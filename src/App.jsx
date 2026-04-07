@@ -534,13 +534,16 @@ function CreditoCobranza({ cliente }) {
   const vmEntries = Object.entries(k.vencimientosMes);
   const vmMax = Math.max(...vmEntries.map(([,v]) => v));
 
-  // Proyección de cobro (sell-out → cobro esperado)
+  // Proyección basada en tendencia de crecimiento real 2026
   const soValues = Object.values(DIGITALIFE_REAL.sellOut);
-  const soPromedio = soValues.reduce((a, b) => a + b, 0) / soValues.length;
+  const soUltimo = soValues[soValues.length - 1];           // Mar 2026: último mes con dato
+  const soAnterior = soValues[soValues.length - 2];         // Feb 2026: mes previo
+  const tasaCrecMensual = soUltimo / soAnterior;            // Tasa real mensual 2026
+  const soPromedio = soValues.reduce((a, b) => a + b, 0) / soValues.length; // referencia
   const proyMeses = [
-    { mes: "Abril",  monto: k.vencimientosMes["2026-04"], cobro: soPromedio * 0.92 },
-    { mes: "Mayo",   monto: k.vencimientosMes["2026-05"], cobro: soPromedio * 0.95 },
-    { mes: "Junio",  monto: k.vencimientosMes["2026-06"], cobro: soPromedio * 0.97 },
+    { mes: "Abril",  monto: k.vencimientosMes["2026-04"], cobro: soUltimo * tasaCrecMensual },
+    { mes: "Mayo",   monto: k.vencimientosMes["2026-05"], cobro: soUltimo * Math.pow(tasaCrecMensual, 2) },
+    { mes: "Junio",  monto: k.vencimientosMes["2026-06"], cobro: soUltimo * Math.pow(tasaCrecMensual, 3) },
   ];
 
   return (
@@ -741,7 +744,7 @@ function CreditoCobranza({ cliente }) {
       <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
         <CardHeader titulo="Proyección de Cobro (basada en Sell Out)" icono="📈" />
         <p className="text-xs text-gray-400 mb-4">
-          Sell out promedio mensual: <strong>{formatMXN(soPromedio)}</strong> · DSO: <strong>{k.dso} días</strong> · TC: ${k.tipoCambio.toFixed(2)} MXN/USD
+          Sell out Mar 2026: <strong>{formatMXN(soUltimo)}</strong> · Crecimiento mensual: <strong>+{((tasaCrecMensual - 1) * 100).toFixed(1)}%</strong> · DSO: <strong>{k.dso} días</strong> · TC: ${k.tipoCambio.toFixed(2)} MXN/USD
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -778,7 +781,7 @@ function CreditoCobranza({ cliente }) {
           </table>
         </div>
         <p className="text-xs text-gray-400 mt-3 italic">
-          * Venta Sell Out = sell out mensual × factor de recuperación histórico. No incluye facturas diferidas ni acuerdos comerciales específicos.
+          * Venta Sell Out proyectada con base en la tendencia de crecimiento mensual 2026 (Ene–Mar). No incluye facturas diferidas ni acuerdos comerciales específicos.
         </p>
       </div>
 
