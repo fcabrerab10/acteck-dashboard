@@ -21,6 +21,20 @@ const DIGITALIFE_REAL = {
   sellOutMarca: { "ACTECK": 2556451.42, "BALAM RUSH": 2626438.04 },
 };
 
+// ─── DATOS REALES — CARTERA DIGITALIFE (API GLOBAL) ─────────────────────────
+// Fuente: correo "Estado de cuenta" enviado cada lunes desde intranet@acteck.com
+// Se actualiza automáticamente cada lunes a las 4pm
+const CARTERA_DIGITALIFE = {
+  semana: 15,
+  periodo: "2026-04-06 al 2026-04-12",
+  saldoActual: 6884832.74,
+  saldoVencido: 196678.56,
+  saldoNC: -67210.44,
+  saldoAVencer: 0.00,
+  ultimaActualizacion: "2026-04-07",
+  correoSemana: "Estado de cuenta de la Semana 15 Del 2026-04-06 al 2026-04-12",
+};
+
 // Último mes con datos de Sell In
 const ULTIMO_MES_SI = 3; // Marzo
 const NOMBRES_MES = { 1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre" };
@@ -76,6 +90,7 @@ const clientes = {
         { id: 3, descripcion: "Propuesta de exhibidores para nueva tienda CDMX", responsable: "Fernando", fechaCompromiso: "2026-04-10", fechaCumplimiento: null, cumplido: false },
       ],
     },
+    cartera: CARTERA_DIGITALIFE,
   },
   pcel: {
     nombre: "PCEL",
@@ -455,19 +470,131 @@ function HomeCliente({ cliente }) {
   );
 }
 
+// ─── PÁGINA: PAGOS Y CARTERA ─────────────────────────────────────────────────
+function CarteraPagos({ cliente }) {
+  const c = cliente;
+  const k = c.cartera;
+  if (!k) return (
+    <div className="p-6 text-gray-400 text-sm">Sin datos de cartera disponibles.</div>
+  );
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+
+      {/* Encabezado */}
+      <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
+                 style={{ backgroundColor: c.color }}>
+              {c.nombre[0]}
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Pagos y Cartera</h1>
+              <p className="text-sm text-gray-400 mt-0.5">
+                <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
+                {" · "}Semana {k.semana} · {k.periodo}
+              </p>
+            </div>
+          </div>
+          <span className="text-xs text-gray-400">Actualizado: {formatFecha(k.ultimaActualizacion)}</span>
+        </div>
+      </div>
+
+      {/* Alerta saldo vencido */}
+      {k.saldoVencido > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
+          <span className="text-red-500 text-lg">⚠️</span>
+          <div>
+            <p className="text-sm font-semibold text-red-700">Saldo Vencido Pendiente</p>
+            <p className="text-xs text-red-600 mt-0.5">
+              Existen <strong>{formatMXN(k.saldoVencido)}</strong> en saldo vencido que requieren seguimiento inmediato.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Actual</p>
+          <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoActual)}</p>
+          <p className="text-xs text-gray-400 mt-1">Total en cartera</p>
+        </div>
+        <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4 ${k.saldoVencido > 0 ? "border-red-500" : "border-green-500"}`}>
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Vencido</p>
+          <p className={`text-2xl font-bold ${k.saldoVencido > 0 ? "text-red-600" : "text-green-600"}`}>
+            {formatMXN(k.saldoVencido)}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">{k.saldoVencido > 0 ? "Requiere atención" : "Sin vencidos"}</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-purple-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo NC</p>
+          <p className="text-2xl font-bold text-purple-700">{formatMXN(k.saldoNC)}</p>
+          <p className="text-xs text-gray-400 mt-1">Notas de crédito</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-yellow-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo a Vencer</p>
+          <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoAVencer)}</p>
+          <p className="text-xs text-gray-400 mt-1">Próxima semana</p>
+        </div>
+      </div>
+
+      {/* Resumen numérico */}
+      <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
+        <p className="text-xs text-gray-400 uppercase tracking-wider mb-4">Resumen de Cartera</p>
+        <div className="space-y-3">
+          <div className="flex justify-between items-center py-2 border-b border-gray-50">
+            <span className="text-sm text-gray-600">Saldo Actual</span>
+            <span className="text-sm font-semibold text-gray-800">{formatMXN(k.saldoActual)}</span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b border-gray-50">
+            <span className="text-sm text-gray-600">Saldo Vencido</span>
+            <span className={`text-sm font-semibold ${k.saldoVencido > 0 ? "text-red-600" : "text-green-600"}`}>
+              {formatMXN(k.saldoVencido)}
+            </span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b border-gray-50">
+            <span className="text-sm text-gray-600">Saldo NC (Notas de Crédito)</span>
+            <span className="text-sm font-semibold text-purple-700">{formatMXN(k.saldoNC)}</span>
+          </div>
+          <div className="flex justify-between items-center py-2">
+            <span className="text-sm text-gray-600">Saldo a Vencer</span>
+            <span className="text-sm font-semibold text-gray-800">{formatMXN(k.saldoAVencer)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Fuente del dato */}
+      <div className="bg-white rounded-2xl shadow-sm p-5">
+        <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Fuente del dato</p>
+        <p className="text-sm text-gray-700 font-medium">{k.correoSemana}</p>
+        <p className="text-xs text-gray-400 mt-1">Correo enviado cada lunes · intranet@acteck.com · Actualización automática 4pm</p>
+      </div>
+
+    </div>
+  );
+}
+
 // ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
 export default function App() {
   const [clienteActivo, setClienteActivo] = useState("digitalife");
   const [modoPresent, setModoPresent] = useState(false);
+  const [paginaActiva, setPaginaActiva] = useState("home");
 
   const c = clientes[clienteActivo];
 
+  // Al cambiar de cliente, volver al home
+  const handleClienteChange = (key) => {
+    setClienteActivo(key);
+    setPaginaActiva("home");
+  };
+
   const navItems = [
-    { id: "home",      label: "Resumen",    icono: "🏠" },
-    { id: "cartera",   label: "Pagos",      icono: "💳" },
-    { id: "promos",    label: "Promociones",icono: "🎯" },
-    { id: "analisis",  label: "Análisis",   icono: "📊" },
-    { id: "estrategia",label: "Estrategia", icono: "🗺️" },
+    { id: "home",      label: "Resumen",    icono: "🏠",  habilitado: true  },
+    { id: "cartera",   label: "Pagos",      icono: "💳",  habilitado: true  },
+    { id: "promos",    label: "Promociones",icono: "🎯",  habilitado: false },
+    { id: "analisis",  label: "Análisis",   icono: "📊",  habilitado: false },
+    { id: "estrategia",label: "Estrategia", icono: "🗺️", habilitado: false },
   ];
 
   return (
@@ -516,7 +643,7 @@ export default function App() {
               {Object.entries(clientes).map(([key, cl]) => (
                 <button
                   key={key}
-                  onClick={() => setClienteActivo(key)}
+                  onClick={() => handleClienteChange(key)}
                   className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                     clienteActivo === key
                       ? "bg-gray-800 text-white"
@@ -553,17 +680,20 @@ export default function App() {
             {navItems.map(item => (
               <button
                 key={item.id}
+                onClick={() => item.habilitado && setPaginaActiva(item.id)}
                 className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
-                  item.id === "home"
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-400 hover:bg-gray-50 hover:text-gray-600 cursor-not-allowed opacity-60"
+                  !item.habilitado
+                    ? "text-gray-400 hover:bg-gray-50 hover:text-gray-600 cursor-not-allowed opacity-60"
+                    : paginaActiva === item.id
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-800"
                 }`}
-                disabled={item.id !== "home"}
-                title={item.id !== "home" ? "Próximamente" : ""}
+                disabled={!item.habilitado}
+                title={!item.habilitado ? "Próximamente" : ""}
               >
                 <span>{item.icono}</span>
                 {item.label}
-                {item.id !== "home" && (
+                {!item.habilitado && (
                   <span className="ml-auto text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">Pronto</span>
                 )}
               </button>
@@ -585,7 +715,8 @@ export default function App() {
             Modo Presentación activo — Solo se muestra información de {c.nombre}
           </div>
         )}
-        <HomeCliente cliente={c} />
+        {paginaActiva === "home"    && <HomeCliente cliente={c} />}
+        {paginaActiva === "cartera" && <CarteraPagos cliente={c} />}
       </main>
 
     </div>
