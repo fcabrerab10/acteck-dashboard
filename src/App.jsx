@@ -145,7 +145,7 @@ const clientes = {
       proximaReunion: "2026-04-15",
       asistentes: ["Fernando Cabrera", "Roberto Méndez (PCEL)"],
       acuerdos: [
-        { id: 1, descripcion: "PCEL compartir reporte de ventas por SKU Marzo", responsable: "Roberto Mìndez", fechaCompromiso: "2026-03-25", fechaCumplimiento: "2026-03-27", cumplido: true },
+        { id: 1, descripcion: "PCEL compartir reporte de ventas por SKU Marzo", responsable: "Roberto Méndez", fechaCompromiso: "2026-03-25", fechaCumplimiento: "2026-03-27", cumplido: true },
         { id: 2, descripcion: "Definir mix de productos para temporada calor", responsable: "Fernando", fechaCompromiso: "2026-04-10", fechaCumplimiento: null, cumplido: false },
       ],
     },
@@ -644,7 +644,7 @@ function CreditoCobranza({ cliente }) {
         <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Total</p>
           <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoActual)}</p>
-          <p className="text-xs text-gray-400 mt-1">{us�Pct}% de la línea usada</p>
+          <p className="text-xs text-gray-400 mt-1">{usoPct}% de la línea usada</p>
         </div>
         <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4 ${k.saldoVencido > 0 ? "border-red-500" : "border-green-500"}`}>
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Vencido</p>
