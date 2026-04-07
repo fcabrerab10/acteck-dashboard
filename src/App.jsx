@@ -32,6 +32,7 @@ const CARTERA_DIGITALIFE = {
   saldoNC: -67210.44,
   saldoAVencer: 0.00,
   ultimaActualizacion: "2026-04-07",
+  horaActualizacion: "16:00",
   correoSemana: "Estado de cuenta de la Semana 15 Del 2026-04-06 al 2026-04-12",
 
   // ── Línea de crédito ──
@@ -144,7 +145,7 @@ const clientes = {
       proximaReunion: "2026-04-15",
       asistentes: ["Fernando Cabrera", "Roberto Méndez (PCEL)"],
       acuerdos: [
-        { id: 1, descripcion: "PCEL compartir reporte de ventas por SKU Marzo", responsable: "Roberto Méndez", fechaCompromiso: "2026-03-25", fechaCumplimiento: "2026-03-27", cumplido: true },
+        { id: 1, descripcion: "PCEL compartir reporte de ventas por SKU Marzo", responsable: "Roberto Mìndez", fechaCompromiso: "2026-03-25", fechaCumplimiento: "2026-03-27", cumplido: true },
         { id: 2, descripcion: "Definir mix de productos para temporada calor", responsable: "Fernando", fechaCompromiso: "2026-04-10", fechaCumplimiento: null, cumplido: false },
       ],
     },
@@ -416,7 +417,15 @@ function HomeCliente({ cliente }) {
           </div>
           <div className="flex items-center gap-3">
             <Semaforo estado={salud} />
-            <span className="text-xs text-gray-400">Actualizado: {formatFecha(new Date().toISOString().slice(0,10))}</span>
+            <div className="text-right">
+              <span className="text-xs text-gray-400 block">
+                Actualizado: {formatFecha(c.cartera?.ultimaActualizacion || new Date().toISOString().slice(0,10))}
+                {c.cartera?.horaActualizacion ? ` · ${c.cartera.horaActualizacion} hrs` : ""}
+              </span>
+              {c.cartera?.tipoCambio && (
+                <span className="text-xs text-gray-400">TC: ${c.cartera.tipoCambio.toFixed(2)} MXN/USD</span>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -552,7 +561,9 @@ function CreditoCobranza({ cliente }) {
             </div>
           </div>
           <div className="text-right">
-            <span className="text-xs text-gray-400 block">Actualizado: {formatFecha(k.ultimaActualizacion)}</span>
+            <span className="text-xs text-gray-400 block">
+              Actualizado: {formatFecha(k.ultimaActualizacion)}{k.horaActualizacion ? ` · ${k.horaActualizacion} hrs` : ""}
+            </span>
             <span className="text-xs text-gray-400">TC: ${k.tipoCambio.toFixed(2)} MXN/USD</span>
           </div>
         </div>
@@ -633,7 +644,7 @@ function CreditoCobranza({ cliente }) {
         <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Total</p>
           <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoActual)}</p>
-          <p className="text-xs text-gray-400 mt-1">{usoPct}% de la línea usada</p>
+          <p className="text-xs text-gray-400 mt-1">{us�Pct}% de la línea usada</p>
         </div>
         <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4 ${k.saldoVencido > 0 ? "border-red-500" : "border-green-500"}`}>
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Vencido</p>
@@ -738,7 +749,7 @@ function CreditoCobranza({ cliente }) {
               <tr className="border-b border-gray-100">
                 <th className="text-left text-xs text-gray-400 uppercase pb-2">Mes</th>
                 <th className="text-right text-xs text-gray-400 uppercase pb-2">Vencimiento</th>
-                <th className="text-right text-xs text-gray-400 uppercase pb-2">Cobro estimado</th>
+                <th className="text-right text-xs text-gray-400 uppercase pb-2">Venta Sell Out</th>
                 <th className="text-right text-xs text-gray-400 uppercase pb-2">Balance</th>
                 <th className="text-center text-xs text-gray-400 uppercase pb-2">Cobertura</th>
               </tr>
@@ -767,7 +778,7 @@ function CreditoCobranza({ cliente }) {
           </table>
         </div>
         <p className="text-xs text-gray-400 mt-3 italic">
-          * Cobro estimado = Sell out mensual × factor de recuperación histórico. No incluye facturas diferidas ni acuerdos comerciales específicos.
+          * Venta Sell Out = sell out mensual × factor de recuperación histórico. No incluye facturas diferidas ni acuerdos comerciales específicos.
         </p>
       </div>
 
