@@ -59,6 +59,53 @@ const CARTERA_DIGITALIFE = {
   dso: 65,  // días promedio de cobro — histórico cliente
 };
 
+// ─── DATOS — PAGOS Y COMPROMISOS DIGITALIFE 2026 ─────────────────────────────────────────────
+// Categorías: Promociones, Plan de Marketing, Gastos Fijos, Gastos Variables
+// Campos: Folio, Concepto, Monto, Estatus, Fecha Compromiso, Fecha Pago Real, Responsable, Notas
+const PAGOS_DIGITALIFE_2026 = {
+  categorias: {
+    promociones: {
+      label: "Promociones",
+      icono: "🎯",
+      color: "#E31E26",
+      presupuesto: null, // Por definir
+      items: [
+        { folio: "PRO-001", concepto: "Campaña Madre Mayo", monto: 15000, estatus: "pendiente", fechaCompromiso: "2026-05-01", fechaPagoReal: null, responsable: "Marketing", notas: "Aportación Acteck. Cliente aporta $8,000 adicionales." },
+        { folio: "PRO-002", concepto: "Bundle Auriculares Q2", monto: 10000, estatus: "pendiente", fechaCompromiso: "2026-04-10", fechaPagoReal: null, responsable: "Marketing", notas: "Aportación Acteck. Cliente aporta $5,000 adicionales." },
+      ],
+    },
+    marketing: {
+      label: "Plan de Marketing",
+      icono: "📣",
+      color: "#3b82f6",
+      presupuesto: null, // Por definir
+      items: [
+        { folio: "MKT-001", concepto: "Material POP Q2", monto: 0, estatus: "pendiente", fechaCompromiso: null, fechaPagoReal: null, responsable: "Marketing", notas: "Monto y fecha por definir." },
+        { folio: "MKT-002", concepto: "Activación punto de venta", monto: 0, estatus: "pendiente", fechaCompromiso: null, fechaPagoReal: null, responsable: "Fernando", notas: "Monto y fecha por definir." },
+      ],
+    },
+    gastosFijos: {
+      label: "Gastos Fijos",
+      icono: "🏢",
+      color: "#8b5cf6",
+      presupuesto: null, // Por definir
+      items: [
+        { folio: "GF-001", concepto: "Cuota mensual exhibidor — Abril", monto: 0, estatus: "pendiente", fechaCompromiso: "2026-04-30", fechaPagoReal: null, responsable: "Fernando", notas: "Recurrente mensual. Monto por confirmar." },
+        { folio: "GF-002", concepto: "Cuota mensual exhibidor — Mayo", monto: 0, estatus: "pendiente", fechaCompromiso: "2026-05-31", fechaPagoReal: null, responsable: "Fernando", notas: "Recurrente mensual. Monto por confirmar." },
+      ],
+    },
+    gastosVariables: {
+      label: "Gastos Variables",
+      icono: "📊",
+      color: "#f59e0b",
+      presupuesto: null, // Por definir
+      items: [
+        { folio: "GV-001", concepto: "Evento lanzamiento producto Q2", monto: 0, estatus: "pendiente", fechaCompromiso: null, fechaPagoReal: null, responsable: "Fernando", notas: "Monto y fecha por definir según agenda." },
+      ],
+    },
+  },
+};
+
 // Último mes con datos de Sell In
 const ULTIMO_MES_SI = 3; // Marzo
 const NOMBRES_MES = { 1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre" };
@@ -800,6 +847,238 @@ function CreditoCobranza({ cliente }) {
 }
 
 // ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
+// ─── PAGOS Y COMPROMISOS ─────────────────────────────────────────────────────
+function PagosCliente({ cliente }) {
+  const [catActiva, setCatActiva] = useState("todas");
+  const c = cliente;
+  const datos = PAGOS_DIGITALIFE_2026;
+  const categoriasArr = Object.entries(datos.categorias);
+
+  // Flatten items with category metadata
+  const todosItems = categoriasArr.flatMap(([key, cat]) =>
+    cat.items.map(item => ({ ...item, catKey: key, catLabel: cat.label, catColor: cat.color, catIcono: cat.icono }))
+  );
+
+  // KPIs globales
+  const totalPagado   = todosItems.filter(i => i.estatus === "pagado").reduce((a, i) => a + i.monto, 0);
+  const totalPorPagar = todosItems.filter(i => ["pendiente","en proceso"].includes(i.estatus) && i.monto > 0).reduce((a, i) => a + i.monto, 0);
+  const totalVencido  = todosItems.filter(i => i.estatus === "vencido").reduce((a, i) => a + i.monto, 0);
+  const totalAnio     = todosItems.reduce((a, i) => a + i.monto, 0);
+
+  // Filtered items
+  const itemsFiltrados = catActiva === "todas"
+    ? todosItems
+    : todosItems.filter(i => i.catKey === catActiva);
+
+  const estatusConfig = {
+    pagado:       { bg: "bg-green-100",  text: "text-green-700",  dot: "bg-green-500",  label: "Pagado"     },
+    pendiente:    { bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-400", label: "Pendiente"  },
+    vencido:      { bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500",    label: "Vencido"    },
+    "en proceso": { bg: "bg-blue-100",   text: "text-blue-700",   dot: "bg-blue-400",   label: "En Proceso" },
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+
+      {/* ── HEADER ── */}
+      <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
+                 style={{ backgroundColor: c.color }}>💰</div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Pagos y Compromisos</h1>
+              <p className="text-sm text-gray-400 mt-0.5">
+                <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
+                {" · "}Promociones · Marketing · Gastos Fijos · Variables
+              </p>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-xs text-gray-400 block">
+              Actualizado: {formatFecha(c.cartera?.ultimaActualizacion || "2026-04-07")}
+              {c.cartera?.horaActualizacion ? ` · ${c.cartera.horaActualizacion} hrs` : ""}
+            </span>
+            {c.cartera?.tipoCambio && (
+              <span className="text-xs text-gray-400">TC: ${c.cartera.tipoCambio.toFixed(2)} MXN/USD</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── KPI CARDS ── */}
+      <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-green-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Pagado</p>
+          <p className="text-2xl font-bold text-green-700">{totalPagado > 0 ? formatMXN(totalPagado) : "$0"}</p>
+          <p className="text-xs text-gray-400 mt-1">{todosItems.filter(i => i.estatus === "pagado").length} conceptos</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-yellow-400">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Por Pagar</p>
+          <p className="text-2xl font-bold text-yellow-600">{totalPorPagar > 0 ? formatMXN(totalPorPagar) : "$0"}</p>
+          <p className="text-xs text-gray-400 mt-1">{todosItems.filter(i => ["pendiente","en proceso"].includes(i.estatus)).length} conceptos</p>
+        </div>
+        <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4 ${totalVencido > 0 ? "border-red-500" : "border-gray-200"}`}>
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Vencido</p>
+          <p className={`text-2xl font-bold ${totalVencido > 0 ? "text-red-600" : "text-gray-400"}`}>
+            {totalVencido > 0 ? formatMXN(totalVencido) : "$0"}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">{todosItems.filter(i => i.estatus === "vencido").length} conceptos</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total 2026</p>
+          <p className="text-2xl font-bold text-gray-800">{totalAnio > 0 ? formatMXN(totalAnio) : "$0"}</p>
+          <p className="text-xs text-gray-400 mt-1">{todosItems.length} conceptos registrados</p>
+        </div>
+      </div>
+
+      {/* ── RESUMEN POR CATEGORÍA (cards clickeables) ── */}
+      <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
+        {categoriasArr.map(([key, cat]) => {
+          const catItems = cat.items;
+          const catPagado = catItems.filter(i => i.estatus === "pagado").reduce((a, i) => a + i.monto, 0);
+          const catTotal  = catItems.reduce((a, i) => a + i.monto, 0);
+          const pct = catTotal > 0 ? Math.round((catPagado / catTotal) * 100) : 0;
+          const isActive = catActiva === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setCatActiva(isActive ? "todas" : key)}
+              className={`bg-white rounded-2xl shadow-sm p-4 text-left transition-all border-2 ${
+                isActive ? "shadow-md" : "border-transparent hover:border-gray-200"
+              }`}
+              style={{ borderColor: isActive ? cat.color : undefined }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">{cat.icono}</span>
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide leading-tight">{cat.label}</p>
+              </div>
+              <p className="text-lg font-bold text-gray-800 mb-2">
+                {catTotal > 0
+                  ? formatMXN(catTotal)
+                  : <span className="text-gray-400 text-sm font-normal">Sin monto aún</span>
+                }
+              </p>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
+                <div className="h-full rounded-full transition-all"
+                     style={{ width: `${pct}%`, backgroundColor: cat.color }}></div>
+              </div>
+              <p className="text-xs text-gray-400">{pct}% pagado · {catItems.length} conceptos</p>
+              {cat.presupuesto === null && (
+                <p className="text-xs text-orange-500 mt-1 font-medium">Presupuesto por definir</p>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── TABLA DE REGISTROS ── */}
+      <div className="bg-white rounded-2xl shadow-sm p-5">
+
+        {/* Filtro de categorías */}
+        <div className="flex items-center gap-2 mb-5 flex-wrap">
+          <button
+            onClick={() => setCatActiva("todas")}
+            className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${
+              catActiva === "todas" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >Todas</button>
+          {categoriasArr.map(([key, cat]) => (
+            <button
+              key={key}
+              onClick={() => setCatActiva(catActiva === key ? "todas" : key)}
+              className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                catActiva === key ? "text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+              style={catActiva === key ? { backgroundColor: cat.color } : {}}
+            >
+              <span>{cat.icono}</span>
+              {cat.label}
+            </button>
+          ))}
+          <span className="ml-auto text-xs text-gray-400">{itemsFiltrados.length} registro{itemsFiltrados.length !== 1 ? "s" : ""}</span>
+        </div>
+
+        {/* Tabla */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">Folio</th>
+                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4">Concepto</th>
+                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">Categoría</th>
+                <th className="text-right text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">Monto</th>
+                <th className="text-center text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">Estatus</th>
+                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">F. Compromiso</th>
+                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">F. Pago Real</th>
+                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">Responsable</th>
+                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3">Notas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itemsFiltrados.map((item, i) => {
+                const es = estatusConfig[item.estatus] || estatusConfig["pendiente"];
+                return (
+                  <tr key={item.folio} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${i % 2 === 1 ? "bg-gray-50/40" : ""}`}>
+                    <td className="py-3 pr-4">
+                      <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">{item.folio}</span>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <p className="font-medium text-gray-800">{item.concepto}</p>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full text-white font-semibold whitespace-nowrap"
+                            style={{ backgroundColor: item.catColor }}>
+                        {item.catIcono} {item.catLabel}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4 text-right whitespace-nowrap">
+                      {item.monto > 0
+                        ? <span className="font-bold text-gray-800">{formatMXN(item.monto)}</span>
+                        : <span className="text-gray-400 text-xs italic">Por definir</span>
+                      }
+                    </td>
+                    <td className="py-3 pr-4 text-center">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${es.bg} ${es.text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${es.dot}`}></span>
+                        {es.label}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4 text-xs text-gray-600 whitespace-nowrap">
+                      {item.fechaCompromiso ? formatFecha(item.fechaCompromiso) : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="py-3 pr-4 text-xs text-gray-600 whitespace-nowrap">
+                      {item.fechaPagoReal ? formatFecha(item.fechaPagoReal) : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="py-3 pr-4 text-xs text-gray-600 whitespace-nowrap">{item.responsable}</td>
+                    <td className="py-3 text-xs text-gray-400 max-w-xs">{item.notas}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {itemsFiltrados.length === 0 && (
+            <div className="text-center py-8 text-gray-400">
+              <p className="text-3xl mb-2">📭</p>
+              <p className="text-sm">No hay registros en esta categoría</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="mt-5 pt-4 border-t border-gray-100">
+          <p className="text-xs text-gray-400">
+            💡 Estatus: <strong className="text-gray-600">Pendiente</strong> = programado · <strong className="text-gray-600">En Proceso</strong> = en trámite · <strong className="text-gray-600">Pagado</strong> = liquidado · <strong className="text-gray-600">Vencido</strong> = fecha superada sin pago.
+            Los conceptos con monto "Por definir" serán actualizados conforme se confirmen.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+
 export default function App() {
   const [clienteActivo, setClienteActivo] = useState("digitalife");
   const [modoPresent, setModoPresent] = useState(false);
@@ -816,7 +1095,7 @@ export default function App() {
   const navItems = [
     { id: "home",      label: "Resumen",    icono: "🏠",  habilitado: true  },
     { id: "cartera",   label: "Crédito y Cobranza", icono: "📊", habilitado: true  },
-    { id: "promos",    label: "Promociones",icono: "🎯",  habilitado: false },
+    { id: "pagos",     label: "Pagos",      icono: "💰",  habilitado: true  },
     { id: "analisis",  label: "Análisis",   icono: "📊",  habilitado: false },
     { id: "estrategia",label: "Estrategia", icono: "🗺️", habilitado: false },
   ];
@@ -941,6 +1220,7 @@ export default function App() {
         )}
         {paginaActiva === "home"    && <HomeCliente cliente={c} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
+        {paginaActiva === "pagos"   && <PagosCliente cliente={c} />}
       </main>
 
     </div>
