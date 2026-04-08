@@ -1379,6 +1379,548 @@ function PagosCliente({ cliente }) {
 }
 
 
+// ─── ESTRATEGIA DE PRODUCTO ─── CONSTANTS ───────────────────────────────────────────────────────────────
+const ROADMAP_CODES = {
+  RMI:   { label: "RunRate",           color: "bg-green-100",  text: "text-green-700" },
+  NVS:   { label: "Nuevo",             color: "bg-blue-100",   text: "text-blue-700" },
+  "2025": { label: "Lanzamiento 2025", color: "bg-purple-100", text: "text-purple-700" },
+  "2026": { label: "Lanzamiento 2026", color: "bg-orange-100", text: "text-orange-700" },
+  EXMAY: { label: "Mayoreo",           color: "bg-amber-100",  text: "text-amber-700" },
+  RML:   { label: "Liquidación",       color: "bg-red-100",    text: "text-red-700" },
+  PEM:   { label: "Marketplace",       color: "bg-teal-100",   text: "text-teal-700" },
+  DECME: { label: "DECME",             color: "bg-gray-100",   text: "text-gray-700" },
+};
+
+const MONTHS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const MONTH_KEYS_2025 = ["ene_2025", "feb_2025", "mar_2025", "abr_2025", "may_2025", "jun_2025", "jul_2025", "ago_2025", "sep_2025", "oct_2025", "nov_2025", "dic_2025"];
+const MONTH_KEYS_2026 = ["ene_2026", "feb_2026", "mar_2026", "abr_2026", "may_2026", "jun_2026", "jul_2026", "ago_2026", "sep_2026", "oct_2026", "nov_2026", "dic_2026"];
+const MONTH_VAL_2025 = ["ene_2025_val", "feb_2025_val", "mar_2025_val", "abr_2025_val", "may_2025_val", "jun_2025_val", "jul_2025_val", "ago_2025_val", "sep_2025_val", "oct_2025_val", "nov_2025_val", "dic_2025_val"];
+const MONTH_VAL_2026 = ["ene_2026_val", "feb_2026_val", "mar_2026_val", "abr_2026_val", "may_2026_val", "jun_2026_val", "jul_2026_val", "ago_2026_val", "sep_2026_val", "oct_2026_val", "nov_2026_val", "dic_2026_val"];
+
+// ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────
+function summonthlyValues(producto, monthKeys) {
+  return monthKeys.reduce((sum, key) => sum + (producto[key] || 0), 0);
+}
+
+function filterProductos(productos, yearFilter, marcaFilter, categoriaFilter, roadmapFilter, searchTerm) {
+  return productos.filter(p => {
+    // Show all products regardless of year data (user needs full catalog view)
+
+    // Marca filter
+    if (marcaFilter !== "todas" && (!p.marca || !p.marca.toUpperCase().includes(marcaFilter.toUpperCase()))) {
+      return false;
+    }
+
+    // Categoria filter
+    if (categoriaFilter !== "todas" && p.categoria !== categoriaFilter) {
+      return false;
+    }
+
+    // Roadmap filter
+    if (roadmapFilter !== "todos" && p.roadmap !== roadmapFilter) {
+      return false;
+    }
+
+    // Search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      return (
+        (p.sku && p.sku.toLowerCase().includes(term)) ||
+        (p.descripcion && p.descripcion.toLowerCase().includes(term))
+      );
+    }
+
+    return true;
+  });
+}
+
+// ─── COMPONENT ───────────────────────────────────────────────────────────────
+function EstrategiaProducto({ cliente = "Digitalife" }) {
+  const [productos, setProductos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [yearFilter, setYearFilter] = useState(2026);
+  const [marcaFilter, setMarcaFilter] = useState("todas");
+  const [categoriaFilter, setCategoriaFilter] = useState("todas");
+  const [roadmapFilter, setRoadmapFilter] = useState("todos");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortCol, setSortCol] = useState("sku");
+  const [sortDir, setSortDir] = useState("asc");
+  const [editingId, setEditingId] = useState(null);
+  const [editingValue, setEditingValue] = useState("");
+  const [toast, setToast] = useState("");
+
+  // Fetch productos from Supabase
+  useEffect(() => {
+    async function fetchProductos() {
+      try {
+        if (!DB_CONFIGURED) {
+          setProductos([]);
+          setLoading(false);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("productos")
+          .select("*")
+          .order("sku", { ascending: true });
+
+        if (error) throw error;
+        setProductos(data || []);
+      } catch (err) {
+        console.error("Error fetching productos:", err);
+        setProductos([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchProductos();
+
+    // Real-time subscription
+    if (DB_CONFIGURED) {
+      const subscription = supabase
+        .channel("productos_changes")
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: "productos"
+        }, (payload) => {
+          if (payload.eventType === "DELETE") {
+            setProductos(p => p.filter(prod => prod.id !== payload.old.id));
+          } else {
+            setProductos(p => {
+              const idx = p.findIndex(prod => prod.id === payload.new.id);
+              if (idx >= 0) {
+                const updated = [...p];
+                updated[idx] = payload.new;
+                return updated;
+              }
+              return [...p, payload.new];
+            });
+          }
+        })
+        .subscribe();
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+  }, []);
+
+  // Get all categories
+  const categorias = [...new Set(productos.map(p => p.categoria).filter(Boolean))].sort();
+
+  // Get all roadmap codes
+  const roadmapCodes = [...new Set(productos.map(p => p.roadmap).filter(Boolean))].sort();
+
+  // Filter productos
+  const filtered = filterProductos(productos, yearFilter, marcaFilter, categoriaFilter, roadmapFilter, searchTerm);
+
+  // Sort
+  const sorted = [...filtered].sort((a, b) => {
+    let aVal = a[sortCol];
+    let bVal = b[sortCol];
+
+    if (typeof aVal === "string") {
+      aVal = aVal.toLowerCase();
+      bVal = bVal.toLowerCase();
+    }
+
+    const cmp = aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  // Calculate KPIs
+  const monthKeysForYear = yearFilter === 2025 ? MONTH_KEYS_2025 : MONTH_KEYS_2026;
+  const monthValForYear = yearFilter === 2025 ? MONTH_VAL_2025 : MONTH_VAL_2026;
+
+  const totalSKUs = filtered.length;
+  const totalVentas = filtered.reduce((sum, p) => sum + summonthlyValues(p, monthValForYear), 0);
+  const totalPiezas = filtered.reduce((sum, p) => sum + summonthlyValues(p, monthKeysForYear), 0);
+  const totalInventarioValor = filtered.reduce((sum, p) => {
+    const inv = p.inventario_cliente || 0;
+    const cost = p.costo_promedio || 0;
+    return sum + (inv * cost);
+  }, 0);
+
+  // Brand breakdown
+  const acteckProds = filtered.filter(p => p.marca && p.marca.toUpperCase().includes("ACTECK"));
+  const balamProds = filtered.filter(p => p.marca && p.marca.toUpperCase().includes("BALAM"));
+
+  const acteckVentas = acteckProds.reduce((sum, p) => sum + summonthlyValues(p, monthValForYear), 0);
+  const acteckPiezas = acteckProds.reduce((sum, p) => sum + summonthlyValues(p, monthKeysForYear), 0);
+  const balamVentas = balamProds.reduce((sum, p) => sum + summonthlyValues(p, monthValForYear), 0);
+  const balamPiezas = balamProds.reduce((sum, p) => sum + summonthlyValues(p, monthKeysForYear), 0);
+
+  // Category breakdown
+  const categoryBreakdown = categorias.map(cat => {
+    const catProds = filtered.filter(p => p.categoria === cat);
+    const ventas = catProds.reduce((sum, p) => sum + summonthlyValues(p, monthValForYear), 0);
+    const piezas = catProds.reduce((sum, p) => sum + summonthlyValues(p, monthKeysForYear), 0);
+    return { categoria: cat, ventas, piezas, count: catProds.length };
+  });
+
+  // Handle sugerido edit
+  const handleEditSugerido = async (productoId, newValue) => {
+    try {
+      const { error } = await supabase
+        .from("productos")
+        .update({ sugerido_manual: parseInt(newValue) || 0 })
+        .eq("id", productoId);
+
+      if (error) throw error;
+
+      setToast("Sugerido actualizado");
+      setTimeout(() => setToast(""), 2000);
+      setEditingId(null);
+    } catch (err) {
+      console.error("Error updating sugerido:", err);
+      setToast("Error al guardar");
+      setTimeout(() => setToast(""), 2000);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="text-gray-500">Cargando productos...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+
+      {/* HEADER */}
+      <div className="bg-gradient-to-r from-slate-700 to-slate-800 rounded-2xl p-6 mb-6 text-white">
+        <h1 className="text-3xl font-bold mb-1">{cliente} — Estrategia de Producto</h1>
+        <p className="text-slate-300 text-sm">Acteck / Balam Rush · Sellout Real</p>
+      </div>
+
+      {/* YEAR SELECTOR */}
+      <div className="flex gap-2 mb-6">
+        {[2025, 2026].map(year => (
+          <button
+            key={year}
+            onClick={() => setYearFilter(year)}
+            className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+              yearFilter === year
+                ? "bg-blue-600 text-white shadow-lg"
+                : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            {year}
+          </button>
+        ))}
+      </div>
+
+      {/* KPI CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white rounded-xl shadow-sm p-4 border-t-4 border-blue-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total SKUs Activos</p>
+          <p className="text-3xl font-bold text-gray-800">{totalSKUs}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm p-4 border-t-4 border-green-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Venta Total {yearFilter}</p>
+          <p className="text-2xl font-bold text-gray-800">{formatMXN(totalVentas)}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm p-4 border-t-4 border-purple-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Piezas Totales</p>
+          <p className="text-3xl font-bold text-gray-800">{totalPiezas.toLocaleString()}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm p-4 border-t-4 border-orange-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Valor Inventario</p>
+          <p className="text-2xl font-bold text-gray-800">{formatMXN(totalInventarioValor)}</p>
+        </div>
+      </div>
+
+      {/* BRAND CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-red-500">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-2xl">🔵</span>
+            <h3 className="text-lg font-bold text-gray-800">Acteck</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Ventas {yearFilter}</p>
+              <p className="text-xl font-bold text-gray-800">{formatMXN(acteckVentas)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Piezas {yearFilter}</p>
+              <p className="text-xl font-bold text-gray-800">{acteckPiezas.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">% del total</p>
+              <p className="text-lg font-bold text-red-600">
+                {totalVentas > 0 ? Math.round((acteckVentas / totalVentas) * 100) : 0}%
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">SKUs</p>
+              <p className="text-lg font-bold text-gray-700">{acteckProds.length}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-500">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-2xl">🔴</span>
+            <h3 className="text-lg font-bold text-gray-800">Balam Rush</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Ventas {yearFilter}</p>
+              <p className="text-xl font-bold text-gray-800">{formatMXN(balamVentas)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Piezas {yearFilter}</p>
+              <p className="text-xl font-bold text-gray-800">{balamPiezas.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">% del total</p>
+              <p className="text-lg font-bold text-blue-600">
+                {totalVentas > 0 ? Math.round((balamVentas / totalVentas) * 100) : 0}%
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">SKUs</p>
+              <p className="text-lg font-bold text-gray-700">{balamProds.length}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CATEGORY BREAKDOWN */}
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-gray-800 mb-4">Desglose por Categoría</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {categoryBreakdown.map(cat => {
+            const pct = totalVentas > 0 ? Math.round((cat.ventas / totalVentas) * 100) : 0;
+            return (
+              <div key={cat.categoria} className="bg-white rounded-xl shadow-sm p-4">
+                <p className="font-semibold text-gray-800 mb-3">{cat.categoria}</p>
+                <div className="space-y-2 mb-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Ventas</span>
+                    <span className="font-semibold text-gray-800">{formatMXN(cat.ventas)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Piezas</span>
+                    <span className="font-semibold text-gray-800">{cat.piezas.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">SKUs</span>
+                    <span className="font-semibold text-gray-800">{cat.count}</span>
+                  </div>
+                </div>
+                <div className="mb-2">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-500">% del total</span>
+                    <span className="font-bold text-blue-600">{pct}%</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* FILTER BAR */}
+      <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+          {/* Marca filter */}
+          <div>
+            <label className="block text-xs text-gray-500 uppercase tracking-wide mb-2">Marca</label>
+            <div className="flex gap-2">
+              {["todas", "Acteck", "Balam"].map(m => (
+                <button
+                  key={m}
+                  onClick={() => setMarcaFilter(m.toLowerCase())}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    marcaFilter === m.toLowerCase()
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Category filter */}
+          <div>
+            <label className="block text-xs text-gray-500 uppercase tracking-wide mb-2">Categoría</label>
+            <select
+              value={categoriaFilter}
+              onChange={(e) => setCategoriaFilter(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="todas">Todas</option>
+              {categorias.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Roadmap filter */}
+          <div>
+            <label className="block text-xs text-gray-500 uppercase tracking-wide mb-2">Roadmap</label>
+            <select
+              value={roadmapFilter}
+              onChange={(e) => setRoadmapFilter(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="todos">Todos</option>
+              {roadmapCodes.map(code => (
+                <option key={code} value={code}>{ROADMAP_CODES[code]?.label || code}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Search */}
+          <div>
+            <label className="block text-xs text-gray-500 uppercase tracking-wide mb-2">Buscar</label>
+            <input
+              type="text"
+              placeholder="SKU o descripción..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Count */}
+          <div className="text-right">
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Resultados</p>
+            <p className="text-lg font-bold text-gray-800">{sorted.length}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* TABLE */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => {
+                      if (sortCol === "sku") setSortDir(sortDir === "asc" ? "desc" : "asc");
+                      else { setSortCol("sku"); setSortDir("asc"); }
+                    }}>
+                  SKU {sortCol === "sku" && (sortDir === "asc" ? "↑" : "↓")}
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Roadmap</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Descripción</th>
+                {MONTHS.map((month, idx) => (
+                  <th key={month} className="px-2 py-3 text-center font-semibold text-gray-700 text-xs">
+                    {month}
+                  </th>
+                ))}
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Prom 90d</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Inventario</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Sugerido</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.length === 0 ? (
+                <tr>
+                  <td colSpan="20" className="px-4 py-8 text-center text-gray-500">
+                    Sin productos que coincidan
+                  </td>
+                </tr>
+              ) : (
+                sorted.map((producto) => {
+                  const monthKeysRow = yearFilter === 2025 ? MONTH_KEYS_2025 : MONTH_KEYS_2026;
+                  const sugerido = producto.sugerido_manual || producto.sugerido || 0;
+                  const roadmapInfo = ROADMAP_CODES[producto.roadmap] || { label: producto.roadmap, color: "bg-gray-100", text: "text-gray-700" };
+
+                  return (
+                    <tr key={producto.id} className="border-b border-gray-100 hover:bg-blue-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <span className="font-mono font-semibold text-gray-800">{producto.sku}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${roadmapInfo.color} ${roadmapInfo.text}`}>
+                          {roadmapInfo.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="max-w-xs truncate text-gray-700 text-sm" title={producto.descripcion}>
+                          {producto.descripcion}
+                        </div>
+                      </td>
+                      {monthKeysRow.map((key, idx) => {
+                        const val = producto[key] || 0;
+                        return (
+                          <td key={key} className={`px-2 py-3 text-center text-xs ${val > 0 ? "bg-blue-50 font-medium text-gray-800" : "text-gray-400"}`}>
+                            {val > 0 ? val : "—"}
+                          </td>
+                        );
+                      })}
+                      <td className="px-4 py-3 text-center font-bold text-gray-800">
+                        {Math.round((producto.promedio_90d || 0))}
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-800">
+                        {producto.inventario_cliente || 0}
+                      </td>
+                      <td className="px-4 py-3">
+                        {editingId === producto.id ? (
+                          <input
+                            type="number"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleEditSugerido(producto.id, editingValue)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleEditSugerido(producto.id, editingValue);
+                              if (e.key === "Escape") setEditingId(null);
+                            }}
+                            autoFocus
+                            className="w-16 px-2 py-1 rounded border border-blue-500 text-sm font-medium focus:ring-2 focus:ring-blue-500"
+                          />
+                        ) : (
+                          <div
+                            onClick={() => {
+                              setEditingId(producto.id);
+                              setEditingValue(sugerido.toString());
+                            }}
+                            className={`cursor-pointer px-3 py-1.5 rounded-lg transition-all font-medium text-sm inline-flex items-center gap-1.5 ${
+                              sugerido > 0
+                                ? "bg-green-100 text-green-700 hover:bg-green-200"
+                                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                            }`}
+                          >
+                            {sugerido}
+                            <span className="text-xs opacity-50">✏️</span>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* TOAST */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-green-500 text-white px-4 py-3 rounded-lg shadow-lg animate-pulse">
+          {toast}
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+
 // ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
 export default function App() {
   const [clienteActivo, setClienteActivo] = useState("digitalife");
@@ -1522,6 +2064,7 @@ export default function App() {
         {paginaActiva === "home"    && <HomeCliente cliente={c} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} />}
+          {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "PCEL"} />}
       </main>
 
     </div>
