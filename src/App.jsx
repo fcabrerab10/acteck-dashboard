@@ -1940,7 +1940,7 @@ export default function App() {
     { id: "cartera",   label: "Crédito y Cobranza", icono: "📊", habilitado: true  },
     { id: "pagos",     label: "Pagos",      icono: "💰",  habilitado: true  },
     { id: "analisis",  label: "Análisis",   icono: "📊",  habilitado: false },
-    { id: "estrategia",label: "Estrategia", icono: "🗺️", habilitado: false },
+    { id: "estrategia",label: "Estrategia de Producto", icono: "📦", habilitado: true },
   ];
 
   return (
