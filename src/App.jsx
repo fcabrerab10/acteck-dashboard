@@ -906,7 +906,7 @@ function PagosCliente({ cliente }) {
   const fetchData = async () => {
     const { data } = await supabase.from("pagos").select("*").order("created_at");
     setRegistros(data || []);
-    setLoad)ng(false);
+    setLoading(false);
   };
 
   // ── Toast ──
