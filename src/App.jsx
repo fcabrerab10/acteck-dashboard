@@ -1727,15 +1727,9 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
                     onClick={() => handleCatSort("categoria")}>
                   Categoría{catSortArrow("categoria")}
                 </th>
-                {MONTHS.map((month, idx) => (
-                  <th key={month} className="px-2 py-3 text-center font-semibold text-gray-700 text-xs cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleCatSort("m_" + idx)}>
-                    {month}{catSortArrow("m_" + idx)}
-                  </th>
-                ))}
                 <th className="px-4 py-3 text-right font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 whitespace-nowrap"
                     onClick={() => handleCatSort("ventas")}>
-                  Total ${catSortArrow("ventas")}
+                  Ventas ${catSortArrow("ventas")}
                 </th>
                 <th className="px-4 py-3 text-right font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 whitespace-nowrap"
                     onClick={() => handleCatSort("piezas")}>
@@ -1759,11 +1753,6 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
                       {cat.categoria}
                       {categoriaFilter === cat.categoria && <span className="ml-2 text-xs text-blue-500">✕</span>}
                     </td>
-                    {cat.monthlyVentas.map((val, idx) => (
-                      <td key={idx} className={`px-2 py-3 text-center text-xs ${val > 0 ? "font-medium text-gray-800" : "text-gray-300"}`}>
-                        {val > 0 ? formatMXN(val).replace("$", "").trim() : "—"}
-                      </td>
-                    ))}
                     <td className="px-4 py-3 text-right font-bold text-gray-800 whitespace-nowrap">{formatMXN(cat.ventas)}</td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-700">{cat.piezas.toLocaleString()}</td>
                     <td className="px-3 py-3 text-center text-gray-700">{cat.count}</td>
@@ -1781,14 +1770,6 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
               {/* TOTALS ROW */}
               <tr className="bg-gray-50 font-bold border-t-2 border-gray-300">
                 <td className="px-4 py-3 text-gray-800">Total</td>
-                {monthValForYear.map((key, idx) => {
-                  const monthTotal = filtered.reduce((s, p) => s + (p[key] || 0), 0);
-                  return (
-                    <td key={idx} className="px-2 py-3 text-center text-xs text-gray-800">
-                      {monthTotal > 0 ? formatMXN(monthTotal).replace("$", "").trim() : "—"}
-                    </td>
-                  );
-                })}
                 <td className="px-4 py-3 text-right text-gray-800 whitespace-nowrap">{formatMXN(totalVentas)}</td>
                 <td className="px-4 py-3 text-right text-gray-700">{totalPiezas.toLocaleString()}</td>
                 <td className="px-3 py-3 text-center text-gray-700">{totalSKUs}</td>
