@@ -1404,24 +1404,15 @@ function summonthlyValues(producto, monthKeys) {
 
 function filterProductos(productos, yearFilter, marcaFilter, categoriaFilter, roadmapFilter, searchTerm) {
   return productos.filter(p => {
-    // Show all products regardless of year data (user needs full catalog view)
-
-    // Marca filter
     if (marcaFilter !== "todas" && (!p.marca || !p.marca.toUpperCase().includes(marcaFilter.toUpperCase()))) {
       return false;
     }
-
-    // Categoria filter
     if (categoriaFilter !== "todas" && p.categoria !== categoriaFilter) {
       return false;
     }
-
-    // Roadmap filter
     if (roadmapFilter !== "todos" && p.roadmap !== roadmapFilter) {
       return false;
     }
-
-    // Search filter
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       return (
@@ -1429,7 +1420,6 @@ function filterProductos(productos, yearFilter, marcaFilter, categoriaFilter, ro
         (p.descripcion && p.descripcion.toLowerCase().includes(term))
       );
     }
-
     return true;
   });
 }
@@ -1448,6 +1438,8 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
   const [editingId, setEditingId] = useState(null);
   const [editingValue, setEditingValue] = useState("");
   const [toast, setToast] = useState("");
+  const [catSortCol, setCatSortCol] = useState("ventas");
+  const [catSortDir, setCatSortDir] = useState("desc");
 
   // Fetch productos from Supabase
   useEffect(() => {
@@ -1458,12 +1450,10 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
           setLoading(false);
           return;
         }
-
         const { data, error } = await supabase
           .from("productos")
           .select("*")
           .order("sku", { ascending: true });
-
         if (error) throw error;
         setProductos(data || []);
       } catch (err) {
@@ -1473,10 +1463,7 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
         setLoading(false);
       }
     }
-
     fetchProductos();
-
-    // Real-time subscription
     if (DB_CONFIGURED) {
       const subscription = supabase
         .channel("productos_changes")
@@ -1500,76 +1487,90 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
           }
         })
         .subscribe();
-
-      return () => {
-        subscription.unsubscribe();
-      };
+      return () => { subscription.unsubscribe(); };
     }
   }, []);
 
-  // Get all categories
   const categorias = [...new Set(productos.map(p => p.categoria).filter(Boolean))].sort();
-
-  // Get all roadmap codes
   const roadmapCodes = [...new Set(productos.map(p => p.roadmap).filter(Boolean))].sort();
-
-  // Filter productos
   const filtered = filterProductos(productos, yearFilter, marcaFilter, categoriaFilter, roadmapFilter, searchTerm);
 
-  // Sort
+  const monthKeysForYear = yearFilter === 2025 ? MONTH_KEYS_2025 : MONTH_KEYS_2026;
+  const monthValForYear = yearFilter === 2025 ? MONTH_VAL_2025 : MONTH_VAL_2026;
+
+  // ─── Sort helper for product table ───
+  const handleSort = (col) => {
+    if (sortCol === col) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortCol(col); setSortDir("desc"); }
+  };
+  const sortArrow = (col) => sortCol === col ? (sortDir === "asc" ? " \u2191" : " \u2193") : "";
+
   const sorted = [...filtered].sort((a, b) => {
     let aVal = a[sortCol];
     let bVal = b[sortCol];
-
-    if (typeof aVal === "string") {
-      aVal = aVal.toLowerCase();
-      bVal = bVal.toLowerCase();
+    if (sortCol === "_sugerido") {
+      aVal = a.sugerido_manual || a.sugerido || 0;
+      bVal = b.sugerido_manual || b.sugerido || 0;
     }
-
+    if (aVal == null) aVal = "";
+    if (bVal == null) bVal = "";
+    if (typeof aVal === "string") { aVal = aVal.toLowerCase(); bVal = (bVal || "").toLowerCase(); }
     const cmp = aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
     return sortDir === "asc" ? cmp : -cmp;
   });
 
-  // Calculate KPIs
-  const monthKeysForYear = yearFilter === 2025 ? MONTH_KEYS_2025 : MONTH_KEYS_2026;
-  const monthValForYear = yearFilter === 2025 ? MONTH_VAL_2025 : MONTH_VAL_2026;
-
+  // ─── KPIs ───
   const totalSKUs = filtered.length;
   const totalVentas = filtered.reduce((sum, p) => sum + summonthlyValues(p, monthValForYear), 0);
   const totalPiezas = filtered.reduce((sum, p) => sum + summonthlyValues(p, monthKeysForYear), 0);
   const totalInventarioValor = filtered.reduce((sum, p) => {
-    const inv = p.inventario_cliente || 0;
-    const cost = p.costo_promedio || 0;
-    return sum + (inv * cost);
+    return sum + ((p.inventario_cliente || 0) * (p.costo_promedio || 0));
   }, 0);
 
-  // Brand breakdown
+  // ─── Brand breakdown ───
   const acteckProds = filtered.filter(p => p.marca && p.marca.toUpperCase().includes("ACTECK"));
   const balamProds = filtered.filter(p => p.marca && p.marca.toUpperCase().includes("BALAM"));
-
   const acteckVentas = acteckProds.reduce((sum, p) => sum + summonthlyValues(p, monthValForYear), 0);
   const acteckPiezas = acteckProds.reduce((sum, p) => sum + summonthlyValues(p, monthKeysForYear), 0);
   const balamVentas = balamProds.reduce((sum, p) => sum + summonthlyValues(p, monthValForYear), 0);
   const balamPiezas = balamProds.reduce((sum, p) => sum + summonthlyValues(p, monthKeysForYear), 0);
 
-  // Category breakdown
+  // ─── Category breakdown with monthly data ───
   const categoryBreakdown = categorias.map(cat => {
     const catProds = filtered.filter(p => p.categoria === cat);
-    const ventas = catProds.reduce((sum, p) => sum + summonthlyValues(p, monthValForYear), 0);
-    const piezas = catProds.reduce((sum, p) => sum + summonthlyValues(p, monthKeysForYear), 0);
-    return { categoria: cat, ventas, piezas, count: catProds.length };
+    const monthlyVentas = monthValForYear.map(key => catProds.reduce((s, p) => s + (p[key] || 0), 0));
+    const monthlyPiezas = monthKeysForYear.map(key => catProds.reduce((s, p) => s + (p[key] || 0), 0));
+    const ventas = monthlyVentas.reduce((a, b) => a + b, 0);
+    const piezas = monthlyPiezas.reduce((a, b) => a + b, 0);
+    return { categoria: cat, ventas, piezas, count: catProds.length, monthlyVentas, monthlyPiezas };
   });
 
-  // Handle sugerido edit
+  // Sort categories
+  const handleCatSort = (col) => {
+    if (catSortCol === col) setCatSortDir(catSortDir === "asc" ? "desc" : "asc");
+    else { setCatSortCol(col); setCatSortDir("desc"); }
+  };
+  const catSortArrow = (col) => catSortCol === col ? (catSortDir === "asc" ? " \u2191" : " \u2193") : "";
+
+  const sortedCategories = [...categoryBreakdown].sort((a, b) => {
+    let aVal, bVal;
+    if (catSortCol === "categoria") { aVal = a.categoria.toLowerCase(); bVal = b.categoria.toLowerCase(); }
+    else if (catSortCol.startsWith("m_")) {
+      const idx = parseInt(catSortCol.split("_")[1]);
+      aVal = a.monthlyVentas[idx]; bVal = b.monthlyVentas[idx];
+    } else { aVal = a[catSortCol]; bVal = b[catSortCol]; }
+    const cmp = aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+    return catSortDir === "asc" ? cmp : -cmp;
+  });
+
+  // ─── Handle sugerido edit ───
   const handleEditSugerido = async (productoId, newValue) => {
     try {
       const { error } = await supabase
         .from("productos")
         .update({ sugerido_manual: parseInt(newValue) || 0 })
         .eq("id", productoId);
-
       if (error) throw error;
-
       setToast("Sugerido actualizado");
       setTimeout(() => setToast(""), 2000);
       setEditingId(null);
@@ -1578,6 +1579,12 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
       setToast("Error al guardar");
       setTimeout(() => setToast(""), 2000);
     }
+  };
+
+  // ─── Brand card click handler ───
+  const handleBrandClick = (brand) => {
+    if (marcaFilter === brand) setMarcaFilter("todas");
+    else setMarcaFilter(brand);
   };
 
   if (loading) {
@@ -1634,12 +1641,20 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
         </div>
       </div>
 
-      {/* BRAND CARDS */}
+      {/* BRAND CARDS — clickable to filter */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-red-500">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-2xl">🔵</span>
-            <h3 className="text-lg font-bold text-gray-800">Acteck</h3>
+        <div
+          onClick={() => handleBrandClick("acteck")}
+          className={`bg-white rounded-xl shadow-sm p-5 border-l-4 cursor-pointer transition-all ${
+            marcaFilter === "acteck" ? "border-red-500 ring-2 ring-red-200 bg-red-50" : "border-red-500 hover:shadow-md"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🔵</span>
+              <h3 className="text-lg font-bold text-gray-800">Acteck</h3>
+            </div>
+            {marcaFilter === "acteck" && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full font-medium">Filtro activo</span>}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -1663,10 +1678,18 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-500">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-2xl">🔴</span>
-            <h3 className="text-lg font-bold text-gray-800">Balam Rush</h3>
+        <div
+          onClick={() => handleBrandClick("balam")}
+          className={`bg-white rounded-xl shadow-sm p-5 border-l-4 cursor-pointer transition-all ${
+            marcaFilter === "balam" ? "border-blue-500 ring-2 ring-blue-200 bg-blue-50" : "border-blue-500 hover:shadow-md"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🔴</span>
+              <h3 className="text-lg font-bold text-gray-800">Balam Rush</h3>
+            </div>
+            {marcaFilter === "balam" && <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full font-medium">Filtro activo</span>}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -1691,48 +1714,94 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
         </div>
       </div>
 
-      {/* CATEGORY BREAKDOWN */}
-      <div className="mb-6">
-        <h2 className="text-lg font-bold text-gray-800 mb-4">Desglose por Categoría</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {categoryBreakdown.map(cat => {
-            const pct = totalVentas > 0 ? Math.round((cat.ventas / totalVentas) * 100) : 0;
-            return (
-              <div key={cat.categoria} className="bg-white rounded-xl shadow-sm p-4">
-                <p className="font-semibold text-gray-800 mb-3">{cat.categoria}</p>
-                <div className="space-y-2 mb-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Ventas</span>
-                    <span className="font-semibold text-gray-800">{formatMXN(cat.ventas)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Piezas</span>
-                    <span className="font-semibold text-gray-800">{cat.piezas.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">SKUs</span>
-                    <span className="font-semibold text-gray-800">{cat.count}</span>
-                  </div>
-                </div>
-                <div className="mb-2">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-500">% del total</span>
-                    <span className="font-bold text-blue-600">{pct}%</span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-full" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+      {/* CATEGORY TABLE — replaces individual cards */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-6">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="text-lg font-bold text-gray-800">Desglose por Categoría — Ventas {yearFilter}</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleCatSort("categoria")}>
+                  Categoría{catSortArrow("categoria")}
+                </th>
+                {MONTHS.map((month, idx) => (
+                  <th key={month} className="px-2 py-3 text-center font-semibold text-gray-700 text-xs cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleCatSort("m_" + idx)}>
+                    {month}{catSortArrow("m_" + idx)}
+                  </th>
+                ))}
+                <th className="px-4 py-3 text-right font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleCatSort("ventas")}>
+                  Total ${catSortArrow("ventas")}
+                </th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+                    onClick={() => handleCatSort("piezas")}>
+                  Piezas{catSortArrow("piezas")}
+                </th>
+                <th className="px-3 py-3 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleCatSort("count")}>
+                  SKUs{catSortArrow("count")}
+                </th>
+                <th className="px-3 py-3 text-center font-semibold text-gray-700">%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedCategories.map((cat) => {
+                const pct = totalVentas > 0 ? Math.round((cat.ventas / totalVentas) * 100) : 0;
+                return (
+                  <tr key={cat.categoria}
+                      className={`border-b border-gray-100 hover:bg-blue-50 transition-colors cursor-pointer ${categoriaFilter === cat.categoria ? "bg-blue-50" : ""}`}
+                      onClick={() => setCategoriaFilter(categoriaFilter === cat.categoria ? "todas" : cat.categoria)}>
+                    <td className="px-4 py-3 font-semibold text-gray-800 whitespace-nowrap">
+                      {cat.categoria}
+                      {categoriaFilter === cat.categoria && <span className="ml-2 text-xs text-blue-500">✕</span>}
+                    </td>
+                    {cat.monthlyVentas.map((val, idx) => (
+                      <td key={idx} className={`px-2 py-3 text-center text-xs ${val > 0 ? "font-medium text-gray-800" : "text-gray-300"}`}>
+                        {val > 0 ? formatMXN(val).replace("$", "").trim() : "—"}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3 text-right font-bold text-gray-800 whitespace-nowrap">{formatMXN(cat.ventas)}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-gray-700">{cat.piezas.toLocaleString()}</td>
+                    <td className="px-3 py-3 text-center text-gray-700">{cat.count}</td>
+                    <td className="px-3 py-3 text-center">
+                      <div className="flex items-center gap-2 justify-center">
+                        <div className="w-12 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-xs font-bold text-blue-600 w-8">{pct}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {/* TOTALS ROW */}
+              <tr className="bg-gray-50 font-bold border-t-2 border-gray-300">
+                <td className="px-4 py-3 text-gray-800">Total</td>
+                {monthValForYear.map((key, idx) => {
+                  const monthTotal = filtered.reduce((s, p) => s + (p[key] || 0), 0);
+                  return (
+                    <td key={idx} className="px-2 py-3 text-center text-xs text-gray-800">
+                      {monthTotal > 0 ? formatMXN(monthTotal).replace("$", "").trim() : "—"}
+                    </td>
+                  );
+                })}
+                <td className="px-4 py-3 text-right text-gray-800 whitespace-nowrap">{formatMXN(totalVentas)}</td>
+                <td className="px-4 py-3 text-right text-gray-700">{totalPiezas.toLocaleString()}</td>
+                <td className="px-3 py-3 text-center text-gray-700">{totalSKUs}</td>
+                <td className="px-3 py-3 text-center text-blue-600">100%</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
       {/* FILTER BAR */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-          {/* Marca filter */}
           <div>
             <label className="block text-xs text-gray-500 uppercase tracking-wide mb-2">Marca</label>
             <div className="flex gap-2">
@@ -1751,8 +1820,6 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
               ))}
             </div>
           </div>
-
-          {/* Category filter */}
           <div>
             <label className="block text-xs text-gray-500 uppercase tracking-wide mb-2">Categoría</label>
             <select
@@ -1766,8 +1833,6 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
               ))}
             </select>
           </div>
-
-          {/* Roadmap filter */}
           <div>
             <label className="block text-xs text-gray-500 uppercase tracking-wide mb-2">Roadmap</label>
             <select
@@ -1781,8 +1846,6 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
               ))}
             </select>
           </div>
-
-          {/* Search */}
           <div>
             <label className="block text-xs text-gray-500 uppercase tracking-wide mb-2">Buscar</label>
             <input
@@ -1793,8 +1856,6 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
               className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-
-          {/* Count */}
           <div className="text-right">
             <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Resultados</p>
             <p className="text-lg font-bold text-gray-800">{sorted.length}</p>
@@ -1802,29 +1863,45 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
         </div>
       </div>
 
-      {/* TABLE */}
+      {/* PRODUCT TABLE — all columns sortable */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                    onClick={() => {
-                      if (sortCol === "sku") setSortDir(sortDir === "asc" ? "desc" : "asc");
-                      else { setSortCol("sku"); setSortDir("asc"); }
-                    }}>
-                  SKU {sortCol === "sku" && (sortDir === "asc" ? "↑" : "↓")}
+                    onClick={() => handleSort("sku")}>
+                  SKU{sortArrow("sku")}
                 </th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Roadmap</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Descripción</th>
-                {MONTHS.map((month, idx) => (
-                  <th key={month} className="px-2 py-3 text-center font-semibold text-gray-700 text-xs">
-                    {month}
-                  </th>
-                ))}
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Prom 90d</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Inventario</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Sugerido</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("roadmap")}>
+                  Roadmap{sortArrow("roadmap")}
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("descripcion")}>
+                  Descripción{sortArrow("descripcion")}
+                </th>
+                {MONTHS.map((month, idx) => {
+                  const colKey = monthKeysForYear[idx];
+                  return (
+                    <th key={month} className="px-2 py-3 text-center font-semibold text-gray-700 text-xs cursor-pointer hover:bg-gray-100"
+                        onClick={() => handleSort(colKey)}>
+                      {month}{sortArrow(colKey)}
+                    </th>
+                  );
+                })}
+                <th className="px-4 py-3 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("promedio_90d")}>
+                  Prom 90d{sortArrow("promedio_90d")}
+                </th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("inventario_cliente")}>
+                  Inventario{sortArrow("inventario_cliente")}
+                </th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("_sugerido")}>
+                  Sugerido{sortArrow("_sugerido")}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1859,7 +1936,7 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
                         const val = producto[key] || 0;
                         return (
                           <td key={key} className={`px-2 py-3 text-center text-xs ${val > 0 ? "bg-blue-50 font-medium text-gray-800" : "text-gray-400"}`}>
-                            {val > 0 ? val : "—"}
+                            {val > 0 ? val : "\u2014"}
                           </td>
                         );
                       })}
