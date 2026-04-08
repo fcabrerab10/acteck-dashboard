@@ -61,7 +61,7 @@ const CARTERA_DIGITALIFE = {
 };
 
 // ─── DATOS — PAGOS Y COMPROMISOS DIGITALIFE 2026 ─────────────────────────────
-// Categorías: Promociones, Plan de Marketing, Gastos Fijos, Gastos Variables
+// Categorías: Promociones, Plan de Marketing, Pagos Fijos, Pagos Variables
 // Campos: Folio, Concepto, Monto, Estatus, Fecha Compromiso, Fecha Pago Real, Responsable, Notas
 const PAGOS_DIGITALIFE_2026 = {
   categorias: {
@@ -1092,7 +1092,7 @@ function PagosCliente({ cliente }) {
               <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Pagos y Compromisos</h1>
               <p className="text-sm text-gray-400 mt-0.5">
                 <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
-                {" · "}Promociones · Marketing · Gastos Fijos · Variables
+                {" · "}Promociones · Marketing · Pagos Fijos · Variables
                 {saving && <span className="ml-2 text-blue-400 animate-pulse">● Guardando...</span>}
               </p>
             </div>
