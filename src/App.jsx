@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase, DB_CONFIGURED } from './lib/supabase';
 
 // ─── DATOS REALES — DIGITALIFE (API GLOBAL) ───────────────────────────────────
 // Fuentes: Vw_TablaH_Ventas (Sell In), BD Sellout (Sell Out), BD Inventario
@@ -59,7 +60,7 @@ const CARTERA_DIGITALIFE = {
   dso: 65,  // días promedio de cobro — histórico cliente
 };
 
-// ─── DATOS — PAGOS Y COMPROMISOS DIGITALIFE 2026 ─────────────────────────────────────────────
+// ─── DATOS — PAGOS Y COMPROMISOS DIGITALIFE 2026 ─────────────────────────────
 // Categorías: Promociones, Plan de Marketing, Gastos Fijos, Gastos Variables
 // Campos: Folio, Concepto, Monto, Estatus, Fecha Compromiso, Fecha Pago Real, Responsable, Notas
 const PAGOS_DIGITALIFE_2026 = {
@@ -846,41 +847,241 @@ function CreditoCobranza({ cliente }) {
   );
 }
 
-// ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
-// ─── PAGOS Y COMPROMISOS ─────────────────────────────────────────────────────
+// ─── PAGOS — CONSTANTES COMPARTIDAS ──────────────────────────────────────────
+const CATEGORIA_META = {
+  promociones:     { label: "Promociones",      icono: "🎯", color: "#E31E26", prefix: "PRO" },
+  marketing:       { label: "Plan de Marketing", icono: "📣", color: "#3b82f6", prefix: "MKT" },
+  gastosFijos:     { label: "Gastos Fijos",      icono: "🏢", color: "#8b5cf6", prefix: "GF"  },
+  gastosVariables: { label: "Gastos Variables",  icono: "📊", color: "#f59e0b", prefix: "GV"  },
+};
+
+const ESTATUS_OPT = [
+  { value: "pendiente",   label: "Pendiente",  bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-400" },
+  { value: "en proceso",  label: "En Proceso", bg: "bg-blue-100",   text: "text-blue-700",   dot: "bg-blue-400"   },
+  { value: "pagado",      label: "Pagado",     bg: "bg-green-100",  text: "text-green-700",  dot: "bg-green-500"  },
+  { value: "vencido",     label: "Vencido",    bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500"    },
+];
+
+const MESES_CORTO = { "01":"Ene","02":"Feb","03":"Mar","04":"Abr","05":"May","06":"Jun","07":"Jul","08":"Ago","09":"Sep","10":"Oct","11":"Nov","12":"Dic" };
+
+// ─── PAGOS Y COMPROMISOS (Supabase) ──────────────────────────────────────────
 function PagosCliente({ cliente }) {
-  const [catActiva, setCatActiva] = useState("todas");
   const c = cliente;
-  const datos = PAGOS_DIGITALIFE_2026;
-  const categoriasArr = Object.entries(datos.categorias);
 
-  // Flatten items with category metadata
-  const todosItems = categoriasArr.flatMap(([key, cat]) =>
-    cat.items.map(item => ({ ...item, catKey: key, catLabel: cat.label, catColor: cat.color, catIcono: cat.icono }))
-  );
+  // ── State ──
+  const [registros, setRegistros]     = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [catActiva, setCatActiva]     = useState("todas");
+  const [editingCell, setEditingCell] = useState(null); // { id, field }
+  const [editValue, setEditValue]     = useState("");
+  const [saving, setSaving]           = useState(false);
+  const [toast, setToast]             = useState(null); // { msg, type }
+  const [showAdd, setShowAdd]         = useState(false);
+  const [newRow, setNewRow]           = useState({
+    folio: "", concepto: "", categoria: "promociones", monto: "",
+    estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
+    responsable: "", notas: "",
+  });
 
-  // KPIs globales
-  const totalPagado   = todosItems.filter(i => i.estatus === "pagado").reduce((a, i) => a + i.monto, 0);
-  const totalPorPagar = todosItems.filter(i => ["pendiente","en proceso"].includes(i.estatus) && i.monto > 0).reduce((a, i) => a + i.monto, 0);
-  const totalVencido  = todosItems.filter(i => i.estatus === "vencido").reduce((a, i) => a + i.monto, 0);
-  const totalAnio     = todosItems.reduce((a, i) => a + i.monto, 0);
+  // ── Data loading ──
+  useEffect(() => {
+    if (!DB_CONFIGURED) {
+      // Usar datos del hardcode como modo lectura
+      const seed = Object.entries(PAGOS_DIGITALIFE_2026.categorias).flatMap(([key, cat]) =>
+        cat.items.map(item => ({ ...item, id: item.folio, categoria: key }))
+      );
+      setRegistros(seed);
+      setLoading(false);
+      return;
+    }
+    fetchData();
+    // Suscripción en tiempo real — cualquier cambio se refleja automáticamente
+    const channel = supabase
+      .channel("pagos-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "pagos" }, fetchData)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
 
-  // Filtered items
-  const itemsFiltrados = catActiva === "todas"
-    ? todosItems
-    : todosItems.filter(i => i.catKey === catActiva);
-
-  const estatusConfig = {
-    pagado:       { bg: "bg-green-100",  text: "text-green-700",  dot: "bg-green-500",  label: "Pagado"     },
-    pendiente:    { bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-400", label: "Pendiente"  },
-    vencido:      { bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500",    label: "Vencido"    },
-    "en proceso": { bg: "bg-blue-100",   text: "text-blue-700",   dot: "bg-blue-400",   label: "En Proceso" },
+  const fetchData = async () => {
+    const { data } = await supabase.from("pagos").select("*").order("created_at");
+    setRegistros(data || []);
+    setLoad)ng(false);
   };
 
+  // ── Toast ──
+  const flash = (msg, type = "ok") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  // ── Inline edit helpers ──
+  const startEdit = (id, field, value) => {
+    if (!DB_CONFIGURED) return;
+    setEditingCell({ id, field });
+    setEditValue(value ?? "");
+  };
+  const cancelEdit = () => { setEditingCell(null); setEditValue(""); };
+  const saveEdit   = async () => {
+    if (!editingCell) return;
+    const { id, field } = editingCell;
+    const value = field === "monto" ? (parseFloat(editValue) || 0) : (editValue || null);
+    // Actualización optimista
+    setRegistros(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+    cancelEdit();
+    setSaving(true);
+    const { error } = await supabase.from("pagos")
+      .update({ [field]: value, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    setSaving(false);
+    if (error) { flash("Error al guardar ✗", "err"); fetchData(); }
+    else flash("Guardado ✓");
+  };
+
+  // ── Add record ──
+  const handleAdd = async () => {
+    if (!newRow.concepto.trim()) return;
+    const meta   = CATEGORIA_META[newRow.categoria] || CATEGORIA_META.promociones;
+    const sameC  = registros.filter(r => r.categoria === newRow.categoria).length;
+    const folio  = newRow.folio.trim() || `${meta.prefix}-${String(sameC + 1).padStart(3, "0")}`;
+    const record = {
+      ...newRow, folio,
+      monto:             parseFloat(newRow.monto) || 0,
+      fecha_compromiso:  newRow.fecha_compromiso  || null,
+      fecha_pago_real:   newRow.fecha_pago_real   || null,
+    };
+    const { data, error } = await supabase.from("pagos").insert(record).select().single();
+    if (error) { flash("Error al agregar ✗", "err"); return; }
+    setRegistros(prev => [...prev, data]);
+    setNewRow({ folio: "", concepto: "", categoria: "promociones", monto: "",
+                estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
+                responsable: "", notas: "" });
+    setShowAdd(false);
+    flash("Registro agregado ✓");
+  };
+
+  // ── Delete record ──
+  const handleDelete = async (id) => {
+    if (!window.confirm("¼Eliminar este registro? Esta acción no se puede deshacer.")) return;
+    setRegistros(prev => prev.filter(r => r.id !== id));
+    const { error } = await supabase.from("pagos").delete().eq("id", id);
+    if (error) { flash("Error al eliminar ✗", "err"); fetchData(); }
+    else flash("Eliminado ✓");
+  };
+
+  // ── Computed KPIs ──
+  const filtered      = catActiva === "todas" ? registros : registros.filter(r => r.categoria === catActiva);
+  const totalPagado   = registros.filter(r => r.estatus === "pagado").reduce((s, r) => s + (r.monto || 0), 0);
+  const totalPorPagar = registros.filter(r => ["pendiente","en proceso"].includes(r.estatus)).reduce((s, r) => s + (r.monto || 0), 0);
+  const totalVencido  = registros.filter(r => r.estatus === "vencido").reduce((s, r) => s + (r.monto || 0), 0);
+  const totalAnio     = registros.reduce((s, r) => s + (r.monto || 0), 0);
+
+  // ── Monthly breakdown ──
+  const monthlyBreakdown = () => {
+    const months = {};
+    registros.forEach(r => {
+      const d = r.fecha_compromiso;
+      if (!d) return;
+      const m = typeof d === "string" ? d.slice(0, 7) : new Date(d).toISOString().slice(0, 7);
+      if (!months[m]) months[m] = { mes: m, total: 0, promociones: 0, marketing: 0, gastosFijos: 0, gastosVariables: 0 };
+      months[m].total += (r.monto || 0);
+      if (CATEGORIA_META[r.categoria]) months[m][r.categoria] = (months[m][r.categoria] || 0) + (r.monto || 0);
+    });
+    return Object.values(months).sort((a, b) => a.mes.localeCompare(b.mes));
+  };
+
+  // ── Inline cell renderer (función, no componente, para evitar remounts) ──
+  const renderCell = (row, field, type = "text") => {
+    const isEditing = editingCell?.id === row.id && editingCell?.field === field;
+    const inputCls  = "w-full border border-blue-400 rounded px-2 py-1 text-sm outline-none bg-blue-50 focus:ring-1 focus:ring-blue-400";
+
+    if (isEditing) {
+      if (type === "sel-estatus") {
+        return (
+          <select autoFocus value={editValue} className={inputCls}
+            onChange={e => setEditValue(e.target.value)} onBlur={saveEdit}
+            onKeyDown={e => { if (e.key==="Enter") saveEdit(); if (e.key==="Escape") cancelEdit(); }}>
+            {ESTATUS_OPT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        );
+      }
+      if (type === "sel-cat") {
+        return (
+          <select autoFocus value={editValue} className={inputCls}
+            onChange={e => setEditValue(e.target.value)} onBlur={saveEdit}
+            onKeyDown={e => { if (e.key==="Enter") saveEdit(); if (e.key==="Escape") cancelEdit(); }}>
+            {Object.entries(CATEGORIA_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        );
+      }
+      return (
+        <input autoFocus type={type} value={editValue} className={inputCls}
+          onChange={e => setEditValue(e.target.value)} onBlur={saveEdit}
+          onKeyDown={e => { if (e.key==="Enter") saveEdit(); if (e.key==="Escape") cancelEdit(); }} />
+      );
+    }
+
+    // Modo display
+    const handleClick = () => {
+      if (field === "monto") startEdit(row.id, field, row.monto ?? "");
+      else startEdit(row.id, field, row[field] ?? "");
+    };
+
+    if (field === "estatus") {
+      const s = ESTATUS_OPT.find(o => o.value === (row.estatus || "pendiente")) || ESTATUS_OPT[0];
+      return (
+        <div className={DB_CONFIGURED ? "cursor-pointer" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${s.bg} ${s.text}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`}></span>{s.label}
+          </span>
+        </div>
+      );
+    }
+    if (field === "categoria") {
+      const m = CATEGORIA_META[row.categoria] || CATEGORIA_META.promociones;
+      return (
+        <div className={DB_CONFIGURED ? "cursor-pointer" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
+          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full text-white font-semibold whitespace-nowrap"
+                style={{ backgroundColor: m.color }}>{m.icono} {m.label}</span>
+        </div>
+      );
+    }
+    if (field === "monto") {
+      return (
+        <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
+          {(row.monto || 0) > 0
+            ? <span className="font-bold text-gray-800">{formatMXN(row.monto)}</span>
+            : <span className="text-gray-400 text-xs italic">Por definir</span>
+          }
+        </div>
+      );
+    }
+    if (field === "fecha_compromiso" || field === "fecha_pago_real") {
+      return (
+        <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors whitespace-nowrap" : "whitespace-nowrap"} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
+          {row[field] ? <span className="text-gray-600">{formatFecha(row[field])}</span> : <span className="text-gray-300">—</span>}
+        </div>
+      );
+    }
+    return (
+      <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
+        {row[field] ? <span className="text-gray-700">{row[field]}</span> : <span className="text-gray-300">—</span>}
+      </div>
+    );
+  };
+
+  // ────────────────────────── RENDER ──────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 p-6">
 
-      {/* ── HEADER ── */}
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl shadow-lg text-sm font-semibold transition-all ${toast.type === "err" ? "bg-red-500 text-white" : "bg-green-600 text-white"}`}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Header */}
       <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -891,6 +1092,7 @@ function PagosCliente({ cliente }) {
               <p className="text-sm text-gray-400 mt-0.5">
                 <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
                 {" · "}Promociones · Marketing · Gastos Fijos · Variables
+                {saving && <span className="ml-2 text-blue-400 animate-pulse">● Guardando...</span>}
               </p>
             </div>
           </div>
@@ -902,183 +1104,277 @@ function PagosCliente({ cliente }) {
             {c.cartera?.tipoCambio && (
               <span className="text-xs text-gray-400">TC: ${c.cartera.tipoCambio.toFixed(2)} MXN/USD</span>
             )}
+            <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-semibold ${DB_CONFIGURED ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+              {DB_CONFIGURED ? "✅ Sincronizado" : "⚠️ Solo lectura"}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* ── KPI CARDS ── */}
-      <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-green-500">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Pagado</p>
-          <p className="text-2xl font-bold text-green-700">{totalPagado > 0 ? formatMXN(totalPagado) : "$0"}</p>
-          <p className="text-xs text-gray-400 mt-1">{todosItems.filter(i => i.estatus === "pagado").length} conceptos</p>
+      {/* Banner de configuración pendiente */}
+      {!DB_CONFIGURED && (
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 mb-6 flex items-start gap-3">
+          <span className="text-2xl">⚙️</span>
+          <div>
+            <p className="font-semibold text-orange-800 mb-1">Configuración requerida para guardar cambios</p>
+            <p className="text-sm text-orange-700 mb-2">
+              Para que todos los cambios se guarden y sean visibles para el equipo, configura las variables en Vercel y la tabla en Supabase (ver instrucciones).
+            </p>
+            <code className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded block w-fit">
+              VITE_SUPABASE_URL · VITE_SUPABASE_ANON_KEY
+            </code>
+          </div>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-yellow-400">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Por Pagar</p>
-          <p className="text-2xl font-bold text-yellow-600">{totalPorPagar > 0 ? formatMXN(totalPorPagar) : "$0"}</p>
-          <p className="text-xs text-gray-400 mt-1">{todosItems.filter(i => ["pendiente","en proceso"].includes(i.estatus)).length} conceptos</p>
-        </div>
-        <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4 ${totalVencido > 0 ? "border-red-500" : "border-gray-200"}`}>
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Vencido</p>
-          <p className={`text-2xl font-bold ${totalVencido > 0 ? "text-red-600" : "text-gray-400"}`}>
-            {totalVencido > 0 ? formatMXN(totalVencido) : "$0"}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">{todosItems.filter(i => i.estatus === "vencido").length} conceptos</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total 2026</p>
-          <p className="text-2xl font-bold text-gray-800">{totalAnio > 0 ? formatMXN(totalAnio) : "$0"}</p>
-          <p className="text-xs text-gray-400 mt-1">{todosItems.length} conceptos registrados</p>
-        </div>
-      </div>
+      )}
 
-      {/* ── RESUMEN POR CATEGORÍA (cards clickeables) ── */}
-      <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
-        {categoriasArr.map(([key, cat]) => {
-          const catItems = cat.items;
-          const catPagado = catItems.filter(i => i.estatus === "pagado").reduce((a, i) => a + i.monto, 0);
-          const catTotal  = catItems.reduce((a, i) => a + i.monto, 0);
-          const pct = catTotal > 0 ? Math.round((catPagado / catTotal) * 100) : 0;
-          const isActive = catActiva === key;
-          return (
-            <button
-              key={key}
-              onClick={() => setCatActiva(isActive ? "todas" : key)}
-              className={`bg-white rounded-2xl shadow-sm p-4 text-left transition-all border-2 ${
-                isActive ? "shadow-md" : "border-transparent hover:border-gray-200"
-              }`}
-              style={{ borderColor: isActive ? cat.color : undefined }}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg">{cat.icono}</span>
-                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide leading-tight">{cat.label}</p>
-              </div>
-              <p className="text-lg font-bold text-gray-800 mb-2">
-                {catTotal > 0
-                  ? formatMXN(catTotal)
-                  : <span className="text-gray-400 text-sm font-normal">Sin monto aún</span>
-                }
-              </p>
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
-                <div className="h-full rounded-full transition-all"
-                     style={{ width: `${pct}%`, backgroundColor: cat.color }}></div>
-              </div>
-              <p className="text-xs text-gray-400">{pct}% pagado · {catItems.length} conceptos</p>
-              {cat.presupuesto === null && (
-                <p className="text-xs text-orange-500 mt-1 font-medium">Presupuesto por definir</p>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── TABLA DE REGISTROS ── */}
-      <div className="bg-white rounded-2xl shadow-sm p-5">
-
-        {/* Filtro de categorías */}
-        <div className="flex items-center gap-2 mb-5 flex-wrap">
-          <button
-            onClick={() => setCatActiva("todas")}
-            className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${
-              catActiva === "todas" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >Todas</button>
-          {categoriasArr.map(([key, cat]) => (
-            <button
-              key={key}
-              onClick={() => setCatActiva(catActiva === key ? "todas" : key)}
-              className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${
-                catActiva === key ? "text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-              style={catActiva === key ? { backgroundColor: cat.color } : {}}
-            >
-              <span>{cat.icono}</span>
-              {cat.label}
-            </button>
-          ))}
-          <span className="ml-auto text-xs text-gray-400">{itemsFiltrados.length} registro{itemsFiltrados.length !== 1 ? "s" : ""}</span>
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-16">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mr-3"></div>
+          <span className="text-gray-500">Cargando datos...</span>
         </div>
+      )}
 
-        {/* Tabla */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">Folio</th>
-                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4">Concepto</th>
-                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">Categoría</th>
-                <th className="text-right text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">Monto</th>
-                <th className="text-center text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">Estatus</th>
-                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">F. Compromiso</th>
-                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">F. Pago Real</th>
-                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-4 whitespace-nowrap">Responsable</th>
-                <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3">Notas</th>
-              </tr>
-            </thead>
-            <tbody>
-              {itemsFiltrados.map((item, i) => {
-                const es = estatusConfig[item.estatus] || estatusConfig["pendiente"];
-                return (
-                  <tr key={item.folio} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${i % 2 === 1 ? "bg-gray-50/40" : ""}`}>
-                    <td className="py-3 pr-4">
-                      <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">{item.folio}</span>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <p className="font-medium text-gray-800">{item.concepto}</p>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full text-white font-semibold whitespace-nowrap"
-                            style={{ backgroundColor: item.catColor }}>
-                        {item.catIcono} {item.catLabel}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4 text-right whitespace-nowrap">
-                      {item.monto > 0
-                        ? <span className="font-bold text-gray-800">{formatMXN(item.monto)}</span>
-                        : <span className="text-gray-400 text-xs italic">Por definir</span>
-                      }
-                    </td>
-                    <td className="py-3 pr-4 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${es.bg} ${es.text}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${es.dot}`}></span>
-                        {es.label}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4 text-xs text-gray-600 whitespace-nowrap">
-                      {item.fechaCompromiso ? formatFecha(item.fechaCompromiso) : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="py-3 pr-4 text-xs text-gray-600 whitespace-nowrap">
-                      {item.fechaPagoReal ? formatFecha(item.fechaPagoReal) : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="py-3 pr-4 text-xs text-gray-600 whitespace-nowrap">{item.responsable}</td>
-                    <td className="py-3 text-xs text-gray-400 max-w-xs">{item.notas}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {itemsFiltrados.length === 0 && (
-            <div className="text-center py-8 text-gray-400">
-              <p className="text-3xl mb-2">📭</p>
-              <p className="text-sm">No hay registros en esta categoría</p>
+      {!loading && (
+        <>
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
+            <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-green-500">
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Pagado</p>
+              <p className="text-2xl font-bold text-green-700">{totalPagado > 0 ? formatMXN(totalPagado) : "$0"}</p>
+              <p className="text-xs text-gray-400 mt-1">{registros.filter(r => r.estatus === "pagado").length} conceptos</p>
             </div>
-          )}
-        </div>
+            <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-yellow-400">
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Por Pagar</p>
+              <p className="text-2xl font-bold text-yellow-600">{totalPorPagar > 0 ? formatMXN(totalPorPagar) : "$0"}</p>
+              <p className="text-xs text-gray-400 mt-1">{registros.filter(r => ["pendiente","en proceso"].includes(r.estatus)).length} conceptos</p>
+            </div>
+            <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4 ${totalVencido > 0 ? "border-red-500" : "border-gray-200"}`}>
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Vencido</p>
+              <p className={`text-2xl font-bold ${totalVencido > 0 ? "text-red-600" : "text-gray-400"}`}>{totalVencido > 0 ? formatMXN(totalVencido) : "$0"}</p>
+              <p className="text-xs text-gray-400 mt-1">{registros.filter(r => r.estatus === "vencido").length} conceptos</p>
+            </div>
+            <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total 2026</p>
+              <p className="text-2xl font-bold text-gray-800">{totalAnio > 0 ? formatMXN(totalAnio) : "$0"}</p>
+              <p className="text-xs text-gray-400 mt-1">{registros.length} conceptos registrados</p>
+            </div>
+          </div>
 
-        {/* Footer */}
-        <div className="mt-5 pt-4 border-t border-gray-100">
-          <p className="text-xs text-gray-400">
-            💡 Estatus: <strong className="text-gray-600">Pendiente</strong> = programado · <strong className="text-gray-600">En Proceso</strong> = en trámite · <strong className="text-gray-600">Pagado</strong> = liquidado · <strong className="text-gray-600">Vencido</strong> = fecha superada sin pago.
-            Los conceptos con monto "Por definir" serán actualizados conforme se confirmen.
-          </p>
-        </div>
-      </div>
+          {/* Category summary cards */}
+          <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
+            {Object.entries(CATEGORIA_META).map(([key, meta]) => {
+              const items  = registros.filter(r => r.categoria === key);
+              const pagado = items.filter(r => r.estatus === "pagado").reduce((s, r) => s + (r.monto || 0), 0);
+              const total  = items.reduce((s, r) => s + (r.monto || 0), 0);
+              const pct    = total > 0 ? Math.round(pagado / total * 100) : 0;
+              const active = catActiva === key;
+              return (
+                <button key={key} onClick={() => setCatActiva(active ? "todas" : key)}
+                  className={`bg-white rounded-2xl shadow-sm p-4 text-left transition-all border-2 ${active ? "shadow-md" : "border-transparent hover:border-gray-200"}`}
+                  style={{ borderColor: active ? meta.color : undefined }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">{meta.icono}</span>
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide leading-tight">{meta.label}</p>
+                  </div>
+                  <p className="text-lg font-bold text-gray-800 mb-2">
+                    {total > 0 ? formatMXN(total) : <span className="text-gray-400 text-sm font-normal">Sin monto</span>}
+                  </p>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: meta.color }}></div>
+                  </div>
+                  <p className="text-xs text-gray-400">{pct}% pagado · {items.length} conceptos</p>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Main table */}
+          <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+
+            {/* Filter tabs + Add button */}
+            <div className="flex items-center gap-2 mb-5 flex-wrap">
+              <button onClick={() => setCatActiva("todas")}
+                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${catActiva === "todas" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                Todas
+              </button>
+              {Object.entries(CATEGORIA_META).map(([key, meta]) => (
+                <button key={key} onClick={() => setCatActiva(catActiva === key ? "todas" : key)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${catActiva === key ? "text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                  style={catActiva === key ? { backgroundColor: meta.color } : {}}>
+                  <span>{meta.icono}</span>{meta.label}
+                </button>
+              ))}
+              <span className="ml-auto text-xs text-gray-400">{filtered.length} registro{filtered.length !== 1 ? "s" : ""}</span>
+              {DB_CONFIGURED && (
+                <button onClick={() => setShowAdd(!showAdd)}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white rounded-full text-sm font-semibold hover:bg-blue-700 transition-colors">
+                  ＋ Agregar
+                </button>
+              )}
+            </div>
+
+            {/* Add form */}
+            {showAdd && DB_CONFIGURED && (
+              <div className="mb-5 p-4 bg-blue-50 rounded-xl border border-blue-200">
+                <p className="text-sm font-semibold text-blue-800 mb-3">Nuevo registro</p>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {[
+                    { label: "Categoría *", key: "categoria", type: "select-cat" },
+                    { label: "Concepto *",  key: "concepto",  type: "text"       },
+                    { label: "Monto (MXN)", key: "monto",     type: "number"     },
+                    { label: "Estatus",     key: "estatus",   type: "select-est" },
+                    { label: "F. Compromiso", key: "fecha_compromiso", type: "date" },
+                    { label: "F. Pago Real",  key: "fecha_pago_real",  type: "date" },
+                    { label: "Responsable",   key: "responsable",      type: "text" },
+                    { label: "Notas",         key: "notas",            type: "text" },
+                  ].map(({ label, key, type }) => (
+                    <div key={key}>
+                      <label className="text-xs text-gray-500 block mb-1">{label}</label>
+                      {type === "select-cat" ? (
+                        <select value={newRow.categoria} onChange={e => setNewRow(p => ({ ...p, categoria: e.target.value }))}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
+                          {Object.entries(CATEGORIA_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                        </select>
+                      ) : type === "select-est" ? (
+                        <select value={newRow.estatus} onChange={e => setNewRow(p => ({ ...p, estatus: e.target.value }))}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
+                          {ESTATUS_OPT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      ) : (
+                        <input type={type} value={newRow[key] || ""} placeholder={key === "monto" ? "0" : ""}
+                          onChange={e => setNewRow(p => ({ ...p, [key]: e.target.value }))}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button onClick={handleAdd} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors">
+                    Guardar registro
+                  </button>
+                  <button onClick={() => setShowAdd(false)} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Folio</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 min-w-36">Concepto {DB_CONFIGURED && <span className="text-blue-300 normal-case font-normal">(click p/editar)</span>}</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Categoría</th>
+                    <th className="text-right text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Monto</th>
+                    <th className="text-center text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Estatus</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">F. Compromiso</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">F. Pago Real</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Responsable</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3">Notas</th>
+                    {DB_CONFIGURED && <th className="pb-3 w-8"></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((row, i) => (
+                    <tr key={row.id} className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${i % 2 === 1 ? "bg-gray-50/30" : ""}`}>
+                      <td className="py-2.5 pr-3">
+                        <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">{row.folio}</span>
+                      </td>
+                      <td className="py-2.5 pr-3 min-w-36">{renderCell(row, "concepto")}</td>
+                      <td className="py-2.5 pr-3">{renderCell(row, "categoria", "sel-cat")}</td>
+                      <td className="py-2.5 pr-3 text-right">{renderCell(row, "monto", "number")}</td>
+                      <td className="py-2.5 pr-3 text-center">{renderCell(row, "estatus", "sel-estatus")}</td>
+                      <td className="py-2.5 pr-3">{renderCell(row, "fecha_compromiso", "date")}</td>
+                      <td className="py-2.5 pr-3">{renderCell(row, "fecha_pago_real", "date")}</td>
+                      <td className="py-2.5 pr-3">{renderCell(row, "responsable")}</td>
+                      <td className="py-2.5">{renderCell(row, "notas")}</td>
+                      {DB_CONFIGURED && (
+                        <td className="py-2.5 pl-1">
+                          <button onClick={() => handleDelete(row.id)}
+                            className="text-gray-300 hover:text-red-500 transition-colors text-base" title="Eliminar registro">🗑</button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filtered.length === 0 && (
+                <div className="text-center py-8 text-gray-400">
+                  <p className="text-3xl mb-2">📭</p>
+                  <p className="text-sm">No hay registros{catActiva !== "todas" ? " en esta categoría" : ""}</p>
+                </div>
+              )}
+            </div>
+            <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+              <p className="text-xs text-gray-400">
+                {DB_CONFIGURED ? "✅ Cambios guardados y sincronizados para todo el equipo." : "⚠️ Modo lectura — configura Supabase para habilitar la edición."}
+                {" "}💡 <strong className="text-gray-600">Pendiente</strong> · <strong className="text-gray-600">En Proceso</strong> · <strong className="text-gray-600">Pagado</strong> · <strong className="text-gray-600">Vencido</strong>
+              </p>
+            </div>
+          </div>
+
+          {/* Monthly summary table */}
+          {(() => {
+            const mb = monthlyBreakdown();
+            if (mb.length === 0) return null;
+            return (
+              <div className="bg-white rounded-2xl shadow-sm p-5">
+                <CardHeader titulo="Resumen General por Mes y Categoría" icono="📅" />
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left text-xs text-gray-400 uppercase pb-3 pr-4">Mes</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.promociones.color }}>Promociones</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.marketing.color }}>Marketing</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.gastosFijos.color }}>Gastos Fijos</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.gastosVariables.color }}>G. Variables</th>
+                        <th className="text-right text-xs text-gray-700 uppercase font-bold pb-3">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mb.map(m => {
+                        const [yr, mo] = m.mes.split("-");
+                        return (
+                          <tr key={m.mes} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                            <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTO[mo]} {yr}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.gastosFijos    > 0 ? formatMXN(m.gastosFijos)    : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.gastosVariables> 0 ? formatMXN(m.gastosVariables): <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 text-right font-bold text-gray-800">{formatMXN(m.total)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-gray-200">
+                        <td className="pt-3 font-bold text-gray-700 text-sm">TOTAL ANUAL</td>
+                        {["promociones","marketing","gastosFijos","gastosVariables"].map(cat => (
+                          <td key={cat} className="pt-3 pr-4 text-right font-bold text-gray-700">
+                            {formatMXN(registros.filter(r => r.categoria === cat).reduce((s, r) => s + (r.monto || 0), 0))}
+                          </td>
+                        ))}
+                        <td className="pt-3 text-right font-bold text-blue-700">{formatMXN(totalAnio)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+        </>
+      )}
 
     </div>
   );
 }
 
 
+// ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
 export default function App() {
   const [clienteActivo, setClienteActivo] = useState("digitalife");
   const [modoPresent, setModoPresent] = useState(false);
