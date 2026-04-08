@@ -85,8 +85,8 @@ const PAGOS_DIGITALIFE_2026 = {
         { folio: "MKT-002", concepto: "Activación punto de venta", monto: 0, estatus: "pendiente", fechaCompromiso: null, fechaPagoReal: null, responsable: "Fernando", notas: "Monto y fecha por definir." },
       ],
     },
-    gastosFijos: {
-      label: "Gastos Fijos",
+    pagosFijos: {
+      label: "Pagos Fijos",
       icono: "🏢",
       color: "#8b5cf6",
       presupuesto: null, // Por definir
@@ -95,8 +95,8 @@ const PAGOS_DIGITALIFE_2026 = {
         { folio: "GF-002", concepto: "Cuota mensual exhibidor — Mayo", monto: 0, estatus: "pendiente", fechaCompromiso: "2026-05-31", fechaPagoReal: null, responsable: "Fernando", notas: "Recurrente mensual. Monto por confirmar." },
       ],
     },
-    gastosVariables: {
-      label: "Gastos Variables",
+    pagosVariables: {
+      label: "Pagos Variables",
       icono: "📊",
       color: "#f59e0b",
       presupuesto: null, // Por definir
@@ -851,8 +851,9 @@ function CreditoCobranza({ cliente }) {
 const CATEGORIA_META = {
   promociones:     { label: "Promociones",      icono: "🎯", color: "#E31E26", prefix: "PRO" },
   marketing:       { label: "Plan de Marketing", icono: "📣", color: "#3b82f6", prefix: "MKT" },
-  gastosFijos:     { label: "Gastos Fijos",      icono: "🏢", color: "#8b5cf6", prefix: "GF"  },
-  gastosVariables: { label: "Gastos Variables",  icono: "📊", color: "#f59e0b", prefix: "GV"  },
+  pagosFijos:     { label: "Pagos Fijos",      icono: "🏢", color: "#8b5cf6", prefix: "PF"  },
+  pagosVariables: { label: "Pagos Variables",  icono: "📊", color: "#f59e0b", prefix: "PV"  },
+  rebate:           { label: "Rebate",           icono: "🔄", color: "#10b981", prefix: "REB" },
 };
 
 const ESTATUS_OPT = [
@@ -983,7 +984,7 @@ function PagosCliente({ cliente }) {
       const d = r.fecha_compromiso;
       if (!d) return;
       const m = typeof d === "string" ? d.slice(0, 7) : new Date(d).toISOString().slice(0, 7);
-      if (!months[m]) months[m] = { mes: m, total: 0, promociones: 0, marketing: 0, gastosFijos: 0, gastosVariables: 0 };
+      if (!months[m]) months[m] = { mes: m, total: 0, promociones: 0, marketing: 0, pagosFijos: 0, pagosVariables: 0 };
       months[m].total += (r.monto || 0);
       if (CATEGORIA_META[r.categoria]) months[m][r.categoria] = (months[m][r.categoria] || 0) + (r.monto || 0);
     });
@@ -1227,7 +1228,8 @@ function PagosCliente({ cliente }) {
                     { label: "F. Compromiso", key: "fecha_compromiso", type: "date" },
                     { label: "F. Pago Real",  key: "fecha_pago_real",  type: "date" },
                     { label: "Responsable",   key: "responsable",      type: "text" },
-                    { label: "Notas",         key: "notas",            type: "text" },
+                    { label: "Folio", key: "folio", type: "text" },
+              { label: "Notas",         key: "notas",            type: "text" },
                   ].map(({ label, key, type }) => (
                     <div key={key}>
                       <label className="text-xs text-gray-500 block mb-1">{label}</label>
@@ -1265,7 +1267,7 @@ function PagosCliente({ cliente }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Folio</th>
+
                     <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 min-w-36">Concepto {DB_CONFIGURED && <span className="text-blue-300 normal-case font-normal">(click p/editar)</span>}</th>
                     <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Categoría</th>
                     <th className="text-right text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Monto</th>
@@ -1273,6 +1275,7 @@ function PagosCliente({ cliente }) {
                     <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">F. Compromiso</th>
                     <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">F. Pago Real</th>
                     <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Responsable</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Folio</th>
                     <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3">Notas</th>
                     {DB_CONFIGURED && <th className="pb-3 w-8"></th>}
                   </tr>
@@ -1280,9 +1283,6 @@ function PagosCliente({ cliente }) {
                 <tbody>
                   {filtered.map((row, i) => (
                     <tr key={row.id} className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${i % 2 === 1 ? "bg-gray-50/30" : ""}`}>
-                      <td className="py-2.5 pr-3">
-                        <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">{row.folio}</span>
-                      </td>
                       <td className="py-2.5 pr-3 min-w-36">{renderCell(row, "concepto")}</td>
                       <td className="py-2.5 pr-3">{renderCell(row, "categoria", "sel-cat")}</td>
                       <td className="py-2.5 pr-3 text-right">{renderCell(row, "monto", "number")}</td>
@@ -1290,6 +1290,9 @@ function PagosCliente({ cliente }) {
                       <td className="py-2.5 pr-3">{renderCell(row, "fecha_compromiso", "date")}</td>
                       <td className="py-2.5 pr-3">{renderCell(row, "fecha_pago_real", "date")}</td>
                       <td className="py-2.5 pr-3">{renderCell(row, "responsable")}</td>
+                      <td className="py-2.5 pr-3">
+                        <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">{row.folio}</span>
+                      </td>
                       <td className="py-2.5">{renderCell(row, "notas")}</td>
                       {DB_CONFIGURED && (
                         <td className="py-2.5 pl-1">
@@ -1330,8 +1333,9 @@ function PagosCliente({ cliente }) {
                         <th className="text-left text-xs text-gray-400 uppercase pb-3 pr-4">Mes</th>
                         <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.promociones.color }}>Promociones</th>
                         <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.marketing.color }}>Marketing</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.gastosFijos.color }}>Gastos Fijos</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.gastosVariables.color }}>G. Variables</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.pagosFijos.color }}>Pagos Fijos</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.pagosVariables.color }}>P. Variables</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.rebate.color }}>Rebate</th>
                         <th className="text-right text-xs text-gray-700 uppercase font-bold pb-3">Total</th>
                       </tr>
                     </thead>
@@ -1343,8 +1347,9 @@ function PagosCliente({ cliente }) {
                             <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTO[mo]} {yr}</td>
                             <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">—</span>}</td>
                             <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.gastosFijos    > 0 ? formatMXN(m.gastosFijos)    : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.gastosVariables> 0 ? formatMXN(m.gastosVariables): <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosFijos    > 0 ? formatMXN(m.pagosFijos)    : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosVariables> 0 ? formatMXN(m.pagosVariables): <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.rebate > 0 ? formatMXN(m.rebate) : <span className="text-gray-300">—</span>}</td>
                             <td className="py-2.5 text-right font-bold text-gray-800">{formatMXN(m.total)}</td>
                           </tr>
                         );
@@ -1353,7 +1358,7 @@ function PagosCliente({ cliente }) {
                     <tfoot>
                       <tr className="border-t-2 border-gray-200">
                         <td className="pt-3 font-bold text-gray-700 text-sm">TOTAL ANUAL</td>
-                        {["promociones","marketing","gastosFijos","gastosVariables"].map(cat => (
+                        {["promociones","marketing","pagosFijos","pagosVariables","rebate"].map(cat => (
                           <td key={cat} className="pt-3 pr-4 text-right font-bold text-gray-700">
                             {formatMXN(registros.filter(r => r.categoria === cat).reduce((s, r) => s + (r.monto || 0), 0))}
                           </td>
