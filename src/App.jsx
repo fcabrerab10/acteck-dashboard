@@ -2894,7 +2894,7 @@ export default function App() {
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} />}
           {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "PCEL"} />}
-        {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: c })}
+        {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: clienteActivo })}
       </main>
 
     </div>
