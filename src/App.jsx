@@ -847,25 +847,7 @@ function CreditoCobranza({ cliente }) {
   );
 }
 
-// ─── PAGOS — CONSTANTES COMPARTIDAS ──────────────────────────────────────────
-const CATEGORIA_META = {
-  promociones:     { label: "Promociones",      icono: "🎯", color: "#E31E26", prefix: "PRO" },
-  marketing:       { label: "Plan de Marketing", icono: "📣", color: "#3b82f6", prefix: "MKT" },
-  pagosFijos:     { label: "Pagos Fijos",      icono: "🏢", color: "#8b5cf6", prefix: "PF"  },
-  pagosVariables: { label: "Pagos Variables",  icono: "📊", color: "#f59e0b", prefix: "PV"  },
-  rebate:           { label: "Rebate",           icono: "🔄", color: "#10b981", prefix: "REB" },
-};
-
-const ESTATUS_OPT = [
-  { value: "pendiente",   label: "Pendiente",  bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-400" },
-  { value: "en proceso",  label: "En Proceso", bg: "bg-blue-100",   text: "text-blue-700",   dot: "bg-blue-400"   },
-  { value: "pagado",      label: "Pagado",     bg: "bg-green-100",  text: "text-green-700",  dot: "bg-green-500"  },
-  { value: "vencido",     label: "Vencido",    bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500"    },
-];
-
-const MESES_CORTO = { "01":"Ene","02":"Feb","03":"Mar","04":"Abr","05":"May","06":"Jun","07":"Jul","08":"Ago","09":"Sep","10":"Oct","11":"Nov","12":"Dic" };
-
-// --- PAGOS Y COMPROMISOS (Supabase) ---
+// ——— PAGOS Y COMPROMISOS (Supabase) ———
 function PagosCliente({ cliente }) {
   const c = cliente;
 
@@ -981,7 +963,7 @@ function PagosCliente({ cliente }) {
     const records = MESES_ARR.map(m => ({
       folio: "",
       concepto: newFijo.concepto.trim(),
-      categoria: "gastosFijos",
+      categoria: "pagosFijos",
       monto,
       estatus: "pendiente",
       fecha_compromiso: `2026-${m.key}-01`,
@@ -1024,16 +1006,16 @@ function PagosCliente({ cliente }) {
   };
 
   // ── Computed ──
-  const fijoRecords = registros.filter(r => r.categoria === "gastosFijos");
-  const nonFijoRecords = registros.filter(r => r.categoria !== "gastosFijos");
+  const fijoRecords = registros.filter(r => r.categoria === "pagosFijos");
+  const nonFijoRecords = registros.filter(r => r.categoria !== "pagosFijos");
   const filtered = catActiva === "todas"
     ? nonFijoRecords
-    : catActiva === "gastosFijos"
+    : catActiva === "pagosFijos"
       ? []
       : registros.filter(r => r.categoria === catActiva);
 
-  const showFijosSection = catActiva === "todas" || catActiva === "gastosFijos";
-  const showRegularTable = catActiva !== "gastosFijos";
+  const showFijosSection = catActiva === "todas" || catActiva === "pagosFijos";
+  const showRegularTable = catActiva !== "pagosFijos";
 
   // Group fijos by concepto
   const fijoGroups = {};
@@ -1056,7 +1038,7 @@ function PagosCliente({ cliente }) {
       const d = r.fecha_compromiso;
       if (!d) return;
       const m = typeof d === "string" ? d.slice(0, 7) : new Date(d).toISOString().slice(0, 7);
-      if (!months[m]) months[m] = { mes: m, total: 0, promociones: 0, marketing: 0, gastosFijos: 0, gastosVariables: 0 };
+      if (!months[m]) months[m] = { mes: m, total: 0, promociones: 0, marketing: 0, pagosFijos: 0, pagosVariables: 0, rebate: 0 };
       months[m].total += (r.monto || 0);
       if (CATEGORIA_META[r.categoria]) months[m][r.categoria] = (months[m][r.categoria] || 0) + (r.monto || 0);
     });
@@ -1162,7 +1144,7 @@ function PagosCliente({ cliente }) {
               <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Pagos y Compromisos</h1>
               <p className="text-sm text-gray-400 mt-0.5">
                 <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
-                {" · "}Promociones · Marketing · Gastos Fijos · Variables
+                {" · "}Promociones · Marketing · Pagos Fijos · Variables
                 {saving && <span className="ml-2 text-blue-400 animate-pulse">● Guardando...</span>}
               </p>
             </div>
@@ -1456,7 +1438,7 @@ function PagosCliente({ cliente }) {
                   className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${catActiva === "todas" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
                   Todas
                 </button>
-                {Object.entries(CATEGORIA_META).filter(([k]) => k !== "gastosFijos").map(([key, meta]) => (
+                {Object.entries(CATEGORIA_META).filter(([k]) => k !== "pagosFijos").map(([key, meta]) => (
                   <button key={key} onClick={() => setCatActiva(catActiva === key ? "todas" : key)}
                     className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${catActiva === key ? "text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
                     style={catActiva === key ? { backgroundColor: meta.color } : {}}>
@@ -1493,7 +1475,7 @@ function PagosCliente({ cliente }) {
                         {type === "select-cat" ? (
                           <select value={newRow.categoria} onChange={e => setNewRow(p => ({ ...p, categoria: e.target.value }))}
                             className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
-                            {Object.entries(CATEGORIA_META).filter(([k]) => k !== "gastosFijos").map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                            {Object.entries(CATEGORIA_META).filter(([k]) => k !== "pagosFijos").map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                           </select>
                         ) : type === "select-est" ? (
                           <select value={newRow.estatus} onChange={e => setNewRow(p => ({ ...p, estatus: e.target.value }))}
@@ -1592,8 +1574,9 @@ function PagosCliente({ cliente }) {
                         <th className="text-left text-xs text-gray-400 uppercase pb-3 pr-4">Mes</th>
                         <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.promociones.color }}>Promociones</th>
                         <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.marketing.color }}>Marketing</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.gastosFijos.color }}>Gastos Fijos</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.gastosVariables.color }}>G. Variables</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.pagosFijos.color }}>Pagos Fijos</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.pagosVariables.color }}>P. Variables</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.rebate.color }}>Rebate</th>
                         <th className="text-right text-xs text-gray-700 uppercase font-bold pb-3">Total</th>
                       </tr>
                     </thead>
@@ -1602,11 +1585,12 @@ function PagosCliente({ cliente }) {
                         const [yr, mo] = m.mes.split("-");
                         return (
                           <tr key={m.mes} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                            <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTO[mo]} {yr}</td>
+                            <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTOS[mo]} {yr}</td>
                             <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">—</span>}</td>
                             <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.gastosFijos    > 0 ? formatMXN(m.gastosFijos)    : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.gastosVariables> 0 ? formatMXN(m.gastosVariables): <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosFijos    > 0 ? formatMXN(m.pagosFijos)    : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosVariables> 0 ? formatMXN(m.pagosVariables): <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.rebate         > 0 ? formatMXN(m.rebate)         : <span className="text-gray-300">—</span>}</td>
                             <td className="py-2.5 text-right font-bold text-gray-800">{formatMXN(m.total)}</td>
                           </tr>
                         );
@@ -1615,7 +1599,7 @@ function PagosCliente({ cliente }) {
                     <tfoot>
                       <tr className="border-t-2 border-gray-200">
                         <td className="pt-3 font-bold text-gray-700 text-sm">TOTAL ANUAL</td>
-                        {["promociones","marketing","gastosFijos","gastosVariables"].map(cat => (
+                        {["promociones","marketing","pagosFijos","pagosVariables","rebate"].map(cat => (
                           <td key={cat} className="pt-3 pr-4 text-right font-bold text-gray-700">
                             {formatMXN(registros.filter(r => r.categoria === cat).reduce((s, r) => s + (r.monto || 0), 0))}
                           </td>
