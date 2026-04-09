@@ -210,6 +210,32 @@ const clientes = {
       ],
     },
   },
+  mercadolibre: {
+    nombre: "Mercado Libre",
+    marca: "Acteck / Balam Rush",
+    ejecutivo: "Por asignar",
+    frecuencia: "Semanal",
+    color: "#FFE600",
+    cuotaAnual: 0,
+    kpis: {
+      sellInMes: 0,
+      cuotaMes: 0,
+      cuotaMes25M: 0,
+      sellInAcumulado: 0,
+      cuotaAcumulada: 0,
+      sellOut: 0,
+      sellOutAcumulado: 0,
+      diasInventario: 0,
+      inventarioValor: 0,
+      ultimoMes: "---",
+    },
+    tendencia: { sellIn: [0], sellOut: [0], cuota: [0] },
+    pendientes: [],
+    pagos: [],
+    promociones: [],
+    cartera: null,
+    sellOutMarca: {},
+  },
 };
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -3050,15 +3076,15 @@ export default function App() {
           {clienteActivo === "pcel" ? (
             <div className="flex flex-col items-center justify-center py-32 px-8">
               <div className="text-7xl mb-6">🔒</div>
-              <h2 className="text-2xl font-bold text-gray-700 mb-3">PCEL — Próximamente</h2>
-              <p className="text-gray-500 text-center max-w-lg">Las pestañas de PCEL se gestionan de manera diferente y están actualmente en desarrollo. Próximamente se habilitará la gestión completa.</p>
+              <h2 className="text-2xl font-bold text-gray-700 mb-3">{c.nombre} — Próximamente</h2>
+              <p className="text-gray-500 text-center max-w-lg">Las pestañas de {c.nombre} se gestionan de manera diferente y están actualmente en desarrollo. Próximamente se habilitará la gestión completa.</p>
             </div>
           ) : (
             <>
         {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} />}
-          {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "PCEL"} />}
+          {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "{c.nombre}"} />}
         {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: clienteActivo })}
             </>
           )}
