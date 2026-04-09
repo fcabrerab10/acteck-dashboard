@@ -233,7 +233,7 @@ const clientes = {
     tendencia: { sellIn: [0], sellOut: [0], cuota: [0] },
     pendientes: [],
     pagos: [],
-    promociones: [],
+    promocionesActivas: [],
     cartera: null,
     sellOutMarca: {},
     minuta: {
@@ -3080,7 +3080,7 @@ export default function App() {
             Modo Presentación activo — Solo se muestra información de {c.nombre}
           </div>
         )}
-          {clienteActivo === "pcel" ? (
+          {(clienteActivo === "pcel" || clienteActivo === "mercadolibre") ? (
             <div className="flex flex-col items-center justify-center py-32 px-8">
               <div className="text-7xl mb-6">🔒</div>
               <h2 className="text-2xl font-bold text-gray-700 mb-3">{c.nombre} — Próximamente</h2>
