@@ -2241,6 +2241,515 @@ function EstrategiaProducto({ cliente = "Digitalife" }) {
 
 
 // ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
+
+// ——— MARKETING (Supabase) ———
+const TIPO_ACTIVIDAD = {
+  banner:     { label: "Banner",      color: "#8b5cf6", icon: "🖼️", tipo: "digital" },
+  mailing:    { label: "Mailing",     color: "#3b82f6", icon: "📧", tipo: "digital" },
+  reel:       { label: "Reel",        color: "#ec4899", icon: "🎬", tipo: "digital" },
+  google_ads: { label: "Google Ads",  color: "#f59e0b", icon: "📢", tipo: "digital" },
+  meta_ads:   { label: "Meta Ads",    color: "#6366f1", icon: "📱", tipo: "digital" },
+  demo:       { label: "Demo Tienda", color: "#10b981", icon: "🏪", tipo: "presencial" },
+  pop:        { label: "Material POP",color: "#14b8a6", icon: "🪧", tipo: "presencial" },
+  taller:     { label: "Taller",      color: "#f97316", icon: "🔧", tipo: "presencial" },
+};
+
+const MKT_ESTATUS = [
+  { value: "planeado",   label: "Planeado" },
+  { value: "en_curso",   label: "En Curso" },
+  { value: "completado", label: "Completado" },
+  { value: "cancelado",  label: "Cancelado" },
+];
+
+const TEMPORALIDADES = {
+  semana_santa: { label: "Semana Santa", emoji: "🐣", color: "#ffeaa7" },
+  dia_nino:     { label: "Día del Niño", emoji: "🎈", color: "#fd79a8" },
+  dia_madres:   { label: "Día Madres",   emoji: "💐", color: "#fab1a0" },
+  dia_maestro:  { label: "Día Maestro",  emoji: "📚", color: "#74b9ff" },
+  hot_sale:     { label: "HOT SALE",     emoji: "🔥", color: "#ff7675" },
+  lluvias:      { label: "Temp. Lluvias",emoji: "🌧️", color: "#a29bfe" },
+  buen_fin:     { label: "Buen Fin",     emoji: "🛒", color: "#e17055" },
+  navidad:      { label: "Navidad",      emoji: "🎄", color: "#00b894" },
+  regreso_clases:{ label: "Regreso Clases",emoji: "📓", color: "#fdcb6e" },
+};
+function MarketingCliente({ cliente }) {
+  const c = cliente;
+  const formatMXN = (n) => {
+    if (n == null || isNaN(n)) return "—";
+    return "$" + Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  };
+
+  const MESES_MKT = [
+    { key: "01", short: "Ene", full: "Enero" },
+    { key: "02", short: "Feb", full: "Febrero" },
+    { key: "03", short: "Mar", full: "Marzo" },
+    { key: "04", short: "Abr", full: "Abril" },
+    { key: "05", short: "May", full: "Mayo" },
+    { key: "06", short: "Jun", full: "Junio" },
+    { key: "07", short: "Jul", full: "Julio" },
+    { key: "08", short: "Ago", full: "Agosto" },
+    { key: "09", short: "Sep", full: "Septiembre" },
+    { key: "10", short: "Oct", full: "Octubre" },
+    { key: "11", short: "Nov", full: "Noviembre" },
+    { key: "12", short: "Dic", full: "Diciembre" },
+  ];
+
+  const [actividades, setActividades] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [expandedAct, setExpandedAct] = React.useState(null);
+  const [filtroTipo, setFiltroTipo] = React.useState("todas");
+  const [anio, setAnio] = React.useState(2026);
+  const [editCell, setEditCell] = React.useState(null);
+
+  // Cargar actividades de Supabase
+  React.useEffect(() => {
+    if (!DB_CONFIGURED || !supabase) { setLoading(false); return; }
+    supabase
+      .from("marketing_actividades")
+      .select("*")
+      .eq("cliente", cliente)
+      .eq("anio", anio)
+      .order("subtipo")
+      .order("mes")
+      .then(({ data, error }) => {
+        if (!error && data) setActividades(data);
+        setLoading(false);
+      });
+    const chan = supabase.channel("mkt-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "marketing_actividades" }, (payload) => {
+        supabase.from("marketing_actividades").select("*").eq("cliente", cliente).eq("anio", anio).order("subtipo").order("mes").then(({ data }) => { if (data) setActividades(data); });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(chan); };
+  }, [cliente, anio]);
+
+  // Agrupar actividades por nombre (concepto fijo)
+  const actividadesPorNombre = React.useMemo(() => {
+    const map = {};
+    actividades.forEach(a => {
+      const key = a.nombre;
+      if (!map[key]) map[key] = { nombre: a.nombre, subtipo: a.subtipo, tipo: a.tipo, meses: {} };
+      map[key].meses[a.mes] = a;
+    });
+    return Object.values(map);
+  }, [actividades]);
+
+  const actDigitales = actividadesPorNombre.filter(a => a.tipo === "digital");
+  const actPresenciales = actividadesPorNombre.filter(a => a.tipo === "presencial");
+
+  // Filtrar
+  const filtradas = filtroTipo === "todas"
+    ? actividadesPorNombre
+    : filtroTipo === "digital"
+      ? actDigitales
+      : filtroTipo === "presencial"
+        ? actPresenciales
+        : actividadesPorNombre.filter(a => a.subtipo === filtroTipo);
+
+  // KPIs
+  const totalInversion = actividades.reduce((s, a) => s + (Number(a.inversion) || 0), 0);
+  const totalAlcance = actividades.reduce((s, a) => s + (Number(a.alcance) || 0), 0);
+  const totalClics = actividades.reduce((s, a) => s + (Number(a.clics) || 0), 0);
+  const totalConversiones = actividades.reduce((s, a) => s + (Number(a.conversiones) || 0), 0);
+  const totalVentas = actividades.reduce((s, a) => s + (Number(a.ventas) || 0), 0);
+  const ctr = totalAlcance > 0 ? ((totalClics / totalAlcance) * 100).toFixed(1) : "0.0";
+  const roi = totalInversion > 0 ? (((totalVentas - totalInversion) / totalInversion) * 100).toFixed(0) : "0";
+
+  // Guardar campo
+  const saveField = async (id, field, value) => {
+    if (!DB_CONFIGURED || !supabase) return;
+    const numFields = ["inversion", "alcance", "clics", "conversiones", "unidades", "ventas"];
+    const val = numFields.includes(field) ? (Number(value) || 0) : value;
+    await supabase.from("marketing_actividades").update({ [field]: val, updated_at: new Date().toISOString() }).eq("id", id);
+    setActividades(prev => prev.map(a => a.id === id ? { ...a, [field]: val } : a));
+    setEditCell(null);
+  };
+
+  // Agregar actividad
+  const addActividad = async (tipo, subtipo) => {
+    if (!DB_CONFIGURED || !supabase) return;
+    const meta = TIPO_ACTIVIDAD[subtipo];
+    const nombre = meta ? meta.label + "  #" + (actividadesPorNombre.filter(a => a.subtipo === subtipo).length + 1) : "Nueva Actividad";
+    const rows = MESES_MKT.map(m => ({
+      cliente, tipo, subtipo, nombre, mes: m.key, anio,
+      estatus: "planeado", inversion: 0, alcance: 0, clics: 0, conversiones: 0, unidades: 0, ventas: 0,
+    }));
+    const { data } = await supabase.from("marketing_actividades").insert(rows).select();
+    if (data) setActividades(prev => [...prev, ...data]);
+  };
+
+  // Eliminar concepto completo
+  const deleteConcepto = async (nombre) => {
+    if (!DB_CONFIGURED || !supabase) return;
+    if (!confirm("¿Eliminar todas las entradas de " + nombre + "?")) return;
+    await supabase.from("marketing_actividades").delete().eq("cliente", cliente).eq("nombre", nombre).eq("anio", anio);
+    setActividades(prev => prev.filter(a => a.nombre !== nombre));
+  };
+
+  // Celda editable inline
+  const EditableCell = ({ act, field, type = "text", options = null }) => {
+    const isEditing = editCell === act.id + "-" + field;
+    const val = act[field];
+    if (isEditing) {
+      if (options) {
+        return React.createElement("select", {
+          autoFocus: true,
+          defaultValue: val || "",
+          className: "border rounded px-1 py-0.5 text-xs w-full",
+          onBlur: (e) => saveField(act.id, field, e.target.value),
+          onChange: (e) => saveField(act.id, field, e.target.value),
+        }, options.map(o => React.createElement("option", { key: o.value, value: o.value }, o.label)));
+      }
+      return React.createElement("input", {
+        autoFocus: true,
+        type: type,
+        defaultValue: val || "",
+        className: "border rounded px-1 py-0.5 text-xs w-full",
+        onBlur: (e) => saveField(act.id, field, e.target.value),
+        onKeyDown: (e) => { if (e.key === "Enter") saveField(act.id, field, e.target.value); },
+      });
+    }
+    const display = type === "number" && field !== "alcance" && field !== "clics" && field !== "conversiones" && field !== "unidades"
+      ? formatMXN(val)
+      : (val || "—");
+    return React.createElement("span", {
+      className: "cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded text-xs",
+      title: "Click para editar",
+      onClick: () => setEditCell(act.id + "-" + field),
+    }, display);
+  };
+
+  // Resumen por mes
+  const resumenPorMes = React.useMemo(() => {
+    const map = {};
+    actividades.forEach(a => {
+      if (!map[a.mes]) map[a.mes] = { inversion: 0, alcance: 0, clics: 0, conversiones: 0, ventas: 0, count: 0 };
+      map[a.mes].inversion += Number(a.inversion) || 0;
+      map[a.mes].alcance += Number(a.alcance) || 0;
+      map[a.mes].clics += Number(a.clics) || 0;
+      map[a.mes].conversiones += Number(a.conversiones) || 0;
+      map[a.mes].ventas += Number(a.ventas) || 0;
+      map[a.mes].count++;
+    });
+    return map;
+  }, [actividades]);
+
+  if (loading) return React.createElement("div", { className: "p-8 text-center text-gray-400" }, "Cargando marketing...");
+
+  const clienteNombre = cliente === "digitalife" ? "Digitalife" : cliente === "pcel" ? "PCEL" : cliente;
+  const marca = "Acteck / Balam Rush";
+
+  return React.createElement("div", { className: "max-w-7xl mx-auto" },
+    // Header
+    React.createElement("div", { className: "mb-6" },
+      React.createElement("div", { className: "flex items-center gap-3 mb-1" },
+        React.createElement("span", { className: "text-2xl" }, "📣"),
+        React.createElement("h2", { className: "text-xl font-bold text-gray-800" }, clienteNombre + " — Marketing"),
+      ),
+      React.createElement("div", { className: "text-sm text-gray-500" },
+        React.createElement("span", { className: "bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-xs font-medium mr-2" }, marca),
+        " · Digital · Presencial · Métricas · Resultados"
+      ),
+      React.createElement("div", { className: "flex items-center gap-4 mt-2 text-xs text-gray-400" },
+        React.createElement("span", null, "Año: " + anio),
+        DB_CONFIGURED
+          ? React.createElement("span", { className: "text-green-600" }, "✅ Sincronizado")
+          : React.createElement("span", { className: "text-amber-600" }, "⚠️ Sin conexión a BD"),
+      ),
+    ),
+
+    // KPIs
+    React.createElement("div", { className: "grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6" },
+      ...[
+        { label: "Inversión", value: formatMXN(totalInversion), color: "bg-indigo-50 text-indigo-700" },
+        { label: "Alcance", value: totalAlcance.toLocaleString(), color: "bg-purple-50 text-purple-700" },
+        { label: "Clics", value: totalClics.toLocaleString(), color: "bg-blue-50 text-blue-700" },
+        { label: "CTR", value: ctr + "%", color: "bg-cyan-50 text-cyan-700" },
+        { label: "Conversiones", value: totalConversiones.toLocaleString(), color: "bg-green-50 text-green-700" },
+        { label: "Ventas", value: formatMXN(totalVentas), color: "bg-emerald-50 text-emerald-700" },
+        { label: "ROI", value: roi + "%", color: Number(roi) >= 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700" },
+      ].map((kpi, i) =>
+        React.createElement("div", { key: i, className: "rounded-xl border p-3 text-center " + kpi.color },
+          React.createElement("div", { className: "text-lg font-bold" }, kpi.value),
+          React.createElement("div", { className: "text-xs opacity-70" }, kpi.label),
+        )
+      )
+    ),
+
+    // Filtros
+    React.createElement("div", { className: "flex flex-wrap items-center gap-2 mb-4" },
+      ...["todas", "digital", "presencial"].map(f =>
+        React.createElement("button", {
+          key: f,
+          onClick: () => setFiltroTipo(f),
+          className: "px-3 py-1 rounded-full text-xs font-medium transition " +
+            (filtroTipo === f ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"),
+        }, f === "todas" ? "Todas" : f === "digital" ? "📱 Digital" : "🏪 Presencial")
+      ),
+      React.createElement("span", { className: "text-xs text-gray-400 ml-2" },
+        filtradas.length + " conceptos · " + actividades.filter(a => filtroTipo === "todas" || a.tipo === filtroTipo || a.subtipo === filtroTipo).length + " registros"
+      ),
+      React.createElement("div", { className: "ml-auto flex gap-2" },
+        React.createElement("select", {
+          className: "border rounded px-2 py-1 text-xs",
+          value: anio,
+          onChange: (e) => setAnio(Number(e.target.value)),
+        },
+          React.createElement("option", { value: 2026 }, "2026"),
+          React.createElement("option", { value: 2025 }, "2025"),
+        ),
+      ),
+    ),
+
+    // Actividades Digitales
+    (filtroTipo === "todas" || filtroTipo === "digital" || Object.keys(TIPO_ACTIVIDAD).filter(k => TIPO_ACTIVIDAD[k].tipo === "digital").includes(filtroTipo)) &&
+    React.createElement("div", { className: "mb-8" },
+      React.createElement("div", { className: "flex items-center justify-between mb-3" },
+        React.createElement("h3", { className: "text-base font-semibold text-gray-700 flex items-center gap-2" },
+          React.createElement("span", { className: "text-lg" }, "📱"),
+          "Actividades Digitales — Calendario Mensual"
+        ),
+        React.createElement("div", { className: "flex gap-1" },
+          ...Object.entries(TIPO_ACTIVIDAD).filter(([, v]) => v.tipo === "digital").map(([key, meta]) =>
+            React.createElement("button", {
+              key: key,
+              onClick: () => addActividad("digital", key),
+              className: "text-xs px-2 py-1 rounded border hover:bg-gray-50",
+              title: "Agregar " + meta.label,
+            }, "＋ " + meta.label)
+          ),
+        ),
+      ),
+      React.createElement("div", { className: "text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-3" },
+        "💡 Haz click en una fila para expandir y ver/editar los 12 meses con métricas de alcance, clics, conversiones y ventas."
+      ),
+      // Filas expandibles digitales
+      ...(filtroTipo === "todas" || filtroTipo === "digital" ? actDigitales : actividadesPorNombre.filter(a => a.subtipo === filtroTipo)).map(grupo =>
+        React.createElement("div", { key: grupo.nombre, className: "border rounded-xl mb-2 overflow-hidden" },
+          React.createElement("button", {
+            onClick: () => setExpandedAct(expandedAct === grupo.nombre ? null : grupo.nombre),
+            className: "w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50 transition text-left",
+          },
+            React.createElement("div", { className: "flex items-center gap-3" },
+              React.createElement("span", { className: "text-sm" }, expandedAct === grupo.nombre ? "▼" : "▶"),
+              React.createElement("span", { className: "text-lg" }, TIPO_ACTIVIDAD[grupo.subtipo]?.icon || "📌"),
+              React.createElement("div", null,
+                React.createElement("div", { className: "font-semibold text-sm" }, grupo.nombre),
+                React.createElement("div", { className: "text-xs text-gray-400" },
+                  React.createElement("span", {
+                    className: "inline-block px-1.5 py-0.5 rounded text-white text-xs mr-2",
+                    style: { background: TIPO_ACTIVIDAD[grupo.subtipo]?.color || "#888" },
+                  }, TIPO_ACTIVIDAD[grupo.subtipo]?.label || grupo.subtipo),
+                  Object.keys(grupo.meses).length + "/12 meses"
+                ),
+              ),
+            ),
+            React.createElement("div", { className: "flex items-center gap-4 text-xs text-gray-500" },
+              React.createElement("span", null, "Inversión: " + formatMXN(Object.values(grupo.meses).reduce((s, m) => s + (Number(m.inversion) || 0), 0))),
+              React.createElement("span", null, "Ventas: " + formatMXN(Object.values(grupo.meses).reduce((s, m) => s + (Number(m.ventas) || 0), 0))),
+              React.createElement("button", {
+                onClick: (e) => { e.stopPropagation(); deleteConcepto(grupo.nombre); },
+                className: "text-red-400 hover:text-red-600 ml-2",
+                title: "Eliminar concepto completo",
+              }, "🗑"),
+            ),
+          ),
+          // Detalle expandido
+          expandedAct === grupo.nombre && React.createElement("div", { className: "border-t bg-gray-50" },
+            React.createElement("div", { className: "overflow-x-auto" },
+              React.createElement("table", { className: "w-full text-xs" },
+                React.createElement("thead", null,
+                  React.createElement("tr", { className: "bg-gray-100 text-gray-500 text-left" },
+                    ...["Mes", "Producto", "Mensaje", "Estatus", "Inversión", "Alcance", "Clics", "Conv.", "Uds.", "Ventas"].map(h =>
+                      React.createElement("th", { key: h, className: "px-3 py-2 font-medium" }, h)
+                    )
+                  ),
+                ),
+                React.createElement("tbody", null,
+                  ...MESES_MKT.map(m => {
+                    const act = grupo.meses[m.key];
+                    if (!act) return React.createElement("tr", { key: m.key, className: "border-t text-gray-300" },
+                      React.createElement("td", { className: "px-3 py-2 font-medium text-gray-500" }, m.short + " " + anio),
+                      ...Array(9).fill(null).map((_, i) => React.createElement("td", { key: i, className: "px-3 py-2" }, "—"))
+                    );
+                    const temporalidad = act.temporalidad && TEMPORALIDADES[act.temporalidad];
+                    return React.createElement("tr", {
+                      key: m.key,
+                      className: "border-t hover:bg-white transition" + (temporalidad ? " bg-opacity-20" : ""),
+                      style: temporalidad ? { background: temporalidad.color + "22" } : {},
+                    },
+                      React.createElement("td", { className: "px-3 py-2 font-medium text-gray-700 whitespace-nowrap" },
+                        temporalidad && React.createElement("span", { className: "mr-1", title: temporalidad.label }, temporalidad.emoji),
+                        m.short + " " + anio,
+                      ),
+                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "producto" })),
+                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "mensaje" })),
+                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "estatus", options: MKT_ESTATUS })),
+                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "inversion", type: "number" })),
+                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "alcance", type: "number" })),
+                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "clics", type: "number" })),
+                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "conversiones", type: "number" })),
+                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "unidades", type: "number" })),
+                      React.createElement("td", { className: "px-3 py-2 font-medium" }, React.createElement(EditableCell, { act, field: "ventas", type: "number" })),
+                    );
+                  })
+                ),
+              ),
+            ),
+          ),
+        )
+      ),
+    ),
+
+    // Actividades Presenciales
+    (filtroTipo === "todas" || filtroTipo === "presencial" || Object.keys(TIPO_ACTIVIDAD).filter(k => TIPO_ACTIVIDAD[k].tipo === "presencial").includes(filtroTipo)) &&
+    React.createElement("div", { className: "mb-8" },
+      React.createElement("div", { className: "flex items-center justify-between mb-3" },
+        React.createElement("h3", { className: "text-base font-semibold text-gray-700 flex items-center gap-2" },
+          React.createElement("span", { className: "text-lg" }, "🏪"),
+          "Actividades Presenciales — Calendario Mensual"
+        ),
+        React.createElement("div", { className: "flex gap-1" },
+          ...Object.entries(TIPO_ACTIVIDAD).filter(([, v]) => v.tipo === "presencial").map(([key, meta]) =>
+            React.createElement("button", {
+              key: key,
+              onClick: () => addActividad("presencial", key),
+              className: "text-xs px-2 py-1 rounded border hover:bg-gray-50",
+              title: "Agregar " + meta.label,
+            }, "＋ " + meta.label)
+          ),
+        ),
+      ),
+      actPresenciales.length === 0
+        ? React.createElement("div", { className: "text-center text-gray-400 py-8 border rounded-xl bg-gray-50" },
+            React.createElement("div", { className: "text-2xl mb-2" }, "🏪"),
+            React.createElement("div", { className: "text-sm" }, "Sin actividades presenciales registradas"),
+            React.createElement("div", { className: "text-xs mt-1" }, "Usa los botones de arriba para agregar demos, material POP o talleres"),
+          )
+        : actPresenciales.map(grupo =>
+            React.createElement("div", { key: grupo.nombre, className: "border rounded-xl mb-2 overflow-hidden" },
+              React.createElement("button", {
+                onClick: () => setExpandedAct(expandedAct === grupo.nombre ? null : grupo.nombre),
+                className: "w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50 transition text-left",
+              },
+                React.createElement("div", { className: "flex items-center gap-3" },
+                  React.createElement("span", { className: "text-sm" }, expandedAct === grupo.nombre ? "▼" : "▶"),
+                  React.createElement("span", { className: "text-lg" }, TIPO_ACTIVIDAD[grupo.subtipo]?.icon || "📌"),
+                  React.createElement("div", null,
+                    React.createElement("div", { className: "font-semibold text-sm" }, grupo.nombre),
+                    React.createElement("div", { className: "text-xs text-gray-400" },
+                      React.createElement("span", {
+                        className: "inline-block px-1.5 py-0.5 rounded text-white text-xs mr-2",
+                        style: { background: TIPO_ACTIVIDAD[grupo.subtipo]?.color || "#888" },
+                      }, TIPO_ACTIVIDAD[grupo.subtipo]?.label || grupo.subtipo),
+                      Object.keys(grupo.meses).length + "/12 meses"
+                    ),
+                  ),
+                ),
+                React.createElement("div", { className: "flex items-center gap-4 text-xs text-gray-500" },
+                  React.createElement("span", null, "Inversión: " + formatMXN(Object.values(grupo.meses).reduce((s, m) => s + (Number(m.inversion) || 0), 0))),
+                  React.createElement("button", {
+                    onClick: (e) => { e.stopPropagation(); deleteConcepto(grupo.nombre); },
+                    className: "text-red-400 hover:text-red-600 ml-2",
+                  }, "🗑"),
+                ),
+              ),
+              expandedAct === grupo.nombre && React.createElement("div", { className: "border-t bg-gray-50" },
+                React.createElement("div", { className: "overflow-x-auto" },
+                  React.createElement("table", { className: "w-full text-xs" },
+                    React.createElement("thead", null,
+                      React.createElement("tr", { className: "bg-gray-100 text-gray-500 text-left" },
+                        ...["Mes", "Descripción", "Estatus", "Inversión", "Responsable", "Notas"].map(h =>
+                          React.createElement("th", { key: h, className: "px-3 py-2 font-medium" }, h)
+                        )
+                      ),
+                    ),
+                    React.createElement("tbody", null,
+                      ...MESES_MKT.map(m => {
+                        const act = grupo.meses[m.key];
+                        if (!act) return React.createElement("tr", { key: m.key, className: "border-t text-gray-300" },
+                          React.createElement("td", { className: "px-3 py-2 font-medium text-gray-500" }, m.short + " " + anio),
+                          ...Array(5).fill(null).map((_, i) => React.createElement("td", { key: i, className: "px-3 py-2" }, "—"))
+                        );
+                        return React.createElement("tr", { key: m.key, className: "border-t hover:bg-white transition" },
+                          React.createElement("td", { className: "px-3 py-2 font-medium text-gray-700" }, m.short + " " + anio),
+                          React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "producto" })),
+                          React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "estatus", options: MKT_ESTATUS })),
+                          React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "inversion", type: "number" })),
+                          React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "responsable" })),
+                          React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "notas" })),
+                        );
+                      })
+                    ),
+                  ),
+                ),
+              ),
+            )
+          ),
+    ),
+
+    // Resumen General por Mes
+    React.createElement("div", { className: "mt-8" },
+      React.createElement("h3", { className: "text-base font-semibold text-gray-700 flex items-center gap-2 mb-3" },
+        React.createElement("span", { className: "text-lg" }, "📅"),
+        "Resumen General por Mes"
+      ),
+      React.createElement("div", { className: "overflow-x-auto border rounded-xl" },
+        React.createElement("table", { className: "w-full text-xs" },
+          React.createElement("thead", null,
+            React.createElement("tr", { className: "bg-gray-50 text-gray-500 text-left" },
+              ...["Mes", "Inversión", "Alcance", "Clics", "CTR", "Conv.", "Ventas", "ROI"].map(h =>
+                React.createElement("th", { key: h, className: "px-3 py-2 font-medium" }, h)
+              )
+            ),
+          ),
+          React.createElement("tbody", null,
+            ...MESES_MKT.filter(m => resumenPorMes[m.key]).map(m => {
+              const r = resumenPorMes[m.key];
+              const mCtr = r.alcance > 0 ? ((r.clics / r.alcance) * 100).toFixed(1) : "0.0";
+              const mRoi = r.inversion > 0 ? (((r.ventas - r.inversion) / r.inversion) * 100).toFixed(0) : "0";
+              return React.createElement("tr", { key: m.key, className: "border-t hover:bg-gray-50" },
+                React.createElement("td", { className: "px-3 py-2 font-semibold text-gray-700" }, m.short + " " + anio),
+                React.createElement("td", { className: "px-3 py-2" }, formatMXN(r.inversion)),
+                React.createElement("td", { className: "px-3 py-2" }, r.alcance.toLocaleString()),
+                React.createElement("td", { className: "px-3 py-2" }, r.clics.toLocaleString()),
+                React.createElement("td", { className: "px-3 py-2" }, mCtr + "%"),
+                React.createElement("td", { className: "px-3 py-2" }, r.conversiones.toLocaleString()),
+                React.createElement("td", { className: "px-3 py-2 font-medium" }, formatMXN(r.ventas)),
+                React.createElement("td", { className: "px-3 py-2 font-medium " + (Number(mRoi) >= 0 ? "text-green-600" : "text-red-600") }, mRoi + "%"),
+              );
+            }),
+            // Total row
+            React.createElement("tr", { className: "border-t-2 bg-gray-100 font-bold" },
+              React.createElement("td", { className: "px-3 py-2" }, "TOTAL ANUAL"),
+              React.createElement("td", { className: "px-3 py-2" }, formatMXN(totalInversion)),
+              React.createElement("td", { className: "px-3 py-2" }, totalAlcance.toLocaleString()),
+              React.createElement("td", { className: "px-3 py-2" }, totalClics.toLocaleString()),
+              React.createElement("td", { className: "px-3 py-2" }, ctr + "%"),
+              React.createElement("td", { className: "px-3 py-2" }, totalConversiones.toLocaleString()),
+              React.createElement("td", { className: "px-3 py-2" }, formatMXN(totalVentas)),
+              React.createElement("td", { className: "px-3 py-2 " + (Number(roi) >= 0 ? "text-green-600" : "text-red-600") }, roi + "%"),
+            ),
+          ),
+        ),
+      ),
+    ),
+
+    // Footer
+    React.createElement("div", { className: "text-xs text-gray-400 text-center mt-4 mb-8" },
+      "✅ Cambios guardados y sincronizados para todo el equipo. ",
+      "💡 ",
+      ...MKT_ESTATUS.map((s, i) =>
+        React.createElement("span", { key: i },
+          React.createElement("span", { className: "font-medium" }, s.label),
+          i < MKT_ESTATUS.length - 1 ? " · " : ""
+        )
+      ),
+    ),
+  );
+}
+
+
 export default function App() {
   const [clienteActivo, setClienteActivo] = useState("digitalife");
   const [modoPresent, setModoPresent] = useState(false);
@@ -2260,6 +2769,7 @@ export default function App() {
     { id: "pagos",     label: "Pagos",      icono: "💰",  habilitado: true  },
     { id: "analisis",  label: "Análisis",   icono: "📊",  habilitado: false },
     { id: "estrategia",label: "Estrategia de Producto", icono: "📦", habilitado: true },
+    { id: "marketing", label: "Marketing", icono: "📣", habilitado: true },
   ];
 
   return (
@@ -2384,6 +2894,7 @@ export default function App() {
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} />}
           {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "PCEL"} />}
+        {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: c })}
       </main>
 
     </div>
