@@ -111,6 +111,18 @@ const PAGOS_DIGITALIFE_2026 = {
 const ULTIMO_MES_SI = 3; // Marzo
 const NOMBRES_MES = { 1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre" };
 
+// ─── CARGA DINÁMICA DE SheetJS ───
+function loadSheetJS() {
+  return new Promise((resolve, reject) => {
+    if (window.XLSX) return resolve(window.XLSX);
+    const s = document.createElement("script");
+    s.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+    s.onload = () => resolve(window.XLSX);
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
 const clientes = {
   digitalife: {
     nombre: "Digitalife",
@@ -435,7 +447,110 @@ function BarraCuota({ actual, objetivo, minimo }) {
   );
 }
 
-function HomeCliente({ cliente }) {
+// ─── COMPONENTE: ACTUALIZAR DATOS DESDE EXCEL ───
+function ActualizarDatosExcel({ cliente, anio, onComplete }) {
+  const [cargando, setCargando] = React.useState(false);
+  const [resultado, setResultado] = React.useState(null);
+  const fileRef = React.useRef(null);
+
+  const procesarArchivo = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setCargando(true);
+    setResultado(null);
+    try {
+      const XLSX = await loadSheetJS();
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: 0 });
+
+      if (!rows.length) throw new Error("El archivo no contiene datos");
+
+      // Detectar columnas flexiblemente
+      const colMap = detectarColumnas(Object.keys(rows[0]));
+      if (!colMap.mes) throw new Error("No se encontr\u00F3 columna de Mes");
+      if (!colMap.sellIn && !colMap.sellOut) throw new Error("No se encontr\u00F3 columna de Sell In o Sell Out");
+
+      const registros = rows.map(r => {
+        const mesVal = parseMes(r[colMap.mes]);
+        if (!mesVal) return null;
+        const reg = { cliente, mes: mesVal, anio: anio || 2026 };
+        if (colMap.sellIn) reg.sell_in = parseNum(r[colMap.sellIn]);
+        if (colMap.sellOut) reg.sell_out = parseNum(r[colMap.sellOut]);
+        if (colMap.cuota) reg.cuota = parseNum(r[colMap.cuota]);
+        if (colMap.invDias) reg.inventario_dias = parseNum(r[colMap.invDias]);
+        if (colMap.invValor) reg.inventario_valor = parseNum(r[colMap.invValor]);
+        return reg;
+      }).filter(Boolean);
+
+      if (!registros.length) throw new Error("No se pudieron parsear registros v\u00E1lidos");
+
+      // Upsert a Supabase
+      const { error } = await supabase
+        .from("ventas_mensuales")
+        .upsert(registros, { onConflict: "cliente,mes,anio" });
+
+      if (error) throw error;
+      setResultado({ ok: true, msg: registros.length + " meses actualizados" });
+      if (onComplete) onComplete();
+    } catch (err) {
+      setResultado({ ok: false, msg: err.message || "Error al procesar" });
+    } finally {
+      setCargando(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  return React.createElement("div", { className: "inline-flex items-center gap-2" },
+    React.createElement("input", {
+      ref: fileRef, type: "file", accept: ".xlsx,.xls,.csv",
+      onChange: procesarArchivo, className: "hidden", id: "excel-upload"
+    }),
+    React.createElement("label", {
+      htmlFor: "excel-upload",
+      className: "cursor-pointer inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg " +
+        (cargando ? "bg-gray-200 text-gray-400" : "bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200")
+    }, cargando ? "\u23F3 Procesando..." : "\uD83D\uDCC2 Actualizar desde Excel"),
+    resultado && React.createElement("span", {
+      className: "text-xs " + (resultado.ok ? "text-green-600" : "text-red-500")
+    }, resultado.ok ? "\u2705 " + resultado.msg : "\u274C " + resultado.msg)
+  );
+}
+
+// Helpers para parseo de Excel
+function detectarColumnas(headers) {
+  const map = {};
+  const lower = headers.map(h => ({ orig: h, lc: String(h).toLowerCase().trim() }));
+  for (const { orig, lc } of lower) {
+    if (/mes|month|periodo/i.test(lc)) map.mes = orig;
+    else if (/sell.?in|venta.?in|compra/i.test(lc)) map.sellIn = orig;
+    else if (/sell.?out|venta.?out|sellout/i.test(lc)) map.sellOut = orig;
+    else if (/cuota|quota|objetivo|meta/i.test(lc)) map.cuota = orig;
+    else if (/inv.*d[ií]a|days.*inv/i.test(lc)) map.invDias = orig;
+    else if (/inv.*val|valor.*inv/i.test(lc)) map.invValor = orig;
+  }
+  return map;
+}
+
+function parseMes(val) {
+  if (typeof val === "number" && val >= 1 && val <= 12) return val;
+  const s = String(val).toLowerCase().trim();
+  const meses = { ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12,
+    enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12,
+    jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+  if (meses[s]) return meses[s];
+  const n = parseInt(s);
+  return (n >= 1 && n <= 12) ? n : null;
+}
+
+function parseNum(val) {
+  if (typeof val === "number") return val;
+  if (!val) return 0;
+  return parseFloat(String(val).replace(/[,$\s]/g, "")) || 0;
+}
+
+function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
   const c = cliente;
   const k = c.kpis;
   const salud = calcularSalud(k, c.pagos);
@@ -475,6 +590,10 @@ function HomeCliente({ cliente }) {
               )}
             </div>
           </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+          <span className="text-xs text-gray-400">Datos de ventas desde Supabase</span>
+          {onUploadComplete && <ActualizarDatosExcel cliente={clienteKey || "digitalife"} anio={2026} onComplete={onUploadComplete} />}
         </div>
       </div>
 
@@ -2755,7 +2874,45 @@ export default function App() {
   const [modoPresent, setModoPresent] = useState(false);
   const [paginaActiva, setPaginaActiva] = useState("home");
 
-  const c = clientes[clienteActivo];
+  // ─── DATOS DESDE SUPABASE (ventas_mensuales) ───
+  const [ventasDB, setVentasDB] = React.useState(null);
+  const [ventasVer, setVentasVer] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!DB_CONFIGURED) return;
+    supabase.from("ventas_mensuales").select("*")
+      .eq("cliente", clienteActivo).eq("anio", 2026).order("mes")
+      .then(({ data }) => setVentasDB(data || []));
+  }, [clienteActivo, ventasVer]);
+
+  const c = React.useMemo(() => {
+    const base = clientes[clienteActivo];
+    if (!ventasDB || ventasDB.length === 0) return base;
+    const sellInMap = {};
+    const sellOutMap = {};
+    ventasDB.forEach(r => { sellInMap[r.mes] = r.sell_in; sellOutMap[r.mes] = r.sell_out; });
+    const ultimoMes = Math.max(...ventasDB.map(r => r.mes));
+    const lastRow = ventasDB.find(r => r.mes === ultimoMes);
+    const cuotaAcum = Object.entries(DIGITALIFE_REAL.cuota30M)
+      .filter(([m]) => parseInt(m) <= ultimoMes)
+      .reduce((a, [, v]) => a + v, 0);
+    return {
+      ...base,
+      kpis: {
+        ...base.kpis,
+        sellInMes: sellInMap[ultimoMes] || base.kpis.sellInMes,
+        sellOut: sellOutMap[ultimoMes] || base.kpis.sellOut,
+        sellInAcumulado: Object.values(sellInMap).reduce((a, b) => a + b, 0),
+        sellOutAcumulado: Object.values(sellOutMap).reduce((a, b) => a + b, 0),
+        cuotaAcumulada: cuotaAcum || base.kpis.cuotaAcumulada,
+        cuotaMes: DIGITALIFE_REAL.cuota30M[ultimoMes] || base.kpis.cuotaMes,
+        cuotaMes25M: DIGITALIFE_REAL.cuota25M[ultimoMes] || base.kpis.cuotaMes25M,
+        diasInventario: lastRow?.inventario_dias ?? base.kpis.diasInventario,
+        inventarioValor: lastRow?.inventario_valor ?? base.kpis.inventarioValor,
+        ultimoMes: NOMBRES_MES[ultimoMes] || base.kpis.ultimoMes,
+      }
+    };
+  }, [clienteActivo, ventasDB]);
 
   // Al cambiar de cliente, volver al home
   const handleClienteChange = (key) => {
@@ -2898,7 +3055,7 @@ export default function App() {
             </div>
           ) : (
             <>
-        {paginaActiva === "home"    && <HomeCliente cliente={c} />}
+        {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} />}
           {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "PCEL"} />}
