@@ -227,6 +227,7 @@ const clientes = {
       sellOutAcumulado: 0,
       diasInventario: 0,
       inventarioValor: 0,
+      inventarioPiezas: 0,
       ultimoMes: "---",
     },
     tendencia: { sellIn: [0], sellOut: [0], cuota: [0] },
@@ -235,6 +236,12 @@ const clientes = {
     promociones: [],
     cartera: null,
     sellOutMarca: {},
+    minuta: {
+      fechaReunion: "",
+      proximaReunion: "",
+      asistentes: [],
+      acuerdos: [],
+    },
   },
 };
 
