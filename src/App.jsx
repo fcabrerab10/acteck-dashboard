@@ -2890,11 +2890,21 @@ export default function App() {
             Modo Presentación activo — Solo se muestra información de {c.nombre}
           </div>
         )}
+          {clienteActivo === "pcel" ? (
+            <div className="flex flex-col items-center justify-center py-32 px-8">
+              <div className="text-7xl mb-6">🔒</div>
+              <h2 className="text-2xl font-bold text-gray-700 mb-3">PCEL — Próximamente</h2>
+              <p className="text-gray-500 text-center max-w-lg">Las pestañas de PCEL se gestionan de manera diferente y están actualmente en desarrollo. Próximamente se habilitará la gestión completa.</p>
+            </div>
+          ) : (
+            <>
         {paginaActiva === "home"    && <HomeCliente cliente={c} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} />}
           {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "PCEL"} />}
         {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: clienteActivo })}
+            </>
+          )}
       </main>
 
     </div>
