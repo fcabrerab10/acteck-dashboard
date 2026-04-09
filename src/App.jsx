@@ -2901,6 +2901,129 @@ function MarketingCliente({ cliente }) {
   );
 }
 
+// ─── RESUMEN DE CUENTAS ──────────────────────────────────────────────────────────────────
+function ResumenCuentas() {
+  const [ventasAll, setVentasAll] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    if (!DB_CONFIGURED) { setLoading(false); return; }
+    supabase.from("ventas_mensuales").select("*").eq("anio", 2026).order("mes")
+      .then(({ data }) => { setVentasAll(data || []); setLoading(false); });
+  }, []);
+
+  const clientesMeta = [
+    { key: "digitalife", nombre: "Digitalife", color: "#4472C4", marca: "Acteck / Balam Rush" },
+    { key: "pcel", nombre: "PCEL", color: "#E67C73", marca: "Balam Rush" },
+    { key: "mercadolibre", nombre: "Mercado Libre", color: "#FFE600", marca: "Acteck / Balam Rush" },
+  ];
+  const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+  function getClientData(clienteKey) {
+    const rows = ventasAll.filter(r => r.cliente === clienteKey);
+    let sellInTotal = 0, sellOutTotal = 0, piezasTotal = 0, invValor = 0, lastMes = 0;
+    const monthly = {};
+    for (const r of rows) {
+      const m = parseInt(r.mes);
+      const si = parseFloat(r.sell_in) || 0;
+      const so = parseFloat(r.sell_out) || 0;
+      sellInTotal += si; sellOutTotal += so;
+      piezasTotal += parseInt(r.piezas || 0);
+      if (m > lastMes) { lastMes = m; invValor = parseFloat(r.inventario_valor) || 0; }
+      monthly[m] = { sellIn: si, sellOut: so };
+    }
+    return { sellInTotal, sellOutTotal, piezasTotal, invValor, lastMes, monthly };
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-32">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+    </div>
+  );
+
+  const clientesData = clientesMeta.map(cm => ({ ...cm, data: getClientData(cm.key) }));
+  const grandTotalSI = clientesData.reduce((s, c) => s + c.data.sellInTotal, 0);
+  const grandTotalSO = clientesData.reduce((s, c) => s + c.data.sellOutTotal, 0);
+
+  return (
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      <div className="mb-2">
+        <h1 className="text-2xl font-bold text-gray-800">Resumen General de Cuentas</h1>
+        <p className="text-sm text-gray-500 mt-1">Vista consolidada — Acteck / Balam Rush 2026</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl shadow p-5 border-l-4 border-blue-600">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Sell In Total</p>
+          <p className="text-2xl font-bold text-gray-800 mt-1">{formatMXN(grandTotalSI)}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow p-5 border-l-4 border-green-600">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Sell Out Total</p>
+          <p className="text-2xl font-bold text-gray-800 mt-1">{formatMXN(grandTotalSO)}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow p-5 border-l-4 border-purple-600">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Participación Sell In</p>
+          <div className="flex gap-4 mt-2">
+            {clientesData.map(c => (
+              <div key={c.key} className="text-center">
+                <div className="text-xs font-medium" style={{ color: c.color }}>{c.nombre}</div>
+                <div className="text-sm font-bold">
+                  {grandTotalSI > 0 ? ((c.data.sellInTotal / grandTotalSI) * 100).toFixed(1) + "%" : "0%"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {clientesData.map(c => (
+          <div key={c.key} className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div className="px-5 py-4 border-b" style={{ background: c.color + "15" }}>
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full" style={{ background: c.color }} />
+                <div>
+                  <h3 className="font-bold text-gray-800">{c.nombre}</h3>
+                  <p className="text-xs text-gray-500">{c.marca}</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-5 space-y-3">
+              {[["Sell In Acum.", c.data.sellInTotal], ["Sell Out Acum.", c.data.sellOutTotal],
+                ["Piezas", c.data.piezasTotal], ["Inventario", c.data.invValor]].map(([lbl, val]) => (
+                <div key={lbl} className="flex justify-between">
+                  <span className="text-sm text-gray-500">{lbl}</span>
+                  <span className="text-sm font-bold text-gray-800">
+                    {lbl === "Piezas" ? val.toLocaleString() : formatMXN(val)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 pb-4">
+              <table className="w-full text-xs">
+                <thead><tr className="border-b">
+                  <th className="text-left py-1 text-gray-400 font-medium">Mes</th>
+                  <th className="text-right py-1 text-gray-400 font-medium">Sell In</th>
+                  <th className="text-right py-1 text-gray-400 font-medium">Sell Out</th>
+                </tr></thead>
+                <tbody>
+                  {meses.map((mes, i) => c.data.monthly[i+1] ? (
+                    <tr key={mes} className={i%2===0 ? "bg-gray-50" : ""}>
+                      <td className="py-1 text-gray-600">{mes}</td>
+                      <td className="py-1 text-right text-gray-800">{formatMXN(c.data.monthly[i+1]?.sellIn||0)}</td>
+                      <td className="py-1 text-right text-gray-800">{formatMXN(c.data.monthly[i+1]?.sellOut||0)}</td>
+                    </tr>
+                  ) : null)}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 export default function App() {
   const [clienteActivo, setClienteActivo] = useState("digitalife");
@@ -2960,6 +3083,7 @@ export default function App() {
     { id: "analisis",  label: "Análisis",   icono: "📊",  habilitado: false },
     { id: "estrategia",label: "Estrategia de Producto", icono: "📦", habilitado: true },
     { id: "marketing", label: "Marketing", icono: "📣", habilitado: true },
+    { id: "resumen", label: "Resumen", icono: "📊", habilitado: true },
   ];
 
   return (
@@ -3080,7 +3204,8 @@ export default function App() {
             Modo Presentación activo — Solo se muestra información de {c.nombre}
           </div>
         )}
-          {(clienteActivo === "pcel" || clienteActivo === "mercadolibre") ? (
+          {paginaActiva === "resumen" && <ResumenCuentas />}
+          {(clienteActivo === "pcel" || clienteActivo === "mercadolibre") && paginaActiva !== "resumen" ? (
             <div className="flex flex-col items-center justify-center py-32 px-8">
               <div className="text-7xl mb-6">🔒</div>
               <h2 className="text-2xl font-bold text-gray-700 mb-3">{c.nombre} — Próximamente</h2>
