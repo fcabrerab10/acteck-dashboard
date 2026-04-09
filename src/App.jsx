@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED } from './lib/supabase';
 
 // ─── DATOS REALES — DIGITALIFE (API GLOBAL) ───────────────────────────────────
