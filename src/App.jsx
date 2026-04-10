@@ -2900,7 +2900,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
   const [vista, setVista] = React.useState("calendario"); // calendario | lista
 
   // Form state
-  const emptyForm = { nombre:"", tipo:"digital", subtipo:"", mes:new Date().getMonth()+1, anio:2026, estatus:"planificado", producto:"", mensaje:"", temporalidad:"", inversion:0, alcance:0, clics:0, conversiones:0, unidades:0, ventas:0, responsable:"", notas:"" };
+  const emptyForm = { nombre:"", tipo:"digital", subtipo:"", mes:new Date().getMonth()+1, anio:2026, estatus:"planificado", producto:"", mensaje:"", temporalidad:"", semana:1, inversion:0, alcance:0, clics:0, conversiones:0, unidades:0, ventas:0, responsable:"", notas:"" };
   const [form, setForm] = React.useState({...emptyForm});
 
   // Load data
@@ -2968,7 +2968,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
 
   const handleEdit = (act) => {
     setEditItem(act);
-    setForm({ nombre: act.nombre || "", tipo: act.tipo || "digital", subtipo: act.subtipo || "", mes: act.mes, anio: act.anio, estatus: act.estatus || "planificado", producto: act.producto || "", mensaje: act.mensaje || "", temporalidad: act.temporalidad || "", inversion: act.inversion || 0, alcance: act.alcance || 0, clics: act.clics || 0, conversiones: act.conversiones || 0, unidades: act.unidades || 0, ventas: act.ventas || 0, responsable: act.responsable || "", notas: act.notas || "" });
+    setForm({ nombre: act.nombre || "", tipo: act.tipo || "digital", subtipo: act.subtipo || "", mes: act.mes, anio: act.anio, estatus: act.estatus || "planificado", producto: act.producto || "", mensaje: act.mensaje || "", temporalidad: act.temporalidad || "", semana: act.semana || 1, inversion: act.inversion || 0, alcance: act.alcance || 0, clics: act.clics || 0, conversiones: act.conversiones || 0, unidades: act.unidades || 0, ventas: act.ventas || 0, responsable: act.responsable || "", notas: act.notas || "" });
     setShowModal(true);
   };
 
@@ -3033,7 +3033,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
         )
       ),
       // Row 3: mes + estatus + responsable
-      el("div", { style: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:10 } },
+      el("div", { style: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10, marginBottom:10 } },
         el("div", null,
           el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Mes"),
           el("select", { value: form.mes, onChange: e => setForm({...form, mes: Number(e.target.value)}), style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13 } },
@@ -3041,6 +3041,17 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
           )
         ),
         el("div", null,
+      el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Semana"),
+      el("select", { value: form.semana, onChange: function(e) { setForm(Object.assign({}, form, { semana: Number(e.target.value) })); },
+        style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13 }
+      },
+        el("option", { value: 1 }, "Semana 1"),
+        el("option", { value: 2 }, "Semana 2"),
+        el("option", { value: 3 }, "Semana 3"),
+        el("option", { value: 4 }, "Semana 4")
+      )
+    ),
+    el("div", null,
           el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Estatus"),
           el("select", { value: form.estatus, onChange: e => setForm({...form, estatus: e.target.value}), style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13 } },
             ESTATUS_OPTS.map(s => el("option", { key: s, value: s }, s.charAt(0).toUpperCase() + s.slice(1)))
@@ -3079,31 +3090,71 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
     )
   ) : null;
 
-  // ── CALENDAR VIEW ──
-  const calendarioView = el("div", { style: { display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:8, marginTop:12 } },
-    MESES.map((m, i) => {
-      const mesNum = i + 1;
-      const acts = porMes[mesNum] || [];
-      const isActive = mesActivo === mesNum;
-      const invMes = acts.reduce((s, a) => s + (Number(a.inversion) || 0), 0);
-      return el("div", {
-        key: i,
-        onClick: () => setMesActivo(isActive ? null : mesNum),
-        style: { background: isActive ? "#1e3a5f" : "#1e293b", borderRadius:10, padding:"10px 12px", cursor:"pointer", border: isActive ? "1px solid #3b82f6" : "1px solid transparent", transition:"all .2s", minHeight:80 }
-      },
-        el("div", { style: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 } },
-          el("span", { style: { fontWeight:600, fontSize:13, color:"#f1f5f9" } }, m),
-          el("span", { style: { fontSize:11, color:"#64748b" } }, acts.length + " act.")
-        ),
-        invMes > 0 ? el("div", { style: { fontSize:10, color:"#94a3b8", marginBottom:4 } }, "Inv: " + fmtMoney(invMes)) : null,
-        el("div", { style: { display:"flex", flexWrap:"wrap", gap:3 } },
-          acts.slice(0, 4).map((a, j) =>
-            el("span", { key: j, style: { display:"inline-block", padding:"2px 6px", borderRadius:10, fontSize:9, fontWeight:500, background: TIPOS_COLOR[a.tipo] || "#3b82f6", color:"#fff", opacity: a.estatus === "completado" ? 0.6 : 1, maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" } }, a.subtipo || a.nombre || a.tipo)
+  // ── CALENDAR VIEW (Weekly) ──
+  // Default to current month if none selected
+  const mesCalendario = mesActivo || (new Date().getMonth() + 1);
+  const actsMes = porMes[mesCalendario] || [];
+  const porSemana = { 1:[], 2:[], 3:[], 4:[] };
+  actsMes.forEach(function(a) { var s = Number(a.semana) || 1; if (porSemana[s]) porSemana[s].push(a); });
+
+  // Pendientes: actividades planificadas o en curso
+  const pendientesMes = actsMes.filter(function(a) { return a.estatus === "planificado" || a.estatus === "en curso"; });
+
+  const calendarioView = el("div", null,
+    // Month selector bar
+    el("div", { style: { display:"flex", gap:4, marginTop:12, marginBottom:12, flexWrap:"wrap" } },
+      MESES.map(function(m, i) {
+        var mesNum = i + 1;
+        var count = (porMes[mesNum] || []).length;
+        var isActive = mesCalendario === mesNum;
+        return el("button", { key: i, onClick: function() { setMesActivo(mesNum); },
+          style: { padding:"6px 14px", borderRadius:8, border: isActive ? "1px solid #3b82f6" : "1px solid transparent", cursor:"pointer", fontSize:12, fontWeight: isActive ? 700 : 400, background: isActive ? "#1e3a5f" : "#1e293b", color: isActive ? "#93c5fd" : "#94a3b8", transition:"all .2s", position:"relative" }
+        }, m, count > 0 ? el("span", { style: { fontSize:9, marginLeft:4, background: isActive ? "#3b82f6" : "#334155", color:"#fff", borderRadius:10, padding:"1px 5px", fontWeight:600 } }, count) : null);
+      })
+    ),
+    // Month title
+    el("div", { style: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 } },
+      el("h3", { style: { margin:0, fontSize:16, color:"#f1f5f9", fontWeight:700 } }, MESES_FULL[mesCalendario - 1] + " " + anio),
+      el("span", { style: { fontSize:12, color:"#64748b" } }, actsMes.length + " actividades")
+    ),
+    // Weekly grid - 4 rows
+    el("div", { style: { display:"flex", flexDirection:"column", gap:8 } },
+      [1,2,3,4].map(function(sem) {
+        var acts = porSemana[sem];
+        return el("div", { key: sem, style: { background:"#1e293b", borderRadius:10, padding:"12px 14px", borderLeft: acts.length > 0 ? "3px solid #3b82f6" : "3px solid #334155" } },
+          el("div", { style: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: acts.length > 0 ? 8 : 0 } },
+            el("span", { style: { fontSize:13, fontWeight:600, color:"#f1f5f9" } }, "Semana " + sem),
+            el("span", { style: { fontSize:11, color:"#64748b" } }, acts.length + " actividades")
           ),
-          acts.length > 4 ? el("span", { style: { fontSize:9, color:"#64748b", padding:"2px 4px" } }, "+" + (acts.length - 4)) : null
-        )
-      );
-    })
+          acts.length > 0 ? el("div", { style: { display:"flex", flexDirection:"column", gap:6 } },
+            acts.map(function(a) {
+              return el("div", { key: a.id, style: { display:"flex", alignItems:"center", gap:8, padding:"6px 10px", background:"#0f172a", borderRadius:8, cursor:"pointer" }, onClick: function() { setExpandedId(expandedId === a.id ? null : a.id); handleEdit(a); } },
+                el("span", { style: { width:8, height:8, borderRadius:"50%", background: TIPOS_COLOR[a.tipo] || "#3b82f6", flexShrink:0 } }),
+                el("span", { style: { flex:1, fontSize:12, color:"#f1f5f9", fontWeight:500 } }, a.nombre || a.subtipo || "Sin nombre"),
+                el("span", { style: { padding:"2px 8px", borderRadius:10, fontSize:10, fontWeight:500, background: ESTATUS_COLOR[a.estatus] || "#94a3b8", color:"#fff" } }, a.estatus || ""),
+                a.inversion ? el("span", { style: { fontSize:11, color:"#94a3b8" } }, fmtMoney(a.inversion)) : null,
+                el("span", { style: { fontSize:10, color:"#64748b" } }, a.tipo)
+              );
+            })
+          ) : el("div", { style: { fontSize:11, color:"#475569", fontStyle:"italic" } }, "Sin actividades programadas")
+        );
+      })
+    ),
+    // Pendientes section
+    pendientesMes.length > 0 ? el("div", { style: { marginTop:16, background:"#1e293b", borderRadius:10, padding:"14px 16px", borderLeft:"3px solid #f59e0b" } },
+      el("h4", { style: { margin:"0 0 10px", fontSize:14, color:"#fbbf24", fontWeight:700 } }, "\u26A0\uFE0F Pendientes de " + MESES_FULL[mesCalendario - 1] + " (" + pendientesMes.length + ")"),
+      el("div", { style: { display:"flex", flexDirection:"column", gap:6 } },
+        pendientesMes.map(function(a) {
+          return el("div", { key: a.id, style: { display:"flex", alignItems:"center", gap:8, padding:"6px 10px", background:"#0f172a", borderRadius:8 } },
+            el("span", { style: { width:8, height:8, borderRadius:"50%", background: ESTATUS_COLOR[a.estatus], flexShrink:0 } }),
+            el("span", { style: { flex:1, fontSize:12, color:"#f1f5f9" } }, a.nombre || a.subtipo || "Sin nombre"),
+            el("span", { style: { fontSize:10, color:"#94a3b8" } }, "Sem " + (a.semana || 1)),
+            el("span", { style: { padding:"2px 8px", borderRadius:10, fontSize:10, background: ESTATUS_COLOR[a.estatus], color:"#fff" } }, a.estatus),
+            a.responsable ? el("span", { style: { fontSize:10, color:"#64748b" } }, a.responsable) : null
+          );
+        })
+      )
+    ) : null
   );
 
   // ── LIST VIEW ──
@@ -3207,14 +3258,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
     loading ? el("div", { style: { textAlign:"center", color:"#64748b", padding:30 } }, "Cargando actividades...") :
 
     // Views
-    vista === "calendario" ? el(React.Fragment, null,
-      calendarioView,
-      // Show filtered list below calendar when a month is selected
-      mesActivo !== null ? el("div", { style: { marginTop:16 } },
-        el("h3", { style: { fontSize:14, color:"#f1f5f9", marginBottom:8 } }, "Actividades de " + MESES_FULL[mesActivo - 1]),
-        listaView
-      ) : null
-    ) : listaView
+    vista === "calendario" ? calendarioView : listaView
   );
 }
 
