@@ -3402,12 +3402,12 @@ function ResumenCuentas() {
                 <div className="flex gap-3 mt-1 mb-2">
                   <span className="text-[9px] text-gray-400 flex items-center gap-1"><span className="inline-block w-2 h-2 rounded" style={{background: c.color, opacity:0.7}} /> Sell In</span>
                   <span className="text-[9px] text-gray-400 flex items-center gap-1"><span className="inline-block w-2 h-2 rounded bg-green-500" /> Sell Out</span>
-                  {c.data.lastMes < 12 && <span className="text-[9px] text-gray-300 flex items-center gap-1"><span className="inline-block w-2 h-2 rounded border border-dashed border-gray-300" /> Proyecci\u00f3n</span>}
+                  {c.data.lastMes < 12 && <span className="text-[9px] text-gray-300 flex items-center gap-1"><span className="inline-block w-2 h-2 rounded border border-dashed border-gray-300" /> Proyección</span>}
                 </div>
                 {/* Projection line overlay */}
                 {c.data.lastMes >= 2 && c.data.lastMes < 12 && (
                   <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-2 text-xs">
-                    <span className="text-blue-600 font-medium">Proyecci\u00f3n anual:</span>
+                    <span className="text-blue-600 font-medium">Proyección anual:</span>
                     <span className="ml-2 text-gray-600">SI {formatMXN(c.data.sellInTotal / c.data.lastMes * 12)}</span>
                     <span className="ml-2 text-green-600">SO {formatMXN(c.data.sellOutTotal / c.data.lastMes * 12)}</span>
                   </div>
