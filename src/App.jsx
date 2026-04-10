@@ -3471,14 +3471,13 @@ export default function App() {
   };
 
   const navItems = [
-    { id: "home",      label: "Resumen",    icono: "🏠",  habilitado: true  },
-    { id: "cartera",   label: "Crédito y Cobranza", icono: "📊", habilitado: true  },
-    { id: "pagos",     label: "Pagos",      icono: "💰",  habilitado: true  },
-    { id: "analisis",  label: "Análisis",   icono: "📊",  habilitado: false },
-    { id: "estrategia",label: "Estrategia de Producto", icono: "📦", habilitado: true },
-    { id: "marketing", label: "Marketing", icono: "📣", habilitado: true },
-    { id: "resumen", label: "Resumen", icono: "📊", habilitado: true },
-  ];
+    { id: "home",       label: "Resumen",               icono: "🏠", habilitado: true  },
+    { id: "analisis",   label: "Análisis",                icono: "📈", habilitado: true  },
+    { id: "estrategia", label: "Estrategia de Producto", icono: "📦", habilitado: true  },
+    { id: "marketing",  label: "Marketing",              icono: "📣", habilitado: true  },
+    { id: "pagos",      label: "Pagos",                  icono: "💰", habilitado: true  },
+    { id: "cartera",    label: "Crédito y Cobranza",     icono: "📊", habilitado: true  },
+  ]
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans">
@@ -3515,6 +3514,17 @@ export default function App() {
             ) : (
               <><span>👁️</span> Modo Presentación</>
             )}
+          </button>
+        </div>
+
+        {/* Botón Resumen General */}
+        <div className="px-4 py-2 border-b border-gray-100">
+          <button
+            onClick={() => setPaginaActiva("resumen")}
+            className={"w-full text-left text-sm font-medium px-3 py-2.5 rounded-xl transition-all flex items-center gap-2 " + (paginaActiva === "resumen" ? "bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-700 shadow-sm border border-indigo-100" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700")}
+          >
+            <span>{"📊"}</span>
+            <span>Resumen General</span>
           </button>
         </div>
 
