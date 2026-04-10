@@ -602,7 +602,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     { key: "completado", label: "Completado", color: "#10B981", bg: "#D1FAE5" }
   ];
 
-  // âââ FETCH ALL DATA âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── FETCH ALL DATA ─────────────────────────────────────────────────────────
   React.useEffect(() => {
     if (!DB_CONFIGURED) { setLoading(false); return; }
     Promise.all([
@@ -623,7 +623,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     });
   }, [clienteKey]);
 
-  // âââ DERIVED DATA âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── DERIVED DATA ───────────────────────────────────────────────────────────
   const ventasPorMes = React.useMemo(() => {
     const map = {};
     ventas.forEach(v => { map[parseInt(v.mes)] = v; });
@@ -640,7 +640,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
   const costoXPeso = totalSellOut > 0 ? totalInversionMkt / totalSellOut : 0;
   const roiMkt = totalInversionMkt > 0 ? totalSellOut / totalInversionMkt : 0;
 
-  // âââ SVG LINE CHART âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── SVG LINE CHART ─────────────────────────────────────────────────────────
   function LineChartSellInOut() {
     const W = 680, H = 260, PAD = { t: 30, r: 30, b: 40, l: 70 };
     const plotW = W - PAD.l - PAD.r;
@@ -650,12 +650,6 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     for (let m = 1; m <= 12; m++) {
       const v = ventasPorMes[m];
       data.push({ mes: m, sellIn: v ? Number(v.sell_in) || 0 : null, sellOut: v ? Number(v.sell_out) || 0 : null });
-    }
-    const hasData = data.filter(d => d.sellIn !== null);
-    if (hasData.length === 0) return React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#94A3B8" } }, "Sin datos de ventas a\u00fan");
-
-    const allVals = hasData.flatMap(d => [d.sellIn, d.sellOut]).filter(v => v !== null);
-    const maxVal = Math.max(...allVals, ) || 0 : null });
     }
     const hasData = data.filter(d => d.sellIn !== null);
     if (hasData.length === 0) return React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#94A3B8" } }, "Sin datos de ventas a\u00fan");
@@ -721,7 +715,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     );
   }
 
-  // âââ PROGRESS BAR ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── PROGRESS BAR ──────────────────────────────────────────────────────────
   function ProgresoAnual() {
     const pctOpt = meta.meta_sell_in_optimista > 0 ? (totalSellIn / meta.meta_sell_in_optimista) * 100 : 0;
     const pctMin = meta.meta_sell_in_min > 0 ? (totalSellIn / meta.meta_sell_in_min) * 100 : 0;
@@ -792,7 +786,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     );
   }
 
-  // âââ INVENTARIO CARD ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── INVENTARIO CARD ────────────────────────────────────────────────────────
   function InventarioCard() {
     return React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 12, padding: 20 } },
       React.createElement("h4", { style: { margin: "0 0 8px", fontSize: 14, color: "#334155" } }, "Valor de Inventario"),
@@ -802,7 +796,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     );
   }
 
-  // âââ PENDIENTES CARD (reusable) âââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── PENDIENTES CARD (reusable) ─────────────────────────────────────────────
   function TarjetaPendientesEditable({ tipo, items, setItems }) {
     const [showForm, setShowForm] = React.useState(false);
     const [showHist, setShowHist] = React.useState(false);
@@ -909,7 +903,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     );
   }
 
-  // âââ MARKETING METRICS ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── MARKETING METRICS ──────────────────────────────────────────────────────
   function MetricasMarketing() {
     const [showAddInv, setShowAddInv] = React.useState(false);
     const [invForm, setInvForm] = React.useState({ mes: new Date().getMonth() + 1, monto: "", descripcion: "" });
@@ -977,7 +971,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     );
   }
 
-  // âââ MINUTA CARD ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── MINUTA CARD ────────────────────────────────────────────────────────────
   function MinutaPlaud() {
     const [showAdd, setShowAdd] = React.useState(false);
     const [minForm, setMinForm] = React.useState({ fecha: new Date().toISOString().split("T")[0], contenido: "" });
@@ -1039,14 +1033,14 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     );
   }
 
-  // âââ MAIN RENDER ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── MAIN RENDER ────────────────────────────────────────────────────────────
   if (loading) return React.createElement("div", { style: { display: "flex", justifyContent: "center", padding: 60 } },
     React.createElement("div", { style: { fontSize: 16, color: "#94A3B8" } }, "Cargando datos..."));
 
   return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 20, padding: "0 4px" } },
     // Row 1: Line chart
     React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 20 } },
-      React.createElement("h3", { style: { margin: "0 0 12px", fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out â " + (cliente?.nombre || clienteKey) + " 2026"),
+      React.createElement("h3", { style: { margin: "0 0 12px", fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out — " + (cliente?.nombre || clienteKey) + " 2026"),
       React.createElement(LineChartSellInOut, null)
     ),
     // Row 2: Progress + Inventario
@@ -1065,7 +1059,6 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     React.createElement(MinutaPlaud, null)
   );
 }
-
 
 // ─── PÁGINA: CRÉDITO Y COBRANZA ──────────────────────────────────────────────
 function CreditoCobranza({ cliente }) {
