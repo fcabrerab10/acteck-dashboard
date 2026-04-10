@@ -584,127 +584,488 @@ function parseNum(val) {
 }
 
 function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
-  const c = cliente;
-  const k = c.kpis;
-  const salud = calcularSalud(k, c.pagos);
-  const pctCuotaMes = k.cuotaMes > 0 ? Math.round((k.sellInMes / k.cuotaMes) * 100) : 0;
-  const pctCuotaAcum = k.cuotaAcumulada > 0 ? Math.round((k.sellInAcumulado / k.cuotaAcumulada) * 100) : 0;
-  const pctCuotaAnual = Math.round((k.sellInAcumulado / c.cuotaAnual) * 100);
+  const [ventas, setVentas] = React.useState([]);
+  const [meta, setMeta] = React.useState({ meta_sell_in_min: 25000000, meta_sell_in_optimista: 30000000 });
+  const [pendCom, setPendCom] = React.useState([]);
+  const [pendMkt, setPendMkt] = React.useState([]);
+  const [invMkt, setInvMkt] = React.useState([]);
+  const [minutasList, setMinutasList] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [editingMeta, setEditingMeta] = React.useState(false);
+  const [metaForm, setMetaForm] = React.useState({ min: 25000000, opt: 30000000 });
 
-  return (
-    <div className="min-h-screen bg-gray-50 p-6">
+  const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  const ESTADOS = [
+    { key: "pendiente", label: "Pendiente", color: "#F59E0B", bg: "#FEF3C7" },
+    { key: "en_curso", label: "En curso", color: "#3B82F6", bg: "#DBEAFE" },
+    { key: "esperando_info", label: "Esperando info", color: "#8B5CF6", bg: "#EDE9FE" },
+    { key: "completado", label: "Completado", color: "#10B981", bg: "#D1FAE5" }
+  ];
 
-      {/* ENCABEZADO */}
-      <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
-                 style={{ backgroundColor: c.color }}>
-              {c.nombre[0]}
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">{c.nombre}</h1>
-              <p className="text-sm text-gray-400">
-                <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
-                {" · "}Ejecutivo: {c.ejecutivo}
-                {" · "}Frecuencia: {c.frecuencia}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Semaforo estado={salud} />
-            <div className="text-right">
-              <span className="text-xs text-gray-400 block">
-                Actualizado: {formatFecha(c.cartera?.ultimaActualizacion || new Date().toISOString().slice(0,10))}
-                {c.cartera?.horaActualizacion ? ` · ${c.cartera.horaActualizacion} hrs` : ""}
-              </span>
-              {c.cartera?.tipoCambio && (
-                <span className="text-xs text-gray-400">TC: ${c.cartera.tipoCambio.toFixed(2)} MXN/USD</span>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
-          <span className="text-xs text-gray-400">Datos de ventas desde Supabase</span>
-          {onUploadComplete && <ActualizarDatosExcel cliente={clienteKey || "digitalife"} anio={2026} onComplete={onUploadComplete} />}
-        </div>
-      </div>
+  // âââ FETCH ALL DATA âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  React.useEffect(() => {
+    if (!DB_CONFIGURED) { setLoading(false); return; }
+    Promise.all([
+      supabase.from("ventas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", 2026).order("mes"),
+      supabase.from("metas_anuales").select("*").eq("cliente", clienteKey).eq("anio", 2026).maybeSingle(),
+      supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "comercial").order("created_at", { ascending: false }),
+      supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "marketing").order("created_at", { ascending: false }),
+      supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", 2026).order("mes"),
+      supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
+    ]).then(([vR, mR, pcR, pmR, imR, minR]) => {
+      setVentas(vR.data || []);
+      if (mR.data) { setMeta(mR.data); setMetaForm({ min: mR.data.meta_sell_in_min, opt: mR.data.meta_sell_in_optimista }); }
+      setPendCom(pcR.data || []);
+      setPendMkt(pmR.data || []);
+      setInvMkt(imR.data || []);
+      setMinutasList(minR.data || []);
+      setLoading(false);
+    });
+  }, [clienteKey]);
 
-      {/* KPIs — FILA 1: Sell In con barra de cuota */}
-      <div className="grid grid-cols-1 gap-4 mb-4 md:grid-cols-2">
+  // âââ DERIVED DATA âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  const ventasPorMes = React.useMemo(() => {
+    const map = {};
+    ventas.forEach(v => { map[parseInt(v.mes)] = v; });
+    return map;
+  }, [ventas]);
 
-        {/* Sell In Mes + Acumulado */}
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4" style={{ borderColor: c.color }}>
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Sell In — {k.ultimoMes || "Último mes"}</p>
-          <div className="flex items-end gap-3">
-            <p className="text-2xl font-bold text-gray-800">{formatMXN(k.sellInMes)}</p>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-semibold mb-1 ${pctCuotaMes >= 100 ? "bg-green-100 text-green-700" : pctCuotaMes >= 80 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
-              {pctCuotaMes}% del mes
-            </span>
-          </div>
-          <p className="text-xs text-gray-400 mb-2">Cuota: {formatMXN(k.cuotaMes)} · Mínimo: {formatMXN(k.cuotaMes25M)}</p>
-          <div className="border-t pt-3 mt-1">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-xs text-gray-500 font-medium">Acumulado 2026</span>
-              <span className="text-sm font-bold text-gray-700">{formatMXN(k.sellInAcumulado)}</span>
-            </div>
-            <BarraCuota actual={k.sellInAcumulado} objetivo={k.cuotaAcumulada} minimo={k.cuotaAcumulada * (25/30)} />
-            <p className="text-xs text-gray-400 mt-1">vs cuota acumulada {formatMXN(k.cuotaAcumulada)} · <span className="font-semibold">{pctCuotaAcum}%</span></p>
-          </div>
-        </div>
+  const totalSellIn = ventas.reduce((s, v) => s + (Number(v.sell_in) || 0), 0);
+  const totalSellOut = ventas.reduce((s, v) => s + (Number(v.sell_out) || 0), 0);
+  const totalInvValor = ventas.reduce((s, v) => s + (Number(v.inventario_valor) || 0), 0);
+  const avgInvValor = ventas.length > 0 ? totalInvValor / ventas.length : 0;
+  const lastInvValor = ventas.length > 0 ? Number(ventas[ventas.length - 1].inventario_valor) || 0 : 0;
 
-        {/* Avance Anual */}
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Avance Anual 2026</p>
-          <div className="flex items-end gap-3">
-            <p className="text-2xl font-bold text-gray-800">{pctCuotaAnual}%</p>
-            <span className="text-xs text-gray-400 mb-1">de {(c.cuotaAnual/1000000).toFixed(0)}M objetivo</span>
-          </div>
-          <p className="text-xs text-gray-400 mb-3">{formatMXN(k.sellInAcumulado)} facturado de {formatMXN(c.cuotaAnual)}</p>
-          <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-1">
-            <div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.min(pctCuotaAnual, 100)}%` }} />
-          </div>
-          <div className="border-t pt-3 mt-2 grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <p className="text-gray-400">2025 Sell In</p>
-              <p className="font-semibold text-gray-700">{formatMXN(15755483)}</p>
-            </div>
-            <div>
-              <p className="text-gray-400">Crec. necesario</p>
-              <p className="font-semibold text-blue-600">+{Math.round((30000000/15755483-1)*100)}% vs 2025</p>
-            </div>
-          </div>
-        </div>
-      </div>
+  const totalInversionMkt = invMkt.reduce((s, v) => s + (Number(v.monto) || 0), 0);
+  const costoXPeso = totalSellOut > 0 ? totalInversionMkt / totalSellOut : 0;
+  const roiMkt = totalInversionMkt > 0 ? totalSellOut / totalInversionMkt : 0;
 
-      {/* KPIs — FILA 2: Sell Out e Inventario */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <KPICard
-          label={`Sell Out — ${k.ultimoMes || "Último mes"}`}
-          valor={formatMXN(k.sellOut)}
-          sub={`Acumulado 2026: ${formatMXN(k.sellOutAcumulado)}`}
-          color="#8b5cf6"
-        />
-        <KPICard
-          label="Días de Inventario"
-          valor={`${k.diasInventario} días`}
-          sub={k.diasInventario > 90 ? "⚠️ Inventario elevado" : k.diasInventario < 15 ? "⚠️ Inventario bajo" : "✅ Nivel adecuado"}
-          color="#0ea5e9"
-          alerta={k.diasInventario > 90 || k.diasInventario < 15}
-        />
-      </div>
+  // âââ SVG LINE CHART âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  function LineChartSellInOut() {
+    const W = 680, H = 260, PAD = { t: 30, r: 30, b: 40, l: 70 };
+    const plotW = W - PAD.l - PAD.r;
+    const plotH = H - PAD.t - PAD.b;
 
-      {/* TARJETAS PRINCIPALES */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <TarjetaPendientes pendientes={c.pendientes} />
-        <TarjetaPagos pagos={c.pagos} />
-        <TarjetaPromociones promos={c.promocionesActivas} />
-        <TarjetaMinuta minuta={c.minuta} />
-      </div>
+    const data = [];
+    for (let m = 1; m <= 12; m++) {
+      const v = ventasPorMes[m];
+      data.push({ mes: m, sellIn: v ? Number(v.sell_in) || 0 : null, sellOut: v ? Number(v.sell_out) || 0 : null });
+    }
+    const hasData = data.filter(d => d.sellIn !== null);
+    if (hasData.length === 0) return React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#94A3B8" } }, "Sin datos de ventas a\u00fan");
 
-    </div>
+    const allVals = hasData.flatMap(d => [d.sellIn, d.sellOut]).filter(v => v !== null);
+    const maxVal = Math.max(...allVals, ) || 0 : null });
+    }
+    const hasData = data.filter(d => d.sellIn !== null);
+    if (hasData.length === 0) return React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#94A3B8" } }, "Sin datos de ventas a\u00fan");
+
+    const allVals = hasData.flatMap(d => [d.sellIn, d.sellOut]).filter(v => v !== null);
+    const maxVal = Math.max(...allVals, 1);
+    const minVal = Math.min(...allVals, 0);
+    const range = maxVal - minVal || 1;
+
+    const x = (m) => PAD.l + ((m - 1) / 11) * plotW;
+    const y = (val) => PAD.t + plotH - ((val - minVal) / range) * plotH;
+
+    const lineSI = hasData.map(d => `${x(d.mes)},${y(d.sellIn)}`).join(" ");
+    const lineSO = hasData.map(d => `${x(d.mes)},${y(d.sellOut)}`).join(" ");
+
+    const gridLines = 5;
+    const gridVals = Array.from({ length: gridLines }, (_, i) => minVal + (range / (gridLines - 1)) * i);
+
+    const [hover, setHover] = React.useState(null);
+
+    return React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, style: { width: "100%", maxWidth: 720, fontFamily: "system-ui" } },
+      // Grid
+      gridVals.map((v, i) => React.createElement("g", { key: i },
+        React.createElement("line", { x1: PAD.l, y1: y(v), x2: W - PAD.r, y2: y(v), stroke: "#E2E8F0", strokeWidth: 1 }),
+        React.createElement("text", { x: PAD.l - 8, y: y(v) + 4, textAnchor: "end", fontSize: 10, fill: "#94A3B8" },
+          "$" + (v / 1e6).toFixed(1) + "M")
+      )),
+      // X axis labels
+      MESES_CORTOS.map((m, i) => React.createElement("text", {
+        key: i, x: x(i + 1), y: H - 8, textAnchor: "middle", fontSize: 10, fill: "#64748B"
+      }, m)),
+      // Sell In line
+      React.createElement("polyline", { points: lineSI, fill: "none", stroke: "#4472C4", strokeWidth: 2.5, strokeLinejoin: "round" }),
+      // Sell Out line
+      React.createElement("polyline", { points: lineSO, fill: "none", stroke: "#10B981", strokeWidth: 2.5, strokeLinejoin: "round", strokeDasharray: "6,3" }),
+      // Data points Sell In
+      hasData.map(d => React.createElement("circle", {
+        key: "si" + d.mes, cx: x(d.mes), cy: y(d.sellIn), r: 4, fill: "#4472C4", stroke: "#fff", strokeWidth: 1.5,
+        style: { cursor: "pointer" },
+        onMouseEnter: () => setHover({ mes: d.mes, si: d.sellIn, so: d.sellOut }),
+        onMouseLeave: () => setHover(null)
+      })),
+      // Data points Sell Out
+      hasData.map(d => React.createElement("circle", {
+        key: "so" + d.mes, cx: x(d.mes), cy: y(d.sellOut), r: 4, fill: "#10B981", stroke: "#fff", strokeWidth: 1.5,
+        style: { cursor: "pointer" },
+        onMouseEnter: () => setHover({ mes: d.mes, si: d.sellIn, so: d.sellOut }),
+        onMouseLeave: () => setHover(null)
+      })),
+      // Legend
+      React.createElement("circle", { cx: PAD.l + 10, cy: 14, r: 4, fill: "#4472C4" }),
+      React.createElement("text", { x: PAD.l + 18, y: 18, fontSize: 11, fill: "#334155" }, "Sell In"),
+      React.createElement("circle", { cx: PAD.l + 80, cy: 14, r: 4, fill: "#10B981" }),
+      React.createElement("text", { x: PAD.l + 88, y: 18, fontSize: 11, fill: "#334155" }, "Sell Out"),
+      // Tooltip
+      hover && React.createElement("g", null,
+        React.createElement("rect", { x: x(hover.mes) - 70, y: y(Math.max(hover.si, hover.so)) - 52, width: 140, height: 44, rx: 6, fill: "#1E293B", opacity: 0.92 }),
+        React.createElement("text", { x: x(hover.mes), y: y(Math.max(hover.si, hover.so)) - 34, textAnchor: "middle", fontSize: 11, fill: "#93C5FD" },
+          "Sell In: " + formatMXN(hover.si)),
+        React.createElement("text", { x: x(hover.mes), y: y(Math.max(hover.si, hover.so)) - 18, textAnchor: "middle", fontSize: 11, fill: "#6EE7B7" },
+          "Sell Out: " + formatMXN(hover.so))
+      )
+    );
+  }
+
+  // âââ PROGRESS BAR ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  function ProgresoAnual() {
+    const pctOpt = meta.meta_sell_in_optimista > 0 ? (totalSellIn / meta.meta_sell_in_optimista) * 100 : 0;
+    const pctMin = meta.meta_sell_in_min > 0 ? (totalSellIn / meta.meta_sell_in_min) * 100 : 0;
+    const minPctOfOpt = meta.meta_sell_in_optimista > 0 ? (meta.meta_sell_in_min / meta.meta_sell_in_optimista) * 100 : 0;
+
+    const saveMeta = async () => {
+      if (!DB_CONFIGURED) return;
+      await supabase.from("metas_anuales").upsert({
+        cliente: clienteKey, anio: 2026,
+        meta_sell_in_min: Number(metaForm.min),
+        meta_sell_in_optimista: Number(metaForm.opt)
+      }, { onConflict: "cliente,anio" });
+      setMeta(prev => ({ ...prev, meta_sell_in_min: Number(metaForm.min), meta_sell_in_optimista: Number(metaForm.opt) }));
+      setEditingMeta(false);
+    };
+
+    return React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 12, padding: 20 } },
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } },
+        React.createElement("h4", { style: { margin: 0, fontSize: 14, color: "#334155" } }, "Progreso Anual Sell In"),
+        React.createElement("button", {
+          onClick: () => setEditingMeta(!editingMeta),
+          style: { background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "#4472C4" }
+        }, editingMeta ? "Cancelar" : "Editar meta")
+      ),
+      editingMeta && React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" } },
+        React.createElement("label", { style: { fontSize: 12, color: "#64748B" } }, "Meta m\u00ednima:",
+          React.createElement("input", {
+            type: "number", value: metaForm.min,
+            onChange: e => setMetaForm(p => ({ ...p, min: e.target.value })),
+            style: { width: 120, marginLeft: 4, padding: "4px 8px", borderRadius: 6, border: "1px solid #CBD5E1", fontSize: 12 }
+          })
+        ),
+        React.createElement("label", { style: { fontSize: 12, color: "#64748B" } }, "Meta optimista:",
+          React.createElement("input", {
+            type: "number", value: metaForm.opt,
+            onChange: e => setMetaForm(p => ({ ...p, opt: e.target.value })),
+            style: { width: 120, marginLeft: 4, padding: "4px 8px", borderRadius: 6, border: "1px solid #CBD5E1", fontSize: 12 }
+          })
+        ),
+        React.createElement("button", { onClick: saveMeta, style: { padding: "4px 12px", background: "#4472C4", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer" } }, "Guardar")
+      ),
+      // Big number
+      React.createElement("div", { style: { fontSize: 28, fontWeight: 700, color: "#1E293B", marginBottom: 4 } }, formatMXN(totalSellIn)),
+      React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 12 } },
+        pctOpt.toFixed(1) + "% de meta optimista (" + formatMXN(meta.meta_sell_in_optimista) + ")"),
+      // Bar
+      React.createElement("div", { style: { position: "relative", height: 24, background: "#E2E8F0", borderRadius: 12, overflow: "hidden" } },
+        React.createElement("div", { style: {
+          position: "absolute", left: 0, top: 0, height: "100%", width: Math.min(pctOpt, 100) + "%",
+          background: pctOpt >= 100 ? "linear-gradient(90deg,#10B981,#059669)" : "linear-gradient(90deg,#4472C4,#60A5FA)",
+          borderRadius: 12, transition: "width 0.6s ease"
+        } }),
+        // Min marker
+        React.createElement("div", { style: {
+          position: "absolute", left: Math.min(minPctOfOpt, 100) + "%", top: 0, height: "100%", width: 2, background: "#F59E0B", zIndex: 2
+        } })
+      ),
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 11, color: "#94A3B8" } },
+        React.createElement("span", null, "0"),
+        React.createElement("span", { style: { color: "#F59E0B" } }, "M\u00edn: " + formatMXN(meta.meta_sell_in_min)),
+        React.createElement("span", null, formatMXN(meta.meta_sell_in_optimista))
+      ),
+      // Sell Out mini
+      React.createElement("div", { style: { marginTop: 16, paddingTop: 12, borderTop: "1px solid #E2E8F0" } },
+        React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Sell Out Acumulado"),
+        React.createElement("div", { style: { fontSize: 20, fontWeight: 700, color: "#10B981" } }, formatMXN(totalSellOut))
+      )
+    );
+  }
+
+  // âââ INVENTARIO CARD ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  function InventarioCard() {
+    return React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 12, padding: 20 } },
+      React.createElement("h4", { style: { margin: "0 0 8px", fontSize: 14, color: "#334155" } }, "Valor de Inventario"),
+      React.createElement("div", { style: { fontSize: 28, fontWeight: 700, color: "#1E293B" } }, formatMXN(lastInvValor)),
+      React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 4 } },
+        ventas.length > 0 ? "Mes m\u00e1s reciente con datos" : "Sin datos")
+    );
+  }
+
+  // âââ PENDIENTES CARD (reusable) âââââââââââââââââââââââââââââââââââââââââââââ
+  function TarjetaPendientesEditable({ tipo, items, setItems }) {
+    const [showForm, setShowForm] = React.useState(false);
+    const [showHist, setShowHist] = React.useState(false);
+    const [form, setForm] = React.useState({ titulo: "", descripcion: "", responsable: "", fecha_entrega: "" });
+
+    const activos = items.filter(p => !p.archivado);
+    const archivados = items.filter(p => p.archivado);
+
+    const addPendiente = async () => {
+      if (!form.titulo.trim()) return;
+      const row = { cliente: clienteKey, tipo, titulo: form.titulo, descripcion: form.descripcion, responsable: form.responsable, fecha_entrega: form.fecha_entrega || null, estado: "pendiente", archivado: false };
+      const { data } = await supabase.from("pendientes").insert(row).select();
+      if (data) setItems(prev => [data[0], ...prev]);
+      setForm({ titulo: "", descripcion: "", responsable: "", fecha_entrega: "" });
+      setShowForm(false);
+    };
+
+    const updateEstado = async (id, estado) => {
+      await supabase.from("pendientes").update({ estado, updated_at: new Date().toISOString() }).eq("id", id);
+      setItems(prev => prev.map(p => p.id === id ? { ...p, estado } : p));
+    };
+
+    const archivar = async (id) => {
+      await supabase.from("pendientes").update({ archivado: true, estado: "completado", updated_at: new Date().toISOString() }).eq("id", id);
+      setItems(prev => prev.map(p => p.id === id ? { ...p, archivado: true, estado: "completado" } : p));
+    };
+
+    const estadoObj = (key) => ESTADOS.find(e => e.key === key) || ESTADOS[0];
+
+    return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" } },
+      // Header
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: "1px solid #E2E8F0", background: tipo === "comercial" ? "#EFF6FF" : "#F0FDF4" } },
+        React.createElement("h4", { style: { margin: 0, fontSize: 14, color: "#334155" } },
+          (tipo === "comercial" ? "Pendientes Comerciales" : "Pendientes Marketing")),
+        React.createElement("div", { style: { display: "flex", gap: 6 } },
+          React.createElement("button", {
+            onClick: () => setShowForm(!showForm),
+            style: { padding: "4px 10px", background: "#4472C4", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer" }
+          }, showForm ? "Cancelar" : "+ Nuevo"),
+          archivados.length > 0 && React.createElement("button", {
+            onClick: () => setShowHist(!showHist),
+            style: { padding: "4px 10px", background: "#F1F5F9", color: "#64748B", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 12, cursor: "pointer" }
+          }, showHist ? "Ocultar historial" : "Historial (" + archivados.length + ")")
+        )
+      ),
+      // Add form
+      showForm && React.createElement("div", { style: { padding: 16, background: "#FAFBFC", borderBottom: "1px solid #E2E8F0" } },
+        React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+          React.createElement("input", { placeholder: "T\u00edtulo del pendiente *", value: form.titulo, onChange: e => setForm(p => ({ ...p, titulo: e.target.value })),
+            style: { padding: "8px 12px", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 13 } }),
+          React.createElement("input", { placeholder: "Descripci\u00f3n (opcional)", value: form.descripcion, onChange: e => setForm(p => ({ ...p, descripcion: e.target.value })),
+            style: { padding: "8px 12px", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 13 } }),
+          React.createElement("div", { style: { display: "flex", gap: 8 } },
+            React.createElement("input", { placeholder: "Responsable", value: form.responsable, onChange: e => setForm(p => ({ ...p, responsable: e.target.value })),
+              style: { flex: 1, padding: "8px 12px", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 13 } }),
+            React.createElement("input", { type: "date", value: form.fecha_entrega, onChange: e => setForm(p => ({ ...p, fecha_entrega: e.target.value })),
+              style: { padding: "8px 12px", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 13 } })
+          ),
+          React.createElement("button", { onClick: addPendiente,
+            style: { alignSelf: "flex-end", padding: "8px 20px", background: "#4472C4", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }
+          }, "Agregar pendiente")
+        )
+      ),
+      // Active items
+      React.createElement("div", { style: { maxHeight: 340, overflowY: "auto" } },
+        activos.length === 0 && React.createElement("div", { style: { padding: 24, textAlign: "center", color: "#94A3B8", fontSize: 13 } }, "No hay pendientes activos"),
+        activos.map(p => {
+          const est = estadoObj(p.estado);
+          return React.createElement("div", { key: p.id, style: { padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "flex-start", gap: 10 } },
+            // Check to archive
+            React.createElement("button", {
+              onClick: () => archivar(p.id),
+              title: "Marcar como completado y archivar",
+              style: { marginTop: 2, width: 20, height: 20, borderRadius: "50%", border: "2px solid " + est.color, background: p.estado === "completado" ? est.color : "transparent", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12 }
+            }, p.estado === "completado" ? "\u2713" : ""),
+            // Content
+            React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+              React.createElement("div", { style: { fontWeight: 600, fontSize: 13, color: "#1E293B" } }, p.titulo),
+              p.descripcion && React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, p.descripcion),
+              React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap", alignItems: "center" } },
+                p.responsable && React.createElement("span", { style: { fontSize: 11, color: "#64748B", background: "#F1F5F9", padding: "2px 8px", borderRadius: 10 } }, p.responsable),
+                p.fecha_entrega && React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, "Entrega: " + formatFecha(p.fecha_entrega))
+              )
+            ),
+            // Estado selector
+            React.createElement("select", {
+              value: p.estado,
+              onChange: e => updateEstado(p.id, e.target.value),
+              style: { padding: "4px 8px", borderRadius: 6, border: "1px solid " + est.color, background: est.bg, color: est.color, fontSize: 11, fontWeight: 600, cursor: "pointer" }
+            }, ESTADOS.map(e => React.createElement("option", { key: e.key, value: e.key }, e.label)))
+          );
+        })
+      ),
+      // Archived history
+      showHist && archivados.length > 0 && React.createElement("div", { style: { borderTop: "2px solid #E2E8F0" } },
+        React.createElement("div", { style: { padding: "10px 16px", background: "#F8FAFC", fontSize: 12, fontWeight: 600, color: "#64748B" } }, "Historial completado"),
+        archivados.map(p => React.createElement("div", { key: p.id, style: { padding: "8px 16px", borderBottom: "1px solid #F1F5F9", opacity: 0.6, display: "flex", gap: 8, alignItems: "center" } },
+          React.createElement("span", { style: { color: "#10B981", fontSize: 14 } }, "\u2713"),
+          React.createElement("span", { style: { fontSize: 12, color: "#64748B", textDecoration: "line-through" } }, p.titulo),
+          p.responsable && React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "(" + p.responsable + ")"),
+          p.fecha_entrega && React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, formatFecha(p.fecha_entrega))
+        ))
+      )
+    );
+  }
+
+  // âââ MARKETING METRICS ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  function MetricasMarketing() {
+    const [showAddInv, setShowAddInv] = React.useState(false);
+    const [invForm, setInvForm] = React.useState({ mes: new Date().getMonth() + 1, monto: "", descripcion: "" });
+
+    const addInversion = async () => {
+      if (!invForm.monto) return;
+      const row = { cliente: clienteKey, mes: Number(invForm.mes), anio: 2026, monto: Number(invForm.monto), descripcion: invForm.descripcion };
+      const { data } = await supabase.from("inversion_marketing").upsert(row, { onConflict: "cliente,mes,anio" }).select();
+      if (data) {
+        setInvMkt(prev => {
+          const filtered = prev.filter(i => !(i.mes === Number(invForm.mes) && i.anio === 2026));
+          return [...filtered, data[0]].sort((a, b) => a.mes - b.mes);
+        });
+      }
+      setInvForm({ mes: new Date().getMonth() + 1, monto: "", descripcion: "" });
+      setShowAddInv(false);
+    };
+
+    return React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 12, padding: 20 } },
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
+        React.createElement("h4", { style: { margin: 0, fontSize: 14, color: "#334155" } }, "M\u00e9tricas de Marketing"),
+        React.createElement("button", {
+          onClick: () => setShowAddInv(!showAddInv),
+          style: { padding: "4px 10px", background: "#4472C4", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer" }
+        }, showAddInv ? "Cancelar" : "+ Agregar inversi\u00f3n")
+      ),
+      showAddInv && React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } },
+        React.createElement("select", { value: invForm.mes, onChange: e => setInvForm(p => ({ ...p, mes: e.target.value })),
+          style: { padding: "6px 10px", borderRadius: 6, border: "1px solid #CBD5E1", fontSize: 12 }
+        }, MESES_CORTOS.map((m, i) => React.createElement("option", { key: i, value: i + 1 }, m))),
+        React.createElement("input", { type: "number", placeholder: "Monto $", value: invForm.monto,
+          onChange: e => setInvForm(p => ({ ...p, monto: e.target.value })),
+          style: { width: 120, padding: "6px 10px", borderRadius: 6, border: "1px solid #CBD5E1", fontSize: 12 } }),
+        React.createElement("input", { placeholder: "Descripci\u00f3n", value: invForm.descripcion,
+          onChange: e => setInvForm(p => ({ ...p, descripcion: e.target.value })),
+          style: { flex: 1, minWidth: 120, padding: "6px 10px", borderRadius: 6, border: "1px solid #CBD5E1", fontSize: 12 } }),
+        React.createElement("button", { onClick: addInversion,
+          style: { padding: "6px 14px", background: "#4472C4", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer" }
+        }, "Guardar")
+      ),
+      // KPI row
+      React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 } },
+        React.createElement("div", { style: { textAlign: "center" } },
+          React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 4 } }, "Inversi\u00f3n Total"),
+          React.createElement("div", { style: { fontSize: 20, fontWeight: 700, color: "#E67C73" } }, formatMXN(totalInversionMkt))
+        ),
+        React.createElement("div", { style: { textAlign: "center" } },
+          React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 4 } }, "Sell Out (Venta)"),
+          React.createElement("div", { style: { fontSize: 20, fontWeight: 700, color: "#10B981" } }, formatMXN(totalSellOut))
+        ),
+        React.createElement("div", { style: { textAlign: "center" } },
+          React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 4 } }, "Costo x Peso Vendido"),
+          React.createElement("div", { style: { fontSize: 20, fontWeight: 700, color: "#4472C4" } }, "$" + costoXPeso.toFixed(2))
+        )
+      ),
+      totalInversionMkt > 0 && React.createElement("div", { style: { background: "#fff", borderRadius: 8, padding: 12, border: "1px solid #E2E8F0" } },
+        React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 4 } }, "ROI Marketing: por cada $1 invertido genera " + formatMXN(roiMkt) + " en venta"),
+        // Monthly breakdown
+        React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 } },
+          invMkt.map(i => React.createElement("span", { key: i.id, style: { fontSize: 11, background: "#EFF6FF", padding: "3px 8px", borderRadius: 6, color: "#334155" } },
+            MESES_CORTOS[(i.mes || 1) - 1] + ": " + formatMXN(i.monto) + (i.descripcion ? " (" + i.descripcion + ")" : "")
+          ))
+        )
+      )
+    );
+  }
+
+  // âââ MINUTA CARD ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  function MinutaPlaud() {
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [minForm, setMinForm] = React.useState({ fecha: new Date().toISOString().split("T")[0], contenido: "" });
+    const [expandedId, setExpandedId] = React.useState(null);
+
+    const addMinuta = async () => {
+      if (!minForm.contenido.trim()) return;
+      const row = { cliente: clienteKey, fecha_reunion: minForm.fecha, contenido: minForm.contenido, fuente: "plaud" };
+      const { data } = await supabase.from("minutas").insert(row).select();
+      if (data) setMinutasList(prev => [data[0], ...prev]);
+      setMinForm({ fecha: new Date().toISOString().split("T")[0], contenido: "" });
+      setShowAdd(false);
+    };
+
+    return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" } },
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: "1px solid #E2E8F0", background: "#FFFBEB" } },
+        React.createElement("h4", { style: { margin: 0, fontSize: 14, color: "#334155" } }, "Minutas de Reuni\u00f3n"),
+        React.createElement("button", {
+          onClick: () => setShowAdd(!showAdd),
+          style: { padding: "4px 10px", background: "#F59E0B", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer" }
+        }, showAdd ? "Cancelar" : "+ Nueva minuta")
+      ),
+      showAdd && React.createElement("div", { style: { padding: 16, background: "#FAFBFC", borderBottom: "1px solid #E2E8F0" } },
+        React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+          React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+            React.createElement("label", { style: { fontSize: 12, color: "#64748B" } }, "Fecha reuni\u00f3n:"),
+            React.createElement("input", { type: "date", value: minForm.fecha,
+              onChange: e => setMinForm(p => ({ ...p, fecha: e.target.value })),
+              style: { padding: "6px 10px", borderRadius: 6, border: "1px solid #CBD5E1", fontSize: 12 } })
+          ),
+          React.createElement("textarea", {
+            placeholder: "Pega aqu\u00ed el texto de Plaud o escribe la minuta...",
+            value: minForm.contenido,
+            onChange: e => setMinForm(p => ({ ...p, contenido: e.target.value })),
+            rows: 8,
+            style: { padding: 12, borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13, resize: "vertical", fontFamily: "system-ui", lineHeight: 1.5 }
+          }),
+          React.createElement("button", { onClick: addMinuta,
+            style: { alignSelf: "flex-end", padding: "8px 20px", background: "#F59E0B", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }
+          }, "Guardar minuta")
+        )
+      ),
+      React.createElement("div", { style: { maxHeight: 400, overflowY: "auto" } },
+        minutasList.length === 0 && React.createElement("div", { style: { padding: 24, textAlign: "center", color: "#94A3B8", fontSize: 13 } }, "No hay minutas registradas"),
+        minutasList.map(m => React.createElement("div", { key: m.id, style: { padding: "12px 16px", borderBottom: "1px solid #F1F5F9" } },
+          React.createElement("div", {
+            onClick: () => setExpandedId(expandedId === m.id ? null : m.id),
+            style: { display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }
+          },
+            React.createElement("div", null,
+              React.createElement("span", { style: { fontWeight: 600, fontSize: 13, color: "#1E293B" } }, "Reuni\u00f3n " + formatFecha(m.fecha_reunion)),
+              React.createElement("span", { style: { fontSize: 11, color: "#94A3B8", marginLeft: 8 } }, m.fuente === "plaud" ? "via Plaud" : "Manual")
+            ),
+            React.createElement("span", { style: { color: "#94A3B8", fontSize: 16 } }, expandedId === m.id ? "\u25B2" : "\u25BC")
+          ),
+          expandedId === m.id && React.createElement("div", { style: { marginTop: 10, padding: 12, background: "#F8FAFC", borderRadius: 8, fontSize: 13, color: "#334155", lineHeight: 1.6, whiteSpace: "pre-wrap" } }, m.contenido)
+        ))
+      )
+    );
+  }
+
+  // âââ MAIN RENDER ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  if (loading) return React.createElement("div", { style: { display: "flex", justifyContent: "center", padding: 60 } },
+    React.createElement("div", { style: { fontSize: 16, color: "#94A3B8" } }, "Cargando datos..."));
+
+  return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 20, padding: "0 4px" } },
+    // Row 1: Line chart
+    React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 20 } },
+      React.createElement("h3", { style: { margin: "0 0 12px", fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out â " + (cliente?.nombre || clienteKey) + " 2026"),
+      React.createElement(LineChartSellInOut, null)
+    ),
+    // Row 2: Progress + Inventario
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 } },
+      React.createElement(ProgresoAnual, null),
+      React.createElement(InventarioCard, null)
+    ),
+    // Row 3: Pendientes
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } },
+      React.createElement(TarjetaPendientesEditable, { tipo: "comercial", items: pendCom, setItems: setPendCom }),
+      React.createElement(TarjetaPendientesEditable, { tipo: "marketing", items: pendMkt, setItems: setPendMkt })
+    ),
+    // Row 4: Marketing metrics
+    React.createElement(MetricasMarketing, null),
+    // Row 5: Minuta
+    React.createElement(MinutaPlaud, null)
   );
 }
+
 
 // ─── PÁGINA: CRÉDITO Y COBRANZA ──────────────────────────────────────────────
 function CreditoCobranza({ cliente }) {
