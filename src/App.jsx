@@ -2927,7 +2927,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
     let f = actividades;
     if (filtroTipo !== "todas") f = f.filter(a => a.tipo === filtroTipo);
     if (filtroEstatus !== "todas") f = f.filter(a => a.estatus === filtroEstatus);
-    if (mesActivo !== null) f = f.filter(a => a.mes === mesActivo);
+    if (mesActivo !== null) f = f.filter(a => Number(a.mes) === mesActivo);
     return f;
   }, [actividades, filtroTipo, filtroEstatus, mesActivo]);
 
@@ -2946,7 +2946,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
   const porMes = React.useMemo(() => {
     const m = {};
     for (let i = 1; i <= 12; i++) m[i] = [];
-    actividades.forEach(a => { if (m[a.mes]) m[a.mes].push(a); });
+    actividades.forEach(a => { if (m[Number(a.mes)]) m[Number(a.mes)].push(a); });
     return m;
   }, [actividades]);
 
