@@ -2881,482 +2881,343 @@ const TEMPORALIDADES = {
   navidad:      { label: "Navidad",      emoji: "🎄", color: "#00b894" },
   regreso_clases:{ label: "Regreso Clases",emoji: "📓", color: "#fdcb6e" },
 };
-function MarketingCliente({ cliente }) {
-  const c = cliente;
-  const formatMXN = (n) => {
-    if (n == null || isNaN(n)) return "—";
-    return "$" + Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  };
-
-  const MESES_MKT = [
-    { key: "01", short: "Ene", full: "Enero" },
-    { key: "02", short: "Feb", full: "Febrero" },
-    { key: "03", short: "Mar", full: "Marzo" },
-    { key: "04", short: "Abr", full: "Abril" },
-    { key: "05", short: "May", full: "Mayo" },
-    { key: "06", short: "Jun", full: "Junio" },
-    { key: "07", short: "Jul", full: "Julio" },
-    { key: "08", short: "Ago", full: "Agosto" },
-    { key: "09", short: "Sep", full: "Septiembre" },
-    { key: "10", short: "Oct", full: "Octubre" },
-    { key: "11", short: "Nov", full: "Noviembre" },
-    { key: "12", short: "Dic", full: "Diciembre" },
-  ];
+function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
+  const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  const MESES_FULL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const TIPOS_COLOR = { digital: "#3b82f6", presencial: "#10b981", mixto: "#f59e0b" };
+  const ESTATUS_COLOR = { planificado: "#94a3b8", "en curso": "#3b82f6", completado: "#10b981", cancelado: "#ef4444" };
+  const ESTATUS_OPTS = ["planificado","en curso","completado","cancelado"];
 
   const [actividades, setActividades] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [expandedAct, setExpandedAct] = React.useState(null);
-  const [filtroTipo, setFiltroTipo] = React.useState("todas");
   const [anio, setAnio] = React.useState(2026);
-  const [editCell, setEditCell] = React.useState(null);
+  const [filtroTipo, setFiltroTipo] = React.useState("todas");
+  const [filtroEstatus, setFiltroEstatus] = React.useState("todas");
+  const [mesActivo, setMesActivo] = React.useState(null);
+  const [showModal, setShowModal] = React.useState(false);
+  const [editItem, setEditItem] = React.useState(null);
+  const [expandedId, setExpandedId] = React.useState(null);
+  const [vista, setVista] = React.useState("calendario"); // calendario | lista
 
-  // Cargar actividades de Supabase
+  // Form state
+  const emptyForm = { nombre:"", tipo:"digital", subtipo:"", mes:new Date().getMonth()+1, anio:2026, estatus:"planificado", producto:"", mensaje:"", temporalidad:"", inversion:0, alcance:0, clics:0, conversiones:0, unidades:0, ventas:0, responsable:"", notas:"" };
+  const [form, setForm] = React.useState({...emptyForm});
+
+  // Load data
   React.useEffect(() => {
-    if (!DB_CONFIGURED || !supabase) { setLoading(false); return; }
-    supabase
-      .from("marketing_actividades")
-      .select("*")
-      .eq("cliente", cliente)
-      .eq("anio", anio)
-      .order("subtipo")
-      .order("mes")
+    if (!DB_CONFIGURED) { setLoading(false); return; }
+    setLoading(true);
+    supabase.from("marketing_actividades").select("*").eq("cliente", clienteKey || cliente).eq("anio", anio)
       .then(({ data, error }) => {
         if (!error && data) setActividades(data);
         setLoading(false);
       });
-    const chan = supabase.channel("mkt-realtime")
+    // Realtime
+    const chan = supabase.channel("mkt-rt-" + anio)
       .on("postgres_changes", { event: "*", schema: "public", table: "marketing_actividades" }, (payload) => {
-        supabase.from("marketing_actividades").select("*").eq("cliente", cliente).eq("anio", anio).order("subtipo").order("mes").then(({ data }) => { if (data) setActividades(data); });
-      })
-      .subscribe();
+        if (payload.eventType === "INSERT") setActividades(prev => [...prev, payload.new]);
+        else if (payload.eventType === "UPDATE") setActividades(prev => prev.map(a => a.id === payload.new.id ? payload.new : a));
+        else if (payload.eventType === "DELETE") setActividades(prev => prev.filter(a => a.id !== payload.old.id));
+      }).subscribe();
     return () => { supabase.removeChannel(chan); };
-  }, [cliente, anio]);
+  }, [cliente, clienteKey, anio]);
 
-  // Agrupar actividades por nombre (concepto fijo)
-  const actividadesPorNombre = React.useMemo(() => {
-    const map = {};
-    actividades.forEach(a => {
-      const key = a.nombre;
-      if (!map[key]) map[key] = { nombre: a.nombre, subtipo: a.subtipo, tipo: a.tipo, meses: {} };
-      map[key].meses[a.mes] = a;
-    });
-    return Object.values(map);
-  }, [actividades]);
-
-  const actDigitales = actividadesPorNombre.filter(a => a.tipo === "digital");
-  const actPresenciales = actividadesPorNombre.filter(a => a.tipo === "presencial");
-
-  // Filtrar
-  const filtradas = filtroTipo === "todas"
-    ? actividadesPorNombre
-    : filtroTipo === "digital"
-      ? actDigitales
-      : filtroTipo === "presencial"
-        ? actPresenciales
-        : actividadesPorNombre.filter(a => a.subtipo === filtroTipo);
+  // Filtered data
+  const filtered = React.useMemo(() => {
+    let f = actividades;
+    if (filtroTipo !== "todas") f = f.filter(a => a.tipo === filtroTipo);
+    if (filtroEstatus !== "todas") f = f.filter(a => a.estatus === filtroEstatus);
+    if (mesActivo !== null) f = f.filter(a => a.mes === mesActivo);
+    return f;
+  }, [actividades, filtroTipo, filtroEstatus, mesActivo]);
 
   // KPIs
-  const totalInversion = actividades.reduce((s, a) => s + (Number(a.inversion) || 0), 0);
-  const totalAlcance = actividades.reduce((s, a) => s + (Number(a.alcance) || 0), 0);
-  const totalClics = actividades.reduce((s, a) => s + (Number(a.clics) || 0), 0);
-  const totalConversiones = actividades.reduce((s, a) => s + (Number(a.conversiones) || 0), 0);
-  const totalVentas = actividades.reduce((s, a) => s + (Number(a.ventas) || 0), 0);
-  const ctr = totalAlcance > 0 ? ((totalClics / totalAlcance) * 100).toFixed(1) : "0.0";
-  const roi = totalInversion > 0 ? (((totalVentas - totalInversion) / totalInversion) * 100).toFixed(0) : "0";
-
-  // Guardar campo
-  const saveField = async (id, field, value) => {
-    if (!DB_CONFIGURED || !supabase) return;
-    const numFields = ["inversion", "alcance", "clics", "conversiones", "unidades", "ventas"];
-    const val = numFields.includes(field) ? (Number(value) || 0) : value;
-    await supabase.from("marketing_actividades").update({ [field]: val, updated_at: new Date().toISOString() }).eq("id", id);
-    setActividades(prev => prev.map(a => a.id === id ? { ...a, [field]: val } : a));
-    setEditCell(null);
-  };
-
-  // Agregar actividad
-  const addActividad = async (tipo, subtipo) => {
-    if (!DB_CONFIGURED || !supabase) return;
-    const meta = TIPO_ACTIVIDAD[subtipo];
-    const nombre = meta ? meta.label + "  #" + (actividadesPorNombre.filter(a => a.subtipo === subtipo).length + 1) : "Nueva Actividad";
-    const rows = MESES_MKT.map(m => ({
-      cliente, tipo, subtipo, nombre, mes: m.key, anio,
-      estatus: "planeado", inversion: 0, alcance: 0, clics: 0, conversiones: 0, unidades: 0, ventas: 0,
-    }));
-    const { data } = await supabase.from("marketing_actividades").insert(rows).select();
-    if (data) setActividades(prev => [...prev, ...data]);
-  };
-
-  // Eliminar concepto completo
-  const deleteConcepto = async (nombre) => {
-    if (!DB_CONFIGURED || !supabase) return;
-    if (!confirm("¿Eliminar todas las entradas de " + nombre + "?")) return;
-    await supabase.from("marketing_actividades").delete().eq("cliente", cliente).eq("nombre", nombre).eq("anio", anio);
-    setActividades(prev => prev.filter(a => a.nombre !== nombre));
-  };
-
-  // Celda editable inline
-  const EditableCell = ({ act, field, type = "text", options = null }) => {
-    const isEditing = editCell === act.id + "-" + field;
-    const val = act[field];
-    if (isEditing) {
-      if (options) {
-        return React.createElement("select", {
-          autoFocus: true,
-          defaultValue: val || "",
-          className: "border rounded px-1 py-0.5 text-xs w-full",
-          onBlur: (e) => saveField(act.id, field, e.target.value),
-          onChange: (e) => saveField(act.id, field, e.target.value),
-        }, options.map(o => React.createElement("option", { key: o.value, value: o.value }, o.label)));
-      }
-      return React.createElement("input", {
-        autoFocus: true,
-        type: type,
-        defaultValue: val || "",
-        className: "border rounded px-1 py-0.5 text-xs w-full",
-        onBlur: (e) => saveField(act.id, field, e.target.value),
-        onKeyDown: (e) => { if (e.key === "Enter") saveField(act.id, field, e.target.value); },
-      });
-    }
-    const display = type === "number" && field !== "alcance" && field !== "clics" && field !== "conversiones" && field !== "unidades"
-      ? formatMXN(val)
-      : (val || "—");
-    return React.createElement("span", {
-      className: "cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded text-xs",
-      title: "Click para editar",
-      onClick: () => setEditCell(act.id + "-" + field),
-    }, display);
-  };
-
-  // Resumen por mes
-  const resumenPorMes = React.useMemo(() => {
-    const map = {};
-    actividades.forEach(a => {
-      if (!map[a.mes]) map[a.mes] = { inversion: 0, alcance: 0, clics: 0, conversiones: 0, ventas: 0, count: 0 };
-      map[a.mes].inversion += Number(a.inversion) || 0;
-      map[a.mes].alcance += Number(a.alcance) || 0;
-      map[a.mes].clics += Number(a.clics) || 0;
-      map[a.mes].conversiones += Number(a.conversiones) || 0;
-      map[a.mes].ventas += Number(a.ventas) || 0;
-      map[a.mes].count++;
-    });
-    return map;
+  const kpis = React.useMemo(() => {
+    const inv = actividades.reduce((s, a) => s + (Number(a.inversion) || 0), 0);
+    const ven = actividades.reduce((s, a) => s + (Number(a.ventas) || 0), 0);
+    const alc = actividades.reduce((s, a) => s + (Number(a.alcance) || 0), 0);
+    const conv = actividades.reduce((s, a) => s + (Number(a.conversiones) || 0), 0);
+    const clics = actividades.reduce((s, a) => s + (Number(a.clics) || 0), 0);
+    const roi = inv > 0 ? ((ven - inv) / inv * 100) : 0;
+    return { inv, ven, alc, conv, clics, roi, total: actividades.length, completadas: actividades.filter(a => a.estatus === "completado").length };
   }, [actividades]);
 
-  if (loading) return React.createElement("div", { className: "p-8 text-center text-gray-400" }, "Cargando marketing...");
+  // Activities grouped by month for calendar
+  const porMes = React.useMemo(() => {
+    const m = {};
+    for (let i = 1; i <= 12; i++) m[i] = [];
+    actividades.forEach(a => { if (m[a.mes]) m[a.mes].push(a); });
+    return m;
+  }, [actividades]);
 
-  const clienteNombre = cliente === "digitalife" ? "Digitalife" : cliente === "pcel" ? "PCEL" : cliente;
-  const marca = "Acteck / Balam Rush";
+  // Save (insert or update)
+  const handleSave = async () => {
+    const row = { ...form, cliente: clienteKey || cliente };
+    if (editItem) {
+      await supabase.from("marketing_actividades").update(row).eq("id", editItem.id);
+    } else {
+      await supabase.from("marketing_actividades").insert([row]);
+    }
+    setShowModal(false);
+    setEditItem(null);
+    setForm({...emptyForm});
+    // Reload
+    const { data } = await supabase.from("marketing_actividades").select("*").eq("cliente", clienteKey || cliente).eq("anio", anio);
+    if (data) setActividades(data);
+  };
 
-  return React.createElement("div", { className: "max-w-7xl mx-auto" },
-    // Header
-    React.createElement("div", { className: "mb-6" },
-      React.createElement("div", { className: "flex items-center gap-3 mb-1" },
-        React.createElement("span", { className: "text-2xl" }, "📣"),
-        React.createElement("h2", { className: "text-xl font-bold text-gray-800" }, clienteNombre + " — Marketing"),
-      ),
-      React.createElement("div", { className: "text-sm text-gray-500" },
-        React.createElement("span", { className: "bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-xs font-medium mr-2" }, marca),
-        " · Digital · Presencial · Métricas · Resultados"
-      ),
-      React.createElement("div", { className: "flex items-center gap-4 mt-2 text-xs text-gray-400" },
-        React.createElement("span", null, "Año: " + anio),
-        DB_CONFIGURED
-          ? React.createElement("span", { className: "text-green-600" }, "✅ Sincronizado")
-          : React.createElement("span", { className: "text-amber-600" }, "⚠️ Sin conexión a BD"),
-      ),
-    ),
+  const handleEdit = (act) => {
+    setEditItem(act);
+    setForm({ nombre: act.nombre || "", tipo: act.tipo || "digital", subtipo: act.subtipo || "", mes: act.mes, anio: act.anio, estatus: act.estatus || "planificado", producto: act.producto || "", mensaje: act.mensaje || "", temporalidad: act.temporalidad || "", inversion: act.inversion || 0, alcance: act.alcance || 0, clics: act.clics || 0, conversiones: act.conversiones || 0, unidades: act.unidades || 0, ventas: act.ventas || 0, responsable: act.responsable || "", notas: act.notas || "" });
+    setShowModal(true);
+  };
 
-    // KPIs
-    React.createElement("div", { className: "grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6" },
-      ...[
-        { label: "Inversión", value: formatMXN(totalInversion), color: "bg-indigo-50 text-indigo-700" },
-        { label: "Alcance", value: totalAlcance.toLocaleString(), color: "bg-purple-50 text-purple-700" },
-        { label: "Clics", value: totalClics.toLocaleString(), color: "bg-blue-50 text-blue-700" },
-        { label: "CTR", value: ctr + "%", color: "bg-cyan-50 text-cyan-700" },
-        { label: "Conversiones", value: totalConversiones.toLocaleString(), color: "bg-green-50 text-green-700" },
-        { label: "Ventas", value: formatMXN(totalVentas), color: "bg-emerald-50 text-emerald-700" },
-        { label: "ROI", value: roi + "%", color: Number(roi) >= 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700" },
-      ].map((kpi, i) =>
-        React.createElement("div", { key: i, className: "rounded-xl border p-3 text-center " + kpi.color },
-          React.createElement("div", { className: "text-lg font-bold" }, kpi.value),
-          React.createElement("div", { className: "text-xs opacity-70" }, kpi.label),
+  const handleDelete = async (id) => {
+    await supabase.from("marketing_actividades").delete().eq("id", id);
+    setActividades(prev => prev.filter(a => a.id !== id));
+  };
+
+  const fmtMoney = (v) => "$" + Number(v||0).toLocaleString("es-MX", {minimumFractionDigits:0});
+  const fmtNum = (v) => Number(v||0).toLocaleString("es-MX");
+
+  // ── RENDER ──
+  const el = React.createElement;
+
+  // KPI Card helper
+  const kpiCard = (label, value, sub, color) =>
+    el("div", { style: { flex:"1", minWidth:130, background:"#1e293b", borderRadius:10, padding:"10px 14px", borderLeft:`3px solid ${color}` } },
+      el("div", { style: { color:"#94a3b8", fontSize:11, marginBottom:2 } }, label),
+      el("div", { style: { color:"#f1f5f9", fontSize:18, fontWeight:700 } }, value),
+      sub ? el("div", { style: { color:"#64748b", fontSize:10, marginTop:2 } }, sub) : null
+    );
+
+  // Filter pill helper
+  const pill = (label, active, onClick) =>
+    el("button", { onClick, style: { padding:"4px 12px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:active?600:400, background:active?"#3b82f6":"#1e293b", color:active?"#fff":"#94a3b8", transition:"all .2s" } }, label);
+
+  // ── MODAL ──
+  const modal = showModal ? el("div", { style: { position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center" }, onClick: () => { setShowModal(false); setEditItem(null); } },
+    el("div", { onClick: e => e.stopPropagation(), style: { background:"#1e293b", borderRadius:14, padding:24, width:520, maxHeight:"80vh", overflowY:"auto", color:"#f1f5f9" } },
+      el("div", { style: { display:"flex", justifyContent:"space-between", marginBottom:16 } },
+        el("h3", { style: { margin:0, fontSize:16 } }, editItem ? "Editar Actividad" : "Nueva Actividad"),
+        el("button", { onClick: () => { setShowModal(false); setEditItem(null); }, style: { background:"none", border:"none", color:"#94a3b8", cursor:"pointer", fontSize:18 } }, "\u2715")
+      ),
+      // Row 1: nombre + tipo
+      el("div", { style: { display:"grid", gridTemplateColumns:"2fr 1fr", gap:10, marginBottom:10 } },
+        el("div", null,
+          el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Nombre / Campa\u00f1a"),
+          el("input", { value: form.nombre, onChange: e => setForm({...form, nombre: e.target.value}), style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13, boxSizing:"border-box" } })
+        ),
+        el("div", null,
+          el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Tipo"),
+          el("select", { value: form.tipo, onChange: e => setForm({...form, tipo: e.target.value}), style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13 } },
+            el("option", { value:"digital" }, "Digital"),
+            el("option", { value:"presencial" }, "Presencial / F\u00edsico"),
+            el("option", { value:"mixto" }, "Mixto")
+          )
         )
+      ),
+      // Row 2: subtipo + producto + temporalidad
+      el("div", { style: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:10 } },
+        el("div", null,
+          el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Subtipo"),
+          el("input", { value: form.subtipo, onChange: e => setForm({...form, subtipo: e.target.value}), placeholder:"Redes, evento, POP...", style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13, boxSizing:"border-box" } })
+        ),
+        el("div", null,
+          el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Producto"),
+          el("input", { value: form.producto, onChange: e => setForm({...form, producto: e.target.value}), placeholder:"SKU o l\u00ednea...", style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13, boxSizing:"border-box" } })
+        ),
+        el("div", null,
+          el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Temporalidad"),
+          el("input", { value: form.temporalidad, onChange: e => setForm({...form, temporalidad: e.target.value}), placeholder:"Semanal, mensual...", style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13, boxSizing:"border-box" } })
+        )
+      ),
+      // Row 3: mes + estatus + responsable
+      el("div", { style: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:10 } },
+        el("div", null,
+          el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Mes"),
+          el("select", { value: form.mes, onChange: e => setForm({...form, mes: Number(e.target.value)}), style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13 } },
+            MESES_FULL.map((m, i) => el("option", { key: i, value: i+1 }, m))
+          )
+        ),
+        el("div", null,
+          el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Estatus"),
+          el("select", { value: form.estatus, onChange: e => setForm({...form, estatus: e.target.value}), style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13 } },
+            ESTATUS_OPTS.map(s => el("option", { key: s, value: s }, s.charAt(0).toUpperCase() + s.slice(1)))
+          )
+        ),
+        el("div", null,
+          el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Responsable"),
+          el("input", { value: form.responsable, onChange: e => setForm({...form, responsable: e.target.value}), style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13, boxSizing:"border-box" } })
+        )
+      ),
+      // Row 4: mensaje (material description)
+      el("div", { style: { marginBottom:10 } },
+        el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Material / Descripci\u00f3n de campa\u00f1a"),
+        el("textarea", { value: form.mensaje, onChange: e => setForm({...form, mensaje: e.target.value}), rows:2, placeholder:"Qu\u00e9 material se necesita, f\u00edsico o digital, especificaciones...", style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13, resize:"vertical", boxSizing:"border-box" } })
+      ),
+      // Row 5: metrics (compact 2x3 grid)
+      el("div", { style: { fontSize:12, color:"#94a3b8", marginBottom:4, fontWeight:600 } }, "M\u00e9tricas"),
+      el("div", { style: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:10 } },
+        ...[["Inversi\u00f3n ($)","inversion"],["Alcance","alcance"],["Clics","clics"],["Conversiones","conversiones"],["Unidades","unidades"],["Ventas ($)","ventas"]].map(([lbl,key]) =>
+          el("div", { key },
+            el("label", { style: { fontSize:10, color:"#64748b", display:"block", marginBottom:2 } }, lbl),
+            el("input", { type:"number", value: form[key], onChange: e => setForm({...form, [key]: Number(e.target.value)}), style: { width:"100%", padding:"5px 8px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:12, boxSizing:"border-box" } })
+          )
+        )
+      ),
+      // Row 6: notas
+      el("div", { style: { marginBottom:16 } },
+        el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Notas"),
+        el("textarea", { value: form.notas, onChange: e => setForm({...form, notas: e.target.value}), rows:2, style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:13, resize:"vertical", boxSizing:"border-box" } })
+      ),
+      // Actions
+      el("div", { style: { display:"flex", gap:10, justifyContent:"flex-end" } },
+        el("button", { onClick: () => { setShowModal(false); setEditItem(null); }, style: { padding:"8px 18px", borderRadius:8, border:"1px solid #334155", background:"transparent", color:"#94a3b8", cursor:"pointer", fontSize:13 } }, "Cancelar"),
+        el("button", { onClick: handleSave, style: { padding:"8px 18px", borderRadius:8, border:"none", background:"#3b82f6", color:"#fff", cursor:"pointer", fontSize:13, fontWeight:600 } }, editItem ? "Guardar" : "Crear")
+      )
+    )
+  ) : null;
+
+  // ── CALENDAR VIEW ──
+  const calendarioView = el("div", { style: { display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:8, marginTop:12 } },
+    MESES.map((m, i) => {
+      const mesNum = i + 1;
+      const acts = porMes[mesNum] || [];
+      const isActive = mesActivo === mesNum;
+      const invMes = acts.reduce((s, a) => s + (Number(a.inversion) || 0), 0);
+      return el("div", {
+        key: i,
+        onClick: () => setMesActivo(isActive ? null : mesNum),
+        style: { background: isActive ? "#1e3a5f" : "#1e293b", borderRadius:10, padding:"10px 12px", cursor:"pointer", border: isActive ? "1px solid #3b82f6" : "1px solid transparent", transition:"all .2s", minHeight:80 }
+      },
+        el("div", { style: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 } },
+          el("span", { style: { fontWeight:600, fontSize:13, color:"#f1f5f9" } }, m),
+          el("span", { style: { fontSize:11, color:"#64748b" } }, acts.length + " act.")
+        ),
+        invMes > 0 ? el("div", { style: { fontSize:10, color:"#94a3b8", marginBottom:4 } }, "Inv: " + fmtMoney(invMes)) : null,
+        el("div", { style: { display:"flex", flexWrap:"wrap", gap:3 } },
+          acts.slice(0, 4).map((a, j) =>
+            el("span", { key: j, style: { display:"inline-block", padding:"2px 6px", borderRadius:10, fontSize:9, fontWeight:500, background: TIPOS_COLOR[a.tipo] || "#3b82f6", color:"#fff", opacity: a.estatus === "completado" ? 0.6 : 1, maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" } }, a.subtipo || a.nombre || a.tipo)
+          ),
+          acts.length > 4 ? el("span", { style: { fontSize:9, color:"#64748b", padding:"2px 4px" } }, "+" + (acts.length - 4)) : null
+        )
+      );
+    })
+  );
+
+  // ── LIST VIEW ──
+  const listaView = el("div", { style: { marginTop:12, display:"flex", flexDirection:"column", gap:6 } },
+    filtered.length === 0 ? el("div", { style: { textAlign:"center", color:"#64748b", padding:30, fontSize:13 } }, "No hay actividades con estos filtros") :
+    filtered.map(a =>
+      el("div", { key: a.id, style: { background:"#1e293b", borderRadius:10, overflow:"hidden", border: expandedId === a.id ? "1px solid #334155" : "1px solid transparent" } },
+        // Header row (always visible)
+        el("div", {
+          onClick: () => setExpandedId(expandedId === a.id ? null : a.id),
+          style: { display:"grid", gridTemplateColumns:"3fr 1fr 1fr 1fr 1fr auto", gap:8, alignItems:"center", padding:"10px 14px", cursor:"pointer", fontSize:12 }
+        },
+          el("div", { style: { display:"flex", alignItems:"center", gap:8 } },
+            el("span", { style: { width:8, height:8, borderRadius:"50%", background: TIPOS_COLOR[a.tipo] || "#3b82f6", flexShrink:0 } }),
+            el("span", { style: { color:"#f1f5f9", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" } }, a.nombre || a.subtipo || "Sin nombre"),
+            el("span", { style: { fontSize:10, color:"#64748b" } }, a.subtipo && a.nombre ? a.subtipo : "")
+          ),
+          el("div", { style: { color:"#94a3b8" } }, MESES[a.mes - 1] || ""),
+          el("div", null,
+            el("span", { style: { padding:"2px 8px", borderRadius:10, fontSize:10, fontWeight:500, background: ESTATUS_COLOR[a.estatus] || "#94a3b8", color:"#fff" } }, a.estatus || "—")
+          ),
+          el("div", { style: { color:"#94a3b8" } }, a.inversion ? fmtMoney(a.inversion) : "—"),
+          el("div", { style: { color:"#94a3b8" } }, a.ventas ? fmtMoney(a.ventas) : "—"),
+          el("span", { style: { color:"#64748b", fontSize:14, transition:"transform .2s", transform: expandedId === a.id ? "rotate(180deg)" : "rotate(0)" } }, "\u25BC")
+        ),
+        // Expanded detail
+        expandedId === a.id ? el("div", { style: { padding:"0 14px 12px", borderTop:"1px solid #0f172a" } },
+          el("div", { style: { display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:10, marginTop:10, fontSize:11 } },
+            el("div", null, el("span", { style: { color:"#64748b" } }, "Producto: "), el("span", { style: { color:"#f1f5f9" } }, a.producto || "—")),
+            el("div", null, el("span", { style: { color:"#64748b" } }, "Responsable: "), el("span", { style: { color:"#f1f5f9" } }, a.responsable || "—")),
+            el("div", null, el("span", { style: { color:"#64748b" } }, "Temporalidad: "), el("span", { style: { color:"#f1f5f9" } }, a.temporalidad || "—")),
+            el("div", null, el("span", { style: { color:"#64748b" } }, "Tipo: "), el("span", { style: { color:"#f1f5f9" } }, a.tipo || "—"))
+          ),
+          a.mensaje ? el("div", { style: { marginTop:8, fontSize:11 } }, el("span", { style: { color:"#64748b" } }, "Material: "), el("span", { style: { color:"#cbd5e1" } }, a.mensaje)) : null,
+          el("div", { style: { display:"grid", gridTemplateColumns:"repeat(5, 1fr)", gap:8, marginTop:10, fontSize:11 } },
+            el("div", null, el("div", { style: { color:"#64748b", fontSize:10 } }, "Alcance"), el("div", { style: { color:"#f1f5f9", fontWeight:600 } }, fmtNum(a.alcance))),
+            el("div", null, el("div", { style: { color:"#64748b", fontSize:10 } }, "Clics"), el("div", { style: { color:"#f1f5f9", fontWeight:600 } }, fmtNum(a.clics))),
+            el("div", null, el("div", { style: { color:"#64748b", fontSize:10 } }, "Conv."), el("div", { style: { color:"#f1f5f9", fontWeight:600 } }, fmtNum(a.conversiones))),
+            el("div", null, el("div", { style: { color:"#64748b", fontSize:10 } }, "Uds."), el("div", { style: { color:"#f1f5f9", fontWeight:600 } }, fmtNum(a.unidades))),
+            a.inversion > 0 && a.ventas > 0 ? el("div", null, el("div", { style: { color:"#64748b", fontSize:10 } }, "ROI"), el("div", { style: { color: ((a.ventas-a.inversion)/a.inversion*100) >= 0 ? "#10b981" : "#ef4444", fontWeight:600 } }, ((a.ventas-a.inversion)/a.inversion*100).toFixed(0) + "%")) : null
+          ),
+          a.notas ? el("div", { style: { marginTop:8, fontSize:11, color:"#64748b", fontStyle:"italic" } }, a.notas) : null,
+          el("div", { style: { display:"flex", gap:8, marginTop:10, justifyContent:"flex-end" } },
+            el("button", { onClick: (e) => { e.stopPropagation(); handleEdit(a); }, style: { padding:"4px 14px", borderRadius:6, border:"1px solid #334155", background:"transparent", color:"#94a3b8", cursor:"pointer", fontSize:11 } }, "Editar"),
+            el("button", { onClick: (e) => { e.stopPropagation(); if(confirm("\u00bfEliminar esta actividad?")) handleDelete(a.id); }, style: { padding:"4px 14px", borderRadius:6, border:"1px solid #7f1d1d", background:"transparent", color:"#ef4444", cursor:"pointer", fontSize:11 } }, "Eliminar")
+          )
+        ) : null
+      )
+    )
+  );
+
+  // ── MAIN LAYOUT ──
+  return el("div", { style: { maxWidth:1100, margin:"0 auto" } },
+    modal,
+    // Header
+    el("div", { style: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8 } },
+      el("h2", { style: { margin:0, color:"#f1f5f9", fontSize:20, fontWeight:700 } }, "\ud83d\udce3 Marketing"),
+      el("div", { style: { display:"flex", gap:8, alignItems:"center" } },
+        el("select", { value: anio, onChange: e => setAnio(Number(e.target.value)), style: { padding:"5px 10px", borderRadius:8, border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:12 } },
+          el("option", { value: 2025 }, "2025"),
+          el("option", { value: 2026 }, "2026"),
+          el("option", { value: 2027 }, "2027")
+        ),
+        el("button", { onClick: () => { setEditItem(null); setForm({...emptyForm}); setShowModal(true); }, style: { padding:"6px 16px", borderRadius:8, border:"none", background:"#3b82f6", color:"#fff", cursor:"pointer", fontSize:12, fontWeight:600 } }, "+ Nueva Actividad")
       )
     ),
 
-    // Filtros
-    React.createElement("div", { className: "flex flex-wrap items-center gap-2 mb-4" },
-      ...["todas", "digital", "presencial"].map(f =>
-        React.createElement("button", {
-          key: f,
-          onClick: () => setFiltroTipo(f),
-          className: "px-3 py-1 rounded-full text-xs font-medium transition " +
-            (filtroTipo === f ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"),
-        }, f === "todas" ? "Todas" : f === "digital" ? "📱 Digital" : "🏪 Presencial")
-      ),
-      React.createElement("span", { className: "text-xs text-gray-400 ml-2" },
-        filtradas.length + " conceptos · " + actividades.filter(a => filtroTipo === "todas" || a.tipo === filtroTipo || a.subtipo === filtroTipo).length + " registros"
-      ),
-      React.createElement("div", { className: "ml-auto flex gap-2" },
-        React.createElement("select", {
-          className: "border rounded px-2 py-1 text-xs",
-          value: anio,
-          onChange: (e) => setAnio(Number(e.target.value)),
-        },
-          React.createElement("option", { value: 2026 }, "2026"),
-          React.createElement("option", { value: 2025 }, "2025"),
-        ),
-      ),
+    // KPI Bar (compact horizontal)
+    el("div", { style: { display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" } },
+      kpiCard("Inversi\u00f3n Total", fmtMoney(kpis.inv), kpis.total + " actividades", "#3b82f6"),
+      kpiCard("Ventas Generadas", fmtMoney(kpis.ven), null, "#10b981"),
+      kpiCard("ROI", (kpis.roi >= 0 ? "+" : "") + kpis.roi.toFixed(0) + "%", kpis.inv > 0 ? "vs inversi\u00f3n" : "sin datos", kpis.roi >= 0 ? "#10b981" : "#ef4444"),
+      kpiCard("Alcance", fmtNum(kpis.alc), fmtNum(kpis.conv) + " conv.", "#8b5cf6"),
+      kpiCard("Completadas", kpis.completadas + "/" + kpis.total, kpis.total > 0 ? (kpis.completadas/kpis.total*100).toFixed(0) + "%" : "—", "#f59e0b")
     ),
 
-    // Actividades Digitales
-    (filtroTipo === "todas" || filtroTipo === "digital" || Object.keys(TIPO_ACTIVIDAD).filter(k => TIPO_ACTIVIDAD[k].tipo === "digital").includes(filtroTipo)) &&
-    React.createElement("div", { className: "mb-8" },
-      React.createElement("div", { className: "flex items-center justify-between mb-3" },
-        React.createElement("h3", { className: "text-base font-semibold text-gray-700 flex items-center gap-2" },
-          React.createElement("span", { className: "text-lg" }, "📱"),
-          "Actividades Digitales — Calendario Mensual"
-        ),
-        React.createElement("div", { className: "flex gap-1" },
-          ...Object.entries(TIPO_ACTIVIDAD).filter(([, v]) => v.tipo === "digital").map(([key, meta]) =>
-            React.createElement("button", {
-              key: key,
-              onClick: () => addActividad("digital", key),
-              className: "text-xs px-2 py-1 rounded border hover:bg-gray-50",
-              title: "Agregar " + meta.label,
-            }, "＋ " + meta.label)
-          ),
-        ),
+    // Filters + view toggle
+    el("div", { style: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, flexWrap:"wrap", gap:6 } },
+      el("div", { style: { display:"flex", gap:4, flexWrap:"wrap" } },
+        pill("Todas", filtroTipo === "todas", () => setFiltroTipo("todas")),
+        pill("Digital", filtroTipo === "digital", () => setFiltroTipo("digital")),
+        pill("Presencial", filtroTipo === "presencial", () => setFiltroTipo("presencial")),
+        pill("Mixto", filtroTipo === "mixto", () => setFiltroTipo("mixto")),
+        el("span", { style: { width:1, height:20, background:"#334155", margin:"0 4px" } }),
+        pill("Todos", filtroEstatus === "todas", () => setFiltroEstatus("todas")),
+        ...ESTATUS_OPTS.map(s => pill(s.charAt(0).toUpperCase() + s.slice(1), filtroEstatus === s, () => setFiltroEstatus(s)))
       ),
-      React.createElement("div", { className: "text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-3" },
-        "💡 Haz click en una fila para expandir y ver/editar los 12 meses con métricas de alcance, clics, conversiones y ventas."
-      ),
-      // Filas expandibles digitales
-      ...(filtroTipo === "todas" || filtroTipo === "digital" ? actDigitales : actividadesPorNombre.filter(a => a.subtipo === filtroTipo)).map(grupo =>
-        React.createElement("div", { key: grupo.nombre, className: "border rounded-xl mb-2 overflow-hidden" },
-          React.createElement("button", {
-            onClick: () => setExpandedAct(expandedAct === grupo.nombre ? null : grupo.nombre),
-            className: "w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50 transition text-left",
-          },
-            React.createElement("div", { className: "flex items-center gap-3" },
-              React.createElement("span", { className: "text-sm" }, expandedAct === grupo.nombre ? "▼" : "▶"),
-              React.createElement("span", { className: "text-lg" }, TIPO_ACTIVIDAD[grupo.subtipo]?.icon || "📌"),
-              React.createElement("div", null,
-                React.createElement("div", { className: "font-semibold text-sm" }, grupo.nombre),
-                React.createElement("div", { className: "text-xs text-gray-400" },
-                  React.createElement("span", {
-                    className: "inline-block px-1.5 py-0.5 rounded text-white text-xs mr-2",
-                    style: { background: TIPO_ACTIVIDAD[grupo.subtipo]?.color || "#888" },
-                  }, TIPO_ACTIVIDAD[grupo.subtipo]?.label || grupo.subtipo),
-                  Object.keys(grupo.meses).length + "/12 meses"
-                ),
-              ),
-            ),
-            React.createElement("div", { className: "flex items-center gap-4 text-xs text-gray-500" },
-              React.createElement("span", null, "Inversión: " + formatMXN(Object.values(grupo.meses).reduce((s, m) => s + (Number(m.inversion) || 0), 0))),
-              React.createElement("span", null, "Ventas: " + formatMXN(Object.values(grupo.meses).reduce((s, m) => s + (Number(m.ventas) || 0), 0))),
-              React.createElement("button", {
-                onClick: (e) => { e.stopPropagation(); deleteConcepto(grupo.nombre); },
-                className: "text-red-400 hover:text-red-600 ml-2",
-                title: "Eliminar concepto completo",
-              }, "🗑"),
-            ),
-          ),
-          // Detalle expandido
-          expandedAct === grupo.nombre && React.createElement("div", { className: "border-t bg-gray-50" },
-            React.createElement("div", { className: "overflow-x-auto" },
-              React.createElement("table", { className: "w-full text-xs" },
-                React.createElement("thead", null,
-                  React.createElement("tr", { className: "bg-gray-100 text-gray-500 text-left" },
-                    ...["Mes", "Producto", "Mensaje", "Estatus", "Inversión", "Alcance", "Clics", "Conv.", "Uds.", "Ventas"].map(h =>
-                      React.createElement("th", { key: h, className: "px-3 py-2 font-medium" }, h)
-                    )
-                  ),
-                ),
-                React.createElement("tbody", null,
-                  ...MESES_MKT.map(m => {
-                    const act = grupo.meses[m.key];
-                    if (!act) return React.createElement("tr", { key: m.key, className: "border-t text-gray-300" },
-                      React.createElement("td", { className: "px-3 py-2 font-medium text-gray-500" }, m.short + " " + anio),
-                      ...Array(9).fill(null).map((_, i) => React.createElement("td", { key: i, className: "px-3 py-2" }, "—"))
-                    );
-                    const temporalidad = act.temporalidad && TEMPORALIDADES[act.temporalidad];
-                    return React.createElement("tr", {
-                      key: m.key,
-                      className: "border-t hover:bg-white transition" + (temporalidad ? " bg-opacity-20" : ""),
-                      style: temporalidad ? { background: temporalidad.color + "22" } : {},
-                    },
-                      React.createElement("td", { className: "px-3 py-2 font-medium text-gray-700 whitespace-nowrap" },
-                        temporalidad && React.createElement("span", { className: "mr-1", title: temporalidad.label }, temporalidad.emoji),
-                        m.short + " " + anio,
-                      ),
-                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "producto" })),
-                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "mensaje" })),
-                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "estatus", options: MKT_ESTATUS })),
-                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "inversion", type: "number" })),
-                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "alcance", type: "number" })),
-                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "clics", type: "number" })),
-                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "conversiones", type: "number" })),
-                      React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "unidades", type: "number" })),
-                      React.createElement("td", { className: "px-3 py-2 font-medium" }, React.createElement(EditableCell, { act, field: "ventas", type: "number" })),
-                    );
-                  })
-                ),
-              ),
-            ),
-          ),
-        )
-      ),
+      el("div", { style: { display:"flex", gap:4 } },
+        el("button", { onClick: () => { setVista("calendario"); setMesActivo(null); }, style: { padding:"4px 12px", borderRadius:6, border:"none", cursor:"pointer", fontSize:12, background: vista==="calendario" ? "#3b82f6" : "#1e293b", color: vista==="calendario" ? "#fff" : "#94a3b8" } }, "\ud83d\udcc5 Calendario"),
+        el("button", { onClick: () => setVista("lista"), style: { padding:"4px 12px", borderRadius:6, border:"none", cursor:"pointer", fontSize:12, background: vista==="lista" ? "#3b82f6" : "#1e293b", color: vista==="lista" ? "#fff" : "#94a3b8" } }, "\ud83d\udccb Lista")
+      )
     ),
 
-    // Actividades Presenciales
-    (filtroTipo === "todas" || filtroTipo === "presencial" || Object.keys(TIPO_ACTIVIDAD).filter(k => TIPO_ACTIVIDAD[k].tipo === "presencial").includes(filtroTipo)) &&
-    React.createElement("div", { className: "mb-8" },
-      React.createElement("div", { className: "flex items-center justify-between mb-3" },
-        React.createElement("h3", { className: "text-base font-semibold text-gray-700 flex items-center gap-2" },
-          React.createElement("span", { className: "text-lg" }, "🏪"),
-          "Actividades Presenciales — Calendario Mensual"
-        ),
-        React.createElement("div", { className: "flex gap-1" },
-          ...Object.entries(TIPO_ACTIVIDAD).filter(([, v]) => v.tipo === "presencial").map(([key, meta]) =>
-            React.createElement("button", {
-              key: key,
-              onClick: () => addActividad("presencial", key),
-              className: "text-xs px-2 py-1 rounded border hover:bg-gray-50",
-              title: "Agregar " + meta.label,
-            }, "＋ " + meta.label)
-          ),
-        ),
-      ),
-      actPresenciales.length === 0
-        ? React.createElement("div", { className: "text-center text-gray-400 py-8 border rounded-xl bg-gray-50" },
-            React.createElement("div", { className: "text-2xl mb-2" }, "🏪"),
-            React.createElement("div", { className: "text-sm" }, "Sin actividades presenciales registradas"),
-            React.createElement("div", { className: "text-xs mt-1" }, "Usa los botones de arriba para agregar demos, material POP o talleres"),
-          )
-        : actPresenciales.map(grupo =>
-            React.createElement("div", { key: grupo.nombre, className: "border rounded-xl mb-2 overflow-hidden" },
-              React.createElement("button", {
-                onClick: () => setExpandedAct(expandedAct === grupo.nombre ? null : grupo.nombre),
-                className: "w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50 transition text-left",
-              },
-                React.createElement("div", { className: "flex items-center gap-3" },
-                  React.createElement("span", { className: "text-sm" }, expandedAct === grupo.nombre ? "▼" : "▶"),
-                  React.createElement("span", { className: "text-lg" }, TIPO_ACTIVIDAD[grupo.subtipo]?.icon || "📌"),
-                  React.createElement("div", null,
-                    React.createElement("div", { className: "font-semibold text-sm" }, grupo.nombre),
-                    React.createElement("div", { className: "text-xs text-gray-400" },
-                      React.createElement("span", {
-                        className: "inline-block px-1.5 py-0.5 rounded text-white text-xs mr-2",
-                        style: { background: TIPO_ACTIVIDAD[grupo.subtipo]?.color || "#888" },
-                      }, TIPO_ACTIVIDAD[grupo.subtipo]?.label || grupo.subtipo),
-                      Object.keys(grupo.meses).length + "/12 meses"
-                    ),
-                  ),
-                ),
-                React.createElement("div", { className: "flex items-center gap-4 text-xs text-gray-500" },
-                  React.createElement("span", null, "Inversión: " + formatMXN(Object.values(grupo.meses).reduce((s, m) => s + (Number(m.inversion) || 0), 0))),
-                  React.createElement("button", {
-                    onClick: (e) => { e.stopPropagation(); deleteConcepto(grupo.nombre); },
-                    className: "text-red-400 hover:text-red-600 ml-2",
-                  }, "🗑"),
-                ),
-              ),
-              expandedAct === grupo.nombre && React.createElement("div", { className: "border-t bg-gray-50" },
-                React.createElement("div", { className: "overflow-x-auto" },
-                  React.createElement("table", { className: "w-full text-xs" },
-                    React.createElement("thead", null,
-                      React.createElement("tr", { className: "bg-gray-100 text-gray-500 text-left" },
-                        ...["Mes", "Descripción", "Estatus", "Inversión", "Responsable", "Notas"].map(h =>
-                          React.createElement("th", { key: h, className: "px-3 py-2 font-medium" }, h)
-                        )
-                      ),
-                    ),
-                    React.createElement("tbody", null,
-                      ...MESES_MKT.map(m => {
-                        const act = grupo.meses[m.key];
-                        if (!act) return React.createElement("tr", { key: m.key, className: "border-t text-gray-300" },
-                          React.createElement("td", { className: "px-3 py-2 font-medium text-gray-500" }, m.short + " " + anio),
-                          ...Array(5).fill(null).map((_, i) => React.createElement("td", { key: i, className: "px-3 py-2" }, "—"))
-                        );
-                        return React.createElement("tr", { key: m.key, className: "border-t hover:bg-white transition" },
-                          React.createElement("td", { className: "px-3 py-2 font-medium text-gray-700" }, m.short + " " + anio),
-                          React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "producto" })),
-                          React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "estatus", options: MKT_ESTATUS })),
-                          React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "inversion", type: "number" })),
-                          React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "responsable" })),
-                          React.createElement("td", { className: "px-3 py-2" }, React.createElement(EditableCell, { act, field: "notas" })),
-                        );
-                      })
-                    ),
-                  ),
-                ),
-              ),
-            )
-          ),
-    ),
+    // Active month indicator
+    mesActivo !== null ? el("div", { style: { display:"flex", alignItems:"center", gap:8, marginBottom:8, padding:"6px 12px", background:"#1e3a5f", borderRadius:8, fontSize:12 } },
+      el("span", { style: { color:"#93c5fd" } }, "Filtrando: " + MESES_FULL[mesActivo - 1]),
+      el("button", { onClick: () => setMesActivo(null), style: { background:"none", border:"none", color:"#93c5fd", cursor:"pointer", fontSize:14 } }, "\u2715")
+    ) : null,
 
-    // Resumen General por Mes
-    React.createElement("div", { className: "mt-8" },
-      React.createElement("h3", { className: "text-base font-semibold text-gray-700 flex items-center gap-2 mb-3" },
-        React.createElement("span", { className: "text-lg" }, "📅"),
-        "Resumen General por Mes"
-      ),
-      React.createElement("div", { className: "overflow-x-auto border rounded-xl" },
-        React.createElement("table", { className: "w-full text-xs" },
-          React.createElement("thead", null,
-            React.createElement("tr", { className: "bg-gray-50 text-gray-500 text-left" },
-              ...["Mes", "Inversión", "Alcance", "Clics", "CTR", "Conv.", "Ventas", "ROI"].map(h =>
-                React.createElement("th", { key: h, className: "px-3 py-2 font-medium" }, h)
-              )
-            ),
-          ),
-          React.createElement("tbody", null,
-            ...MESES_MKT.filter(m => resumenPorMes[m.key]).map(m => {
-              const r = resumenPorMes[m.key];
-              const mCtr = r.alcance > 0 ? ((r.clics / r.alcance) * 100).toFixed(1) : "0.0";
-              const mRoi = r.inversion > 0 ? (((r.ventas - r.inversion) / r.inversion) * 100).toFixed(0) : "0";
-              return React.createElement("tr", { key: m.key, className: "border-t hover:bg-gray-50" },
-                React.createElement("td", { className: "px-3 py-2 font-semibold text-gray-700" }, m.short + " " + anio),
-                React.createElement("td", { className: "px-3 py-2" }, formatMXN(r.inversion)),
-                React.createElement("td", { className: "px-3 py-2" }, r.alcance.toLocaleString()),
-                React.createElement("td", { className: "px-3 py-2" }, r.clics.toLocaleString()),
-                React.createElement("td", { className: "px-3 py-2" }, mCtr + "%"),
-                React.createElement("td", { className: "px-3 py-2" }, r.conversiones.toLocaleString()),
-                React.createElement("td", { className: "px-3 py-2 font-medium" }, formatMXN(r.ventas)),
-                React.createElement("td", { className: "px-3 py-2 font-medium " + (Number(mRoi) >= 0 ? "text-green-600" : "text-red-600") }, mRoi + "%"),
-              );
-            }),
-            // Total row
-            React.createElement("tr", { className: "border-t-2 bg-gray-100 font-bold" },
-              React.createElement("td", { className: "px-3 py-2" }, "TOTAL ANUAL"),
-              React.createElement("td", { className: "px-3 py-2" }, formatMXN(totalInversion)),
-              React.createElement("td", { className: "px-3 py-2" }, totalAlcance.toLocaleString()),
-              React.createElement("td", { className: "px-3 py-2" }, totalClics.toLocaleString()),
-              React.createElement("td", { className: "px-3 py-2" }, ctr + "%"),
-              React.createElement("td", { className: "px-3 py-2" }, totalConversiones.toLocaleString()),
-              React.createElement("td", { className: "px-3 py-2" }, formatMXN(totalVentas)),
-              React.createElement("td", { className: "px-3 py-2 " + (Number(roi) >= 0 ? "text-green-600" : "text-red-600") }, roi + "%"),
-            ),
-          ),
-        ),
-      ),
-    ),
+    // Loading
+    loading ? el("div", { style: { textAlign:"center", color:"#64748b", padding:30 } }, "Cargando actividades...") :
 
-    // Footer
-    React.createElement("div", { className: "text-xs text-gray-400 text-center mt-4 mb-8" },
-      "✅ Cambios guardados y sincronizados para todo el equipo. ",
-      "💡 ",
-      ...MKT_ESTATUS.map((s, i) =>
-        React.createElement("span", { key: i },
-          React.createElement("span", { className: "font-medium" }, s.label),
-          i < MKT_ESTATUS.length - 1 ? " · " : ""
-        )
-      ),
-    ),
+    // Views
+    vista === "calendario" ? el(React.Fragment, null,
+      calendarioView,
+      // Show filtered list below calendar when a month is selected
+      mesActivo !== null ? el("div", { style: { marginTop:16 } },
+        el("h3", { style: { fontSize:14, color:"#f1f5f9", marginBottom:8 } }, "Actividades de " + MESES_FULL[mesActivo - 1]),
+        listaView
+      ) : null
+    ) : listaView
   );
 }
+
 
 // ─── RESUMEN DE CUENTAS ──────────────────────────────────────────────────────────────────
 function ResumenCuentas() {
