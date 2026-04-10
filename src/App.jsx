@@ -3343,7 +3343,7 @@ function ResumenCuentas() {
 }
 
 
-export default 
+
 // ── PanelActualizacion ── Central update panel (slide-over)
 function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate }) {
   return React.createElement("div", {
@@ -3417,7 +3417,8 @@ function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate
   );
 }
 
-function App() {
+
+export default function App() {
   const [clienteActivo, setClienteActivo] = useState("digitalife");
   const [modoPresent, setModoPresent] = useState(false);
   const [paginaActiva, setPaginaActiva] = useState("home");
