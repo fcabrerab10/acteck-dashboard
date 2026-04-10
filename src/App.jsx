@@ -3343,10 +3343,85 @@ function ResumenCuentas() {
 }
 
 
-export default function App() {
+export default 
+// ── PanelActualizacion ── Central update panel (slide-over)
+function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate }) {
+  return React.createElement("div", {
+    className: "fixed inset-0 z-50 flex",
+    onClick: function(e) { if (e.target === e.currentTarget) onClose(); }
+  },
+    React.createElement("div", { className: "absolute inset-0 bg-black bg-opacity-40" }),
+    React.createElement("div", {
+      className: "relative ml-auto w-full max-w-md bg-white shadow-2xl flex flex-col h-full",
+      style: { animation: "slideInRight 0.3s ease-out" }
+    },
+      React.createElement("div", { className: "flex items-center justify-between p-5 border-b border-gray-100" },
+        React.createElement("div", null,
+          React.createElement("h2", { className: "text-lg font-bold text-gray-800" }, "\uD83D\uDD04 Central de Actualizaci\u00F3n"),
+          React.createElement("p", { className: "text-xs text-gray-400 mt-0.5" }, "Actualiza todos los datos desde un solo lugar")
+        ),
+        React.createElement("button", {
+          onClick: onClose,
+          className: "w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+        }, "\u2715")
+      ),
+      React.createElement("div", { className: "flex-1 overflow-y-auto p-5 space-y-5" },
+        React.createElement("div", { className: "bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200" },
+          React.createElement("div", { className: "flex items-center gap-2 mb-3" },
+            React.createElement("span", { className: "text-lg" }, "\uD83D\uDCCA"),
+            React.createElement("div", null,
+              React.createElement("p", { className: "text-sm font-semibold text-blue-800" }, "Ventas Mensuales"),
+              React.createElement("p", { className: "text-xs text-blue-500" }, "Excel Central de Ventas")
+            )
+          ),
+          React.createElement(ActualizarDatosExcel, { cliente: clienteKey, anio: anio, onComplete: onVentasUpdate })
+        ),
+        React.createElement("div", { className: "bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-4 border border-emerald-200 opacity-60" },
+          React.createElement("div", { className: "flex items-center gap-2" },
+            React.createElement("span", { className: "text-lg" }, "\uD83D\uDCE6"),
+            React.createElement("div", { className: "flex-1" },
+              React.createElement("p", { className: "text-sm font-semibold text-emerald-800" }, "Estrategia de Producto"),
+              React.createElement("p", { className: "text-xs text-emerald-500" }, "Reporte Acteck + Resumen Cliente")
+            ),
+            React.createElement("span", { className: "text-xs bg-emerald-200 text-emerald-700 px-2 py-0.5 rounded-full font-medium" }, "Pronto")
+          )
+        ),
+        React.createElement("div", { className: "bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200 opacity-60" },
+          React.createElement("div", { className: "flex items-center gap-2" },
+            React.createElement("span", { className: "text-lg" }, "\uD83D\uDCE7"),
+            React.createElement("div", { className: "flex-1" },
+              React.createElement("p", { className: "text-sm font-semibold text-amber-800" }, "Correos y Reportes"),
+              React.createElement("p", { className: "text-xs text-amber-500" }, "Descarga autom\u00E1tica de reportes por email")
+            ),
+            React.createElement("span", { className: "text-xs bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full font-medium" }, "Pronto")
+          )
+        ),
+        React.createElement("div", { className: "bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200 opacity-60" },
+          React.createElement("div", { className: "flex items-center gap-2" },
+            React.createElement("span", { className: "text-lg" }, "\uD83D\uDCE3"),
+            React.createElement("div", { className: "flex-1" },
+              React.createElement("p", { className: "text-sm font-semibold text-purple-800" }, "Marketing"),
+              React.createElement("p", { className: "text-xs text-purple-500" }, "Importar campa\u00F1as y m\u00E9tricas")
+            ),
+            React.createElement("span", { className: "text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full font-medium" }, "Pronto")
+          )
+        )
+      ),
+      React.createElement("div", { className: "p-4 border-t border-gray-100 bg-gray-50" },
+        React.createElement("p", { className: "text-xs text-gray-400 text-center" },
+          "Cliente: ", React.createElement("span", { className: "font-semibold text-gray-600" }, cliente),
+          " \u00B7 A\u00F1o: ", React.createElement("span", { className: "font-semibold text-gray-600" }, anio)
+        )
+      )
+    )
+  );
+}
+
+function App() {
   const [clienteActivo, setClienteActivo] = useState("digitalife");
   const [modoPresent, setModoPresent] = useState(false);
   const [paginaActiva, setPaginaActiva] = useState("home");
+  const [showUpdatePanel, setShowUpdatePanel] = useState(false);
 
   // ─── DATOS DESDE SUPABASE (ventas_mensuales) ───
   const [ventasDB, setVentasDB] = React.useState(null);
@@ -3508,7 +3583,15 @@ export default function App() {
           </div>
         </nav>
 
-        {/* Footer */}
+        <div className="p-4 border-t border-gray-100">
+            <button
+              onClick={() => setShowUpdatePanel(true)}
+              className="w-full text-sm font-semibold px-3 py-3 rounded-xl transition-all bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+            >
+              {"\uD83D\uDD04"} Actualizar Datos
+            </button>
+          </div>
+          {/* Footer */}
         <div className="p-4 border-t border-gray-100">
           <p className="text-xs text-gray-300 text-center">v1.0 · Abril 2026</p>
         </div>
@@ -3539,6 +3622,14 @@ export default function App() {
             </>
           )}
       </main>
+      {showUpdatePanel && React.createElement(PanelActualizacion, {
+        onClose: function() { setShowUpdatePanel(false); },
+        cliente: clientes[clienteActivo] ? clientes[clienteActivo].nombre : clienteActivo,
+        clienteKey: clienteActivo,
+        anio: 2026,
+        onVentasUpdate: function() { setVentasVer(function(v) { return v + 1; }); }
+      })}
+
 
     </div>
   );
