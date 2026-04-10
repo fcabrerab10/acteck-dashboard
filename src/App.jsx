@@ -2886,7 +2886,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
   const MESES_FULL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
   const TIPOS_COLOR = { digital: "#3b82f6", presencial: "#10b981", mixto: "#f59e0b" };
   const ESTATUS_COLOR = { planificado: "#94a3b8", "en curso": "#3b82f6", completado: "#10b981", cancelado: "#ef4444" };
-  const ESTATUS_OPTS = ["planificado","en curso","completado","cancelado"];
+  const ESTATUS_OPTS = ["planificado","planeado","en curso","completado","cancelado"];
 
   const [actividades, setActividades] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -3098,7 +3098,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
   actsMes.forEach(function(a) { var s = Number(a.semana) || 1; if (porSemana[s]) porSemana[s].push(a); });
 
   // Pendientes: actividades planificadas o en curso
-  const pendientesMes = actsMes.filter(function(a) { return a.estatus === "planificado" || a.estatus === "en curso"; });
+  const pendientesMes = actsMes.filter(function(a) { return a.estatus === "planificado" || a.estatus === "planeado" || a.estatus === "en curso"; });
 
   const calendarioView = el("div", null,
     // Month selector bar
