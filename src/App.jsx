@@ -2191,8 +2191,662 @@ function filterProductos(productos, yearFilter, marcaFilter, categoriaFilter, ro
   });
 }
 
-// ─── COMPONENT ───────────────────────────────────────────────────────────────
-function EstrategiaProducto({ cliente = "Digitalife" }) {
+// ——— ESTRATEGIA DE PRODUCTO (Excel Upload + Data Display) ———
+function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
+  const [loading, setLoading] = React.useState(false);
+  const [message, setMessage] = React.useState("");
+  const [datos, setDatos] = React.useState(null);
+  const [searchFilter, setSearchFilter] = React.useState("");
+  const [sortBy, setSortBy] = React.useState("sell-in");
+
+  const formatMXN = (n) => {
+    if (n == null || isNaN(n)) return "—";
+    return "$" + Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  };
+
+  const MARCA_COLORES = {
+    "ACTECK": "#3B82F6",
+    "Balam Rush": "#8B5CF6",
+  };
+
+  const ESTADO_COLORES = {
+    "D": "#10B981",
+    "NVS": "#F59E0B",
+    "RMI": "#3B82F6",
+    "RML": "#8B5CF6",
+  };
+
+  const MESES_ABREV = { 1:"Ene", 2:"Feb", 3:"Mar", 4:"Abr", 5:"May", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Sep", 10:"Oct", 11:"Nov", 12:"Dic" };
+
+  // Parse Excel Reporte Acteck
+  const parseActeck = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const wb = window.XLSX.read(e.target.result, { cellDates: true });
+          const sheetTD = wb.Sheets["TD Ventas"];
+          const sheetMaster = wb.Sheets["Master"];
+
+          if (!sheetTD || !sheetMaster) return reject("Hojas no encontradas");
+
+          // Parse TD Ventas (pivot already filtered by client)
+          const rangeTD = sheetTD['!ref'];
+          const productos = [];
+
+          if (rangeTD) {
+            const decoded = window.XLSX.utils.decode_range(rangeTD);
+            for (let r = 6; r <= decoded.e.r; r++) {
+              const skuCell = sheetTD[window.XLSX.utils.encode_cell({r, c: 0})];
+              const sku = skuCell ? skuCell.v : null;
+              if (!sku || sku === "Total") break;
+
+              const prod = { sku: String(sku).trim(), meses: {} };
+
+              // Extract 2026 months from columns (cols 22+ for 2026, 3 columns per month: cost, amount, piezas)
+              let colOffset = 22;
+              for (let mes = 1; mes <= 12; mes++) {
+                const piezasIdx = colOffset + (mes - 1) * 3 + 2;
+                const montoIdx = colOffset + (mes - 1) * 3 + 1;
+                const piezasCell = sheetTD[window.XLSX.utils.encode_cell({r, c: piezasIdx})];
+                const montoCell = sheetTD[window.XLSX.utils.encode_cell({r, c: montoIdx})];
+                const piezas = piezasCell ? Number(piezasCell.v) || 0 : 0;
+                const monto = montoCell ? Number(montoCell.v) || 0 : 0;
+                if (piezas > 0 || monto > 0) {
+                  prod.meses[mes] = { piezas, monto };
+                }
+              }
+              if (Object.keys(prod.meses).length > 0) productos.push(prod);
+            }
+          }
+
+          // Parse Master
+          const rangeMaster = sheetMaster['!ref'];
+          const masterMap = {};
+          if (rangeMaster) {
+            const decoded = window.XLSX.utils.decode_range(rangeMaster);
+            for (let r = 4; r <= Math.min(decoded.e.r, 500); r++) {
+              const skuCell = sheetMaster[window.XLSX.utils.encode_cell({r, c: 1})];
+              const sku = skuCell ? String(skuCell.v).trim() : null;
+              if (!sku) continue;
+              const roadmapCell = sheetMaster[window.XLSX.utils.encode_cell({r, c: 2})];
+              const descCell = sheetMaster[window.XLSX.utils.encode_cell({r, c: 3})];
+              masterMap[sku] = {
+                roadmap: roadmapCell ? String(roadmapCell.v) : "",
+                descripcion: descCell ? String(descCell.v) : "",
+              };
+            }
+          }
+
+          productos.forEach(p => {
+            const m = masterMap[p.sku];
+            if (m) { p.roadmap = m.roadmap; p.descripcion = m.descripcion; }
+          });
+
+          resolve(productos);
+        } catch (err) {
+          reject(err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  // Parse Excel Resumen Digitalife
+  const parseDigitalife = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const wb = window.XLSX.read(e.target.result, { cellDates: true });
+          const sheetSellout = wb.Sheets["BD Sellout"];
+          const sheetInventario = wb.Sheets["BD Inventario"];
+          const sheetRDMP = wb.Sheets["RDMP"];
+
+          if (!sheetSellout || !sheetInventario || !sheetRDMP) return reject("Hojas no encontradas");
+
+          // Parse BD Sellout
+          const rangeSO = sheetSellout['!ref'];
+          const selloutMap = {};
+          if (rangeSO) {
+            const decoded = window.XLSX.utils.decode_range(rangeSO);
+            for (let r = 1; r <= decoded.e.r; r++) {
+              const fechaCell = sheetSellout[window.XLSX.utils.encode_cell({r, c: 0})];
+              const skuCell = sheetSellout[window.XLSX.utils.encode_cell({r, c: 2})];
+              const cantCell = sheetSellout[window.XLSX.utils.encode_cell({r, c: 4})];
+              const totalCell = sheetSellout[window.XLSX.utils.encode_cell({r, c: 9})];
+
+              if (!fechaCell || !skuCell) continue;
+              const sku = String(skuCell.v).trim();
+              const fecha = fechaCell.v instanceof Date ? fechaCell.v : new Date(fechaCell.v);
+              const cantidad = cantCell ? Number(cantCell.v) || 0 : 0;
+              const total = totalCell ? Number(totalCell.v) || 0 : 0;
+
+              if (sku && fecha && cantidad > 0) {
+                const mes = fecha.getMonth() + 1;
+                const anio = fecha.getFullYear();
+                const key = `${sku}|${anio}|${mes}`;
+                if (!selloutMap[key]) selloutMap[key] = { piezas: 0, monto: 0 };
+                selloutMap[key].piezas += cantidad;
+                selloutMap[key].monto += total;
+              }
+            }
+          }
+
+          // Parse BD Inventario
+          const rangeInv = sheetInventario['!ref'];
+          const invMap = {};
+          if (rangeInv) {
+            const decoded = window.XLSX.utils.decode_range(rangeInv);
+            for (let r = 1; r <= decoded.e.r; r++) {
+              const skuCell = sheetInventario[window.XLSX.utils.encode_cell({r, c: 0})];
+              if (!skuCell) continue;
+              const sku = String(skuCell.v).trim();
+              const marcaCell = sheetInventario[window.XLSX.utils.encode_cell({r, c: 1})];
+              const titleCell = sheetInventario[window.XLSX.utils.encode_cell({r, c: 2})];
+              const stockCell = sheetInventario[window.XLSX.utils.encode_cell({r, c: 3})];
+              const costCell = sheetInventario[window.XLSX.utils.encode_cell({r, c: 5})];
+              const priceCell = sheetInventario[window.XLSX.utils.encode_cell({r, c: 6})];
+              const valorCell = sheetInventario[window.XLSX.utils.encode_cell({r, c: 10})];
+
+              invMap[sku] = {
+                marca: marcaCell ? String(marcaCell.v) : "",
+                titulo: titleCell ? String(titleCell.v) : "",
+                stock: stockCell ? Number(stockCell.v) || 0 : 0,
+                costo: costCell ? Number(costCell.v) || 0 : 0,
+                precio: priceCell ? Number(priceCell.v) || 0 : 0,
+                valor: valorCell ? Number(valorCell.v) || 0 : 0,
+              };
+            }
+          }
+
+          // Parse RDMP
+          const rangeRDMP = sheetRDMP['!ref'];
+          const productosRDMP = [];
+          if (rangeRDMP) {
+            const decoded = window.XLSX.utils.decode_range(rangeRDMP);
+            for (let r = 6; r <= decoded.e.r; r++) {
+              const skuCell = sheetRDMP[window.XLSX.utils.encode_cell({r, c: 1})];
+              if (!skuCell) continue;
+              const sku = String(skuCell.v).trim();
+
+              const catCell = sheetRDMP[window.XLSX.utils.encode_cell({r, c: 2})];
+              const roadCell = sheetRDMP[window.XLSX.utils.encode_cell({r, c: 3})];
+              const descCell = sheetRDMP[window.XLSX.utils.encode_cell({r, c: 4})];
+              const estCell = sheetRDMP[window.XLSX.utils.encode_cell({r, c: 5})];
+              const costCell = sheetRDMP[window.XLSX.utils.encode_cell({r, c: 6})];
+              const priceCell = sheetRDMP[window.XLSX.utils.encode_cell({r, c: 7})];
+
+              const prod = {
+                sku,
+                categoria: catCell ? String(catCell.v) : "",
+                roadmap: roadCell ? String(roadCell.v) : "",
+                descripcion: descCell ? String(descCell.v) : "",
+                estado: estCell ? String(estCell.v) : "D",
+                costo_promedio: costCell ? Number(costCell.v) || 0 : 0,
+                precio_venta: priceCell ? Number(priceCell.v) || 0 : 0,
+                meses: {},
+              };
+
+              prod.marca = sku.startsWith("AC-") ? "ACTECK" : sku.startsWith("BR-") ? "Balam Rush" : "Otro";
+
+              // Extract monthly 2026 data
+              let colOffset = 22;
+              for (let mes = 1; mes <= 12; mes++) {
+                const cellIdx = colOffset + (mes - 1);
+                const cell = sheetRDMP[window.XLSX.utils.encode_cell({r, c: cellIdx})];
+                const piezas = cell ? Number(cell.v) || 0 : 0;
+                if (piezas > 0) prod.meses[mes] = piezas;
+              }
+
+              productosRDMP.push(prod);
+            }
+          }
+
+          resolve({ productosRDMP, selloutMap, invMap });
+        } catch (err) {
+          reject(err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  // Upsert to Supabase
+  const upsertData = async (tabla, rows, uniqueFields) => {
+    if (!DB_CONFIGURED || !supabase) return 0;
+    let count = 0;
+    const chunks = [];
+    for (let i = 0; i < rows.length; i += 50) chunks.push(rows.slice(i, i + 50));
+
+    for (const chunk of chunks) {
+      const { error } = await supabase.from(tabla).upsert(chunk, { onConflict: uniqueFields });
+      if (!error) count += chunk.length;
+    }
+    return count;
+  };
+
+  // Handle file uploads
+  const handleUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setLoading(true);
+    setMessage("");
+    try {
+      let counts = { productos: 0, sellIn: 0, sellOut: 0, inventario: 0 };
+
+      for (const file of files) {
+        if (file.name.includes("Acteck")) {
+          const productos = await parseActeck(file);
+          const rows = productos.map(p => ({
+            cliente: clienteKey,
+            sku: p.sku,
+            categoria: "TBD",
+            roadmap: p.roadmap || "",
+            descripcion: p.descripcion || "",
+            estado: "D",
+            costo_promedio: 0,
+            precio_venta: 0,
+            marca: p.sku.startsWith("AC-") ? "ACTECK" : "Balam Rush",
+          }));
+          counts.productos += await upsertData("productos_cliente", rows, "cliente,sku");
+
+          for (const prod of productos) {
+            for (const [mes, data] of Object.entries(prod.meses)) {
+              const sellInRow = {
+                cliente: clienteKey,
+                sku: prod.sku,
+                anio: 2026,
+                mes: parseInt(mes),
+                piezas: data.piezas,
+                monto_pesos: data.monto,
+              };
+              await supabase.from("sell_in_sku").upsert([sellInRow], { onConflict: "cliente,sku,anio,mes" });
+              counts.sellIn++;
+            }
+          }
+        } else if (file.name.includes("Digitalife")) {
+          const { productosRDMP, selloutMap, invMap } = await parseDigitalife(file);
+
+          const prodRows = productosRDMP.map(p => ({
+            cliente: clienteKey,
+            sku: p.sku,
+            categoria: p.categoria,
+            roadmap: p.roadmap,
+            descripcion: p.descripcion,
+            estado: p.estado,
+            costo_promedio: p.costo_promedio,
+            precio_venta: p.precio_venta,
+            marca: p.marca,
+          }));
+          counts.productos += await upsertData("productos_cliente", prodRows, "cliente,sku");
+
+          for (const [key, data] of Object.entries(selloutMap)) {
+            const [sku, anio, mes] = key.split("|");
+            const row = {
+              cliente: clienteKey,
+              sku,
+              anio: parseInt(anio),
+              mes: parseInt(mes),
+              piezas: data.piezas,
+              monto_pesos: data.monto,
+            };
+            await supabase.from("sellout_sku").upsert([row], { onConflict: "cliente,sku,anio,mes" });
+            counts.sellOut++;
+          }
+
+          for (const [sku, inv] of Object.entries(invMap)) {
+            const row = {
+              cliente: clienteKey,
+              sku,
+              marca: inv.marca,
+              titulo: inv.titulo,
+              stock: inv.stock,
+              costo_convenio: inv.costo,
+              precio_venta: inv.precio,
+              valor: inv.valor,
+              dias_sin_venta: 0,
+              fecha_ultima_venta: null,
+            };
+            await supabase.from("inventario_cliente").upsert([row], { onConflict: "cliente,sku" });
+            counts.inventario++;
+          }
+        }
+      }
+
+      setMessage(`Cargado: ${counts.productos} productos, ${counts.sellIn} registros sell-in, ${counts.sellOut} sell-out, ${counts.inventario} inventario`);
+      if (onUploadComplete) onUploadComplete();
+      loadData();
+    } catch (err) {
+      setMessage(`Error: ${err}`);
+    }
+    setLoading(false);
+  };
+
+  // Load data from Supabase
+  const loadData = async () => {
+    if (!DB_CONFIGURED || !supabase) return;
+    setLoading(true);
+    try {
+      const [productos, sellIn, sellOut, inventario] = await Promise.all([
+        supabase.from("productos_cliente").select("*").eq("cliente", clienteKey),
+        supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026),
+        supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026),
+        supabase.from("inventario_cliente").select("*").eq("cliente", clienteKey),
+      ]);
+
+      if (productos.data && sellIn.data && sellOut.data && inventario.data) {
+        setDatos({
+          productos: productos.data || [],
+          sellIn: sellIn.data || [],
+          sellOut: sellOut.data || [],
+          inventario: inventario.data || [],
+        });
+      }
+    } catch (err) {
+      console.error("Error loading data:", err);
+    }
+    setLoading(false);
+  };
+
+  React.useEffect(() => {
+    loadData();
+  }, [cliente, clienteKey]);
+
+  // Compute aggregations
+  const aggs = React.useMemo(() => {
+    if (!datos) return null;
+
+    const sellInTotal = datos.sellIn.reduce((s, r) => s + (r.monto_pesos || 0), 0);
+    const sellInPiezas = datos.sellIn.reduce((s, r) => s + (r.piezas || 0), 0);
+    const sellOutTotal = datos.sellOut.reduce((s, r) => s + (r.monto_pesos || 0), 0);
+    const sellOutPiezas = datos.sellOut.reduce((s, r) => s + (r.piezas || 0), 0);
+    const invTotal = datos.inventario.reduce((s, r) => s + (r.valor || 0), 0);
+    const invPiezas = datos.inventario.reduce((s, r) => s + (r.stock || 0), 0);
+
+    // Find max months
+    const siByMes = {};
+    const soByMes = {};
+    datos.sellIn.forEach(r => { siByMes[r.mes] = (siByMes[r.mes] || 0) + (r.monto_pesos || 0); });
+    datos.sellOut.forEach(r => { soByMes[r.mes] = (soByMes[r.mes] || 0) + (r.monto_pesos || 0); });
+    const maxSIMes = Object.entries(siByMes).reduce((a, b) => a[1] > b[1] ? a : b, [0, 0])[0];
+    const maxSOMes = Object.entries(soByMes).reduce((a, b) => a[1] > b[1] ? a : b, [0, 0])[0];
+
+    // By marca
+    const byMarca = {};
+    datos.productos.forEach(p => {
+      if (!byMarca[p.marca]) byMarca[p.marca] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0, invValor: 0 };
+      const siForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
+      const siMontoForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.monto_pesos || 0), 0);
+      const soForSku = datos.sellOut.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
+      const soMontoForSku = datos.sellOut.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.monto_pesos || 0), 0);
+      const invForSku = datos.inventario.find(r => r.sku === p.sku);
+      byMarca[p.marca].siPiezas += siForSku;
+      byMarca[p.marca].siMonto += siMontoForSku;
+      byMarca[p.marca].soPiezas += soForSku;
+      byMarca[p.marca].soMonto += soMontoForSku;
+      if (invForSku) {
+        byMarca[p.marca].invPiezas += invForSku.stock || 0;
+        byMarca[p.marca].invValor += invForSku.valor || 0;
+      }
+    });
+
+    // By categoria
+    const byCategoria = {};
+    datos.productos.forEach(p => {
+      const cat = p.categoria || "Sin Categoría";
+      if (!byCategoria[cat]) byCategoria[cat] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0 };
+      const siForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
+      const siMontoForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.monto_pesos || 0), 0);
+      const soForSku = datos.sellOut.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
+      const soMontoForSku = datos.sellOut.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.monto_pesos || 0), 0);
+      const invForSku = datos.inventario.find(r => r.sku === p.sku);
+      byCategoria[cat].siPiezas += siForSku;
+      byCategoria[cat].siMonto += siMontoForSku;
+      byCategoria[cat].soPiezas += soForSku;
+      byCategoria[cat].soMonto += soMontoForSku;
+      if (invForSku) byCategoria[cat].invPiezas += invForSku.stock || 0;
+    });
+
+    return {
+      sellInTotal, sellInPiezas, sellOutTotal, sellOutPiezas, invTotal, invPiezas,
+      maxSIMes, maxSOMes, byMarca, byCategoria,
+    };
+  }, [datos]);
+
+  // Filtered & sorted SKUs
+  const skuDetail = React.useMemo(() => {
+    if (!datos) return [];
+    return datos.productos
+      .filter(p => !searchFilter || p.sku.toUpperCase().includes(searchFilter.toUpperCase()) || p.descripcion.toUpperCase().includes(searchFilter.toUpperCase()))
+      .map(p => {
+        const siData = datos.sellIn.filter(r => r.sku === p.sku);
+        const soData = datos.sellOut.filter(r => r.sku === p.sku);
+        const invData = datos.inventario.find(r => r.sku === p.sku);
+
+        const siPiezasTotal = siData.reduce((s, r) => s + (r.piezas || 0), 0);
+        const soMontoTotal = soData.reduce((s, r) => s + (r.monto_pesos || 0), 0);
+        const promedio90d = siData.slice(-3).length > 0 ? Math.round(siData.slice(-3).reduce((s, r) => s + (r.piezas || 0), 0) / 3) : 0;
+        const stock = invData?.stock || 0;
+        const sugerido = Math.max(0, promedio90d * 3 - stock);
+
+        return {
+          sku: p.sku,
+          descripcion: p.descripcion,
+          marca: p.marca,
+          estado: p.estado,
+          siPiezasTotal,
+          promedio90d,
+          stock,
+          sugerido,
+          soMontoTotal,
+        };
+      })
+      .sort((a, b) => {
+        if (sortBy === "sell-in") return b.siPiezasTotal - a.siPiezasTotal;
+        if (sortBy === "inventory") return b.stock - a.stock;
+        if (sortBy === "suggested") return b.sugerido - a.sugerido;
+        return 0;
+      });
+  }, [datos, searchFilter, sortBy]);
+
+  // ———— RENDER ————
+
+  if (!datos && !loading) {
+    return React.createElement("div", { className: "max-w-4xl mx-auto p-6" },
+      React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6 mb-6" },
+        React.createElement("h2", { className: "text-2xl font-bold text-gray-800 mb-4" }, "Estrategia de Producto"),
+        React.createElement("p", { className: "text-gray-600 mb-4" }, "Carga archivos Excel para actualizar datos de Sell In, Sell Out e Inventario."),
+        React.createElement("div", { className: "space-y-4" },
+          React.createElement("div", {
+            className: "border-2 border-dashed border-blue-300 rounded-xl p-6 text-center bg-blue-50 cursor-pointer transition-all hover:border-blue-500",
+            onClick: () => document.getElementById("file-input").click(),
+          },
+            React.createElement("p", { className: "text-blue-700 font-semibold mb-2" }, "📁 Selecciona archivos Excel"),
+            React.createElement("p", { className: "text-sm text-gray-600" }, "Reporte Acteck y/o Resumen Digitalife"),
+            React.createElement("input", {
+              id: "file-input",
+              type: "file",
+              multiple: true,
+              accept: ".xlsx,.xls",
+              style: { display: "none" },
+              onChange: handleUpload,
+            }),
+          ),
+        ),
+        message && React.createElement("p", { className: `mt-4 text-sm ${message.includes("Error") ? "text-red-600" : "text-green-600"}` }, message),
+      ),
+    );
+  }
+
+  return React.createElement("div", { className: "max-w-7xl mx-auto p-6 space-y-6" },
+    // Header
+    React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
+      React.createElement("div", { className: "flex justify-between items-start mb-4" },
+        React.createElement("h2", { className: "text-2xl font-bold text-gray-800" }, "Estrategia de Producto"),
+        React.createElement("button", {
+          className: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium",
+          onClick: () => document.getElementById("file-input-update").click(),
+        }, "📤 Actualizar datos"),
+        React.createElement("input", {
+          id: "file-input-update",
+          type: "file",
+          multiple: true,
+          accept: ".xlsx,.xls",
+          style: { display: "none" },
+          onChange: handleUpload,
+        }),
+      ),
+      message && React.createElement("p", { className: `text-sm ${message.includes("Error") ? "text-red-600" : "text-green-600"}` }, message),
+    ),
+
+    // Summary Cards
+    aggs && React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6" },
+      React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6 border-t-4", style: { borderColor: "#4472C4" } },
+        React.createElement("p", { className: "text-xs text-gray-400 uppercase tracking-wide mb-2" }, "Sell In"),
+        React.createElement("p", { className: "text-2xl font-bold text-gray-800 mb-1" }, formatMXN(aggs.sellInTotal)),
+        React.createElement("p", { className: "text-xs text-gray-600 mb-3" }, `${aggs.sellInPiezas.toLocaleString("es-MX")} piezas YTD`),
+        React.createElement("p", { className: "text-xs text-gray-500" }, `Mayor: ${MESES_ABREV[aggs.maxSIMes] || "—"}`),
+      ),
+      React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6 border-t-4", style: { borderColor: "#8B5CF6" } },
+        React.createElement("p", { className: "text-xs text-gray-400 uppercase tracking-wide mb-2" }, "Sell Out"),
+        React.createElement("p", { className: "text-2xl font-bold text-gray-800 mb-1" }, formatMXN(aggs.sellOutTotal)),
+        React.createElement("p", { className: "text-xs text-gray-600 mb-3" }, `${aggs.sellOutPiezas.toLocaleString("es-MX")} piezas YTD`),
+        React.createElement("p", { className: "text-xs text-gray-500" }, `Mayor: ${MESES_ABREV[aggs.maxSOMes] || "—"}`),
+      ),
+    ),
+
+    // Marca Comparison
+    aggs && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
+      React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Comparativa por Marca"),
+      React.createElement("div", { className: "overflow-x-auto" },
+        React.createElement("table", { className: "w-full text-sm" },
+          React.createElement("thead", {},
+            React.createElement("tr", { className: "border-b border-gray-200" },
+              React.createElement("th", { className: "text-left py-2 px-3 font-semibold text-gray-700" }, "Marca"),
+              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI Piezas"),
+              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI $"),
+              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SO Piezas"),
+              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SO $"),
+              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Inv Piezas"),
+              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Inv Valor"),
+            ),
+          ),
+          React.createElement("tbody", {},
+            Object.entries(aggs.byMarca).map(([marca, m]) =>
+              React.createElement("tr", { key: marca, className: "border-b border-gray-100 hover:bg-gray-50" },
+                React.createElement("td", { className: "py-3 px-3 text-gray-700 font-medium" }, marca),
+                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, m.siPiezas.toLocaleString("es-MX")),
+                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(m.siMonto)),
+                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, m.soPiezas.toLocaleString("es-MX")),
+                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(m.soMonto)),
+                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, m.invPiezas.toLocaleString("es-MX")),
+                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(m.invValor)),
+              )
+            ),
+          ),
+        ),
+      ),
+    ),
+
+    // By Categoria
+    aggs && Object.keys(aggs.byCategoria).length > 0 && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
+      React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Por Categoría"),
+      React.createElement("div", { className: "overflow-x-auto" },
+        React.createElement("table", { className: "w-full text-sm" },
+          React.createElement("thead", {},
+            React.createElement("tr", { className: "border-b border-gray-200" },
+              React.createElement("th", { className: "text-left py-2 px-3 font-semibold text-gray-700" }, "Categoría"),
+              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI Piezas"),
+              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI $"),
+              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Inv Piezas"),
+              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SO Piezas"),
+              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SO $"),
+            ),
+          ),
+          React.createElement("tbody", {},
+            Object.entries(aggs.byCategoria).map(([cat, c]) =>
+              React.createElement("tr", { key: cat, className: "border-b border-gray-100 hover:bg-gray-50" },
+                React.createElement("td", { className: "py-3 px-3 text-gray-700 font-medium" }, cat),
+                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, c.siPiezas.toLocaleString("es-MX")),
+                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(c.siMonto)),
+                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, c.invPiezas.toLocaleString("es-MX")),
+                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, c.soPiezas.toLocaleString("es-MX")),
+                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(c.soMonto)),
+              )
+            ),
+          ),
+        ),
+      ),
+    ),
+
+    // SKU Detail
+    React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
+      React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Detalle por SKU"),
+      React.createElement("div", { className: "mb-4 flex gap-3 flex-wrap" },
+        React.createElement("input", {
+          type: "text",
+          placeholder: "Buscar SKU o descripción...",
+          value: searchFilter,
+          onChange: (e) => setSearchFilter(e.target.value),
+          className: "flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm",
+        }),
+        React.createElement("select", {
+          value: sortBy,
+          onChange: (e) => setSortBy(e.target.value),
+          className: "px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white",
+        },
+          React.createElement("option", { value: "sell-in" }, "Ordenar: Sell In"),
+          React.createElement("option", { value: "inventory" }, "Ordenar: Inventario"),
+          React.createElement("option", { value: "suggested" }, "Ordenar: Sugerido"),
+        ),
+      ),
+      React.createElement("div", { className: "space-y-4" },
+        skuDetail.map(sku =>
+          React.createElement("div", { key: sku.sku, className: "border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow" },
+            React.createElement("div", { className: "flex justify-between items-start mb-3" },
+              React.createElement("div", { className: "flex-1" },
+                React.createElement("div", { className: "flex items-center gap-2 mb-1" },
+                  React.createElement("p", { className: "font-bold text-gray-800" }, sku.sku),
+                  React.createElement("span", {
+                    className: "text-xs font-semibold px-2 py-1 rounded-full text-white",
+                    style: { backgroundColor: ESTADO_COLORES[sku.estado] || "#999" },
+                  }, sku.estado),
+                  React.createElement("span", {
+                    className: "text-xs font-semibold px-2 py-1 rounded-full text-white",
+                    style: { backgroundColor: MARCA_COLORES[sku.marca] || "#999" },
+                  }, sku.marca),
+                ),
+                React.createElement("p", { className: "text-sm text-gray-600" }, sku.descripcion),
+              ),
+            ),
+            React.createElement("div", { className: "grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3" },
+              React.createElement("div", { className: "bg-gray-50 p-3 rounded-lg" },
+                React.createElement("p", { className: "text-gray-500 text-xs mb-1" }, "Sell In Total"),
+                React.createElement("p", { className: "font-semibold text-gray-800" }, sku.siPiezasTotal.toLocaleString("es-MX")),
+              ),
+              React.createElement("div", { className: "bg-gray-50 p-3 rounded-lg" },
+                React.createElement("p", { className: "text-gray-500 text-xs mb-1" }, "Prom 90d"),
+                React.createElement("p", { className: "font-semibold text-gray-800" }, sku.promedio90d.toLocaleString("es-MX")),
+              ),
+              React.createElement("div", { className: "bg-gray-50 p-3 rounded-lg" },
+                React.createElement("p", { className: "text-gray-500 text-xs mb-1" }, "Inventario"),
+                React.createElement("p", { className: "font-semibold text-gray-800" }, sku.stock.toLocaleString("es-MX")),
+              ),
+              React.createElement("div", { className: "bg-blue-50 p-3 rounded-lg border border-blue-200" },
+                React.createElement("p", { className: "text-blue-700 text-xs mb-1 font-semibold" }, "Sugerido"),
+                React.createElement("p", { className: "font-bold text-blue-700" }, sku.sugerido.toLocaleString("es-MX")),
+              ),
+            ),
+          )
+        ),
+        skuDetail.length === 0 && React.createElement("p", { className: "text-center text-gray-500 py-6" }, "No hay datos"),
+      ),
+    ),
+  );
+}
+
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [yearFilter, setYearFilter] = useState(2026);
@@ -3570,7 +4224,7 @@ export default function App() {
         {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} />}
-          {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "{c.nombre}"} />}
+          {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "{c.nombre}"}  clienteKey={clienteKey} />}
         {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: clienteActivo })}
             </>
           )}
