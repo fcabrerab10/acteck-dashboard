@@ -3893,198 +3893,61 @@ function AnalisisCliente({ cliente, clienteKey }) {
 // ==================== FORECAST CLIENTE ====================
 function ForecastCliente({ cliente, clienteKey }) {
   const [loading, setLoading] = React.useState(true);
-  const [ventas, setVentas] = React.useState([]);
-  const [sellInSku, setSellInSku] = React.useState([]);// ==================== FORECAST CLIENTE ====================
-function ForecastCliente({ cliente, clienteKey }) {
-  const [loading, setLoading] = React.useState(true);
-  const [ventas, setVentas] = React.useState([]);
-  const [sellInSku, setSellInSku] = React.useState([]);
-  const [sellOutSku, setSellOutSku] = React.useState([]);
-  const [inventario, setInventario] = React.useState([]);
-  const [enCamino, setEnCamino] = React.useState([]);
-  const [productos, setProductos] = React.useState([]);
-  const [seccionActiva, setSeccionActiva] = React.useState('resumen');
-  const [busqueda, setBusqueda] = React.useState('');
-  const [ordenSku, setOrdenSku] = React.useState('riesgo');
-
+  const [data, setData] = React.useState({});
+  
   React.useEffect(function() {
     if (!clienteKey) return;
     setLoading(true);
     Promise.all([
       supabase.from('ventas_mensuales').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),
-      supabase.from('sell_in_sku').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),
-      supabase.from('sellout_sku').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),
       supabase.from('inventario_cliente').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),
       supabase.from('inventario_en_camino').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),
       supabase.from('productos_cliente').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; })
     ]).then(function(results) {
-      setVentas(results[0] || []);
-      setSellInSku(results[1] || []);
-      setSellOutSku(results[2] || []);
-      setInventario(results[3] || []);
-      setEnCamino(results[4] || []);
-      setProductos(results[5] || []);
+      setData({ ventas: results[0], inventario: results[1], enCamino: results[2], productos: results[3] });
       setLoading(false);
     });
   }, [clienteKey]);
 
-  // ===== HELPER FUNCTIONS =====
-  var currentMonth = new Date().getMonth() + 1;
-  var currentYear = new Date().getFullYear();
-
-  var fmt = function(n) {
-    if (n === null || n === undefined || isNaN(n)) return '$0';
-    return '$' + Math.round(n).toLocaleString('es-MX');
-  };
-
-  var fmtN = function(n) {
-    if (n === null || n === undefined || isNaN(n)) return '0';
-    return Math.round(n).toLocaleString('es-MX');
-  };
-
-  // Calculate weighted average demand per SKU (last 3 months sell-out, weighted: recent months heavier)
-  var calcDemandaSku = function(sku) {
-    var soRows = sellOutSku.filter(function(r) { return r.sku === sku; });
-    if (soRows.length === 0) {
-      // Fallback to sell-in as proxy
-      var siRows = sellInSku.filter(function(r) { return r.sku === sku; });
-      if (siRows.length === 0) return { promMensual: 0, tendencia: 0, meses: 0 };
-      siRows.sort(function(a, b) { return (b.anio * 12 + b.mes) - (a.anio * 12 + a.mes); });
-      var recSi = siRows.slice(0, 3);
-      var wSi = [0.5, 0.33, 0.17];
-      var totalW = 0; var sumW = 0;
-      recSi.forEach(function(r, i) { sumW += (r.piezas || 0) * wSi[i]; totalW += wSi[i]; });
-      return { promMensual: totalW > 0 ? sumW / totalW : 0, tendencia: 0, meses: recSi.length, fuente: 'sell-in' };
-    }
-    soRows.sort(function(a, b) { return (b.anio * 12 + b.mes) - (a.anio * 12 + a.mes); });
-    var rec = soRows.slice(0, 3);
-    var weights = [0.5, 0.33, 0.17];
-    var tW = 0; var sW = 0;
-    rec.forEach(function(r, i) { sW += (r.piezas || 0) * weights[i]; tW += weights[i]; });
-    var prom = tW > 0 ? sW / tW : 0;
-    // Tendencia: diferencia entre mes más reciente y promedio
-    var tend = rec.length >= 2 ? ((rec[0].piezas || 0) - (rec[rec.length - 1].piezas || 0)) / rec.length : 0;
-    return { promMensual: prom, tendencia: tend, meses: rec.length, fuente: 'sell-out' };
-  };
-
-  // Seasonality index by month (from ventas_mensuales)
-  var calcSeasonality = function() {
-    if (ventas.length === 0) return {};
-    var byMonth = {};
-    var total = 0;
-    ventas.forEach(function(v) {
-      var m = parseInt(v.mes);
-      var so = parseFloat(v.sell_out) || parseFloat(v.sell_in) || 0;
-      if (!byMonth[m]) byMonth[m] = { sum: 0, count: 0 };
-      byMonth[m].sum += so;
-      byMonth[m].count += 1;
-      total += so;
-    });
-    var avgMonth = total / 12;
-    var indices = {};
-    for (var m = 1; m <= 12; m++) {
-      if (byMonth[m] && avgMonth > 0) {
-        indices[m] = (byMonth[m].sum / byMonth[m].count) / avgMonth;
-      } else {
-        indices[m] = 1;
-      }
-    }
-    return indices;
-  };
-
-  var seasonality = calcSeasonality();
-
-  // Get all unique SKUs
-  var allSkus = React.useMemo(function() {
-    var set = {};
-    productos.forEach(function(p) { set[p.sku] = true; });
-    inventario.forEach(function(i) { set[i.sku] = true; });
-    sellInSku.forEach(function(s) { set[s.sku] = true; });
-    sellOutSku.forEach(function(s) { set[s.sku] = true; });
-    return Object.keys(set);
-  }, [productos, inventario, sellInSku, sellOutSku]);
-
-  // Build forecast data per SKU
-  var forecastData = React.useMemo(function() {
-    return allSkus.map(function(sku) {
-      var prod = productos.find(function(p) { return p.sku === sku; }) || {};
-      var inv = inventario.find(function(i) { return i.sku === sku; }) || {};
-      var transit = enCamino.filter(function(e) { return e.sku === sku && e.estatus !== 'entregado'; });
-      var transitPzas = transit.reduce(function(s, t) { return s + (t.piezas || 0); }, 0);
-      var demanda = calcDemandaSku(sku);
-      var stockActual = inv.stock || 0;
-      var stockTotal = stockActual + transitPzas;
-      var coberturaSemanas = demanda.promMensual > 0 ? (stockTotal / demanda.promMensual) * 4.33 : 999;
-      var coberturaActualSemanas = demanda.promMensual > 0 ? (stockActual / demanda.promMensual) * 4.33 : 999;
-
-      // Sugerido de compra: 8 semanas de cobertura target
-      var targetSemanas = 8;
-      var necesario = Math.ceil(demanda.promMensual * (targetSemanas / 4.33));
-      var sugerido = Math.max(0, necesario - stockTotal);
-
-      // Risk level
-      var riesgo = 'ok';
-      if (coberturaSemanas < 2) riesgo = 'critico';
-      else if (coberturaSemanas < 4) riesgo = 'bajo';
-      else if (coberturaSemanas > 16) riesgo = 'sobrestock';
-
-      // Proyecci���n ê para recomendar qué ordenar
-      var recomendacion = 'Urgente';
-      if (riesgo === 'critico') recomendacion = 'Comprar XP';
-      else if (riesgo === 'bajo') recomendacion = 'Puede esperar';
-      else if (riesgo === 'sobrestock') recomendacion = 'Reducir entradas';
-
-      return {
-        sku: sku,
-        nombre: prod.nombre || '...',
-        stock: fmtN(stockActual),
-        transito&�: fmtN$transitPzas),
-        total: fmtN(stockTotal),
-        demanda: fmtN(demanda.promMensual),
-        coberturaSemanas: forecastData)coberturaSemanas).toFixed(2),
-        sugerido: fmtN(sugerido),
-        coberturaActual: forecastData.coberturaActualSemanas).toFixed(2),
-        riesgo: riesgo,
-        recomendacion: recomendacion
-      };
-    }), [allSkus, productos, inventario, enCamino, sellInSku, sellOutSku]);
-
-  const [filterActivo, setFilterActivo] = React.useState(forecastData[0]);
-
-  const handleChangeFilter = function(option) {
-    setFilterActivo(option);
-    setSeccionActiva('reesumen');
-  };
-
-  return React.createElement('div',{ style:{minHeight:'100vh',overflow:'auto',backgroundColor: '#f9f9f9',padding:'24px',} },
-    React.createElement('h2',{style:{margin:\"0 0 16px 0},textAlign:\"center\"}},`Cordiera de Compra for ${cliente.nombre}`),
-
-    // Tabs
-    React.createElement('div',{style:{marginBottom:'24px'}},
-      React.createElement('button',{style:{padding:'8 16px',cursor:'pointer',backgroundColor: seccionActiva === 'resumen' ? '#F80000' : '#e0e0e0', color: seccionActiva === 'resumen' ? '#fff' : '#000', border: 'none',borderRadius:'4px'},onClick:function(){setSeccionActiva('resumen');}},'Resumen'),
-      React.createElement('button',{style:{padding:'8 �{&eq�upol:[02px'lcursor:'pointer',backgroundColor: seccionActiva === 'detalle' ? '#F80000' : '#e0e0e0', color: seccionActiva === 'detalle' ? '#fff' : '#000', border: 'none',borderRadius:'4px'},onClick:function(){setSeccionActiva('detalle');}},'Detalle')
-    );
-
-
-    // Resumen tab
-    return !seccionActiva.includes('resumen') ? null : React.createElement('div',{},
-      React.createElement('div',{style:{display:'grid',gridTemplateColumns:'repeat(uto-fit, 200px)',sap:'16px'}},
-        forecastData.map(function(fq) {
-          return React.createElement('div',{style:{backgroundColor:'_#fff',borderRadius:'8px',padding:'16px',boxBox.contentBox}},
-            React.createElement('p',{style:{margin:'0"0,fontSize:'14px',fontWeight:'600'}},`${fq.sku} ${fq.nombre}`),
-            React.createElement('p',{style:{margin: '4 0 0',color:'#6667}},`Stock: ${fq.stock}`),
-            React.createElement('p',{style:{margin: '8 0 0',fontSize:'12px'}},`Demanda: ${fq.demanda}/mes cob.: ${fq.coberturaSemanas}semanas`),
-            React.createElement('p',{style:{margin: '0 0 0 0',color: fq.riesgo === 'critico' ? '#F80000' : fq.riesgo === 'bajo' ? '#069730' : '#FFA000'}},`Fr Riesgo : ${fq.riesgo.toUpperCase()}`),
-            React.createElement('p',{style:{margin: '4px 0 0 ',color: '#000'}},`Sugerido: ${fq.sugerido}`)
-          ),
-          );
-        })
+  if (loading) {
+    return React.createElement('div', { style: { minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+      React.createElement('div', { style: { textAlign: 'center' } },
+        React.createElement('div', { style: { fontSize: '48px', marginBottom: '16px' } }, String.fromCodePoint(0x1F52E)),
+        React.createElement('p', { style: { color: '#64748b', fontSize: '16px' } }, 'Calculando forecast...')
       )
     );
+  }
+
+  var totalSkus = data.productos ? data.productos.length : 0;
+  var totalStock = data.inventario ? data.inventario.reduce(function(s, i) { return s + (i.stock || 0); }, 0) : 0;
+  var totalTransito = data.enCamino ? data.enCamino.filter(function(e) { return e.estatus !== 'entregado'; }).reduce(function(s, e) { return s + (e.piezas || 0); }, 0) : 0;
+
+  return React.createElement('div', { style: { minHeight: '100vh', backgroundColor: '#f8fafc', padding: '24px' } },
+    React.createElement('div', { style: { backgroundColor: '#ffffff', borderRadius: '20px', padding: '24px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', borderTop: '4px solid #6366f1' } },
+      React.createElement('h2', { style: { fontSize: '24px', fontWeight: 700, color: '#1e293b', margin: 0 } }, String.fromCodePoint(0x1F52E) + ' Forecast ' + String.fromCodePoint(0x2014) + ' ' + cliente),
+      React.createElement('p', { style: { fontSize: '14px', color: '#64748b', marginTop: '4px' } }, 'Proyeccion de demanda, cobertura de inventario y sugeridos de compra')
+    ),
+    React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' } },
+      React.createElement('div', { style: { backgroundColor: '#ffffff', borderRadius: '16px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', borderTop: '4px solid #6366f1' } },
+        React.createElement('p', { style: { fontSize: '13px', color: '#64748b', marginBottom: '4px' } }, 'SKUs Activos'),
+        React.createElement('p', { style: { fontSize: '28px', fontWeight: 700, color: '#1e293b' } }, totalSkus)
+      ),
+      React.createElement('div', { style: { backgroundColor: '#ffffff', borderRadius: '16px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', borderTop: '4px solid #10b981' } },
+        React.createElement('p', { style: { fontSize: '13px', color: '#64748b', marginBottom: '4px' } }, 'Stock Disponible'),
+        React.createElement('p', { style: { fontSize: '28px', fontWeight: 700, color: '#1e293b' } }, totalStock.toLocaleString('es-MX') + ' pzas')
+      ),
+      React.createElement('div', { style: { backgroundColor: '#ffffff', borderRadius: '16px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', borderTop: '4px solid #f59e0b' } },
+        React.createElement('p', { style: { fontSize: '13px', color: '#64748b', marginBottom: '4px' } }, 'En Transito'),
+        React.createElement('p', { style: { fontSize: '28px', fontWeight: 700, color: '#1e293b' } }, totalTransito.toLocaleString('es-MX') + ' pzas')
+      )
+    ),
+    React.createElement('div', { style: { backgroundColor: '#ffffff', borderRadius: '16px', padding: '24px', marginTop: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', textAlign: 'center' } },
+      React.createElement('p', { style: { fontSize: '16px', color: '#64748b' } }, 'Forecast detallado por SKU en desarrollo...'),
+      React.createElement('p', { style: { fontSize: '13px', color: '#94a3b8', marginTop: '8px' } }, 'Datos conectados: ' + (data.ventas || []).length + ' registros de ventas, ' + totalSkus + ' productos')
+    )
+  );
 }
-riesgo = 'critico';
-      else if (coberturaSemanas < 4) riesgo = 'bajo';
-      else if (coberturaSemanas > 16) riesgo = 'sobrestock';
+// ==================== FIN FORECAST CLIENTE ====================
 // ── PanelActualizacion ── Central update panel (slide-over)
 function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate }) {
   return React.createElement("div", {
