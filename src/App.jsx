@@ -1,30 +1,30 @@
 import React, { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED } from './lib/supabase';
 
-// ─── DATOS REALES — DIGITALIFE (API GLOBAL) ───────────────────────────────────
+// âââ DATOS REALES â DIGITALIFE (API GLOBAL) âââââââââââââââââââââââââââââââââââ
 // Fuentes: Vw_TablaH_Ventas (Sell In), BD Sellout (Sell Out), BD Inventario
 // Actualizado: 2026-04-07
 const DIGITALIFE_REAL = {
-  // Sell In 2026 por mes (desde Vw_TablaH_Ventas → API GLOBAL)
+  // Sell In 2026 por mes (desde Vw_TablaH_Ventas â API GLOBAL)
   sellIn: { 1: 80437.84, 2: 3986509.45, 3: 491098.50 },
   // Sell Out 2026 por mes (desde BD Sellout)
   sellOut: { 1: 1904705.28, 2: 1575772.46, 3: 1702411.72 },
-  // Cuotas mensuales (desde pestaña 2026 — objetivo 30M, mínimo 25M)
+  // Cuotas mensuales (desde pestaÃ±a 2026 â objetivo 30M, mÃ­nimo 25M)
   cuota30M: { 1:2502665.97, 2:2421385.87, 3:2287315.71, 4:1619770.63, 5:2112348.18, 6:2071317.14, 7:2757009.45, 8:2740078.67, 9:2803455.11, 10:2974335.88, 11:2913008.38, 12:2797308.99 },
   cuota25M: { 1:2085554.97, 2:2017821.56, 3:1906096.43, 4:1349808.86, 5:1760290.15, 6:1726097.61, 7:2297507.88, 8:2283398.89, 9:2336212.59, 10:2478613.23, 11:2427506.99, 12:2331090.83 },
   // Inventario del cliente (BD Inventario)
   inventarioPiezas: 8614,
   inventarioValor: 6612493.03,
   diasInventario: 154,
-  // Histórico 2025
+  // HistÃ³rico 2025
   hist2025: { sellIn: 15755483, sellOut: 15606924, cuota: 12270000 },
   // Sell Out por marca 2026
   sellOutMarca: { "ACTECK": 2556451.42, "BALAM RUSH": 2626438.04 },
 };
 
-// ─── DATOS REALES — CRÉDITO Y COBRANZA DIGITALIFE (API GLOBAL) ───────────────
+// âââ DATOS REALES â CRÃDITO Y COBRANZA DIGITALIFE (API GLOBAL) âââââââââââââââ
 // Fuente: correo "Estado de cuenta" enviado cada lunes desde intranet@acteck.com
-// Se actualiza automáticamente cada lunes a las 4pm
+// Se actualiza automÃ¡ticamente cada lunes a las 4pm
 const CARTERA_DIGITALIFE = {
   semana: 15,
   periodo: "2026-04-06 al 2026-04-12",
@@ -36,82 +36,82 @@ const CARTERA_DIGITALIFE = {
   horaActualizacion: "16:00",
   correoSemana: "Estado de cuenta de la Semana 15 Del 2026-04-06 al 2026-04-12",
 
-  // ── Línea de crédito ──
+  // ââ LÃ­nea de crÃ©dito ââ
   lineaCreditoUSD: 500000,
-  tipoCambio: 17.76,    // MXN/USD — Banxico 07-Abr-2026
-  // lineaCreditoMXN = 500,000 × 17.76 = 8,880,000
+  tipoCambio: 17.76,    // MXN/USD â Banxico 07-Abr-2026
+  // lineaCreditoMXN = 500,000 Ã 17.76 = 8,880,000
 
-  // ── Aging de facturas (suma = saldoActual) ──
+  // ââ Aging de facturas (suma = saldoActual) ââ
   aging: {
-    d0_30:  5500000.00,   // vigentes — vencen en ≤ 30 días
-    d31_60: 1188154.18,   // vigentes — vencen en 31-60 días
+    d0_30:  5500000.00,   // vigentes â vencen en â¤ 30 dÃ­as
+    d31_60: 1188154.18,   // vigentes â vencen en 31-60 dÃ­as
     d61_90: 100000.00,    // vencidos recientes
-    mas90:  96678.56,     // vencidos críticos (+90 días)
+    mas90:  96678.56,     // vencidos crÃ­ticos (+90 dÃ­as)
   },
 
-  // ── Vencimientos por mes (calendario de cobranza) ──
+  // ââ Vencimientos por mes (calendario de cobranza) ââ
   vencimientosMes: {
     "2026-04": 2100000.00,
     "2026-05": 3200000.00,
     "2026-06": 1584832.74,
   },
 
-  // ── DSO (Days Sales Outstanding) ──
-  dso: 65,  // días promedio de cobro — histórico cliente
+  // ââ DSO (Days Sales Outstanding) ââ
+  dso: 65,  // dÃ­as promedio de cobro â histÃ³rico cliente
 };
 
-// ─── DATOS — PAGOS Y COMPROMISOS DIGITALIFE 2026 ─────────────────────────────
-// Categorías: Promociones, Plan de Marketing, Pagos Fijos, Pagos Variables
+// âââ DATOS â PAGOS Y COMPROMISOS DIGITALIFE 2026 âââââââââââââââââââââââââââââ
+// CategorÃ­as: Promociones, Plan de Marketing, Pagos Fijos, Pagos Variables
 // Campos: Folio, Concepto, Monto, Estatus, Fecha Compromiso, Fecha Pago Real, Responsable, Notas
 const PAGOS_DIGITALIFE_2026 = {
   categorias: {
     promociones: {
       label: "Promociones",
-      icono: "🎯",
+      icono: "ð¯",
       color: "#E31E26",
       presupuesto: null, // Por definir
       items: [
-        { folio: "PRO-001", concepto: "Campaña Madre Mayo", monto: 15000, estatus: "pendiente", fechaCompromiso: "2026-05-01", fechaPagoReal: null, responsable: "Marketing", notas: "Aportación Acteck. Cliente aporta $8,000 adicionales." },
-        { folio: "PRO-002", concepto: "Bundle Auriculares Q2", monto: 10000, estatus: "pendiente", fechaCompromiso: "2026-04-10", fechaPagoReal: null, responsable: "Marketing", notas: "Aportación Acteck. Cliente aporta $5,000 adicionales." },
+        { folio: "PRO-001", concepto: "CampaÃ±a Madre Mayo", monto: 15000, estatus: "pendiente", fechaCompromiso: "2026-05-01", fechaPagoReal: null, responsable: "Marketing", notas: "AportaciÃ³n Acteck. Cliente aporta $8,000 adicionales." },
+        { folio: "PRO-002", concepto: "Bundle Auriculares Q2", monto: 10000, estatus: "pendiente", fechaCompromiso: "2026-04-10", fechaPagoReal: null, responsable: "Marketing", notas: "AportaciÃ³n Acteck. Cliente aporta $5,000 adicionales." },
       ],
     },
     marketing: {
       label: "Plan de Marketing",
-      icono: "📣",
+      icono: "ð£",
       color: "#3b82f6",
       presupuesto: null, // Por definir
       items: [
         { folio: "MKT-001", concepto: "Material POP Q2", monto: 0, estatus: "pendiente", fechaCompromiso: null, fechaPagoReal: null, responsable: "Marketing", notas: "Monto y fecha por definir." },
-        { folio: "MKT-002", concepto: "Activación punto de venta", monto: 0, estatus: "pendiente", fechaCompromiso: null, fechaPagoReal: null, responsable: "Fernando", notas: "Monto y fecha por definir." },
+        { folio: "MKT-002", concepto: "ActivaciÃ³n punto de venta", monto: 0, estatus: "pendiente", fechaCompromiso: null, fechaPagoReal: null, responsable: "Fernando", notas: "Monto y fecha por definir." },
       ],
     },
     pagosFijos: {
       label: "Pagos Fijos",
-      icono: "🏢",
+      icono: "ð¢",
       color: "#8b5cf6",
       presupuesto: null, // Por definir
       items: [
-        { folio: "GF-001", concepto: "Cuota mensual exhibidor — Abril", monto: 0, estatus: "pendiente", fechaCompromiso: "2026-04-30", fechaPagoReal: null, responsable: "Fernando", notas: "Recurrente mensual. Monto por confirmar." },
-        { folio: "GF-002", concepto: "Cuota mensual exhibidor — Mayo", monto: 0, estatus: "pendiente", fechaCompromiso: "2026-05-31", fechaPagoReal: null, responsable: "Fernando", notas: "Recurrente mensual. Monto por confirmar." },
+        { folio: "GF-001", concepto: "Cuota mensual exhibidor â Abril", monto: 0, estatus: "pendiente", fechaCompromiso: "2026-04-30", fechaPagoReal: null, responsable: "Fernando", notas: "Recurrente mensual. Monto por confirmar." },
+        { folio: "GF-002", concepto: "Cuota mensual exhibidor â Mayo", monto: 0, estatus: "pendiente", fechaCompromiso: "2026-05-31", fechaPagoReal: null, responsable: "Fernando", notas: "Recurrente mensual. Monto por confirmar." },
       ],
     },
     pagosVariables: {
       label: "Pagos Variables",
-      icono: "📊",
+      icono: "ð",
       color: "#f59e0b",
       presupuesto: null, // Por definir
       items: [
-        { folio: "GV-001", concepto: "Evento lanzamiento producto Q2", monto: 0, estatus: "pendiente", fechaCompromiso: null, fechaPagoReal: null, responsable: "Fernando", notas: "Monto y fecha por definir según agenda." },
+        { folio: "GV-001", concepto: "Evento lanzamiento producto Q2", monto: 0, estatus: "pendiente", fechaCompromiso: null, fechaPagoReal: null, responsable: "Fernando", notas: "Monto y fecha por definir segÃºn agenda." },
       ],
     },
   },
 };
 
-// Último mes con datos de Sell In
+// Ãltimo mes con datos de Sell In
 const ULTIMO_MES_SI = 3; // Marzo
 const NOMBRES_MES = { 1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre" };
 
-// ─── CARGA DINÁMICA DE SheetJS ───
+// âââ CARGA DINÃMICA DE SheetJS âââ
 function loadSheetJS() {
   return new Promise((resolve, reject) => {
     if (window.XLSX) return resolve(window.XLSX);
@@ -152,8 +152,8 @@ const clientes = {
     })),
     pendientes: [
       { id: 1, tarea: "Enviar propuesta de planograma Q2", responsable: "Fernando", fecha: "2026-04-10", estado: "pendiente" },
-      { id: 2, tarea: "Confirmar entrega de pedido #4821", responsable: "Logística", fecha: "2026-04-08", estado: "en proceso" },
-      { id: 3, tarea: "Armar materiales para campaña Mayo", responsable: "Marketing", fecha: "2026-04-15", estado: "pendiente" },
+      { id: 2, tarea: "Confirmar entrega de pedido #4821", responsable: "LogÃ­stica", fecha: "2026-04-08", estado: "en proceso" },
+      { id: 3, tarea: "Armar materiales para campaÃ±a Mayo", responsable: "Marketing", fecha: "2026-04-15", estado: "pendiente" },
     ],
     pagos: [
       { id: 1, factura: "FAC-2026-0312", monto: 85000, vencimiento: "2026-04-09", estado: "vencida" },
@@ -161,16 +161,16 @@ const clientes = {
       { id: 3, factura: "FAC-2026-0358", monto: 95000, vencimiento: "2026-05-05", estado: "vigente" },
     ],
     promocionesActivas: [
-      { id: 1, nombre: "Campaña Madre Mayo", aportacionActeck: 15000, aportacionCliente: 8000, vigencia: "01 May – 15 May 2026" },
-      { id: 2, nombre: "Bundle Auriculares Q2", aportacionActeck: 10000, aportacionCliente: 5000, vigencia: "10 Abr – 30 Abr 2026" },
+      { id: 1, nombre: "CampaÃ±a Madre Mayo", aportacionActeck: 15000, aportacionCliente: 8000, vigencia: "01 May â 15 May 2026" },
+      { id: 2, nombre: "Bundle Auriculares Q2", aportacionActeck: 10000, aportacionCliente: 5000, vigencia: "10 Abr â 30 Abr 2026" },
     ],
     minuta: {
       fechaReunion: "2026-04-01",
       proximaReunion: "2026-04-08",
-      asistentes: ["Fernando Cabrera", "Ana López (Digitalife)", "Carlos Ruiz (Digitalife)"],
+      asistentes: ["Fernando Cabrera", "Ana LÃ³pez (Digitalife)", "Carlos Ruiz (Digitalife)"],
       acuerdos: [
-        { id: 1, descripcion: "Confirmar cuota Q2 con dirección comercial", responsable: "Fernando", fechaCompromiso: "2026-04-05", fechaCumplimiento: "2026-04-04", cumplido: true },
-        { id: 2, descripcion: "Digitalife envía sell out de Marzo completo", responsable: "Ana López", fechaCompromiso: "2026-04-05", fechaCumplimiento: null, cumplido: false },
+        { id: 1, descripcion: "Confirmar cuota Q2 con direcciÃ³n comercial", responsable: "Fernando", fechaCompromiso: "2026-04-05", fechaCumplimiento: "2026-04-04", cumplido: true },
+        { id: 2, descripcion: "Digitalife envÃ­a sell out de Marzo completo", responsable: "Ana LÃ³pez", fechaCompromiso: "2026-04-05", fechaCumplimiento: null, cumplido: false },
         { id: 3, descripcion: "Propuesta de exhibidores para nueva tienda CDMX", responsable: "Fernando", fechaCompromiso: "2026-04-10", fechaCumplimiento: null, cumplido: false },
       ],
     },
@@ -190,22 +190,22 @@ const clientes = {
       diasInventario: 35,
     },
     pendientes: [
-      { id: 1, tarea: "Revisión de portafolio Balam Rush Q2", responsable: "Fernando", fecha: "2026-04-20", estado: "pendiente" },
-      { id: 2, tarea: "Cotización de material POP para PCEL Monterrey", responsable: "Marketing", fecha: "2026-04-18", estado: "en proceso" },
+      { id: 1, tarea: "RevisiÃ³n de portafolio Balam Rush Q2", responsable: "Fernando", fecha: "2026-04-20", estado: "pendiente" },
+      { id: 2, tarea: "CotizaciÃ³n de material POP para PCEL Monterrey", responsable: "Marketing", fecha: "2026-04-18", estado: "en proceso" },
     ],
     pagos: [
       { id: 1, factura: "FAC-2026-0299", monto: 60000, vencimiento: "2026-04-12", estado: "por vencer" },
       { id: 2, factura: "FAC-2026-0315", monto: 75000, vencimiento: "2026-04-30", estado: "vigente" },
     ],
     promocionesActivas: [
-      { id: 1, nombre: "Promo Teclados Mayo", aportacionActeck: 8000, aportacionCliente: 4000, vigencia: "01 May – 31 May 2026" },
+      { id: 1, nombre: "Promo Teclados Mayo", aportacionActeck: 8000, aportacionCliente: 4000, vigencia: "01 May â 31 May 2026" },
     ],
     minuta: {
       fechaReunion: "2026-03-15",
       proximaReunion: "2026-04-15",
-      asistentes: ["Fernando Cabrera", "Roberto Méndez (PCEL)"],
+      asistentes: ["Fernando Cabrera", "Roberto MÃ©ndez (PCEL)"],
       acuerdos: [
-        { id: 1, descripcion: "PCEL compartir reporte de ventas por SKU Marzo", responsable: "Roberto Méndez", fechaCompromiso: "2026-03-25", fechaCumplimiento: "2026-03-27", cumplido: true },
+        { id: 1, descripcion: "PCEL compartir reporte de ventas por SKU Marzo", responsable: "Roberto MÃ©ndez", fechaCompromiso: "2026-03-25", fechaCumplimiento: "2026-03-27", cumplido: true },
         { id: 2, descripcion: "Definir mix de productos para temporada calor", responsable: "Fernando", fechaCompromiso: "2026-04-10", fechaCumplimiento: null, cumplido: false },
       ],
     },
@@ -245,7 +245,7 @@ const clientes = {
   },
 };
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
+// âââ HELPERS âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function formatMXN(n) {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n);
 }
@@ -255,7 +255,7 @@ function formatUSD(n) {
 }
 
 function formatFecha(str) {
-  if (!str) return "—";
+  if (!str) return "â";
   const [y, m, d] = str.split("-");
   const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
   return `${d} ${meses[parseInt(m) - 1]} ${y}`;
@@ -276,13 +276,13 @@ function calcularSalud(kpis, pagos) {
   return "verde";
 }
 
-// ─── COMPONENTES ─────────────────────────────────────────────────────────────
+// âââ COMPONENTES âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 function Semaforo({ estado }) {
   const config = {
     verde:    { bg: "bg-green-100",  text: "text-green-700",  dot: "bg-green-500",  label: "Saludable" },
-    amarillo: { bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-400", label: "Atención" },
-    rojo:     { bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500",    label: "Crítico" },
+    amarillo: { bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-400", label: "AtenciÃ³n" },
+    rojo:     { bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500",    label: "CrÃ­tico" },
   };
   const c = config[estado];
   return (
@@ -320,13 +320,13 @@ function TarjetaPendientes({ pendientes }) {
   };
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5">
-      <CardHeader titulo="Pendientes" icono="📋" />
+      <CardHeader titulo="Pendientes" icono="ð" />
       <div className="space-y-3">
         {pendientes.map(p => (
           <div key={p.id} className="flex items-start justify-between gap-3 text-sm">
             <div className="flex-1">
               <p className="text-gray-800 font-medium leading-snug">{p.tarea}</p>
-              <p className="text-gray-400 text-xs mt-0.5">{p.responsable} · {formatFecha(p.fecha)}</p>
+              <p className="text-gray-400 text-xs mt-0.5">{p.responsable} Â· {formatFecha(p.fecha)}</p>
             </div>
             <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${colores[p.estado]}`}>
               {p.estado}
@@ -340,14 +340,14 @@ function TarjetaPendientes({ pendientes }) {
 
 function TarjetaPagos({ pagos }) {
   const colores = {
-    "vencida":    { bg: "bg-red-100",    text: "text-red-700",    icon: "⚠️" },
-    "por vencer": { bg: "bg-yellow-100", text: "text-yellow-700", icon: "🕐" },
-    "vigente":    { bg: "bg-green-100",  text: "text-green-700",  icon: "✅" },
+    "vencida":    { bg: "bg-red-100",    text: "text-red-700",    icon: "â ï¸" },
+    "por vencer": { bg: "bg-yellow-100", text: "text-yellow-700", icon: "ð" },
+    "vigente":    { bg: "bg-green-100",  text: "text-green-700",  icon: "â" },
   };
   const total = pagos.reduce((s, p) => s + p.monto, 0);
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5">
-      <CardHeader titulo="Pagos Pendientes" icono="💳" />
+      <CardHeader titulo="Pagos Pendientes" icono="ð³" />
       <div className="space-y-3 mb-4">
         {pagos.map(p => {
           const c = colores[p.estado];
@@ -357,8 +357,8 @@ function TarjetaPagos({ pagos }) {
               <div>
                 <p className="text-gray-700 font-medium">{p.factura}</p>
                 <p className="text-gray-400 text-xs">Vence: {formatFecha(p.vencimiento)}
-                  {p.estado === "vencida" ? <span className="text-red-500 font-semibold"> · Vencida hace {Math.abs(dias)} días</span>
-                  : p.estado === "por vencer" ? <span className="text-yellow-600 font-semibold"> · {dias} días</span>
+                  {p.estado === "vencida" ? <span className="text-red-500 font-semibold"> Â· Vencida hace {Math.abs(dias)} dÃ­as</span>
+                  : p.estado === "por vencer" ? <span className="text-yellow-600 font-semibold"> Â· {dias} dÃ­as</span>
                   : null}
                 </p>
               </div>
@@ -381,7 +381,7 @@ function TarjetaPagos({ pagos }) {
 function TarjetaPromociones({ promos }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5">
-      <CardHeader titulo="Promociones Activas" icono="🎯" />
+      <CardHeader titulo="Promociones Activas" icono="ð¯" />
       <div className="space-y-4">
         {promos.map(p => {
           const total = p.aportacionActeck + p.aportacionCliente;
@@ -393,13 +393,13 @@ function TarjetaPromociones({ promos }) {
                 <span className="text-xs text-gray-400">{p.vigencia}</span>
               </div>
               <div className="flex gap-4 text-xs mb-2">
-                <span className="text-blue-700">Nuestra aportación: <b>{formatMXN(p.aportacionActeck)}</b></span>
+                <span className="text-blue-700">Nuestra aportaciÃ³n: <b>{formatMXN(p.aportacionActeck)}</b></span>
                 <span className="text-purple-700">Cliente aporta: <b>{formatMXN(p.aportacionCliente)}</b></span>
               </div>
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                 <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pctActeck}%` }}></div>
               </div>
-              <p className="text-xs text-gray-400 mt-1">Inversión total: {formatMXN(total)} · Nosotros {pctActeck}% / Cliente {100 - pctActeck}%</p>
+              <p className="text-xs text-gray-400 mt-1">InversiÃ³n total: {formatMXN(total)} Â· Nosotros {pctActeck}% / Cliente {100 - pctActeck}%</p>
             </div>
           );
         })}
@@ -413,14 +413,14 @@ function TarjetaMinuta({ minuta }) {
   const pct = Math.round((cumplidos / minuta.acuerdos.length) * 100);
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5">
-      <CardHeader titulo="Minuta — Reunión Anterior" icono="📝" />
+      <CardHeader titulo="Minuta â ReuniÃ³n Anterior" icono="ð" />
       <div className="flex flex-wrap gap-4 text-sm mb-4">
         <div>
-          <p className="text-xs text-gray-400">Fecha reunión</p>
+          <p className="text-xs text-gray-400">Fecha reuniÃ³n</p>
           <p className="font-semibold text-gray-700">{formatFecha(minuta.fechaReunion)}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-400">Próxima reunión</p>
+          <p className="text-xs text-gray-400">PrÃ³xima reuniÃ³n</p>
           <p className="font-semibold text-blue-600">{formatFecha(minuta.proximaReunion)}</p>
         </div>
         <div>
@@ -443,7 +443,7 @@ function TarjetaMinuta({ minuta }) {
       <div className="space-y-2">
         {minuta.acuerdos.map(a => (
           <div key={a.id} className={`flex gap-3 text-sm p-3 rounded-xl ${a.cumplido ? "bg-green-50" : "bg-gray-50"}`}>
-            <span className="text-base shrink-0">{a.cumplido ? "✅" : "⬜"}</span>
+            <span className="text-base shrink-0">{a.cumplido ? "â" : "â¬"}</span>
             <div className="flex-1">
               <p className={`font-medium leading-snug ${a.cumplido ? "text-gray-500 line-through" : "text-gray-800"}`}>{a.descripcion}</p>
               <div className="flex gap-3 text-xs text-gray-400 mt-0.5">
@@ -459,7 +459,7 @@ function TarjetaMinuta({ minuta }) {
   );
 }
 
-// ─── PÁGINA HOME CLIENTE ──────────────────────────────────────────────────────
+// âââ PÃGINA HOME CLIENTE ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function BarraCuota({ actual, objetivo, minimo }) {
   const pctObj = Math.min((actual / objetivo) * 100, 100);
   const pctMin = (minimo / objetivo) * 100;
@@ -468,19 +468,19 @@ function BarraCuota({ actual, objetivo, minimo }) {
       <div className="relative h-2 bg-gray-100 rounded-full overflow-visible">
         <div className="h-full rounded-full transition-all"
           style={{ width: `${pctObj}%`, backgroundColor: pctObj >= 100 ? "#22c55e" : pctObj >= 80 ? "#eab308" : "#ef4444" }} />
-        {/* línea mínimo */}
-        <div className="absolute top-0 h-full w-0.5 bg-orange-400" style={{ left: `${pctMin}%` }} title="Mínimo 25M" />
+        {/* lÃ­nea mÃ­nimo */}
+        <div className="absolute top-0 h-full w-0.5 bg-orange-400" style={{ left: `${pctMin}%` }} title="MÃ­nimo 25M" />
       </div>
       <div className="flex justify-between text-xs text-gray-400 mt-0.5">
         <span>0</span>
-        <span className="text-orange-500">Mín {Math.round(pctMin)}%</span>
+        <span className="text-orange-500">MÃ­n {Math.round(pctMin)}%</span>
         <span>Obj 100%</span>
       </div>
     </div>
   );
 }
 
-// ─── COMPONENTE: ACTUALIZAR DATOS DESDE EXCEL ───
+// âââ COMPONENTE: ACTUALIZAR DATOS DESDE EXCEL âââ
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
   const [cargando, setCargando] = React.useState(false);
   const [resultado, setResultado] = React.useState(null);
@@ -560,7 +560,7 @@ function detectarColumnas(headers) {
     else if (/sell.?in|venta.?in|compra/i.test(lc)) map.sellIn = orig;
     else if (/sell.?out|venta.?out|sellout/i.test(lc)) map.sellOut = orig;
     else if (/cuota|quota|objetivo|meta/i.test(lc)) map.cuota = orig;
-    else if (/inv.*d[ií]a|days.*inv/i.test(lc)) map.invDias = orig;
+    else if (/inv.*d[iÃ­]a|days.*inv/i.test(lc)) map.invDias = orig;
     else if (/inv.*val|valor.*inv/i.test(lc)) map.invValor = orig;
   }
   return map;
@@ -602,7 +602,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     { key: "completado", label: "Completado", color: "#10B981", bg: "#D1FAE5" }
   ];
 
-  // ─── FETCH ALL DATA ─────────────────────────────────────────────────────────
+  // âââ FETCH ALL DATA âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   React.useEffect(() => {
     if (!DB_CONFIGURED) { setLoading(false); return; }
     Promise.all([
@@ -623,7 +623,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     });
   }, [clienteKey]);
 
-  // ─── DERIVED DATA ───────────────────────────────────────────────────────────
+  // âââ DERIVED DATA âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const ventasPorMes = React.useMemo(() => {
     const map = {};
     ventas.forEach(v => { map[parseInt(v.mes)] = v; });
@@ -640,7 +640,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
   const costoXPeso = totalSellOut > 0 ? totalInversionMkt / totalSellOut : 0;
   const roiMkt = totalInversionMkt > 0 ? totalSellOut / totalInversionMkt : 0;
 
-  // ─── SVG LINE CHART ─────────────────────────────────────────────────────────
+  // âââ SVG LINE CHART âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   function LineChartSellInOut() {
   const W = 780, H = 340, PAD = { t: 40, r: 70, b: 50, l: 75 };
   const plotW = W - PAD.l - PAD.r;
@@ -776,7 +776,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
   );
 }
 
-  // ─── PROGRESS BAR ──────────────────────────────────────────────────────────
+  // âââ PROGRESS BAR ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   function ProgresoAnual() {
     const pctOpt = meta.meta_sell_in_optimista > 0 ? (totalSellIn / meta.meta_sell_in_optimista) * 100 : 0;
     const pctMin = meta.meta_sell_in_min > 0 ? (totalSellIn / meta.meta_sell_in_min) * 100 : 0;
@@ -847,7 +847,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     );
   }
 
-  // ─── INVENTARIO CARD ────────────────────────────────────────────────────────
+  // âââ INVENTARIO CARD ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   function InventarioCard() {
     return React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 12, padding: 20 } },
       React.createElement("h4", { style: { margin: "0 0 8px", fontSize: 14, color: "#334155" } }, "Valor de Inventario"),
@@ -857,7 +857,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     );
   }
 
-  // ─── PENDIENTES CARD (reusable) ─────────────────────────────────────────────
+  // âââ PENDIENTES CARD (reusable) âââââââââââââââââââââââââââââââââââââââââââââ
   function TarjetaPendientesEditable({ tipo, items, setItems }) {
     const [showForm, setShowForm] = React.useState(false);
     const [showHist, setShowHist] = React.useState(false);
@@ -964,7 +964,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     );
   }
 
-  // ─── MARKETING METRICS ──────────────────────────────────────────────────────
+  // âââ MARKETING METRICS ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   function MetricasMarketing() {
     const [showAddInv, setShowAddInv] = React.useState(false);
     const [invForm, setInvForm] = React.useState({ mes: new Date().getMonth() + 1, monto: "", descripcion: "" });
@@ -1032,7 +1032,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     );
   }
 
-  // ─── MINUTA CARD ────────────────────────────────────────────────────────────
+  // âââ MINUTA CARD ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   function MinutaPlaud() {
     const [showAdd, setShowAdd] = React.useState(false);
     const [minForm, setMinForm] = React.useState({ fecha: new Date().toISOString().split("T")[0], contenido: "" });
@@ -1094,14 +1094,14 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
     );
   }
 
-  // ─── MAIN RENDER ────────────────────────────────────────────────────────────
+  // âââ MAIN RENDER ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   if (loading) return React.createElement("div", { style: { display: "flex", justifyContent: "center", padding: 60 } },
     React.createElement("div", { style: { fontSize: 16, color: "#94A3B8" } }, "Cargando datos..."));
 
   return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 20, padding: "0 4px" } },
     // Row 1: Line chart
     React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 20 } },
-      React.createElement("h3", { style: { margin: "0 0 12px", fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out — " + (cliente?.nombre || clienteKey) + " 2026"),
+      React.createElement("h3", { style: { margin: "0 0 12px", fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out â " + (cliente?.nombre || clienteKey) + " 2026"),
       React.createElement(LineChartSellInOut, null)
     ),
     // Row 2: Progress + Inventario
@@ -1121,12 +1121,12 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
   );
 }
 
-// ─── PÁGINA: CRÉDITO Y COBRANZA ──────────────────────────────────────────────
+// âââ PÃGINA: CRÃDITO Y COBRANZA ââââââââââââââââââââââââââââââââââââââââââââââ
 function CreditoCobranza({ cliente }) {
   const c = cliente;
   const k = c.cartera;
   if (!k) return (
-    <div className="p-6 text-gray-400 text-sm">Sin datos de crédito y cobranza disponibles.</div>
+    <div className="p-6 text-gray-400 text-sm">Sin datos de crÃ©dito y cobranza disponibles.</div>
   );
 
   const lineaMXN = k.lineaCreditoUSD * k.tipoCambio;
@@ -1134,10 +1134,10 @@ function CreditoCobranza({ cliente }) {
   const disponibleMXN = lineaMXN - k.saldoActual;
   const disponibleUSD = disponibleMXN / k.tipoCambio;
 
-  // Semáforo línea de crédito
-  const lineaColor = usoPct >= 90 ? { bar: "#ef4444", bg: "bg-red-50", border: "border-red-200", text: "text-red-700", label: "Crítico — Línea casi agotada" }
-                   : usoPct >= 70 ? { bar: "#eab308", bg: "bg-yellow-50", border: "border-yellow-200", text: "text-yellow-700", label: "Atención — Uso elevado" }
-                   :                { bar: "#22c55e", bg: "bg-green-50",  border: "border-green-200",  text: "text-green-700",  label: "Saludable — Línea disponible" };
+  // SemÃ¡foro lÃ­nea de crÃ©dito
+  const lineaColor = usoPct >= 90 ? { bar: "#ef4444", bg: "bg-red-50", border: "border-red-200", text: "text-red-700", label: "CrÃ­tico â LÃ­nea casi agotada" }
+                   : usoPct >= 70 ? { bar: "#eab308", bg: "bg-yellow-50", border: "border-yellow-200", text: "text-yellow-700", label: "AtenciÃ³n â Uso elevado" }
+                   :                { bar: "#22c55e", bg: "bg-green-50",  border: "border-green-200",  text: "text-green-700",  label: "Saludable â LÃ­nea disponible" };
 
   // Aging total y porcentajes
   const ag = k.aging;
@@ -1149,9 +1149,9 @@ function CreditoCobranza({ cliente }) {
   const vmEntries = Object.entries(k.vencimientosMes);
   const vmMax = Math.max(...vmEntries.map(([,v]) => v));
 
-  // Proyección basada en tendencia de crecimiento real 2026
+  // ProyecciÃ³n basada en tendencia de crecimiento real 2026
   const soValues = Object.values(DIGITALIFE_REAL.sellOut);
-  const soUltimo = soValues[soValues.length - 1];           // Mar 2026: último mes con dato
+  const soUltimo = soValues[soValues.length - 1];           // Mar 2026: Ãºltimo mes con dato
   const soAnterior = soValues[soValues.length - 2];         // Feb 2026: mes previo
   const tasaCrecMensual = soUltimo / soAnterior;            // Tasa real mensual 2026
   const soPromedio = soValues.reduce((a, b) => a + b, 0) / soValues.length; // referencia
@@ -1164,49 +1164,49 @@ function CreditoCobranza({ cliente }) {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
 
-      {/* ── ENCABEZADO ── */}
+      {/* ââ ENCABEZADO ââ */}
       <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
-                 style={{ backgroundColor: c.color }}>💳</div>
+                 style={{ backgroundColor: c.color }}>ð³</div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Crédito y Cobranza</h1>
+              <h1 className="text-2xl font-bold text-gray-800">{c.nombre} â CrÃ©dito y Cobranza</h1>
               <p className="text-sm text-gray-400 mt-0.5">
                 <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
-                {" · "}Semana {k.semana} · {k.periodo}
+                {" Â· "}Semana {k.semana} Â· {k.periodo}
               </p>
             </div>
           </div>
           <div className="text-right">
             <span className="text-xs text-gray-400 block">
-              Actualizado: {formatFecha(k.ultimaActualizacion)}{k.horaActualizacion ? ` · ${k.horaActualizacion} hrs` : ""}
+              Actualizado: {formatFecha(k.ultimaActualizacion)}{k.horaActualizacion ? ` Â· ${k.horaActualizacion} hrs` : ""}
             </span>
             <span className="text-xs text-gray-400">TC: ${k.tipoCambio.toFixed(2)} MXN/USD</span>
           </div>
         </div>
       </div>
 
-      {/* ── ALERTA VENCIDO ── */}
+      {/* ââ ALERTA VENCIDO ââ */}
       {k.saldoVencido > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
-          <span className="text-red-500 text-xl">⚠️</span>
+          <span className="text-red-500 text-xl">â ï¸</span>
           <div>
-            <p className="text-sm font-semibold text-red-700">Saldo Vencido — Gestión inmediata requerida</p>
+            <p className="text-sm font-semibold text-red-700">Saldo Vencido â GestiÃ³n inmediata requerida</p>
             <p className="text-xs text-red-600 mt-0.5">
               <strong>{formatMXN(k.saldoVencido)}</strong> en cartera vencida
-              ({" "}{formatMXN(ag.d61_90)} entre 61-90 días y{" "}
-              {formatMXN(ag.mas90)} con más de 90 días).
+              ({" "}{formatMXN(ag.d61_90)} entre 61-90 dÃ­as y{" "}
+              {formatMXN(ag.mas90)} con mÃ¡s de 90 dÃ­as).
             </p>
           </div>
         </div>
       )}
 
-      {/* ── SEMÁFORO LÍNEA DE CRÉDITO ── */}
+      {/* ââ SEMÃFORO LÃNEA DE CRÃDITO ââ */}
       <div className={`${lineaColor.bg} border ${lineaColor.border} rounded-2xl p-5 mb-6`}>
         <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Línea de Crédito</p>
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">LÃ­nea de CrÃ©dito</p>
             <p className="text-xl font-bold text-gray-800">
               {formatUSD(k.lineaCreditoUSD)} USD
               <span className="text-sm font-normal text-gray-400 ml-2">= {formatMXN(lineaMXN)}</span>
@@ -1219,10 +1219,10 @@ function CreditoCobranza({ cliente }) {
             </span>
           </div>
         </div>
-        {/* Barra de utilización */}
+        {/* Barra de utilizaciÃ³n */}
         <div className="mb-3">
           <div className="flex justify-between text-xs text-gray-500 mb-1">
-            <span>Utilización: <strong className={lineaColor.text}>{usoPct}%</strong></span>
+            <span>UtilizaciÃ³n: <strong className={lineaColor.text}>{usoPct}%</strong></span>
             <span>Disponible: <strong className="text-green-700">{formatUSD(disponibleUSD)} ({formatMXN(disponibleMXN)})</strong></span>
           </div>
           <div className="h-4 bg-white rounded-full overflow-hidden border border-gray-200 shadow-inner">
@@ -1232,12 +1232,12 @@ function CreditoCobranza({ cliente }) {
           </div>
           <div className="flex justify-between text-xs text-gray-400 mt-1">
             <span>$0</span>
-            <span className="text-yellow-500">70% · Alerta</span>
-            <span className="text-red-500">90% · Crítico</span>
+            <span className="text-yellow-500">70% Â· Alerta</span>
+            <span className="text-red-500">90% Â· CrÃ­tico</span>
             <span>{formatUSD(k.lineaCreditoUSD)}</span>
           </div>
         </div>
-        {/* Desglose numérico */}
+        {/* Desglose numÃ©rico */}
         <div className="grid grid-cols-3 gap-3 mt-3">
           <div className="bg-white rounded-xl p-3 text-center shadow-sm">
             <p className="text-xs text-gray-400 mb-1">Saldo Usado</p>
@@ -1251,18 +1251,18 @@ function CreditoCobranza({ cliente }) {
           </div>
           <div className="bg-white rounded-xl p-3 text-center shadow-sm">
             <p className="text-xs text-gray-400 mb-1">DSO Actual</p>
-            <p className="text-base font-bold text-blue-700">{k.dso} días</p>
+            <p className="text-base font-bold text-blue-700">{k.dso} dÃ­as</p>
             <p className="text-xs text-gray-400">promedio de cobro</p>
           </div>
         </div>
       </div>
 
-      {/* ── KPI CARDS ── */}
+      {/* ââ KPI CARDS ââ */}
       <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
         <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Total</p>
           <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoActual)}</p>
-          <p className="text-xs text-gray-400 mt-1">{usoPct}% de la línea usada</p>
+          <p className="text-xs text-gray-400 mt-1">{usoPct}% de la lÃ­nea usada</p>
         </div>
         <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4 ${k.saldoVencido > 0 ? "border-red-500" : "border-green-500"}`}>
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Vencido</p>
@@ -1272,29 +1272,29 @@ function CreditoCobranza({ cliente }) {
           <p className="text-xs text-gray-400 mt-1">{k.saldoVencido > 0 ? `${Math.round((k.saldoVencido / k.saldoActual) * 100)}% del saldo total` : "Sin vencidos"}</p>
         </div>
         <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-purple-500">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Notas de Crédito</p>
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Notas de CrÃ©dito</p>
           <p className="text-2xl font-bold text-purple-700">{formatMXN(k.saldoNC)}</p>
-          <p className="text-xs text-gray-400 mt-1">A aplicar en próximos pagos</p>
+          <p className="text-xs text-gray-400 mt-1">A aplicar en prÃ³ximos pagos</p>
         </div>
         <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-yellow-400">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">A Vencer (semana)</p>
           <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoAVencer)}</p>
-          <p className="text-xs text-gray-400 mt-1">Próximos 7 días</p>
+          <p className="text-xs text-gray-400 mt-1">PrÃ³ximos 7 dÃ­as</p>
         </div>
       </div>
 
-      {/* ── AGING DE FACTURAS + VENCIMIENTOS POR MES ── */}
+      {/* ââ AGING DE FACTURAS + VENCIMIENTOS POR MES ââ */}
       <div className="grid grid-cols-1 gap-6 mb-6 md:grid-cols-2">
 
         {/* Aging */}
         <div className="bg-white rounded-2xl shadow-sm p-5">
-          <CardHeader titulo="Aging de Facturas" icono="📅" />
+          <CardHeader titulo="Aging de Facturas" icono="ð" />
           <div className="space-y-3">
             {[
-              { label: "0 – 30 días",  monto: ag.d0_30,  color: "#22c55e", bg: "bg-green-500",  tag: "bg-green-100 text-green-700",  icono: "✅" },
-              { label: "31 – 60 días", monto: ag.d31_60, color: "#3b82f6", bg: "bg-blue-400",   tag: "bg-blue-100 text-blue-700",    icono: "🔵" },
-              { label: "61 – 90 días", monto: ag.d61_90, color: "#eab308", bg: "bg-yellow-400", tag: "bg-yellow-100 text-yellow-700", icono: "⚠️" },
-              { label: "+ 90 días",    monto: ag.mas90,  color: "#ef4444", bg: "bg-red-500",    tag: "bg-red-100 text-red-700",       icono: "🔴" },
+              { label: "0 â 30 dÃ­as",  monto: ag.d0_30,  color: "#22c55e", bg: "bg-green-500",  tag: "bg-green-100 text-green-700",  icono: "â" },
+              { label: "31 â 60 dÃ­as", monto: ag.d31_60, color: "#3b82f6", bg: "bg-blue-400",   tag: "bg-blue-100 text-blue-700",    icono: "ðµ" },
+              { label: "61 â 90 dÃ­as", monto: ag.d61_90, color: "#eab308", bg: "bg-yellow-400", tag: "bg-yellow-100 text-yellow-700", icono: "â ï¸" },
+              { label: "+ 90 dÃ­as",    monto: ag.mas90,  color: "#ef4444", bg: "bg-red-500",    tag: "bg-red-100 text-red-700",       icono: "ð´" },
             ].map(({ label, monto, color, bg, tag, icono }) => (
               <div key={label}>
                 <div className="flex justify-between items-center text-sm mb-1">
@@ -1321,7 +1321,7 @@ function CreditoCobranza({ cliente }) {
 
         {/* Vencimientos por mes */}
         <div className="bg-white rounded-2xl shadow-sm p-5">
-          <CardHeader titulo="Vencimientos por Mes" icono="🗓️" />
+          <CardHeader titulo="Vencimientos por Mes" icono="ðï¸" />
           <div className="space-y-4">
             {vmEntries.map(([mes, monto]) => {
               const pct = Math.round((monto / vmMax) * 100);
@@ -1355,11 +1355,11 @@ function CreditoCobranza({ cliente }) {
         </div>
       </div>
 
-      {/* ── PROYECCIÓN DE COBRO ── */}
+      {/* ââ PROYECCIÃN DE COBRO ââ */}
       <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-        <CardHeader titulo="Proyección de Cobro (basada en Sell Out)" icono="📈" />
+        <CardHeader titulo="ProyecciÃ³n de Cobro (basada en Sell Out)" icono="ð" />
         <p className="text-xs text-gray-400 mb-4">
-          Sell out Mar 2026: <strong>{formatMXN(soUltimo)}</strong> · Crecimiento mensual: <strong>+{((tasaCrecMensual - 1) * 100).toFixed(1)}%</strong> · DSO: <strong>{k.dso} días</strong> · TC: ${k.tipoCambio.toFixed(2)} MXN/USD
+          Sell out Mar 2026: <strong>{formatMXN(soUltimo)}</strong> Â· Crecimiento mensual: <strong>+{((tasaCrecMensual - 1) * 100).toFixed(1)}%</strong> Â· DSO: <strong>{k.dso} dÃ­as</strong> Â· TC: ${k.tipoCambio.toFixed(2)} MXN/USD
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -1396,17 +1396,17 @@ function CreditoCobranza({ cliente }) {
           </table>
         </div>
         <p className="text-xs text-gray-400 mt-3 italic">
-          * Venta Sell Out proyectada con base en la tendencia de crecimiento mensual 2026 (Ene–Mar). No incluye facturas diferidas ni acuerdos comerciales específicos.
+          * Venta Sell Out proyectada con base en la tendencia de crecimiento mensual 2026 (EneâMar). No incluye facturas diferidas ni acuerdos comerciales especÃ­ficos.
         </p>
       </div>
 
-      {/* ── FUENTE DEL DATO ── */}
+      {/* ââ FUENTE DEL DATO ââ */}
       <div className="bg-white rounded-2xl shadow-sm p-5">
         <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Fuente del dato</p>
         <p className="text-sm text-gray-700 font-medium">{k.correoSemana}</p>
         <p className="text-xs text-gray-400 mt-1">
-          Correo enviado cada lunes · intranet@acteck.com · Actualización automática 4pm
-          {" · "}TC Banxico {formatFecha(k.ultimaActualizacion)}: ${k.tipoCambio.toFixed(2)} MXN/USD
+          Correo enviado cada lunes Â· intranet@acteck.com Â· ActualizaciÃ³n automÃ¡tica 4pm
+          {" Â· "}TC Banxico {formatFecha(k.ultimaActualizacion)}: ${k.tipoCambio.toFixed(2)} MXN/USD
         </p>
       </div>
 
@@ -1414,7 +1414,7 @@ function CreditoCobranza({ cliente }) {
   );
 }
 
-// ——— PAGOS Y COMPROMISOS (Supabase) ———
+// âââ PAGOS Y COMPROMISOS (Supabase) âââ
 const CATEGORIA_META = {
   promociones:    { label: "Promociones",      color: "#f59e0b" },
   marketing:      { label: "Marketing",        color: "#8b5cf6" },
@@ -1439,7 +1439,7 @@ const MESES_CORTOS = {
 function PagosCliente({ cliente }) {
   const c = cliente;
 
-  // ── State ──
+  // ââ State ââ
   const [registros, setRegistros]     = useState([]);
   const [loading, setLoading]         = useState(true);
   const [catActiva, setCatActiva]     = useState("todas");
@@ -1472,7 +1472,7 @@ function PagosCliente({ cliente }) {
     { key: "12", short: "Dic", full: "Diciembre" },
   ];
 
-  // ── Data loading ──
+  // ââ Data loading ââ
   useEffect(() => {
     if (!DB_CONFIGURED) {
       const seed = Object.entries(PAGOS_DIGITALIFE_2026.categorias).flatMap(([key, cat]) =>
@@ -1496,13 +1496,13 @@ function PagosCliente({ cliente }) {
     setLoading(false);
   };
 
-  // ── Toast ──
+  // ââ Toast ââ
   const flash = (msg, type = "ok") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 2500);
   };
 
-  // ── Inline edit helpers ──
+  // ââ Inline edit helpers ââ
   const startEdit = (id, field, value) => {
     if (!DB_CONFIGURED) return;
     setEditingCell({ id, field });
@@ -1520,11 +1520,11 @@ function PagosCliente({ cliente }) {
       .update({ [field]: value, updated_at: new Date().toISOString() })
       .eq("id", id);
     setSaving(false);
-    if (error) { flash("Error al guardar ✗", "err"); fetchData(); }
-    else flash("Guardado ✓");
+    if (error) { flash("Error al guardar â", "err"); fetchData(); }
+    else flash("Guardado â");
   };
 
-  // ── Add record (non-fijos) ──
+  // ââ Add record (non-fijos) ââ
   const handleAdd = async () => {
     if (!newRow.concepto.trim()) return;
     const record = {
@@ -1535,16 +1535,16 @@ function PagosCliente({ cliente }) {
       fecha_pago_real: newRow.fecha_pago_real || null,
     };
     const { data, error } = await supabase.from("pagos").insert(record).select().single();
-    if (error) { flash("Error al agregar ✗", "err"); return; }
+    if (error) { flash("Error al agregar â", "err"); return; }
     setRegistros(prev => [...prev, data]);
     setNewRow({ folio: "", concepto: "", categoria: "promociones", monto: "",
                 estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
                 responsable: "", notas: "" });
     setShowAdd(false);
-    flash("Registro agregado ✓");
+    flash("Registro agregado â");
   };
 
-  // ── Add Pago Fijo (creates 12 monthly records) ──
+  // ââ Add Pago Fijo (creates 12 monthly records) ââ
   const handleAddFijo = async () => {
     if (!newFijo.concepto.trim()) return;
     const monto = parseFloat(newFijo.monto) || 0;
@@ -1562,38 +1562,38 @@ function PagosCliente({ cliente }) {
     setSaving(true);
     const { data, error } = await supabase.from("pagos").insert(records).select();
     setSaving(false);
-    if (error) { flash("Error al crear pagos fijos ✗", "err"); return; }
+    if (error) { flash("Error al crear pagos fijos â", "err"); return; }
     setRegistros(prev => [...prev, ...data]);
     setNewFijo({ concepto: "", monto: "", responsable: "" });
     setShowAddFijo(false);
-    flash(`12 meses de "${newFijo.concepto}" creados ✓`);
+    flash(`12 meses de "${newFijo.concepto}" creados â`);
   };
 
-  // ── Delete record ──
+  // ââ Delete record ââ
   const handleDelete = async (id) => {
-    if (!window.confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")) return;
+    if (!window.confirm("Â¿Eliminar este registro? Esta acciÃ³n no se puede deshacer.")) return;
     setRegistros(prev => prev.filter(r => r.id !== id));
     const { error } = await supabase.from("pagos").delete().eq("id", id);
-    if (error) { flash("Error al eliminar ✗", "err"); fetchData(); }
-    else flash("Eliminado ✓");
+    if (error) { flash("Error al eliminar â", "err"); fetchData(); }
+    else flash("Eliminado â");
   };
 
-  // ── Delete all months of a fijo concept ──
+  // ââ Delete all months of a fijo concept ââ
   const handleDeleteFijo = async (conceptoKey, ids) => {
-    if (!window.confirm(`¿Eliminar todos los meses de "${conceptoKey}"? Esta acción no se puede deshacer.`)) return;
+    if (!window.confirm(`Â¿Eliminar todos los meses de "${conceptoKey}"? Esta acciÃ³n no se puede deshacer.`)) return;
     setRegistros(prev => prev.filter(r => !ids.includes(r.id)));
     for (const id of ids) {
       await supabase.from("pagos").delete().eq("id", id);
     }
-    flash(`"${conceptoKey}" eliminado ✓`);
+    flash(`"${conceptoKey}" eliminado â`);
   };
 
-  // ── Toggle expand fijo ──
+  // ââ Toggle expand fijo ââ
   const toggleFijo = (key) => {
     setExpandedFijos(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // ── Computed ──
+  // ââ Computed ââ
   const fijoRecords = registros.filter(r => r.categoria === "pagosFijos");
   const nonFijoRecords = registros.filter(r => r.categoria !== "pagosFijos");
   const filtered = catActiva === "todas"
@@ -1633,7 +1633,7 @@ function PagosCliente({ cliente }) {
     return Object.values(months).sort((a, b) => a.mes.localeCompare(b.mes));
   };
 
-  // ── Inline cell renderer ──
+  // ââ Inline cell renderer ââ
   const renderCell = (row, field, type = "text") => {
     const isEditing = editingCell?.id === row.id && editingCell?.field === field;
     const inputCls = "w-full border border-blue-400 rounded px-2 py-1 text-sm outline-none bg-blue-50 focus:ring-1 focus:ring-blue-400";
@@ -1700,18 +1700,18 @@ function PagosCliente({ cliente }) {
     if (field === "fecha_compromiso" || field === "fecha_pago_real") {
       return (
         <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors whitespace-nowrap" : "whitespace-nowrap"} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
-          {row[field] ? <span className="text-gray-600">{formatFecha(row[field])}</span> : <span className="text-gray-300">—</span>}
+          {row[field] ? <span className="text-gray-600">{formatFecha(row[field])}</span> : <span className="text-gray-300">â</span>}
         </div>
       );
     }
     return (
       <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
-        {row[field] ? <span className="text-gray-700">{row[field]}</span> : <span className="text-gray-300">—</span>}
+        {row[field] ? <span className="text-gray-700">{row[field]}</span> : <span className="text-gray-300">â</span>}
       </div>
     );
   };
 
-  // ────────────────────────── RENDER ──────────────────────────────────────────
+  // ââââââââââââââââââââââââââ RENDER ââââââââââââââââââââââââââââââââââââââââââ
   return (
     <div className="min-h-screen bg-gray-50 p-6">
 
@@ -1727,42 +1727,42 @@ function PagosCliente({ cliente }) {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
-                 style={{ backgroundColor: c.color }}>💰</div>
+                 style={{ backgroundColor: c.color }}>ð°</div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Pagos y Compromisos</h1>
+              <h1 className="text-2xl font-bold text-gray-800">{c.nombre} â Pagos y Compromisos</h1>
               <p className="text-sm text-gray-400 mt-0.5">
                 <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
-                {" · "}Promociones · Marketing · Pagos Fijos · Variables
-                {saving && <span className="ml-2 text-blue-400 animate-pulse">● Guardando...</span>}
+                {" Â· "}Promociones Â· Marketing Â· Pagos Fijos Â· Variables
+                {saving && <span className="ml-2 text-blue-400 animate-pulse">â Guardando...</span>}
               </p>
             </div>
           </div>
           <div className="text-right">
             <span className="text-xs text-gray-400 block">
               Actualizado: {formatFecha(c.cartera?.ultimaActualizacion || "2026-04-07")}
-              {c.cartera?.horaActualizacion ? ` · ${c.cartera.horaActualizacion} hrs` : ""}
+              {c.cartera?.horaActualizacion ? ` Â· ${c.cartera.horaActualizacion} hrs` : ""}
             </span>
             {c.cartera?.tipoCambio && (
               <span className="text-xs text-gray-400">TC: ${c.cartera.tipoCambio.toFixed(2)} MXN/USD</span>
             )}
             <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-semibold ${DB_CONFIGURED ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
-              {DB_CONFIGURED ? "✅ Sincronizado" : "⚠️ Solo lectura"}
+              {DB_CONFIGURED ? "â Sincronizado" : "â ï¸ Solo lectura"}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Banner de configuración pendiente */}
+      {/* Banner de configuraciÃ³n pendiente */}
       {!DB_CONFIGURED && (
         <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 mb-6 flex items-start gap-3">
-          <span className="text-2xl">⚙️</span>
+          <span className="text-2xl">âï¸</span>
           <div>
-            <p className="font-semibold text-orange-800 mb-1">Configuración requerida para guardar cambios</p>
+            <p className="font-semibold text-orange-800 mb-1">ConfiguraciÃ³n requerida para guardar cambios</p>
             <p className="text-sm text-orange-700 mb-2">
               Para que todos los cambios se guarden y sean visibles para el equipo, configura las variables en Vercel y la tabla en Supabase.
             </p>
             <code className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded block w-fit">
-              VITE_SUPABASE_URL · VITE_SUPABASE_ANON_KEY
+              VITE_SUPABASE_URL Â· VITE_SUPABASE_ANON_KEY
             </code>
           </div>
         </div>
@@ -1824,25 +1824,25 @@ function PagosCliente({ cliente }) {
                   <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
                     <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: meta.color }}></div>
                   </div>
-                  <p className="text-xs text-gray-400">{pct}% pagado · {items.length} conceptos</p>
+                  <p className="text-xs text-gray-400">{pct}% pagado Â· {items.length} conceptos</p>
                 </button>
               );
             })}
           </div>
 
-          {/* ═══════════════ PAGOS FIJOS SECTION ═══════════════ */}
+          {/* âââââââââââââââ PAGOS FIJOS SECTION âââââââââââââââ */}
           {showFijosSection && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">🏢</span>
-                  <h3 className="font-bold text-gray-700 text-base">Pagos Fijos — Calendario Mensual</h3>
+                  <span className="text-lg">ð¢</span>
+                  <h3 className="font-bold text-gray-700 text-base">Pagos Fijos â Calendario Mensual</h3>
                   <span className="text-xs text-gray-400 ml-2">{Object.keys(fijoGroups).length} concepto{Object.keys(fijoGroups).length !== 1 ? "s" : ""}</span>
                 </div>
                 {DB_CONFIGURED && (
                   <button onClick={() => setShowAddFijo(!showAddFijo)}
                     className="flex items-center gap-1.5 px-4 py-1.5 bg-purple-600 text-white rounded-full text-sm font-semibold hover:bg-purple-700 transition-colors">
-                    ＋ Nuevo Pago Fijo
+                    ï¼ Nuevo Pago Fijo
                   </button>
                 )}
               </div>
@@ -1850,7 +1850,7 @@ function PagosCliente({ cliente }) {
               {/* Add Fijo Form */}
               {showAddFijo && DB_CONFIGURED && (
                 <div className="mb-5 p-4 bg-purple-50 rounded-xl border border-purple-200">
-                  <p className="text-sm font-semibold text-purple-800 mb-3">Nuevo Pago Fijo (se crean 12 meses automáticamente)</p>
+                  <p className="text-sm font-semibold text-purple-800 mb-3">Nuevo Pago Fijo (se crean 12 meses automÃ¡ticamente)</p>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <div>
                       <label className="text-xs text-gray-500 block mb-1">Concepto *</label>
@@ -1887,7 +1887,7 @@ function PagosCliente({ cliente }) {
               {/* Fijo Groups */}
               {Object.keys(fijoGroups).length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
-                  <p className="text-3xl mb-2">🏢</p>
+                  <p className="text-3xl mb-2">ð¢</p>
                   <p className="text-sm">No hay pagos fijos registrados</p>
                 </div>
               ) : (
@@ -1915,11 +1915,11 @@ function PagosCliente({ cliente }) {
                         {/* Summary row */}
                         <button onClick={() => toggleFijo(conceptoKey)}
                           className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left">
-                          <span className={`text-gray-400 transition-transform ${isOpen ? "rotate-90" : ""}`} style={{ fontSize: "12px" }}>▶</span>
+                          <span className={`text-gray-400 transition-transform ${isOpen ? "rotate-90" : ""}`} style={{ fontSize: "12px" }}>â¶</span>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3 flex-wrap">
                               <span className="font-semibold text-gray-800 text-sm">{conceptoKey}</span>
-                              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full text-white font-semibold" style={{ backgroundColor: "#8b5cf6" }}>🏢 Pago Fijo</span>
+                              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full text-white font-semibold" style={{ backgroundColor: "#8b5cf6" }}>ð¢ Pago Fijo</span>
                             </div>
                             <div className="flex items-center gap-4 mt-1.5">
                               <span className="text-xs text-gray-500">Mensual: <strong className="text-gray-700">{formatMXN(montoMensual)}</strong></span>
@@ -1936,7 +1936,7 @@ function PagosCliente({ cliente }) {
                             </div>
                             {DB_CONFIGURED && (
                               <button onClick={(e) => { e.stopPropagation(); handleDeleteFijo(conceptoKey, rows.map(r => r.id)); }}
-                                className="text-gray-300 hover:text-red-500 transition-colors text-base" title="Eliminar concepto completo">🗑</button>
+                                className="text-gray-300 hover:text-red-500 transition-colors text-base" title="Eliminar concepto completo">ð</button>
                             )}
                           </div>
                         </button>
@@ -2010,13 +2010,13 @@ function PagosCliente({ cliente }) {
 
               <div className="mt-4 pt-3 border-t border-gray-100">
                 <p className="text-xs text-gray-400">
-                  💡 Haz click en una fila para expandir y ver/editar los 12 meses. Los campos de folio, estatus y fecha de pago son editables por mes.
+                  ð¡ Haz click en una fila para expandir y ver/editar los 12 meses. Los campos de folio, estatus y fecha de pago son editables por mes.
                 </p>
               </div>
             </div>
           )}
 
-          {/* ═══════════════ REGULAR TABLE (non-fijos) ═══════════════ */}
+          {/* âââââââââââââââ REGULAR TABLE (non-fijos) âââââââââââââââ */}
           {showRegularTable && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
 
@@ -2037,7 +2037,7 @@ function PagosCliente({ cliente }) {
                 {DB_CONFIGURED && (
                   <button onClick={() => setShowAdd(!showAdd)}
                     className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white rounded-full text-sm font-semibold hover:bg-blue-700 transition-colors">
-                    ＋ Agregar
+                    ï¼ Agregar
                   </button>
                 )}
               </div>
@@ -2048,7 +2048,7 @@ function PagosCliente({ cliente }) {
                   <p className="text-sm font-semibold text-blue-800 mb-3">Nuevo registro</p>
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                     {[
-                      { label: "Categoría *", key: "categoria", type: "select-cat" },
+                      { label: "CategorÃ­a *", key: "categoria", type: "select-cat" },
                       { label: "Concepto *",  key: "concepto",  type: "text" },
                       { label: "Monto (MXN)", key: "monto",     type: "number" },
                       { label: "Estatus",     key: "estatus",   type: "select-est" },
@@ -2095,7 +2095,7 @@ function PagosCliente({ cliente }) {
                   <thead>
                     <tr className="border-b border-gray-100">
                       <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 min-w-36">Concepto {DB_CONFIGURED && <span className="text-blue-300 normal-case font-normal">(click p/editar)</span>}</th>
-                      <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Categoría</th>
+                      <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">CategorÃ­a</th>
                       <th className="text-right text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Monto</th>
                       <th className="text-center text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Estatus</th>
                       <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">F. Compromiso</th>
@@ -2125,7 +2125,7 @@ function PagosCliente({ cliente }) {
                         {DB_CONFIGURED && (
                           <td className="py-2.5 pl-1">
                             <button onClick={() => handleDelete(row.id)}
-                              className="text-gray-300 hover:text-red-500 transition-colors text-base" title="Eliminar registro">🗑</button>
+                              className="text-gray-300 hover:text-red-500 transition-colors text-base" title="Eliminar registro">ð</button>
                           </td>
                         )}
                       </tr>
@@ -2134,15 +2134,15 @@ function PagosCliente({ cliente }) {
                 </table>
                 {filtered.length === 0 && (
                   <div className="text-center py-8 text-gray-400">
-                    <p className="text-3xl mb-2">📭</p>
-                    <p className="text-sm">No hay registros{catActiva !== "todas" ? " en esta categoría" : ""}</p>
+                    <p className="text-3xl mb-2">ð­</p>
+                    <p className="text-sm">No hay registros{catActiva !== "todas" ? " en esta categorÃ­a" : ""}</p>
                   </div>
                 )}
               </div>
               <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
                 <p className="text-xs text-gray-400">
-                  {DB_CONFIGURED ? "✅ Cambios guardados y sincronizados para todo el equipo." : "⚠️ Modo lectura — configura Supabase para habilitar la edición."}
-                  {" "}💡 <strong className="text-gray-600">Pendiente</strong> · <strong className="text-gray-600">En Proceso</strong> · <strong className="text-gray-600">Pagado</strong> · <strong className="text-gray-600">Vencido</strong>
+                  {DB_CONFIGURED ? "â Cambios guardados y sincronizados para todo el equipo." : "â ï¸ Modo lectura â configura Supabase para habilitar la ediciÃ³n."}
+                  {" "}ð¡ <strong className="text-gray-600">Pendiente</strong> Â· <strong className="text-gray-600">En Proceso</strong> Â· <strong className="text-gray-600">Pagado</strong> Â· <strong className="text-gray-600">Vencido</strong>
                 </p>
               </div>
             </div>
@@ -2154,7 +2154,7 @@ function PagosCliente({ cliente }) {
             if (mb.length === 0) return null;
             return (
               <div className="bg-white rounded-2xl shadow-sm p-5">
-                <CardHeader titulo="Resumen General por Mes y Categoría" icono="📅" />
+                <CardHeader titulo="Resumen General por Mes y CategorÃ­a" icono="ð" />
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -2174,11 +2174,11 @@ function PagosCliente({ cliente }) {
                         return (
                           <tr key={m.mes} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                             <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTOS[mo]} {yr}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosFijos    > 0 ? formatMXN(m.pagosFijos)    : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosVariables> 0 ? formatMXN(m.pagosVariables): <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.rebate         > 0 ? formatMXN(m.rebate)         : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">â</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">â</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosFijos    > 0 ? formatMXN(m.pagosFijos)    : <span className="text-gray-300">â</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosVariables> 0 ? formatMXN(m.pagosVariables): <span className="text-gray-300">â</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.rebate         > 0 ? formatMXN(m.rebate)         : <span className="text-gray-300">â</span>}</td>
                             <td className="py-2.5 text-right font-bold text-gray-800">{formatMXN(m.total)}</td>
                           </tr>
                         );
@@ -2207,14 +2207,14 @@ function PagosCliente({ cliente }) {
   );
 }
 
-// ─── ESTRATEGIA DE PRODUCTO ─── CONSTANTS ───────────────────────────────────────────────────────────────
+// âââ ESTRATEGIA DE PRODUCTO âââ CONSTANTS âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const ROADMAP_CODES = {
   RMI:   { label: "RunRate",           color: "bg-green-100",  text: "text-green-700" },
   NVS:   { label: "Nuevo",             color: "bg-blue-100",   text: "text-blue-700" },
   "2025": { label: "Lanzamiento 2025", color: "bg-purple-100", text: "text-purple-700" },
   "2026": { label: "Lanzamiento 2026", color: "bg-orange-100", text: "text-orange-700" },
   EXMAY: { label: "Mayoreo",           color: "bg-amber-100",  text: "text-amber-700" },
-  RML:   { label: "Liquidación",       color: "bg-red-100",    text: "text-red-700" },
+  RML:   { label: "LiquidaciÃ³n",       color: "bg-red-100",    text: "text-red-700" },
   PEM:   { label: "Marketplace",       color: "bg-teal-100",   text: "text-teal-700" },
   DECME: { label: "DECME",             color: "bg-gray-100",   text: "text-gray-700" },
 };
@@ -2225,7 +2225,7 @@ const MONTH_KEYS_2026 = ["ene_2026", "feb_2026", "mar_2026", "abr_2026", "may_20
 const MONTH_VAL_2025 = ["ene_2025_val", "feb_2025_val", "mar_2025_val", "abr_2025_val", "may_2025_val", "jun_2025_val", "jul_2025_val", "ago_2025_val", "sep_2025_val", "oct_2025_val", "nov_2025_val", "dic_2025_val"];
 const MONTH_VAL_2026 = ["ene_2026_val", "feb_2026_val", "mar_2026_val", "abr_2026_val", "may_2026_val", "jun_2026_val", "jul_2026_val", "ago_2026_val", "sep_2026_val", "oct_2026_val", "nov_2026_val", "dic_2026_val"];
 
-// ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────
+// âââ HELPER FUNCTIONS ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function summonthlyValues(producto, monthKeys) {
   return monthKeys.reduce((sum, key) => sum + (producto[key] || 0), 0);
 }
@@ -2252,7 +2252,7 @@ function filterProductos(productos, yearFilter, marcaFilter, categoriaFilter, ro
   });
 }
 
-// ——— ESTRATEGIA DE PRODUCTO (Excel Upload + Data Display) ———
+// âââ ESTRATEGIA DE PRODUCTO (Excel Upload + Data Display) âââ
 function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState("");
@@ -2261,7 +2261,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
   const [sortBy, setSortBy] = React.useState("sell-in");
 
   const formatMXN = (n) => {
-    if (n == null || isNaN(n)) return "—";
+    if (n == null || isNaN(n)) return "â";
     return "$" + Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   };
 
@@ -2656,7 +2656,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
     // By categoria
     const byCategoria = {};
     datos.productos.forEach(p => {
-      const cat = p.categoria || "Sin Categoría";
+      const cat = p.categoria || "Sin CategorÃ­a";
       if (!byCategoria[cat]) byCategoria[cat] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0 };
       const siForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
       const siMontoForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.monto_pesos || 0), 0);
@@ -2712,7 +2712,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
       });
   }, [datos, searchFilter, sortBy]);
 
-  // ———— RENDER ————
+  // ââââ RENDER ââââ
 
   if (!datos && !loading) {
     return React.createElement("div", { className: "max-w-4xl mx-auto p-6" },
@@ -2724,7 +2724,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
             className: "border-2 border-dashed border-blue-300 rounded-xl p-6 text-center bg-blue-50 cursor-pointer transition-all hover:border-blue-500",
             onClick: () => document.getElementById("file-input").click(),
           },
-            React.createElement("p", { className: "text-blue-700 font-semibold mb-2" }, "📁 Selecciona archivos Excel"),
+            React.createElement("p", { className: "text-blue-700 font-semibold mb-2" }, "ð Selecciona archivos Excel"),
             React.createElement("p", { className: "text-sm text-gray-600" }, "Reporte Acteck y/o Resumen Digitalife"),
             React.createElement("input", {
               id: "file-input",
@@ -2749,7 +2749,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
         React.createElement("button", {
           className: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium",
           onClick: () => document.getElementById("file-input-update").click(),
-        }, "📤 Actualizar datos"),
+        }, "ð¤ Actualizar datos"),
         React.createElement("input", {
           id: "file-input-update",
           type: "file",
@@ -2768,13 +2768,13 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
         React.createElement("p", { className: "text-xs text-gray-400 uppercase tracking-wide mb-2" }, "Sell In"),
         React.createElement("p", { className: "text-2xl font-bold text-gray-800 mb-1" }, formatMXN(aggs.sellInTotal)),
         React.createElement("p", { className: "text-xs text-gray-600 mb-3" }, `${aggs.sellInPiezas.toLocaleString("es-MX")} piezas YTD`),
-        React.createElement("p", { className: "text-xs text-gray-500" }, `Mayor: ${MESES_ABREV[aggs.maxSIMes] || "—"}`),
+        React.createElement("p", { className: "text-xs text-gray-500" }, `Mayor: ${MESES_ABREV[aggs.maxSIMes] || "â"}`),
       ),
       React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6 border-t-4", style: { borderColor: "#8B5CF6" } },
         React.createElement("p", { className: "text-xs text-gray-400 uppercase tracking-wide mb-2" }, "Sell Out"),
         React.createElement("p", { className: "text-2xl font-bold text-gray-800 mb-1" }, formatMXN(aggs.sellOutTotal)),
         React.createElement("p", { className: "text-xs text-gray-600 mb-3" }, `${aggs.sellOutPiezas.toLocaleString("es-MX")} piezas YTD`),
-        React.createElement("p", { className: "text-xs text-gray-500" }, `Mayor: ${MESES_ABREV[aggs.maxSOMes] || "—"}`),
+        React.createElement("p", { className: "text-xs text-gray-500" }, `Mayor: ${MESES_ABREV[aggs.maxSOMes] || "â"}`),
       ),
     ),
 
@@ -2813,12 +2813,12 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
 
     // By Categoria
     aggs && Object.keys(aggs.byCategoria).length > 0 && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
-      React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Por Categoría"),
+      React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Por CategorÃ­a"),
       React.createElement("div", { className: "overflow-x-auto" },
         React.createElement("table", { className: "w-full text-sm" },
           React.createElement("thead", {},
             React.createElement("tr", { className: "border-b border-gray-200" },
-              React.createElement("th", { className: "text-left py-2 px-3 font-semibold text-gray-700" }, "Categoría"),
+              React.createElement("th", { className: "text-left py-2 px-3 font-semibold text-gray-700" }, "CategorÃ­a"),
               React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI Piezas"),
               React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI $"),
               React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Inv Piezas"),
@@ -2848,7 +2848,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
       React.createElement("div", { className: "mb-4 flex gap-3 flex-wrap" },
         React.createElement("input", {
           type: "text",
-          placeholder: "Buscar SKU o descripción...",
+          placeholder: "Buscar SKU o descripciÃ³n...",
           value: searchFilter,
           onChange: (e) => setSearchFilter(e.target.value),
           className: "flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm",
@@ -2910,18 +2910,18 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
 
 
 
-// ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
+// âââ APP PRINCIPAL ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
-// ——— MARKETING (Supabase) ———
+// âââ MARKETING (Supabase) âââ
 const TIPO_ACTIVIDAD = {
-  banner:     { label: "Banner",      color: "#8b5cf6", icon: "🖼️", tipo: "digital" },
-  mailing:    { label: "Mailing",     color: "#3b82f6", icon: "📧", tipo: "digital" },
-  reel:       { label: "Reel",        color: "#ec4899", icon: "🎬", tipo: "digital" },
-  google_ads: { label: "Google Ads",  color: "#f59e0b", icon: "📢", tipo: "digital" },
-  meta_ads:   { label: "Meta Ads",    color: "#6366f1", icon: "📱", tipo: "digital" },
-  demo:       { label: "Demo Tienda", color: "#10b981", icon: "🏪", tipo: "presencial" },
-  pop:        { label: "Material POP",color: "#14b8a6", icon: "🪧", tipo: "presencial" },
-  taller:     { label: "Taller",      color: "#f97316", icon: "🔧", tipo: "presencial" },
+  banner:     { label: "Banner",      color: "#8b5cf6", icon: "ð¼ï¸", tipo: "digital" },
+  mailing:    { label: "Mailing",     color: "#3b82f6", icon: "ð§", tipo: "digital" },
+  reel:       { label: "Reel",        color: "#ec4899", icon: "ð¬", tipo: "digital" },
+  google_ads: { label: "Google Ads",  color: "#f59e0b", icon: "ð¢", tipo: "digital" },
+  meta_ads:   { label: "Meta Ads",    color: "#6366f1", icon: "ð±", tipo: "digital" },
+  demo:       { label: "Demo Tienda", color: "#10b981", icon: "ðª", tipo: "presencial" },
+  pop:        { label: "Material POP",color: "#14b8a6", icon: "ðª§", tipo: "presencial" },
+  taller:     { label: "Taller",      color: "#f97316", icon: "ð§", tipo: "presencial" },
 };
 
 const MKT_ESTATUS = [
@@ -2932,15 +2932,15 @@ const MKT_ESTATUS = [
 ];
 
 const TEMPORALIDADES = {
-  semana_santa: { label: "Semana Santa", emoji: "🐣", color: "#ffeaa7" },
-  dia_nino:     { label: "Día del Niño", emoji: "🎈", color: "#fd79a8" },
-  dia_madres:   { label: "Día Madres",   emoji: "💐", color: "#fab1a0" },
-  dia_maestro:  { label: "Día Maestro",  emoji: "📚", color: "#74b9ff" },
-  hot_sale:     { label: "HOT SALE",     emoji: "🔥", color: "#ff7675" },
-  lluvias:      { label: "Temp. Lluvias",emoji: "🌧️", color: "#a29bfe" },
-  buen_fin:     { label: "Buen Fin",     emoji: "🛒", color: "#e17055" },
-  navidad:      { label: "Navidad",      emoji: "🎄", color: "#00b894" },
-  regreso_clases:{ label: "Regreso Clases",emoji: "📓", color: "#fdcb6e" },
+  semana_santa: { label: "Semana Santa", emoji: "ð£", color: "#ffeaa7" },
+  dia_nino:     { label: "DÃ­a del NiÃ±o", emoji: "ð", color: "#fd79a8" },
+  dia_madres:   { label: "DÃ­a Madres",   emoji: "ð", color: "#fab1a0" },
+  dia_maestro:  { label: "DÃ­a Maestro",  emoji: "ð", color: "#74b9ff" },
+  hot_sale:     { label: "HOT SALE",     emoji: "ð¥", color: "#ff7675" },
+  lluvias:      { label: "Temp. Lluvias",emoji: "ð§ï¸", color: "#a29bfe" },
+  buen_fin:     { label: "Buen Fin",     emoji: "ð", color: "#e17055" },
+  navidad:      { label: "Navidad",      emoji: "ð", color: "#00b894" },
+  regreso_clases:{ label: "Regreso Clases",emoji: "ð", color: "#fdcb6e" },
 };
 function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
   const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
@@ -3043,7 +3043,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
   const fmtMoney = (v) => "$" + Number(v||0).toLocaleString("es-MX", {minimumFractionDigits:0});
   const fmtNum = (v) => Number(v||0).toLocaleString("es-MX");
 
-  // ── RENDER ──
+  // ââ RENDER ââ
   const el = React.createElement;
 
   // KPI Card helper
@@ -3058,7 +3058,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
   const pill = (label, active, onClick) =>
     el("button", { onClick, style: { padding:"4px 12px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:active?600:400, background:active?"#3b82f6":"#1e293b", color:active?"#fff":"#94a3b8", transition:"all .2s" } }, label);
 
-  // ── MODAL ──
+  // ââ MODAL ââ
   const modal = showModal ? el("div", { style: { position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center" }, onClick: () => { setShowModal(false); setEditItem(null); } },
     el("div", { onClick: e => e.stopPropagation(), style: { background:"#ffffff", borderRadius:14, padding:24, width:520, maxHeight:"80vh", overflowY:"auto", color:"#1e293b" } },
       el("div", { style: { display:"flex", justifyContent:"space-between", marginBottom:16 } },
@@ -3125,14 +3125,14 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
           el("input", { value: form.responsable, onChange: e => setForm({...form, responsable: e.target.value}), style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #cbd5e1", background:"#f1f5f9", color:"#1e293b", fontSize:13, boxSizing:"border-box" } })
         )
       ),
-      // Row 3b: Costo + Clasificación
+      // Row 3b: Costo + ClasificaciÃ³n
     el("div", { style: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 } },
       el("div", null,
         el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Costo / Precio"),
         el("input", { type:"number", value: form.costo, onChange: e => setForm({...form, costo: parseFloat(e.target.value) || 0}), placeholder:"0 = Gratis", style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #cbd5e1", background:"#f1f5f9", color:"#1e293b", fontSize:13, boxSizing:"border-box" } })
       ),
       el("div", null,
-        el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "Clasificación"),
+        el("label", { style: { fontSize:11, color:"#94a3b8", display:"block", marginBottom:3 } }, "ClasificaciÃ³n"),
         el("select", { value: form.clasificacion, onChange: e => setForm({...form, clasificacion: e.target.value}), style: { width:"100%", padding:"6px 10px", borderRadius:6, border:"1px solid #cbd5e1", background:"#f1f5f9", color:"#1e293b", fontSize:13, boxSizing:"border-box" } },
           CLASIFICACION_OPTS.map(o => el("option", { key: o, value: o.toLowerCase() }, o))
         )
@@ -3166,7 +3166,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
     )
   ) : null;
 
-  // ── CALENDAR VIEW (Weekly) ──
+  // ââ CALENDAR VIEW (Weekly) ââ
   // Default to current month if none selected
   const mesCalendario = mesActivo || (new Date().getMonth() + 1);
   const actsMes = porMes[mesCalendario] || [];
@@ -3234,7 +3234,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
     ) : null
   );
 
-  // ── LIST VIEW ──
+  // ââ LIST VIEW ââ
   const listaView = el("div", { style: { marginTop:12, display:"flex", flexDirection:"column", gap:6 } },
     filtered.length === 0 ? el("div", { style: { textAlign:"center", color:"#64748b", padding:30, fontSize:13 } }, "No hay actividades con estos filtros") :
     filtered.map(a =>
@@ -3251,19 +3251,19 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
           ),
           el("div", { style: { color:"#94a3b8" } }, MESES[a.mes - 1] || ""),
           el("div", null,
-            el("span", { style: { padding:"2px 8px", borderRadius:10, fontSize:10, fontWeight:500, background: ESTATUS_COLOR[a.estatus] || "#94a3b8", color:"#fff" } }, a.estatus || "—")
+            el("span", { style: { padding:"2px 8px", borderRadius:10, fontSize:10, fontWeight:500, background: ESTATUS_COLOR[a.estatus] || "#94a3b8", color:"#fff" } }, a.estatus || "â")
           ),
-          el("div", { style: { color:"#94a3b8" } }, a.inversion ? fmtMoney(a.inversion) : "—"),
-          el("div", { style: { color:"#94a3b8" } }, a.ventas ? fmtMoney(a.ventas) : "—"),
+          el("div", { style: { color:"#94a3b8" } }, a.inversion ? fmtMoney(a.inversion) : "â"),
+          el("div", { style: { color:"#94a3b8" } }, a.ventas ? fmtMoney(a.ventas) : "â"),
           el("span", { style: { color:"#64748b", fontSize:14, transition:"transform .2s", transform: expandedId === a.id ? "rotate(180deg)" : "rotate(0)" } }, "\u25BC")
         ),
         // Expanded detail
         expandedId === a.id ? el("div", { style: { padding:"0 14px 12px", borderTop:"1px solid #0f172a" } },
           el("div", { style: { display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:10, marginTop:10, fontSize:11 } },
-            el("div", null, el("span", { style: { color:"#64748b" } }, "Producto: "), el("span", { style: { color:"#1e293b" } }, a.producto || "—")),
-            el("div", null, el("span", { style: { color:"#64748b" } }, "Responsable: "), el("span", { style: { color:"#1e293b" } }, a.responsable || "—")),
-            el("div", null, el("span", { style: { color:"#64748b" } }, "Temporalidad: "), el("span", { style: { color:"#1e293b" } }, a.temporalidad || "—")),
-            el("div", null, el("span", { style: { color:"#64748b" } }, "Tipo: "), el("span", { style: { color:"#1e293b" } }, a.tipo || "—"))
+            el("div", null, el("span", { style: { color:"#64748b" } }, "Producto: "), el("span", { style: { color:"#1e293b" } }, a.producto || "â")),
+            el("div", null, el("span", { style: { color:"#64748b" } }, "Responsable: "), el("span", { style: { color:"#1e293b" } }, a.responsable || "â")),
+            el("div", null, el("span", { style: { color:"#64748b" } }, "Temporalidad: "), el("span", { style: { color:"#1e293b" } }, a.temporalidad || "â")),
+            el("div", null, el("span", { style: { color:"#64748b" } }, "Tipo: "), el("span", { style: { color:"#1e293b" } }, a.tipo || "â"))
           ),
           a.mensaje ? el("div", { style: { marginTop:8, fontSize:11 } }, el("span", { style: { color:"#64748b" } }, "Material: "), el("span", { style: { color:"#cbd5e1" } }, a.mensaje)) : null,
           el("div", { style: { display:"grid", gridTemplateColumns:"repeat(5, 1fr)", gap:8, marginTop:10, fontSize:11 } },
@@ -3283,7 +3283,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
     )
   );
 
-  // ── MAIN LAYOUT ──
+  // ââ MAIN LAYOUT ââ
   return el("div", { style: { maxWidth:1100, margin:"0 auto" } },
     modal,
     // Header
@@ -3305,7 +3305,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
       kpiCard("Ventas Generadas", fmtMoney(kpis.ven), null, "#10b981"),
       kpiCard("ROI", (kpis.roi >= 0 ? "+" : "") + kpis.roi.toFixed(0) + "%", kpis.inv > 0 ? "vs inversi\u00f3n" : "sin datos", kpis.roi >= 0 ? "#10b981" : "#ef4444"),
       kpiCard("Alcance", fmtNum(kpis.alc), fmtNum(kpis.conv) + " conv.", "#8b5cf6"),
-      kpiCard("Completadas", kpis.completadas + "/" + kpis.total, kpis.total > 0 ? (kpis.completadas/kpis.total*100).toFixed(0) + "%" : "—", "#f59e0b")
+      kpiCard("Completadas", kpis.completadas + "/" + kpis.total, kpis.total > 0 ? (kpis.completadas/kpis.total*100).toFixed(0) + "%" : "â", "#f59e0b")
     ),
 
     // Filters + view toggle
@@ -3340,7 +3340,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
 }
 
 
-// ─── RESUMEN DE CUENTAS ──────────────────────────────────────────────────────────────────
+// âââ RESUMEN DE CUENTAS ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function ResumenCuentas() {
   const [ventasAll, setVentasAll] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -3388,7 +3388,7 @@ function ResumenCuentas() {
     <div className="min-h-screen bg-gray-50 p-6 space-y-6 max-w-7xl mx-auto">
       <div className="bg-white rounded-2xl shadow-sm p-6 mb-2">
         <h1 className="text-2xl font-bold text-gray-800">Resumen General de Cuentas</h1>
-        <p className="text-sm text-gray-500 mt-1">Vista consolidada — Acteck / Balam Rush 2026</p>
+        <p className="text-sm text-gray-500 mt-1">Vista consolidada â Acteck / Balam Rush 2026</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -3401,7 +3401,7 @@ function ResumenCuentas() {
           <p className="text-2xl font-bold text-gray-800 mt-1">{formatMXN(grandTotalSO)}</p>
         </div>
         <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-purple-600">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Participación Sell In</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">ParticipaciÃ³n Sell In</p>
           <div className="flex gap-4 mt-2">
             {clientesData.map(c => (
               <div key={c.key} className="text-center">
@@ -3462,11 +3462,11 @@ function ResumenCuentas() {
                 <div className="flex gap-3 mt-1 mb-2">
                   <span className="text-[9px] text-gray-400 flex items-center gap-1"><span className="inline-block w-2 h-2 rounded" style={{background: c.color, opacity:0.7}} /> Sell In</span>
                   <span className="text-[9px] text-gray-400 flex items-center gap-1"><span className="inline-block w-2 h-2 rounded bg-green-500" /> Sell Out</span>
-                  {c.data.lastMes < 12 && <span className="text-[9px] text-gray-300 flex items-center gap-1"><span className="inline-block w-2 h-2 rounded border border-dashed border-gray-300" /> Proyección</span>}
+                  {c.data.lastMes < 12 && <span className="text-[9px] text-gray-300 flex items-center gap-1"><span className="inline-block w-2 h-2 rounded border border-dashed border-gray-300" /> ProyecciÃ³n</span>}
                 </div>
                 {c.data.lastMes >= 2 && c.data.lastMes < 12 && (
                   <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-2 text-xs">
-                    <span className="text-blue-600 font-medium">Proyección anual:</span>
+                    <span className="text-blue-600 font-medium">ProyecciÃ³n anual:</span>
                     <span className="ml-2 text-gray-600">SI {formatMXN(c.data.sellInTotal / c.data.lastMes * 12)}</span>
                     <span className="ml-2 text-green-600">SO {formatMXN(c.data.sellOutTotal / c.data.lastMes * 12)}</span>
                   </div>
@@ -3499,7 +3499,7 @@ function ResumenCuentas() {
 
 
 
-// ── ANÁLISIS ──────────────────────────────────────────────────────────────────
+// ââ ANÃLISIS ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function AnalisisCliente({ cliente, clienteKey }) {
   var el = React.createElement;
   var MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
@@ -3537,14 +3537,14 @@ function AnalisisCliente({ cliente, clienteKey }) {
     });
   }, [cliente, clienteKey, anio]);
 
-  // ── Helpers ──
+  // ââ Helpers ââ
   var fmtM = function(v) { return "$" + (Number(v||0)/1000000).toFixed(2) + "M"; };
   var fmtK = function(v) { return "$" + (Number(v||0)/1000).toFixed(0) + "K"; };
   var fmtMoney = function(v) { return "$" + Number(v||0).toLocaleString("es-MX", {minimumFractionDigits:0}); };
   var fmtPct = function(v) { return (Number(v||0)).toFixed(1) + "%"; };
   var fmtNum = function(v) { return Number(v||0).toLocaleString("es-MX"); };
 
-  // ── Sell-through by month ──
+  // ââ Sell-through by month ââ
   var ventasPorMes = React.useMemo(function() {
     var result = [];
     for (var i = 1; i <= 12; i++) {
@@ -3557,7 +3557,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
     return result;
   }, [ventas]);
 
-  // ── YTD Totals ──
+  // ââ YTD Totals ââ
   var ytd = React.useMemo(function() {
     var si = ventasPorMes.reduce(function(s,v) { return s + v.sell_in; }, 0);
     var so = ventasPorMes.reduce(function(s,v) { return s + v.sell_out; }, 0);
@@ -3571,7 +3571,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
     return { si: si, so: so, st: st, mesesConDatos: mesesConDatos, avgSI: avgSI, avgSO: avgSO, projSI: projSI, projSO: projSO };
   }, [ventasPorMes]);
 
-  // ── Marketing aggregates by month ──
+  // ââ Marketing aggregates by month ââ
   var mktPorMes = React.useMemo(function() {
     var m = {};
     for (var i = 1; i <= 12; i++) m[i] = { inv: 0, ventas: 0, alcance: 0, count: 0 };
@@ -3593,7 +3593,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
     return { inv: inv, ven: ven, roi: inv > 0 ? ((ven-inv)/inv*100) : 0 };
   }, [marketing]);
 
-  // ── SKU-level analysis (when data available) ──
+  // ââ SKU-level analysis (when data available) ââ
   var skuAnalysis = React.useMemo(function() {
     if (productos.length === 0) return null;
     var skuMap = {};
@@ -3633,7 +3633,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
     return { all: all, topSO: topSO, bottomSO: bottomSO, sinVenta60: sinVenta60, sinVenta90: sinVenta90, invMuerto: invMuerto, byMarca: byMarca, total: all.length };
   }, [productos, sellInSku, sellOutSku, inventario]);
 
-  // ── Scorecard ──
+  // ââ Scorecard ââ
   var scorecard = React.useMemo(function() {
     var items = [];
     // Sell-through
@@ -3660,7 +3660,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
     return items;
   }, [ytd, ventasPorMes, mktTotals, marketing, skuAnalysis]);
 
-  // ── RENDER ──
+  // ââ RENDER ââ
   if (loading) return el("div", { style: { textAlign:"center", color:"#64748b", padding:60 } }, "Cargando an\u00E1lisis...");
 
   // Section card helper
@@ -3697,13 +3697,13 @@ function AnalisisCliente({ cliente, clienteKey }) {
   return el("div", { style: { maxWidth:1100, margin:"0 auto", color:"#1e293b" } },
     // Header
     el("div", { style: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 } },
-      el("h2", { style: { margin:0, fontSize:20, fontWeight:700 } }, "\uD83D\uDCC8 An\u00E1lisis — " + (cliente || clienteKey)),
+      el("h2", { style: { margin:0, fontSize:20, fontWeight:700 } }, "\uD83D\uDCC8 An\u00E1lisis â " + (cliente || clienteKey)),
       el("select", { value: anio, onChange: function(e) { setAnio(Number(e.target.value)); }, style: { padding:"5px 10px", borderRadius:8, border:"1px solid #cbd5e1", background:"#f1f5f9", color:"#1e293b", fontSize:12 } },
         el("option", { value: 2025 }, "2025"), el("option", { value: 2026 }, "2026"), el("option", { value: 2027 }, "2027")
       )
     ),
 
-    // ═══ 1. SCORECARD ═══
+    // âââ 1. SCORECARD âââ
     section("Scorecard", "\uD83D\uDEA6",
       el("div", { style: { display:"flex", gap:10, flexWrap:"wrap" } },
         scorecard.map(function(s, i) {
@@ -3716,7 +3716,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
       )
     ),
 
-    // ═══ 2. SELL-THROUGH POR MES ═══
+    // âââ 2. SELL-THROUGH POR MES âââ
     section("Eficiencia de Venta Mensual", "\uD83D\uDD04",
       el("div", null,
         // YTD summary row
@@ -3750,7 +3750,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
               var color = !hasST ? "#334155" : v.sellThrough >= 80 ? "#10b981" : v.sellThrough >= 50 ? "#f59e0b" : "#ef4444";
               return el("div", { key: v.mes, style: { textAlign:"center", width:70, background:"#f1f5f9", borderRadius:8, padding:"8px 4px", borderBottom:"3px solid " + color } },
                 el("div", { style: { fontSize:10, color:"#94a3b8" } }, v.label),
-                el("div", { style: { fontSize:16, fontWeight:700, color: hasST ? color : "#475569" } }, hasST ? fmtPct(v.sellThrough) : "—")
+                el("div", { style: { fontSize:16, fontWeight:700, color: hasST ? color : "#475569" } }, hasST ? fmtPct(v.sellThrough) : "â")
               );
             })
           )
@@ -3758,13 +3758,13 @@ function AnalisisCliente({ cliente, clienteKey }) {
       )
     ),
 
-    // ═══ 3. MARKETING vs VENTAS ═══
+    // âââ 3. MARKETING vs VENTAS âââ
     section("Marketing vs Ventas", "\uD83D\uDCE3",
       el("div", null,
         el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
           metricBox("Inversi\u00F3n Mkt", fmtMoney(mktTotals.inv), marketing.length + " actividades", "#8b5cf6"),
           metricBox("Sell Out Total", fmtM(ytd.so), null, "#10b981"),
-          metricBox("Costo x Peso Vendido", ytd.so > 0 ? "$" + (mktTotals.inv / ytd.so).toFixed(2) : "—", ytd.so > 0 ? "Por cada $1 de sell out" : "Sin sell out", "#f59e0b")
+          metricBox("Costo x Peso Vendido", ytd.so > 0 ? "$" + (mktTotals.inv / ytd.so).toFixed(2) : "â", ytd.so > 0 ? "Por cada $1 de sell out" : "Sin sell out", "#f59e0b")
         ),
         // Monthly comparison
         el("div", { style: { fontSize:12, color:"#94a3b8", marginBottom:8, fontWeight:600 } }, "Inversi\u00F3n Marketing vs Sell Out por Mes"),
@@ -3775,9 +3775,9 @@ function AnalisisCliente({ cliente, clienteKey }) {
             var hasSO = v.sell_out > 0;
             return el("div", { key: v.mes, style: { background:"#f1f5f9", borderRadius:8, padding:"10px 8px", textAlign:"center" } },
               el("div", { style: { fontSize:10, color:"#94a3b8", marginBottom:6 } }, v.label),
-              el("div", { style: { fontSize:11, color:"#8b5cf6", fontWeight:600 } }, hasMkt ? fmtK(mktMes.inv) : "—"),
+              el("div", { style: { fontSize:11, color:"#8b5cf6", fontWeight:600 } }, hasMkt ? fmtK(mktMes.inv) : "â"),
               el("div", { style: { fontSize:9, color:"#64748b", margin:"2px 0" } }, "mkt"),
-              el("div", { style: { fontSize:11, color:"#10b981", fontWeight:600 } }, hasSO ? fmtK(v.sell_out) : "—"),
+              el("div", { style: { fontSize:11, color:"#10b981", fontWeight:600 } }, hasSO ? fmtK(v.sell_out) : "â"),
               el("div", { style: { fontSize:9, color:"#64748b" } }, "sell out")
             );
           })
@@ -3785,10 +3785,10 @@ function AnalisisCliente({ cliente, clienteKey }) {
       )
     ),
 
-    // ═══ 4. MÁRGENES DEL CANAL ═══
+    // âââ 4. MÃRGENES DEL CANAL âââ
     skuAnalysis ? section("Margen de Digitalife", "\uD83D\uDCB0",
       el("div", null,
-        el("div", { style: { fontSize:12, color:"#94a3b8", marginBottom:12 } }, "Comparativa: Costo Acteck vs Precio " + (cliente || clienteKey) + " — Margen que se lleva el cliente"),
+        el("div", { style: { fontSize:12, color:"#94a3b8", marginBottom:12 } }, "Comparativa: Costo Acteck vs Precio " + (cliente || clienteKey) + " â Margen que se lleva el cliente"),
         // By brand summary
         Object.keys(skuAnalysis.byMarca).length > 0 ? el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
           Object.keys(skuAnalysis.byMarca).map(function(marca) {
@@ -3835,7 +3835,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
       )
     ),
 
-    // ═══ 5. TOP/BOTTOM SKUs ═══
+    // âââ 5. TOP/BOTTOM SKUs âââ
     skuAnalysis ? section("Top / Bottom SKUs", "\uD83C\uDFC6",
       el("div", { style: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 } },
         el("div", null,
@@ -3866,7 +3866,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
       )
     ),
 
-    // ═══ 6. SALUD DEL INVENTARIO ═══
+    // âââ 6. SALUD DEL INVENTARIO âââ
     skuAnalysis ? section("Salud del Inventario", "\uD83D\uDCE6",
       el("div", null,
         el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
@@ -3895,14 +3895,14 @@ function AnalisisCliente({ cliente, clienteKey }) {
       )
     ),
 
-    // ═══ 7. PROYECCIÓN ═══
+    // âââ 7. PROYECCIÃN âââ
     section("Proyecci\u00F3n de Cierre Anual", "\uD83D\uDD2E",
       el("div", null,
         ytd.mesesConDatos >= 2 ? el("div", null,
           el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
             metricBox("Promedio Mensual SI", fmtM(ytd.avgSI), "\u00DAltimos " + ytd.mesesConDatos + " meses", "#3b82f6"),
             metricBox("Proyecci\u00F3n SI Anual", fmtM(ytd.projSI), "Estimado cierre " + anio, "#8b5cf6"),
-            metricBox("Ratio SI/SO", ytd.so > 0 ? fmtPct(ytd.so/ytd.si*100) : "—", ytd.st < 50 ? "⚠️ Riesgo alto de sobreinventario" : ytd.st < 70 ? "⚠️ Inventario acumulado" : "Rotación saludable", ytd.st < 50 ? "#ef4444" : ytd.st < 70 ? "#f59e0b" : "#10b981"),
+            metricBox("Ratio SI/SO", ytd.so > 0 ? fmtPct(ytd.so/ytd.si*100) : "â", ytd.st < 50 ? "â ï¸ Riesgo alto de sobreinventario" : ytd.st < 70 ? "â ï¸ Inventario acumulado" : "RotaciÃ³n saludable", ytd.st < 50 ? "#ef4444" : ytd.st < 70 ? "#f59e0b" : "#10b981"),
           metricBox("Promedio Mensual SO", fmtM(ytd.avgSO), "\u00DAltimos " + ytd.mesesConDatos + " meses", "#10b981"),
             metricBox("Proyecci\u00F3n SO Anual", fmtM(ytd.projSO), "Estimado cierre " + anio, "#059669")
           ),
@@ -3936,7 +3936,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
             })
           ),
           ytd.st < 60 ? el("div", { style: { background:"#fef2f2", border:"1px solid #fecaca", borderRadius:10, padding:"12px 16px", marginTop:12, display:"flex", alignItems:"center", gap:10 } },
-            el("span", { style: { fontSize:20 } }, "⚠️"),
+            el("span", { style: { fontSize:20 } }, "â ï¸"),
             el("div", null,
               el("div", { style: { fontSize:13, fontWeight:600, color:"#dc2626" } }, "Alerta: Sell Out proyectado muy por debajo del Sell In"),
               el("div", { style: { fontSize:11, color:"#991b1b" } }, "Posible sobreinventario de " + fmtM(ytd.projSI - ytd.projSO) + ". Considerar ajustar sell in o impulsar sell out.")
@@ -4019,7 +4019,7 @@ function ForecastCliente({ cliente, clienteKey }) {
     var tW = 0; var sW = 0;
     rec.forEach(function(r, i) { sW += (r.piezas || 0) * weights[i]; tW += weights[i]; });
     var prom = tW > 0 ? sW / tW : 0;
-    // Tendencia: diferencia entre mes más reciente y promedio
+    // Tendencia: diferencia entre mes mÃ¡s reciente y promedio
     var tend = rec.length >= 2 ? ((rec[0].piezas || 0) - (rec[rec.length - 1].piezas || 0)) / rec.length : 0;
     return { promMensual: prom, tendencia: tend, meses: rec.length, fuente: 'sell-out' };
   };
@@ -4085,7 +4085,7 @@ function ForecastCliente({ cliente, clienteKey }) {
       else if (coberturaSemanas < 4) riesgo = 'bajo';
       else if (coberturaSemanas > 16) riesgo = 'sobrestock';
 
-      // Proyección next 6 months
+      // ProyecciÃ³n next 6 months
       var proyeccion = [];
       for (var i = 1; i <= 6; i++) {
         var mesP = ((currentMonth - 1 + i) % 12) + 1;
@@ -4557,7 +4557,7 @@ function ForecastCliente({ cliente, clienteKey }) {
   );
 }
 // ==================== FIN FORECAST CLIENTE ====================
-// ── PanelActualizacion ── Central update panel (slide-over)
+// ââ PanelActualizacion ââ Central update panel (slide-over)
 function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate }) {
   return React.createElement("div", {
     className: "fixed inset-0 z-50 flex",
@@ -4637,7 +4637,7 @@ export default function App() {
   const [paginaActiva, setPaginaActiva] = useState("home");
   const [showUpdatePanel, setShowUpdatePanel] = useState(false);
 
-  // ─── DATOS DESDE SUPABASE (ventas_mensuales) ───
+  // âââ DATOS DESDE SUPABASE (ventas_mensuales) âââ
   const [ventasDB, setVentasDB] = React.useState(null);
   const [ventasVer, setVentasVer] = React.useState(0);
 
@@ -4684,12 +4684,12 @@ export default function App() {
   };
 
   const navItems = [
-    { id: "home",       label: "Resumen",               icono: "🏠", habilitado: true  },
-    { id: "analisis",   label: "Análisis",                icono: "📈", habilitado: true  },
-    { id: "estrategia", label: "Estrategia de Producto", icono: "📦", habilitado: true  },
-    { id: "marketing",  label: "Marketing",              icono: "📣", habilitado: true  },
-    { id: "pagos",      label: "Pagos",                  icono: "💰", habilitado: true  },
-    { id: "cartera",    label: "Crédito y Cobranza",     icono: "📊", habilitado: true  },
+    { id: "home",       label: "Resumen",               icono: "ð ", habilitado: true  },
+    { id: "analisis",   label: "AnÃ¡lisis",                icono: "ð", habilitado: true  },
+    { id: "estrategia", label: "Estrategia de Producto", icono: "ð¦", habilitado: true  },
+    { id: "marketing",  label: "Marketing",              icono: "ð£", habilitado: true  },
+    { id: "pagos",      label: "Pagos",                  icono: "ð°", habilitado: true  },
+    { id: "cartera",    label: "CrÃ©dito y Cobranza",     icono: "ð", habilitado: true  },
   ]
 
   return (
@@ -4698,11 +4698,11 @@ export default function App() {
       {/* SIDEBAR */}
       <aside className="w-52 bg-white border-r border-gray-100 flex flex-col shadow-sm shrink-0 overflow-y-auto">
 
-        {/* Logo + Botón Modo Presentación */}
+        {/* Logo + BotÃ³n Modo PresentaciÃ³n */}
         <div className="p-3 border-b border-gray-100">
           {!modoPresent ? (
             <>
-              <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Administración de Clientes</p>
+              <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">AdministraciÃ³n de Clientes</p>
               <div className="flex gap-2 mb-3">
                 <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-semibold">Acteck</span>
                 <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-semibold">Balam Rush</span>
@@ -4711,7 +4711,7 @@ export default function App() {
           ) : (
             <div className="flex items-center gap-2 mb-3">
               <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-              <p className="text-xs text-green-600 font-semibold uppercase tracking-widest">Modo Presentación</p>
+              <p className="text-xs text-green-600 font-semibold uppercase tracking-widest">Modo PresentaciÃ³n</p>
             </div>
           )}
           <button
@@ -4723,36 +4723,36 @@ export default function App() {
             }`}
           >
             {modoPresent ? (
-              <><span>🔒</span> Salir de Presentación</>
+              <><span>ð</span> Salir de PresentaciÃ³n</>
             ) : (
-              <><span>👁️</span> Modo Presentación</>
+              <><span>ðï¸</span> Modo PresentaciÃ³n</>
             )}
           </button>
         </div>
 
-        {/* Botón Resumen General */}
+        {/* BotÃ³n Resumen General */}
         <div className="px-4 py-2 border-b border-gray-100">
           <button
             onClick={() => setPaginaActiva("resumen")}
             className={"w-full text-left text-sm font-medium px-3 py-2.5 rounded-xl transition-all flex items-center gap-2 " + (paginaActiva === "resumen" ? "bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-700 shadow-sm border border-indigo-100" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700")}
           >
-            <span>{"📊"}</span>
+            <span>{"ð"}</span>
             <span>Resumen General</span>
           </button>
         </div>
 
-        {/* Botón Forecast */}
+        {/* BotÃ³n Forecast */}
           <div className="px-4 py-2 border-b border-gray-100">
             <button
               onClick={() => setPaginaActiva("forecast")}
               className={"w-full text-left text-sm font-medium px-3 py-2.5 rounded-xl transition-all flex items-center gap-2 " + (paginaActiva === "forecast" ? "bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 shadow-sm border border-emerald-100" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700")}
             >
-              <span>{"🔮"}</span>
+              <span>{"ð®"}</span>
               <span>Forecast</span>
             </button>
           </div>
 
-          {/* Selector de cliente — se oculta en modo presentación */}
+          {/* Selector de cliente â se oculta en modo presentaciÃ³n */}
         {!modoPresent && (
           <div className="p-4 border-b border-gray-100">
             <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Cliente</p>
@@ -4778,7 +4778,7 @@ export default function App() {
           </div>
         )}
 
-        {/* En modo presentación: mostrar solo el cliente activo */}
+        {/* En modo presentaciÃ³n: mostrar solo el cliente activo */}
         {modoPresent && (
           <div className="p-4 border-b border-gray-100">
             <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Cliente</p>
@@ -4790,7 +4790,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Navegación */}
+        {/* NavegaciÃ³n */}
         <nav className="p-4 flex-1">
           <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Secciones</p>
           <div className="space-y-1">
@@ -4806,7 +4806,7 @@ export default function App() {
                       : "text-gray-600 hover:bg-gray-50 hover:text-gray-800"
                 }`}
                 disabled={!item.habilitado}
-                title={!item.habilitado ? "Próximamente" : ""}
+                title={!item.habilitado ? "PrÃ³ximamente" : ""}
               >
                 <span>{item.icono}</span>
                 {item.label}
@@ -4828,26 +4828,20 @@ export default function App() {
           </div>
           {/* Footer */}
         <div className="p-4 border-t border-gray-100">
-          <p className="text-xs text-gray-300 text-center">v1.0 · Abril 2026</p>
+          <p className="text-xs text-gray-300 text-center">v1.0 Â· Abril 2026</p>
         </div>
       </aside>
 
       {/* CONTENIDO */}
       <main className="flex-1 overflow-y-auto">
-        {/* Banner modo presentación */}
+        {/* Banner modo presentaciÃ³n */}
         {modoPresent && (
           <div className="bg-green-600 text-white text-xs text-center py-1.5 font-medium tracking-wide">
-            Modo Presentación activo — Solo se muestra información de {c.nombre}
+            Modo PresentaciÃ³n activo â Solo se muestra informaciÃ³n de {c.nombre}
           </div>
         )}
           {paginaActiva === "resumen" && <ResumenCuentas />}
-          {(clienteActivo === "pcel" || clienteActivo === "mercadolibre") && paginaActiva !== "resumen" ? (
-            <div className="flex flex-col items-center justify-center py-32 px-8">
-              <div className="text-7xl mb-6">🔒</div>
-              <h2 className="text-2xl font-bold text-gray-700 mb-3">{c.nombre} — Próximamente</h2>
-              <p className="text-gray-500 text-center max-w-lg">Las pestañas de {c.nombre} se gestionan de manera diferente y están actualmente en desarrollo. Próximamente se habilitará la gestión completa.</p>
-            </div>
-          ) : (
+          <>
             <>
         {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
@@ -4857,7 +4851,7 @@ export default function App() {
         {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: clienteActivo })}
                     {paginaActiva === "forecast" && React.createElement(ForecastCliente, { cliente: c, clienteKey: clienteActivo })}
 </>
-          )}
+          </>
 </main>
       {showUpdatePanel && React.createElement(PanelActualizacion, {
         onClose: function() { setShowUpdatePanel(false); },
