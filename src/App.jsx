@@ -642,78 +642,139 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete }) {
 
   // ─── SVG LINE CHART ─────────────────────────────────────────────────────────
   function LineChartSellInOut() {
-    const W = 680, H = 260, PAD = { t: 30, r: 30, b: 40, l: 70 };
-    const plotW = W - PAD.l - PAD.r;
-    const plotH = H - PAD.t - PAD.b;
+  const W = 780, H = 340, PAD = { t: 40, r: 70, b: 50, l: 75 };
+  const plotW = W - PAD.l - PAD.r;
+  const plotH = H - PAD.t - PAD.b;
 
-    const data = [];
-    for (let m = 1; m <= 12; m++) {
-      const v = ventasPorMes[m];
-      data.push({ mes: m, sellIn: v ? Number(v.sell_in) || 0 : null, sellOut: v ? Number(v.sell_out) || 0 : null });
-    }
-    const hasData = data.filter(d => d.sellIn !== null);
-    if (hasData.length === 0) return React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#94A3B8" } }, "Sin datos de ventas a\u00fan");
-
-    const allVals = hasData.flatMap(d => [d.sellIn, d.sellOut]).filter(v => v !== null);
-    const maxVal = Math.max(...allVals, 1);
-    const minVal = Math.min(...allVals, 0);
-    const range = maxVal - minVal || 1;
-
-    const x = (m) => PAD.l + ((m - 1) / 11) * plotW;
-    const y = (val) => PAD.t + plotH - ((val - minVal) / range) * plotH;
-
-    const lineSI = hasData.map(d => `${x(d.mes)},${y(d.sellIn)}`).join(" ");
-    const lineSO = hasData.map(d => `${x(d.mes)},${y(d.sellOut)}`).join(" ");
-
-    const gridLines = 5;
-    const gridVals = Array.from({ length: gridLines }, (_, i) => minVal + (range / (gridLines - 1)) * i);
-
-    const [hover, setHover] = React.useState(null);
-
-    return React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, style: { width: "100%", maxWidth: 720, fontFamily: "system-ui" } },
-      // Grid
-      gridVals.map((v, i) => React.createElement("g", { key: i },
-        React.createElement("line", { x1: PAD.l, y1: y(v), x2: W - PAD.r, y2: y(v), stroke: "#E2E8F0", strokeWidth: 1 }),
-        React.createElement("text", { x: PAD.l - 8, y: y(v) + 4, textAnchor: "end", fontSize: 10, fill: "#94A3B8" },
-          "$" + (v / 1e6).toFixed(1) + "M")
-      )),
-      // X axis labels
-      MESES_CORTOS.map((m, i) => React.createElement("text", {
-        key: i, x: x(i + 1), y: H - 8, textAnchor: "middle", fontSize: 10, fill: "#64748B"
-      }, m)),
-      // Sell In line
-      React.createElement("polyline", { points: lineSI, fill: "none", stroke: "#4472C4", strokeWidth: 2.5, strokeLinejoin: "round" }),
-      // Sell Out line
-      React.createElement("polyline", { points: lineSO, fill: "none", stroke: "#10B981", strokeWidth: 2.5, strokeLinejoin: "round", strokeDasharray: "6,3" }),
-      // Data points Sell In
-      hasData.map(d => React.createElement("circle", {
-        key: "si" + d.mes, cx: x(d.mes), cy: y(d.sellIn), r: 4, fill: "#4472C4", stroke: "#fff", strokeWidth: 1.5,
-        style: { cursor: "pointer" },
-        onMouseEnter: () => setHover({ mes: d.mes, si: d.sellIn, so: d.sellOut }),
-        onMouseLeave: () => setHover(null)
-      })),
-      // Data points Sell Out
-      hasData.map(d => React.createElement("circle", {
-        key: "so" + d.mes, cx: x(d.mes), cy: y(d.sellOut), r: 4, fill: "#10B981", stroke: "#fff", strokeWidth: 1.5,
-        style: { cursor: "pointer" },
-        onMouseEnter: () => setHover({ mes: d.mes, si: d.sellIn, so: d.sellOut }),
-        onMouseLeave: () => setHover(null)
-      })),
-      // Legend
-      React.createElement("circle", { cx: PAD.l + 10, cy: 14, r: 4, fill: "#4472C4" }),
-      React.createElement("text", { x: PAD.l + 18, y: 18, fontSize: 11, fill: "#334155" }, "Sell In"),
-      React.createElement("circle", { cx: PAD.l + 80, cy: 14, r: 4, fill: "#10B981" }),
-      React.createElement("text", { x: PAD.l + 88, y: 18, fontSize: 11, fill: "#334155" }, "Sell Out"),
-      // Tooltip
-      hover && React.createElement("g", null,
-        React.createElement("rect", { x: x(hover.mes) - 70, y: y(Math.max(hover.si, hover.so)) - 52, width: 140, height: 44, rx: 6, fill: "#1E293B", opacity: 0.92 }),
-        React.createElement("text", { x: x(hover.mes), y: y(Math.max(hover.si, hover.so)) - 34, textAnchor: "middle", fontSize: 11, fill: "#93C5FD" },
-          "Sell In: " + formatMXN(hover.si)),
-        React.createElement("text", { x: x(hover.mes), y: y(Math.max(hover.si, hover.so)) - 18, textAnchor: "middle", fontSize: 11, fill: "#6EE7B7" },
-          "Sell Out: " + formatMXN(hover.so))
-      )
-    );
+  const data = [];
+  for (let m = 1; m <= 12; m++) {
+    const v = ventasPorMes[m];
+    data.push({
+      mes: m,
+      sellIn: v ? Number(v.sell_in) || 0 : null,
+      sellOut: v ? Number(v.sell_out) || 0 : null,
+      cuota: v ? Number(v.cuota) || 0 : null,
+      inventario: v ? Number(v.inventario_valor) || 0 : null
+    });
   }
+  const hasData = data.filter(d => d.sellIn !== null);
+  if (hasData.length === 0) return React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#94A3B8" } }, "Sin datos de ventas a\u00fan");
+
+  // Primary Y axis: money values (Sell In, Sell Out, Cuota, Inventario)
+  const moneyVals = hasData.flatMap(d => [d.sellIn, d.sellOut, d.cuota, d.inventario].filter(v => v !== null && v > 0));
+  const maxMoney = Math.max(...moneyVals, 1) * 1.12;
+  const minMoney = 0;
+  const rangeMoney = maxMoney - minMoney || 1;
+
+  // Secondary Y axis: cumplimiento % (sell_in / cuota * 100)
+  const cumpData = hasData.filter(d => d.cuota > 0).map(d => ({ mes: d.mes, pct: (d.sellIn / d.cuota) * 100 }));
+  const maxPct = cumpData.length > 0 ? Math.max(...cumpData.map(d => d.pct), 100) * 1.1 : 120;
+  const minPct = 0;
+  const rangePct = maxPct - minPct || 1;
+
+  const x = (m) => PAD.l + ((m - 1) / 11) * plotW;
+  const yMoney = (val) => PAD.t + plotH - ((val - minMoney) / rangeMoney) * plotH;
+  const yPct = (val) => PAD.t + plotH - ((val - minPct) / rangePct) * plotH;
+
+  // Build polyline strings
+  const lineSI = hasData.map(d => x(d.mes) + "," + yMoney(d.sellIn)).join(" ");
+  const lineSO = hasData.map(d => x(d.mes) + "," + yMoney(d.sellOut)).join(" ");
+  const lineCuota = hasData.filter(d => d.cuota > 0).map(d => x(d.mes) + "," + yMoney(d.cuota)).join(" ");
+  const lineInv = hasData.filter(d => d.inventario > 0).map(d => x(d.mes) + "," + yMoney(d.inventario)).join(" ");
+  const lineCump = cumpData.map(d => x(d.mes) + "," + yPct(d.pct)).join(" ");
+
+  // Area fill paths (Sell In)
+  const areaSI = "M" + hasData.map(d => x(d.mes) + "," + yMoney(d.sellIn)).join("L") + "L" + x(hasData[hasData.length-1].mes) + "," + yMoney(0) + "L" + x(hasData[0].mes) + "," + yMoney(0) + "Z";
+  // Area fill (Sell Out)
+  const areaSO = "M" + hasData.map(d => x(d.mes) + "," + yMoney(d.sellOut)).join("L") + "L" + x(hasData[hasData.length-1].mes) + "," + yMoney(0) + "L" + x(hasData[0].mes) + "," + yMoney(0) + "Z";
+
+  const gridLines = 6;
+  const gridVals = Array.from({ length: gridLines }, (_, i) => minMoney + (rangeMoney / (gridLines - 1)) * i);
+  const pctGridVals = [0, 25, 50, 75, 100, maxPct > 100 ? Math.ceil(maxPct / 25) * 25 : null].filter(v => v !== null && v <= maxPct * 1.05);
+
+  const [hover, setHover] = React.useState(null);
+  const [activeLines, setActiveLines] = React.useState({ sellIn: true, sellOut: true, cuota: true, inventario: true, cumplimiento: true });
+
+  const toggleLine = (key) => { setActiveLines(prev => Object.assign({}, prev, { [key]: !prev[key] })); };
+
+  const series = [
+    { key: "sellIn", label: "Sell In", color: "#3B82F6", dash: "" },
+    { key: "sellOut", label: "Sell Out", color: "#10B981", dash: "" },
+    { key: "cuota", label: "Cuota", color: "#F59E0B", dash: "8,4" },
+    { key: "inventario", label: "Inventario", color: "#8B5CF6", dash: "4,4" },
+    { key: "cumplimiento", label: "Cumplimiento %", color: "#EF4444", dash: "2,4" }
+  ];
+
+  return React.createElement("svg", { viewBox: "0 0 " + W + " " + H, style: { width: "100%", maxWidth: 820, fontFamily: "system-ui" } },
+    // Defs for gradients
+    React.createElement("defs", null,
+      React.createElement("linearGradient", { id: "gradSI", x1: "0", y1: "0", x2: "0", y2: "1" },
+        React.createElement("stop", { offset: "0%", stopColor: "#3B82F6", stopOpacity: 0.18 }),
+        React.createElement("stop", { offset: "100%", stopColor: "#3B82F6", stopOpacity: 0.02 })
+      ),
+      React.createElement("linearGradient", { id: "gradSO", x1: "0", y1: "0", x2: "0", y2: "1" },
+        React.createElement("stop", { offset: "0%", stopColor: "#10B981", stopOpacity: 0.15 }),
+        React.createElement("stop", { offset: "100%", stopColor: "#10B981", stopOpacity: 0.02 })
+      )
+    ),
+    // Background
+    React.createElement("rect", { x: PAD.l, y: PAD.t, width: plotW, height: plotH, fill: "#FAFBFD", rx: 4 }),
+    // Grid lines (horizontal)
+    gridVals.map((v, i) => React.createElement("g", { key: "g" + i },
+      React.createElement("line", { x1: PAD.l, y1: yMoney(v), x2: W - PAD.r, y2: yMoney(v), stroke: "#E2E8F0", strokeWidth: 0.8, strokeDasharray: i === 0 ? "" : "3,3" }),
+      React.createElement("text", { x: PAD.l - 10, y: yMoney(v) + 4, textAnchor: "end", fontSize: 10, fill: "#94A3B8", fontWeight: 500 },
+        v >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : "$" + (v / 1e3).toFixed(0) + "K")
+    )),
+    // Right Y axis labels (%)
+    pctGridVals.map((v, i) => React.createElement("g", { key: "p" + i },
+      React.createElement("line", { x1: W - PAD.r, y1: yPct(v), x2: W - PAD.r + 5, y2: yPct(v), stroke: "#FCA5A5", strokeWidth: 0.8 }),
+      React.createElement("text", { x: W - PAD.r + 10, y: yPct(v) + 4, textAnchor: "start", fontSize: 10, fill: "#EF4444", fontWeight: 500 }, v + "%")
+    )),
+    // 100% reference line
+    React.createElement("line", { x1: PAD.l, y1: yPct(100), x2: W - PAD.r, y2: yPct(100), stroke: "#FCA5A5", strokeWidth: 0.8, strokeDasharray: "6,4", opacity: 0.6 }),
+    // X axis labels
+    MESES_CORTOS.map((m, i) => React.createElement("text", { key: "m" + i, x: x(i + 1), y: H - 12, textAnchor: "middle", fontSize: 11, fill: "#64748B", fontWeight: 500 }, m)),
+    // Axis labels
+    React.createElement("text", { x: 14, y: H / 2, textAnchor: "middle", fontSize: 10, fill: "#94A3B8", transform: "rotate(-90 14 " + H / 2 + ")" }, "Monto (MXN)"),
+    React.createElement("text", { x: W - 8, y: H / 2, textAnchor: "middle", fontSize: 10, fill: "#EF4444", transform: "rotate(90 " + (W - 8) + " " + H / 2 + ")" }, "Cumplimiento %"),
+    // Area fills
+    activeLines.sellIn && React.createElement("path", { d: areaSI, fill: "url(#gradSI)" }),
+    activeLines.sellOut && React.createElement("path", { d: areaSO, fill: "url(#gradSO)" }),
+    // Lines
+    activeLines.sellIn && React.createElement("polyline", { points: lineSI, fill: "none", stroke: "#3B82F6", strokeWidth: 2.5, strokeLinejoin: "round", strokeLinecap: "round" }),
+    activeLines.sellOut && React.createElement("polyline", { points: lineSO, fill: "none", stroke: "#10B981", strokeWidth: 2.5, strokeLinejoin: "round", strokeLinecap: "round" }),
+    activeLines.cuota && lineCuota && React.createElement("polyline", { points: lineCuota, fill: "none", stroke: "#F59E0B", strokeWidth: 2, strokeLinejoin: "round", strokeDasharray: "8,4" }),
+    activeLines.inventario && lineInv && React.createElement("polyline", { points: lineInv, fill: "none", stroke: "#8B5CF6", strokeWidth: 2, strokeLinejoin: "round", strokeDasharray: "4,4" }),
+    activeLines.cumplimiento && lineCump && React.createElement("polyline", { points: lineCump, fill: "none", stroke: "#EF4444", strokeWidth: 2, strokeLinejoin: "round", strokeDasharray: "2,4" }),
+    // Data points Sell In
+    activeLines.sellIn && hasData.map(d => React.createElement("circle", { key: "si" + d.mes, cx: x(d.mes), cy: yMoney(d.sellIn), r: 4.5, fill: "#3B82F6", stroke: "#fff", strokeWidth: 2, style: { cursor: "pointer", filter: "drop-shadow(0 1px 2px rgba(59,130,246,0.3))" }, onMouseEnter: () => setHover(d), onMouseLeave: () => setHover(null) })),
+    // Data points Sell Out
+    activeLines.sellOut && hasData.map(d => React.createElement("circle", { key: "so" + d.mes, cx: x(d.mes), cy: yMoney(d.sellOut), r: 4.5, fill: "#10B981", stroke: "#fff", strokeWidth: 2, style: { cursor: "pointer", filter: "drop-shadow(0 1px 2px rgba(16,185,129,0.3))" }, onMouseEnter: () => setHover(d), onMouseLeave: () => setHover(null) })),
+    // Data points Cuota
+    activeLines.cuota && hasData.filter(d => d.cuota > 0).map(d => React.createElement("circle", { key: "cu" + d.mes, cx: x(d.mes), cy: yMoney(d.cuota), r: 3.5, fill: "#F59E0B", stroke: "#fff", strokeWidth: 1.5, style: { cursor: "pointer" }, onMouseEnter: () => setHover(d), onMouseLeave: () => setHover(null) })),
+    // Data points Inventario
+    activeLines.inventario && hasData.filter(d => d.inventario > 0).map(d => React.createElement("circle", { key: "iv" + d.mes, cx: x(d.mes), cy: yMoney(d.inventario), r: 3.5, fill: "#8B5CF6", stroke: "#fff", strokeWidth: 1.5, style: { cursor: "pointer" }, onMouseEnter: () => setHover(d), onMouseLeave: () => setHover(null) })),
+    // Data points Cumplimiento
+    activeLines.cumplimiento && cumpData.map(d => React.createElement("circle", { key: "cp" + d.mes, cx: x(d.mes), cy: yPct(d.pct), r: 3.5, fill: "#EF4444", stroke: "#fff", strokeWidth: 1.5, style: { cursor: "pointer" } })),
+    // Interactive Legend
+    series.map((s, i) => React.createElement("g", { key: "lg" + i, style: { cursor: "pointer" }, onClick: () => toggleLine(s.key), opacity: activeLines[s.key] ? 1 : 0.35 },
+      React.createElement("rect", { x: PAD.l + i * 130, y: 6, width: 120, height: 22, rx: 11, fill: activeLines[s.key] ? s.color + "15" : "#f1f5f9", stroke: activeLines[s.key] ? s.color + "40" : "#e2e8f0", strokeWidth: 1 }),
+      React.createElement("circle", { cx: PAD.l + i * 130 + 14, cy: 17, r: 4, fill: s.color }),
+      React.createElement("text", { x: PAD.l + i * 130 + 24, y: 21, fontSize: 10.5, fill: activeLines[s.key] ? "#334155" : "#94a3b8", fontWeight: 600 }, s.label)
+    )),
+    // Tooltip
+    hover && React.createElement("g", null,
+      React.createElement("line", { x1: x(hover.mes), y1: PAD.t, x2: x(hover.mes), y2: PAD.t + plotH, stroke: "#CBD5E1", strokeWidth: 1, strokeDasharray: "4,3" }),
+      React.createElement("rect", { x: Math.min(x(hover.mes) - 90, W - PAD.r - 185), y: PAD.t + 6, width: 180, height: hover.cuota > 0 ? 96 : 56, rx: 8, fill: "#1E293B", opacity: 0.94, filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.15))" }),
+      React.createElement("text", { x: Math.min(x(hover.mes) - 90, W - PAD.r - 185) + 90, y: PAD.t + 24, textAnchor: "middle", fontSize: 11, fill: "#E2E8F0", fontWeight: 700 }, MESES_CORTOS[hover.mes - 1] + " 2026"),
+      React.createElement("text", { x: Math.min(x(hover.mes) - 90, W - PAD.r - 185) + 12, y: PAD.t + 40, fontSize: 10.5, fill: "#93C5FD" }, "\u25CF Sell In: " + formatMXN(hover.sellIn)),
+      React.createElement("text", { x: Math.min(x(hover.mes) - 90, W - PAD.r - 185) + 12, y: PAD.t + 54, fontSize: 10.5, fill: "#6EE7B7" }, "\u25CF Sell Out: " + formatMXN(hover.sellOut)),
+      hover.cuota > 0 && React.createElement("text", { x: Math.min(x(hover.mes) - 90, W - PAD.r - 185) + 12, y: PAD.t + 68, fontSize: 10.5, fill: "#FCD34D" }, "\u25CF Cuota: " + formatMXN(hover.cuota)),
+      hover.cuota > 0 && React.createElement("text", { x: Math.min(x(hover.mes) - 90, W - PAD.r - 185) + 12, y: PAD.t + 82, fontSize: 10.5, fill: "#FCA5A5" }, "\u25CF Cump: " + ((hover.sellIn / hover.cuota) * 100).toFixed(1) + "%"),
+      hover.inventario > 0 && React.createElement("text", { x: Math.min(x(hover.mes) - 90, W - PAD.r - 185) + 12, y: PAD.t + (hover.cuota > 0 ? 96 : 68), fontSize: 10.5, fill: "#C4B5FD" }, "\u25CF Inv: " + formatMXN(hover.inventario))
+    )
+  );
+}
 
   // ─── PROGRESS BAR ──────────────────────────────────────────────────────────
   function ProgresoAnual() {
