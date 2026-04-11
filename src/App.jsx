@@ -645,7 +645,7 @@ function TarjetaTendenciaML({ sellOutPorMesMarca }) {
             <div key={mes}>
               <div className="flex justify-between text-sm mb-1">
                 <span className="font-medium text-gray-700">{meses[Number(mes)]}</span>
-                <span className="text-gray-600">${Math.round(total).toLocaleString("es-MX")}</span>
+                <span className="text-gray-600">{"$"}{Math.round(total).toLocaleString("es-MX")}</span>
               </div>
               <div className="flex w-full h-3 rounded-full overflow-hidden bg-gray-100">
                 <div style={{ width: ((act/maxTotal)*100)+"%", backgroundColor: "#DC2626" }}></div>
@@ -653,9 +653,9 @@ function TarjetaTendenciaML({ sellOutPorMesMarca }) {
                 <div style={{ width: ((otro/maxTotal)*100)+"%", backgroundColor: "#D1D5DB" }}></div>
               </div>
               <div className="flex gap-3 text-xs text-gray-400 mt-0.5">
-                <span>Acteck: ${Math.round(act).toLocaleString("es-MX")}</span>
-                <span>BR: ${Math.round(br).toLocaleString("es-MX")}</span>
-                <span>Otro: ${Math.round(otro).toLocaleString("es-MX")}</span>
+                <span>Acteck: {"$"}{Math.round(act).toLocaleString("es-MX")}</span>
+                <span>BR: {"$"}{Math.round(br).toLocaleString("es-MX")}</span>
+                <span>Otro: {"$"}{Math.round(otro).toLocaleString("es-MX")}</span>
               </div>
             </div>
           );
@@ -674,17 +674,22 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
 
   // ML-specific view
   if (isML) {
-    const k = cliente.kpis || {};
-    const ticketProm = cliente.totalOrdenes > 0 ? Math.round(cliente.totalMonto / cliente.totalOrdenes) : 0;
+    const mesesNombres = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+    const mesesData = Object.keys(cliente.sellOutPorMesMarca || {}).sort((a,b) => Number(a) - Number(b));
+    const lastMes = mesesData.length > 0 ? mesesData[mesesData.length - 1] : null;
+    const mesLabel = lastMes ? mesesNombres[Number(lastMes)] : "---";
+    const sellOutMes = lastMes && cliente.tendencia && cliente.tendencia.sellOut ? cliente.tendencia.sellOut[cliente.tendencia.sellOut.length - 1] || 0 : 0;
+    const acumulado = cliente.totalMonto || 0;
+    const ordenes = cliente.totalOrdenes || 0;
+    const ticketProm = ordenes > 0 ? Math.round(acumulado / ordenes) : 0;
     return (
       <div className="p-8 space-y-6">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{cliente.nombre}</h1>
             <p className="text-sm text-gray-500">
               <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: cliente.color, color: "#333" }}>{cliente.marca}</span>
-              {" "}&middot; Ejecutivo: {cliente.ejecutivo} &middot; Frecuencia: {cliente.frecuencia}
+              {" "}\u00B7 Ejecutivo: {cliente.ejecutivo} \u00B7 Frecuencia: {cliente.frecuencia}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -692,37 +697,31 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
             <span className="text-xs text-gray-400">Actualizado: {new Date().toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}</span>
           </div>
         </div>
-
-        {/* KPIs */}
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Sell Out &mdash; {k.ultimoMes || "---"}</p>
-            <p className="text-2xl font-bold text-gray-900">${Math.round(k.sellOut || 0).toLocaleString("es-MX")}</p>
-            <p className="text-xs text-gray-400">Acumulado 2026: ${Math.round(k.sellOutAcumulado || 0).toLocaleString("es-MX")}</p>
+            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Sell Out \u2014 {mesLabel}</p>
+            <p className="text-2xl font-bold text-gray-900">{"$"}{Math.round(sellOutMes).toLocaleString("es-MX")}</p>
+            <p className="text-xs text-gray-400">Acumulado 2026: {"$"}{Math.round(acumulado).toLocaleString("es-MX")}</p>
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Total &Oacute;rdenes ML</p>
-            <p className="text-2xl font-bold text-gray-900">{(cliente.totalOrdenes || 0).toLocaleString("es-MX")}</p>
-            <p className="text-xs text-gray-400">&Oacute;rdenes pagadas 2026</p>
+            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Total \u00D3rdenes ML</p>
+            <p className="text-2xl font-bold text-gray-900">{ordenes.toLocaleString("es-MX")}</p>
+            <p className="text-xs text-gray-400">\u00D3rdenes pagadas 2026</p>
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Ticket Promedio</p>
-            <p className="text-2xl font-bold text-gray-900">${ticketProm.toLocaleString("es-MX")}</p>
+            <p className="text-2xl font-bold text-gray-900">{"$"}{ticketProm.toLocaleString("es-MX")}</p>
             <p className="text-xs text-gray-400">Monto promedio por orden</p>
           </div>
         </div>
-
-        {/* Marca + Tendencia */}
         <div className="grid grid-cols-2 gap-4">
-          <TarjetaSellOutMarca sellOutMarca={cliente.sellOutMarca} totalMonto={cliente.totalMonto} />
+          <TarjetaSellOutMarca sellOutMarca={cliente.sellOutMarca} totalMonto={acumulado} />
           <TarjetaTendenciaML sellOutPorMesMarca={cliente.sellOutPorMesMarca} />
         </div>
-
-        {/* Pendientes */}
         {cliente.pendientes && cliente.pendientes.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-lg">{String.fromCodePoint(0x1F4CB)}</span>
+              <span className="text-lg">\u{1F4CB}</span>
               <h3 className="font-semibold text-gray-800">Pendientes</h3>
             </div>
             <div className="space-y-3">
@@ -730,7 +729,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
                 <div key={i} className="flex items-start justify-between p-3 bg-gray-50 rounded-xl">
                   <div>
                     <p className="text-sm font-medium text-gray-800">{p.texto}</p>
-                    <p className="text-xs text-gray-400">{p.responsable} &middot; {p.fecha}</p>
+                    <p className="text-xs text-gray-400">{p.responsable} \u00B7 {p.fecha}</p>
                   </div>
                   <span className={"text-xs px-2 py-1 rounded-full font-medium " + (p.status === "cumplido" ? "bg-green-100 text-green-700" : p.status === "en proceso" ? "bg-blue-100 text-blue-700" : "bg-yellow-100 text-yellow-700")}>{p.status || "pendiente"}</span>
                 </div>
