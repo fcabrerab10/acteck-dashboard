@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/auth/mercadolibre",
+      "destination": "/api/auth/mercadolibre"
+    }
+  ]
+}
