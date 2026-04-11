@@ -4696,10 +4696,10 @@ export default function App() {
     <div className="flex h-screen bg-gray-50 font-sans">
 
       {/* SIDEBAR */}
-      <aside className="w-64 bg-white border-r border-gray-100 flex flex-col shadow-sm shrink-0">
+      <aside className="w-52 bg-white border-r border-gray-100 flex flex-col shadow-sm shrink-0 overflow-y-auto">
 
         {/* Logo + Botón Modo Presentación */}
-        <div className="p-5 border-b border-gray-100">
+        <div className="p-3 border-b border-gray-100">
           {!modoPresent ? (
             <>
               <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Administración de Clientes</p>
