@@ -683,58 +683,50 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
     const ordenes = cliente.totalOrdenes || 0;
     const ticketProm = ordenes > 0 ? Math.round(acumulado / ordenes) : 0;
     return (
-      <div className="p-8 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{cliente.nombre}</h1>
-            <p className="text-sm text-gray-500">
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: cliente.color, color: "#333" }}>{cliente.marca}</span>
-              {" "}\u00B7 Ejecutivo: {cliente.ejecutivo} \u00B7 Frecuencia: {cliente.frecuencia}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="px-3 py-1 bg-yellow-400 text-yellow-900 text-xs font-bold rounded-full">ML en vivo</span>
-            <span className="text-xs text-gray-400">Actualizado: {new Date().toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}</span>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Sell Out \u2014 {mesLabel}</p>
-            <p className="text-2xl font-bold text-gray-900">{"$"}{Math.round(sellOutMes).toLocaleString("es-MX")}</p>
-            <p className="text-xs text-gray-400">Acumulado 2026: {"$"}{Math.round(acumulado).toLocaleString("es-MX")}</p>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Total \u00D3rdenes ML</p>
-            <p className="text-2xl font-bold text-gray-900">{ordenes.toLocaleString("es-MX")}</p>
-            <p className="text-xs text-gray-400">\u00D3rdenes pagadas 2026</p>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Ticket Promedio</p>
-            <p className="text-2xl font-bold text-gray-900">{"$"}{ticketProm.toLocaleString("es-MX")}</p>
-            <p className="text-xs text-gray-400">Monto promedio por orden</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <TarjetaSellOutMarca sellOutMarca={cliente.sellOutMarca} totalMonto={acumulado} />
-          <TarjetaTendenciaML sellOutPorMesMarca={cliente.sellOutPorMesMarca} />
-        </div>
-        {cliente.pendientes && cliente.pendientes.length > 0 && (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-lg">\u{1F4CB}</span>
-              <h3 className="font-semibold text-gray-800">Pendientes</h3>
+              <span className="text-lg">💰</span>
+              <span className="text-xs text-gray-500 font-semibold uppercase">Sell Out {mesLabel}</span>
             </div>
-            <div className="space-y-3">
+            <p className="text-2xl font-bold text-blue-700">{"$"}{sellOutMes.toLocaleString("es-MX")}</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-lg">📈</span>
+              <span className="text-xs text-gray-500 font-semibold uppercase">Acumulado 2026</span>
+            </div>
+            <p className="text-2xl font-bold text-green-700">{"$"}{acumulado.toLocaleString("es-MX")}</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-lg">📋</span>
+              <span className="text-xs text-gray-500 font-semibold uppercase">Total Ordenes 2026</span>
+            </div>
+            <p className="text-2xl font-bold text-purple-700">{ordenes.toLocaleString("es-MX")}</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-lg">🎯</span>
+              <span className="text-xs text-gray-500 font-semibold uppercase">Ticket Promedio</span>
+            </div>
+            <p className="text-2xl font-bold text-orange-700">{"$"}{ticketProm.toLocaleString("es-MX")}</p>
+          </div>
+        </div>
+        <TarjetaSellOutMarca sellOutMarca={cliente.sellOutMarca} />
+        <TarjetaTendenciaML sellOutPorMesMarca={cliente.sellOutPorMesMarca} />
+        {cliente.pendientes && cliente.pendientes.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <h3 className="font-semibold text-gray-700 mb-3">Pendientes</h3>
+            <ul className="space-y-2">
               {cliente.pendientes.map((p, i) => (
-                <div key={i} className="flex items-start justify-between p-3 bg-gray-50 rounded-xl">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{p.texto}</p>
-                    <p className="text-xs text-gray-400">{p.responsable} \u00B7 {p.fecha}</p>
-                  </div>
-                  <span className={"text-xs px-2 py-1 rounded-full font-medium " + (p.status === "cumplido" ? "bg-green-100 text-green-700" : p.status === "en proceso" ? "bg-blue-100 text-blue-700" : "bg-yellow-100 text-yellow-700")}>{p.status || "pendiente"}</span>
-                </div>
+                <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
+                  <span className="text-yellow-500 mt-0.5">⚠️</span>
+                  <span>{p}</span>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         )}
       </div>
