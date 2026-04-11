@@ -4849,7 +4849,7 @@ export default function App() {
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientes[clienteActivo] ? clientes[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
             {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "{c.nombre}"}  clienteKey={clienteActivo} />}
         {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: clienteActivo })}
-                    {paginaActiva === "forecast" && React.createElement(ForecastCliente, { cliente: c, clienteKey: clienteActivo })}
+                    {paginaActiva === "forecast" && React.createElement(ForecastCliente, { cliente: c.nombre, clienteKey: clienteActivo })}
 </>
           </>
 </main>
