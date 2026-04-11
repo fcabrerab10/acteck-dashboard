@@ -335,7 +335,7 @@ function TarjetaPendientes({ pendientes }) {
           <div key={p.id} className="flex items-start justify-between gap-3 text-sm">
             <div className="flex-1">
               <p className="text-gray-800 font-medium leading-snug">{p.tarea}</p>
-              <p className="text-gray-400 text-xs mt-0.5">{p.responsable} Â· {formatFecha(p.fecha)}</p>
+              <p className="text-gray-400 text-xs mt-0.5">{p.responsable} · {formatFecha(p.fecha)}</p>
             </div>
             <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${colores[p.estado]}`}>
               {p.estado}
@@ -366,8 +366,8 @@ function TarjetaPagos({ pagos }) {
               <div>
                 <p className="text-gray-700 font-medium">{p.factura}</p>
                 <p className="text-gray-400 text-xs">Vence: {formatFecha(p.vencimiento)}
-                  {p.estado === "vencida" ? <span className="text-red-500 font-semibold"> Â· Vencida hace {Math.abs(dias)} días</span>
-                  : p.estado === "por vencer" ? <span className="text-yellow-600 font-semibold"> Â· {dias} días</span>
+                  {p.estado === "vencida" ? <span className="text-red-500 font-semibold"> · Vencida hace {Math.abs(dias)} días</span>
+                  : p.estado === "por vencer" ? <span className="text-yellow-600 font-semibold"> · {dias} días</span>
                   : null}
                 </p>
               </div>
@@ -408,7 +408,7 @@ function TarjetaPromociones({ promos }) {
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                 <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pctActeck}%` }}></div>
               </div>
-              <p className="text-xs text-gray-400 mt-1">Inversión total: {formatMXN(total)} Â· Nosotros {pctActeck}% / Cliente {100 - pctActeck}%</p>
+              <p className="text-xs text-gray-400 mt-1">Inversión total: {formatMXN(total)} · Nosotros {pctActeck}% / Cliente {100 - pctActeck}%</p>
             </div>
           );
         })}
@@ -787,6 +787,10 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
   const totalInversionMkt = invMkt.reduce((s, v) => s + (Number(v.monto) || 0), 0);
   const costoXPeso = totalSellOut > 0 ? totalInversionMkt / totalSellOut : 0;
   const roiMkt = totalInversionMkt > 0 ? totalSellOut / totalInversionMkt : 0;
+  const cuotaAcumulada = ventas.reduce((s, v) => s + (Number(v.cuota) || 0), 0);
+  const ultimoMesData = ventas.length > 0 ? ventas[ventas.length - 1] : null;
+  const diasInventario = ultimoMesData && Number(ultimoMesData.sell_out) > 0 ? Math.round((Number(ultimoMesData.inventario_valor) || 0) / (Number(ultimoMesData.sell_out) / 30)) : 0;
+  const estadoSalud = calcularSalud({ cuotaAcumulada, sellInAcumulado: totalSellIn, diasInventario }, []);
 
   // ─── SVG LINE CHART ─────────────────────────────────────────────────────────
   function LineChartSellInOut() {
@@ -1247,6 +1251,14 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
     React.createElement("div", { style: { fontSize: 16, color: "#94A3B8" } }, "Cargando datos..."));
 
   return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 20, padding: "0 4px" } },
+    // Row 0: Header with Semaforo
+    React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: "14px 20px" } },
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
+        React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, color: "#1E293B", margin: 0 } }, (cliente && cliente.nombre ? cliente.nombre : clienteKey)),
+        React.createElement("span", { style: { fontSize: 13, color: "#94A3B8" } }, "Acteck / Balam Rush")
+      ),
+      React.createElement(Semaforo, { estado: estadoSalud })
+    ),
     // Row 1: Line chart
     React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 20 } },
       React.createElement("h3", { style: { margin: "0 0 12px", fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out — " + (cliente?.nombre || clienteKey) + " 2026"),
@@ -1322,13 +1334,13 @@ function CreditoCobranza({ cliente }) {
               <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Crédito y Cobranza</h1>
               <p className="text-sm text-gray-400 mt-0.5">
                 <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
-                {" Â· "}Semana {k.semana} Â· {k.periodo}
+                {" · "}Semana {k.semana} · {k.periodo}
               </p>
             </div>
           </div>
           <div className="text-right">
             <span className="text-xs text-gray-400 block">
-              Actualizado: {formatFecha(k.ultimaActualizacion)}{k.horaActualizacion ? ` Â· ${k.horaActualizacion} hrs` : ""}
+              Actualizado: {formatFecha(k.ultimaActualizacion)}{k.horaActualizacion ? ` · ${k.horaActualizacion} hrs` : ""}
             </span>
             <span className="text-xs text-gray-400">TC: ${k.tipoCambio.toFixed(2)} MXN/USD</span>
           </div>
@@ -1380,8 +1392,8 @@ function CreditoCobranza({ cliente }) {
           </div>
           <div className="flex justify-between text-xs text-gray-400 mt-1">
             <span>$0</span>
-            <span className="text-yellow-500">70% Â· Alerta</span>
-            <span className="text-red-500">90% Â· Crítico</span>
+            <span className="text-yellow-500">70% · Alerta</span>
+            <span className="text-red-500">90% · Crítico</span>
             <span>{formatUSD(k.lineaCreditoUSD)}</span>
           </div>
         </div>
@@ -1507,7 +1519,7 @@ function CreditoCobranza({ cliente }) {
       <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
         <CardHeader titulo="Proyección de Cobro (basada en Sell Out)" icono="📈" />
         <p className="text-xs text-gray-400 mb-4">
-          Sell out Mar 2026: <strong>{formatMXN(soUltimo)}</strong> Â· Crecimiento mensual: <strong>+{((tasaCrecMensual - 1) * 100).toFixed(1)}%</strong> Â· DSO: <strong>{k.dso} días</strong> Â· TC: ${k.tipoCambio.toFixed(2)} MXN/USD
+          Sell out Mar 2026: <strong>{formatMXN(soUltimo)}</strong> · Crecimiento mensual: <strong>+{((tasaCrecMensual - 1) * 100).toFixed(1)}%</strong> · DSO: <strong>{k.dso} días</strong> · TC: ${k.tipoCambio.toFixed(2)} MXN/USD
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -1553,8 +1565,8 @@ function CreditoCobranza({ cliente }) {
         <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Fuente del dato</p>
         <p className="text-sm text-gray-700 font-medium">{k.correoSemana}</p>
         <p className="text-xs text-gray-400 mt-1">
-          Correo enviado cada lunes Â· intranet@acteck.com Â· Actualización automática 4pm
-          {" Â· "}TC Banxico {formatFecha(k.ultimaActualizacion)}: ${k.tipoCambio.toFixed(2)} MXN/USD
+          Correo enviado cada lunes · intranet@acteck.com · Actualización automática 4pm
+          {" · "}TC Banxico {formatFecha(k.ultimaActualizacion)}: ${k.tipoCambio.toFixed(2)} MXN/USD
         </p>
       </div>
 
@@ -1880,7 +1892,7 @@ function PagosCliente({ cliente }) {
               <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Pagos y Compromisos</h1>
               <p className="text-sm text-gray-400 mt-0.5">
                 <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
-                {" Â· "}Promociones Â· Marketing Â· Pagos Fijos Â· Variables
+                {" · "}Promociones · Marketing · Pagos Fijos · Variables
                 {saving && <span className="ml-2 text-blue-400 animate-pulse">â Guardando...</span>}
               </p>
             </div>
@@ -1888,7 +1900,7 @@ function PagosCliente({ cliente }) {
           <div className="text-right">
             <span className="text-xs text-gray-400 block">
               Actualizado: {formatFecha(c.cartera?.ultimaActualizacion || "2026-04-07")}
-              {c.cartera?.horaActualizacion ? ` Â· ${c.cartera.horaActualizacion} hrs` : ""}
+              {c.cartera?.horaActualizacion ? ` · ${c.cartera.horaActualizacion} hrs` : ""}
             </span>
             {c.cartera?.tipoCambio && (
               <span className="text-xs text-gray-400">TC: ${c.cartera.tipoCambio.toFixed(2)} MXN/USD</span>
@@ -1910,7 +1922,7 @@ function PagosCliente({ cliente }) {
               Para que todos los cambios se guarden y sean visibles para el equipo, configura las variables en Vercel y la tabla en Supabase.
             </p>
             <code className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded block w-fit">
-              VITE_SUPABASE_URL Â· VITE_SUPABASE_ANON_KEY
+              VITE_SUPABASE_URL · VITE_SUPABASE_ANON_KEY
             </code>
           </div>
         </div>
@@ -1972,7 +1984,7 @@ function PagosCliente({ cliente }) {
                   <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
                     <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: meta.color }}></div>
                   </div>
-                  <p className="text-xs text-gray-400">{pct}% pagado Â· {items.length} conceptos</p>
+                  <p className="text-xs text-gray-400">{pct}% pagado · {items.length} conceptos</p>
                 </button>
               );
             })}
@@ -2290,7 +2302,7 @@ function PagosCliente({ cliente }) {
               <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
                 <p className="text-xs text-gray-400">
                   {DB_CONFIGURED ? "â Cambios guardados y sincronizados para todo el equipo." : "â ️ Modo lectura — configura Supabase para habilitar la edición."}
-                  {" "}💡 <strong className="text-gray-600">Pendiente</strong> Â· <strong className="text-gray-600">En Proceso</strong> Â· <strong className="text-gray-600">Pagado</strong> Â· <strong className="text-gray-600">Vencido</strong>
+                  {" "}💡 <strong className="text-gray-600">Pendiente</strong> · <strong className="text-gray-600">En Proceso</strong> · <strong className="text-gray-600">Pagado</strong> · <strong className="text-gray-600">Vencido</strong>
                 </p>
               </div>
             </div>
@@ -5018,7 +5030,7 @@ export default function App() {
           </div>
           {/* Footer */}
         <div className="p-4 border-t border-gray-100">
-          <p className="text-xs text-gray-300 text-center">v1.0 Â· Abril 2026</p>
+          <p className="text-xs text-gray-300 text-center">v1.0 · Abril 2026</p>
         </div>
       </aside>
 
