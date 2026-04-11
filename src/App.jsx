@@ -609,7 +609,7 @@ function TarjetaSellOutMarca({ sellOutMarca, totalMonto }) {
             <div key={marca}>
               <div className="flex justify-between text-sm mb-1">
                 <span className="font-medium" style={{ color: colores[marca] || "#6B7280" }}>{marca}</span>
-                <span className="text-gray-600">${"$"}{Math.round(monto).toLocaleString("es-MX")}</span>
+                <span className="text-gray-600">{"$"}{Math.round(monto).toLocaleString("es-MX")}</span>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-2.5">
                 <div className="h-2.5 rounded-full" style={{ width: pct + "%", backgroundColor: colores[marca] || "#6B7280" }}></div>
@@ -620,7 +620,7 @@ function TarjetaSellOutMarca({ sellOutMarca, totalMonto }) {
         })}
       </div>
       <div className="mt-4 pt-3 border-t border-gray-100 text-sm text-gray-500">
-        Total sell-out ML <span className="font-semibold text-gray-800">${"$"}{Math.round(totalMonto).toLocaleString("es-MX")}</span>
+        Total sell-out ML <span className="font-semibold text-gray-800">{"$"}{Math.round(totalMonto).toLocaleString("es-MX")}</span>
       </div>
       <div className="text-xs text-gray-400 mt-1">{Math.round(totalMonto) > 0 ? (marcas.length + " marcas · " + Math.round(totalMonto).toLocaleString("es-MX") + " total") : ""}</div>
     </div>
@@ -4848,7 +4848,7 @@ export default function App() {
   }, [clienteActivo, ventasVer]);
 
   const c = React.useMemo(() => {
-    const base = clientes[clienteActivo];
+    const base = clientesDinamicos[clienteActivo];
     if (!ventasDB || ventasDB.length === 0) return base;
     const sellInMap = {};
     const sellOutMap = {};
@@ -5045,7 +5045,7 @@ export default function App() {
         {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} isML={clienteActivo === "mercadolibre"} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} />}
-          {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientes[clienteActivo] ? clientes[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
+          {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
             {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "{c.nombre}"}  clienteKey={clienteActivo} />}
         {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: clienteActivo })}
                     {paginaActiva === "forecast" && React.createElement(ForecastCliente, { cliente: c.nombre, clienteKey: clienteActivo })}
@@ -5054,7 +5054,7 @@ export default function App() {
 </main>
       {showUpdatePanel && React.createElement(PanelActualizacion, {
         onClose: function() { setShowUpdatePanel(false); },
-        cliente: clientes[clienteActivo] ? clientes[clienteActivo].nombre : clienteActivo,
+        cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo,
         clienteKey: clienteActivo,
         anio: 2026,
         onVentasUpdate: function() { setVentasVer(function(v) { return v + 1; }); }
