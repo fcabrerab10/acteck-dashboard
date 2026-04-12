@@ -742,6 +742,9 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
   const [loading, setLoading] = React.useState(true);
   const [editingMeta, setEditingMeta] = React.useState(false);
   const [metaForm, setMetaForm] = React.useState({ min: 25000000, opt: 30000000 });
+  const [anioResumen, setAnioResumen] = React.useState(2026);
+  const [sellInSku, setSellInSku] = React.useState([]);
+  const [sellOutSku, setSellOutSku] = React.useState([]);
   const [periodoTipo, setPeriodoTipo] = React.useState('ytd');
   const [periodoMes, setPeriodoMes] = React.useState(new Date().getMonth() + 1);
   const [periodoRango, setPeriodoRango] = React.useState([1, 12]);
@@ -759,16 +762,18 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
   React.useEffect(() => {
     if (!DB_CONFIGURED) { setLoading(false); return; }
     Promise.all([
-      supabase.from("ventas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", 2026).order("mes"),
-      supabase.from("metas_anuales").select("*").eq("cliente", clienteKey).eq("anio", 2026).maybeSingle(),
+      supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
+      supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
+      supabase.from("metas_anuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).maybeSingle(),
       supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "comercial").order("created_at", { ascending: false }),
       supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "marketing").order("created_at", { ascending: false }),
-      supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", 2026).order("mes"),
+      supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).order("mes"),
       supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
       supabase.from("inventario_cliente").select("valor").eq("cliente", clienteKey),
-      supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", 2026),
-    ]).then(([vR, mR, pcR, pmR, imR, minR, invCR, cuotasR]) => {
-      setVentas(vR.data || []);
+      supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
+    ]).then(([siR, soR, mR, pcR, pmR, imR, minR, invCR, cuotasR]) => {
+      setSellInSku(siR.data || []);
+      setSellOutSku(soR.data || []);
       if (mR.data) { setMeta(mR.data); setMetaForm({ min: mR.data.meta_sell_in_min, opt: mR.data.meta_sell_in_optimista }); }
       setPendCom(pcR.data || []);
       setPendMkt(pmR.data || []);
@@ -778,14 +783,23 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
       setCuotasMensuales(cuotasR?.data || []);
       setLoading(false);
     });
-  }, [clienteKey]);
+  }, [clienteKey, anioResumen]);
 
   // ─── DERIVED DATA ───────────────────────────────────────────────────────────
+  // Aggregate sell_in_sku by month
   const ventasPorMes = React.useMemo(() => {
     const map = {};
-    ventas.forEach(v => { map[parseInt(v.mes)] = v; });
+    for (var m = 1; m <= 12; m++) map[m] = { mes: m, sell_in: 0, sell_out: 0 };
+    sellInSku.forEach(function(r) {
+      var m = parseInt(r.mes);
+      if (map[m]) map[m].sell_in += Number(r.monto_pesos) || 0;
+    });
+    sellOutSku.forEach(function(r) {
+      var m = parseInt(r.mes);
+      if (map[m]) map[m].sell_out += Number(r.monto_pesos) || 0;
+    });
     return map;
-  }, [ventas]);
+  }, [sellInSku, sellOutSku]);
 
   // ─── CUOTAS POR MES (from cuotas_mensuales table) ────────────────────────
   const cuotasPorMes = React.useMemo(() => {
@@ -812,25 +826,26 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
   }, [periodoTipo, periodoMes, periodoRango]);
 
   const ventasFiltradas = React.useMemo(() => {
-    return ventas.filter(v => mesesFiltrados.includes(parseInt(v.mes)));
-  }, [ventas, mesesFiltrados]);
+    return mesesFiltrados.map(function(m) { return ventasPorMes[m] || { mes: m, sell_in: 0, sell_out: 0 }; });
+  }, [ventasPorMes, mesesFiltrados]);
 
-  const totalSellIn = ventasFiltradas.reduce((s, v) => s + (Number(v.sell_in) || 0), 0);
-  const totalSellOut = ventasFiltradas.reduce((s, v) => s + (Number(v.sell_out) || 0), 0);
+  const totalSellIn = ventasFiltradas.reduce(function(s, v) { return s + (Number(v.sell_in) || 0); }, 0);
+  const totalSellOut = ventasFiltradas.reduce(function(s, v) { return s + (Number(v.sell_out) || 0); }, 0);
   const totalCuotaMin = mesesFiltrados.reduce((s, m) => s + (cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_min) || 0 : 0), 0);
   const totalCuotaIdeal = mesesFiltrados.reduce((s, m) => s + (cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : 0), 0);
   const cumplimientoMin = totalCuotaMin > 0 ? (totalSellIn / totalCuotaMin * 100) : 0;
   const cumplimientoIdeal = totalCuotaIdeal > 0 ? (totalSellIn / totalCuotaIdeal * 100) : 0;
-  const totalInvValor = ventas.reduce((s, v) => s + (Number(v.inventario_valor) || 0), 0);
-  const avgInvValor = ventas.length > 0 ? totalInvValor / ventas.length : 0;
-  const lastInvValor = ventas.length > 0 ? Number(ventas[ventas.length - 1].inventario_valor) || 0 : 0;
+  const totalInvValor = invCliente.reduce(function(s, r) { return s + (Number(r.valor) || 0); }, 0);
+  const avgInvValor = invCliente.length > 0 ? totalInvValor / invCliente.length : 0;
+  const lastInvValor = totalInvValor;
   const totalInvCliente = invCliente.reduce((s, r) => s + (Number(r.valor) || 0), 0);
 
   const totalInversionMkt = invMkt.reduce((s, v) => s + (Number(v.monto) || 0), 0);
   const costoXPeso = totalSellOut > 0 ? totalInversionMkt / totalSellOut : 0;
   const roiMkt = totalInversionMkt > 0 ? totalSellOut / totalInversionMkt : 0;
-  const cuotaAcumulada = ventas.reduce((s, v) => s + (Number(v.cuota) || 0), 0);
-  const ultimoMesData = ventas.length > 0 ? ventas[ventas.length - 1] : null;
+  const cuotaAcumulada = Object.values(cuotasPorMes).reduce(function(s, c) { return s + (Number(c.cuota_ideal) || 0); }, 0);
+  const ultimoMesConDatos = Object.values(ventasPorMes).filter(function(v) { return v.sell_out > 0; });
+  const ultimoMesData = ultimoMesConDatos.length > 0 ? ultimoMesConDatos[ultimoMesConDatos.length - 1] : null;
   const diasInventario = ultimoMesData && Number(ultimoMesData.sell_out) > 0 ? Math.round((Number(ultimoMesData.inventario_valor) || 0) / (Number(ultimoMesData.sell_out) / 30)) : 0;
   const estadoSalud = calcularSalud({ cuotaAcumulada, sellInAcumulado: totalSellIn, diasInventario }, []);
 
@@ -1302,6 +1317,22 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
         React.createElement("span", { style: { fontSize: 13, color: "#94A3B8" } }, "Acteck / Balam Rush")
       ),
       React.createElement(Semaforo, { estado: estadoSalud })
+    ),
+    // Row 0.5a: Year selector
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } },
+      React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: "#475569" } }, "Año:"),
+      [2025, 2026].map(function(y) {
+        return React.createElement("button", {
+          key: y,
+          onClick: function() { setAnioResumen(y); },
+          style: {
+            padding: "4px 16px", borderRadius: 8, border: "1px solid " + (anioResumen === y ? "#3B82F6" : "#E2E8F0"),
+            background: anioResumen === y ? "#3B82F6" : "#fff",
+            color: anioResumen === y ? "#fff" : "#475569",
+            fontWeight: 600, fontSize: 13, cursor: "pointer"
+          }
+        }, String(y));
+      })
     ),
     // Row 0.5: Period selector
     React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" } },
@@ -2907,7 +2938,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
     const byCategoria = {};
     datos.productos.forEach(p => {
       const cat = p.categoria || "Sin Categoría";
-      if (!byCategoria[cat]) byCategoria[cat] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0 };
+      if (!byCategoria[cat]) byCategoria[cat] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0, invValor: 0 };
       const siForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
       const siMontoForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.monto_pesos || 0), 0);
       const soForSku = datos.sellOut.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
@@ -2917,7 +2948,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
       byCategoria[cat].siMonto += siMontoForSku;
       byCategoria[cat].soPiezas += soForSku;
       byCategoria[cat].soMonto += soMontoForSku;
-      if (invForSku) byCategoria[cat].invPiezas += invForSku.stock || 0;
+      if (invForSku) { byCategoria[cat].invPiezas += invForSku.stock || 0; byCategoria[cat].invValor += (Number(invForSku.stock || 0)) * (Number(invForSku.costo_convenio || invForSku.costo_promedio || 0)); }
     });
 
     return {
@@ -3119,102 +3150,97 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
 
     // By Categoria
     aggs && Object.keys(aggs.byCategoria).length > 0 && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
-      React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Por Categoría"),
-      React.createElement("div", { className: "overflow-x-auto" },
-        React.createElement("table", { className: "w-full text-sm" },
-          React.createElement("thead", {},
-            React.createElement("tr", { className: "border-b border-gray-200" },
-              React.createElement("th", { className: "text-left py-2 px-3 font-semibold text-gray-700" }, "Categoría"),
-              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI Piezas"),
-              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI $"),
-              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Inv Piezas"),
-              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SO Piezas"),
-              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SO $"),
+        React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Por Categor\u00eda (ambas marcas)"),
+        React.createElement("div", { className: "overflow-x-auto" },
+          React.createElement("table", { className: "w-full text-sm" },
+            React.createElement("thead", {},
+              React.createElement("tr", { className: "border-b border-gray-200" },
+                React.createElement("th", { className: "text-left py-2 px-3 font-semibold text-gray-700" }, "Categor\u00eda"),
+                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Valor Inventario"),
+                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Sell Out $"),
+                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "% SO"),
+                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SKUs c/Inv"),
+              ),
             ),
-          ),
-          React.createElement("tbody", {},
-            Object.entries(aggs.byCategoria).map(([cat, c]) =>
-              React.createElement("tr", { key: cat, className: "border-b border-gray-100 hover:bg-gray-50" },
-                React.createElement("td", { className: "py-3 px-3 text-gray-700 font-medium" }, cat),
-                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, c.siPiezas.toLocaleString("es-MX")),
-                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(c.siMonto)),
-                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, c.invPiezas.toLocaleString("es-MX")),
-                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, c.soPiezas.toLocaleString("es-MX")),
-                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(c.soMonto)),
-              )
+            React.createElement("tbody", {},
+              (function() {
+                var totalSO = Object.values(aggs.byCategoria).reduce(function(s,c){return s+c.soMonto;},0);
+                return Object.entries(aggs.byCategoria).sort(function(a,b){return b[1].soMonto-a[1].soMonto;}).map(function(entry) {
+                  var cat = entry[0]; var c = entry[1];
+                  var pct = totalSO > 0 ? (c.soMonto/totalSO*100).toFixed(1) : "0.0";
+                  return React.createElement("tr", { key: cat, className: "border-b border-gray-100 hover:bg-gray-50" },
+                    React.createElement("td", { className: "py-3 px-3 text-gray-700 font-medium" }, cat),
+                    React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(c.invValor)),
+                    React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(c.soMonto)),
+                    React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, pct + "%"),
+                    React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, c.invPiezas > 0 ? c.invPiezas.toLocaleString("es-MX") : "0"),
+                  );
+                });
+              })(),
             ),
           ),
         ),
       ),
-    ),
-
-    // SKU Detail
-    React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
-      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
-              React.createElement("h3", { className: "font-bold text-gray-800" }, "Detalle por SKU"),
-              React.createElement("button", {
-                onClick: exportToExcel,
-                style: { padding: "8px 16px", background: "#10B981", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }
-              }, "\uD83D\uDCE5 Exportar a Excel")
-            ),
-      React.createElement("div", { className: "mb-4 flex gap-3 flex-wrap" },
-        React.createElement("input", {
-          type: "text",
-          placeholder: "Buscar SKU o descripción...",
-          value: searchFilter,
-          onChange: (e) => setSearchFilter(e.target.value),
-          className: "flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm",
-        }),
-        React.createElement("select", {
-          value: sortBy,
-          onChange: (e) => setSortBy(e.target.value),
-          className: "px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white",
-        },
-          React.createElement("option", { value: "sell-in" }, "Ordenar: Sell In"),
-          React.createElement("option", { value: "inventory" }, "Ordenar: Inventario"),
-          React.createElement("option", { value: "suggested" }, "Ordenar: Sugerido"),
+      // SKU Detail - Full Table
+      React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 } },
+          React.createElement("h3", { className: "font-bold text-gray-800" }, "Detalle por SKU"),
+          React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+            React.createElement("input", {
+              type: "text", placeholder: "Buscar SKU o descripci\u00f3n...",
+              value: searchFilter,
+              onChange: function(e) { setSearchFilter(e.target.value); },
+              style: { padding: "6px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, width: 220 }
+            }),
+            React.createElement("button", {
+              onClick: exportToExcel,
+              style: { padding: "8px 16px", background: "#10B981", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }
+            }, "\uD83D\uDCE5 Exportar Excel"),
+          ),
         ),
-      ),
-      React.createElement("div", { className: "space-y-4" },
-        skuDetail.map(sku =>
-          React.createElement("div", { key: sku.sku, className: "border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow" },
-            React.createElement("div", { className: "flex justify-between items-start mb-3" },
-              React.createElement("div", { className: "flex-1" },
-                React.createElement("div", { className: "flex items-center gap-2 mb-1" },
-                  React.createElement("p", { className: "font-bold text-gray-800" }, sku.sku),
-                  React.createElement("span", {
-                    className: "text-xs font-semibold px-2 py-1 rounded-full text-white",
-                    style: { backgroundColor: ESTADO_COLORES[sku.estado] || "#999" },
-                  }, sku.estado),
-                  React.createElement("span", {
-                    className: "text-xs font-semibold px-2 py-1 rounded-full text-white",
-                    style: { backgroundColor: MARCA_COLORES[sku.marca] || "#999" },
-                  }, sku.marca),
-                ),
-                React.createElement("p", { className: "text-sm text-gray-600" }, sku.descripcion),
+        React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflowY: "auto" } },
+          React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+            React.createElement("thead", {},
+              React.createElement("tr", { style: { position: "sticky", top: 0, background: "#F8FAFC", zIndex: 1 } },
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "SKU"),
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Roadmap"),
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", minWidth: 140 } }, "Descripci\u00f3n"),
+                [1,2,3,4,5,6,7,8,9,10,11,12].map(function(m) {
+                  return React.createElement("th", { key: "h"+m, style: { textAlign: "right", padding: "8px 4px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][m-1]);
+                }),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Inv"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Prom 90d"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Sugerido"),
               ),
             ),
-            React.createElement("div", { className: "grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3" },
-              React.createElement("div", { className: "bg-gray-50 p-3 rounded-lg" },
-                React.createElement("p", { className: "text-gray-500 text-xs mb-1" }, "Sell In Total"),
-                React.createElement("p", { className: "font-semibold text-gray-800" }, sku.siPiezasTotal.toLocaleString("es-MX")),
-              ),
-              React.createElement("div", { className: "bg-gray-50 p-3 rounded-lg" },
-                React.createElement("p", { className: "text-gray-500 text-xs mb-1" }, "Prom 90d"),
-                React.createElement("p", { className: "font-semibold text-gray-800" }, sku.promedio90d.toLocaleString("es-MX")),
-              ),
-              React.createElement("div", { className: "bg-gray-50 p-3 rounded-lg" },
-                React.createElement("p", { className: "text-gray-500 text-xs mb-1" }, "Inventario"),
-                React.createElement("p", { className: "font-semibold text-gray-800" }, sku.stock.toLocaleString("es-MX")),
-              ),
-              React.createElement("div", { className: "bg-blue-50 p-3 rounded-lg border border-blue-200" },
-                React.createElement("p", { className: "text-blue-700 text-xs mb-1 font-semibold" }, "Sugerido"),
-                React.createElement("p", { className: "font-bold text-blue-700" }, sku.sugerido.toLocaleString("es-MX")),
-              ),
+            React.createElement("tbody", {},
+              skuDetail.map(function(s, idx) {
+                return React.createElement("tr", { key: s.sku, style: { borderBottom: "1px solid #F1F5F9", background: idx % 2 === 0 ? "#fff" : "#FAFBFC" } },
+                  React.createElement("td", { style: { padding: "6px", fontWeight: 500, color: "#1E293B", whiteSpace: "nowrap", fontSize: 11 } }, s.sku),
+                  React.createElement("td", { style: { padding: "6px", color: "#64748B", fontSize: 11 } },
+                    React.createElement("span", { style: { padding: "2px 6px", borderRadius: 4, background: s.estado === "D" ? "#D1FAE5" : s.estado === "NVS" ? "#FEF3C7" : "#DBEAFE", color: s.estado === "D" ? "#065F46" : s.estado === "NVS" ? "#92400E" : "#1E40AF", fontSize: 10, fontWeight: 600 } }, s.estado || "-")
+                  ),
+                  React.createElement("td", { style: { padding: "6px", color: "#475569", fontSize: 11, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.descripcion }, s.descripcion),
+                  [1,2,3,4,5,6,7,8,9,10,11,12].map(function(m) {
+                    var soData = datos.sellOut.filter(function(r) { return r.sku === s.sku && Number(r.mes) === m; });
+                    var pzas = soData.reduce(function(sum,r) { return sum + (Number(r.piezas) || 0); }, 0);
+                    return React.createElement("td", { key: "m"+m, style: { textAlign: "right", padding: "6px 4px", color: pzas > 0 ? "#1E293B" : "#CBD5E1", fontSize: 11 } }, pzas > 0 ? pzas : "-");
+                  }),
+                  React.createElement("td", { style: { textAlign: "right", padding: "6px", fontWeight: 500, color: "#1E293B", fontSize: 11 } }, (s.stock || 0).toLocaleString("es-MX")),
+                  React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11 } }, (s.promedio90d || 0).toLocaleString("es-MX")),
+                  React.createElement("td", { style: { textAlign: "right", padding: "6px", fontSize: 11 } },
+                    React.createElement("input", {
+                      type: "number", min: 0,
+                      value: sugeridoEdits[s.sku] !== undefined ? sugeridoEdits[s.sku] : (s.sugerido || 0),
+                      onChange: function(e) { var v = {}; v[s.sku] = Number(e.target.value) || 0; setSugeridoEdits(Object.assign({}, sugeridoEdits, v)); },
+                      style: { width: 60, padding: "2px 4px", border: "1px solid #E2E8F0", borderRadius: 4, textAlign: "right", fontSize: 11 }
+                    })
+                  ),
+                );
+              }),
             ),
-          )
+          ),
         ),
-        skuDetail.length === 0 && React.createElement("p", { className: "text-center text-gray-500 py-6" }, "No hay datos"),
       ),
     ),
   );
@@ -3646,165 +3672,66 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
     // Loading
     loading ? el("div", { style: { textAlign:"center", color:"#64748b", padding:30 } }, "Cargando actividades...") :
 
-    // Views
-    vista === "calendario" ? calendarioView : listaView
-  );
-}
-
-
-// ─── RESUMEN DE CUENTAS ──────────────────────────────────────────────────────────────────
-function ResumenCuentas() {
-  const [ventasAll, setVentasAll] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    if (!DB_CONFIGURED) { setLoading(false); return; }
-    supabase.from("ventas_mensuales").select("*").eq("anio", 2026).order("mes")
-      .then(({ data }) => { setVentasAll(data || []); setLoading(false); });
-  }, []);
-
-  const clientesMeta = [
-    { key: "digitalife", nombre: "Digitalife", color: "#4472C4", marca: "Acteck / Balam Rush" },
-    { key: "pcel", nombre: "PCEL", color: "#E67C73", marca: "Balam Rush" },
-    { key: "mercadolibre", nombre: "Mercado Libre", color: "#FFE600", marca: "Acteck / Balam Rush" },
-  ];
-  const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
-
-  function getClientData(clienteKey) {
-    const rows = ventasAll.filter(r => r.cliente === clienteKey);
-    let sellInTotal = 0, sellOutTotal = 0, piezasTotal = 0, invValor = 0, lastMes = 0;
-    const monthly = {};
-    for (const r of rows) {
-      const m = parseInt(r.mes);
-      const si = parseFloat(r.sell_in) || 0;
-      const so = parseFloat(r.sell_out) || 0;
-      sellInTotal += si; sellOutTotal += so;
-      piezasTotal += parseInt(r.piezas || 0);
-      if (m > lastMes) { lastMes = m; invValor = parseFloat(r.inventario_valor) || 0; }
-      monthly[m] = { sellIn: si, sellOut: so };
-    }
-    return { sellInTotal, sellOutTotal, piezasTotal, invValor, lastMes, monthly };
-  }
-
-  if (loading) return (
-    <div className="flex items-center justify-center py-32">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
-    </div>
-  );
-
-  const clientesData = clientesMeta.map(cm => ({ ...cm, data: getClientData(cm.key) }));
-  const grandTotalSI = clientesData.reduce((s, c) => s + c.data.sellInTotal, 0);
-  const grandTotalSO = clientesData.reduce((s, c) => s + c.data.sellOutTotal, 0);
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="bg-white rounded-2xl shadow-sm p-6 mb-2">
-        <h1 className="text-2xl font-bold text-gray-800">Resumen General de Cuentas</h1>
-        <p className="text-sm text-gray-500 mt-1">Vista consolidada — Acteck / Balam Rush 2026</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-600">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Sell In Total</p>
-          <p className="text-2xl font-bold text-gray-800 mt-1">{formatMXN(grandTotalSI)}</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-green-600">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Sell Out Total</p>
-          <p className="text-2xl font-bold text-gray-800 mt-1">{formatMXN(grandTotalSO)}</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-purple-600">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Participación Sell In</p>
-          <div className="flex gap-4 mt-2">
-            {clientesData.map(c => (
-              <div key={c.key} className="text-center">
-                <div className="text-xs font-medium" style={{ color: c.color }}>{c.nombre}</div>
-                <div className="text-sm font-bold">
-                  {grandTotalSI > 0 ? ((c.data.sellInTotal / grandTotalSI) * 100).toFixed(1) + "%" : "0%"}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {clientesData.map(c => (
-          <div key={c.key} className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-            <div className="px-5 py-4 border-b" style={{ background: c.color + "15" }}>
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full" style={{ background: c.color }} />
-                <div>
-                  <h3 className="font-bold text-gray-800">{c.nombre}</h3>
-                  <p className="text-xs text-gray-500">{c.marca}</p>
-                </div>
-              </div>
-            </div>
-            <div className="p-5 space-y-3">
-              {[["Sell In Acum.", c.data.sellInTotal], ["Sell Out Acum.", c.data.sellOutTotal],
-                ["Piezas", c.data.piezasTotal], ["Inventario", c.data.invValor]].map(([lbl, val]) => (
-                <div key={lbl} className="flex justify-between">
-                  <span className="text-sm text-gray-500">{lbl}</span>
-                  <span className="text-sm font-bold text-gray-800">
-                    {lbl === "Piezas" ? val.toLocaleString() : formatMXN(val)}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="px-5 pb-4">
-              <div className="mb-3">
-                {/* Visual bars */}
-                <div className="flex items-end gap-1" style={{height:60}}>
-                  {meses.map((mes, i) => {
-                    const d = c.data.monthly[i+1];
-                    if (!d) return null;
-                    const maxVal = Math.max(...Object.values(c.data.monthly).map(m => Math.max(m.sellIn, m.sellOut)), 1);
-                    const siH = Math.max((d.sellIn / maxVal) * 50, 2);
-                    const soH = Math.max((d.sellOut / maxVal) * 50, 2);
-                    return (
-                      <div key={mes} className="flex-1 flex flex-col items-center gap-0.5">
-                        <div className="w-full flex gap-0.5 items-end" style={{height:52}}>
-                          <div className="flex-1 rounded-t" style={{height:siH, background: c.color, opacity:0.7}} />
-                          <div className="flex-1 rounded-t" style={{height:soH, background:"#10b981"}} />
-                        </div>
-                        <span className="text-[8px] text-gray-400">{mes.substring(0,1)}</span>
-                      </div>
+    // Views - Card system (month > weeks)
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))", gap: 16 } },
+      [1,2,3,4,5,6,7,8,9,10,11,12].map(function(mes) {
+        var acts = porMes[mes] || [];
+        if (acts.length === 0 && mes > new Date().getMonth() + 3) return null;
+        // Group by week
+        var byWeek = {};
+        acts.forEach(function(a) {
+          var w = Number(a.semana) || 1;
+          if (!byWeek[w]) byWeek[w] = [];
+          byWeek[w].push(a);
+        });
+        var costoMes = acts.reduce(function(s,a) { return s + (Number(a.costo) || Number(a.inversion) || 0); }, 0);
+        var completadas = acts.filter(function(a) { return a.estatus === "completado"; }).length;
+        var mesColor = completadas === acts.length && acts.length > 0 ? "#10B981" : acts.some(function(a){return a.estatus==="en curso"||a.estatus==="en_curso";}) ? "#3B82F6" : "#94A3B8";
+        return React.createElement("div", { key: mes, style: { background: "#fff", borderRadius: 16, border: "1px solid #E2E8F0", borderTop: "4px solid " + mesColor, overflow: "hidden" } },
+          // Card header
+          React.createElement("div", { style: { padding: "14px 16px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9" } },
+            React.createElement("div", {},
+              React.createElement("span", { style: { fontWeight: 700, fontSize: 15, color: "#1E293B" } }, MESES_FULL[mes - 1]),
+              React.createElement("span", { style: { marginLeft: 8, fontSize: 12, color: "#94A3B8" } }, acts.length + " actividad" + (acts.length !== 1 ? "es" : "")),
+            ),
+            costoMes > 0 ? React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: "#475569", background: "#F1F5F9", padding: "2px 8px", borderRadius: 6 } }, "$" + costoMes.toLocaleString("es-MX")) : null,
+          ),
+          // Card body - weeks
+          acts.length === 0 ?
+            React.createElement("div", { style: { padding: 16, textAlign: "center", color: "#CBD5E1", fontSize: 13 } }, "Sin actividades") :
+            React.createElement("div", { style: { padding: "8px 12px 12px" } },
+              Object.keys(byWeek).sort(function(a,b){return a-b;}).map(function(w) {
+                return React.createElement("div", { key: w, style: { marginBottom: 8 } },
+                  React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase", marginBottom: 4, letterSpacing: 0.5 } }, "Semana " + w),
+                  byWeek[w].map(function(a) {
+                    var statusColor = a.estatus === "completado" ? "#10B981" : a.estatus === "en curso" || a.estatus === "en_curso" ? "#3B82F6" : a.estatus === "cancelado" ? "#EF4444" : "#F59E0B";
+                    var statusBg = a.estatus === "completado" ? "#D1FAE5" : a.estatus === "en curso" || a.estatus === "en_curso" ? "#DBEAFE" : a.estatus === "cancelado" ? "#FEE2E2" : "#FEF3C7";
+                    return React.createElement("div", { key: a.id, style: { display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 8px", borderRadius: 8, background: "#FAFBFC", marginBottom: 4 } },
+                      React.createElement("div", { style: { width: 6, height: 6, borderRadius: 3, background: statusColor, marginTop: 5, flexShrink: 0 } }),
+                      React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                        React.createElement("div", { style: { fontSize: 13, fontWeight: 500, color: "#1E293B", lineHeight: 1.3 } }, a.nombre || a.subtipo || "Actividad"),
+                        React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 3, flexWrap: "wrap" } },
+                          React.createElement("span", { style: { fontSize: 10, padding: "1px 6px", borderRadius: 4, background: statusBg, color: statusColor, fontWeight: 600 } }, a.estatus),
+                          a.tipo ? React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, a.tipo) : null,
+                          a.producto ? React.createElement("span", { style: { fontSize: 10, color: "#64748B" } }, a.producto) : null,
+                        ),
+                      ),
                     );
-                  })}
-                </div>
-                <div className="flex gap-3 mt-1 mb-2">
-                  <span className="text-[9px] text-gray-400 flex items-center gap-1"><span className="inline-block w-2 h-2 rounded" style={{background: c.color, opacity:0.7}} /> Sell In</span>
-                  <span className="text-[9px] text-gray-400 flex items-center gap-1"><span className="inline-block w-2 h-2 rounded bg-green-500" /> Sell Out</span>
-                  {c.data.lastMes < 12 && <span className="text-[9px] text-gray-300 flex items-center gap-1"><span className="inline-block w-2 h-2 rounded border border-dashed border-gray-300" /> Proyección</span>}
-                </div>
-                {c.data.lastMes >= 2 && c.data.lastMes < 12 && (
-                  <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-2 text-xs">
-                    <span className="text-blue-600 font-medium">Proyección anual:</span>
-                    <span className="ml-2 text-gray-600">SI {formatMXN(c.data.sellInTotal / c.data.lastMes * 12)}</span>
-                    <span className="ml-2 text-green-600">SO {formatMXN(c.data.sellOutTotal / c.data.lastMes * 12)}</span>
-                  </div>
-                )}
-              </div>
-              <table className="w-full text-xs">
-                <thead><tr className="border-b">
-                  <th className="text-left py-1 text-gray-400 font-medium">Mes</th>
-                  <th className="text-right py-1 text-gray-400 font-medium">Sell In</th>
-                  <th className="text-right py-1 text-gray-400 font-medium">Sell Out</th>
-                </tr></thead>
-                <tbody>
-                  {meses.map((mes, i) => c.data.monthly[i+1] ? (
-                    <tr key={mes} className={i%2===0 ? "bg-gray-50" : ""}>
-                      <td className="py-1 text-gray-600">{mes}</td>
-                      <td className="py-1 text-right text-gray-800">{formatMXN(c.data.monthly[i+1]?.sellIn||0)}</td>
-                      <td className="py-1 text-right text-gray-800">{formatMXN(c.data.monthly[i+1]?.sellOut||0)}</td>
-                    </tr>
-                  ) : null)}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+                  }),
+                );
+              }),
+            ),
+        );
+      }).filter(Boolean),
+    ),
+
+    // Add activity button
+    React.createElement("div", { style: { textAlign: "center", marginTop: 16 } },
+      React.createElement("button", {
+        onClick: function() { setEditItem(null); setForm(Object.assign({}, emptyForm)); setShowModal(true); },
+        style: { padding: "10px 24px", background: "#3B82F6", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, cursor: "pointer", fontWeight: 600 }
+      }, "+ Nueva Actividad"),
+    ),
   );
 }
 
@@ -3956,33 +3883,30 @@ function AnalisisCliente({ cliente, clienteKey }) {
   // ── Scorecard ──
   var scorecard = React.useMemo(function() {
     var items = [];
-    // Sell-through
-    var stColor = ytd.st >= 80 ? "#10b981" : ytd.st >= 50 ? "#f59e0b" : "#ef4444";
-    if (totalCuotaIdealA > 0) {
-      items.push({ label: "Cuota Ideal YTD", value: fmtM(totalCuotaIdealA), color: "#F59E0B", detail: "Min: " + fmtM(totalCuotaMinA) });
-      items.push({ label: "Cumplimiento Cuota", value: fmtPct(cumpCuotaA), color: cumpCuotaA >= 100 ? "#10b981" : cumpCuotaA >= 80 ? "#f59e0b" : "#ef4444", detail: "vs Cuota Ideal" });
-    }
-    items.push({ label: "Eficiencia de Venta YTD", value: fmtPct(ytd.st), color: stColor, detail: "Meta: >80%" });
-    // Cumplimiento cuota
-    var cuotaTotal = ventasPorMes.reduce(function(s,v){return s+v.cuota;},0);
-    var cumpPct = cuotaTotal > 0 ? (ytd.si / cuotaTotal * 100) : 0;
-    var cumpColor = cumpPct >= 90 ? "#10b981" : cumpPct >= 70 ? "#f59e0b" : "#ef4444";
-    items.push({ label: "Cumplimiento Cuota", value: cuotaTotal > 0 ? fmtPct(cumpPct) : "Sin cuota", color: cuotaTotal > 0 ? cumpColor : "#64748b", detail: cuotaTotal > 0 ? "Cuota: " + fmtMoney(cuotaTotal) : "" });
-    // Marketing ROI
-    var roiColor = mktTotals.roi > 50 ? "#10b981" : mktTotals.roi > 0 ? "#f59e0b" : "#ef4444";
-    items.push({ label: "ROI Marketing", value: mktTotals.inv > 0 ? fmtPct(mktTotals.roi) : "Sin datos", color: mktTotals.inv > 0 ? roiColor : "#64748b", detail: "Inv: " + fmtMoney(mktTotals.inv) });
-    // Actividades completadas
-    var completadas = marketing.filter(function(a){return a.estatus==="completado";}).length;
-    var actPct = marketing.length > 0 ? (completadas/marketing.length*100) : 0;
-    var actColor = actPct >= 80 ? "#10b981" : actPct >= 50 ? "#f59e0b" : "#ef4444";
-    items.push({ label: "Ejecuci\u00F3n Marketing", value: completadas + "/" + marketing.length, color: marketing.length > 0 ? actColor : "#64748b", detail: marketing.length > 0 ? fmtPct(actPct) + " completado" : "" });
-    // Inventory (if data)
-    if (skuAnalysis) {
-      var invColor = skuAnalysis.sinVenta90.length === 0 ? "#10b981" : skuAnalysis.sinVenta90.length <= 5 ? "#f59e0b" : "#ef4444";
-      items.push({ label: "Salud Inventario", value: skuAnalysis.sinVenta90.length + " sin venta 90d", color: invColor, detail: "Valor muerto: " + fmtMoney(skuAnalysis.invMuerto) });
-    }
+    if (!skuAnalysis) return items;
+    // 1. SKUs con inventario
+    var skusConInv = skuAnalysis.all.filter(function(s) { return s.invStock > 0; }).length;
+    var totalSkus = skuAnalysis.all.length;
+    var skuColor = skusConInv > totalSkus * 0.5 ? "#10b981" : skusConInv > totalSkus * 0.25 ? "#f59e0b" : "#ef4444";
+    items.push({ label: "SKUs con Inventario", value: fmtNum(skusConInv), color: skuColor, detail: "de " + fmtNum(totalSkus) + " totales" });
+    // 2. Días de inventario
+    var invValorTotal = 0;
+    skuAnalysis.all.forEach(function(s) {
+      if (s.invStock > 0) {
+        var inv = inventario.find(function(i) { return i.sku === s.sku; });
+        if (inv) invValorTotal += Number(inv.stock || 0) * Number(inv.costo_convenio || inv.costo_promedio || 0);
+      }
+    });
+    var soTotal = ytd.so;
+    var mesesConDatos = ytd.mesesConDatos || 1;
+    var soDiario = mesesConDatos > 0 ? soTotal / (mesesConDatos * 30) : 0;
+    var diasInv = soDiario > 0 ? Math.round(invValorTotal / soDiario) : 0;
+    var diasColor = diasInv <= 90 ? "#10b981" : diasInv <= 150 ? "#f59e0b" : "#ef4444";
+    items.push({ label: "D\u00edas de Inventario", value: diasInv + " d\u00edas", color: diasColor, detail: "Basado en SO promedio diario" });
+    // 3. Valor del inventario (stock × costo_convenio)
+    items.push({ label: "Valor del Inventario", value: fmtMoney(invValorTotal), color: "#3B82F6", detail: "Stock \u00d7 Costo Convenio" });
     return items;
-  }, [ytd, ventasPorMes, mktTotals, marketing, skuAnalysis]);
+  }, [skuAnalysis, inventario, ytd]);
 
   // ── RENDER ──
   if (loading) return el("div", { style: { textAlign:"center", color:"#64748b", padding:60 } }, "Cargando an\u00E1lisis...");
