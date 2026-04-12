@@ -3927,17 +3927,16 @@ function AnalisisCliente({ cliente, clienteKey }) {
     return { all: all, topSO: topSO, bottomSO: bottomSO, sinVenta60: sinVenta60, sinVenta90: sinVenta90, invMuerto: invMuerto, byMarca: byMarca, total: all.length };
   }, [productos, sellInSku, sellOutSku, inventario]);
 
+  // Component-level cuota calculations (needed in render)
+  var totalCuotaIdealA = cuotasMens.reduce(function(s, cm) { return s + (Number(cm.cuota_ideal) || 0); }, 0);
+  var totalCuotaMinA = cuotasMens.reduce(function(s, cm) { return s + (Number(cm.cuota_min) || 0); }, 0);
+  var cumpCuotaA = totalCuotaIdealA > 0 ? (ytd.si / totalCuotaIdealA * 100) : 0;
+
   // ── Scorecard ──
   var scorecard = React.useMemo(function() {
     var items = [];
     // Sell-through
     var stColor = ytd.st >= 80 ? "#10b981" : ytd.st >= 50 ? "#f59e0b" : "#ef4444";
-    // Cuota from cuotas_mensuales
-    var cuotaMap = {};
-    cuotasMens.forEach(function(cm) { cuotaMap[parseInt(cm.mes)] = cm; });
-    var totalCuotaIdealA = cuotasMens.reduce(function(s, cm) { return s + (Number(cm.cuota_ideal) || 0); }, 0);
-    var totalCuotaMinA = cuotasMens.reduce(function(s, cm) { return s + (Number(cm.cuota_min) || 0); }, 0);
-    var cumpCuotaA = totalCuotaIdealA > 0 ? (ytd.si / totalCuotaIdealA * 100) : 0;
     if (totalCuotaIdealA > 0) {
       items.push({ label: "Cuota Ideal YTD", value: fmtM(totalCuotaIdealA), color: "#F59E0B", detail: "Min: " + fmtM(totalCuotaMinA) });
       items.push({ label: "Cumplimiento Cuota", value: fmtPct(cumpCuotaA), color: cumpCuotaA >= 100 ? "#10b981" : cumpCuotaA >= 80 ? "#f59e0b" : "#ef4444", detail: "vs Cuota Ideal" });
