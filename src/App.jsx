@@ -2145,219 +2145,58 @@ function PagosCliente({ cliente, clienteKey }) {
             )}
           </div>
 
-          {/* Category summary cards */}
-          <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
-            {Object.entries(CATEGORIA_META).map(([key, meta]) => {
-              const items  = registros.filter(r => r.categoria === key);
-              const pagado = items.filter(r => r.estatus === "pagado").reduce((s, r) => s + (r.monto || 0), 0);
-              const total  = items.reduce((s, r) => s + (r.monto || 0), 0);
-              const pct    = total > 0 ? Math.round(pagado / total * 100) : 0;
-              const active = catActiva === key;
-              return (
-                <button key={key} onClick={() => setCatActiva(active ? "todas" : key)}
-                  className={`bg-white rounded-2xl shadow-sm p-4 text-left transition-all border-2 ${active ? "shadow-md" : "border-transparent hover:border-gray-200"}`}
-                  style={{ borderColor: active ? meta.color : undefined }}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-lg">{meta.icono}</span>
-                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide leading-tight">{meta.label}</p>
-                  </div>
-                  <p className="text-lg font-bold text-gray-800 mb-2">
-                    {total > 0 ? formatMXN(total) : <span className="text-gray-400 text-sm font-normal">Sin monto</span>}
-                  </p>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: meta.color }}></div>
-                  </div>
-                  <p className="text-xs text-gray-400">{pct}% pagado · {items.length} conceptos</p>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* ═══════════════ PAGOS FIJOS SECTION ═══════════════ */}
-          {showFijosSection && (
-            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🏢</span>
-                  <h3 className="font-bold text-gray-700 text-base">Pagos Fijos — Calendario Mensual</h3>
-                  <span className="text-xs text-gray-400 ml-2">{Object.keys(fijoGroups).length} concepto{Object.keys(fijoGroups).length !== 1 ? "s" : ""}</span>
+          {/* Monthly summary table */}
+          {(() => {
+            const mb = monthlyBreakdown();
+            if (mb.length === 0) return null;
+            return (
+              <div className="bg-white rounded-2xl shadow-sm p-5">
+                <CardHeader titulo="Resumen General por Mes y Categoría" icono="📅" />
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left text-xs text-gray-400 uppercase pb-3 pr-4">Mes</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.promociones.color }}>Promociones</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.marketing.color }}>Marketing</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.pagosFijos.color }}>Pagos Fijos</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.pagosVariables.color }}>P. Variables</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.rebate.color }}>Rebate</th>
+                        <th className="text-right text-xs text-gray-700 uppercase font-bold pb-3">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mb.map(m => {
+                        const [yr, mo] = m.mes.split("-");
+                        return (
+                          <tr key={m.mes} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                            <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTOS[mo]} {yr}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosFijos    > 0 ? formatMXN(m.pagosFijos)    : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosVariables> 0 ? formatMXN(m.pagosVariables): <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.rebate         > 0 ? formatMXN(m.rebate)         : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 text-right font-bold text-gray-800">{formatMXN(m.total)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-gray-200">
+                        <td className="pt-3 font-bold text-gray-700 text-sm">TOTAL ANUAL</td>
+                        {["promociones","marketing","pagosFijos","pagosVariables","rebate"].map(cat => (
+                          <td key={cat} className="pt-3 pr-4 text-right font-bold text-gray-700">
+                            {formatMXN(registros.filter(r => r.categoria === cat).reduce((s, r) => s + (r.monto || 0), 0))}
+                          </td>
+                        ))}
+                        <td className="pt-3 text-right font-bold text-blue-700">{formatMXN(totalAnio)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
-                {DB_CONFIGURED && (
-                  <button onClick={() => setShowAddFijo(!showAddFijo)}
-                    className="flex items-center gap-1.5 px-4 py-1.5 bg-purple-600 text-white rounded-full text-sm font-semibold hover:bg-purple-700 transition-colors">
-                    + Nuevo Pago Fijo
-                  </button>
-                )}
               </div>
-
-              {/* Add Fijo Form */}
-              {showAddFijo && DB_CONFIGURED && (
-                <div className="mb-5 p-4 bg-purple-50 rounded-xl border border-purple-200">
-                  <p className="text-sm font-semibold text-purple-800 mb-3">Nuevo Pago Fijo (se crean 12 meses automáticamente)</p>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">Concepto *</label>
-                      <input type="text" value={newFijo.concepto} placeholder="Ej: Renta Sucursal Norte"
-                        onChange={e => setNewFijo(p => ({ ...p, concepto: e.target.value }))}
-                        className="w-full border rounded-lg px-3 py-1.5 text-sm" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">Monto Mensual (MXN)</label>
-                      <input type="number" value={newFijo.monto} placeholder="10000"
-                        onChange={e => setNewFijo(p => ({ ...p, monto: e.target.value }))}
-                        className="w-full border rounded-lg px-3 py-1.5 text-sm" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">Responsable</label>
-                      <input type="text" value={newFijo.responsable} placeholder="Fernando"
-                        onChange={e => setNewFijo(p => ({ ...p, responsable: e.target.value }))}
-                        className="w-full border rounded-lg px-3 py-1.5 text-sm" />
-                    </div>
-                  </div>
-                  <div className="flex gap-2 mt-4">
-                    <button onClick={handleAddFijo} disabled={saving}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50">
-                      {saving ? "Creando..." : "Crear 12 meses"}
-                    </button>
-                    <button onClick={() => setShowAddFijo(false)}
-                      className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Fijo Groups */}
-              {Object.keys(fijoGroups).length === 0 ? (
-                <div className="text-center py-8 text-gray-400">
-                  <p className="text-3xl mb-2">🏢</p>
-                  <p className="text-sm">No hay pagos fijos registrados</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {Object.entries(fijoGroups).map(([conceptoKey, rows]) => {
-                    const isOpen = expandedFijos[conceptoKey];
-                    const pagados = rows.filter(r => r.estatus === "pagado").length;
-                    const totalMeses = rows.length;
-                    const pctPagado = totalMeses > 0 ? Math.round(pagados / totalMeses * 100) : 0;
-                    const montoMensual = rows[0]?.monto || 0;
-                    const totalPagadoGrp = rows.filter(r => r.estatus === "pagado").reduce((s, r) => s + (r.monto || 0), 0);
-                    const totalGrp = rows.reduce((s, r) => s + (r.monto || 0), 0);
-
-                    // Map rows by month
-                    const byMonth = {};
-                    rows.forEach(r => {
-                      if (r.fecha_compromiso) {
-                        const mk = r.fecha_compromiso.slice(5, 7);
-                        byMonth[mk] = r;
-                      }
-                    });
-
-                    return (
-                      <div key={conceptoKey} className="border border-gray-200 rounded-xl overflow-hidden">
-                        {/* Summary row */}
-                        <button onClick={() => toggleFijo(conceptoKey)}
-                          className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left">
-                          <span className={`text-gray-400 transition-transform ${isOpen ? "rotate-90" : ""}`} style={{ fontSize: "12px" }}>â¶</span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-3 flex-wrap">
-                              <span className="font-semibold text-gray-800 text-sm">{conceptoKey}</span>
-                              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full text-white font-semibold" style={{ backgroundColor: "#8b5cf6" }}>🏢 Pago Fijo</span>
-                            </div>
-                            <div className="flex items-center gap-4 mt-1.5">
-                              <span className="text-xs text-gray-500">Mensual: <strong className="text-gray-700">{formatMXN(montoMensual)}</strong></span>
-                              <span className="text-xs text-gray-500">Pagado: <strong className="text-green-600">{formatMXN(totalPagadoGrp)}</strong> / {formatMXN(totalGrp)}</span>
-                              <span className="text-xs text-gray-500">{pagados}/{totalMeses} meses</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3 flex-shrink-0">
-                            <div className="w-24">
-                              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-purple-500 rounded-full transition-all" style={{ width: `${pctPagado}%` }}></div>
-                              </div>
-                              <p className="text-xs text-gray-400 text-center mt-0.5">{pctPagado}%</p>
-                            </div>
-                            {DB_CONFIGURED && (
-                              <button onClick={(e) => { e.stopPropagation(); handleDeleteFijo(conceptoKey, rows.map(r => r.id)); }}
-                                className="text-gray-300 hover:text-red-500 transition-colors text-base" title="Eliminar concepto completo">🗑</button>
-                            )}
-                          </div>
-                        </button>
-
-                        {/* Expanded month rows */}
-                        {isOpen && (
-                          <div className="border-t border-gray-100">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-sm">
-                                <thead>
-                                  <tr className="bg-gray-50 border-b border-gray-100">
-                                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide py-2.5 px-4 w-20">Mes</th>
-                                    <th className="text-right text-xs text-gray-400 uppercase tracking-wide py-2.5 px-3 w-28">Monto</th>
-                                    <th className="text-center text-xs text-gray-400 uppercase tracking-wide py-2.5 px-3 w-28">Estatus</th>
-                                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide py-2.5 px-3 w-32">F. Pago Real</th>
-                                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide py-2.5 px-3 w-28">Folio</th>
-                                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide py-2.5 px-3 w-28">Responsable</th>
-                                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide py-2.5 px-3">Notas</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {MESES_ARR.map((mes, idx) => {
-                                    const row = byMonth[mes.key];
-                                    if (!row) {
-                                      return (
-                                        <tr key={mes.key} className={`border-b border-gray-50 ${idx % 2 === 1 ? "bg-gray-50/30" : ""}`}>
-                                          <td className="py-2.5 px-4 font-semibold text-gray-700 text-xs">{mes.short}</td>
-                                          <td colSpan="6" className="py-2.5 px-3 text-center text-gray-300 text-xs italic">Sin registro para este mes</td>
-                                        </tr>
-                                      );
-                                    }
-                                    const isPast = new Date(`2026-${mes.key}-01`) < new Date();
-                                    const isPagado = row.estatus === "pagado";
-                                    const rowBg = isPagado ? "bg-green-50/40" : (row.estatus === "vencido" ? "bg-red-50/40" : (isPast && !isPagado ? "bg-yellow-50/30" : ""));
-                                    return (
-                                      <tr key={mes.key} className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${idx % 2 === 1 ? "bg-gray-50/30" : ""} ${rowBg}`}>
-                                        <td className="py-2.5 px-4">
-                                          <span className="font-semibold text-gray-700 text-xs">{mes.short}</span>
-                                        </td>
-                                        <td className="py-2.5 px-3 text-right">{renderCell(row, "monto", "number")}</td>
-                                        <td className="py-2.5 px-3 text-center">{renderCell(row, "estatus", "sel-estatus")}</td>
-                                        <td className="py-2.5 px-3">{renderCell(row, "fecha_pago_real", "date")}</td>
-                                        <td className="py-2.5 px-3">{renderCell(row, "folio")}</td>
-                                        <td className="py-2.5 px-3">{renderCell(row, "responsable")}</td>
-                                        <td className="py-2.5 px-3">{renderCell(row, "notas")}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                                <tfoot>
-                                  <tr className="border-t-2 border-gray-200 bg-gray-50">
-                                    <td className="py-2.5 px-4 font-bold text-gray-700 text-xs">TOTAL</td>
-                                    <td className="py-2.5 px-3 text-right font-bold text-gray-800 text-sm">{formatMXN(totalGrp)}</td>
-                                    <td className="py-2.5 px-3 text-center">
-                                      <span className="text-xs text-green-600 font-semibold">{pagados} pagado{pagados !== 1 ? "s" : ""}</span>
-                                    </td>
-                                    <td colSpan="4" className="py-2.5 px-3">
-                                      <span className="text-xs text-gray-400">Pendiente: {formatMXN(totalGrp - totalPagadoGrp)}</span>
-                                    </td>
-                                  </tr>
-                                </tfoot>
-                              </table>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div className="mt-4 pt-3 border-t border-gray-100">
-                <p className="text-xs text-gray-400">
-                  💡 Haz click en una fila para expandir y ver/editar los 12 meses. Los campos de folio, estatus y fecha de pago son editables por mes.
-                </p>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ═══════════════ REGULAR TABLE (non-fijos) ═══════════════ */}
           {showRegularTable && (
@@ -2369,7 +2208,7 @@ function PagosCliente({ cliente, clienteKey }) {
                   className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${catActiva === "todas" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
                   Todas
                 </button>
-                {Object.entries(CATEGORIA_META).filter(([k]) => k !== "pagosFijos").map(([key, meta]) => (
+                {Object.entries(CATEGORIA_META).map(([key, meta]) => (
                   <button key={key} onClick={() => setCatActiva(catActiva === key ? "todas" : key)}
                     className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${catActiva === key ? "text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
                     style={catActiva === key ? { backgroundColor: meta.color } : {}}>
@@ -2406,7 +2245,7 @@ function PagosCliente({ cliente, clienteKey }) {
                         {type === "select-cat" ? (
                           <select value={newRow.categoria} onChange={e => setNewRow(p => ({ ...p, categoria: e.target.value }))}
                             className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
-                            {Object.entries(CATEGORIA_META).filter(([k]) => k !== "pagosFijos").map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                            {Object.entries(CATEGORIA_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                           </select>
                         ) : type === "select-est" ? (
                           <select value={newRow.estatus} onChange={e => setNewRow(p => ({ ...p, estatus: e.target.value }))}
@@ -2584,58 +2423,7 @@ function PagosCliente({ cliente, clienteKey }) {
             </div>
           )}
 
-          {/* Monthly summary table */}
-          {(() => {
-            const mb = monthlyBreakdown();
-            if (mb.length === 0) return null;
-            return (
-              <div className="bg-white rounded-2xl shadow-sm p-5">
-                <CardHeader titulo="Resumen General por Mes y Categoría" icono="📅" />
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100">
-                        <th className="text-left text-xs text-gray-400 uppercase pb-3 pr-4">Mes</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.promociones.color }}>Promociones</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.marketing.color }}>Marketing</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.pagosFijos.color }}>Pagos Fijos</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.pagosVariables.color }}>P. Variables</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.rebate.color }}>Rebate</th>
-                        <th className="text-right text-xs text-gray-700 uppercase font-bold pb-3">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mb.map(m => {
-                        const [yr, mo] = m.mes.split("-");
-                        return (
-                          <tr key={m.mes} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                            <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTOS[mo]} {yr}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosFijos    > 0 ? formatMXN(m.pagosFijos)    : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosVariables> 0 ? formatMXN(m.pagosVariables): <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.rebate         > 0 ? formatMXN(m.rebate)         : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 text-right font-bold text-gray-800">{formatMXN(m.total)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t-2 border-gray-200">
-                        <td className="pt-3 font-bold text-gray-700 text-sm">TOTAL ANUAL</td>
-                        {["promociones","marketing","pagosFijos","pagosVariables","rebate"].map(cat => (
-                          <td key={cat} className="pt-3 pr-4 text-right font-bold text-gray-700">
-                            {formatMXN(registros.filter(r => r.categoria === cat).reduce((s, r) => s + (r.monto || 0), 0))}
-                          </td>
-                        ))}
-                        <td className="pt-3 text-right font-bold text-blue-700">{formatMXN(totalAnio)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-            );
-          })()}
+          
         </>
       )}
 
