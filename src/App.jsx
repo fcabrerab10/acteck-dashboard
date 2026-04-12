@@ -3235,7 +3235,6 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
                       onChange: function(e) { var v = {}; v[s.sku] = Number(e.target.value) || 0; setSugeridoEdits(Object.assign({}, sugeridoEdits, v)); },
                       style: { width: 60, padding: "2px 4px", border: "1px solid #E2E8F0", borderRadius: 4, textAlign: "right", fontSize: 11 }
                     })
-                  ),
                 );
               }),
             ),
