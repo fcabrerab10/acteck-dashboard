@@ -2976,7 +2976,9 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
         const promedio90d = soSinMesActual.slice(-3).length > 0 ? Math.round(soSinMesActual.slice(-3).reduce((s, r) => s + (r.piezas || 0), 0) / Math.min(3, soSinMesActual.slice(-3).length)) : 0;
         const stock = invData?.stock || 0;
         const valorInv = invData?.valor || 0;
-        const sugerido = Math.max(0, promedio90d * 3 - stock);
+        const base = promedio90d * 3 - stock;
+        const minPorTienda = clienteKey === "digitalife" && promedio90d > 0 ? 11 : 0;
+        const sugerido = Math.max(minPorTienda, base);
 
         return {
           sku: p.sku,
