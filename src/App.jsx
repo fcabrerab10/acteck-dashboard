@@ -1724,6 +1724,7 @@ function PagosCliente({ cliente, clienteKey }) {
   const [registros, setRegistros]     = useState([]);
   const [loading, setLoading]         = useState(true);
   const [catActiva, setCatActiva]     = useState("todas");
+  const [expandedMonth, setExpandedMonth] = useState(null);
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue]     = useState("");
   const [saving, setSaving]           = useState(false);
@@ -2166,7 +2167,7 @@ function PagosCliente({ cliente, clienteKey }) {
                       {mb.map(m => {
                         const [yr, mo] = m.mes.split("-");
                         return (<React.Fragment key={m.mes}>
-                          <tr className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                          <tr className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setExpandedMonth(expandedMonth === m.mes ? null : m.mes)}>
                             <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTOS[mo]} {yr}</td>
                             <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">—</span>}</td>
                             <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">—</span>}</td>
