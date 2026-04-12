@@ -2539,7 +2539,8 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
   const [message, setMessage] = React.useState("");
   const [datos, setDatos] = React.useState(null);
   const [searchFilter, setSearchFilter] = React.useState("");
-  const [sortBy, setSortBy] = React.useState("sell-in");
+  const [sortCol, setSortCol] = React.useState("stock");
+    const [sortDir, setSortDir] = React.useState("desc");
   const [sugeridoEdits, setSugeridoEdits] = React.useState({});
 
   const formatMXN = (n) => {
@@ -2972,6 +2973,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
         const soMontoTotal = soData.reduce((s, r) => s + (r.monto_pesos || 0), 0);
         const promedio90d = soData.slice(-3).length > 0 ? Math.round(soData.slice(-3).reduce((s, r) => s + (r.piezas || 0), 0) / 3) : 0;
         const stock = invData?.stock || 0;
+        const valorInv = invData?.valor || 0;
         const sugerido = Math.max(0, promedio90d * 3 - stock);
 
         return {
@@ -2982,20 +2984,24 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
           siPiezasTotal,
           promedio90d,
           stock,
+          valorInv,
           sugerido,
           soMontoTotal,
         };
       })
       .sort((a, b) => {
-        if (sortBy === "sell-in") return b.siPiezasTotal - a.siPiezasTotal;
-        if (sortBy === "inventory") return b.stock - a.stock;
-        if (sortBy === "suggested") return b.sugerido - a.sugerido;
-        return 0;
+        const valA = a[sortCol] || 0;
+        const valB = b[sortCol] || 0;
+        return sortDir === "asc" ? valA - valB : valB - valA;
       });
-  }, [datos, searchFilter, sortBy]);
+    }, [datos, searchFilter, sortCol, sortDir]);
 
   // Export to Excel
-  const exportToExcel = async () => {
+  const handleSort = (col) => { if (sortCol === col) { setSortDir(sortDir === "desc" ? "asc" : "desc"); } else { setSortCol(col); setSortDir("desc"); } };
+    const sortArrow = (col) => sortCol === col ? (sortDir === "desc" ? " \u25BC" : " \u25B2") : " \u25B7";
+    const thSort = (label, col) => React.createElement("th", { onClick: () => handleSort(col), style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === col ? "#1D4ED8" : "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none" } }, label + sortArrow(col));
+
+      const exportToExcel = async () => {
     const XLSX = await loadSheetJS();
     if (!XLSX) { alert("Error cargando librería Excel"); return; }
     const rows = skuDetail.map(s => ({
@@ -3006,6 +3012,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
       "SI Piezas": s.siPiezasTotal,
       "Prom 90d": s.promedio90d,
       "Stock": s.stock,
+      "Valor Inv": s.valorInv,
       "SO Monto": s.soMontoTotal,
       "Sugerido": sugeridoEdits[s.sku] !== undefined ? sugeridoEdits[s.sku] : s.sugerido,
     }));
@@ -3209,9 +3216,10 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
                 [1,2,3,4,5,6,7,8,9,10,11,12].map(function(m) {
                   return React.createElement("th", { key: "h"+m, style: { textAlign: "right", padding: "8px 4px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][m-1]);
                 }),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Inv"),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Prom 90d"),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Sugerido"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", color: sortCol === "stock" ? "#1D4ED8" : "#475569" }, onClick: () => handleSort("stock") }, "Inv" + sortArrow("stock")),
+                thSort("Valor Inv", "valorInv"),
+                thSort("Prom 90d", "promedio90d"),
+                thSort("Sugerido", "sugerido"),
               ),
             ),
             React.createElement("tbody", {},
@@ -3228,6 +3236,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
                     return React.createElement("td", { key: "m"+m, style: { textAlign: "right", padding: "6px 4px", color: pzas > 0 ? "#1E293B" : "#CBD5E1", fontSize: 11 } }, pzas > 0 ? pzas : "-");
                   }),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", fontWeight: 500, color: "#1E293B", fontSize: 11 } }, (s.stock || 0).toLocaleString("es-MX")),
+                  React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11 } }, s.valorInv > 0 ? "$" + Math.round(s.valorInv).toLocaleString("es-MX") : "-"),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11 } }, (s.promedio90d || 0).toLocaleString("es-MX")),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", fontSize: 11 } },
                     React.createElement("input", {
