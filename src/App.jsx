@@ -1846,11 +1846,11 @@ function PagosCliente({ cliente, clienteKey }) {
     if (!editingCell) return;
     const { id, field } = editingCell;
     const value = field === "monto" ? (parseFloat(editValue) || 0) : (editValue || null);
-    setRegistros(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+    setRegistros(prev => prev.map(r => r.id === id ? { ...r, [field]: value, ...(field === "fecha_pago_real" && value ? { estatus: "pagado" } : {}) } : r));
     cancelEdit();
     setSaving(true);
     const { error } = await supabase.from("pagos")
-      .update({ [field]: value, updated_at: new Date().toISOString() })
+      .update({ [field]: value, updated_at: new Date().toISOString(), ...(field === "fecha_pago_real" && value ? { estatus: "pagado" } : {}) })
       .eq("id", id);
     setSaving(false);
     if (error) { flash("Error al guardar â", "err"); fetchData(); }
@@ -1930,7 +1930,7 @@ function PagosCliente({ cliente, clienteKey }) {
   const fijoRecords = registros.filter(r => r.categoria === "pagosFijos");
   const nonFijoRecords = registros.filter(r => r.categoria !== "pagosFijos");
   const filtered = catActiva === "todas"
-    ? nonFijoRecords
+    ? registros.filter(r => r.estatus !== "pagado")
     : catActiva === "pagosFijos"
       ? fijoRecords
       : registros.filter(r => r.categoria === catActiva);
@@ -1959,8 +1959,9 @@ function PagosCliente({ cliente, clienteKey }) {
       const d = r.fecha_compromiso;
       if (!d) return;
       const m = typeof d === "string" ? d.slice(0, 7) : new Date(d).toISOString().slice(0, 7);
-      if (!months[m]) months[m] = { mes: m, total: 0, promociones: 0, marketing: 0, pagosFijos: 0, pagosVariables: 0, rebate: 0 };
+      if (!months[m]) months[m] = { mes: m, total: 0, promociones: 0, marketing: 0, pagosFijos: 0, pagosVariables: 0, rebate: 0, records: [] };
       months[m].total += (r.monto || 0);
+      months[m].records.push(r);
       if (CATEGORIA_META[r.categoria]) months[m][r.categoria] = (months[m][r.categoria] || 0) + (r.monto || 0);
     });
     return Object.values(months).sort((a, b) => a.mes.localeCompare(b.mes));
@@ -2164,8 +2165,8 @@ function PagosCliente({ cliente, clienteKey }) {
                     <tbody>
                       {mb.map(m => {
                         const [yr, mo] = m.mes.split("-");
-                        return (
-                          <tr key={m.mes} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                        return (<React.Fragment key={m.mes}>
+                          <tr className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                             <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTOS[mo]} {yr}</td>
                             <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">—</span>}</td>
                             <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">—</span>}</td>
@@ -2174,7 +2175,35 @@ function PagosCliente({ cliente, clienteKey }) {
                             <td className="py-2.5 pr-4 text-right text-gray-600">{m.rebate         > 0 ? formatMXN(m.rebate)         : <span className="text-gray-300">—</span>}</td>
                             <td className="py-2.5 text-right font-bold text-gray-800">{formatMXN(m.total)}</td>
                           </tr>
-                        );
+                          {expandedMonth === m.mes && (
+                            <tr>
+                              <td colSpan="8" className="p-0">
+                                <div className="bg-blue-50 px-6 py-3">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="text-gray-500">
+                                        <th className="text-left pb-1 font-medium">Concepto</th>
+                                        <th className="text-left pb-1 font-medium">Categor\u00eda</th>
+                                        <th className="text-right pb-1 font-medium">Monto</th>
+                                        <th className="text-left pb-1 font-medium">Estatus</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {m.records.map((r, ri) => (
+                                        <tr key={ri} className="border-t border-blue-100">
+                                          <td className="py-1 text-gray-700">{r.concepto}</td>
+                                          <td className="py-1 text-gray-600">{CATEGORIA_META[r.categoria]?.label || r.categoria}</td>
+                                          <td className="py-1 text-right text-gray-700">{formatMXN(r.monto || 0)}</td>
+                                          <td className="py-1"><span className={`px-2 py-0.5 rounded-full text-xs ${r.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{r.estatus}</span></td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>);
                       })}
                     </tbody>
                     <tfoot>
@@ -2328,7 +2357,7 @@ function PagosCliente({ cliente, clienteKey }) {
 
           
           {/* Calculadora de Rebate Trimestral */}
-          {clienteKey === "digitalife" && (
+          {clienteKey === "digitalife" && catActiva === "rebate" && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
