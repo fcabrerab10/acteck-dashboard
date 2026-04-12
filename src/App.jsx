@@ -1717,7 +1717,7 @@ const MESES_CORTOS = {
   "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dic",
 };
 
-function PagosCliente({ cliente }) {
+function PagosCliente({ cliente, clienteKey }) {
   const c = cliente;
 
   // ── State ──
@@ -1753,7 +1753,44 @@ function PagosCliente({ cliente }) {
     { key: "12", short: "Dic", full: "Diciembre" },
   ];
 
-  // ── Data loading ──
+  
+
+  // ── Rebate Calculator (solo Digitalife) ──
+  const [rebateData, setRebateData] = useState({ monitores: 0, sillas: 0, accesorios: 0 });
+  const [rebateLoading, setRebateLoading] = useState(false);
+  const [rebateQ, setRebateQ] = useState(() => {
+    const m = new Date().getMonth();
+    return m < 3 ? 1 : m < 6 ? 2 : m < 9 ? 3 : 4;
+  });
+  const REBATE_PCT = { monitores: 0.02, sillas: 0.02, accesorios: 0.03 };
+  const Q_MESES = { 1: [1,2,3], 2: [4,5,6], 3: [7,8,9], 4: [10,11,12] };
+
+  useEffect(() => {
+    if (clienteKey !== "digitalife" || !DB_CONFIGURED) return;
+    setRebateLoading(true);
+    (async () => {
+      const anio = new Date().getFullYear();
+      const meses = Q_MESES[rebateQ];
+      const [siRes, prodRes] = await Promise.all([
+        supabase.from("sell_in_sku").select("sku,mes,monto_pesos").eq("cliente", "digitalife").eq("anio", anio).in("mes", meses),
+        supabase.from("productos_cliente").select("sku,categoria").eq("cliente", "digitalife")
+      ]);
+      const catMap = {};
+      (prodRes.data || []).forEach(p => { catMap[p.sku] = (p.categoria || "").toLowerCase(); });
+      let mon = 0, sil = 0, acc = 0;
+      (siRes.data || []).forEach(r => {
+        const cat = catMap[r.sku] || "";
+        const monto = r.monto_pesos || 0;
+        if (cat.includes("monitor")) mon += monto;
+        else if (cat.includes("silla")) sil += monto;
+        else acc += monto;
+      });
+      setRebateData({ monitores: mon, sillas: sil, accesorios: acc });
+      setRebateLoading(false);
+    })();
+  }, [clienteKey, rebateQ]);
+
+// ── Data loading ──
   useEffect(() => {
     if (!DB_CONFIGURED) {
       const seed = Object.entries(PAGOS_DIGITALIFE_2026.categorias).flatMap(([key, cat]) =>
@@ -1852,7 +1889,7 @@ function PagosCliente({ cliente }) {
 
   // ── Delete record ──
   const handleDelete = async (id) => {
-    if (!window.confirm("Â¿Eliminar este registro? Esta acción no se puede deshacer.")) return;
+    if (!window.confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")) return;
     setRegistros(prev => prev.filter(r => r.id !== id));
     const { error } = await supabase.from("pagos").delete().eq("id", id);
     if (error) { flash("Error al eliminar â", "err"); fetchData(); }
@@ -1861,7 +1898,7 @@ function PagosCliente({ cliente }) {
 
   // ── Delete all months of a fijo concept ──
   const handleDeleteFijo = async (conceptoKey, ids) => {
-    if (!window.confirm(`Â¿Eliminar todos los meses de "${conceptoKey}"? Esta acción no se puede deshacer.`)) return;
+    if (!window.confirm(`¿Eliminar todos los meses de "${conceptoKey}"? Esta acción no se puede deshacer.`)) return;
     setRegistros(prev => prev.filter(r => !ids.includes(r.id)));
     for (const id of ids) {
       await supabase.from("pagos").delete().eq("id", id);
@@ -2123,7 +2160,7 @@ function PagosCliente({ cliente }) {
                 {DB_CONFIGURED && (
                   <button onClick={() => setShowAddFijo(!showAddFijo)}
                     className="flex items-center gap-1.5 px-4 py-1.5 bg-purple-600 text-white rounded-full text-sm font-semibold hover:bg-purple-700 transition-colors">
-                    ï¼ Nuevo Pago Fijo
+                    + Nuevo Pago Fijo
                   </button>
                 )}
               </div>
@@ -2318,7 +2355,7 @@ function PagosCliente({ cliente }) {
                 {DB_CONFIGURED && (
                   <button onClick={() => setShowAdd(!showAdd)}
                     className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white rounded-full text-sm font-semibold hover:bg-blue-700 transition-colors">
-                    ï¼ Agregar
+                    + Agregar
                   </button>
                 )}
               </div>
@@ -2426,6 +2463,69 @@ function PagosCliente({ cliente }) {
                   {" "}💡 <strong className="text-gray-600">Pendiente</strong> · <strong className="text-gray-600">En Proceso</strong> · <strong className="text-gray-600">Pagado</strong> · <strong className="text-gray-600">Vencido</strong>
                 </p>
               </div>
+            </div>
+          )}
+
+          
+          {/* Calculadora de Rebate Trimestral */}
+          {clienteKey === "digitalife" && (
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">💰</span>
+                  <h3 className="text-lg font-bold text-gray-800">Calculadora Rebate Q{rebateQ} {new Date().getFullYear()}</h3>
+                </div>
+                <div className="flex gap-1">
+                  {[1,2,3,4].map(q => (
+                    <button key={q} onClick={() => setRebateQ(q)}
+                      className={"px-3 py-1 rounded-full text-xs font-bold transition-all " + (rebateQ === q ? "bg-red-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}>
+                      Q{q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {rebateLoading ? (
+                <div className="text-center py-6 text-gray-400">Cargando datos de Sell In...</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b-2 border-gray-200">
+                        <th className="text-left py-2 px-3 font-bold text-gray-700">Categoria</th>
+                        <th className="text-right py-2 px-3 font-bold text-gray-700">Sell In</th>
+                        <th className="text-right py-2 px-3 font-bold text-gray-700">Rebate (%)</th>
+                        <th className="text-right py-2 px-3 font-bold text-red-600">Rebate ($)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { label: "Monitores", key: "monitores" },
+                        { label: "Sillas", key: "sillas" },
+                        { label: "Accesorios", key: "accesorios" }
+                      ].map(row => {
+                        const si = rebateData[row.key] || 0;
+                        const pct = REBATE_PCT[row.key];
+                        const reb = Math.round(si * pct);
+                        return (
+                          <tr key={row.key} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-2 px-3 font-semibold text-gray-700">{row.label}</td>
+                            <td className="py-2 px-3 text-right text-gray-600">{si > 0 ? "$" + si.toLocaleString("es-MX") : "—"}</td>
+                            <td className="py-2 px-3 text-right text-gray-500">{(pct * 100).toFixed(0)}%</td>
+                            <td className="py-2 px-3 text-right font-bold" style={{ color: reb > 0 ? "#ef4444" : "#9ca3af" }}>{reb > 0 ? "$" + reb.toLocaleString("es-MX") : "—"}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="border-t-2 border-gray-300 bg-gray-50">
+                        <td className="py-2 px-3 font-bold text-gray-800">Total</td>
+                        <td className="py-2 px-3 text-right font-bold text-gray-800">{"$" + (rebateData.monitores + rebateData.sillas + rebateData.accesorios).toLocaleString("es-MX")}</td>
+                        <td className="py-2 px-3"></td>
+                        <td className="py-2 px-3 text-right font-bold text-red-600">{"$" + Math.round(rebateData.monitores * REBATE_PCT.monitores + rebateData.sillas * REBATE_PCT.sillas + rebateData.accesorios * REBATE_PCT.accesorios).toLocaleString("es-MX")}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p className="text-xs text-gray-400 mt-3">* Rebate basado en Sell In del trimestre. Se paga al cierre de Q{rebateQ}. Monitores y Sillas: 2%, Accesorios (todo lo demas): 3%.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -5148,7 +5248,7 @@ export default function App() {
             <>
         {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} isML={clienteActivo === "mercadolibre"} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
-        {paginaActiva === "pagos"   && <PagosCliente cliente={c} />}
+        {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
             {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "{c.nombre}"}  clienteKey={clienteActivo} />}
         {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: clienteActivo })}
