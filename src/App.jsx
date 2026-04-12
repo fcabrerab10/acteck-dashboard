@@ -2970,7 +2970,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
 
         const siPiezasTotal = siData.reduce((s, r) => s + (r.piezas || 0), 0);
         const soMontoTotal = soData.reduce((s, r) => s + (r.monto_pesos || 0), 0);
-        const promedio90d = siData.slice(-3).length > 0 ? Math.round(siData.slice(-3).reduce((s, r) => s + (r.piezas || 0), 0) / 3) : 0;
+        const promedio90d = soData.slice(-3).length > 0 ? Math.round(soData.slice(-3).reduce((s, r) => s + (r.piezas || 0), 0) / 3) : 0;
         const stock = invData?.stock || 0;
         const sugerido = Math.max(0, promedio90d * 3 - stock);
 
