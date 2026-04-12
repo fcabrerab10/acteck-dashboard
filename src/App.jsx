@@ -1539,7 +1539,7 @@ function CreditoCobranza({ cliente }) {
       </div>
 
       {/* ── KPI CARDS ── */}
-      <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-4 mb-6 ${clienteKey === "digitalife" ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
         <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Total</p>
           <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoActual)}</p>
@@ -1764,31 +1764,46 @@ function PagosCliente({ cliente, clienteKey }) {
   });
   const REBATE_PCT = { monitores: 0.02, sillas: 0.02, accesorios: 0.03 };
   const Q_MESES = { 1: [1,2,3], 2: [4,5,6], 3: [7,8,9], 4: [10,11,12] };
+  const Q_FECHA_PAGO = { 1: "-04-15", 2: "-07-15", 3: "-10-15", 4: "-01-15" };
+  const [rebateAllQ, setRebateAllQ] = useState({ 1: 0, 2: 0, 3: 0, 4: 0 });
+  const [rebateSynced, setRebateSynced] = useState({});
 
   useEffect(() => {
     if (clienteKey !== "digitalife" || !DB_CONFIGURED) return;
     setRebateLoading(true);
     (async () => {
       const anio = new Date().getFullYear();
-      const meses = Q_MESES[rebateQ];
       const [siRes, prodRes] = await Promise.all([
-        supabase.from("sell_in_sku").select("sku,mes,monto_pesos").eq("cliente", "digitalife").eq("anio", anio).in("mes", meses),
+        supabase.from("sell_in_sku").select("sku,mes,monto_pesos").eq("cliente", "digitalife").eq("anio", anio),
         supabase.from("productos_cliente").select("sku,categoria").eq("cliente", "digitalife")
       ]);
       const catMap = {};
       (prodRes.data || []).forEach(p => { catMap[p.sku] = (p.categoria || "").toLowerCase(); });
-      let mon = 0, sil = 0, acc = 0;
+      // Compute per-quarter totals
+      const qTotals = { 1: 0, 2: 0, 3: 0, 4: 0 };
+      const qData = { 1: { m: 0, s: 0, a: 0 }, 2: { m: 0, s: 0, a: 0 }, 3: { m: 0, s: 0, a: 0 }, 4: { m: 0, s: 0, a: 0 } };
       (siRes.data || []).forEach(r => {
         const cat = catMap[r.sku] || "";
         const monto = r.monto_pesos || 0;
-        if (cat.includes("monitor")) mon += monto;
-        else if (cat.includes("silla")) sil += monto;
-        else acc += monto;
+        const mes = Number(r.mes);
+        const q = mes <= 3 ? 1 : mes <= 6 ? 2 : mes <= 9 ? 3 : 4;
+        if (cat.includes("monitor")) { qData[q].m += monto; qTotals[q] += monto * 0.02; }
+        else if (cat.includes("silla")) { qData[q].s += monto; qTotals[q] += monto * 0.02; }
+        else { qData[q].a += monto; qTotals[q] += monto * 0.03; }
       });
-      setRebateData({ monitores: mon, sillas: sil, accesorios: acc });
+      setRebateAllQ(qTotals);
+      const sel = qData[rebateQ];
+      setRebateData({ monitores: sel.m, sillas: sel.s, accesorios: sel.a });
+      // Check which Qs already have rebate pagos
+      const synced = {};
+      registros.filter(r => r.categoria === "rebate").forEach(r => {
+        const m = r.concepto?.match(/Q(\d)/);
+        if (m) synced[Number(m[1])] = r.id;
+      });
+      setRebateSynced(synced);
       setRebateLoading(false);
     })();
-  }, [clienteKey, rebateQ]);
+  }, [clienteKey, rebateQ, registros.length]);
 
 // ── Data loading ──
   useEffect(() => {
@@ -2118,6 +2133,16 @@ function PagosCliente({ cliente, clienteKey }) {
               <p className="text-2xl font-bold text-gray-800">{totalAnio > 0 ? formatMXN(totalAnio) : "$0"}</p>
               <p className="text-xs text-gray-400 mt-1">{registros.length} conceptos registrados</p>
             </div>
+            {clienteKey === "digitalife" && (
+              <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-red-500">
+                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Rebate Acum.</p>
+                <p className="text-2xl font-bold text-red-600">{(() => {
+                  const total = Math.round(Object.values(rebateAllQ).reduce((s, v) => s + v, 0));
+                  return total > 0 ? formatMXN(total) : "$0";
+                })()}</p>
+                <p className="text-xs text-gray-400 mt-1">{Object.values(rebateSynced).filter(Boolean).length} de 4 Qs registrados</p>
+              </div>
+            )}
           </div>
 
           {/* Category summary cards */}
@@ -2523,7 +2548,37 @@ function PagosCliente({ cliente, clienteKey }) {
                       </tr>
                     </tbody>
                   </table>
-                  <p className="text-xs text-gray-400 mt-3">* Rebate basado en Sell In del trimestre. Se paga al cierre de Q{rebateQ}. Monitores y Sillas: 2%, Accesorios (todo lo demas): 3%.</p>
+                  <div className="flex items-center justify-between mt-4">
+                    <p className="text-xs text-gray-400">* Rebate basado en Sell In del trimestre. Se paga al cierre de Q{rebateQ}. Monitores y Sillas: 2%, Accesorios (todo lo demas): 3%.</p>
+                    {(() => {
+                      const totalReb = Math.round(rebateData.monitores * REBATE_PCT.monitores + rebateData.sillas * REBATE_PCT.sillas + rebateData.accesorios * REBATE_PCT.accesorios);
+                      if (totalReb <= 0) return null;
+                      if (rebateSynced[rebateQ]) return <span className="text-xs text-green-600 font-semibold ml-2">Pago registrado</span>;
+                      return <button onClick={async () => {
+                        const anio = new Date().getFullYear();
+                        const fechaQ = rebateQ === 4 ? (anio + 1) + Q_FECHA_PAGO[4] : anio + Q_FECHA_PAGO[rebateQ];
+                        const record = {
+                          concepto: "Rebate Q" + rebateQ + " " + anio,
+                          categoria: "rebate",
+                          monto: totalReb,
+                          estatus: "pendiente",
+                          fecha_compromiso: fechaQ,
+                          responsable: "Acteck",
+                          notas: "Monitores: $" + Math.round(rebateData.monitores).toLocaleString("es-MX") + " (2%), Sillas: $" + Math.round(rebateData.sillas).toLocaleString("es-MX") + " (2%), Accesorios: $" + Math.round(rebateData.accesorios).toLocaleString("es-MX") + " (3%)",
+                          cliente: "digitalife"
+                        };
+                        const { data, error } = await supabase.from("pagos").insert(record).select().single();
+                        if (!error && data) {
+                          setRegistros(prev => [...prev, data]);
+                          flash("Pago de Rebate Q" + rebateQ + " registrado", "ok");
+                        } else {
+                          flash("Error al registrar rebate", "err");
+                        }
+                      }} className="px-4 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg hover:bg-red-600 transition-colors ml-2">
+                        Registrar Pago Q{rebateQ}
+                      </button>;
+                    })()}
+                  </div>
                 </div>
               )}
             </div>
