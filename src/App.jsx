@@ -738,6 +738,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
   const [pendMkt, setPendMkt] = React.useState([]);
   const [invMkt, setInvMkt] = React.useState([]);
   const [minutasList, setMinutasList] = React.useState([]);
+  const [invCliente, setInvCliente] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [editingMeta, setEditingMeta] = React.useState(false);
   const [metaForm, setMetaForm] = React.useState({ min: 25000000, opt: 30000000 });
@@ -760,13 +761,15 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
       supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "marketing").order("created_at", { ascending: false }),
       supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", 2026).order("mes"),
       supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
-    ]).then(([vR, mR, pcR, pmR, imR, minR]) => {
+      supabase.from("inventario_cliente").select("valor").eq("cliente", clienteKey),
+    ]).then(([vR, mR, pcR, pmR, imR, minR, invCR]) => {
       setVentas(vR.data || []);
       if (mR.data) { setMeta(mR.data); setMetaForm({ min: mR.data.meta_sell_in_min, opt: mR.data.meta_sell_in_optimista }); }
       setPendCom(pcR.data || []);
       setPendMkt(pmR.data || []);
       setInvMkt(imR.data || []);
       setMinutasList(minR.data || []);
+      setInvCliente(invCR.data || []);
       setLoading(false);
     });
   }, [clienteKey]);
@@ -783,6 +786,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
   const totalInvValor = ventas.reduce((s, v) => s + (Number(v.inventario_valor) || 0), 0);
   const avgInvValor = ventas.length > 0 ? totalInvValor / ventas.length : 0;
   const lastInvValor = ventas.length > 0 ? Number(ventas[ventas.length - 1].inventario_valor) || 0 : 0;
+  const totalInvCliente = invCliente.reduce((s, r) => s + (Number(r.valor) || 0), 0);
 
   const totalInversionMkt = invMkt.reduce((s, v) => s + (Number(v.monto) || 0), 0);
   const costoXPeso = totalSellOut > 0 ? totalInversionMkt / totalSellOut : 0;
@@ -1003,9 +1007,9 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
   function InventarioCard() {
     return React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 12, padding: 20 } },
       React.createElement("h4", { style: { margin: "0 0 8px", fontSize: 14, color: "#334155" } }, "Valor de Inventario"),
-      React.createElement("div", { style: { fontSize: 28, fontWeight: 700, color: "#1E293B" } }, formatMXN(lastInvValor)),
+      React.createElement("div", { style: { fontSize: 28, fontWeight: 700, color: "#1E293B" } }, formatMXN(totalInvCliente > 0 ? totalInvCliente : lastInvValor)),
       React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 4 } },
-        ventas.length > 0 ? "Mes m\u00e1s reciente con datos" : "Sin datos")
+        totalInvCliente > 0 ? invCliente.length + " SKUs en inventario" : (ventas.length > 0 ? "Mes m\u00e1s reciente con datos" : "Sin datos"))
     );
   }
 
