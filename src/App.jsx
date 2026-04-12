@@ -1932,11 +1932,11 @@ function PagosCliente({ cliente, clienteKey }) {
   const filtered = catActiva === "todas"
     ? nonFijoRecords
     : catActiva === "pagosFijos"
-      ? []
+      ? fijoRecords
       : registros.filter(r => r.categoria === catActiva);
 
   const showFijosSection = catActiva === "todas" || catActiva === "pagosFijos";
-  const showRegularTable = catActiva !== "pagosFijos";
+  const showRegularTable = true;
 
   // Group fijos by concepto
   const fijoGroups = {};
@@ -2123,11 +2123,7 @@ function PagosCliente({ cliente, clienteKey }) {
               <p className="text-2xl font-bold text-yellow-600">{totalPorPagar > 0 ? formatMXN(totalPorPagar) : "$0"}</p>
               <p className="text-xs text-gray-400 mt-1">{registros.filter(r => ["pendiente","en proceso"].includes(r.estatus)).length} conceptos</p>
             </div>
-            <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4 ${totalVencido > 0 ? "border-red-500" : "border-gray-200"}`}>
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Vencido</p>
-              <p className={`text-2xl font-bold ${totalVencido > 0 ? "text-red-600" : "text-gray-400"}`}>{totalVencido > 0 ? formatMXN(totalVencido) : "$0"}</p>
-              <p className="text-xs text-gray-400 mt-1">{registros.filter(r => r.estatus === "vencido").length} conceptos</p>
-            </div>
+           
             <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
               <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total 2026</p>
               <p className="text-2xl font-bold text-gray-800">{totalAnio > 0 ? formatMXN(totalAnio) : "$0"}</p>
