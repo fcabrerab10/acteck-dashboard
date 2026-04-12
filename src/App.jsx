@@ -2962,6 +2962,27 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
       });
   }, [datos, searchFilter, sortBy]);
 
+  // Export to Excel
+  const exportToExcel = async () => {
+    const XLSX = await loadSheetJS();
+    if (!XLSX) { alert("Error cargando librería Excel"); return; }
+    const rows = skuDetail.map(s => ({
+      SKU: s.sku,
+      Descripcion: s.descripcion,
+      Marca: s.marca,
+      Estado: s.estado,
+      "SI Piezas": s.siPiezasTotal,
+      "Prom 90d": s.promedio90d,
+      "Stock": s.stock,
+      "SO Monto": s.soMontoTotal,
+      "Sugerido": sugeridoEdits[s.sku] !== undefined ? sugeridoEdits[s.sku] : s.sugerido,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Estrategia");
+    XLSX.writeFile(wb, "Estrategia_" + (clienteKey || cliente) + ".xlsx");
+  };
+
   // ———— RENDER ————
 
   if (!datos && !loading) {
@@ -3126,27 +3147,6 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
         ),
       ),
     ),
-
-    // Export to Excel function
-    const exportToExcel = async () => {
-      const XLSX = await loadSheetJS();
-      if (!XLSX) { alert("Error cargando librería Excel"); return; }
-      const rows = skuDetail.map(s => ({
-        SKU: s.sku,
-        Descripcion: s.descripcion,
-        Marca: s.marca,
-        Estado: s.estado,
-        "SI Piezas": s.siPiezasTotal,
-        "Prom 90d": s.promedio90d,
-        "Stock": s.stock,
-        "SO Monto": s.soMontoTotal,
-        "Sugerido": sugeridoEdits[s.sku] !== undefined ? sugeridoEdits[s.sku] : s.sugerido,
-      }));
-      const ws = XLSX.utils.json_to_sheet(rows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Estrategia");
-      XLSX.writeFile(wb, "Estrategia_" + (clienteKey || cliente) + ".xlsx");
-    };
 
     // SKU Detail
     React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
