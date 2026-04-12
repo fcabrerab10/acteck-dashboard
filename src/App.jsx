@@ -733,7 +733,8 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
     );
   }
   const [ventas, setVentas] = React.useState([]);
-  const [meta, setMeta] = React.useState({ meta_sell_in_min: 25000000, meta_sell_in_optimista: 30000000 });
+  const clienteCuota = (clientes[clienteKey] && clientes[clienteKey].cuotaAnual) || 30000000;
+    const [meta, setMeta] = React.useState({ meta_sell_in_min: Math.round(clienteCuota * 0.83), meta_sell_in_optimista: clienteCuota });
   const [pendCom, setPendCom] = React.useState([]);
   const [pendMkt, setPendMkt] = React.useState([]);
   const [invMkt, setInvMkt] = React.useState([]);
@@ -774,7 +775,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
     ]).then(([siR, soR, mR, pcR, pmR, imR, minR, invCR, cuotasR]) => {
       setSellInSku(siR.data || []);
       setSellOutSku(soR.data || []);
-      if (mR.data) { setMeta(mR.data); setMetaForm({ min: mR.data.meta_sell_in_min, opt: mR.data.meta_sell_in_optimista }); }
+      if (mR.data) { setMeta(mR.data); setMetaForm({ min: mR.data.meta_sell_in_min, opt: mR.data.meta_sell_in_optimista }); } else { const _cc = (clientes[clienteKey] && clientes[clienteKey].cuotaAnual) || 30000000; setMeta({ meta_sell_in_min: Math.round(_cc * 0.83), meta_sell_in_optimista: _cc }); setMetaForm({ min: Math.round(_cc * 0.83), opt: _cc }); }
       setPendCom(pcR.data || []);
       setPendMkt(pmR.data || []);
       setInvMkt(imR.data || []);
@@ -1314,7 +1315,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
     React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: "14px 20px" } },
       React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
         React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, color: "#1E293B", margin: 0 } }, (cliente && cliente.nombre ? cliente.nombre : clienteKey)),
-        React.createElement("span", { style: { fontSize: 13, color: "#94A3B8" } }, "Acteck / Balam Rush")
+        React.createElement("span", { style: { fontSize: 13, color: "#94A3B8" } }, cliente && cliente.marca ? cliente.marca : "Acteck / Balam Rush")
       ),
       React.createElement(Semaforo, { estado: estadoSalud })
     ),
@@ -4980,7 +4981,7 @@ export default function App() {
     { id: "home",       label: "Resumen",               icono: "🏠", habilitado: true  },
     { id: "analisis",   label: "Análisis",                icono: "📈", habilitado: true  },
     { id: "estrategia", label: "Estrategia de Producto", icono: "📦", habilitado: true  },
-    { id: "marketing",  label: "Marketing",              icono: "📣", habilitado: true  },
+    { id: "marketing",  label: "Marketing",              icono: "📣", habilitado: clienteActivo !== "pcel"  },
     { id: "pagos",      label: "Pagos",                  icono: "💰", habilitado: true  },
     { id: "cartera",    label: "Crédito y Cobranza",     icono: "📊", habilitado: true  },
   ]
