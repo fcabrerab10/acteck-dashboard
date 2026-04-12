@@ -1732,7 +1732,7 @@ function PagosCliente({ cliente, clienteKey }) {
   const [showAdd, setShowAdd]         = useState(false);
   const [expandedFijos, setExpandedFijos] = useState({});  // { conceptoKey: true }
   const [showAddFijo, setShowAddFijo] = useState(false);
-  const [newFijo, setNewFijo]         = useState({ concepto: "", monto: "", responsable: "" });
+  const [newFijo, setNewFijo] = useState({ concepto: "", monto: "", responsable: "", meses: [], existente: "" });
   const [newRow, setNewRow]           = useState({
     folio: "", concepto: "", categoria: "promociones", monto: "",
     estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
@@ -1880,27 +1880,34 @@ function PagosCliente({ cliente, clienteKey }) {
 
   // ── Add Pago Fijo (creates 12 monthly records) ──
   const handleAddFijo = async () => {
-    if (!newFijo.concepto.trim()) return;
-    const monto = parseFloat(newFijo.monto) || 0;
-    const records = MESES_ARR.map(m => ({
+    const isExisting = newFijo.existente && newFijo.existente !== "__nuevo__";
+    const concepto = isExisting ? newFijo.existente : newFijo.concepto.trim();
+    if (!concepto) return;
+    const selectedMeses = newFijo.meses.length > 0 ? newFijo.meses : MESES_ARR.map(m => m.key);
+    const existingMeses = isExisting && fijoGroups[concepto] ? fijoGroups[concepto].map(r => r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : null).filter(Boolean) : [];
+    const baseMonto = isExisting && fijoGroups[concepto] && fijoGroups[concepto][0] ? (fijoGroups[concepto][0].monto || 0) : (parseFloat(newFijo.monto) || 0);
+    const baseResp = isExisting && fijoGroups[concepto] && fijoGroups[concepto][0] ? (fijoGroups[concepto][0].responsable || null) : (newFijo.responsable.trim() || null);
+    const newMeses = selectedMeses.filter(m => !existingMeses.includes(m));
+    if (newMeses.length === 0) { flash("Todos los meses seleccionados ya existen", "err"); return; }
+    const records = newMeses.map(mKey => ({
       folio: "",
-      concepto: newFijo.concepto.trim(),
+      concepto,
       categoria: "pagosFijos",
-      monto,
+      monto: isExisting ? baseMonto : (parseFloat(newFijo.monto) || 0),
       estatus: "pendiente",
-      fecha_compromiso: `2026-${m.key}-01`,
+      fecha_compromiso: `2026-${mKey}-01`,
       fecha_pago_real: null,
-      responsable: newFijo.responsable.trim() || null,
+      responsable: isExisting ? baseResp : (newFijo.responsable.trim() || null),
       notas: null,
     }));
     setSaving(true);
     const { data, error } = await supabase.from("pagos").insert(records).select();
     setSaving(false);
-    if (error) { flash("Error al crear pagos fijos â", "err"); return; }
+    if (error) { flash("Error al crear pagos fijos", "err"); return; }
     setRegistros(prev => [...prev, ...data]);
-    setNewFijo({ concepto: "", monto: "", responsable: "" });
+    setNewFijo({ concepto: "", monto: "", responsable: "", meses: [], existente: "" });
     setShowAddFijo(false);
-    flash(`12 meses de "${newFijo.concepto}" creados â`);
+    flash(`${newMeses.length} mes(es) de "${concepto}" creados`);
   };
 
   // ── Delete record ──
@@ -2309,27 +2316,68 @@ function PagosCliente({ cliente, clienteKey }) {
                         </button>
                       ) : (
                         <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200">
-                          <p className="text-sm font-semibold text-indigo-800 mb-3">Nuevo Pago Fijo (se crean 12 registros mensuales)</p>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div>
-                              <label className="text-xs text-gray-500 block mb-1">Concepto *</label>
-                              <input type="text" value={newFijo.concepto} onChange={e => setNewFijo(p => ({...p, concepto: e.target.value}))}
-                                placeholder="Ej: Renta oficina" className="w-full border rounded-lg px-3 py-1.5 text-sm" />
-                            </div>
-                            <div>
-                              <label className="text-xs text-gray-500 block mb-1">Monto mensual (MXN)</label>
-                              <input type="number" value={newFijo.monto} onChange={e => setNewFijo(p => ({...p, monto: e.target.value}))}
-                                placeholder="0" className="w-full border rounded-lg px-3 py-1.5 text-sm" />
-                            </div>
-                            <div>
-                              <label className="text-xs text-gray-500 block mb-1">Responsable</label>
-                              <input type="text" value={newFijo.responsable} onChange={e => setNewFijo(p => ({...p, responsable: e.target.value}))}
-                                placeholder="Responsable" className="w-full border rounded-lg px-3 py-1.5 text-sm" />
-                            </div>
+                          <p className="text-sm font-semibold text-indigo-800 mb-3">Agregar Pago Fijo</p>
+                          <div className="mb-3">
+                            <label className="text-xs text-gray-500 block mb-1">¿A qué concepto?</label>
+                            <select value={newFijo.existente} onChange={e => {
+                              const v = e.target.value;
+                              setNewFijo(p => ({...p, existente: v, concepto: v === "__nuevo__" ? "" : v}));
+                            }} className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white">
+                              <option value="">— Selecciona —</option>
+                              <option value="__nuevo__">+ Crear nuevo concepto</option>
+                              {Object.keys(fijoGroups).map(k => <option key={k} value={k}>{k}</option>)}
+                            </select>
                           </div>
+                          {(newFijo.existente === "__nuevo__") && (
+                            <div className="grid grid-cols-3 gap-3 mb-3">
+                              <div>
+                                <label className="text-xs text-gray-500 block mb-1">Concepto *</label>
+                                <input type="text" value={newFijo.concepto} onChange={e => setNewFijo(p => ({...p, concepto: e.target.value}))}
+                                  placeholder="Ej: Renta oficina" className="w-full border rounded-lg px-3 py-1.5 text-sm" />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500 block mb-1">Monto mensual (MXN)</label>
+                                <input type="number" value={newFijo.monto} onChange={e => setNewFijo(p => ({...p, monto: e.target.value}))}
+                                  placeholder="0" className="w-full border rounded-lg px-3 py-1.5 text-sm" />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500 block mb-1">Responsable</label>
+                                <input type="text" value={newFijo.responsable} onChange={e => setNewFijo(p => ({...p, responsable: e.target.value}))}
+                                  placeholder="Responsable" className="w-full border rounded-lg px-3 py-1.5 text-sm" />
+                              </div>
+                            </div>
+                          )}
+                          {newFijo.existente && (
+                            <div className="mb-3">
+                              <label className="text-xs text-gray-500 block mb-2">Selecciona los meses</label>
+                              <div className="flex flex-wrap gap-2">
+                                <button type="button" onClick={() => {
+                                  const allKeys = MESES_ARR.map(m => m.key);
+                                  setNewFijo(p => ({...p, meses: p.meses.length === 12 ? [] : allKeys}));
+                                }} className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${newFijo.meses.length === 12 ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300 hover:border-indigo-400"}`}>
+                                  Todos
+                                </button>
+                                {MESES_ARR.map(m => {
+                                  const sel = newFijo.meses.includes(m.key);
+                                  const existingGroup = newFijo.existente !== "__nuevo__" && fijoGroups[newFijo.existente];
+                                  const alreadyExists = existingGroup ? existingGroup.some(r => r.fecha_compromiso && r.fecha_compromiso.slice(5, 7) === m.key) : false;
+                                  return (
+                                    <button key={m.key} type="button" disabled={alreadyExists}
+                                      onClick={() => setNewFijo(p => ({...p, meses: sel ? p.meses.filter(x => x !== m.key) : [...p.meses, m.key]}))}
+                                      className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${alreadyExists ? "bg-gray-100 text-gray-300 border-gray-200 cursor-not-allowed" : sel ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300 hover:border-indigo-400"}`}>
+                                      {m.short}{alreadyExists ? " ✓" : ""}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                           <div className="flex gap-2 mt-3">
-                            <button onClick={handleAddFijo} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700">Crear Pago Fijo</button>
-                            <button onClick={() => setShowAddFijo(false)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">Cancelar</button>
+                            <button onClick={handleAddFijo} disabled={!newFijo.existente || (newFijo.existente === "__nuevo__" && !newFijo.concepto.trim()) || newFijo.meses.length === 0}
+                              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${(!newFijo.existente || (newFijo.existente === "__nuevo__" && !newFijo.concepto.trim()) || newFijo.meses.length === 0) ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-indigo-600 text-white hover:bg-indigo-700"}`}>
+                              Crear {newFijo.meses.length > 0 ? `${newFijo.meses.length} mes(es)` : "Pago Fijo"}
+                            </button>
+                            <button onClick={() => { setShowAddFijo(false); setNewFijo({ concepto: "", monto: "", responsable: "", meses: [], existente: "" }); }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">Cancelar</button>
                           </div>
                         </div>
                       )}
