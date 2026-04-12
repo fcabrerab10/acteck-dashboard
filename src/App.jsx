@@ -39,7 +39,7 @@ const CARTERA_DIGITALIFE = {
   // ── Línea de crédito ──
   lineaCreditoUSD: 500000,
   tipoCambio: 17.76,    // MXN/USD — Banxico 07-Abr-2026
-  // lineaCreditoMXN = 500,000 Ã 17.76 = 8,880,000
+  // lineaCreditoMXN = 500,000 × 17.76 = 8,880,000
 
   // ── Aging de facturas (suma = saldoActual) ──
   aging: {
@@ -169,8 +169,8 @@ const clientes = {
       { id: 3, factura: "FAC-2026-0358", monto: 95000, vencimiento: "2026-05-05", estado: "vigente" },
     ],
     promocionesActivas: [
-      { id: 1, nombre: "Campaña Madre Mayo", aportacionActeck: 15000, aportacionCliente: 8000, vigencia: "01 May â 15 May 2026" },
-      { id: 2, nombre: "Bundle Auriculares Q2", aportacionActeck: 10000, aportacionCliente: 5000, vigencia: "10 Abr â 30 Abr 2026" },
+      { id: 1, nombre: "Campaña Madre Mayo", aportacionActeck: 15000, aportacionCliente: 8000, vigencia: "01 May – 15 May 2026" },
+      { id: 2, nombre: "Bundle Auriculares Q2", aportacionActeck: 10000, aportacionCliente: 5000, vigencia: "10 Abr – 30 Abr 2026" },
     ],
     minuta: {
       fechaReunion: "2026-04-01",
@@ -206,7 +206,7 @@ const clientes = {
       { id: 2, factura: "FAC-2026-0315", monto: 75000, vencimiento: "2026-04-30", estado: "vigente" },
     ],
     promocionesActivas: [
-      { id: 1, nombre: "Promo Teclados Mayo", aportacionActeck: 8000, aportacionCliente: 4000, vigencia: "01 May â 31 May 2026" },
+      { id: 1, nombre: "Promo Teclados Mayo", aportacionActeck: 8000, aportacionCliente: 4000, vigencia: "01 May – 31 May 2026" },
     ],
     minuta: {
       fechaReunion: "2026-03-15",
@@ -742,6 +742,10 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
   const [loading, setLoading] = React.useState(true);
   const [editingMeta, setEditingMeta] = React.useState(false);
   const [metaForm, setMetaForm] = React.useState({ min: 25000000, opt: 30000000 });
+  const [periodoTipo, setPeriodoTipo] = React.useState('ytd');
+  const [periodoMes, setPeriodoMes] = React.useState(new Date().getMonth() + 1);
+  const [periodoRango, setPeriodoRango] = React.useState([1, 12]);
+  const [cuotasMensuales, setCuotasMensuales] = React.useState([]);
 
   const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
   const ESTADOS = [
@@ -762,7 +766,8 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
       supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", 2026).order("mes"),
       supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
       supabase.from("inventario_cliente").select("valor").eq("cliente", clienteKey),
-    ]).then(([vR, mR, pcR, pmR, imR, minR, invCR]) => {
+      supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", 2026),
+    ]).then(([vR, mR, pcR, pmR, imR, minR, invCR, cuotasR]) => {
       setVentas(vR.data || []);
       if (mR.data) { setMeta(mR.data); setMetaForm({ min: mR.data.meta_sell_in_min, opt: mR.data.meta_sell_in_optimista }); }
       setPendCom(pcR.data || []);
@@ -770,6 +775,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
       setInvMkt(imR.data || []);
       setMinutasList(minR.data || []);
       setInvCliente(invCR.data || []);
+      setCuotasMensuales(cuotasR?.data || []);
       setLoading(false);
     });
   }, [clienteKey]);
@@ -781,8 +787,40 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
     return map;
   }, [ventas]);
 
-  const totalSellIn = ventas.reduce((s, v) => s + (Number(v.sell_in) || 0), 0);
-  const totalSellOut = ventas.reduce((s, v) => s + (Number(v.sell_out) || 0), 0);
+  // ─── CUOTAS POR MES (from cuotas_mensuales table) ────────────────────────
+  const cuotasPorMes = React.useMemo(() => {
+    const map = {};
+    cuotasMensuales.forEach(c => { map[parseInt(c.mes)] = c; });
+    return map;
+  }, [cuotasMensuales]);
+
+  // ─── PERIOD FILTER ────────────────────────────────────────────────────────
+  const mesesFiltrados = React.useMemo(() => {
+    if (periodoTipo === 'ytd') return Array.from({length: 12}, (_, i) => i + 1);
+    if (periodoTipo === 'mes') return [periodoMes];
+    if (periodoTipo === 'trimestre') {
+      const t = Math.ceil(periodoMes / 3);
+      const start = (t - 1) * 3 + 1;
+      return [start, start + 1, start + 2];
+    }
+    if (periodoTipo === 'rango') {
+      const arr = [];
+      for (let i = periodoRango[0]; i <= periodoRango[1]; i++) arr.push(i);
+      return arr;
+    }
+    return Array.from({length: 12}, (_, i) => i + 1);
+  }, [periodoTipo, periodoMes, periodoRango]);
+
+  const ventasFiltradas = React.useMemo(() => {
+    return ventas.filter(v => mesesFiltrados.includes(parseInt(v.mes)));
+  }, [ventas, mesesFiltrados]);
+
+  const totalSellIn = ventasFiltradas.reduce((s, v) => s + (Number(v.sell_in) || 0), 0);
+  const totalSellOut = ventasFiltradas.reduce((s, v) => s + (Number(v.sell_out) || 0), 0);
+  const totalCuotaMin = mesesFiltrados.reduce((s, m) => s + (cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_min) || 0 : 0), 0);
+  const totalCuotaIdeal = mesesFiltrados.reduce((s, m) => s + (cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : 0), 0);
+  const cumplimientoMin = totalCuotaMin > 0 ? (totalSellIn / totalCuotaMin * 100) : 0;
+  const cumplimientoIdeal = totalCuotaIdeal > 0 ? (totalSellIn / totalCuotaIdeal * 100) : 0;
   const totalInvValor = ventas.reduce((s, v) => s + (Number(v.inventario_valor) || 0), 0);
   const avgInvValor = ventas.length > 0 ? totalInvValor / ventas.length : 0;
   const lastInvValor = ventas.length > 0 ? Number(ventas[ventas.length - 1].inventario_valor) || 0 : 0;
@@ -809,7 +847,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
       mes: m,
       sellIn: v ? Number(v.sell_in) || 0 : null,
       sellOut: v ? Number(v.sell_out) || 0 : null,
-      cuota: v ? Number(v.cuota) || 0 : null,
+      cuota: cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : (v ? Number(v.cuota) || 0 : null), cuotaMin: cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_min) || 0 : null,
       inventario: v ? Number(v.inventario_valor) || 0 : null
     });
   }
@@ -934,9 +972,11 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
 
   // ─── PROGRESS BAR ──────────────────────────────────────────────────────────
   function ProgresoAnual() {
-    const pctOpt = meta.meta_sell_in_optimista > 0 ? (totalSellIn / meta.meta_sell_in_optimista) * 100 : 0;
-    const pctMin = meta.meta_sell_in_min > 0 ? (totalSellIn / meta.meta_sell_in_min) * 100 : 0;
-    const minPctOfOpt = meta.meta_sell_in_optimista > 0 ? (meta.meta_sell_in_min / meta.meta_sell_in_optimista) * 100 : 0;
+    const cuotaIdealEff = totalCuotaIdeal > 0 ? totalCuotaIdeal : meta.meta_sell_in_optimista;
+    const cuotaMinEff = totalCuotaMin > 0 ? totalCuotaMin : meta.meta_sell_in_min;
+    const pctOpt = cuotaIdealEff > 0 ? (totalSellIn / cuotaIdealEff) * 100 : 0;
+    const pctMin = cuotaMinEff > 0 ? (totalSellIn / cuotaMinEff) * 100 : 0;
+    const minPctOfOpt = cuotaIdealEff > 0 ? (cuotaMinEff / cuotaIdealEff) * 100 : 0;
 
     const saveMeta = async () => {
       if (!DB_CONFIGURED) return;
@@ -977,7 +1017,7 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
       // Big number
       React.createElement("div", { style: { fontSize: 28, fontWeight: 700, color: "#1E293B", marginBottom: 4 } }, formatMXN(totalSellIn)),
       React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 12 } },
-        pctOpt.toFixed(1) + "% de meta optimista (" + formatMXN(meta.meta_sell_in_optimista) + ")"),
+        pctOpt.toFixed(1) + "% de cuota ideal (" + formatMXN(cuotaIdealEff) + ")"),
       // Bar
       React.createElement("div", { style: { position: "relative", height: 24, background: "#E2E8F0", borderRadius: 12, overflow: "hidden" } },
         React.createElement("div", { style: {
@@ -992,8 +1032,8 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
       ),
       React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 11, color: "#94A3B8" } },
         React.createElement("span", null, "0"),
-        React.createElement("span", { style: { color: "#F59E0B" } }, "M\u00edn: " + formatMXN(meta.meta_sell_in_min)),
-        React.createElement("span", null, formatMXN(meta.meta_sell_in_optimista))
+        React.createElement("span", { style: { color: "#F59E0B" } }, "M\u00edn: " + formatMXN(cuotaMinEff)),
+        React.createElement("span", null, formatMXN(cuotaIdealEff))
       ),
       // Sell Out mini
       React.createElement("div", { style: { marginTop: 16, paddingTop: 12, borderTop: "1px solid #E2E8F0" } },
@@ -1263,6 +1303,51 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
       ),
       React.createElement(Semaforo, { estado: estadoSalud })
     ),
+    // Row 0.5: Period selector
+    React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" } },
+      React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, "Periodo:"),
+      ["ytd", "mes", "trimestre", "rango"].map(t => 
+        React.createElement("button", {
+          key: t,
+          onClick: () => setPeriodoTipo(t),
+          style: {
+            padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer",
+            border: periodoTipo === t ? "2px solid #4472C4" : "1px solid #E2E8F0",
+            background: periodoTipo === t ? "#EFF6FF" : "#fff",
+            color: periodoTipo === t ? "#4472C4" : "#64748B"
+          }
+        }, t === "ytd" ? "Acumulado YTD" : t === "mes" ? "Mes" : t === "trimestre" ? "Trimestre" : "Rango")
+      ),
+      periodoTipo === "mes" && React.createElement("select", {
+        value: periodoMes,
+        onChange: e => setPeriodoMes(Number(e.target.value)),
+        style: { padding: "6px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12 }
+      }, MESES_CORTOS.map((m, i) => React.createElement("option", { key: i, value: i + 1 }, m))),
+      periodoTipo === "trimestre" && React.createElement("select", {
+        value: Math.ceil(periodoMes / 3),
+        onChange: e => setPeriodoMes((Number(e.target.value) - 1) * 3 + 1),
+        style: { padding: "6px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12 }
+      }, [1,2,3,4].map(q => React.createElement("option", { key: q, value: q }, "Q" + q))),
+      periodoTipo === "rango" && React.createElement(React.Fragment, null,
+        React.createElement("select", {
+          value: periodoRango[0],
+          onChange: e => setPeriodoRango([Number(e.target.value), periodoRango[1]]),
+          style: { padding: "6px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12 }
+        }, MESES_CORTOS.map((m, i) => React.createElement("option", { key: i, value: i + 1 }, m))),
+        React.createElement("span", { style: { color: "#94A3B8" } }, "a"),
+        React.createElement("select", {
+          value: periodoRango[1],
+          onChange: e => setPeriodoRango([periodoRango[0], Number(e.target.value)]),
+          style: { padding: "6px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12 }
+        }, MESES_CORTOS.map((m, i) => React.createElement("option", { key: i, value: i + 1 }, m)))
+      ),
+      // Cuota summary
+      totalCuotaIdeal > 0 && React.createElement("div", { style: { marginLeft: "auto", display: "flex", gap: 16, fontSize: 12 } },
+        React.createElement("span", { style: { color: "#F59E0B", fontWeight: 600 } }, "Cuota Min: " + formatMXN(totalCuotaMin)),
+        React.createElement("span", { style: { color: "#E67C73", fontWeight: 600 } }, "Cuota Ideal: " + formatMXN(totalCuotaIdeal)),
+        React.createElement("span", { style: { color: cumplimientoMin >= 100 ? "#10B981" : cumplimientoMin >= 80 ? "#F59E0B" : "#EF4444", fontWeight: 700 } }, "Cump: " + cumplimientoMin.toFixed(1) + "%")
+      )
+    ),
     // Row 1: Line chart
     React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 20 } },
       React.createElement("h3", { style: { margin: "0 0 12px", fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out — " + (cliente?.nombre || clienteKey) + " 2026"),
@@ -1366,7 +1451,7 @@ function CreditoCobranza({ cliente }) {
         </div>
       )}
 
-      {/* ── SEMÁFORO LÃNEA DE CRÉDITO ── */}
+      {/* ── SEMÁFORO LÍNEA DE CRÉDITO ── */}
       <div className={`${lineaColor.bg} border ${lineaColor.border} rounded-2xl p-5 mb-6`}>
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -1455,9 +1540,9 @@ function CreditoCobranza({ cliente }) {
           <CardHeader titulo="Aging de Facturas" icono="📅" />
           <div className="space-y-3">
             {[
-              { label: "0 â 30 días",  monto: ag.d0_30,  color: "#22c55e", bg: "bg-green-500",  tag: "bg-green-100 text-green-700",  icono: "â" },
-              { label: "31 â 60 días", monto: ag.d31_60, color: "#3b82f6", bg: "bg-blue-400",   tag: "bg-blue-100 text-blue-700",    icono: "🔵" },
-              { label: "61 â 90 días", monto: ag.d61_90, color: "#eab308", bg: "bg-yellow-400", tag: "bg-yellow-100 text-yellow-700", icono: "â ️" },
+              { label: "0 – 30 días",  monto: ag.d0_30,  color: "#22c55e", bg: "bg-green-500",  tag: "bg-green-100 text-green-700",  icono: "â" },
+              { label: "31 – 60 días", monto: ag.d31_60, color: "#3b82f6", bg: "bg-blue-400",   tag: "bg-blue-100 text-blue-700",    icono: "🔵" },
+              { label: "61 – 90 días", monto: ag.d61_90, color: "#eab308", bg: "bg-yellow-400", tag: "bg-yellow-100 text-yellow-700", icono: "â ️" },
               { label: "+ 90 días",    monto: ag.mas90,  color: "#ef4444", bg: "bg-red-500",    tag: "bg-red-100 text-red-700",       icono: "🔴" },
             ].map(({ label, monto, color, bg, tag, icono }) => (
               <div key={label}>
@@ -1560,7 +1645,7 @@ function CreditoCobranza({ cliente }) {
           </table>
         </div>
         <p className="text-xs text-gray-400 mt-3 italic">
-          * Venta Sell Out proyectada con base en la tendencia de crecimiento mensual 2026 (EneâMar). No incluye facturas diferidas ni acuerdos comerciales específicos.
+          * Venta Sell Out proyectada con base en la tendencia de crecimiento mensual 2026 (Ene–Mar). No incluye facturas diferidas ni acuerdos comerciales específicos.
         </p>
       </div>
 
@@ -2423,6 +2508,7 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
   const [datos, setDatos] = React.useState(null);
   const [searchFilter, setSearchFilter] = React.useState("");
   const [sortBy, setSortBy] = React.useState("sell-in");
+  const [sugeridoEdits, setSugeridoEdits] = React.useState({});
 
   const formatMXN = (n) => {
     if (n == null || isNaN(n)) return "—";
@@ -2945,6 +3031,41 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
     // Marca Comparison
     aggs && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
       React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Comparativa por Marca"),
+            // Visual bar chart for brand comparison
+            React.createElement("div", { style: { display: "flex", gap: 20, marginBottom: 20, flexWrap: "wrap" } },
+              Object.entries(aggs.byMarca).map(function([marca, m]) {
+                var total = Object.values(aggs.byMarca).reduce(function(s, x) { return s + x.soMonto; }, 0);
+                var pct = total > 0 ? (m.soMonto / total * 100) : 0;
+                var color = MARCA_COLORES[marca] || "#64748B";
+                return React.createElement("div", { key: "viz_"+marca, style: { flex: 1, minWidth: 200, background: "#F8FAFC", borderRadius: 12, padding: 16, border: "1px solid #E2E8F0" } },
+                  React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+                    React.createElement("span", { style: { fontWeight: 700, color: color, fontSize: 14 } }, marca),
+                    React.createElement("span", { style: { fontSize: 12, color: "#94A3B8", fontWeight: 600 } }, pct.toFixed(1) + "% del SO")
+                  ),
+                  React.createElement("div", { style: { height: 8, background: "#E2E8F0", borderRadius: 4, marginBottom: 12 } },
+                    React.createElement("div", { style: { height: "100%", width: pct + "%", background: color, borderRadius: 4 } })
+                  ),
+                  React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12 } },
+                    React.createElement("div", null,
+                      React.createElement("div", { style: { color: "#94A3B8" } }, "Sell In"),
+                      React.createElement("div", { style: { fontWeight: 700, color: "#1E293B" } }, formatMXN(m.siMonto))
+                    ),
+                    React.createElement("div", null,
+                      React.createElement("div", { style: { color: "#94A3B8" } }, "Sell Out"),
+                      React.createElement("div", { style: { fontWeight: 700, color: "#10B981" } }, formatMXN(m.soMonto))
+                    ),
+                    React.createElement("div", null,
+                      React.createElement("div", { style: { color: "#94A3B8" } }, "Inventario"),
+                      React.createElement("div", { style: { fontWeight: 700, color: "#8B5CF6" } }, formatMXN(m.invValor))
+                    ),
+                    React.createElement("div", null,
+                      React.createElement("div", { style: { color: "#94A3B8" } }, "Eficiencia"),
+                      React.createElement("div", { style: { fontWeight: 700, color: m.siMonto > 0 ? (m.soMonto/m.siMonto >= 0.8 ? "#10B981" : "#F59E0B") : "#94A3B8" } }, m.siMonto > 0 ? (m.soMonto/m.siMonto*100).toFixed(0) + "%" : "\u2014")
+                    )
+                  )
+                );
+              })
+            ),
       React.createElement("div", { className: "overflow-x-auto" },
         React.createElement("table", { className: "w-full text-sm" },
           React.createElement("thead", {},
@@ -3008,7 +3129,13 @@ function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
 
     // SKU Detail
     React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
-      React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Detalle por SKU"),
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
+              React.createElement("h3", { className: "font-bold text-gray-800" }, "Detalle por SKU"),
+              React.createElement("button", {
+                onClick: exportToExcel,
+                style: { padding: "8px 16px", background: "#10B981", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }
+              }, "\uD83D\uDCE5 Exportar a Excel")
+            ),
       React.createElement("div", { className: "mb-4 flex gap-3 flex-wrap" },
         React.createElement("input", {
           type: "text",
@@ -3678,6 +3805,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
   var [inventario, setInventario] = _s([]);
   var [loading, setLoading] = _s(true);
   var [anio, setAnio] = _s(2026);
+  var [cuotasMens, setCuotasMens] = _s([]);
 
   React.useEffect(function() {
     if (!DB_CONFIGURED) { setLoading(false); return; }
@@ -3689,7 +3817,8 @@ function AnalisisCliente({ cliente, clienteKey }) {
       supabase.from("productos_cliente").select("*").eq("cliente", ck),
       supabase.from("sell_in_sku").select("*").eq("cliente", ck).eq("anio", anio),
       supabase.from("sellout_sku").select("*").eq("cliente", ck).eq("anio", anio),
-      supabase.from("inventario_cliente").select("*").eq("cliente", ck)
+      supabase.from("inventario_cliente").select("*").eq("cliente", ck),
+      supabase.from("cuotas_mensuales").select("*").eq("cliente", ck).eq("anio", anio)
     ]).then(function(results) {
       if (results[0].data) setVentas(results[0].data);
       if (results[1].data) setMarketing(results[1].data);
@@ -3697,6 +3826,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
       if (results[3].data) setSellInSku(results[3].data);
       if (results[4].data) setSellOutSku(results[4].data);
       if (results[5].data) setInventario(results[5].data);
+    if (results[6] && results[6].data) setCuotasMens(results[6].data);
       setLoading(false);
     });
   }, [cliente, clienteKey, anio]);
@@ -3802,6 +3932,16 @@ function AnalisisCliente({ cliente, clienteKey }) {
     var items = [];
     // Sell-through
     var stColor = ytd.st >= 80 ? "#10b981" : ytd.st >= 50 ? "#f59e0b" : "#ef4444";
+    // Cuota from cuotas_mensuales
+    var cuotaMap = {};
+    cuotasMens.forEach(function(cm) { cuotaMap[parseInt(cm.mes)] = cm; });
+    var totalCuotaIdealA = cuotasMens.reduce(function(s, cm) { return s + (Number(cm.cuota_ideal) || 0); }, 0);
+    var totalCuotaMinA = cuotasMens.reduce(function(s, cm) { return s + (Number(cm.cuota_min) || 0); }, 0);
+    var cumpCuotaA = totalCuotaIdealA > 0 ? (ytd.si / totalCuotaIdealA * 100) : 0;
+    if (totalCuotaIdealA > 0) {
+      items.push({ label: "Cuota Ideal YTD", value: fmtM(totalCuotaIdealA), color: "#F59E0B", detail: "Min: " + fmtM(totalCuotaMinA) });
+      items.push({ label: "Cumplimiento Cuota", value: fmtPct(cumpCuotaA), color: cumpCuotaA >= 100 ? "#10b981" : cumpCuotaA >= 80 ? "#f59e0b" : "#ef4444", detail: "vs Cuota Ideal" });
+    }
     items.push({ label: "Eficiencia de Venta YTD", value: fmtPct(ytd.st), color: stColor, detail: "Meta: >80%" });
     // Cumplimiento cuota
     var cuotaTotal = ventasPorMes.reduce(function(s,v){return s+v.cuota;},0);
@@ -3882,6 +4022,11 @@ function AnalisisCliente({ cliente, clienteKey }) {
 
     // ═══ 2. SELL-THROUGH POR MES ═══
     section("Eficiencia de Venta Mensual", "\uD83D\uDD04",
+        el("div", { style: { background: "#F0F9FF", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#334155", lineHeight: 1.5, border: "1px solid #BAE6FD" } },
+          el("strong", null, "\u00bfQu\u00e9 es la Eficiencia de Venta? "),
+          "Mide la relaci\u00f3n entre lo que el cliente nos compra (Sell In) y lo que vende a sus clientes (Sell Out). ",
+          "Una eficiencia \u2265 80% indica un balance saludable. Valores bajos sugieren sobreinventario; valores muy altos pueden indicar riesgo de desabasto."
+        ),
       el("div", null,
         // YTD summary row
         el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
@@ -4005,7 +4150,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
         el("div", null,
           el("div", { style: { fontSize:12, color:"#10b981", marginBottom:8, fontWeight:600 } }, "\u2B06 Top 10 Sell Out"),
           skuAnalysis.topSO.map(function(s, i) {
-            return el("div", { key: s.sku, style: { display:"flex", alignItems:"center", gap:8, padding:"6px 8px", background: i % 2 === 0 ? "#0f172a" : "transparent", borderRadius:6, fontSize:11 } },
+            return el("div", { key: s.sku, style: { display:"flex", alignItems:"center", gap:8, padding:"6px 8px", background: i % 2 === 0 ? "#F8FAFC" : "#fff", borderRadius:6, fontSize:11 } },
               el("span", { style: { color:"#64748b", width:16 } }, (i+1) + "."),
               el("span", { style: { flex:1, color:"#1e293b", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" } }, s.desc || s.sku),
               el("span", { style: { color:"#10b981", fontWeight:600 } }, fmtNum(s.soTotal) + " pzas")
@@ -4015,7 +4160,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
         el("div", null,
           el("div", { style: { fontSize:12, color:"#ef4444", marginBottom:8, fontWeight:600 } }, "\u2B07 Sin Movimiento (con stock)"),
           skuAnalysis.bottomSO.map(function(s, i) {
-            return el("div", { key: s.sku, style: { display:"flex", alignItems:"center", gap:8, padding:"6px 8px", background: i % 2 === 0 ? "#0f172a" : "transparent", borderRadius:6, fontSize:11 } },
+            return el("div", { key: s.sku, style: { display:"flex", alignItems:"center", gap:8, padding:"6px 8px", background: i % 2 === 0 ? "#F8FAFC" : "#fff", borderRadius:6, fontSize:11 } },
               el("span", { style: { color:"#64748b", width:16 } }, (i+1) + "."),
               el("span", { style: { flex:1, color:"#1e293b", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" } }, s.desc || s.sku),
               el("span", { style: { color:"#ef4444" } }, fmtNum(s.siTotal) + " pzas in")
@@ -4035,6 +4180,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
       el("div", null,
         el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
           metricBox("Total SKUs", fmtNum(skuAnalysis.total), null, "#3b82f6"),
+              metricBox("D\u00edas de Inventario", skuAnalysis.diasCobertura ? fmtNum(skuAnalysis.diasCobertura) + "d" : (inventario.length > 0 && ytd.so > 0 ? fmtNum(Math.round(inventario.reduce(function(s,x){return s+(Number(x.valor)||0);},0) / (ytd.so / ytd.mesesConDatos) * 30)) + "d" : "\u2014"), "Cobertura estimada", "#8b5cf6"),
           metricBox(">60 d\u00EDas sin venta", fmtNum(skuAnalysis.sinVenta60.length), "SKUs en riesgo", skuAnalysis.sinVenta60.length > 10 ? "#ef4444" : "#f59e0b"),
           metricBox(">90 d\u00EDas sin venta", fmtNum(skuAnalysis.sinVenta90.length), "Inventario muerto", skuAnalysis.sinVenta90.length > 5 ? "#ef4444" : "#f59e0b"),
           metricBox("Valor Muerto", fmtMoney(skuAnalysis.invMuerto), ">90 d\u00EDas", "#ef4444")
@@ -4067,7 +4213,8 @@ function AnalisisCliente({ cliente, clienteKey }) {
             metricBox("Promedio Mensual SI", fmtM(ytd.avgSI), "\u00DAltimos " + ytd.mesesConDatos + " meses", "#3b82f6"),
             metricBox("Proyecci\u00F3n SI Anual", fmtM(ytd.projSI), "Estimado cierre " + anio, "#8b5cf6"),
             metricBox("Ratio SI/SO", ytd.so > 0 ? fmtPct(ytd.so/ytd.si*100) : "—", ytd.st < 50 ? "â ️ Riesgo alto de sobreinventario" : ytd.st < 70 ? "â ️ Inventario acumulado" : "Rotación saludable", ytd.st < 50 ? "#ef4444" : ytd.st < 70 ? "#f59e0b" : "#10b981"),
-          metricBox("Promedio Mensual SO", fmtM(ytd.avgSO), "\u00DAltimos " + ytd.mesesConDatos + " meses", "#10b981"),
+          metricBox("Cuota Ideal Anual", totalCuotaIdealA > 0 ? fmtM(totalCuotaIdealA) : "Sin datos", totalCuotaIdealA > 0 ? "Cump: " + fmtPct(cumpCuotaA) : "Subir cuotas", "#F59E0B"),
+            metricBox("Promedio Mensual SO", fmtM(ytd.avgSO), "\u00DAltimos " + ytd.mesesConDatos + " meses", "#10b981"),
             metricBox("Proyecci\u00F3n SO Anual", fmtM(ytd.projSO), "Estimado cierre " + anio, "#059669")
           ),
           // Monthly projection bars
