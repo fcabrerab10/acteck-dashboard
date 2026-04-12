@@ -3788,15 +3788,18 @@ function AnalisisCliente({ cliente, clienteKey }) {
   // ── Sell-through by month ──
   var ventasPorMes = React.useMemo(function() {
     var result = [];
+    var siMap = {};
+    var soMap = {};
+    sellInSku.forEach(function(r) { var m = parseInt(r.mes); siMap[m] = (siMap[m] || 0) + (Number(r.monto_pesos) || 0); });
+    sellOutSku.forEach(function(r) { var m = parseInt(r.mes); soMap[m] = (soMap[m] || 0) + (Number(r.monto_pesos) || 0); });
     for (var i = 1; i <= 12; i++) {
-      var row = ventas.find(function(v) { return Number(v.mes) === i; });
-      var si = row ? Number(row.sell_in || 0) : 0;
-      var so = row ? Number(row.sell_out || 0) : 0;
+      var si = siMap[i] || 0;
+      var so = soMap[i] || 0;
       var st = si > 0 && so > 0 ? (so / si * 100) : 0;
-      result.push({ mes: i, label: MESES[i-1], sell_in: si, sell_out: so, sellThrough: st, cuota: row ? Number(row.cuota || 0) : 0, invDias: row ? Number(row.inventario_dias || 0) : 0, invValor: row ? Number(row.inventario_valor || 0) : 0 });
+      result.push({ mes: i, label: MESES[i-1], sell_in: si, sell_out: so, sellThrough: st, cuota: 0, invDias: 0, invValor: 0 });
     }
     return result;
-  }, [ventas]);
+  }, [sellInSku, sellOutSku]);
 
   // ── YTD Totals ──
   var ytd = React.useMemo(function() {
@@ -3889,13 +3892,7 @@ function AnalisisCliente({ cliente, clienteKey }) {
     var skuColor = skusConInv > totalSkus * 0.5 ? "#10b981" : skusConInv > totalSkus * 0.25 ? "#f59e0b" : "#ef4444";
     items.push({ label: "SKUs con Inventario", value: fmtNum(skusConInv), color: skuColor, detail: "de " + fmtNum(totalSkus) + " totales" });
     // 2. Días de inventario
-    var invValorTotal = 0;
-    skuAnalysis.all.forEach(function(s) {
-      if (s.invStock > 0) {
-        var inv = inventario.find(function(i) { return i.sku === s.sku; });
-        if (inv) invValorTotal += Number(inv.stock || 0) * Number(inv.costo_convenio || inv.costo_promedio || 0);
-      }
-    });
+    var invValorTotal = inventario.reduce(function(s, r) { return s + (Number(r.valor) || 0); }, 0);
     var soTotal = ytd.so;
     var mesesConDatos = ytd.mesesConDatos || 1;
     var soDiario = mesesConDatos > 0 ? soTotal / (mesesConDatos * 30) : 0;
