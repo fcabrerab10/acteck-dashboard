@@ -2297,8 +2297,115 @@ function PagosCliente({ cliente, clienteKey }) {
                 </div>
               )}
 
+              {/* ═══════════ PAGOS FIJOS VIEW ═══════════ */}
+              {catActiva === "pagosFijos" && (
+                <div>
+                  {DB_CONFIGURED && (
+                    <div className="mb-5">
+                      {!showAddFijo ? (
+                        <button onClick={() => setShowAddFijo(true)}
+                          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors">
+                          + Nuevo Pago Fijo
+                        </button>
+                      ) : (
+                        <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200">
+                          <p className="text-sm font-semibold text-indigo-800 mb-3">Nuevo Pago Fijo (se crean 12 registros mensuales)</p>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="text-xs text-gray-500 block mb-1">Concepto *</label>
+                              <input type="text" value={newFijo.concepto} onChange={e => setNewFijo(p => ({...p, concepto: e.target.value}))}
+                                placeholder="Ej: Renta oficina" className="w-full border rounded-lg px-3 py-1.5 text-sm" />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500 block mb-1">Monto mensual (MXN)</label>
+                              <input type="number" value={newFijo.monto} onChange={e => setNewFijo(p => ({...p, monto: e.target.value}))}
+                                placeholder="0" className="w-full border rounded-lg px-3 py-1.5 text-sm" />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500 block mb-1">Responsable</label>
+                              <input type="text" value={newFijo.responsable} onChange={e => setNewFijo(p => ({...p, responsable: e.target.value}))}
+                                placeholder="Responsable" className="w-full border rounded-lg px-3 py-1.5 text-sm" />
+                            </div>
+                          </div>
+                          <div className="flex gap-2 mt-3">
+                            <button onClick={handleAddFijo} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700">Crear Pago Fijo</button>
+                            <button onClick={() => setShowAddFijo(false)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">Cancelar</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {Object.keys(fijoGroups).length === 0 ? (
+                    <div className="text-center py-10 text-gray-400">
+                      <p className="text-3xl mb-2">📋</p>
+                      <p className="text-sm">No hay pagos fijos registrados</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {Object.entries(fijoGroups).map(([conceptoKey, records]) => {
+                        const isExp = expandedFijos[conceptoKey];
+                        const totalAnual = records.reduce((s, r) => s + (r.monto || 0), 0);
+                        const pagados = records.filter(r => r.estatus === "pagado").length;
+                        const montoMes = records[0] ? (records[0].monto || 0) : 0;
+                        const sorted = [...records].sort((a, b) => (a.fecha_compromiso || "").localeCompare(b.fecha_compromiso || ""));
+                        return (
+                          <div key={conceptoKey} className="border border-gray-200 rounded-xl overflow-hidden">
+                            <div className="flex items-center justify-between px-5 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                              onClick={() => toggleFijo(conceptoKey)}>
+                              <div className="flex items-center gap-3">
+                                <span className="text-lg">{isExp ? "▾" : "▸"}</span>
+                                <div>
+                                  <p className="font-semibold text-gray-800">{conceptoKey}</p>
+                                  <p className="text-xs text-gray-500">{formatMXN(montoMes)}/mes · {records.length} meses · {pagados} pagados</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-gray-800">{formatMXN(totalAnual)}</p>
+                                <p className="text-xs text-gray-400">Total anual</p>
+                              </div>
+                            </div>
+                            {isExp && (
+                              <div className="px-4 py-3 bg-white">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b border-gray-100">
+                                      <th className="text-left text-xs text-gray-400 uppercase pb-2 pr-3">Mes</th>
+                                      <th className="text-right text-xs text-gray-400 uppercase pb-2 pr-3">Monto</th>
+                                      <th className="text-center text-xs text-gray-400 uppercase pb-2 pr-3">Estatus</th>
+                                      <th className="text-left text-xs text-gray-400 uppercase pb-2 pr-3">F. Compromiso</th>
+                                      <th className="text-left text-xs text-gray-400 uppercase pb-2 pr-3">F. Pago Real</th>
+                                      <th className="text-left text-xs text-gray-400 uppercase pb-2">Folio</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {sorted.map((r) => {
+                                      const mk = r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??";
+                                      const mi = MESES_ARR.find(m => m.key === mk);
+                                      return (
+                                        <tr key={r.id} className="border-b border-gray-50 hover:bg-blue-50/40">
+                                          <td className="py-2 pr-3 font-medium text-gray-700">{mi ? mi.full : mk}</td>
+                                          <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
+                                          <td className="py-2 pr-3 text-center">{renderCell(r, "estatus", "sel-estatus")}</td>
+                                          <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
+                                          <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
+                                          <td className="py-2">{renderCell(r, "folio")}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Table */}
-              <div className="overflow-x-auto">
+              {catActiva !== "pagosFijos" && (<div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
@@ -2346,7 +2453,7 @@ function PagosCliente({ cliente, clienteKey }) {
                     <p className="text-sm">No hay registros{catActiva !== "todas" ? " en esta categoría" : ""}</p>
                   </div>
                 )}
-              </div>
+              </div>)}
               <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
                 <p className="text-xs text-gray-400">
                   {DB_CONFIGURED ? "â Cambios guardados y sincronizados para todo el equipo." : "â ️ Modo lectura — configura Supabase para habilitar la edición."}
