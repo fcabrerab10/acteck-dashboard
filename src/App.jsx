@@ -4722,7 +4722,7 @@ function ForecastCliente({ cliente, clienteKey }) {
 }
 // ==================== FIN FORECAST CLIENTE ====================
 // ── PanelActualizacion ── Central update panel (slide-over)
-function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate }) {
+function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate, onGoToSection }) {
   return React.createElement("div", {
     className: "fixed inset-0 z-50 flex",
     onClick: function(e) { if (e.target === e.currentTarget) onClose(); }
@@ -4753,14 +4753,14 @@ function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate
           ),
           React.createElement(ActualizarDatosExcel, { cliente: clienteKey, anio: anio, onComplete: onVentasUpdate })
         ),
-        React.createElement("div", { className: "bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-4 border border-emerald-200 opacity-60" },
+        React.createElement("div", { className: "bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-4 border border-emerald-200 cursor-pointer hover:shadow-md transition-shadow", onClick: function() { if (onGoToSection) { onGoToSection("estrategia"); onClose(); } } },
           React.createElement("div", { className: "flex items-center gap-2" },
             React.createElement("span", { className: "text-lg" }, "\uD83D\uDCE6"),
             React.createElement("div", { className: "flex-1" },
               React.createElement("p", { className: "text-sm font-semibold text-emerald-800" }, "Estrategia de Producto"),
               React.createElement("p", { className: "text-xs text-emerald-500" }, "Reporte Acteck + Resumen Cliente")
             ),
-            React.createElement("span", { className: "text-xs bg-emerald-200 text-emerald-700 px-2 py-0.5 rounded-full font-medium" }, "Pronto")
+            React.createElement("span", { className: "text-xs bg-emerald-600 text-white px-2 py-0.5 rounded-full font-medium" }, "Activo")
           )
         ),
         React.createElement("div", { className: "bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200 opacity-60" },
