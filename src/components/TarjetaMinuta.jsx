@@ -1,19 +1,19 @@
 import React from "react";
 import { formatFecha } from "../lib/utils";
 
-export function TarjetaMinuta({ minuta }) {
+export export function TarjetaMinuta({ minuta }) {
   const cumplidos = minuta.acuerdos.filter(a => a.cumplido).length;
   const pct = Math.round((cumplidos / minuta.acuerdos.length) * 100);
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5">
-      <CardHeader titulo="Minuta — Reunión Anterior" icono="📝" />
+      <CardHeader titulo="Minuta â ReuniÃ³n Anterior" icono="ð" />
       <div className="flex flex-wrap gap-4 text-sm mb-4">
         <div>
-          <p className="text-xs text-gray-400">Fecha reunión</p>
+          <p className="text-xs text-gray-400">Fecha reuniÃ³n</p>
           <p className="font-semibold text-gray-700">{formatFecha(minuta.fechaReunion)}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-400">Próxima reunión</p>
+          <p className="text-xs text-gray-400">PrÃ³xima reuniÃ³n</p>
           <p className="font-semibold text-blue-600">{formatFecha(minuta.proximaReunion)}</p>
         </div>
         <div>
@@ -36,7 +36,7 @@ export function TarjetaMinuta({ minuta }) {
       <div className="space-y-2">
         {minuta.acuerdos.map(a => (
           <div key={a.id} className={`flex gap-3 text-sm p-3 rounded-xl ${a.cumplido ? "bg-green-50" : "bg-gray-50"}`}>
-            <span className="text-base shrink-0">{a.cumplido ? "â" : "â¬"}</span>
+            <span className="text-base shrink-0">{a.cumplido ? "Ã¢ÂÂ" : "Ã¢Â¬Â"}</span>
             <div className="flex-1">
               <p className={`font-medium leading-snug ${a.cumplido ? "text-gray-500 line-through" : "text-gray-800"}`}>{a.descripcion}</p>
               <div className="flex gap-3 text-xs text-gray-400 mt-0.5">
@@ -52,5 +52,5 @@ export function TarjetaMinuta({ minuta }) {
   );
 }
 
-// ─── PÁGINA HOME CLIENTE ──────────────────────────────────────────────────────
+// âââ PÃGINA HOME CLIENTE ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 

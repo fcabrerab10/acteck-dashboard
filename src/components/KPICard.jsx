@@ -1,6 +1,6 @@
 import React from "react";
 
-export function KPICard({ label, valor, sub, color, alerta }) {
+export export function KPICard({ label, valor, sub, color, alerta }) {
   return (
     <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4`} style={{ borderColor: color }}>
       <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{label}</p>
