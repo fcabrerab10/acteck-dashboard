@@ -4,6 +4,8 @@ import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_
 import { formatMXN, formatUSD, formatFecha, diasRestantes, calcularSalud, loadSheetJS } from './lib/utils';
 import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota } from './components';
 import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, ForecastCliente } from './modules/comercial';
+import LoginPage from './modules/auth/LoginPage';
+import { Configuracion } from './modules/configuracion';
 
 function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate, onGoToSection }) {
   return React.createElement("div", {
@@ -79,6 +81,37 @@ function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate
 
 
 export default function App() {
+  // ─── AUTH STATE ─────────────────────────────────────────────
+  const [authUser, setAuthUser] = useState(null);
+  const [perfil, setPerfil] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    // Check existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        supabase.from("perfiles").select("*").eq("user_id", session.user.id).single()
+          .then(({ data: p }) => {
+            if (p && p.activo) { setAuthUser(session.user); setPerfil(p); }
+            setAuthLoading(false);
+          });
+      } else {
+        setAuthLoading(false);
+      }
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') { setAuthUser(null); setPerfil(null); }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogin = ({ user, perfil: p }) => { setAuthUser(user); setPerfil(p); };
+  const handleLogout = async () => { await supabase.auth.signOut(); setAuthUser(null); setPerfil(null); };
+
+  if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><p className="text-gray-400">Cargando...</p></div>;
+  if (!authUser || !perfil) return <LoginPage onLogin={handleLogin} />;
+
+
   const [mlData, setMlData] = useState(null);
     const [mlLoading, setMlLoading] = useState(true);
     useEffect(() => {
@@ -317,13 +350,27 @@ export default function App() {
           </div>
           {/* Footer */}
         <div className="p-4 border-t border-gray-100">
+          {perfil.rol === "admin" && (
+            <button
+              onClick={() => { setVistaActual("configuracion"); setClienteKey(null); }}
+              className={"w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition " + (vistaActual === "configuracion" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800/50")}
+            >Configuración</button>
+          )}
+          <div className="mt-2 pt-2 border-t border-gray-700/50">
+            <p className="text-xs text-gray-500 mb-1">{perfil.nombre}</p>
+            <button onClick={handleLogout} className="w-full text-left px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-red-400 hover:bg-gray-800/50 transition">Cerrar sesión</button>
+          </div>
           <p className="text-xs text-gray-300 text-center">v1.0 · Abril 2026</p>
         </div>
       </aside>
 
       {/* CONTENIDO */}
       <main className="flex-1 overflow-y-auto">
-        {/* Banner modo presentación */}
+          {vistaActual === "configuracion" ? (
+            <Configuracion session={{user: authUser, perfil}} />
+          ) : (
+            <>
+            {/* Banner modo presentación */}
         { /* Banner removed */ }
           {paginaActiva === "resumen" && <ResumenCuentas />}
           <>
@@ -337,7 +384,9 @@ export default function App() {
                     {paginaActiva === "forecast" && React.createElement(ForecastCliente, { cliente: c.nombre, clienteKey: clienteActivo })}
 </>
           </>
-</main>
+            </>
+          )}
+        </main>
       {showUpdatePanel && React.createElement(PanelActualizacion, {
         onClose: function() { setShowUpdatePanel(false); },
         cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo,
