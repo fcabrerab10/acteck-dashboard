@@ -1,6 +1,6 @@
 import React from "react";
 
-export export function CardHeader({ titulo, icono }) {
+export function CardHeader({ titulo, icono }) {
   return (
     <div className="flex items-center gap-2 mb-4">
       <span className="text-lg">{icono}</span>
