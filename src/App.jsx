@@ -2282,48 +2282,48 @@ function PagosCliente({ cliente, clienteKey }) {
       {!loading && (
         <>
           {/* KPI Cards */}
-          <div className={"grid grid-cols-2 gap-4 mb-6 " + (clienteKey === "digitalife" ? "md:grid-cols-4" : "md:grid-cols-3")}>
-            <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-green-500 flex flex-col justify-between">
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Pagado</p>
-              <p className="text-2xl font-bold text-green-700">{totalPagado > 0 ? formatMXN(totalPagado) : "$0"}</p>
-              <p className="text-xs text-gray-400 mt-1">{registros.filter(r => r.estatus === "pagado").length} conceptos</p>
-            </div>
-            <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-yellow-400">
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Por Pagar</p>
-              <p className="text-2xl font-bold text-yellow-600">{totalPorPagar > 0 ? formatMXN(totalPorPagar) : "$0"}</p>
-              <p className="text-xs text-gray-400 mt-1">{registros.filter(r => ["pendiente","en proceso"].includes(r.estatus)).length} conceptos</p>
-            </div>
-           
-            <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total 2026</p>
-              <p className="text-2xl font-bold text-gray-800">{totalAnio > 0 ? formatMXN(totalAnio) : "$0"}</p>
-              <p className="text-xs text-gray-400 mt-1">{registros.length} conceptos registrados</p>
-            </div>
-            {clienteKey === "digitalife" && (
-              <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-red-500 flex flex-col justify-between">
-                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Rebate Acum.</p>
-                <p className="text-2xl font-bold text-red-600">{(() => {
-                  const total = Math.round(Object.values(rebateAllQ).reduce((s, v) => s + v, 0));
-                  return total > 0 ? formatMXN(total) : "$0";
-                })()}</p>
-                <p className="text-xs text-gray-400 mt-1">{Object.values(rebateSynced).filter(Boolean).length} de 4 Qs registrados</p>
+          <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Resumen de Pagos 2026</h3>
+                <span className="text-xs text-gray-400">{registros.length} registros</span>
               </div>
-            )}
-          {clienteKey === "pcel" && pcelCalc && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-600 flex flex-col justify-between" style={{minHeight:"120px"}}>
-                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Rebate Trimestral</p>
-                <p className="text-2xl font-bold text-blue-600">{pcelCalc.totalRebate > 0 ? "$" + Math.round(pcelCalc.totalRebate).toLocaleString("es-MX") : "$0"}</p>
-                <p className="text-xs text-gray-400 mt-1">Acumulado {pcelCalc.quarterly.filter(q => q.sellIn > 0).length} trimestre(s)</p>
-              </div>
-              <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-emerald-500 flex flex-col justify-between" style={{minHeight:"120px"}}>
-                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Fondo MKT</p>
-                <p className="text-2xl font-bold text-emerald-600">{pcelCalc.totalFondo > 0 ? "$" + Math.round(pcelCalc.totalFondo).toLocaleString("es-MX") : "$0"}</p>
-                <p className="text-xs text-gray-400 mt-1">Acumulado sobre Sell In</p>
+              <div className={"grid grid-cols-2 gap-x-6 gap-y-5 " + (clienteKey === "pcel" && pcelCalc ? "md:grid-cols-5" : "md:grid-cols-4")}>
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Pagado</p>
+                  <p className="text-2xl font-bold text-green-600">{totalPagado > 0 ? formatMXN(totalPagado) : "$0"}</p>
+                  <p className="text-xs text-gray-400 mt-1">{registros.filter(r => r.estatus === "pagado").length} conceptos</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Por Pagar</p>
+                  <p className="text-2xl font-bold text-yellow-600">{totalPorPagar > 0 ? formatMXN(totalPorPagar) : "$0"}</p>
+                  <p className="text-xs text-gray-400 mt-1">{registros.filter(r => ["pendiente","en proceso"].includes(r.estatus)).length} conceptos</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total 2026</p>
+                  <p className="text-2xl font-bold text-gray-800">{totalAnio > 0 ? formatMXN(totalAnio) : "$0"}</p>
+                  <p className="text-xs text-gray-400 mt-1">{registros.length} conceptos registrados</p>
+                </div>
+                {clienteKey === "digitalife" && (
+                  <div>
+                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Rebate Acum.</p>
+                    <p className="text-2xl font-bold text-red-600">{(() => { const total = Math.round(Object.values(rebateAllQ).reduce((s, v) => s + v, 0)); return total > 0 ? formatMXN(total) : "$0"; })()}</p>
+                    <p className="text-xs text-gray-400 mt-1">{Object.values(rebateSynced).filter(Boolean).length} de 4 Qs registrados</p>
+                  </div>
+                )}
+                {clienteKey === "pcel" && pcelCalc && (<>
+                  <div>
+                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Rebate Trimestral</p>
+                    <p className="text-2xl font-bold text-blue-600">{pcelCalc.totalRebate > 0 ? "$" + Math.round(pcelCalc.totalRebate).toLocaleString("es-MX") : "$0"}</p>
+                    <p className="text-xs text-gray-400 mt-1">Acumulado {pcelCalc.quarterly.filter(q => q.sellIn > 0).length} trimestre(s)</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Fondo MKT</p>
+                    <p className="text-2xl font-bold text-emerald-600">{pcelCalc.totalFondo > 0 ? "$" + Math.round(pcelCalc.totalFondo).toLocaleString("es-MX") : "$0"}</p>
+                    <p className="text-xs text-gray-400 mt-1">Acumulado sobre Sell In</p>
+                  </div>
+                </>)}
               </div>
             </div>
-          )}
-          </div>
 
           {/* Monthly summary table */}
           {(() => {
