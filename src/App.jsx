@@ -1844,6 +1844,9 @@ function PagosCliente({ cliente, clienteKey }) {
   // ── PCEL Condiciones Comerciales (Rebate + Fondo MKT + SPIFF) ──
   const [pcelSellIn, setPcelSellIn] = useState({});
   const SPIFF_PCT = 0.0021;
+  const [pcelOverrideRebate, setPcelOverrideRebate] = useState({1:"",2:"",3:"",4:""});
+  const [pcelOverrideSpiff, setPcelOverrideSpiff] = useState({});
+  const [pcelCuotasSupa, setPcelCuotasSupa] = useState(null);
   
   useEffect(() => {
     if (clienteKey !== "pcel" || !DB_CONFIGURED) return;
@@ -1858,40 +1861,26 @@ function PagosCliente({ cliente, clienteKey }) {
       setPcelSellIn(byMonth);
     })();
   }, [clienteKey]);
+  
+  // ── Fetch cuotas mensuales from Supabase (fallback to PCEL_REAL) ──
+  useEffect(() => {
+    if (clienteKey !== "pcel" || !DB_CONFIGURED) return;
+    const anio = new Date().getFullYear();
+    (async () => {
+      const { data } = await supabase.from("cuotas_mensuales").select("mes,monto").eq("cliente", "pcel").eq("anio", anio);
+      if (data && data.length > 0) {
+        const byMonth = {};
+        data.forEach(r => { byMonth[parseInt(r.mes)] = Number(r.monto) || 0; });
+        setPcelCuotasSupa(byMonth);
+      }
+    })();
+  }, [clienteKey]);
 
   const pcelCalc = React.useMemo(() => {
     if (clienteKey !== "pcel") return null;
-    const cuotas = PCEL_REAL.cuota50M;
-    const cuotasMin = PCEL_REAL.cuota45M;
-    const meses = Object.keys(pcelSellIn).map(Number).sort((a,b) => a - b);
-    const totalSellIn = Object.values(pcelSellIn).reduce((a,b) => a + b, 0);
-    const totalCuota = Object.entries(cuotas).filter(([m]) => meses.includes(Number(m))).reduce((a,[,v]) => a + v, 0);
-    const alcance = totalCuota > 0 ? totalSellIn / totalCuota : 0;
-    
-    // Determine rebate tier
-    let rebatePct = 0;
-    let rebateLabel = "< 90%";
-    for (const t of PCEL_REAL.rebateTiers) {
-      if (alcance >= t.min) { rebatePct = t.pct; rebateLabel = t.label; }
-    }
-    
-    // Determine fondo MKT tier
-    let fondoPct = 0;
-    let fondoLabel = "< 100%";
-    for (const t of PCEL_REAL.fondoMktTiers) {
-      if (alcance <= t.maxAlcance) { fondoPct = t.pct; fondoLabel = t.label; break; }
-    }
-    
-    const rebateAmount = totalSellIn * rebatePct;
-    const fondoAmount = totalSellIn * fondoPct;
-    
-    // SPIFF by month
-    const spiffByMonth = {};
-    let totalSpiff = 0;
-    for (const [m, val] of Object.entries(pcelSellIn)) {
-      spiffByMonth[m] = val * SPIFF_PCT;
-      totalSpiff += val * SPIFF_PCT;
-    }
+    const cuotas = pcelCuotasSupa || PCEL_REAL.cuota50M;
+    const QUARTERS = [[1,2,3],[4,5,6],[7,8,9],[10,11,12]];
+    const qLabels = ["Q1 (Ene-Mar)","Q2 (Abr-Jun)","Q3 (Jul-Sep)","Q4 (Oct-Dic)"];
     
     // Monthly breakdown
     const monthly = [];
@@ -1902,8 +1891,46 @@ function PagosCliente({ cliente, clienteKey }) {
       monthly.push({ mes: m, sellIn: si, cuota, alcance: alc, spiff: si * SPIFF_PCT });
     }
     
-    return { totalSellIn, totalCuota, alcance, rebatePct, rebateLabel, rebateAmount, fondoPct, fondoLabel, fondoAmount, totalSpiff, spiffByMonth, monthly };
-  }, [clienteKey, pcelSellIn]);
+    // Quarterly rebate
+    const quarterly = QUARTERS.map((meses, qi) => {
+      const qSellIn = meses.reduce((s, m) => s + (pcelSellIn[m] || 0), 0);
+      const qCuota = meses.reduce((s, m) => s + (cuotas[m] || 0), 0);
+      const qAlcance = qCuota > 0 ? qSellIn / qCuota : 0;
+      let rebatePct = 0, rebateLabel = "< 90%";
+      for (const t of PCEL_REAL.rebateTiers) {
+        if (qAlcance >= t.min) { rebatePct = t.pct; rebateLabel = t.label; }
+      }
+      let fondoPct = 0, fondoLabel = "< 100%";
+      for (const t of PCEL_REAL.fondoMktTiers) {
+        if (qAlcance <= t.maxAlcance) { fondoPct = t.pct; fondoLabel = t.label; break; }
+      }
+      const overrideR = pcelOverrideRebate[qi+1];
+      const overrideRVal = overrideR !== "" && overrideR !== undefined ? parseFloat(overrideR) : null;
+      const rebateAmount = overrideRVal !== null ? overrideRVal : qSellIn * rebatePct;
+      const fondoAmount = qSellIn * fondoPct;
+      return { q: qi+1, label: qLabels[qi], meses, sellIn: qSellIn, cuota: qCuota, alcance: qAlcance, rebatePct, rebateLabel, rebateAmount, fondoPct, fondoLabel, fondoAmount, overrideActive: overrideRVal !== null };
+    });
+    
+    const totalRebate = quarterly.reduce((s, q) => s + q.rebateAmount, 0);
+    const totalFondo = quarterly.reduce((s, q) => s + q.fondoAmount, 0);
+    
+    // SPIFF by month (monthly)
+    const spiffByMonth = {};
+    let totalSpiff = 0;
+    for (const [m, val] of Object.entries(pcelSellIn)) {
+      const overrideS = pcelOverrideSpiff[m];
+      const overrideSVal = overrideS !== "" && overrideS !== undefined ? parseFloat(overrideS) : null;
+      const spiffAmt = overrideSVal !== null ? overrideSVal : val * SPIFF_PCT;
+      spiffByMonth[m] = { amount: spiffAmt, overrideActive: overrideSVal !== null };
+      totalSpiff += spiffAmt;
+    }
+    
+    const totalSellIn = Object.values(pcelSellIn).reduce((a,b) => a + b, 0);
+    const totalCuota = Object.entries(cuotas).filter(([m]) => monthly.some(r => r.sellIn > 0 && r.mes === Number(m))).reduce((a,[,v]) => a + v, 0);
+    const alcance = totalCuota > 0 ? totalSellIn / totalCuota : 0;
+    
+    return { totalSellIn, totalCuota, alcance, quarterly, totalRebate, totalFondo, totalSpiff, spiffByMonth, monthly };
+  }, [clienteKey, pcelSellIn, pcelCuotasSupa, pcelOverrideRebate, pcelOverrideSpiff]);
 
 
 // ── Data loading ──
@@ -2043,7 +2070,7 @@ function PagosCliente({ cliente, clienteKey }) {
       ? fijoRecords
       : registros.filter(r => r.categoria === catActiva);
 
-  const showFijosSection = catActiva === "todas" || catActiva === "pagosFijos";
+  const showFijosSection = clienteKey !== "pcel" && (catActiva === "todas" || catActiva === "pagosFijos");
   const showRegularTable = true;
 
   // Group fijos by concepto
@@ -2249,16 +2276,21 @@ function PagosCliente({ cliente, clienteKey }) {
               </div>
             )}
           {clienteKey === "pcel" && pcelCalc && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-600">
-                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Rebate Acum.</p>
-                <p className="text-2xl font-bold text-blue-600">{pcelCalc.rebateAmount > 0 ? "$" + Math.round(pcelCalc.rebateAmount).toLocaleString() : "$0"}</p>
-                <p className="text-xs text-gray-400 mt-1">{pcelCalc.rebateLabel} — {(pcelCalc.alcance * 100).toFixed(1)}% alcance</p>
+                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Rebate Trimestral</p>
+                <p className="text-2xl font-bold text-blue-600">{pcelCalc.totalRebate > 0 ? "$" + Math.round(pcelCalc.totalRebate).toLocaleString("es-MX") : "$0"}</p>
+                <p className="text-xs text-gray-400 mt-1">Acumulado {pcelCalc.quarterly.filter(q => q.sellIn > 0).length} trimestre(s)</p>
               </div>
               <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-emerald-500">
-                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Fondo MKT Acum.</p>
-                <p className="text-2xl font-bold text-emerald-600">{pcelCalc.fondoAmount > 0 ? "$" + Math.round(pcelCalc.fondoAmount).toLocaleString() : "$0"}</p>
-                <p className="text-xs text-gray-400 mt-1">{pcelCalc.fondoLabel} — {(pcelCalc.fondoPct * 100).toFixed(2)}% sobre Sell In</p>
+                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Fondo MKT</p>
+                <p className="text-2xl font-bold text-emerald-600">{pcelCalc.totalFondo > 0 ? "$" + Math.round(pcelCalc.totalFondo).toLocaleString("es-MX") : "$0"}</p>
+                <p className="text-xs text-gray-400 mt-1">Acumulado sobre Sell In</p>
+              </div>
+              <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-purple-500">
+                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">SPIFF Mensual</p>
+                <p className="text-2xl font-bold text-purple-600">{pcelCalc.totalSpiff > 0 ? "$" + Math.round(pcelCalc.totalSpiff).toLocaleString("es-MX") : "$0"}</p>
+                <p className="text-xs text-gray-400 mt-1">{(SPIFF_PCT * 100).toFixed(2)}% sobre Sell In</p>
               </div>
             </div>
           )}
@@ -2355,7 +2387,7 @@ function PagosCliente({ cliente, clienteKey }) {
                   className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${catActiva === "todas" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
                   Todas
                 </button>
-                {Object.entries(CATEGORIA_META).map(([key, meta]) => (
+                {Object.entries(CATEGORIA_META).filter(([key]) => !(clienteKey === "pcel" && key === "pagosFijos")).map(([key, meta]) => (
                   <button key={key} onClick={() => setCatActiva(catActiva === key ? "todas" : key)}
                     className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${catActiva === key ? "text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
                     style={catActiva === key ? { backgroundColor: meta.color } : {}}>
@@ -2717,17 +2749,76 @@ function PagosCliente({ cliente, clienteKey }) {
               )}
             </div>
           )}
-          {/* Calculadora Condiciones PCEL */}
+          {/* {/* ═══ Calculadora REBATE Trimestral PCEL ═══ */}
           {clienteKey === "pcel" && catActiva === "rebate" && pcelCalc && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <span className="text-xl">📊</span>
-                  <h3 className="text-lg font-bold text-gray-800">Calculadora Condiciones PCEL {new Date().getFullYear()}</h3>
+                  <h3 className="text-lg font-bold text-gray-800">Calculadora Rebate Trimestral {new Date().getFullYear()}</h3>
                 </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-gray-200">
+                      <th className="text-left py-2 px-3 font-bold text-gray-700">Trimestre</th>
+                      <th className="text-right py-2 px-3 font-bold text-gray-700">Sell In</th>
+                      <th className="text-right py-2 px-3 font-bold text-gray-700">Cuota</th>
+                      <th className="text-right py-2 px-3 font-bold text-gray-700">Alcance</th>
+                      <th className="text-right py-2 px-3 font-bold text-blue-600">Rebate</th>
+                      <th className="text-right py-2 px-3 font-bold text-emerald-600">Fondo MKT</th>
+                      <th className="text-center py-2 px-3 font-bold text-orange-500" style={{minWidth:"120px"}}>Override $</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pcelCalc.quarterly.map((q, i) => (
+                      <tr key={i} className={"border-b border-gray-100 " + (q.sellIn > 0 ? "hover:bg-gray-50" : "text-gray-300")}>
+                        <td className="py-2 px-3 font-semibold text-gray-700">{q.label}</td>
+                        <td className="py-2 px-3 text-right text-gray-600">{q.sellIn > 0 ? "$" + Math.round(q.sellIn).toLocaleString("es-MX") : "—"}</td>
+                        <td className="py-2 px-3 text-right text-gray-500">{q.cuota > 0 ? "$" + Math.round(q.cuota).toLocaleString("es-MX") : "—"}</td>
+                        <td className="py-2 px-3 text-right">{q.sellIn > 0 ? <span className={"font-semibold " + (q.alcance >= 1.2 ? "text-green-600" : q.alcance >= 0.9 ? "text-blue-600" : "text-red-500")}>{(q.alcance * 100).toFixed(1)}%</span> : <span>—</span>}</td>
+                        <td className="py-2 px-3 text-right">{q.sellIn > 0 ? <span className={"font-bold " + (q.overrideActive ? "text-orange-600" : "text-blue-600")}>{"$" + Math.round(q.rebateAmount).toLocaleString("es-MX")}{q.overrideActive ? " *" : ""}</span> : <span>—</span>}</td>
+                        <td className="py-2 px-3 text-right text-emerald-600 font-bold">{q.sellIn > 0 ? "$" + Math.round(q.fondoAmount).toLocaleString("es-MX") : "—"}</td>
+                        <td className="py-1 px-2 text-center"><input type="number" placeholder="Manual" className="w-24 px-2 py-1 text-xs border rounded-lg text-center focus:ring-2 focus:ring-orange-300 focus:border-orange-400" value={pcelOverrideRebate[q.q] || ""} onChange={e => setPcelOverrideRebate(prev => ({...prev, [q.q]: e.target.value}))} /></td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-gray-300 bg-gray-50">
+                      <td className="py-2 px-3 font-bold text-gray-800">Total</td>
+                      <td className="py-2 px-3 text-right font-bold text-gray-800">{"$" + Math.round(pcelCalc.totalSellIn).toLocaleString("es-MX")}</td>
+                      <td className="py-2 px-3 text-right font-bold text-gray-500">{"—"}</td>
+                      <td className="py-2 px-3 text-right font-bold text-gray-500">{"—"}</td>
+                      <td className="py-2 px-3 text-right font-bold text-blue-600">{"$" + Math.round(pcelCalc.totalRebate).toLocaleString("es-MX")}</td>
+                      <td className="py-2 px-3 text-right font-bold text-emerald-600">{"$" + Math.round(pcelCalc.totalFondo).toLocaleString("es-MX")}</td>
+                      <td className="py-2 px-3"></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center justify-between mt-4">
+                <p className="text-xs text-gray-400">* Tiers: {PCEL_REAL.rebateTiers.map(t => t.label + "=" + (t.pct*100) + "%").join(", ")} | Override: escribe monto manual para pagar aunque no alcance cuota</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-blue-600 font-semibold">Rebate Total</p>
+                  <p className="text-lg font-bold text-blue-600">{"$" + Math.round(pcelCalc.totalRebate).toLocaleString("es-MX")}</p>
+                </div>
+                <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-emerald-600 font-semibold">Fondo MKT Total</p>
+                  <p className="text-lg font-bold text-emerald-600">{"$" + Math.round(pcelCalc.totalFondo).toLocaleString("es-MX")}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {/* ═══ Calculadora SPIFF Mensual PCEL ═══ */}
+          {clienteKey === "pcel" && catActiva === "rebate" && pcelCalc && (
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className={"px-3 py-1 rounded-full text-xs font-bold " + (pcelCalc.alcance >= 1.2 ? "bg-green-100 text-green-700" : pcelCalc.alcance >= 0.9 ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-700")}>{(pcelCalc.alcance * 100).toFixed(1)}% Alcance</span>
+                  <span className="text-xl">💰</span>
+                  <h3 className="text-lg font-bold text-gray-800">Calculadora SPIFF Mensual {new Date().getFullYear()}</h3>
                 </div>
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700">{(SPIFF_PCT * 100).toFixed(2)}% sobre Sell In</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -2738,50 +2829,43 @@ function PagosCliente({ cliente, clienteKey }) {
                       <th className="text-right py-2 px-3 font-bold text-gray-700">Cuota</th>
                       <th className="text-right py-2 px-3 font-bold text-gray-700">Alcance</th>
                       <th className="text-right py-2 px-3 font-bold text-purple-600">SPIFF</th>
+                      <th className="text-center py-2 px-3 font-bold text-orange-500" style={{minWidth:"120px"}}>Override $</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pcelCalc.monthly.map((r, i) => {
                       const mName = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][r.mes - 1];
+                      const spiffData = pcelCalc.spiffByMonth[r.mes];
+                      const spiffAmt = spiffData ? spiffData.amount : r.spiff;
+                      const isOverride = spiffData ? spiffData.overrideActive : false;
                       return (
                         <tr key={i} className={"border-b border-gray-100 " + (r.sellIn > 0 ? "hover:bg-gray-50" : "text-gray-300")}>
                           <td className="py-2 px-3 font-semibold text-gray-700">{mName}</td>
                           <td className="py-2 px-3 text-right text-gray-600">{r.sellIn > 0 ? "$" + Math.round(r.sellIn).toLocaleString("es-MX") : "—"}</td>
                           <td className="py-2 px-3 text-right text-gray-500">{r.cuota > 0 ? "$" + Math.round(r.cuota).toLocaleString("es-MX") : "—"}</td>
                           <td className="py-2 px-3 text-right">{r.sellIn > 0 ? <span className={"font-semibold " + (r.alcance >= 1.2 ? "text-green-600" : r.alcance >= 0.9 ? "text-blue-600" : "text-red-500")}>{(r.alcance * 100).toFixed(1)}%</span> : <span>—</span>}</td>
-                          <td className="py-2 px-3 text-right" style={{ color: r.sellIn > 0 ? "#9333ea" : "#d1d5db" }}>{r.sellIn > 0 ? "$" + Math.round(r.spiff).toLocaleString("es-MX") : "—"}</td>
+                          <td className="py-2 px-3 text-right"><span className={"font-bold " + (isOverride ? "text-orange-600" : "text-purple-600")} style={{color: r.sellIn > 0 ? undefined : "#d1d5db"}}>{r.sellIn > 0 || isOverride ? "$" + Math.round(spiffAmt).toLocaleString("es-MX") + (isOverride ? " *" : "") : "—"}</span></td>
+                          <td className="py-1 px-2 text-center"><input type="number" placeholder="Manual" className="w-24 px-2 py-1 text-xs border rounded-lg text-center focus:ring-2 focus:ring-orange-300 focus:border-orange-400" value={pcelOverrideSpiff[r.mes] || ""} onChange={e => setPcelOverrideSpiff(prev => ({...prev, [r.mes]: e.target.value}))} /></td>
                         </tr>
                       );
                     })}
                     <tr className="border-t-2 border-gray-300 bg-gray-50">
                       <td className="py-2 px-3 font-bold text-gray-800">Total</td>
                       <td className="py-2 px-3 text-right font-bold text-gray-800">{"$" + Math.round(pcelCalc.totalSellIn).toLocaleString("es-MX")}</td>
-                      <td className="py-2 px-3 text-right font-bold text-gray-500">{"$" + Math.round(pcelCalc.totalCuota).toLocaleString("es-MX")}</td>
-                      <td className="py-2 px-3 text-right"><span className={"font-bold " + (pcelCalc.alcance >= 1.2 ? "text-green-600" : pcelCalc.alcance >= 0.9 ? "text-blue-600" : "text-red-500")}>{(pcelCalc.alcance * 100).toFixed(1)}%</span></td>
+                      <td className="py-2 px-3 text-right font-bold text-gray-500">{"—"}</td>
+                      <td className="py-2 px-3 text-right font-bold text-gray-500">{"—"}</td>
                       <td className="py-2 px-3 text-right font-bold text-purple-600">{"$" + Math.round(pcelCalc.totalSpiff).toLocaleString("es-MX")}</td>
+                      <td className="py-2 px-3"></td>
                     </tr>
                   </tbody>
                 </table>
-                <div className="flex items-center justify-between mt-4">
-                  <p className="text-xs text-gray-400">* Rebate: {pcelCalc.rebateLabel} ({(pcelCalc.rebatePct * 100).toFixed(1)}%) — Fondo MKT: {pcelCalc.fondoLabel} ({(pcelCalc.fondoPct * 100).toFixed(2)}%) — SPIFF: {(SPIFF_PCT * 100).toFixed(2)}% mensual sobre Sell In</p>
-                </div>
-                <div className="grid grid-cols-3 gap-3 mt-4">
-                  <div className="bg-blue-50 rounded-lg p-3 text-center">
-                    <p className="text-xs text-blue-600 font-semibold">Rebate</p>
-                    <p className="text-lg font-bold text-blue-600">{"$" + Math.round(pcelCalc.rebateAmount).toLocaleString()}</p>
-                    <p className="text-xs text-gray-400">{(pcelCalc.rebatePct * 100).toFixed(1)}%</p>
-                  </div>
-                  <div className="bg-emerald-50 rounded-lg p-3 text-center">
-                    <p className="text-xs text-emerald-600 font-semibold">Fondo MKT</p>
-                    <p className="text-lg font-bold text-emerald-600">{"$" + Math.round(pcelCalc.fondoAmount).toLocaleString()}</p>
-                    <p className="text-xs text-gray-400">{(pcelCalc.fondoPct * 100).toFixed(2)}%</p>
-                  </div>
-                  <div className="bg-purple-50 rounded-lg p-3 text-center">
-                    <p className="text-xs text-purple-600 font-semibold">SPIFF Total</p>
-                    <p className="text-lg font-bold text-purple-600">{"$" + Math.round(pcelCalc.totalSpiff).toLocaleString()}</p>
-                    <p className="text-xs text-gray-400">{(SPIFF_PCT * 100).toFixed(2)}%</p>
-                  </div>
-                </div>
+              </div>
+              <div className="mt-4">
+                <p className="text-xs text-gray-400">* SPIFF: {(SPIFF_PCT * 100).toFixed(2)}% mensual sobre Sell In | Override: escribe monto manual para pagar sin importar alcance</p>
+              </div>
+              <div className="bg-purple-50 rounded-lg p-3 text-center mt-4">
+                <p className="text-xs text-purple-600 font-semibold">SPIFF Total Acumulado</p>
+                <p className="text-lg font-bold text-purple-600">{"$" + Math.round(pcelCalc.totalSpiff).toLocaleString("es-MX")}</p>
               </div>
             </div>
           )}
