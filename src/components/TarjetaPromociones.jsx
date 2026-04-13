@@ -5,7 +5,7 @@ import { CardHeader } from './CardHeader';
 export function TarjetaPromociones({ promos }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5">
-      <CardHeader titulo="Promociones Activas" icono="Ã°ÂÂÂ¯" />
+      <CardHeader titulo="Promociones Activas" icono="🎯" />
       <div className="space-y-4">
         {promos.map(p => {
           const total = p.aportacionActeck + p.aportacionCliente;
@@ -17,13 +17,13 @@ export function TarjetaPromociones({ promos }) {
                 <span className="text-xs text-gray-400">{p.vigencia}</span>
               </div>
               <div className="flex gap-4 text-xs mb-2">
-                <span className="text-blue-700">Nuestra aportaciÃÂ³n: <b>{formatMXN(p.aportacionActeck)}</b></span>
+                <span className="text-blue-700">Nuestra aportación: <b>{formatMXN(p.aportacionActeck)}</b></span>
                 <span className="text-purple-700">Cliente aporta: <b>{formatMXN(p.aportacionCliente)}</b></span>
               </div>
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                 <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pctActeck}%` }}></div>
               </div>
-              <p className="text-xs text-gray-400 mt-1">InversiÃÂ³n total: {formatMXN(total)} ÃÂ· Nosotros {pctActeck}% / Cliente {100 - pctActeck}%</p>
+              <p className="text-xs text-gray-400 mt-1">Inversión total: {formatMXN(total)} · Nosotros {pctActeck}% / Cliente {100 - pctActeck}%</p>
             </div>
           );
         })}

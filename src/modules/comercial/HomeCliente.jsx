@@ -83,7 +83,7 @@ function detectarColumnas(headers) {
     else if (/sell.?in|venta.?in|compra/i.test(lc)) map.sellIn = orig;
     else if (/sell.?out|venta.?out|sellout/i.test(lc)) map.sellOut = orig;
     else if (/cuota|quota|objetivo|meta/i.test(lc)) map.cuota = orig;
-    else if (/inv.*d[iÃ­]a|days.*inv/i.test(lc)) map.invDias = orig;
+    else if (/inv.*d[ií]a|days.*inv/i.test(lc)) map.invDias = orig;
     else if (/inv.*val|valor.*inv/i.test(lc)) map.invValor = orig;
   }
   return map;
@@ -113,7 +113,7 @@ function TarjetaSellOutMarca({ sellOutMarca, totalMonto }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-lg">ð·ï¸</span>
+        <span className="text-lg">🏷️</span>
         <h3 className="font-semibold text-gray-800">Sell Out por Marca (ML)</h3>
       </div>
       <div className="space-y-3">
@@ -136,7 +136,7 @@ function TarjetaSellOutMarca({ sellOutMarca, totalMonto }) {
       <div className="mt-4 pt-3 border-t border-gray-100 text-sm text-gray-500">
         Total sell-out ML <span className="font-semibold text-gray-800">{"$"}{Math.round(totalMonto).toLocaleString("es-MX")}</span>
       </div>
-      <div className="text-xs text-gray-400 mt-1">{Math.round(totalMonto) > 0 ? (marcas.length + " marcas Â· " + Math.round(totalMonto).toLocaleString("es-MX") + " total") : ""}</div>
+      <div className="text-xs text-gray-400 mt-1">{Math.round(totalMonto) > 0 ? (marcas.length + " marcas · " + Math.round(totalMonto).toLocaleString("es-MX") + " total") : ""}</div>
     </div>
   );
 }
@@ -148,7 +148,7 @@ function TarjetaTendenciaML({ sellOutPorMesMarca }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-lg">ð</span>
+        <span className="text-lg">📈</span>
         <h3 className="font-semibold text-gray-800">Tendencia Sell Out ML por Mes</h3>
       </div>
       <div className="space-y-3">
@@ -201,28 +201,28 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-lg">ð°</span>
+              <span className="text-lg">💰</span>
               <span className="text-xs text-gray-500 font-semibold uppercase">Sell Out {mesLabel}</span>
             </div>
             <p className="text-2xl font-bold text-blue-700">{"$"}{sellOutMes.toLocaleString("es-MX")}</p>
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-lg">ð</span>
+              <span className="text-lg">📈</span>
               <span className="text-xs text-gray-500 font-semibold uppercase">Acumulado 2026</span>
             </div>
             <p className="text-2xl font-bold text-green-700">{"$"}{acumulado.toLocaleString("es-MX")}</p>
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-lg">ð</span>
+              <span className="text-lg">📋</span>
               <span className="text-xs text-gray-500 font-semibold uppercase">Total Ordenes 2026</span>
             </div>
             <p className="text-2xl font-bold text-purple-700">{ordenes.toLocaleString("es-MX")}</p>
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-lg">ð¯</span>
+              <span className="text-lg">🎯</span>
               <span className="text-xs text-gray-500 font-semibold uppercase">Ticket Promedio</span>
             </div>
             <p className="text-2xl font-bold text-orange-700">{"$"}{ticketProm.toLocaleString("es-MX")}</p>
@@ -236,7 +236,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
             <ul className="space-y-2">
               {cliente.pendientes.map((p, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                  <span className="text-yellow-500 mt-0.5">â ï¸</span>
+                  <span className="text-yellow-500 mt-0.5">⚠️</span>
                   <span>{p}</span>
                 </li>
               ))}
@@ -274,7 +274,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     { key: "completado", label: "Completado", color: "#10B981", bg: "#D1FAE5" }
   ];
 
-  // âââ FETCH ALL DATA âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── FETCH ALL DATA ─────────────────────────────────────────────────────────
   React.useEffect(() => {
     if (!DB_CONFIGURED) { setLoading(false); return; }
     Promise.all([
@@ -301,7 +301,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     });
   }, [clienteKey, anioResumen]);
 
-  // âââ DERIVED DATA âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── DERIVED DATA ───────────────────────────────────────────────────────────
   // Aggregate sell_in_sku by month
   const ventasPorMes = React.useMemo(() => {
     const map = {};
@@ -317,7 +317,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     return map;
   }, [sellInSku, sellOutSku]);
 
-  // âââ CUOTAS POR MES (from cuotas_mensuales table) ââââââââââââââââââââââââ
+  // ─── CUOTAS POR MES (from cuotas_mensuales table) ────────────────────────
   const cuotasPorMes = React.useMemo(() => {
     const map = {};
     if (cuotasMensuales.length > 0) {
@@ -333,7 +333,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     return map;
   }, [cuotasMensuales, clienteKey]);
 
-  // âââ PERIOD FILTER ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── PERIOD FILTER ────────────────────────────────────────────────────────
   const mesesFiltrados = React.useMemo(() => {
     if (periodoTipo === 'ytd') return Array.from({length: 12}, (_, i) => i + 1);
     if (periodoTipo === 'mes') return [periodoMes];
@@ -374,7 +374,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   const diasInventario = ultimoMesData && Number(ultimoMesData.sell_out) > 0 ? Math.round((Number(ultimoMesData.inventario_valor) || 0) / (Number(ultimoMesData.sell_out) / 30)) : 0;
   const estadoSalud = calcularSalud({ cuotaAcumulada, sellInAcumulado: totalSellIn, diasInventario }, []);
 
-  // âââ SVG LINE CHART âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── SVG LINE CHART ─────────────────────────────────────────────────────────
   function LineChartSellInOut() {
   const W = 780, H = 340, PAD = { t: 40, r: 70, b: 50, l: 75 };
   const plotW = W - PAD.l - PAD.r;
@@ -510,7 +510,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   );
 }
 
-  // âââ PROGRESS BAR ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── PROGRESS BAR ──────────────────────────────────────────────────────────
   function ProgresoAnual() {
     const cuotaIdealEff = totalCuotaIdeal > 0 ? totalCuotaIdeal : meta.meta_sell_in_optimista;
     const cuotaMinEff = totalCuotaMin > 0 ? totalCuotaMin : meta.meta_sell_in_min;
@@ -583,7 +583,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     );
   }
 
-  // âââ INVENTARIO CARD ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── INVENTARIO CARD ────────────────────────────────────────────────────────
   function InventarioCard() {
     return React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 12, padding: 20 } },
       React.createElement("h4", { style: { margin: "0 0 8px", fontSize: 14, color: "#334155" } }, "Valor de Inventario"),
@@ -593,7 +593,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     );
   }
 
-  // âââ PENDIENTES CARD (reusable) âââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── PENDIENTES CARD (reusable) ─────────────────────────────────────────────
   function TarjetaPendientesEditable({ tipo, items, setItems }) {
     const [showForm, setShowForm] = React.useState(false);
     const [showHist, setShowHist] = React.useState(false);
@@ -700,7 +700,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     );
   }
 
-  // âââ MARKETING METRICS ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── MARKETING METRICS ──────────────────────────────────────────────────────
   function MetricasMarketing() {
     const [showAddInv, setShowAddInv] = React.useState(false);
     const [invForm, setInvForm] = React.useState({ mes: new Date().getMonth() + 1, monto: "", descripcion: "" });
@@ -768,7 +768,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     );
   }
 
-  // âââ MINUTA CARD ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── MINUTA CARD ────────────────────────────────────────────────────────────
   function MinutaPlaud() {
     const [showAdd, setShowAdd] = React.useState(false);
     const [minForm, setMinForm] = React.useState({ fecha: new Date().toISOString().split("T")[0], contenido: "" });
@@ -830,7 +830,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     );
   }
 
-  // âââ MAIN RENDER ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── MAIN RENDER ────────────────────────────────────────────────────────────
   if (loading) return React.createElement("div", { style: { display: "flex", justifyContent: "center", padding: 60 } },
     React.createElement("div", { style: { fontSize: 16, color: "#94A3B8" } }, "Cargando datos..."));
 
@@ -845,7 +845,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     ),
     // Row 0.5a: Year selector
     React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } },
-      React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: "#475569" } }, "AÃ±o:"),
+      React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: "#475569" } }, "Año:"),
       [2025, 2026].map(function(y) {
         return React.createElement("button", {
           key: y,
@@ -906,7 +906,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     ),
     // Row 1: Line chart
     React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 20 } },
-      React.createElement("h3", { style: { margin: "0 0 12px", fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out â " + (cliente?.nombre || clienteKey) + " 2026"),
+      React.createElement("h3", { style: { margin: "0 0 12px", fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out — " + (cliente?.nombre || clienteKey) + " 2026"),
       React.createElement(LineChartSellInOut, null)
     ),
     // Row 2: Progress + Inventario
@@ -926,5 +926,5 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   );
 }
 
-// âââ PÃGINA: CRÃDITO Y COBRANZA ââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── PÁGINA: CRÉDITO Y COBRANZA ──────────────────────────────────────────────
 

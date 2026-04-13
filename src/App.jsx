@@ -130,7 +130,7 @@ function ResumenCuentas() {
 }
 
 export default function App() {
-  // ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ AUTH STATE ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+  // ─── AUTH STATE ─────────────────────────────────────────────
   const [authUser, setAuthUser] = useState(null);
   const [perfil, setPerfil] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -208,7 +208,7 @@ export default function App() {
   const [vistaActual, setVistaActual] = useState(null);
   const [clienteKey, setClienteKey] = useState(null);
 
-  // ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ DATOS DESDE SUPABASE (ventas_mensuales) ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+  // ─── DATOS DESDE SUPABASE (ventas_mensuales) ───
   const [ventasDB, setVentasDB] = React.useState(null);
   const [ventasVer, setVentasVer] = React.useState(0);
 
@@ -255,12 +255,12 @@ export default function App() {
   };
 
   const navItems = [
-    { id: "home",       label: "Resumen",               icono: "ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ ", habilitado: true  },
-    { id: "analisis",   label: "AnÃÂÃÂÃÂÃÂ¡lisis",                icono: "ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ", habilitado: true  },
-    { id: "estrategia", label: "Estrategia de Producto", icono: "ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ¦", habilitado: true  },
-    { id: "marketing",  label: "Marketing",              icono: "ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ£", habilitado: clienteActivo !== "pcel"  },
-    { id: "pagos",      label: "Pagos",                  icono: "ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ°", habilitado: true  },
-    { id: "cartera",    label: "CrÃÂÃÂÃÂÃÂ©dito y Cobranza",     icono: "ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ", habilitado: true  },
+    { id: "home",       label: "Resumen",               icono: "🏠", habilitado: true  },
+    { id: "analisis",   label: "Análisis",                icono: "📈", habilitado: true  },
+    { id: "estrategia", label: "Estrategia de Producto", icono: "📦", habilitado: true  },
+    { id: "marketing",  label: "Marketing",              icono: "📣", habilitado: clienteActivo !== "pcel"  },
+    { id: "pagos",      label: "Pagos",                  icono: "💰", habilitado: true  },
+    { id: "cartera",    label: "Crédito y Cobranza",     icono: "📊", habilitado: true  },
   ]
 
   
@@ -274,11 +274,11 @@ export default function App() {
       {/* SIDEBAR */}
       <aside className="w-52 bg-white border-r border-gray-100 flex flex-col shadow-sm shrink-0 overflow-y-auto">
 
-        {/* Logo + BotÃÂÃÂÃÂÃÂ³n Modo PresentaciÃÂÃÂÃÂÃÂ³n */}
+        {/* Logo + Botón Modo Presentación */}
         <div className="p-3 border-b border-gray-100">
           {!modoPresent ? (
             <>
-              <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">AdministraciÃÂÃÂÃÂÃÂ³n de Clientes</p>
+              <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Administración de Clientes</p>
               <div className="flex gap-2 mb-3">
                 <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-semibold">Acteck</span>
                 <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-semibold">Balam Rush</span>
@@ -287,7 +287,7 @@ export default function App() {
           ) : (
             <div className="flex items-center gap-2 mb-3">
               <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-              <p className="text-xs text-green-600 font-semibold uppercase tracking-widest">Modo PresentaciÃÂÃÂÃÂÃÂ³n</p>
+              <p className="text-xs text-green-600 font-semibold uppercase tracking-widest">Modo Presentación</p>
             </div>
           )}
           <button
@@ -299,36 +299,36 @@ export default function App() {
             }`}
           >
             {modoPresent ? (
-              <><span>ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ</span> Salir de PresentaciÃÂÃÂÃÂÃÂ³n</>
+              <><span>🔒</span> Salir de Presentación</>
             ) : (
-              <><span>ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¯ÃÂÃÂ¸ÃÂÃÂ</span> Modo PresentaciÃÂÃÂÃÂÃÂ³n</>
+              <><span>👁️</span> Modo Presentación</>
             )}
           </button>
         </div>
 
-        {/* BotÃÂÃÂÃÂÃÂ³n Resumen General */}
+        {/* Botón Resumen General */}
         <div className="px-4 py-2 border-b border-gray-100">
           <button
             onClick={() => setPaginaActiva("resumen")}
             className={"w-full text-left text-sm font-medium px-3 py-2.5 rounded-xl transition-all flex items-center gap-2 " + (paginaActiva === "resumen" ? "bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-700 shadow-sm border border-indigo-100" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700")}
           >
-            <span>{"ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ"}</span>
+            <span>{"📊"}</span>
             <span>Resumen General</span>
           </button>
         </div>
 
-        {/* BotÃÂÃÂÃÂÃÂ³n Forecast */}
+        {/* Botón Forecast */}
           <div className="px-4 py-2 border-b border-gray-100">
             <button
               onClick={() => setPaginaActiva("forecast")}
               className={"w-full text-left text-sm font-medium px-3 py-2.5 rounded-xl transition-all flex items-center gap-2 " + (paginaActiva === "forecast" ? "bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 shadow-sm border border-emerald-100" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700")}
             >
-              <span>{"ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ®"}</span>
+              <span>{"🔮"}</span>
               <span>Forecast</span>
             </button>
           </div>
 
-          {/* Selector de cliente ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ se oculta en modo presentaciÃÂÃÂÃÂÃÂ³n */}
+          {/* Selector de cliente — se oculta en modo presentación */}
         {!modoPresent && (
           <div className="p-4 border-b border-gray-100">
             <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Cliente</p>
@@ -354,7 +354,7 @@ export default function App() {
           </div>
         )}
 
-        {/* En modo presentaciÃÂÃÂÃÂÃÂ³n: mostrar solo el cliente activo */}
+        {/* En modo presentación: mostrar solo el cliente activo */}
         {modoPresent && (
           <div className="p-4 border-b border-gray-100">
             <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Cliente</p>
@@ -366,7 +366,7 @@ export default function App() {
           </div>
         )}
 
-        {/* NavegaciÃÂÃÂÃÂÃÂ³n */}
+        {/* Navegación */}
         <nav className="p-4 flex-1">
           <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Secciones</p>
           <div className="space-y-1">
@@ -382,7 +382,7 @@ export default function App() {
                       : "text-gray-600 hover:bg-gray-50 hover:text-gray-800"
                 }`}
                 disabled={!item.habilitado}
-                title={!item.habilitado ? "PrÃÂÃÂÃÂÃÂ³ximamente" : ""}
+                title={!item.habilitado ? "Próximamente" : ""}
               >
                 <span>{item.icono}</span>
                 {item.label}
@@ -408,13 +408,13 @@ export default function App() {
             <button
               onClick={() => { setVistaActual("configuracion"); setClienteKey(null); }}
               className={"w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition " + (vistaActual === "configuracion" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800/50")}
-            >ConfiguraciÃÂÃÂÃÂÃÂ³n</button>
+            >Configuración</button>
           )}
           <div className="mt-2 pt-2 border-t border-gray-700/50">
             <p className="text-xs text-gray-500 mb-1">{perfil.nombre}</p>
-            <button onClick={handleLogout} className="w-full text-left px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-red-400 hover:bg-gray-800/50 transition">Cerrar sesiÃÂÃÂÃÂÃÂ³n</button>
+            <button onClick={handleLogout} className="w-full text-left px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-red-400 hover:bg-gray-800/50 transition">Cerrar sesión</button>
           </div>
-          <p className="text-xs text-gray-300 text-center">v1.0 ÃÂÃÂÃÂÃÂ· Abril 2026</p>
+          <p className="text-xs text-gray-300 text-center">v1.0 · Abril 2026</p>
         </div>
       </aside>
 
@@ -424,7 +424,7 @@ export default function App() {
             <Configuracion session={{user: authUser, perfil}} />
           ) : (
             <>
-            {/* Banner modo presentaciÃÂÃÂÃÂÃÂ³n */}
+            {/* Banner modo presentación */}
         { /* Banner removed */ }
           {paginaActiva === "resumen" && <ResumenCuentas />}
           <>

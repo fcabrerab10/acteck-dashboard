@@ -3,8 +3,8 @@ import React from "react";
 export function Semaforo({ estado }) {
   const config = {
     verde:    { bg: "bg-green-100",  text: "text-green-700",  dot: "bg-green-500",  label: "Saludable" },
-    amarillo: { bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-400", label: "AtenciÃÂ³n" },
-    rojo:     { bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500",    label: "CrÃÂ­tico" },
+    amarillo: { bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-400", label: "Atención" },
+    rojo:     { bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500",    label: "Crítico" },
   };
   const c = config[estado];
   return (

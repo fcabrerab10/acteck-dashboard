@@ -7,14 +7,14 @@ export function TarjetaMinuta({ minuta }) {
   const pct = Math.round((cumplidos / minuta.acuerdos.length) * 100);
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5">
-      <CardHeader titulo="Minuta Ã¢ÂÂ ReuniÃÂ³n Anterior" icono="Ã°ÂÂÂ" />
+      <CardHeader titulo="Minuta — Reunión Anterior" icono="📝" />
       <div className="flex flex-wrap gap-4 text-sm mb-4">
         <div>
-          <p className="text-xs text-gray-400">Fecha reuniÃÂ³n</p>
+          <p className="text-xs text-gray-400">Fecha reunión</p>
           <p className="font-semibold text-gray-700">{formatFecha(minuta.fechaReunion)}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-400">PrÃÂ³xima reuniÃÂ³n</p>
+          <p className="text-xs text-gray-400">Próxima reunión</p>
           <p className="font-semibold text-blue-600">{formatFecha(minuta.proximaReunion)}</p>
         </div>
         <div>
@@ -37,7 +37,7 @@ export function TarjetaMinuta({ minuta }) {
       <div className="space-y-2">
         {minuta.acuerdos.map(a => (
           <div key={a.id} className={`flex gap-3 text-sm p-3 rounded-xl ${a.cumplido ? "bg-green-50" : "bg-gray-50"}`}>
-            <span className="text-base shrink-0">{a.cumplido ? "ÃÂ¢ÃÂÃÂ" : "ÃÂ¢ÃÂ¬ÃÂ"}</span>
+            <span className="text-base shrink-0">{a.cumplido ? "â" : "â¬"}</span>
             <div className="flex-1">
               <p className={`font-medium leading-snug ${a.cumplido ? "text-gray-500 line-through" : "text-gray-800"}`}>{a.descripcion}</p>
               <div className="flex gap-3 text-xs text-gray-400 mt-0.5">
@@ -53,5 +53,5 @@ export function TarjetaMinuta({ minuta }) {
   );
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ PÃÂGINA HOME CLIENTE Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ─── PÁGINA HOME CLIENTE ──────────────────────────────────────────────────────
 

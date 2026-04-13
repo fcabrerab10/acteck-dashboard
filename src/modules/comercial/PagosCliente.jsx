@@ -7,7 +7,7 @@ import { CardHeader } from '../../components';
 export default function PagosCliente({ cliente, clienteKey }) {
   const c = cliente;
 
-  // ââ State ââ
+  // ── State ──
   const [registros, setRegistros]     = useState([]);
   const [loading, setLoading]         = useState(true);
   const [catActiva, setCatActiva]     = useState("todas");
@@ -43,7 +43,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
 
   
 
-  // ââ Rebate Calculator (solo Digitalife) ââ
+  // ── Rebate Calculator (solo Digitalife) ──
   const [rebateData, setRebateData] = useState({ monitores: 0, sillas: 0, accesorios: 0 });
   const [rebateLoading, setRebateLoading] = useState(false);
   const [rebateQ, setRebateQ] = useState(() => {
@@ -93,7 +93,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     })();
   }, [clienteKey, rebateQ, registros.length]);
 
-  // ââ PCEL Condiciones Comerciales (Rebate + Fondo MKT + SPIFF) ââ
+  // ── PCEL Condiciones Comerciales (Rebate + Fondo MKT + SPIFF) ──
   const [pcelSellIn, setPcelSellIn] = useState({});
   const SPIFF_PCT = 0.0021;
   const [pcelOverrideRebate, setPcelOverrideRebate] = useState({1:"",2:"",3:"",4:""});
@@ -117,7 +117,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     })();
   }, [clienteKey]);
   
-  // ââ Fetch cuotas mensuales from Supabase (fallback to PCEL_REAL) ââ
+  // ── Fetch cuotas mensuales from Supabase (fallback to PCEL_REAL) ──
   useEffect(() => {
     if (clienteKey !== "pcel" || !DB_CONFIGURED) return;
     const anio = new Date().getFullYear();
@@ -131,7 +131,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     })();
   }, [clienteKey]);
   
-  // ââ Fetch PCEL payment records (rebate/spiff) ââ
+  // ── Fetch PCEL payment records (rebate/spiff) ──
   useEffect(() => {
     if (clienteKey !== "pcel" || !DB_CONFIGURED) return;
     (async () => {
@@ -218,7 +218,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   }, [clienteKey, pcelSellIn, pcelCuotasSupa, pcelOverrideRebate, pcelOverrideSpiff]);
 
 
-// ââ Data loading ââ
+// ── Data loading ──
   useEffect(() => {
     if (!DB_CONFIGURED) {
       const seed = Object.entries(PAGOS_DIGITALIFE_2026.categorias).flatMap(([key, cat]) =>
@@ -242,13 +242,13 @@ export default function PagosCliente({ cliente, clienteKey }) {
     setLoading(false);
   };
 
-  // ââ Toast ââ
+  // ── Toast ──
   const flash = (msg, type = "ok") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 2500);
   };
 
-  // ââ Inline edit helpers ââ
+  // ── Inline edit helpers ──
   const startEdit = (id, field, value) => {
     if (!DB_CONFIGURED) return;
     setEditingCell({ id, field });
@@ -266,11 +266,11 @@ export default function PagosCliente({ cliente, clienteKey }) {
       .update({ [field]: value, updated_at: new Date().toISOString(), ...(field === "fecha_pago_real" && value ? { estatus: "pagado" } : {}) })
       .eq("id", id);
     setSaving(false);
-    if (error) { flash("Error al guardar Ã¢ÂÂ", "err"); fetchData(); }
-    else flash("Guardado Ã¢ÂÂ");
+    if (error) { flash("Error al guardar â", "err"); fetchData(); }
+    else flash("Guardado â");
   };
 
-  // ââ Add record (non-fijos) ââ
+  // ── Add record (non-fijos) ──
   const handleAdd = async () => {
     if (!newRow.concepto.trim()) return;
     const record = {
@@ -281,16 +281,16 @@ export default function PagosCliente({ cliente, clienteKey }) {
       fecha_pago_real: newRow.fecha_pago_real || null,
     };
     const { data, error } = await supabase.from("pagos").insert(record).select().single();
-    if (error) { flash("Error al agregar Ã¢ÂÂ", "err"); return; }
+    if (error) { flash("Error al agregar â", "err"); return; }
     setRegistros(prev => [...prev, data]);
     setNewRow({ folio: "", concepto: "", categoria: "promociones", monto: "",
                 estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
                 responsable: "", notas: "" });
     setShowAdd(false);
-    flash("Registro agregado Ã¢ÂÂ");
+    flash("Registro agregado â");
   };
 
-  // ââ Add Pago Fijo (creates 12 monthly records) ââ
+  // ── Add Pago Fijo (creates 12 monthly records) ──
   const handleAddFijo = async () => {
     const isExisting = newFijo.existente && newFijo.existente !== "__nuevo__";
     const concepto = isExisting ? newFijo.existente : newFijo.concepto.trim();
@@ -322,31 +322,31 @@ export default function PagosCliente({ cliente, clienteKey }) {
     flash(`${newMeses.length} mes(es) de "${concepto}" creados`);
   };
 
-  // ââ Delete record ââ
+  // ── Delete record ──
   const handleDelete = async (id) => {
-    if (!window.confirm("Â¿Eliminar este registro? Esta acciÃ³n no se puede deshacer.")) return;
+    if (!window.confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")) return;
     setRegistros(prev => prev.filter(r => r.id !== id));
     const { error } = await supabase.from("pagos").delete().eq("id", id);
-    if (error) { flash("Error al eliminar Ã¢ÂÂ", "err"); fetchData(); }
-    else flash("Eliminado Ã¢ÂÂ");
+    if (error) { flash("Error al eliminar â", "err"); fetchData(); }
+    else flash("Eliminado â");
   };
 
-  // ââ Delete all months of a fijo concept ââ
+  // ── Delete all months of a fijo concept ──
   const handleDeleteFijo = async (conceptoKey, ids) => {
-    if (!window.confirm(`Â¿Eliminar todos los meses de "${conceptoKey}"? Esta acciÃ³n no se puede deshacer.`)) return;
+    if (!window.confirm(`¿Eliminar todos los meses de "${conceptoKey}"? Esta acción no se puede deshacer.`)) return;
     setRegistros(prev => prev.filter(r => !ids.includes(r.id)));
     for (const id of ids) {
       await supabase.from("pagos").delete().eq("id", id);
     }
-    flash(`"${conceptoKey}" eliminado Ã¢ÂÂ`);
+    flash(`"${conceptoKey}" eliminado â`);
   };
 
-  // ââ Toggle expand fijo ââ
+  // ── Toggle expand fijo ──
   const toggleFijo = (key) => {
     setExpandedFijos(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // ââ Computed ââ
+  // ── Computed ──
   const fijoRecords = registros.filter(r => r.categoria === "pagosFijos");
   const nonFijoRecords = registros.filter(r => r.categoria !== "pagosFijos");
   const filtered = catActiva === "todas"
@@ -387,7 +387,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     return Object.values(months).sort((a, b) => a.mes.localeCompare(b.mes));
   };
 
-  // ââ Inline cell renderer ââ
+  // ── Inline cell renderer ──
   const renderCell = (row, field, type = "text") => {
     const isEditing = editingCell?.id === row.id && editingCell?.field === field;
     const inputCls = "w-full border border-blue-400 rounded px-2 py-1 text-sm outline-none bg-blue-50 focus:ring-1 focus:ring-blue-400";
@@ -454,18 +454,18 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (field === "fecha_compromiso" || field === "fecha_pago_real") {
       return (
         <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors whitespace-nowrap" : "whitespace-nowrap"} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
-          {row[field] ? <span className="text-gray-600">{formatFecha(row[field])}</span> : <span className="text-gray-300">â</span>}
+          {row[field] ? <span className="text-gray-600">{formatFecha(row[field])}</span> : <span className="text-gray-300">—</span>}
         </div>
       );
     }
     return (
       <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
-        {row[field] ? <span className="text-gray-700">{row[field]}</span> : <span className="text-gray-300">â</span>}
+        {row[field] ? <span className="text-gray-700">{row[field]}</span> : <span className="text-gray-300">—</span>}
       </div>
     );
   };
 
-  // ââââââââââââââââââââââââââ RENDER ââââââââââââââââââââââââââââââââââââââââââ
+  // ────────────────────────── RENDER ──────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 p-6">
 
@@ -481,42 +481,42 @@ export default function PagosCliente({ cliente, clienteKey }) {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
-                 style={{ backgroundColor: c.color }}>ð°</div>
+                 style={{ backgroundColor: c.color }}>💰</div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">{c.nombre} â Pagos y Compromisos</h1>
+              <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Pagos y Compromisos</h1>
               <p className="text-sm text-gray-400 mt-0.5">
                 <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
-                {" Â· "}Promociones Â· Marketing{clienteKey !== "pcel" && " Â· Pagos Fijos"} Â· Variables
-                {saving && <span className="ml-2 text-blue-400 animate-pulse">Ã¢ÂÂ Guardando...</span>}
+                {" · "}Promociones · Marketing{clienteKey !== "pcel" && " · Pagos Fijos"} · Variables
+                {saving && <span className="ml-2 text-blue-400 animate-pulse">â Guardando...</span>}
               </p>
             </div>
           </div>
           <div className="text-right">
             <span className="text-xs text-gray-400 block">
               Actualizado: {formatFecha(c.cartera?.ultimaActualizacion || "2026-04-07")}
-              {c.cartera?.horaActualizacion ? ` Â· ${c.cartera.horaActualizacion} hrs` : ""}
+              {c.cartera?.horaActualizacion ? ` · ${c.cartera.horaActualizacion} hrs` : ""}
             </span>
             {c.cartera?.tipoCambio && (
               <span className="text-xs text-gray-400">TC: ${c.cartera.tipoCambio.toFixed(2)} MXN/USD</span>
             )}
             <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-semibold ${DB_CONFIGURED ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
-              {DB_CONFIGURED ? "Ã¢ÂÂ Sincronizado" : "Ã¢ÂÂ ï¸ Solo lectura"}
+              {DB_CONFIGURED ? "â Sincronizado" : "â ️ Solo lectura"}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Banner de configuraciÃ³n pendiente */}
+      {/* Banner de configuración pendiente */}
       {!DB_CONFIGURED && (
         <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 mb-6 flex items-start gap-3">
-          <span className="text-2xl">Ã¢ÂÂï¸</span>
+          <span className="text-2xl">â️</span>
           <div>
-            <p className="font-semibold text-orange-800 mb-1">ConfiguraciÃ³n requerida para guardar cambios</p>
+            <p className="font-semibold text-orange-800 mb-1">Configuración requerida para guardar cambios</p>
             <p className="text-sm text-orange-700 mb-2">
               Para que todos los cambios se guarden y sean visibles para el equipo, configura las variables en Vercel y la tabla en Supabase.
             </p>
             <code className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded block w-fit">
-              VITE_SUPABASE_URL Â· VITE_SUPABASE_ANON_KEY
+              VITE_SUPABASE_URL · VITE_SUPABASE_ANON_KEY
             </code>
           </div>
         </div>
@@ -582,7 +582,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
             if (mb.length === 0) return null;
             return (
               <div className="bg-white rounded-2xl shadow-sm p-5">
-                <CardHeader titulo="Resumen General por Mes y CategorÃ­a" icono="ð" />
+                <CardHeader titulo="Resumen General por Mes y Categoría" icono="📅" />
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -602,11 +602,11 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         return (<React.Fragment key={m.mes}>
                           <tr className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setExpandedMonth(expandedMonth === m.mes ? null : m.mes)}>
                             <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTOS[mo]} {yr}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">â</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">â</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosFijos    > 0 ? formatMXN(m.pagosFijos)    : <span className="text-gray-300">â</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosVariables> 0 ? formatMXN(m.pagosVariables): <span className="text-gray-300">â</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.rebate         > 0 ? formatMXN(m.rebate)         : <span className="text-gray-300">â</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosFijos    > 0 ? formatMXN(m.pagosFijos)    : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosVariables> 0 ? formatMXN(m.pagosVariables): <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.rebate         > 0 ? formatMXN(m.rebate)         : <span className="text-gray-300">—</span>}</td>
                             <td className="py-2.5 text-right font-bold text-gray-800">{formatMXN(m.total)}</td>
                           </tr>
                           {expandedMonth === m.mes && (
@@ -657,7 +657,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
             );
           })()}
 
-          {/* âââââââââââââââ REGULAR TABLE (non-fijos) âââââââââââââââ */}
+          {/* ═══════════════ REGULAR TABLE (non-fijos) ═══════════════ */}
           {showRegularTable && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
 
@@ -689,7 +689,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   <p className="text-sm font-semibold text-blue-800 mb-3">Nuevo registro</p>
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                     {[
-                      { label: "CategorÃ­a *", key: "categoria", type: "select-cat" },
+                      { label: "Categoría *", key: "categoria", type: "select-cat" },
                       { label: "Concepto *",  key: "concepto",  type: "text" },
                       { label: "Monto (MXN)", key: "monto",     type: "number" },
                       { label: "Estatus",     key: "estatus",   type: "select-est" },
@@ -730,7 +730,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                 </div>
               )}
 
-              {/* âââââââââââ PAGOS FIJOS VIEW âââââââââââ */}
+              {/* ═══════════ PAGOS FIJOS VIEW ═══════════ */}
               {catActiva === "pagosFijos" && (
                 <div>
                   {DB_CONFIGURED && (
@@ -744,12 +744,12 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200">
                           <p className="text-sm font-semibold text-indigo-800 mb-3">Agregar Pago Fijo</p>
                           <div className="mb-3">
-                            <label className="text-xs text-gray-500 block mb-1">Â¿A quÃ© concepto?</label>
+                            <label className="text-xs text-gray-500 block mb-1">¿A qué concepto?</label>
                             <select value={newFijo.existente} onChange={e => {
                               const v = e.target.value;
                               setNewFijo(p => ({...p, existente: v, concepto: v === "__nuevo__" ? "" : v}));
                             }} className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white">
-                              <option value="">â Selecciona â</option>
+                              <option value="">— Selecciona —</option>
                               <option value="__nuevo__">+ Crear nuevo concepto</option>
                               {Object.keys(fijoGroups).map(k => <option key={k} value={k}>{k}</option>)}
                             </select>
@@ -791,7 +791,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                     <button key={m.key} type="button" disabled={alreadyExists}
                                       onClick={() => setNewFijo(p => ({...p, meses: sel ? p.meses.filter(x => x !== m.key) : [...p.meses, m.key]}))}
                                       className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${alreadyExists ? "bg-gray-100 text-gray-300 border-gray-200 cursor-not-allowed" : sel ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300 hover:border-indigo-400"}`}>
-                                      {m.short}{alreadyExists ? " â" : ""}
+                                      {m.short}{alreadyExists ? " ✓" : ""}
                                     </button>
                                   );
                                 })}
@@ -811,7 +811,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   )}
                   {Object.keys(fijoGroups).length === 0 ? (
                     <div className="text-center py-10 text-gray-400">
-                      <p className="text-3xl mb-2">ð</p>
+                      <p className="text-3xl mb-2">📋</p>
                       <p className="text-sm">No hay pagos fijos registrados</p>
                     </div>
                   ) : (
@@ -827,10 +827,10 @@ export default function PagosCliente({ cliente, clienteKey }) {
                             <div className="flex items-center justify-between px-5 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
                               onClick={() => toggleFijo(conceptoKey)}>
                               <div className="flex items-center gap-3">
-                                <span className="text-lg">{isExp ? "â¾" : "â¸"}</span>
+                                <span className="text-lg">{isExp ? "▾" : "▸"}</span>
                                 <div>
                                   <p className="font-semibold text-gray-800">{conceptoKey}</p>
-                                  <p className="text-xs text-gray-500">{formatMXN(montoMes)}/mes Â· {records.length} meses Â· {pagados} pagados</p>
+                                  <p className="text-xs text-gray-500">{formatMXN(montoMes)}/mes · {records.length} meses · {pagados} pagados</p>
                                 </div>
                               </div>
                               <div className="text-right">
@@ -884,7 +884,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   <thead>
                     <tr className="border-b border-gray-100">
                       <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 min-w-36">Concepto {DB_CONFIGURED && <span className="text-blue-300 normal-case font-normal">(click p/editar)</span>}</th>
-                      <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">CategorÃ­a</th>
+                      <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Categoría</th>
                       <th className="text-right text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Monto</th>
                       <th className="text-center text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Estatus</th>
                       <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">F. Compromiso</th>
@@ -914,7 +914,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         {DB_CONFIGURED && (
                           <td className="py-2.5 pl-1">
                             <button onClick={() => handleDelete(row.id)}
-                              className="text-gray-300 hover:text-red-500 transition-colors text-base" title="Eliminar registro">ð</button>
+                              className="text-gray-300 hover:text-red-500 transition-colors text-base" title="Eliminar registro">🗑</button>
                           </td>
                         )}
                       </tr>
@@ -923,15 +923,15 @@ export default function PagosCliente({ cliente, clienteKey }) {
                 </table>
                 {filtered.length === 0 && (
                   <div className="text-center py-8 text-gray-400">
-                    <p className="text-3xl mb-2">ð­</p>
-                    <p className="text-sm">No hay registros{catActiva !== "todas" ? " en esta categorÃ­a" : ""}</p>
+                    <p className="text-3xl mb-2">📭</p>
+                    <p className="text-sm">No hay registros{catActiva !== "todas" ? " en esta categoría" : ""}</p>
                   </div>
                 )}
               </div>)}
               <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
                 <p className="text-xs text-gray-400">
-                  {DB_CONFIGURED ? "Ã¢ÂÂ Cambios guardados y sincronizados para todo el equipo." : "Ã¢ÂÂ ï¸ Modo lectura â configura Supabase para habilitar la ediciÃ³n."}
-                  {" "}ð¡ <strong className="text-gray-600">Pendiente</strong> Â· <strong className="text-gray-600">En Proceso</strong> Â· <strong className="text-gray-600">Pagado</strong> Â· <strong className="text-gray-600">Vencido</strong>
+                  {DB_CONFIGURED ? "â Cambios guardados y sincronizados para todo el equipo." : "â ️ Modo lectura — configura Supabase para habilitar la edición."}
+                  {" "}💡 <strong className="text-gray-600">Pendiente</strong> · <strong className="text-gray-600">En Proceso</strong> · <strong className="text-gray-600">Pagado</strong> · <strong className="text-gray-600">Vencido</strong>
                 </p>
               </div>
             </div>
@@ -943,7 +943,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">ð°</span>
+                  <span className="text-xl">💰</span>
                   <h3 className="text-lg font-bold text-gray-800">Calculadora Rebate Q{rebateQ} {new Date().getFullYear()}</h3>
                 </div>
                 <div className="flex gap-1">
@@ -980,9 +980,9 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         return (
                           <tr key={row.key} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="py-2 px-3 font-semibold text-gray-700">{row.label}</td>
-                            <td className="py-2 px-3 text-right text-gray-600">{si > 0 ? "$" + si.toLocaleString("es-MX") : "â"}</td>
+                            <td className="py-2 px-3 text-right text-gray-600">{si > 0 ? "$" + si.toLocaleString("es-MX") : "—"}</td>
                             <td className="py-2 px-3 text-right text-gray-500">{(pct * 100).toFixed(0)}%</td>
-                            <td className="py-2 px-3 text-right font-bold" style={{ color: reb > 0 ? "#ef4444" : "#9ca3af" }}>{reb > 0 ? "$" + reb.toLocaleString("es-MX") : "â"}</td>
+                            <td className="py-2 px-3 text-right font-bold" style={{ color: reb > 0 ? "#ef4444" : "#9ca3af" }}>{reb > 0 ? "$" + reb.toLocaleString("es-MX") : "—"}</td>
                           </tr>
                         );
                       })}
@@ -1029,12 +1029,12 @@ export default function PagosCliente({ cliente, clienteKey }) {
               )}
             </div>
           )}
-          {/* {/* âââ Calculadora REBATE Trimestral PCEL âââ */}
+          {/* {/* ═══ Calculadora REBATE Trimestral PCEL ═══ */}
           {clienteKey === "pcel" && catActiva === "rebate" && pcelCalc && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">ð</span>
+                  <span className="text-xl">📊</span>
                   <h3 className="text-lg font-bold text-gray-800">Calculadora Rebate Trimestral {new Date().getFullYear()}</h3>
                 </div>
               </div>
@@ -1063,15 +1063,15 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       return (<React.Fragment key={i}>
                         <tr className={"border-b border-gray-100 " + (q.sellIn > 0 ? "hover:bg-gray-50" : "text-gray-300")}>
                           <td className="py-2 px-3 font-semibold text-gray-700">{q.label}</td>
-                          <td className="py-2 px-3 text-right text-gray-600">{q.sellIn > 0 ? "$" + Math.round(q.sellIn).toLocaleString("es-MX") : "â"}</td>
-                          <td className="py-2 px-3 text-right text-gray-500">{q.cuota > 0 ? "$" + Math.round(q.cuota).toLocaleString("es-MX") : "â"}</td>
-                          <td className="py-2 px-3 text-right">{q.sellIn > 0 ? <span className={"font-semibold " + (q.alcance >= 1.2 ? "text-green-600" : q.alcance >= 0.9 ? "text-blue-600" : "text-red-500")}>{(q.alcance * 100).toFixed(1)}%</span> : <span>â</span>}</td>
-                          <td className="py-2 px-3 text-right"><span className={"font-bold " + (shouldPay ? (isApproved && !meetsQuota ? "text-orange-600" : "text-blue-600") : "text-gray-300")}>{shouldPay ? "$" + Math.round(rebateAmt).toLocaleString("es-MX") + (!meetsQuota && isApproved ? " *" : "") : q.sellIn > 0 ? "$0" : "â"}</span></td>
-                          <td className="py-2 px-3 text-right text-emerald-600 font-bold">{shouldPay ? "$" + Math.round(fondoAmt).toLocaleString("es-MX") : q.sellIn > 0 ? "$0" : "â"}</td>
+                          <td className="py-2 px-3 text-right text-gray-600">{q.sellIn > 0 ? "$" + Math.round(q.sellIn).toLocaleString("es-MX") : "—"}</td>
+                          <td className="py-2 px-3 text-right text-gray-500">{q.cuota > 0 ? "$" + Math.round(q.cuota).toLocaleString("es-MX") : "—"}</td>
+                          <td className="py-2 px-3 text-right">{q.sellIn > 0 ? <span className={"font-semibold " + (q.alcance >= 1.2 ? "text-green-600" : q.alcance >= 0.9 ? "text-blue-600" : "text-red-500")}>{(q.alcance * 100).toFixed(1)}%</span> : <span>—</span>}</td>
+                          <td className="py-2 px-3 text-right"><span className={"font-bold " + (shouldPay ? (isApproved && !meetsQuota ? "text-orange-600" : "text-blue-600") : "text-gray-300")}>{shouldPay ? "$" + Math.round(rebateAmt).toLocaleString("es-MX") + (!meetsQuota && isApproved ? " *" : "") : q.sellIn > 0 ? "$0" : "—"}</span></td>
+                          <td className="py-2 px-3 text-right text-emerald-600 font-bold">{shouldPay ? "$" + Math.round(fondoAmt).toLocaleString("es-MX") : q.sellIn > 0 ? "$0" : "—"}</td>
                           <td className="py-1 px-2 text-center">{q.sellIn > 0 && !meetsQuota ? (
                             <button onClick={() => setPcelOverrideRebate(prev => ({...prev, [q.q]: prev[q.q] === "approved" ? "" : "approved"}))} className={"px-3 py-1 rounded-full text-xs font-bold transition-all " + (isApproved ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-orange-100 hover:text-orange-600")}>{isApproved ? "Aprobado" : "Pagar"}</button>
                           ) : q.sellIn > 0 && meetsQuota ? (
-                            <span className="text-xs text-green-500 font-semibold">â</span>
+                            <span className="text-xs text-green-500 font-semibold">✅</span>
                           ) : null}</td>
                           <td className="py-1 px-2 text-center">{shouldPay && !pagoReg ? (
                             <button onClick={() => setShowPagoForm(showPagoForm === "rebate-Q"+q.q ? null : "rebate-Q"+q.q)} className="px-2 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">+ Registrar</button>
@@ -1106,12 +1106,12 @@ export default function PagosCliente({ cliente, clienteKey }) {
               <p className="text-xs text-gray-400 mt-3">* Tiers: {PCEL_REAL.rebateTiers.map(t => t.label + "=" + (t.pct*100) + "%").join(", ")}</p>
             </div>
           )}
-          {/* âââ Calculadora SPIFF Mensual PCEL âââ */}
+          {/* ═══ Calculadora SPIFF Mensual PCEL ═══ */}
           {clienteKey === "pcel" && catActiva === "spiff" && pcelCalc && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">ð°</span>
+                  <span className="text-xl">💰</span>
                   <h3 className="text-lg font-bold text-gray-800">Calculadora SPIFF Mensual {new Date().getFullYear()}</h3>
                 </div>
                 <span className="px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700">{(SPIFF_PCT * 100).toFixed(2)}% sobre Sell In</span>
@@ -1140,14 +1140,14 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       return (<React.Fragment key={i}>
                         <tr className={"border-b border-gray-100 " + (r.sellIn > 0 ? "hover:bg-gray-50" : "text-gray-300")}>
                           <td className="py-2 px-3 font-semibold text-gray-700">{mName}</td>
-                          <td className="py-2 px-3 text-right text-gray-600">{r.sellIn > 0 ? "$" + Math.round(r.sellIn).toLocaleString("es-MX") : "â"}</td>
-                          <td className="py-2 px-3 text-right text-gray-500">{r.cuota > 0 ? "$" + Math.round(r.cuota).toLocaleString("es-MX") : "â"}</td>
-                          <td className="py-2 px-3 text-right">{r.sellIn > 0 ? <span className={"font-semibold " + (r.alcance >= 1.2 ? "text-green-600" : r.alcance >= 0.9 ? "text-blue-600" : "text-red-500")}>{(r.alcance * 100).toFixed(1)}%</span> : <span>â</span>}</td>
-                          <td className="py-2 px-3 text-right"><span className={"font-bold " + (shouldPay ? (isApproved && !meetsQuota ? "text-orange-600" : "text-purple-600") : "text-gray-300")}>{shouldPay ? "$" + Math.round(spiffAmt).toLocaleString("es-MX") + (!meetsQuota && isApproved ? " *" : "") : r.sellIn > 0 ? "$0" : "â"}</span></td>
+                          <td className="py-2 px-3 text-right text-gray-600">{r.sellIn > 0 ? "$" + Math.round(r.sellIn).toLocaleString("es-MX") : "—"}</td>
+                          <td className="py-2 px-3 text-right text-gray-500">{r.cuota > 0 ? "$" + Math.round(r.cuota).toLocaleString("es-MX") : "—"}</td>
+                          <td className="py-2 px-3 text-right">{r.sellIn > 0 ? <span className={"font-semibold " + (r.alcance >= 1.2 ? "text-green-600" : r.alcance >= 0.9 ? "text-blue-600" : "text-red-500")}>{(r.alcance * 100).toFixed(1)}%</span> : <span>—</span>}</td>
+                          <td className="py-2 px-3 text-right"><span className={"font-bold " + (shouldPay ? (isApproved && !meetsQuota ? "text-orange-600" : "text-purple-600") : "text-gray-300")}>{shouldPay ? "$" + Math.round(spiffAmt).toLocaleString("es-MX") + (!meetsQuota && isApproved ? " *" : "") : r.sellIn > 0 ? "$0" : "—"}</span></td>
                           <td className="py-1 px-2 text-center">{r.sellIn > 0 && !meetsQuota ? (
                             <button onClick={() => setPcelOverrideSpiff(prev => ({...prev, [r.mes]: prev[r.mes] === "approved" ? "" : "approved"}))} className={"px-3 py-1 rounded-full text-xs font-bold transition-all " + (isApproved ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-orange-100 hover:text-orange-600")}>{isApproved ? "Aprobado" : "Pagar"}</button>
                           ) : r.sellIn > 0 && meetsQuota ? (
-                            <span className="text-xs text-green-500 font-semibold">â</span>
+                            <span className="text-xs text-green-500 font-semibold">✅</span>
                           ) : null}</td>
                           <td className="py-1 px-2 text-center">{shouldPay && !pagoReg ? (
                             <button onClick={() => setShowPagoForm(showPagoForm === "spiff-M"+r.mes ? null : "spiff-M"+r.mes)} className="px-2 py-1 rounded-lg text-xs font-bold bg-purple-50 text-purple-600 hover:bg-purple-100 transition-all">+ Registrar</button>
@@ -1190,14 +1190,14 @@ export default function PagosCliente({ cliente, clienteKey }) {
   );
 }
 
-// âââ ESTRATEGIA DE PRODUCTO âââ CONSTANTS âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── ESTRATEGIA DE PRODUCTO ─── CONSTANTS ───────────────────────────────────────────────────────────────
 const ROADMAP_CODES = {
   RMI:   { label: "RunRate",           color: "bg-green-100",  text: "text-green-700" },
   NVS:   { label: "Nuevo",             color: "bg-blue-100",   text: "text-blue-700" },
   "2025": { label: "Lanzamiento 2025", color: "bg-purple-100", text: "text-purple-700" },
   "2026": { label: "Lanzamiento 2026", color: "bg-orange-100", text: "text-orange-700" },
   EXMAY: { label: "Mayoreo",           color: "bg-amber-100",  text: "text-amber-700" },
-  RML:   { label: "LiquidaciÃ³n",       color: "bg-red-100",    text: "text-red-700" },
+  RML:   { label: "Liquidación",       color: "bg-red-100",    text: "text-red-700" },
   PEM:   { label: "Marketplace",       color: "bg-teal-100",   text: "text-teal-700" },
   DECME: { label: "DECME",             color: "bg-gray-100",   text: "text-gray-700" },
 };
@@ -1208,7 +1208,7 @@ const MONTH_KEYS_2026 = ["ene_2026", "feb_2026", "mar_2026", "abr_2026", "may_20
 const MONTH_VAL_2025 = ["ene_2025_val", "feb_2025_val", "mar_2025_val", "abr_2025_val", "may_2025_val", "jun_2025_val", "jul_2025_val", "ago_2025_val", "sep_2025_val", "oct_2025_val", "nov_2025_val", "dic_2025_val"];
 const MONTH_VAL_2026 = ["ene_2026_val", "feb_2026_val", "mar_2026_val", "abr_2026_val", "may_2026_val", "jun_2026_val", "jul_2026_val", "ago_2026_val", "sep_2026_val", "oct_2026_val", "nov_2026_val", "dic_2026_val"];
 
-// âââ HELPER FUNCTIONS ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────
 function summonthlyValues(producto, monthKeys) {
   return monthKeys.reduce((sum, key) => sum + (producto[key] || 0), 0);
 }
@@ -1235,5 +1235,5 @@ function filterProductos(productos, yearFilter, marcaFilter, categoriaFilter, ro
   });
 }
 
-// âââ ESTRATEGIA DE PRODUCTO (Excel Upload + Data Display) âââ
+// ——— ESTRATEGIA DE PRODUCTO (Excel Upload + Data Display) ———
 
