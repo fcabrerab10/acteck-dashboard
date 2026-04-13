@@ -1859,7 +1859,7 @@ function PagosCliente({ cliente, clienteKey }) {
     })();
   }, [clienteKey]);
 
-  const pcelCalc = useMemo(() => {
+  const pcelCalc = React.useMemo(() => {
     if (clienteKey !== "pcel") return null;
     const cuotas = PCEL_REAL.cuota50M;
     const cuotasMin = PCEL_REAL.cuota45M;
