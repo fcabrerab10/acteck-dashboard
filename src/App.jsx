@@ -22,6 +22,26 @@ const DIGITALIFE_REAL = {
   sellOutMarca: { "ACTECK": 2556451.42, "BALAM RUSH": 2626438.04 },
 };
 
+// ─── DATOS REALES — PCEL (Vendor 2026) ────────────────────────────────────────
+const PCEL_REAL = {
+  // Cuotas mensuales Vendor 2026 ($50M anual)
+  cuota50M: { 1:0, 2:4801570.72, 3:4198429.28, 4:3440737.78, 5:4212548.94, 6:4165899.12, 7:4026646.91, 8:4481543.97, 9:4520621.16, 10:5448596.97, 11:5523146.04, 12:5180259.10 },
+  // Cuotas mínimas 90% ($45M anual)
+  cuota45M: { 1:2852398.53, 2:2799636.62, 3:2447964.85, 4:3096664.00, 5:3791294.05, 6:3749309.21, 7:3623982.22, 8:4033389.57, 9:4068559.05, 10:4903737.27, 11:4970831.43, 12:4662233.19 },
+  // Rebate por alcance (% sobre sell in)
+  rebateTiers: [
+    { min: 0.90, max: 1.05, pct: 0.01, label: "90%-105%" },
+    { min: 1.06, max: 1.19, pct: 0.015, label: "106%-119%" },
+    { min: 1.20, max: Infinity, pct: 0.02, label: ">120%" }
+  ],
+  // Fondo de MKT por alcance
+  fondoMktTiers: [
+    { maxAlcance: 1.0599, pct: 0.01, label: "Hasta 105.99%" },
+    { maxAlcance: 1.1999, pct: 0.0125, label: "Hasta 119.99%" },
+    { maxAlcance: Infinity, pct: 0.015, label: "120% en adelante" }
+  ],
+};
+
 // ─── DATOS REALES — CRÉDITO Y COBRANZA DIGITALIFE (API GLOBAL) ───────────────
 // Fuente: correo "Estado de cuenta" enviado cada lunes desde intranet@acteck.com
 // Se actualiza automáticamente cada lunes a las 4pm
@@ -186,16 +206,21 @@ const clientes = {
   },
   pcel: {
     nombre: "PCEL",
-    marca: "Balam Rush",
+    marca: "Acteck / Balam Rush",
     ejecutivo: "Fernando Cabrera",
     frecuencia: "Mensual",
     color: "#1A3A8F",
-    cuotaAnual: 2400000,
+    cuotaAnual: 50000000,
+    cuotaMinima: 45000000,
+    cuotasMensuales: PCEL_REAL.cuota50M,
+    cuotasMinimas: PCEL_REAL.cuota45M,
+    rebateTiers: PCEL_REAL.rebateTiers,
+    fondoMktTiers: PCEL_REAL.fondoMktTiers,
     kpis: {
-      sellInMes: 195000,
-      cuotaMes: 200000,
-      sellOut: 160000,
-      diasInventario: 35,
+      sellInMes: 0,
+      cuotaMes: 0,
+      sellOut: 0,
+      diasInventario: 0,
     },
     pendientes: [
       { id: 1, tarea: "Revisión de portafolio Balam Rush Q2", responsable: "Fernando", fecha: "2026-04-20", estado: "pendiente" },
@@ -734,7 +759,8 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
   }
   const [ventas, setVentas] = React.useState([]);
   const clienteCuota = (clientes[clienteKey] && clientes[clienteKey].cuotaAnual) || 30000000;
-    const [meta, setMeta] = React.useState({ meta_sell_in_min: Math.round(clienteCuota * 0.83), meta_sell_in_optimista: clienteCuota });
+    const clienteCuotaMin = (clientes[clienteKey] && clientes[clienteKey].cuotaMinima) || Math.round(clienteCuota * 0.83);
+  const [meta, setMeta] = React.useState({ meta_sell_in_min: clienteCuotaMin, meta_sell_in_optimista: clienteCuota });
   const [pendCom, setPendCom] = React.useState([]);
   const [pendMkt, setPendMkt] = React.useState([]);
   const [invMkt, setInvMkt] = React.useState([]);
@@ -805,9 +831,18 @@ function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
   // ─── CUOTAS POR MES (from cuotas_mensuales table) ────────────────────────
   const cuotasPorMes = React.useMemo(() => {
     const map = {};
-    cuotasMensuales.forEach(c => { map[parseInt(c.mes)] = c; });
+    if (cuotasMensuales.length > 0) {
+      cuotasMensuales.forEach(c => { map[parseInt(c.mes)] = c; });
+    } else {
+      const cfg = clientes[clienteKey];
+      if (cfg && cfg.cuotasMensuales) {
+        for (let m = 1; m <= 12; m++) {
+          map[m] = { mes: m, cuota_ideal: cfg.cuotasMensuales[m] || 0, cuota_min: cfg.cuotasMinimas ? (cfg.cuotasMinimas[m] || 0) : Math.round((cfg.cuotasMensuales[m] || 0) * 0.9) };
+        }
+      }
+    }
     return map;
-  }, [cuotasMensuales]);
+  }, [cuotasMensuales, clienteKey]);
 
   // ─── PERIOD FILTER ────────────────────────────────────────────────────────
   const mesesFiltrados = React.useMemo(() => {
