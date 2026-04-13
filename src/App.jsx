@@ -3463,7 +3463,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
     setLoading(true);
     Promise.all([
       supabase.from("marketing_actividades").select("*").eq("cliente", clienteKey || cliente).eq("anio", anio),
-      supabase.from("pagos").select("*").eq("cliente", clienteKey || cliente).eq("categoria", "marketing"),
+      supabase.from("pagos").select("*").eq("categoria", "marketing"),
       supabase.from("sellout_sku").select("*").eq("cliente", clienteKey || cliente),
     ]).then(([actRes, pagRes, soRes]) => {
       if (actRes.data) setActividades(actRes.data);
@@ -3562,8 +3562,7 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
       fecha_pago_real: null,
       responsable: null,
       notas: null,
-      cliente: clienteKey || cliente,
-    }));
+      }));
     setSaving(true);
     const { data, error } = await supabase.from("pagos").insert(records).select();
     setSaving(false);
