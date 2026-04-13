@@ -3445,6 +3445,14 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
 
   const emptyForm = { nombre: "", tipo: "digital", tematica: "", sku: "", costo: "", periodo_inicio: "", periodo_fin: "", vistas: "", clics: "", notas: "", responsable: "" };
   const [form, setForm] = React.useState({ ...emptyForm });
+  // Calendar states
+  const [calView, setCalView] = React.useState("grid");
+  const now = new Date();
+  const [calMonth, setCalMonth] = React.useState(now.getMonth());
+  const [calYear, setCalYear] = React.useState(now.getFullYear());
+  const [dragStart, setDragStart] = React.useState(null);
+  const [dragEnd, setDragEnd] = React.useState(null);
+  const [isDragging, setIsDragging] = React.useState(false);
 
   const showFlash = (msg, type) => { setFlash({ msg, type }); setTimeout(() => setFlash(null), 3000); };
   const formatMXN = (v) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v || 0);
@@ -3660,6 +3668,247 @@ function MarketingCliente({ cliente = "Digitalife", clienteKey }) {
         </div>
       )}
 
+
+      {/* ═══ CALENDARIO ═══ */}
+      {(() => {
+        // Helper: days in month
+        const daysInMonth = (m, y) => new Date(y, m + 1, 0).getDate();
+        // Helper: first day of week (0=Sun, adjust to Mon=0)
+        const firstDayOfWeek = (m, y) => { const d = new Date(y, m, 1).getDay(); return d === 0 ? 6 : d - 1; };
+        const totalDays = daysInMonth(calMonth, calYear);
+        const startDay = firstDayOfWeek(calMonth, calYear);
+        const DIAS = ["Lun", "Mar", "Mi\u00e9", "Jue", "Vie", "S\u00e1b", "Dom"];
+        const mesNombre = MESES_ARR[calMonth] ? MESES_ARR[calMonth].full : "";
+
+        // Get activities for this month
+        const monthKey = String(calMonth + 1).padStart(2, "0");
+        const monthStr = calYear + "-" + monthKey;
+
+        // Match activities that overlap with this month
+        const actsMes = actividades.filter(a => {
+          const inicio = a.temporalidad || "";
+          const fin = a.subtipo || "";
+          const mes = a.mes;
+          if (inicio) {
+            const inicioM = inicio.slice(0, 7);
+            const finM = fin ? fin.slice(0, 7) : inicioM;
+            return inicioM <= monthStr && finM >= monthStr;
+          }
+          return mes === calMonth + 1;
+        });
+
+        // Get activities for a specific day
+        const getActsForDay = (day) => {
+          const dateStr = calYear + "-" + monthKey + "-" + String(day).padStart(2, "0");
+          return actsMes.filter(a => {
+            const inicio = a.temporalidad || "";
+            const fin = a.subtipo || inicio;
+            if (inicio) return inicio <= dateStr && fin >= dateStr;
+            return true; // no date = show all month
+          });
+        };
+
+        // Drag handlers
+        const handleMouseDown = (day) => {
+          setDragStart(day);
+          setDragEnd(day);
+          setIsDragging(true);
+        };
+        const handleMouseEnter = (day) => {
+          if (isDragging) setDragEnd(day);
+        };
+        const handleMouseUp = (day) => {
+          if (isDragging) {
+            setIsDragging(false);
+            const d1 = Math.min(dragStart, day);
+            const d2 = Math.max(dragStart, day);
+            const pInicio = calYear + "-" + monthKey + "-" + String(d1).padStart(2, "0");
+            const pFin = calYear + "-" + monthKey + "-" + String(d2).padStart(2, "0");
+            setForm({...emptyForm, periodo_inicio: pInicio, periodo_fin: d1 === d2 ? "" : pFin});
+            setEditItem(null);
+            setShowForm(true);
+          }
+        };
+        const isInDragRange = (day) => {
+          if (!isDragging || dragStart === null) return false;
+          const d1 = Math.min(dragStart, dragEnd || dragStart);
+          const d2 = Math.max(dragStart, dragEnd || dragStart);
+          return day >= d1 && day <= d2;
+        };
+
+        // Week grouping for weekly view
+        const weeks = [];
+        let currentWeek = [];
+        for (let i = 0; i < startDay; i++) currentWeek.push(null);
+        for (let d = 1; d <= totalDays; d++) {
+          currentWeek.push(d);
+          if (currentWeek.length === 7) { weeks.push(currentWeek); currentWeek = []; }
+        }
+        if (currentWeek.length > 0) { while (currentWeek.length < 7) currentWeek.push(null); weeks.push(currentWeek); }
+
+        // Timeline: unique activities for the month
+        const timelineActs = actsMes.filter(a => a.temporalidad);
+        const noDateActs = actsMes.filter(a => !a.temporalidad);
+
+        return (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            {/* Calendar header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <button onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); } else setCalMonth(calMonth - 1); }} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 text-sm font-bold">&lt;</button>
+                <h3 className="text-lg font-bold text-gray-800 min-w-[180px] text-center">{mesNombre} {calYear}</h3>
+                <button onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); } else setCalMonth(calMonth + 1); }} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 text-sm font-bold">&gt;</button>
+              </div>
+              <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                {[{k:"grid",l:"Cuadr\u00edcula"},{k:"timeline",l:"Timeline"},{k:"weeks",l:"Semanas"}].map(v => (
+                  <button key={v.k} onClick={() => setCalView(v.k)} className={"px-3 py-1.5 rounded-md text-xs font-semibold transition-colors " + (calView === v.k ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700")}>{v.l}</button>
+                ))}
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 mb-3">{actsMes.length} actividades en {mesNombre.toLowerCase()} \u00b7 Click en un d\u00eda para crear, arrastra para definir periodo</p>
+            {/* ── GRID VIEW ── */}
+            {calView === "grid" && (
+              <div onMouseLeave={() => { if (isDragging) setIsDragging(false); }} style={{ userSelect: "none" }}>
+                <div className="grid grid-cols-7 gap-0">
+                  {DIAS.map(d => (<div key={d} className="text-center text-xs font-semibold text-gray-400 py-2 border-b border-gray-100">{d}</div>))}
+                  {Array.from({ length: startDay }).map((_, i) => (<div key={"e" + i} className="min-h-[80px] border-b border-r border-gray-50"></div>))}
+                  {Array.from({ length: totalDays }).map((_, i) => {
+                    const day = i + 1;
+                    const dayActs = getActsForDay(day);
+                    const inRange = isInDragRange(day);
+                    const isToday = day === new Date().getDate() && calMonth === new Date().getMonth() && calYear === new Date().getFullYear();
+                    return (
+                      <div key={day}
+                        onMouseDown={() => handleMouseDown(day)}
+                        onMouseEnter={() => handleMouseEnter(day)}
+                        onMouseUp={() => handleMouseUp(day)}
+                        className={"min-h-[80px] border-b border-r border-gray-50 p-1 cursor-crosshair transition-colors " + (inRange ? "bg-blue-50" : "hover:bg-gray-50")}
+                      >
+                        <div className={"text-xs font-semibold mb-1 " + (isToday ? "bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center" : "text-gray-500 pl-1")}>{day}</div>
+                        <div className="space-y-0.5">
+                          {dayActs.slice(0, 3).map((a, idx) => {
+                            const meta = TIPO_META[a.tipo] || TIPO_META.digital;
+                            return (<div key={a.id || idx} onClick={(e) => { e.stopPropagation(); setExpandedId(expandedId === a.id ? null : a.id); }} className="text-xs px-1.5 py-0.5 rounded truncate cursor-pointer hover:opacity-80" style={{ backgroundColor: meta.color + "20", color: meta.color, borderLeft: "3px solid " + meta.color }} title={a.nombre}>{a.nombre}</div>);
+                          })}
+                          {dayActs.length > 3 && (<div className="text-xs text-gray-400 pl-1">+{dayActs.length - 3} m\u00e1s</div>)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {/* ── TIMELINE VIEW ── */}
+            {calView === "timeline" && (
+              <div>
+                {/* Day numbers header */}
+                <div className="flex mb-2">
+                  <div className="w-[160px] flex-shrink-0"></div>
+                  <div className="flex-1 flex">
+                    {Array.from({ length: totalDays }).map((_, i) => (
+                      <div key={i} className={"flex-1 text-center text-xs " + ((i + 1) === new Date().getDate() && calMonth === new Date().getMonth() && calYear === new Date().getFullYear() ? "font-bold text-blue-600" : "text-gray-400")}>{i + 1}</div>
+                    ))}
+                  </div>
+                </div>
+                {/* Activity bars */}
+                <div className="space-y-1.5">
+                  {timelineActs.map(a => {
+                    const meta = TIPO_META[a.tipo] || TIPO_META.digital;
+                    const inicio = a.temporalidad || "";
+                    const fin = a.subtipo || inicio;
+                    // Calculate start/end day within this month
+                    let startD = 1, endD = totalDays;
+                    if (inicio.slice(0, 7) === monthStr) startD = parseInt(inicio.slice(8, 10)) || 1;
+                    if (fin.slice(0, 7) === monthStr) endD = parseInt(fin.slice(8, 10)) || totalDays;
+                    if (inicio.slice(0, 7) < monthStr) startD = 1;
+                    if (fin.slice(0, 7) > monthStr) endD = totalDays;
+                    const leftPct = ((startD - 1) / totalDays * 100).toFixed(1);
+                    const widthPct = ((endD - startD + 1) / totalDays * 100).toFixed(1);
+                    return (
+                      <div key={a.id} className="flex items-center group">
+                        <div className="w-[160px] flex-shrink-0 pr-3 text-right">
+                          <span className="text-xs font-semibold text-gray-700 truncate block">{a.nombre}</span>
+                          <span className="text-xs text-gray-400">{meta.icon} {meta.label}</span>
+                        </div>
+                        <div className="flex-1 relative h-8 bg-gray-50 rounded">
+                          <div onClick={() => setExpandedId(expandedId === a.id ? null : a.id)} className="absolute top-0.5 bottom-0.5 rounded cursor-pointer hover:opacity-80 flex items-center px-2 overflow-hidden transition-opacity" style={{ left: leftPct + "%", width: widthPct + "%", backgroundColor: meta.color + "30", borderLeft: "3px solid " + meta.color }}>
+                            <span className="text-xs font-semibold truncate" style={{ color: meta.color }}>{a.nombre}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {noDateActs.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <p className="text-xs text-gray-400 font-semibold mb-2">Sin fecha asignada ({noDateActs.length})</p>
+                      <div className="flex flex-wrap gap-2">
+                        {noDateActs.map(a => {
+                          const meta = TIPO_META[a.tipo] || TIPO_META.digital;
+                          return (<span key={a.id} onClick={() => setExpandedId(expandedId === a.id ? null : a.id)} className="px-2 py-1 rounded text-xs font-semibold cursor-pointer hover:opacity-80" style={{ backgroundColor: meta.color + "20", color: meta.color }}>{meta.icon} {a.nombre}</span>);
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* ── WEEKLY VIEW ── */}
+            {calView === "weeks" && (
+              <div className="space-y-3" onMouseLeave={() => { if (isDragging) setIsDragging(false); }} style={{ userSelect: "none" }}>
+                {/* Day headers */}
+                <div className="grid grid-cols-7 gap-2">
+                  {DIAS.map(d => (<div key={d} className="text-center text-xs font-semibold text-gray-400">{d}</div>))}
+                </div>
+                {weeks.map((week, wi) => {
+                  const weekDays = week.filter(d => d !== null);
+                  const weekActs = [];
+                  const seen = new Set();
+                  weekDays.forEach(day => {
+                    getActsForDay(day).forEach(a => {
+                      if (!seen.has(a.id)) { seen.add(a.id); weekActs.push(a); }
+                    });
+                  });
+                  return (
+                    <div key={wi} className="bg-gray-50 rounded-xl p-3">
+                      {/* Day numbers */}
+                      <div className="grid grid-cols-7 gap-2 mb-2">
+                        {week.map((day, di) => {
+                          if (day === null) return (<div key={"n" + di}></div>);
+                          const isToday = day === new Date().getDate() && calMonth === new Date().getMonth() && calYear === new Date().getFullYear();
+                          const inRange = isInDragRange(day);
+                          return (
+                            <div key={day}
+                              onMouseDown={() => handleMouseDown(day)}
+                              onMouseEnter={() => handleMouseEnter(day)}
+                              onMouseUp={() => handleMouseUp(day)}
+                              className={"text-center py-1 rounded-lg cursor-crosshair transition-colors text-sm " + (isToday ? "bg-blue-600 text-white font-bold" : inRange ? "bg-blue-100 text-blue-700 font-semibold" : "text-gray-600 hover:bg-gray-200")}
+                            >{day}</div>
+                          );
+                        })}
+                      </div>
+                      {/* Week activities */}
+                      {weekActs.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {weekActs.map(a => {
+                            const meta = TIPO_META[a.tipo] || TIPO_META.digital;
+                            return (
+                              <div key={a.id} onClick={() => setExpandedId(expandedId === a.id ? null : a.id)} className="px-2 py-1 rounded-lg text-xs font-semibold cursor-pointer hover:opacity-80 flex items-center gap-1" style={{ backgroundColor: meta.color + "18", color: meta.color, borderLeft: "3px solid " + meta.color }}>
+                                {meta.icon} {a.nombre}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-300 text-center">Sin actividades</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ═══ ADD/EDIT FORM ═══ */}
       {showForm && (
