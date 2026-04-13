@@ -13,13 +13,15 @@ export default async function handler(req, res) {
   const { data: { user } } = await supabaseUser.auth.getUser(authHeader.replace('Bearer ', ''));
   if (!user) return res.status(401).json({ error: 'Token inválido' });
 
-  const { data: callerProfile } = await supabaseUser.from('perfiles').select('rol').eq('user_id', user.id).single();
-  if (!callerProfile || callerProfile.rol !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
-
+  // Admin client (service role bypasses RLS)
   const supabaseAdmin = createClient(
     process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
+
+  // Check admin role using admin client to bypass RLS
+  const { data: callerProfile } = await supabaseAdmin.from('perfiles').select('rol').eq('user_id', user.id).single();
+  if (!callerProfile || callerProfile.rol !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
 
   const { perfil_id, updates, new_password } = req.body;
   if (!perfil_id) return res.status(400).json({ error: 'Falta perfil_id' });
