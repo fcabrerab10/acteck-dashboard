@@ -1575,7 +1575,7 @@ function CreditoCobranza({ cliente }) {
 
       {/* ── KPI CARDS ── */}
       <div className={`grid grid-cols-2 gap-4 mb-6 ${clienteKey === "digitalife" ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500 flex flex-col justify-between">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Total</p>
           <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoActual)}</p>
           <p className="text-xs text-gray-400 mt-1">{usoPct}% de la línea usada</p>
@@ -1592,7 +1592,7 @@ function CreditoCobranza({ cliente }) {
           <p className="text-2xl font-bold text-purple-700">{formatMXN(k.saldoNC)}</p>
           <p className="text-xs text-gray-400 mt-1">A aplicar en próximos pagos</p>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-yellow-400">
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-yellow-400 flex flex-col justify-between">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">A Vencer (semana)</p>
           <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoAVencer)}</p>
           <p className="text-xs text-gray-400 mt-1">Próximos 7 días</p>
@@ -2282,8 +2282,8 @@ function PagosCliente({ cliente, clienteKey }) {
       {!loading && (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
-            <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-green-500">
+          <div className={"grid grid-cols-2 gap-4 mb-6 " + (clienteKey === "digitalife" ? "md:grid-cols-4" : "md:grid-cols-3")}>
+            <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-green-500 flex flex-col justify-between">
               <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Pagado</p>
               <p className="text-2xl font-bold text-green-700">{totalPagado > 0 ? formatMXN(totalPagado) : "$0"}</p>
               <p className="text-xs text-gray-400 mt-1">{registros.filter(r => r.estatus === "pagado").length} conceptos</p>
@@ -2300,7 +2300,7 @@ function PagosCliente({ cliente, clienteKey }) {
               <p className="text-xs text-gray-400 mt-1">{registros.length} conceptos registrados</p>
             </div>
             {clienteKey === "digitalife" && (
-              <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-red-500">
+              <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-red-500 flex flex-col justify-between">
                 <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Rebate Acum.</p>
                 <p className="text-2xl font-bold text-red-600">{(() => {
                   const total = Math.round(Object.values(rebateAllQ).reduce((s, v) => s + v, 0));
