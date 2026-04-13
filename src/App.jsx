@@ -1847,6 +1847,9 @@ function PagosCliente({ cliente, clienteKey }) {
   const SPIFF_PCT = 0.0021;
   const [pcelOverrideRebate, setPcelOverrideRebate] = useState({1:"",2:"",3:"",4:""});
   const [pcelOverrideSpiff, setPcelOverrideSpiff] = useState({});
+  const [pcelPagosReg, setPcelPagosReg] = useState([]);
+  const [showPagoForm, setShowPagoForm] = useState(null);
+  const [pagoFormData, setPagoFormData] = useState({ fecha_compromiso: "", responsable: "Fernando Cabrera", notas: "" });
   const [pcelCuotasSupa, setPcelCuotasSupa] = useState(null);
   
   useEffect(() => {
@@ -1876,6 +1879,36 @@ function PagosCliente({ cliente, clienteKey }) {
       }
     })();
   }, [clienteKey]);
+  
+  // ── Fetch PCEL payment records (rebate/spiff) ──
+  useEffect(() => {
+    if (clienteKey !== "pcel" || !DB_CONFIGURED) return;
+    (async () => {
+      const { data } = await supabase.from("pagos").select("*").eq("cliente", "pcel").in("categoria", ["rebate","spiff"]);
+      if (data) setPcelPagosReg(data);
+    })();
+  }, [clienteKey]);
+  
+  const guardarPagoPcel = async (tipo, periodo, montoCalc) => {
+    if (!DB_CONFIGURED) return;
+    const row = {
+      cliente: "pcel",
+      categoria: tipo,
+      folio: tipo.toUpperCase() + "-" + periodo + "-" + new Date().getFullYear(),
+      concepto: (tipo === "rebate" ? "Rebate " : "SPIFF ") + periodo + " " + new Date().getFullYear(),
+      monto: montoCalc,
+      estatus: "pendiente",
+      fecha_compromiso: pagoFormData.fecha_compromiso || null,
+      responsable: pagoFormData.responsable || "Fernando Cabrera",
+      notas: pagoFormData.notas || "",
+    };
+    const { data, error } = await supabase.from("pagos").insert([row]).select();
+    if (data) {
+      setPcelPagosReg(prev => [...prev, ...data]);
+      setShowPagoForm(null);
+      setPagoFormData({ fecha_compromiso: "", responsable: "Fernando Cabrera", notas: "" });
+    }
+  };
 
   const pcelCalc = React.useMemo(() => {
     if (clienteKey !== "pcel") return null;
@@ -2278,17 +2311,16 @@ function PagosCliente({ cliente, clienteKey }) {
             )}
           {clienteKey === "pcel" && pcelCalc && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-600">
+              <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-600 flex flex-col justify-between" style={{minHeight:"120px"}}>
                 <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Rebate Trimestral</p>
                 <p className="text-2xl font-bold text-blue-600">{pcelCalc.totalRebate > 0 ? "$" + Math.round(pcelCalc.totalRebate).toLocaleString("es-MX") : "$0"}</p>
                 <p className="text-xs text-gray-400 mt-1">Acumulado {pcelCalc.quarterly.filter(q => q.sellIn > 0).length} trimestre(s)</p>
               </div>
-              <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-emerald-500">
+              <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-emerald-500 flex flex-col justify-between" style={{minHeight:"120px"}}>
                 <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Fondo MKT</p>
                 <p className="text-2xl font-bold text-emerald-600">{pcelCalc.totalFondo > 0 ? "$" + Math.round(pcelCalc.totalFondo).toLocaleString("es-MX") : "$0"}</p>
                 <p className="text-xs text-gray-400 mt-1">Acumulado sobre Sell In</p>
               </div>
-              
             </div>
           )}
           </div>
@@ -2765,44 +2797,62 @@ function PagosCliente({ cliente, clienteKey }) {
                       <th className="text-right py-2 px-3 font-bold text-gray-700">Alcance</th>
                       <th className="text-right py-2 px-3 font-bold text-blue-600">Rebate</th>
                       <th className="text-right py-2 px-3 font-bold text-emerald-600">Fondo MKT</th>
-                      <th className="text-center py-2 px-3 font-bold text-orange-500" style={{minWidth:"120px"}}>Override $</th>
+                      <th className="text-center py-2 px-3 font-bold text-gray-600">Pagar</th>
+                      <th className="text-center py-2 px-3 font-bold text-gray-600">Registro</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pcelCalc.quarterly.map((q, i) => (
-                      <tr key={i} className={"border-b border-gray-100 " + (q.sellIn > 0 ? "hover:bg-gray-50" : "text-gray-300")}>
-                        <td className="py-2 px-3 font-semibold text-gray-700">{q.label}</td>
-                        <td className="py-2 px-3 text-right text-gray-600">{q.sellIn > 0 ? "$" + Math.round(q.sellIn).toLocaleString("es-MX") : "—"}</td>
-                        <td className="py-2 px-3 text-right text-gray-500">{q.cuota > 0 ? "$" + Math.round(q.cuota).toLocaleString("es-MX") : "—"}</td>
-                        <td className="py-2 px-3 text-right">{q.sellIn > 0 ? <span className={"font-semibold " + (q.alcance >= 1.2 ? "text-green-600" : q.alcance >= 0.9 ? "text-blue-600" : "text-red-500")}>{(q.alcance * 100).toFixed(1)}%</span> : <span>—</span>}</td>
-                        <td className="py-2 px-3 text-right">{q.sellIn > 0 ? <span className={"font-bold " + (q.overrideActive ? "text-orange-600" : "text-blue-600")}>{"$" + Math.round(q.rebateAmount).toLocaleString("es-MX")}{q.overrideActive ? " *" : ""}</span> : <span>—</span>}</td>
-                        <td className="py-2 px-3 text-right text-emerald-600 font-bold">{q.sellIn > 0 ? "$" + Math.round(q.fondoAmount).toLocaleString("es-MX") : "—"}</td>
-                        <td className="py-1 px-2 text-center"><input type="number" placeholder="Manual" className="w-24 px-2 py-1 text-xs border rounded-lg text-center focus:ring-2 focus:ring-orange-300 focus:border-orange-400" value={pcelOverrideRebate[q.q] || ""} onChange={e => setPcelOverrideRebate(prev => ({...prev, [q.q]: e.target.value}))} /></td>
-                      </tr>
-                    ))}
+                    {pcelCalc.quarterly.map((q, i) => {
+                      const isApproved = pcelOverrideRebate[q.q] === "approved";
+                      const meetsQuota = q.alcance >= 0.9;
+                      const shouldPay = q.sellIn > 0 && (meetsQuota || isApproved);
+                      const rebateAmt = shouldPay ? q.sellIn * q.rebatePct : 0;
+                      const fondoAmt = shouldPay ? q.fondoAmount : 0;
+                      const pagoReg = pcelPagosReg.find(p => p.categoria === "rebate" && p.folio && p.folio.includes("Q" + q.q));
+                      return (<React.Fragment key={i}>
+                        <tr className={"border-b border-gray-100 " + (q.sellIn > 0 ? "hover:bg-gray-50" : "text-gray-300")}>
+                          <td className="py-2 px-3 font-semibold text-gray-700">{q.label}</td>
+                          <td className="py-2 px-3 text-right text-gray-600">{q.sellIn > 0 ? "$" + Math.round(q.sellIn).toLocaleString("es-MX") : "—"}</td>
+                          <td className="py-2 px-3 text-right text-gray-500">{q.cuota > 0 ? "$" + Math.round(q.cuota).toLocaleString("es-MX") : "—"}</td>
+                          <td className="py-2 px-3 text-right">{q.sellIn > 0 ? <span className={"font-semibold " + (q.alcance >= 1.2 ? "text-green-600" : q.alcance >= 0.9 ? "text-blue-600" : "text-red-500")}>{(q.alcance * 100).toFixed(1)}%</span> : <span>—</span>}</td>
+                          <td className="py-2 px-3 text-right"><span className={"font-bold " + (shouldPay ? (isApproved && !meetsQuota ? "text-orange-600" : "text-blue-600") : "text-gray-300")}>{shouldPay ? "$" + Math.round(rebateAmt).toLocaleString("es-MX") + (!meetsQuota && isApproved ? " *" : "") : q.sellIn > 0 ? "$0" : "—"}</span></td>
+                          <td className="py-2 px-3 text-right text-emerald-600 font-bold">{shouldPay ? "$" + Math.round(fondoAmt).toLocaleString("es-MX") : q.sellIn > 0 ? "$0" : "—"}</td>
+                          <td className="py-1 px-2 text-center">{q.sellIn > 0 && !meetsQuota ? (
+                            <button onClick={() => setPcelOverrideRebate(prev => ({...prev, [q.q]: prev[q.q] === "approved" ? "" : "approved"}))} className={"px-3 py-1 rounded-full text-xs font-bold transition-all " + (isApproved ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-orange-100 hover:text-orange-600")}>{isApproved ? "Aprobado" : "Pagar"}</button>
+                          ) : q.sellIn > 0 && meetsQuota ? (
+                            <span className="text-xs text-green-500 font-semibold">✅</span>
+                          ) : null}</td>
+                          <td className="py-1 px-2 text-center">{shouldPay && !pagoReg ? (
+                            <button onClick={() => setShowPagoForm(showPagoForm === "rebate-Q"+q.q ? null : "rebate-Q"+q.q)} className="px-2 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">+ Registrar</button>
+                          ) : pagoReg ? (
+                            <span className={"text-xs font-semibold px-2 py-0.5 rounded-full " + (pagoReg.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700")}>{pagoReg.estatus === "pagado" ? "Pagado" : "Pendiente"}</span>
+                          ) : null}</td>
+                        </tr>
+                        {showPagoForm === "rebate-Q"+q.q && (
+                          <tr><td colSpan="8" className="p-3 bg-blue-50 border-b">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <label className="text-xs text-gray-600">Compromiso: <input type="date" className="ml-1 px-2 py-1 border rounded text-xs" value={pagoFormData.fecha_compromiso} onChange={e => setPagoFormData(p => ({...p, fecha_compromiso: e.target.value}))} /></label>
+                              <label className="text-xs text-gray-600">Responsable: <input type="text" className="ml-1 px-2 py-1 border rounded text-xs w-32" value={pagoFormData.responsable} onChange={e => setPagoFormData(p => ({...p, responsable: e.target.value}))} /></label>
+                              <label className="text-xs text-gray-600">Notas: <input type="text" className="ml-1 px-2 py-1 border rounded text-xs w-40" value={pagoFormData.notas} onChange={e => setPagoFormData(p => ({...p, notas: e.target.value}))} /></label>
+                              <button onClick={() => guardarPagoPcel("rebate", "Q"+q.q, rebateAmt)} className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">Guardar</button>
+                              <button onClick={() => setShowPagoForm(null)} className="px-3 py-1 rounded-lg text-xs text-gray-500 hover:text-gray-700">Cancelar</button>
+                            </div>
+                          </td></tr>
+                        )}
+                      </React.Fragment>);
+                    })}
                     <tr className="border-t-2 border-gray-300 bg-gray-50">
                       <td className="py-2 px-3 font-bold text-gray-800">Total</td>
                       <td className="py-2 px-3 text-right font-bold text-gray-800">{"$" + Math.round(pcelCalc.totalSellIn).toLocaleString("es-MX")}</td>
-                      <td className="py-2 px-3 text-right font-bold text-gray-500">{"—"}</td>
-                      <td className="py-2 px-3 text-right font-bold text-gray-500">{"—"}</td>
-                      <td className="py-2 px-3 text-right font-bold text-blue-600">{"$" + Math.round(pcelCalc.totalRebate).toLocaleString("es-MX")}</td>
-                      <td className="py-2 px-3 text-right font-bold text-emerald-600">{"$" + Math.round(pcelCalc.totalFondo).toLocaleString("es-MX")}</td>
-                      <td></td>
+                      <td className="py-2 px-3"></td><td className="py-2 px-3"></td>
+                      <td className="py-2 px-3 text-right font-bold text-blue-600">{"$" + Math.round(pcelCalc.quarterly.reduce((s,q) => { const ok = q.alcance >= 0.9 || pcelOverrideRebate[q.q] === "approved"; return s + (q.sellIn > 0 && ok ? q.sellIn * q.rebatePct : 0); }, 0)).toLocaleString("es-MX")}</td>
+                      <td className="py-2 px-3 text-right font-bold text-emerald-600">{"$" + Math.round(pcelCalc.quarterly.reduce((s,q) => { const ok = q.alcance >= 0.9 || pcelOverrideRebate[q.q] === "approved"; return s + (q.sellIn > 0 && ok ? q.fondoAmount : 0); }, 0)).toLocaleString("es-MX")}</td>
+                      <td></td><td></td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-gray-400 mt-3">* Tiers: {PCEL_REAL.rebateTiers.map(t => t.label + "=" + (t.pct*100) + "%").join(", ")} | Override: monto manual para pagar aunque no alcance cuota</p>
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <div className="bg-blue-50 rounded-lg p-3 text-center">
-                  <p className="text-xs text-blue-600 font-semibold">Rebate Total</p>
-                  <p className="text-lg font-bold text-blue-600">{"$" + Math.round(pcelCalc.totalRebate).toLocaleString("es-MX")}</p>
-                </div>
-                <div className="bg-emerald-50 rounded-lg p-3 text-center">
-                  <p className="text-xs text-emerald-600 font-semibold">Fondo MKT Total</p>
-                  <p className="text-lg font-bold text-emerald-600">{"$" + Math.round(pcelCalc.totalFondo).toLocaleString("es-MX")}</p>
-                </div>
-              </div>
+              <p className="text-xs text-gray-400 mt-3">* Tiers: {PCEL_REAL.rebateTiers.map(t => t.label + "=" + (t.pct*100) + "%").join(", ")}</p>
             </div>
           )}
           {/* ═══ Calculadora SPIFF Mensual PCEL ═══ */}
@@ -2825,18 +2875,19 @@ function PagosCliente({ cliente, clienteKey }) {
                       <th className="text-right py-2 px-3 font-bold text-gray-700">Alcance</th>
                       <th className="text-right py-2 px-3 font-bold text-purple-600">SPIFF</th>
                       <th className="text-center py-2 px-3 font-bold text-gray-600">Pagar</th>
+                      <th className="text-center py-2 px-3 font-bold text-gray-600">Registro</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pcelCalc.monthly.map((r, i) => {
                       const mName = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][r.mes - 1];
-                      const spiffData = pcelCalc.spiffByMonth[r.mes];
                       const isApproved = pcelOverrideSpiff[r.mes] === "approved";
                       const meetsQuota = r.alcance >= 0.9;
                       const shouldPay = r.sellIn > 0 && (meetsQuota || isApproved);
                       const spiffAmt = shouldPay ? r.sellIn * SPIFF_PCT : 0;
-                      return (
-                        <tr key={i} className={"border-b border-gray-100 " + (r.sellIn > 0 ? "hover:bg-gray-50" : "text-gray-300")}>
+                      const pagoReg = pcelPagosReg.find(p => p.categoria === "spiff" && p.folio && p.folio.includes("M" + r.mes + "-"));
+                      return (<React.Fragment key={i}>
+                        <tr className={"border-b border-gray-100 " + (r.sellIn > 0 ? "hover:bg-gray-50" : "text-gray-300")}>
                           <td className="py-2 px-3 font-semibold text-gray-700">{mName}</td>
                           <td className="py-2 px-3 text-right text-gray-600">{r.sellIn > 0 ? "$" + Math.round(r.sellIn).toLocaleString("es-MX") : "—"}</td>
                           <td className="py-2 px-3 text-right text-gray-500">{r.cuota > 0 ? "$" + Math.round(r.cuota).toLocaleString("es-MX") : "—"}</td>
@@ -2847,25 +2898,36 @@ function PagosCliente({ cliente, clienteKey }) {
                           ) : r.sellIn > 0 && meetsQuota ? (
                             <span className="text-xs text-green-500 font-semibold">✅</span>
                           ) : null}</td>
+                          <td className="py-1 px-2 text-center">{shouldPay && !pagoReg ? (
+                            <button onClick={() => setShowPagoForm(showPagoForm === "spiff-M"+r.mes ? null : "spiff-M"+r.mes)} className="px-2 py-1 rounded-lg text-xs font-bold bg-purple-50 text-purple-600 hover:bg-purple-100 transition-all">+ Registrar</button>
+                          ) : pagoReg ? (
+                            <span className={"text-xs font-semibold px-2 py-0.5 rounded-full " + (pagoReg.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700")}>{pagoReg.estatus === "pagado" ? "Pagado" : "Pendiente"}</span>
+                          ) : null}</td>
                         </tr>
-                      );
+                        {showPagoForm === "spiff-M"+r.mes && (
+                          <tr><td colSpan="7" className="p-3 bg-purple-50 border-b">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <label className="text-xs text-gray-600">Compromiso: <input type="date" className="ml-1 px-2 py-1 border rounded text-xs" value={pagoFormData.fecha_compromiso} onChange={e => setPagoFormData(p => ({...p, fecha_compromiso: e.target.value}))} /></label>
+                              <label className="text-xs text-gray-600">Responsable: <input type="text" className="ml-1 px-2 py-1 border rounded text-xs w-32" value={pagoFormData.responsable} onChange={e => setPagoFormData(p => ({...p, responsable: e.target.value}))} /></label>
+                              <label className="text-xs text-gray-600">Notas: <input type="text" className="ml-1 px-2 py-1 border rounded text-xs w-40" value={pagoFormData.notas} onChange={e => setPagoFormData(p => ({...p, notas: e.target.value}))} /></label>
+                              <button onClick={() => guardarPagoPcel("spiff", "M"+r.mes, spiffAmt)} className="px-3 py-1 rounded-lg text-xs font-bold bg-purple-600 text-white hover:bg-purple-700">Guardar</button>
+                              <button onClick={() => setShowPagoForm(null)} className="px-3 py-1 rounded-lg text-xs text-gray-500 hover:text-gray-700">Cancelar</button>
+                            </div>
+                          </td></tr>
+                        )}
+                      </React.Fragment>);
                     })}
                     <tr className="border-t-2 border-gray-300 bg-gray-50">
                       <td className="py-2 px-3 font-bold text-gray-800">Total</td>
                       <td className="py-2 px-3 text-right font-bold text-gray-800">{"$" + Math.round(pcelCalc.totalSellIn).toLocaleString("es-MX")}</td>
-                      <td className="py-2 px-3"></td>
-                      <td className="py-2 px-3"></td>
-                      <td className="py-2 px-3 text-right font-bold text-purple-600">{"$" + Math.round(pcelCalc.monthly.reduce((s,r) => { const meetsQ = r.alcance >= 0.9; const approved = pcelOverrideSpiff[r.mes] === "approved"; return s + ((r.sellIn > 0 && (meetsQ || approved)) ? r.sellIn * SPIFF_PCT : 0); }, 0)).toLocaleString("es-MX")}</td>
-                      <td></td>
+                      <td className="py-2 px-3"></td><td className="py-2 px-3"></td>
+                      <td className="py-2 px-3 text-right font-bold text-purple-600">{"$" + Math.round(pcelCalc.monthly.reduce((s,r) => { const ok = r.alcance >= 0.9 || pcelOverrideSpiff[r.mes] === "approved"; return s + (r.sellIn > 0 && ok ? r.sellIn * SPIFF_PCT : 0); }, 0)).toLocaleString("es-MX")}</td>
+                      <td></td><td></td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-gray-400 mt-3">* SPIFF: {(SPIFF_PCT * 100).toFixed(2)}% mensual sobre Sell In | Botón "Pagar": aprueba SPIFF aunque no alcance cuota (marcado con *)</p>
-              <div className="bg-purple-50 rounded-lg p-3 text-center mt-4">
-                <p className="text-xs text-purple-600 font-semibold">SPIFF Total Aprobado</p>
-                <p className="text-lg font-bold text-purple-600">{"$" + Math.round(pcelCalc.monthly.reduce((s,r) => { const meetsQ = r.alcance >= 0.9; const approved = pcelOverrideSpiff[r.mes] === "approved"; return s + ((r.sellIn > 0 && (meetsQ || approved)) ? r.sellIn * SPIFF_PCT : 0); }, 0)).toLocaleString("es-MX")}</p>
-              </div>
+              <p className="text-xs text-gray-400 mt-3">* SPIFF: {(SPIFF_PCT * 100).toFixed(2)}% mensual sobre Sell In</p>
             </div>
           )}
 
