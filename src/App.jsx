@@ -80,8 +80,15 @@ function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate
 }
 
 
-export default function App() {
-  // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ AUTH STATE Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+export default function ResumenCuentas() {
+  return React.createElement("div", { className: "p-8" },
+    React.createElement("h2", { className: "text-2xl font-bold mb-4" }, "Resumen General"),
+    React.createElement("p", { className: "text-gray-500" }, "Vista de resumen en desarrollo...")
+  );
+}
+
+function App() {
+  // ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ AUTH STATE ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
   const [authUser, setAuthUser] = useState(null);
   const [perfil, setPerfil] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -159,7 +166,7 @@ export default function App() {
   const [vistaActual, setVistaActual] = useState(null);
   const [clienteKey, setClienteKey] = useState(null);
 
-  // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ DATOS DESDE SUPABASE (ventas_mensuales) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+  // ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ DATOS DESDE SUPABASE (ventas_mensuales) ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
   const [ventasDB, setVentasDB] = React.useState(null);
   const [ventasVer, setVentasVer] = React.useState(0);
 
@@ -206,12 +213,12 @@ export default function App() {
   };
 
   const navItems = [
-    { id: "home",       label: "Resumen",               icono: "Ã°ÂÂÂ ", habilitado: true  },
-    { id: "analisis",   label: "AnÃÂ¡lisis",                icono: "Ã°ÂÂÂ", habilitado: true  },
-    { id: "estrategia", label: "Estrategia de Producto", icono: "Ã°ÂÂÂ¦", habilitado: true  },
-    { id: "marketing",  label: "Marketing",              icono: "Ã°ÂÂÂ£", habilitado: clienteActivo !== "pcel"  },
-    { id: "pagos",      label: "Pagos",                  icono: "Ã°ÂÂÂ°", habilitado: true  },
-    { id: "cartera",    label: "CrÃÂ©dito y Cobranza",     icono: "Ã°ÂÂÂ", habilitado: true  },
+    { id: "home",       label: "Resumen",               icono: "ÃÂ°ÃÂÃÂÃÂ ", habilitado: true  },
+    { id: "analisis",   label: "AnÃÂÃÂ¡lisis",                icono: "ÃÂ°ÃÂÃÂÃÂ", habilitado: true  },
+    { id: "estrategia", label: "Estrategia de Producto", icono: "ÃÂ°ÃÂÃÂÃÂ¦", habilitado: true  },
+    { id: "marketing",  label: "Marketing",              icono: "ÃÂ°ÃÂÃÂÃÂ£", habilitado: clienteActivo !== "pcel"  },
+    { id: "pagos",      label: "Pagos",                  icono: "ÃÂ°ÃÂÃÂÃÂ°", habilitado: true  },
+    { id: "cartera",    label: "CrÃÂÃÂ©dito y Cobranza",     icono: "ÃÂ°ÃÂÃÂÃÂ", habilitado: true  },
   ]
 
   
@@ -225,11 +232,11 @@ export default function App() {
       {/* SIDEBAR */}
       <aside className="w-52 bg-white border-r border-gray-100 flex flex-col shadow-sm shrink-0 overflow-y-auto">
 
-        {/* Logo + BotÃÂ³n Modo PresentaciÃÂ³n */}
+        {/* Logo + BotÃÂÃÂ³n Modo PresentaciÃÂÃÂ³n */}
         <div className="p-3 border-b border-gray-100">
           {!modoPresent ? (
             <>
-              <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">AdministraciÃÂ³n de Clientes</p>
+              <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">AdministraciÃÂÃÂ³n de Clientes</p>
               <div className="flex gap-2 mb-3">
                 <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-semibold">Acteck</span>
                 <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-semibold">Balam Rush</span>
@@ -238,7 +245,7 @@ export default function App() {
           ) : (
             <div className="flex items-center gap-2 mb-3">
               <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-              <p className="text-xs text-green-600 font-semibold uppercase tracking-widest">Modo PresentaciÃÂ³n</p>
+              <p className="text-xs text-green-600 font-semibold uppercase tracking-widest">Modo PresentaciÃÂÃÂ³n</p>
             </div>
           )}
           <button
@@ -250,36 +257,36 @@ export default function App() {
             }`}
           >
             {modoPresent ? (
-              <><span>Ã°ÂÂÂ</span> Salir de PresentaciÃÂ³n</>
+              <><span>ÃÂ°ÃÂÃÂÃÂ</span> Salir de PresentaciÃÂÃÂ³n</>
             ) : (
-              <><span>Ã°ÂÂÂÃ¯Â¸Â</span> Modo PresentaciÃÂ³n</>
+              <><span>ÃÂ°ÃÂÃÂÃÂÃÂ¯ÃÂ¸ÃÂ</span> Modo PresentaciÃÂÃÂ³n</>
             )}
           </button>
         </div>
 
-        {/* BotÃÂ³n Resumen General */}
+        {/* BotÃÂÃÂ³n Resumen General */}
         <div className="px-4 py-2 border-b border-gray-100">
           <button
             onClick={() => setPaginaActiva("resumen")}
             className={"w-full text-left text-sm font-medium px-3 py-2.5 rounded-xl transition-all flex items-center gap-2 " + (paginaActiva === "resumen" ? "bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-700 shadow-sm border border-indigo-100" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700")}
           >
-            <span>{"Ã°ÂÂÂ"}</span>
+            <span>{"ÃÂ°ÃÂÃÂÃÂ"}</span>
             <span>Resumen General</span>
           </button>
         </div>
 
-        {/* BotÃÂ³n Forecast */}
+        {/* BotÃÂÃÂ³n Forecast */}
           <div className="px-4 py-2 border-b border-gray-100">
             <button
               onClick={() => setPaginaActiva("forecast")}
               className={"w-full text-left text-sm font-medium px-3 py-2.5 rounded-xl transition-all flex items-center gap-2 " + (paginaActiva === "forecast" ? "bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 shadow-sm border border-emerald-100" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700")}
             >
-              <span>{"Ã°ÂÂÂ®"}</span>
+              <span>{"ÃÂ°ÃÂÃÂÃÂ®"}</span>
               <span>Forecast</span>
             </button>
           </div>
 
-          {/* Selector de cliente Ã¢ÂÂ se oculta en modo presentaciÃÂ³n */}
+          {/* Selector de cliente ÃÂ¢ÃÂÃÂ se oculta en modo presentaciÃÂÃÂ³n */}
         {!modoPresent && (
           <div className="p-4 border-b border-gray-100">
             <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Cliente</p>
@@ -305,7 +312,7 @@ export default function App() {
           </div>
         )}
 
-        {/* En modo presentaciÃÂ³n: mostrar solo el cliente activo */}
+        {/* En modo presentaciÃÂÃÂ³n: mostrar solo el cliente activo */}
         {modoPresent && (
           <div className="p-4 border-b border-gray-100">
             <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Cliente</p>
@@ -317,7 +324,7 @@ export default function App() {
           </div>
         )}
 
-        {/* NavegaciÃÂ³n */}
+        {/* NavegaciÃÂÃÂ³n */}
         <nav className="p-4 flex-1">
           <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Secciones</p>
           <div className="space-y-1">
@@ -333,7 +340,7 @@ export default function App() {
                       : "text-gray-600 hover:bg-gray-50 hover:text-gray-800"
                 }`}
                 disabled={!item.habilitado}
-                title={!item.habilitado ? "PrÃÂ³ximamente" : ""}
+                title={!item.habilitado ? "PrÃÂÃÂ³ximamente" : ""}
               >
                 <span>{item.icono}</span>
                 {item.label}
@@ -359,13 +366,13 @@ export default function App() {
             <button
               onClick={() => { setVistaActual("configuracion"); setClienteKey(null); }}
               className={"w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition " + (vistaActual === "configuracion" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800/50")}
-            >ConfiguraciÃÂ³n</button>
+            >ConfiguraciÃÂÃÂ³n</button>
           )}
           <div className="mt-2 pt-2 border-t border-gray-700/50">
             <p className="text-xs text-gray-500 mb-1">{perfil.nombre}</p>
-            <button onClick={handleLogout} className="w-full text-left px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-red-400 hover:bg-gray-800/50 transition">Cerrar sesiÃÂ³n</button>
+            <button onClick={handleLogout} className="w-full text-left px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-red-400 hover:bg-gray-800/50 transition">Cerrar sesiÃÂÃÂ³n</button>
           </div>
-          <p className="text-xs text-gray-300 text-center">v1.0 ÃÂ· Abril 2026</p>
+          <p className="text-xs text-gray-300 text-center">v1.0 ÃÂÃÂ· Abril 2026</p>
         </div>
       </aside>
 
@@ -375,7 +382,7 @@ export default function App() {
             <Configuracion session={{user: authUser, perfil}} />
           ) : (
             <>
-            {/* Banner modo presentaciÃÂ³n */}
+            {/* Banner modo presentaciÃÂÃÂ³n */}
         { /* Banner removed */ }
           {paginaActiva === "resumen" && <ResumenCuentas />}
           <>
