@@ -1,283 +1,1405 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED } from './lib/supabase';
-import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_MES, ML_SELLOUT_DEFAULT, clientes } from './lib/constants';
-import { formatMXN, formatUSD, formatFecha, diasRestantes, calcularSalud, loadSheetJS } from './lib/utils';
-import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, Sidebar } from './components';
-import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, ForecastCliente } from './modules/comercial';
-import ReporteTab from './modules/comercial/ReporteTab';
-import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
-import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
-import LoginPage from './modules/auth/LoginPage';
-import { Configuracion } from './modules/configuracion';
+import ActualizacionDatos from './modules/settings/ActualizacionDatos';
 
+// Lista de correos admin (acceso a "Actualización de datos")
+const ADMIN_EMAILS = ['fernando.cabrera@acteck.com'];
 
-function ActualizarDatosExcel({ cliente, anio, onComplete }) {
-  const [cargando, setCargando] = React.useState(false);
-  const [resultado, setResultado] = React.useState(null);
-  const fileRef = React.useRef(null);
+// ─── DATOS REALES — DIGITALIFE (API GLOBAL) ───────────────────────────────────
+// Fuentes: Vw_TablaH_Ventas (Sell In), BD Sellout (Sell Out), BD Inventario
+// Actualizado: 2026-04-07
+const DIGITALIFE_REAL = {
+  // Sell In 2026 por mes (desde Vw_TablaH_Ventas → API GLOBAL)
+  sellIn: { 1: 80437.84, 2: 3986509.45, 3: 491098.50 },
+  // Sell Out 2026 por mes (desde BD Sellout)
+  sellOut: { 1: 1904705.28, 2: 1575772.46, 3: 1702411.72 },
+  // Cuotas mensuales (desde pestaña 2026 — objetivo 30M, mínimo 25M)
+  cuota30M: { 1:2502665.97, 2:2421385.87, 3:2287315.71, 4:1619770.63, 5:2112348.18, 6:2071317.14, 7:2757009.45, 8:2740078.67, 9:2803455.11, 10:2974335.88, 11:2913008.38, 12:2797308.99 },
+  cuota25M: { 1:2085554.97, 2:2017821.56, 3:1906096.43, 4:1349808.86, 5:1760290.15, 6:1726097.61, 7:2297507.88, 8:2283398.89, 9:2336212.59, 10:2478613.23, 11:2427506.99, 12:2331090.83 },
+  // Inventario del cliente (BD Inventario)
+  inventarioPiezas: 8614,
+  inventarioValor: 6612493.03,
+  diasInventario: 154,
+  // Histórico 2025
+  hist2025: { sellIn: 15755483, sellOut: 15606924, cuota: 12270000 },
+  // Sell Out por marca 2026
+  sellOutMarca: { "ACTECK": 2556451.42, "BALAM RUSH": 2626438.04 },
+};
 
-  function handleFile(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    setCargando(true);
-    setResultado(null);
-    loadSheetJS().then(XLSX => {
-      const reader = new FileReader();
-      reader.onload = evt => {
-        try {
-          const wb = XLSX.read(evt.target.result, { type: "array" });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const data = XLSX.utils.sheet_to_json(ws);
-          if (onComplete) onComplete(data);
-          setResultado({ ok: true, rows: data.length });
-        } catch (err) {
-          setResultado({ ok: false, error: err.message });
-        }
-        setCargando(false);
-      };
-      reader.readAsArrayBuffer(file);
-    });
-  }
+// ─── DATOS REALES — CRÉDITO Y COBRANZA DIGITALIFE (API GLOBAL) ───────────────
+// Fuente: correo "Estado de cuenta" enviado cada lunes desde intranet@acteck.com
+// Se actualiza automáticamente cada lunes a las 4pm
+const CARTERA_DIGITALIFE = {
+  semana: 15,
+  periodo: "2026-04-06 al 2026-04-12",
+  saldoActual: 6884832.74,
+  saldoVencido: 196678.56,
+  saldoNC: -67210.44,
+  saldoAVencer: 0.00,
+  ultimaActualizacion: "2026-04-07",
+  horaActualizacion: "16:00",
+  correoSemana: "Estado de cuenta de la Semana 15 Del 2026-04-06 al 2026-04-12",
 
-  return React.createElement("div", null,
-    React.createElement("input", { ref: fileRef, type: "file", accept: ".xlsx,.xls,.csv", onChange: handleFile, className: "hidden" }),
-    React.createElement("button", {
-      onClick: () => fileRef.current?.click(),
-      disabled: cargando,
-      className: "w-full py-2.5 rounded-lg text-sm font-medium transition-all " + (cargando ? "bg-gray-200 text-gray-500" : "bg-blue-600 text-white hover:bg-blue-700")
-    }, cargando ? "Procesando..." : "Subir Excel"),
-    resultado && React.createElement("p", { className: "text-xs mt-2 " + (resultado.ok ? "text-green-600" : "text-red-500") },
-      resultado.ok ? resultado.rows + " registros cargados" : "Error: " + resultado.error
-    )
-  );
-}
+  // ── Línea de crédito ──
+  lineaCreditoUSD: 500000,
+  tipoCambio: 17.76,    // MXN/USD — Banxico 07-Abr-2026
+  // lineaCreditoMXN = 500,000 × 17.76 = 8,880,000
 
-function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate, onGoToSection }) {
-  return React.createElement("div", {
-    className: "fixed inset-0 z-50 flex",
-    onClick: function(e) { if (e.target === e.currentTarget) onClose(); }
+  // ── Aging de facturas (suma = saldoActual) ──
+  aging: {
+    d0_30:  5500000.00,   // vigentes — vencen en ≤ 30 días
+    d31_60: 1188154.18,   // vigentes — vencen en 31-60 días
+    d61_90: 100000.00,    // vencidos recientes
+    mas90:  96678.56,     // vencidos críticos (+90 días)
   },
-    React.createElement("div", { className: "absolute inset-0 bg-black bg-opacity-40" }),
-    React.createElement("div", {
-      className: "relative ml-auto w-full max-w-md bg-white shadow-2xl flex flex-col h-full",
-      style: { animation: "slideInRight 0.3s ease-out" }
+
+  // ── Vencimientos por mes (calendario de cobranza) ──
+  vencimientosMes: {
+    "2026-04": 2100000.00,
+    "2026-05": 3200000.00,
+    "2026-06": 1584832.74,
+  },
+
+  // ── DSO (Days Sales Outstanding) ──
+  dso: 65,  // días promedio de cobro — histórico cliente
+};
+
+// ─── DATOS — PAGOS Y COMPROMISOS DIGITALIFE 2026 ─────────────────────────────
+// Categorías: Promociones, Plan de Marketing, Gastos Fijos, Gastos Variables
+// Campos: Folio, Concepto, Monto, Estatus, Fecha Compromiso, Fecha Pago Real, Responsable, Notas
+const PAGOS_DIGITALIFE_2026 = {
+  categorias: {
+    promociones: {
+      label: "Promociones",
+      icono: "🎯",
+      color: "#E31E26",
+      presupuesto: null, // Por definir
+      items: [
+        { folio: "PRO-001", concepto: "Campaña Madre Mayo", monto: 15000, estatus: "pendiente", fechaCompromiso: "2026-05-01", fechaPagoReal: null, responsable: "Marketing", notas: "Aportación Acteck. Cliente aporta $8,000 adicionales." },
+        { folio: "PRO-002", concepto: "Bundle Auriculares Q2", monto: 10000, estatus: "pendiente", fechaCompromiso: "2026-04-10", fechaPagoReal: null, responsable: "Marketing", notas: "Aportación Acteck. Cliente aporta $5,000 adicionales." },
+      ],
     },
-      React.createElement("div", { className: "flex items-center justify-between p-5 border-b border-gray-100" },
-        React.createElement("div", null,
-          React.createElement("h2", { className: "text-lg font-bold text-gray-800" }, "\uD83D\uDD04 Central de Actualizaci\u00F3n"),
-          React.createElement("p", { className: "text-xs text-gray-400 mt-0.5" }, "Actualiza todos los datos desde un solo lugar")
-        ),
-        React.createElement("button", {
-          onClick: onClose,
-          className: "w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-        }, "\u2715")
-      ),
-      React.createElement("div", { className: "flex-1 overflow-y-auto p-5 space-y-5" },
-        React.createElement("div", { className: "bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200" },
-          React.createElement("div", { className: "flex items-center gap-2 mb-3" },
-            React.createElement("span", { className: "text-lg" }, "\uD83D\uDCCA"),
-            React.createElement("div", null,
-              React.createElement("p", { className: "text-sm font-semibold text-blue-800" }, "Ventas Mensuales"),
-              React.createElement("p", { className: "text-xs text-blue-500" }, "Excel Central de Ventas")
-            )
-          ),
-          React.createElement(ActualizarDatosExcel, { cliente: clienteKey, anio: anio, onComplete: onVentasUpdate })
-        ),
-        React.createElement("div", { className: "bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-4 border border-emerald-200 cursor-pointer hover:shadow-md transition-shadow", onClick: function() { if (onGoToSection) { onGoToSection("estrategia"); onClose(); } } },
-          React.createElement("div", { className: "flex items-center gap-2" },
-            React.createElement("span", { className: "text-lg" }, "\uD83D\uDCE6"),
-            React.createElement("div", { className: "flex-1" },
-              React.createElement("p", { className: "text-sm font-semibold text-emerald-800" }, "Estrategia de Producto"),
-              React.createElement("p", { className: "text-xs text-emerald-500" }, "Reporte Acteck + Resumen Cliente")
-            ),
-            React.createElement("span", { className: "text-xs bg-emerald-600 text-white px-2 py-0.5 rounded-full font-medium" }, "Activo")
-          )
-        ),
-        React.createElement("div", { className: "bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200 opacity-60" },
-          React.createElement("div", { className: "flex items-center gap-2" },
-            React.createElement("span", { className: "text-lg" }, "\uD83D\uDCE7"),
-            React.createElement("div", { className: "flex-1" },
-              React.createElement("p", { className: "text-sm font-semibold text-amber-800" }, "Correos y Reportes"),
-              React.createElement("p", { className: "text-xs text-amber-500" }, "Descarga autom\u00E1tica de reportes por email")
-            ),
-            React.createElement("span", { className: "text-xs bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full font-medium" }, "Pronto")
-          )
-        ),
-        React.createElement("div", { className: "bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200 opacity-60" },
-          React.createElement("div", { className: "flex items-center gap-2" },
-            React.createElement("span", { className: "text-lg" }, "\uD83D\uDCE3"),
-            React.createElement("div", { className: "flex-1" },
-              React.createElement("p", { className: "text-sm font-semibold text-purple-800" }, "Marketing"),
-              React.createElement("p", { className: "text-xs text-purple-500" }, "Importar campa\u00F1as y m\u00E9tricas")
-            ),
-            React.createElement("span", { className: "text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full font-medium" }, "Pronto")
-          )
-        )
-      ),
-      React.createElement("div", { className: "p-4 border-t border-gray-100 bg-gray-50" },
-        React.createElement("p", { className: "text-xs text-gray-400 text-center" },
-          "Cliente: ", React.createElement("span", { className: "font-semibold text-gray-600" }, cliente),
-          " \u00B7 A\u00F1o: ", React.createElement("span", { className: "font-semibold text-gray-600" }, anio)
-        )
-      )
-    )
-  );
+    marketing: {
+      label: "Plan de Marketing",
+      icono: "📣",
+      color: "#3b82f6",
+      presupuesto: null, // Por definir
+      items: [
+        { folio: "MKT-001", concepto: "Material POP Q2", monto: 0, estatus: "pendiente", fechaCompromiso: null, fechaPagoReal: null, responsable: "Marketing", notas: "Monto y fecha por definir." },
+        { folio: "MKT-002", concepto: "Activación punto de venta", monto: 0, estatus: "pendiente", fechaCompromiso: null, fechaPagoReal: null, responsable: "Fernando", notas: "Monto y fecha por definir." },
+      ],
+    },
+    gastosFijos: {
+      label: "Gastos Fijos",
+      icono: "🏢",
+      color: "#8b5cf6",
+      presupuesto: null, // Por definir
+      items: [
+        { folio: "GF-001", concepto: "Cuota mensual exhibidor — Abril", monto: 0, estatus: "pendiente", fechaCompromiso: "2026-04-30", fechaPagoReal: null, responsable: "Fernando", notas: "Recurrente mensual. Monto por confirmar." },
+        { folio: "GF-002", concepto: "Cuota mensual exhibidor — Mayo", monto: 0, estatus: "pendiente", fechaCompromiso: "2026-05-31", fechaPagoReal: null, responsable: "Fernando", notas: "Recurrente mensual. Monto por confirmar." },
+      ],
+    },
+    gastosVariables: {
+      label: "Gastos Variables",
+      icono: "📊",
+      color: "#f59e0b",
+      presupuesto: null, // Por definir
+      items: [
+        { folio: "GV-001", concepto: "Evento lanzamiento producto Q2", monto: 0, estatus: "pendiente", fechaCompromiso: null, fechaPagoReal: null, responsable: "Fernando", notas: "Monto y fecha por definir según agenda." },
+      ],
+    },
+  },
+};
+
+// Último mes con datos de Sell In
+const ULTIMO_MES_SI = 3; // Marzo
+const NOMBRES_MES = { 1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre" };
+
+const clientes = {
+  digitalife: {
+    nombre: "Digitalife",
+    marca: "Acteck / Balam Rush",
+    ejecutivo: "Fernando Cabrera",
+    frecuencia: "Semanal",
+    color: "#E31E26",
+    cuotaAnual: 30000000,
+    // KPIs calculados desde datos reales
+    kpis: {
+      sellInMes: DIGITALIFE_REAL.sellIn[ULTIMO_MES_SI],
+      cuotaMes: DIGITALIFE_REAL.cuota30M[ULTIMO_MES_SI],
+      cuotaMes25M: DIGITALIFE_REAL.cuota25M[ULTIMO_MES_SI],
+      sellInAcumulado: Object.values(DIGITALIFE_REAL.sellIn).reduce((a,b)=>a+b,0),
+      cuotaAcumulada: Object.entries(DIGITALIFE_REAL.cuota30M).filter(([m])=>parseInt(m)<=ULTIMO_MES_SI).reduce((a,[,v])=>a+v,0),
+      sellOut: DIGITALIFE_REAL.sellOut[ULTIMO_MES_SI],
+      sellOutAcumulado: Object.values(DIGITALIFE_REAL.sellOut).reduce((a,b)=>a+b,0),
+      diasInventario: DIGITALIFE_REAL.diasInventario,
+      inventarioValor: DIGITALIFE_REAL.inventarioValor,
+      ultimoMes: NOMBRES_MES[ULTIMO_MES_SI],
+    },
+    tendencia: Object.entries(DIGITALIFE_REAL.sellIn).map(([m,si])=>({
+      mes: NOMBRES_MES[parseInt(m)].slice(0,3),
+      sellIn: si,
+      sellOut: DIGITALIFE_REAL.sellOut[m] || 0,
+      cuota: DIGITALIFE_REAL.cuota30M[m] || 0,
+    })),
+    pendientes: [
+      { id: 1, tarea: "Enviar propuesta de planograma Q2", responsable: "Fernando", fecha: "2026-04-10", estado: "pendiente" },
+      { id: 2, tarea: "Confirmar entrega de pedido #4821", responsable: "Logística", fecha: "2026-04-08", estado: "en proceso" },
+      { id: 3, tarea: "Armar materiales para campaña Mayo", responsable: "Marketing", fecha: "2026-04-15", estado: "pendiente" },
+    ],
+    pagos: [
+      { id: 1, factura: "FAC-2026-0312", monto: 85000, vencimiento: "2026-04-09", estado: "vencida" },
+      { id: 2, factura: "FAC-2026-0341", monto: 120000, vencimiento: "2026-04-20", estado: "por vencer" },
+      { id: 3, factura: "FAC-2026-0358", monto: 95000, vencimiento: "2026-05-05", estado: "vigente" },
+    ],
+    promocionesActivas: [
+      { id: 1, nombre: "Campaña Madre Mayo", aportacionActeck: 15000, aportacionCliente: 8000, vigencia: "01 May – 15 May 2026" },
+      { id: 2, nombre: "Bundle Auriculares Q2", aportacionActeck: 10000, aportacionCliente: 5000, vigencia: "10 Abr – 30 Abr 2026" },
+    ],
+    minuta: {
+      fechaReunion: "2026-04-01",
+      proximaReunion: "2026-04-08",
+      asistentes: ["Fernando Cabrera", "Ana López (Digitalife)", "Carlos Ruiz (Digitalife)"],
+      acuerdos: [
+        { id: 1, descripcion: "Confirmar cuota Q2 con dirección comercial", responsable: "Fernando", fechaCompromiso: "2026-04-05", fechaCumplimiento: "2026-04-04", cumplido: true },
+        { id: 2, descripcion: "Digitalife envía sell out de Marzo completo", responsable: "Ana López", fechaCompromiso: "2026-04-05", fechaCumplimiento: null, cumplido: false },
+        { id: 3, descripcion: "Propuesta de exhibidores para nueva tienda CDMX", responsable: "Fernando", fechaCompromiso: "2026-04-10", fechaCumplimiento: null, cumplido: false },
+      ],
+    },
+    cartera: CARTERA_DIGITALIFE,
+  },
+  pcel: {
+    nombre: "PCEL",
+    marca: "Balam Rush",
+    ejecutivo: "Fernando Cabrera",
+    frecuencia: "Mensual",
+    color: "#1A3A8F",
+    cuotaAnual: 2400000,
+    kpis: {
+      sellInMes: 195000,
+      cuotaMes: 200000,
+      sellOut: 160000,
+      diasInventario: 35,
+    },
+    pendientes: [
+      { id: 1, tarea: "Revisión de portafolio Balam Rush Q2", responsable: "Fernando", fecha: "2026-04-20", estado: "pendiente" },
+      { id: 2, tarea: "Cotización de material POP para PCEL Monterrey", responsable: "Marketing", fecha: "2026-04-18", estado: "en proceso" },
+    ],
+    pagos: [
+      { id: 1, factura: "FAC-2026-0299", monto: 60000, vencimiento: "2026-04-12", estado: "por vencer" },
+      { id: 2, factura: "FAC-2026-0315", monto: 75000, vencimiento: "2026-04-30", estado: "vigente" },
+    ],
+    promocionesActivas: [
+      { id: 1, nombre: "Promo Teclados Mayo", aportacionActeck: 8000, aportacionCliente: 4000, vigencia: "01 May – 31 May 2026" },
+    ],
+    minuta: {
+      fechaReunion: "2026-03-15",
+      proximaReunion: "2026-04-15",
+      asistentes: ["Fernando Cabrera", "Roberto Méndez (PCEL)"],
+      acuerdos: [
+        { id: 1, descripcion: "PCEL compartir reporte de ventas por SKU Marzo", responsable: "Roberto Méndez", fechaCompromiso: "2026-03-25", fechaCumplimiento: "2026-03-27", cumplido: true },
+        { id: 2, descripcion: "Definir mix de productos para temporada calor", responsable: "Fernando", fechaCompromiso: "2026-04-10", fechaCumplimiento: null, cumplido: false },
+      ],
+    },
+  },
+};
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function formatMXN(n) {
+  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n);
 }
 
-
-function ResumenCuentas() {
-  return React.createElement("div", { className: "p-8" },
-    React.createElement("h2", { className: "text-2xl font-bold mb-4" }, "Resumen General"),
-    React.createElement("p", { className: "text-gray-500" }, "Vista de resumen en desarrollo...")
-  );
+function formatUSD(n) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 }
 
-function UploadModalX({ onClose }) {
+function formatFecha(str) {
+  if (!str) return "—";
+  const [y, m, d] = str.split("-");
+  const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  return `${d} ${meses[parseInt(m) - 1]} ${y}`;
+}
+
+function diasRestantes(fechaStr) {
+  const hoy = new Date();
+  const fecha = new Date(fechaStr);
+  return Math.ceil((fecha - hoy) / (1000 * 60 * 60 * 24));
+}
+
+function calcularSalud(kpis, pagos) {
+  const cumplimiento = kpis.sellInAcumulado / kpis.cuotaAcumulada;
+  const tieneVencidas = pagos.some(p => p.estado === "vencida");
+  const diasInv = kpis.diasInventario;
+  if (tieneVencidas || cumplimiento < 0.5 || diasInv > 180) return "rojo";
+  if (cumplimiento < 0.80 || diasInv > 90) return "amarillo";
+  return "verde";
+}
+
+// ─── COMPONENTES ─────────────────────────────────────────────────────────────
+
+function Semaforo({ estado }) {
+  const config = {
+    verde:    { bg: "bg-green-100",  text: "text-green-700",  dot: "bg-green-500",  label: "Saludable" },
+    amarillo: { bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-400", label: "Atención" },
+    rojo:     { bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500",    label: "Crítico" },
+  };
+  const c = config[estado];
   return (
-    React.createElement('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4', style: { backgroundColor: 'rgba(0,0,0,0.6)' } },
-      React.createElement('div', { className: 'bg-white rounded-lg shadow-2xl w-full flex flex-col overflow-hidden', style: { maxWidth: '1100px', height: '90vh' } },
-        React.createElement('div', { className: 'flex items-center justify-between px-4 py-3 bg-gray-800 text-white' },
-          React.createElement('div', { className: 'font-semibold' }, '📤 Subir Excel central — Importador de tablas'),
-          React.createElement('button', { onClick: onClose, className: 'px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm' }, 'Cerrar ✕')
-        ),
-        React.createElement('iframe', { src: '/import.html', className: 'flex-1 w-full', style: { border: 0 }, title: 'Importador Excel' })
-      )
-    )
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${c.bg} ${c.text}`}>
+      <span className={`w-2 h-2 rounded-full ${c.dot}`}></span>
+      {c.label}
+    </span>
   );
 }
 
-function UpdatedAtBadgeX() {
-  const [info, setInfo] = useState(null);
-  useEffect(() => {
-    fetch('/api/last-update').then(r => r.json()).then(setInfo).catch(() => setInfo({ error: true }));
-  }, []);
-  if (!info) return React.createElement('span', { className: 'text-xs text-gray-400' }, 'cargando…');
-  if (info.error || !info.last_update) return React.createElement('span', { className: 'text-xs text-gray-400' }, 'sin datos');
-  const d = new Date(info.last_update);
-  const txt = d.toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-  return React.createElement('span', { className: 'text-xs text-gray-600', title: info.last_update }, '🕒 Últ. actualización: ' + txt);
+function KPICard({ label, valor, sub, color, alerta }) {
+  return (
+    <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4`} style={{ borderColor: color }}>
+      <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{label}</p>
+      <p className="text-2xl font-bold text-gray-800">{valor}</p>
+      {sub && <p className={`text-xs mt-1 ${alerta ? "text-red-500 font-semibold" : "text-gray-400"}`}>{sub}</p>}
+    </div>
+  );
 }
 
-export default function App() {
-  // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ AUTH STATE Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
-  const [authUser, setAuthUser] = useState(null);
-  const [perfil, setPerfil] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
+function CardHeader({ titulo, icono }) {
+  return (
+    <div className="flex items-center gap-2 mb-4">
+      <span className="text-lg">{icono}</span>
+      <h3 className="font-bold text-gray-700 text-base">{titulo}</h3>
+    </div>
+  );
+}
 
+function TarjetaPendientes({ pendientes }) {
+  const colores = {
+    "pendiente":  "bg-gray-100 text-gray-600",
+    "en proceso": "bg-blue-100 text-blue-700",
+    "completado": "bg-green-100 text-green-700",
+  };
+  return (
+    <div className="bg-white rounded-2xl shadow-sm p-5">
+      <CardHeader titulo="Pendientes" icono="📋" />
+      <div className="space-y-3">
+        {pendientes.map(p => (
+          <div key={p.id} className="flex items-start justify-between gap-3 text-sm">
+            <div className="flex-1">
+              <p className="text-gray-800 font-medium leading-snug">{p.tarea}</p>
+              <p className="text-gray-400 text-xs mt-0.5">{p.responsable} · {formatFecha(p.fecha)}</p>
+            </div>
+            <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${colores[p.estado]}`}>
+              {p.estado}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TarjetaPagos({ pagos }) {
+  const colores = {
+    "vencida":    { bg: "bg-red-100",    text: "text-red-700",    icon: "⚠️" },
+    "por vencer": { bg: "bg-yellow-100", text: "text-yellow-700", icon: "🕐" },
+    "vigente":    { bg: "bg-green-100",  text: "text-green-700",  icon: "✅" },
+  };
+  const total = pagos.reduce((s, p) => s + p.monto, 0);
+  return (
+    <div className="bg-white rounded-2xl shadow-sm p-5">
+      <CardHeader titulo="Pagos Pendientes" icono="💳" />
+      <div className="space-y-3 mb-4">
+        {pagos.map(p => {
+          const c = colores[p.estado];
+          const dias = diasRestantes(p.vencimiento);
+          return (
+            <div key={p.id} className="flex items-center justify-between text-sm">
+              <div>
+                <p className="text-gray-700 font-medium">{p.factura}</p>
+                <p className="text-gray-400 text-xs">Vence: {formatFecha(p.vencimiento)}
+                  {p.estado === "vencida" ? <span className="text-red-500 font-semibold"> · Vencida hace {Math.abs(dias)} días</span>
+                  : p.estado === "por vencer" ? <span className="text-yellow-600 font-semibold"> · {dias} días</span>
+                  : null}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-gray-800">{formatMXN(p.monto)}</p>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${c.bg} ${c.text}`}>{c.icon} {p.estado}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="border-t pt-3 flex justify-between items-center">
+        <span className="text-sm text-gray-500">Total adeudo</span>
+        <span className="font-bold text-gray-800 text-base">{formatMXN(total)}</span>
+      </div>
+    </div>
+  );
+}
+
+function TarjetaPromociones({ promos }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm p-5">
+      <CardHeader titulo="Promociones Activas" icono="🎯" />
+      <div className="space-y-4">
+        {promos.map(p => {
+          const total = p.aportacionActeck + p.aportacionCliente;
+          const pctActeck = Math.round((p.aportacionActeck / total) * 100);
+          return (
+            <div key={p.id} className="text-sm">
+              <div className="flex justify-between items-start mb-1">
+                <p className="font-semibold text-gray-800">{p.nombre}</p>
+                <span className="text-xs text-gray-400">{p.vigencia}</span>
+              </div>
+              <div className="flex gap-4 text-xs mb-2">
+                <span className="text-blue-700">Nuestra aportación: <b>{formatMXN(p.aportacionActeck)}</b></span>
+                <span className="text-purple-700">Cliente aporta: <b>{formatMXN(p.aportacionCliente)}</b></span>
+              </div>
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pctActeck}%` }}></div>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Inversión total: {formatMXN(total)} · Nosotros {pctActeck}% / Cliente {100 - pctActeck}%</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TarjetaMinuta({ minuta }) {
+  const cumplidos = minuta.acuerdos.filter(a => a.cumplido).length;
+  const pct = Math.round((cumplidos / minuta.acuerdos.length) * 100);
+  return (
+    <div className="bg-white rounded-2xl shadow-sm p-5">
+      <CardHeader titulo="Minuta — Reunión Anterior" icono="📝" />
+      <div className="flex flex-wrap gap-4 text-sm mb-4">
+        <div>
+          <p className="text-xs text-gray-400">Fecha reunión</p>
+          <p className="font-semibold text-gray-700">{formatFecha(minuta.fechaReunion)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-400">Próxima reunión</p>
+          <p className="font-semibold text-blue-600">{formatFecha(minuta.proximaReunion)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-400">Asistentes</p>
+          <p className="font-semibold text-gray-700">{minuta.asistentes.join(", ")}</p>
+        </div>
+      </div>
+
+      <div className="mb-3">
+        <div className="flex justify-between text-xs text-gray-500 mb-1">
+          <span>Cumplimiento de acuerdos</span>
+          <span className="font-bold">{cumplidos}/{minuta.acuerdos.length} ({pct}%)</span>
+        </div>
+        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full ${pct === 100 ? "bg-green-500" : pct >= 60 ? "bg-yellow-400" : "bg-red-400"}`}
+               style={{ width: `${pct}%` }}></div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {minuta.acuerdos.map(a => (
+          <div key={a.id} className={`flex gap-3 text-sm p-3 rounded-xl ${a.cumplido ? "bg-green-50" : "bg-gray-50"}`}>
+            <span className="text-base shrink-0">{a.cumplido ? "✅" : "⬜"}</span>
+            <div className="flex-1">
+              <p className={`font-medium leading-snug ${a.cumplido ? "text-gray-500 line-through" : "text-gray-800"}`}>{a.descripcion}</p>
+              <div className="flex gap-3 text-xs text-gray-400 mt-0.5">
+                <span>Responsable: {a.responsable}</span>
+                <span>Compromiso: {formatFecha(a.fechaCompromiso)}</span>
+                {a.cumplido && <span className="text-green-600 font-medium">Cumplido: {formatFecha(a.fechaCumplimiento)}</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── PÁGINA HOME CLIENTE ──────────────────────────────────────────────────────
+function BarraCuota({ actual, objetivo, minimo }) {
+  const pctObj = Math.min((actual / objetivo) * 100, 100);
+  const pctMin = (minimo / objetivo) * 100;
+  return (
+    <div className="mt-2">
+      <div className="relative h-2 bg-gray-100 rounded-full overflow-visible">
+        <div className="h-full rounded-full transition-all"
+          style={{ width: `${pctObj}%`, backgroundColor: pctObj >= 100 ? "#22c55e" : pctObj >= 80 ? "#eab308" : "#ef4444" }} />
+        {/* línea mínimo */}
+        <div className="absolute top-0 h-full w-0.5 bg-orange-400" style={{ left: `${pctMin}%` }} title="Mínimo 25M" />
+      </div>
+      <div className="flex justify-between text-xs text-gray-400 mt-0.5">
+        <span>0</span>
+        <span className="text-orange-500">Mín {Math.round(pctMin)}%</span>
+        <span>Obj 100%</span>
+      </div>
+    </div>
+  );
+}
+
+function HomeCliente({ cliente }) {
+  const c = cliente;
+  const k = c.kpis;
+  const salud = calcularSalud(k, c.pagos);
+  const pctCuotaMes = k.cuotaMes > 0 ? Math.round((k.sellInMes / k.cuotaMes) * 100) : 0;
+  const pctCuotaAcum = k.cuotaAcumulada > 0 ? Math.round((k.sellInAcumulado / k.cuotaAcumulada) * 100) : 0;
+  const pctCuotaAnual = Math.round((k.sellInAcumulado / c.cuotaAnual) * 100);
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+
+      {/* ENCABEZADO */}
+      <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
+                 style={{ backgroundColor: c.color }}>
+              {c.nombre[0]}
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">{c.nombre}</h1>
+              <p className="text-sm text-gray-400">
+                <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
+                {" · "}Ejecutivo: {c.ejecutivo}
+                {" · "}Frecuencia: {c.frecuencia}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Semaforo estado={salud} />
+            <div className="text-right">
+              <span className="text-xs text-gray-400 block">
+                Actualizado: {formatFecha(c.cartera?.ultimaActualizacion || new Date().toISOString().slice(0,10))}
+                {c.cartera?.horaActualizacion ? ` · ${c.cartera.horaActualizacion} hrs` : ""}
+              </span>
+              {c.cartera?.tipoCambio && (
+                <span className="text-xs text-gray-400">TC: ${c.cartera.tipoCambio.toFixed(2)} MXN/USD</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* KPIs — FILA 1: Sell In con barra de cuota */}
+      <div className="grid grid-cols-1 gap-4 mb-4 md:grid-cols-2">
+
+        {/* Sell In Mes + Acumulado */}
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4" style={{ borderColor: c.color }}>
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Sell In — {k.ultimoMes || "Último mes"}</p>
+          <div className="flex items-end gap-3">
+            <p className="text-2xl font-bold text-gray-800">{formatMXN(k.sellInMes)}</p>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-semibold mb-1 ${pctCuotaMes >= 100 ? "bg-green-100 text-green-700" : pctCuotaMes >= 80 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
+              {pctCuotaMes}% del mes
+            </span>
+          </div>
+          <p className="text-xs text-gray-400 mb-2">Cuota: {formatMXN(k.cuotaMes)} · Mínimo: {formatMXN(k.cuotaMes25M)}</p>
+          <div className="border-t pt-3 mt-1">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs text-gray-500 font-medium">Acumulado 2026</span>
+              <span className="text-sm font-bold text-gray-700">{formatMXN(k.sellInAcumulado)}</span>
+            </div>
+            <BarraCuota actual={k.sellInAcumulado} objetivo={k.cuotaAcumulada} minimo={k.cuotaAcumulada * (25/30)} />
+            <p className="text-xs text-gray-400 mt-1">vs cuota acumulada {formatMXN(k.cuotaAcumulada)} · <span className="font-semibold">{pctCuotaAcum}%</span></p>
+          </div>
+        </div>
+
+        {/* Avance Anual */}
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Avance Anual 2026</p>
+          <div className="flex items-end gap-3">
+            <p className="text-2xl font-bold text-gray-800">{pctCuotaAnual}%</p>
+            <span className="text-xs text-gray-400 mb-1">de {(c.cuotaAnual/1000000).toFixed(0)}M objetivo</span>
+          </div>
+          <p className="text-xs text-gray-400 mb-3">{formatMXN(k.sellInAcumulado)} facturado de {formatMXN(c.cuotaAnual)}</p>
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-1">
+            <div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.min(pctCuotaAnual, 100)}%` }} />
+          </div>
+          <div className="border-t pt-3 mt-2 grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <p className="text-gray-400">2025 Sell In</p>
+              <p className="font-semibold text-gray-700">{formatMXN(15755483)}</p>
+            </div>
+            <div>
+              <p className="text-gray-400">Crec. necesario</p>
+              <p className="font-semibold text-blue-600">+{Math.round((30000000/15755483-1)*100)}% vs 2025</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* KPIs — FILA 2: Sell Out e Inventario */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <KPICard
+          label={`Sell Out — ${k.ultimoMes || "Último mes"}`}
+          valor={formatMXN(k.sellOut)}
+          sub={`Acumulado 2026: ${formatMXN(k.sellOutAcumulado)}`}
+          color="#8b5cf6"
+        />
+        <KPICard
+          label="Días de Inventario"
+          valor={`${k.diasInventario} días`}
+          sub={k.diasInventario > 90 ? "⚠️ Inventario elevado" : k.diasInventario < 15 ? "⚠️ Inventario bajo" : "✅ Nivel adecuado"}
+          color="#0ea5e9"
+          alerta={k.diasInventario > 90 || k.diasInventario < 15}
+        />
+      </div>
+
+      {/* TARJETAS PRINCIPALES */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <TarjetaPendientes pendientes={c.pendientes} />
+        <TarjetaPagos pagos={c.pagos} />
+        <TarjetaPromociones promos={c.promocionesActivas} />
+        <TarjetaMinuta minuta={c.minuta} />
+      </div>
+
+    </div>
+  );
+}
+
+// ─── PÁGINA: CRÉDITO Y COBRANZA ──────────────────────────────────────────────
+function CreditoCobranza({ cliente }) {
+  const c = cliente;
+  const k = c.cartera;
+  if (!k) return (
+    <div className="p-6 text-gray-400 text-sm">Sin datos de crédito y cobranza disponibles.</div>
+  );
+
+  const lineaMXN = k.lineaCreditoUSD * k.tipoCambio;
+  const usoPct = Math.round((k.saldoActual / lineaMXN) * 100);
+  const disponibleMXN = lineaMXN - k.saldoActual;
+  const disponibleUSD = disponibleMXN / k.tipoCambio;
+
+  // Semáforo línea de crédito
+  const lineaColor = usoPct >= 90 ? { bar: "#ef4444", bg: "bg-red-50", border: "border-red-200", text: "text-red-700", label: "Crítico — Línea casi agotada" }
+                   : usoPct >= 70 ? { bar: "#eab308", bg: "bg-yellow-50", border: "border-yellow-200", text: "text-yellow-700", label: "Atención — Uso elevado" }
+                   :                { bar: "#22c55e", bg: "bg-green-50",  border: "border-green-200",  text: "text-green-700",  label: "Saludable — Línea disponible" };
+
+  // Aging total y porcentajes
+  const ag = k.aging;
+  const agTotal = ag.d0_30 + ag.d31_60 + ag.d61_90 + ag.mas90;
+  const agPct = (v) => Math.round((v / agTotal) * 100);
+
+  // Vencimientos por mes
+  const mesesLabel = { "2026-04": "Abril", "2026-05": "Mayo", "2026-06": "Junio" };
+  const vmEntries = Object.entries(k.vencimientosMes);
+  const vmMax = Math.max(...vmEntries.map(([,v]) => v));
+
+  // Proyección basada en tendencia de crecimiento real 2026
+  const soValues = Object.values(DIGITALIFE_REAL.sellOut);
+  const soUltimo = soValues[soValues.length - 1];           // Mar 2026: último mes con dato
+  const soAnterior = soValues[soValues.length - 2];         // Feb 2026: mes previo
+  const tasaCrecMensual = soUltimo / soAnterior;            // Tasa real mensual 2026
+  const soPromedio = soValues.reduce((a, b) => a + b, 0) / soValues.length; // referencia
+  const proyMeses = [
+    { mes: "Abril",  monto: k.vencimientosMes["2026-04"], cobro: soUltimo * tasaCrecMensual },
+    { mes: "Mayo",   monto: k.vencimientosMes["2026-05"], cobro: soUltimo * Math.pow(tasaCrecMensual, 2) },
+    { mes: "Junio",  monto: k.vencimientosMes["2026-06"], cobro: soUltimo * Math.pow(tasaCrecMensual, 3) },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+
+      {/* ── ENCABEZADO ── */}
+      <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
+                 style={{ backgroundColor: c.color }}>💳</div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Crédito y Cobranza</h1>
+              <p className="text-sm text-gray-400 mt-0.5">
+                <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
+                {" · "}Semana {k.semana} · {k.periodo}
+              </p>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-xs text-gray-400 block">
+              Actualizado: {formatFecha(k.ultimaActualizacion)}{k.horaActualizacion ? ` · ${k.horaActualizacion} hrs` : ""}
+            </span>
+            <span className="text-xs text-gray-400">TC: ${k.tipoCambio.toFixed(2)} MXN/USD</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── ALERTA VENCIDO ── */}
+      {k.saldoVencido > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
+          <span className="text-red-500 text-xl">⚠️</span>
+          <div>
+            <p className="text-sm font-semibold text-red-700">Saldo Vencido — Gestión inmediata requerida</p>
+            <p className="text-xs text-red-600 mt-0.5">
+              <strong>{formatMXN(k.saldoVencido)}</strong> en cartera vencida
+              ({" "}{formatMXN(ag.d61_90)} entre 61-90 días y{" "}
+              {formatMXN(ag.mas90)} con más de 90 días).
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── SEMÁFORO LÍNEA DE CRÉDITO ── */}
+      <div className={`${lineaColor.bg} border ${lineaColor.border} rounded-2xl p-5 mb-6`}>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Línea de Crédito</p>
+            <p className="text-xl font-bold text-gray-800">
+              {formatUSD(k.lineaCreditoUSD)} USD
+              <span className="text-sm font-normal text-gray-400 ml-2">= {formatMXN(lineaMXN)}</span>
+            </p>
+          </div>
+          <div className="text-right">
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${lineaColor.bg} ${lineaColor.text} border ${lineaColor.border}`}>
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: lineaColor.bar }}></span>
+              {lineaColor.label}
+            </span>
+          </div>
+        </div>
+        {/* Barra de utilización */}
+        <div className="mb-3">
+          <div className="flex justify-between text-xs text-gray-500 mb-1">
+            <span>Utilización: <strong className={lineaColor.text}>{usoPct}%</strong></span>
+            <span>Disponible: <strong className="text-green-700">{formatUSD(disponibleUSD)} ({formatMXN(disponibleMXN)})</strong></span>
+          </div>
+          <div className="h-4 bg-white rounded-full overflow-hidden border border-gray-200 shadow-inner">
+            <div className="h-full rounded-full transition-all relative"
+                 style={{ width: `${Math.min(usoPct, 100)}%`, backgroundColor: lineaColor.bar }}>
+            </div>
+          </div>
+          <div className="flex justify-between text-xs text-gray-400 mt-1">
+            <span>$0</span>
+            <span className="text-yellow-500">70% · Alerta</span>
+            <span className="text-red-500">90% · Crítico</span>
+            <span>{formatUSD(k.lineaCreditoUSD)}</span>
+          </div>
+        </div>
+        {/* Desglose numérico */}
+        <div className="grid grid-cols-3 gap-3 mt-3">
+          <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+            <p className="text-xs text-gray-400 mb-1">Saldo Usado</p>
+            <p className="text-base font-bold text-gray-800">{formatMXN(k.saldoActual)}</p>
+            <p className="text-xs text-gray-400">{formatUSD(k.saldoActual / k.tipoCambio)}</p>
+          </div>
+          <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+            <p className="text-xs text-gray-400 mb-1">Disponible</p>
+            <p className="text-base font-bold text-green-700">{formatMXN(disponibleMXN)}</p>
+            <p className="text-xs text-gray-400">{formatUSD(disponibleUSD)}</p>
+          </div>
+          <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+            <p className="text-xs text-gray-400 mb-1">DSO Actual</p>
+            <p className="text-base font-bold text-blue-700">{k.dso} días</p>
+            <p className="text-xs text-gray-400">promedio de cobro</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── KPI CARDS ── */}
+      <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Total</p>
+          <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoActual)}</p>
+          <p className="text-xs text-gray-400 mt-1">{usPct}% de la línea usada</p>
+        </div>
+        <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4 ${k.saldoVencido > 0 ? "border-red-500" : "border-green-500"}`}>
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Vencido</p>
+          <p className={`text-2xl font-bold ${k.saldoVencido > 0 ? "text-red-600" : "text-green-600"}`}>
+            {formatMXN(k.saldoVencido)}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">{k.saldoVencido > 0 ? `${Math.round((k.saldoVencido / k.saldoActual) * 100)}% del saldo total`  : "Sin vencidos"}</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-purple-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Notas de Crédito</p>
+          <p className="text-2xl font-bold text-purple-700">{formatMXN(k.saldoNC)}</p>
+          <p className="text-xs text-gray-400 mt-1">A aplicar en próximos pagos</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-yellow-400">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">A Vencer (semana)</p>
+          <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoAVencer)}</p>
+          <p className="text-xs text-gray-400 mt-1">Próximos 7 días</p>
+        </div>
+      </div>
+
+      {/* ── AGING DE FACTURAS + VENCIMIENTOS POR MES ── */}
+      <div className="grid grid-cols-1 gap-6 mb-6 md:grid-cols-2">
+
+        {/* Aging */}
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <CardHeader titulo="Aging de Facturas" icono="📅" />
+          <div className="space-y-3">
+            {[
+              { label: "0 – 30 días",  monto: ag.d0_30,  color: "#22c55e", bg: "bg-green-500",  tag: "bg-green-100 text-green-700",  icono: "✅" },
+              { label: "31 – 60 días", monto: ag.d31_60, color: "#3b82f6", bg: "bg-blue-400",   tag: "bg-blue-100 text-blue-700",    icono: "🔵" },
+              { label: "61 – 90 días", monto: ag.d61_90, color: "#eab308", bg: "bg-yellow-400", tag: "bg-yellow-100 text-yellow-700", icono: "⚠️" },
+              { label: "+ 90 días",    monto: ag.mas90,  color: "#ef4444", bg: "bg-red-500",    tag: "bg-red-100 text-red-700",       icono: "🔴" },
+            ].map(({ label, monto, color, bg, tag, icono }) => (
+              <div key={label}>
+                <div className="flex justify-between items-center text-sm mb-1">
+                  <div className="flex items-center gap-1.5">
+                    <span>{icono}</span>
+                    <span className="text-gray-700 font-medium">{label}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-gray-800">{formatMXN(monto)}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${tag}`}>{agPct(monto)}%</span>
+                  </div>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${bg}`} style={{ width: `${agPct(monto)}%` }}></div>
+                </div>
+              </div>
+            ))}
+            <div className="border-t pt-3 flex justify-between text-sm">
+              <span className="text-gray-500">Total cartera</span>
+              <span className="font-bold text-gray-800">{formatMXN(agTotal)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Vencimientos por mes */}
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <CardHeader titulo="Vencimientos por Mes" icono="🗓️" />
+          <div className="space-y-4">
+            {vmEntries.map(([mes, monto]) => {
+              const pct = Math.round((monto / vmMax) * 100);
+              const isPast = mes < "2026-04";
+              return (
+                <div key={mes}>
+                  <div className="flex justify-between items-center text-sm mb-1">
+                    <span className="font-semibold text-gray-700">{mesesLabel[mes] || mes}</span>
+                    <span className="font-bold text-gray-800">{formatMXN(monto)}</span>
+                  </div>
+                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-blue-500"
+                         style={{ width: `${pct}%` }}></div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">{pct}% del mes con mayor vencimiento</p>
+                </div>
+              );
+            })}
+          </div>
+          {/* Mini-resumen */}
+          <div className="mt-4 border-t pt-3 grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <p className="text-gray-400">Total a vencer (3 meses)</p>
+              <p className="font-bold text-gray-800">{formatMXN(Object.values(k.vencimientosMes).reduce((a,b)=>a+b,0))}</p>
+            </div>
+            <div>
+              <p className="text-gray-400">Mes con mayor vencimiento</p>
+              <p className="font-bold text-blue-700">{mesesLabel[vmEntries.reduce((a,b)=>b[1]>a[1]?b:a)[0]]}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── PROYECCIÓN DE COBRO ── */}
+      <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+        <CardHeader titulo="Proyección de Cobro (basada en Sell Out)" icono="📈" />
+        <p className="text-xs text-gray-400 mb-4">
+          Sell out Mar 2026: <strong>{formatMXN(soUltimo)}</strong> · Crecimiento mensual: <strong>+{((tasaCrecMensual - 1) * 100).toFixed(1)}%</strong> · DSO: <strong>{k.dso} días</strong> · TC: ${k.tipoCambio.toFixed(2)} MXN/USD
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="text-left text-xs text-gray-400 uppercase pb-2">Mes</th>
+                <th className="text-right text-xs text-gray-400 uppercase pb-2">Vencimiento</th>
+                <th className="text-right text-xs text-gray-400 uppercase pb-2">Venta Sell Out</th>
+                <th className="text-right text-xs text-gray-400 uppercase pb-2">Balance</th>
+                <th className="text-center text-xs text-gray-400 uppercase pb-2">Cobertura</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {proyMeses.map(({ mes, monto, cobro }) => {
+                const balance = cobro - monto;
+                const cobertura = Math.round((cobro / monto) * 100);
+                return (
+                  <tr key={mes} className="text-sm">
+                    <td className="py-3 font-semibold text-gray-700">{mes}</td>
+                    <td className="py-3 text-right text-gray-700">{formatMXN(monto)}</td>
+                    <td className="py-3 text-right text-blue-700 font-semibold">{formatMXN(cobro)}</td>
+                    <td className={`py-3 text-right font-semibold ${balance >= 0 ? "text-green-600" : "text-red-600"}`}>
+                      {balance >= 0 ? "+" : ""}{formatMXN(balance)}
+                    </td>
+                    <td className="py-3 text-center">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${cobertura >= 100 ? "bg-green-100 text-green-700" : cobertura >= 80 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
+                        {cobertura}%
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-gray-400 mt-3 italic">
+          * Venta Sell Out proyectada con base en la tendencia de crecimiento mensual 2026 (Ene–Mar). No incluye facturas diferidas ni acuerdos comerciales específicos.
+        </p>
+      </div>
+
+      {/* ── FUENTE DEL DATO ── */}
+      <div className="bg-white rounded-2xl shadow-sm p-5">
+        <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Fuente del dato</p>
+        <p className="text-sm text-gray-700 font-medium">{k.correoSemana}</p>
+        <p className="text-xs text-gray-400 mt-1">
+          Correo enviado cada lunes · intranet@acteck.com · Actualización automática 4pm
+          {" · "}TC Banxico {formatFecha(k.ultimaActualizacion)}: ${k.tipoCambio.toFixed(2)} MXN/USD
+        </p>
+      </div>
+
+    </div>
+  );
+}
+
+// ─── PAGOS — CONSTANTES COMPARTIDAS ──────────────────────────────────────────
+const CATEGORIA_META = {
+  promociones:     { label: "Promociones",      icono: "🎯", color: "#E31E26", prefix: "PRO" },
+  marketing:       { label: "Plan de Marketing", icono: "📣", color: "#3b82f6", prefix: "MKT" },
+  gastosFijos:     { label: "Gastos Fijos",      icono: "🏢", color: "#8b5cf6", prefix: "GF"  },
+  gastosVariables: { label: "Gastos Variables",  icono: "📊", color: "#f59e0b", prefix: "GV"  },
+};
+
+const ESTATUS_OPT = [
+  { value: "pendiente",   label: "Pendiente",  bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-400" },
+  { value: "en proceso",  label: "En Proceso", bg: "bg-blue-100",   text: "text-blue-700",   dot: "bg-blue-400"   },
+  { value: "pagado",      label: "Pagado",     bg: "bg-green-100",  text: "text-green-700",  dot: "bg-green-500"  },
+  { value: "vencido",     label: "Vencido",    bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500"    },
+];
+
+const MESES_CORTO = { "01":"Ene","02":"Feb","03":"Mar","04":"Abr","05":"May","06":"Jun","07":"Jul","08":"Ago","09":"Sep","10":"Oct","11":"Nov","12":"Dic" };
+
+// ─── PAGOS Y COMPROMISOS (Supabase) ──────────────────────────────────────────
+function PagosCliente({ cliente }) {
+  const c = cliente;
+
+  // ── State ──
+  const [registros, setRegistros]     = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [catActiva, setCatActiva]     = useState("todas");
+  const [editingCell, setEditingCell] = useState(null); // { id, field }
+  const [editValue, setEditValue]     = useState("");
+  const [saving, setSaving]           = useState(false);
+  const [toast, setToast]             = useState(null); // { msg, type }
+  const [showAdd, setShowAdd]         = useState(false);
+  const [newRow, setNewRow]           = useState({
+    folio: "", concepto: "", categoria: "promociones", monto: "",
+    estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
+    responsable: "", notas: "",
+  });
+
+  // ── Data loading ──
   useEffect(() => {
-    // Check existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        supabase.from("perfiles").select("*").eq("user_id", session.user.id).single()
-          .then(({ data: p }) => {
-            if (p && p.activo) { setAuthUser(session.user); setPerfil(p); }
-            setAuthLoading(false);
-          });
-      } else {
-        setAuthLoading(false);
-      }
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') { setAuthUser(null); setPerfil(null); }
-    });
-    return () => subscription.unsubscribe();
+    if (!DB_CONFIGURED) {
+      // Usar datos del hardcode como modo lectura
+      const seed = Object.entries(PAGOS_DIGITALIFE_2026.categorias).flatMap(([key, cat]) =>
+        cat.items.map(item => ({ ...item, id: item.folio, categoria: key }))
+      );
+      setRegistros(seed);
+      setLoading(false);
+      return;
+    }
+    fetchData();
+    // Suscripción en tiempo real — cualquier cambio se refleja automáticamente
+    const channel = supabase
+      .channel("pagos-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "pagos" }, fetchData)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
   }, []);
 
-  const handleLogin = ({ user, perfil: p }) => { setAuthUser(user); setPerfil(p); };
-  const handleLogout = async () => { await supabase.auth.signOut(); setAuthUser(null); setPerfil(null); };
+  const fetchData = async () => {
+    const { data } = await supabase.from("pagos").select("*").order("created_at");
+    setRegistros(data || []);
+    setLoading(false);
+  };
 
-  
+  // ── Toast ──
+  const flash = (msg, type = "ok") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2500);
+  };
 
-  const [mlData, setMlData] = useState(null);
-    const [mlLoading, setMlLoading] = useState(true);
-    useEffect(() => {
-      let cancelled = false;
-      setMlLoading(true);
-      fetch("/api/ml-sellout?year=2026")
-        .then(r => r.json())
-        .then(data => {
-          if (!cancelled && data.sellOutPorMes) setMlData(data);
-        })
-        .catch(err => console.error("ML sellout fetch error:", err))
-        .finally(() => { if (!cancelled) setMlLoading(false); });
-      return () => { cancelled = true; };
-    }, []);
+  // ── Inline edit helpers ──
+  const startEdit = (id, field, value) => {
+    if (!DB_CONFIGURED) return;
+    setEditingCell({ id, field });
+    setEditValue(value ?? "");
+  };
+  const cancelEdit = () => { setEditingCell(null); setEditValue(""); };
+  const saveEdit   = async () => {
+    if (!editingCell) return;
+    const { id, field } = editingCell;
+    const value = field === "monto" ? (parseFloat(editValue) || 0) : (editValue || null);
+    // Actualización optimista
+    setRegistros(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+    cancelEdit();
+    setSaving(true);
+    const { error } = await supabase.from("pagos")
+      .update({ [field]: value, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    setSaving(false);
+    if (error) { flash("Error al guardar ✗", "err"); fetchData(); }
+    else flash("Guardado ✓");
+  };
 
-  // Enrich ML client with live data
-  const clientesDinamicos = { ...clientes };
-  if (mlData) {
-    const mesesArr = Object.keys(mlData.sellOutPorMes || {}).sort((a,b) => Number(a) - Number(b));
-    const ultimoMes = mesesArr.length > 0 ? mesesArr[mesesArr.length - 1] : null;
-    const sellOutUltimoMes = ultimoMes ? mlData.sellOutPorMes[ultimoMes] : 0;
-    clientesDinamicos.mercadolibre = {
-      ...clientes.mercadolibre,
-      ejecutivo: "Fernando Cabrera",
-      kpis: {
-        ...clientes.mercadolibre.kpis,
-        sellOut: sellOutUltimoMes,
-        sellOutAcumulado: mlData.totalMonto || 0,
-        ultimoMes: ultimoMes ? ["","Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][Number(ultimoMes)] : "---",
-      },
-      tendencia: {
-        ...clientes.mercadolibre.tendencia,
-        sellOut: mesesArr.map(m => mlData.sellOutPorMes[m]),
-      },
-      sellOutMarca: mlData.sellOutPorMarca || {},
-      sellOutPorMesMarca: mlData.sellOutPorMesMarca || {},
-      totalOrdenes: mlData.totalOrdenes || 0,
-      totalMonto: mlData.totalMonto || 0,
+  // ── Add record ──
+  const handleAdd = async () => {
+    if (!newRow.concepto.trim()) return;
+    const meta   = CATEGORIA_META[newRow.categoria] || CATEGORIA_META.promociones;
+    const sameC  = registros.filter(r => r.categoria === newRow.categoria).length;
+    const folio  = newRow.folio.trim() || `${meta.prefix}-${String(sameC + 1).padStart(3, "0")}`;
+    const record = {
+      ...newRow, folio,
+      monto:             parseFloat(newRow.monto) || 0,
+      fecha_compromiso:  newRow.fecha_compromiso  || null,
+      fecha_pago_real:   newRow.fecha_pago_real   || null,
     };
-  }
+    const { data, error } = await supabase.from("pagos").insert(record).select().single();
+    if (error) { flash("Error al agregar ✗", "err"); return; }
+    setRegistros(prev => [...prev, data]);
+    setNewRow({ folio: "", concepto: "", categoria: "promociones", monto: "",
+                estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
+                responsable: "", notas: "" });
+    setShowAdd(false);
+    flash("Registro agregado ✓");
+  };
 
-  
-    const [clienteActivo, setClienteActivo] = useState("digitalife");
+  // ── Delete record ──
+  const handleDelete = async (id) => {
+    if (!window.confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")) return;
+    setRegistros(prev => prev.filter(r => r.id !== id));
+    const { error } = await supabase.from("pagos").delete().eq("id", id);
+    if (error) { flash("Error al eliminar ✗", "err"); fetchData(); }
+    else flash("Eliminado ✓");
+  };
+
+  // ── Computed KPIs ──
+  const filtered      = catActiva === "todas" ? registros : registros.filter(r => r.categoria === catActiva);
+  const totalPagado   = registros.filter(r => r.estatus === "pagado").reduce((s, r) => s + (r.monto || 0), 0);
+  const totalPorPagar = registros.filter(r => ["pendiente","en proceso"].includes(r.estatus)).reduce((s, r) => s + (r.monto || 0), 0);
+  const totalVencido  = registros.filter(r => r.estatus === "vencido").reduce((s, r) => s + (r.monto || 0), 0);
+  const totalAnio     = registros.reduce((s, r) => s + (r.monto || 0), 0);
+
+  // ── Monthly breakdown ──
+  const monthlyBreakdown = () => {
+    const months = {};
+    registros.forEach(r => {
+      const d = r.fecha_compromiso;
+      if (!d) return;
+      const m = typeof d === "string" ? d.slice(0, 7) : new Date(d).toISOString().slice(0, 7);
+      if (!months[m]) months[m] = { mes: m, total: 0, promociones: 0, marketing: 0, gastosFijos: 0, gastosVariables: 0 };
+      months[m].total += (r.monto || 0);
+      if (CATEGORIA_META[r.categoria]) months[m][r.categoria] = (months[m][r.categoria] || 0) + (r.monto || 0);
+    });
+    return Object.values(months).sort((a, b) => a.mes.localeCompare(b.mes));
+  };
+
+  // ── Inline cell renderer (función, no componente, para evitar remounts) ──
+  const renderCell = (row, field, type = "text") => {
+    const isEditing = editingCell?.id === row.id && editingCell?.field === field;
+    const inputCls  = "w-full border border-blue-400 rounded px-2 py-1 text-sm outline-none bg-blue-50 focus:ring-1 focus:ring-blue-400";
+
+    if (isEditing) {
+      if (type === "sel-estatus") {
+        return (
+          <select autoFocus value={editValue} className={inputCls}
+            onChange={e => setEditValue(e.target.value)} onBlur={saveEdit}
+            onKeyDown={e => { if (e.key==="Enter") saveEdit(); if (e.key==="Escape") cancelEdit(); }}>
+            {ESTATUS_OPT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        );
+      }
+      if (type === "sel-cat") {
+        return (
+          <select autoFocus value={editValue} className={inputCls}
+            onChange={e => setEditValue(e.target.value)} onBlur={saveEdit}
+            onKeyDown={e => { if (e.key==="Enter") saveEdit(); if (e.key==="Escape") cancelEdit(); }}>
+            {Object.entries(CATEGORIA_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        );
+      }
+      return (
+        <input autoFocus type={type} value={editValue} className={inputCls}
+          onChange={e => setEditValue(e.target.value)} onBlur={saveEdit}
+          onKeyDown={e => { if (e.key==="Enter") saveEdit(); if (e.key==="Escape") cancelEdit(); }} />
+      );
+    }
+
+    // Modo display
+    const handleClick = () => {
+      if (field === "monto") startEdit(row.id, field, row.monto ?? "");
+      else startEdit(row.id, field, row[field] ?? "");
+    };
+
+    if (field === "estatus") {
+      const s = ESTATUS_OPT.find(o => o.value === (row.estatus || "pendiente")) || ESTATUS_OPT[0];
+      return (
+        <div className={DB_CONFIGURED ? "cursor-pointer" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${s.bg} ${s.text}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`}></span>{s.label}
+          </span>
+        </div>
+      );
+    }
+    if (field === "categoria") {
+      const m = CATEGORIA_META[row.categoria] || CATEGORIA_META.promociones;
+      return (
+        <div className={DB_CONFIGURED ? "cursor-pointer" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
+          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full text-white font-semibold whitespace-nowrap"
+                style={{ backgroundColor: m.color }}>{m.icono} {m.label}</span>
+        </div>
+      );
+    }
+    if (field === "monto") {
+      return (
+        <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
+          {(row.monto || 0) > 0
+            ? <span className="font-bold text-gray-800">{formatMXN(row.monto)}</span>
+            : <span className="text-gray-400 text-xs italic">Por definir</span>
+          }
+        </div>
+      );
+    }
+    if (field === "fecha_compromiso" || field === "fecha_pago_real") {
+      return (
+        <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors whitespace-nowrap" : "whitespace-nowrap"} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
+          {row[field] ? <span className="text-gray-600">{formatFecha(row[field])}</span> : <span className="text-gray-300">—</span>}
+        </div>
+      );
+    }
+    return (
+      <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
+        {row[field] ? <span className="text-gray-700">{row[field]}</span> : <span className="text-gray-300">—</span>}
+      </div>
+    );
+  };
+
+  // ────────────────────────── RENDER ──────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl shadow-lg text-sm font-semibold transition-all ${toast.type === "err" ? "bg-red-500 text-white" : "bg-green-600 text-white"}`}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
+                 style={{ backgroundColor: c.color }}>💰</div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Pagos y Compromisos</h1>
+              <p className="text-sm text-gray-400 mt-0.5">
+                <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
+                {" · "}Promociones · Marketing · Gastos Fijos · Variables
+                {saving && <span className="ml-2 text-blue-400 animate-pulse">● Guardando...</span>}
+              </p>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-xs text-gray-400 block">
+              Actualizado: {formatFecha(c.cartera?.ultimaActualizacion || "2026-04-07")}
+              {c.cartera?.horaActualizacion ? ` · ${c.cartera.horaActualizacion} hrs` : ""}
+            </span>
+            {c.cartera?.tipoCambio && (
+              <span className="text-xs text-gray-400">TC: ${c.cartera.tipoCambio.toFixed(2)} MXN/USD</span>
+            )}
+            <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-semibold ${DB_CONFIGURED ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+              {DB_CONFIGURED ? "✅ Sincronizado" : "⚙️ Solo lectura"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Banner de configuración pendiente */}
+      {!DB_CONFIGURED && (
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 mb-6 flex items-start gap-3">
+          <span className="text-2xl">⚙️</span>
+          <div>
+            <p className="font-semibold text-orange-800 mb-1">Configuración requerida para guardar cambios</p>
+            <p className="text-sm text-orange-700 mb-2">
+              Para que todos los cambios se guarden y sean visibles para el equipo, configura las variables en Vercel y la tabla en Supabase (ver instrucciones).
+            </p>
+            <code className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded block w-fit">
+              VITE_SUPABASE_URL · VITE_SUPABASE_ANON_KEY
+            </code>
+          </div>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-16">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mr-3"></div>
+          <span className="text-gray-500">Cargando datos...</span>
+        </div>
+      )}
+
+      {!loading && (
+        <>
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
+            <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-green-500">
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Pagado</p>
+              <p className="text-2xl font-bold text-green-700">{totalPagado > 0 ? formatMXN(totalPagado) : "$0"}</p>
+              <p className="text-xs text-gray-400 mt-1">{registros.filter(r => r.estatus === "pagado").length} conceptos</p>
+            </div>
+            <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-yellow-400">
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Por Pagar</p>
+              <p className="text-2xl font-bold text-yellow-600">{totalPorPagar > 0 ? formatMXN(totalPorPagar) : "$0"}</p>
+              <p className="text-xs text-gray-400 mt-1">{registros.filter(r => ["pendiente","en proceso"].includes(r.estatus)).length} conceptos</p>
+            </div>
+            <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4 ${totalVencido > 0 ? "border-red-500" : "border-gray-200"}`}>
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Vencido</p>
+              <p className={`text-2xl font-bold ${totalVencido > 0 ? "text-red-600" : "text-gray-400"}`}>{totalVencido > 0 ? formatMXN(totalVencido) : "$0"}</p>
+              <p className="text-xs text-gray-400 mt-1">{registros.filter(r => r.estatus === "vencido").length} conceptos</p>
+            </div>
+            <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500">
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total 2026</p>
+              <p className="text-2xl font-bold text-gray-800">{totalAnio > 0 ? formatMXN(totalAnio) : "$0"}</p>
+              <p className="text-xs text-gray-400 mt-1">{registros.length} conceptos registrados</p>
+            </div>
+          </div>
+
+          {/* Category summary cards */}
+          <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
+            {Object.entries(CATEGORIA_META).map(([key, meta]) => {
+              const items  = registros.filter(r => r.categoria === key);
+              const pagado = items.filter(r => r.estatus === "pagado").reduce((s, r) => s + (r.monto || 0), 0);
+              const total  = items.reduce((s, r) => s + (r.monto || 0), 0);
+              const pct    = total > 0 ? Math.round(pagado / total * 100) : 0;
+              const active = catActiva === key;
+              return (
+                <button key={key} onClick={() => setCatActiva(active ? "todas" : key)}
+                  className={`bg-white rounded-2xl shadow-sm p-4 text-left transition-all border-2 ${active ? "shadow-md" : "border-transparent hover:border-gray-200"}`}
+                  style={{ borderColor: active ? meta.color : undefined }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">{meta.icono}</span>
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide leading-tight">{meta.label}</p>
+                  </div>
+                  <p className="text-lg font-bold text-gray-800 mb-2">
+                    {total > 0 ? formatMXN(total) : <span className="text-gray-400 text-sm font-normal">Sin monto</span>}
+                  </p>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: meta.color }}></div>
+                  </div>
+                  <p className="text-xs text-gray-400">{pct}% pagado · {items.length} conceptos</p>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Main table */}
+          <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+
+            {/* Filter tabs + Add button */}
+            <div className="flex items-center gap-2 mb-5 flex-wrap">
+              <button onClick={() => setCatActiva("todas")}
+                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${catActiva === "todas" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                Todas
+              </button>
+              {Object.entries(CATEGORIA_META).map(([key, meta]) => (
+                <button key={key} onClick={() => setCatActiva(catActiva === key ? "todas" : key)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${catActiva === key ? "text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                  style={catActiva === key ? { backgroundColor: meta.color } : {}}>
+                  <span>{meta.icono}</span>{meta.label}
+                </button>
+              ))}
+              <span className="ml-auto text-xs text-gray-400">{filtered.length} registro{filtered.length !== 1 ? "s" : ""}</span>
+              {DB_CONFIGURED && (
+                <button onClick={() => setShowAdd(!showAdd)}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white rounded-full text-sm font-semibold hover:bg-blue-700 transition-colors">
+                  ＋ Agregar
+                </button>
+              )}
+            </div>
+
+            {/* Add form */}
+            {showAdd && DB_CONFIGURED && (
+              <div className="mb-5 p-4 bg-blue-50 rounded-xl border border-blue-200">
+                <p className="text-sm font-semibold text-blue-800 mb-3">Nuevo registro</p>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {[
+                    { label: "Categoría *", key: "categoria", type: "select-cat" },
+                    { label: "Concepto *",  key: "concepto",  type: "text"       },
+                    { label: "Monto (MXN)", key: "monto",     type: "number"     },
+                    { label: "Estatus",     key: "estatus",   type: "select-est" },
+                    { label: "F. Compromiso", key: "fecha_compromiso", type: "date" },
+                    { label: "F. Pago Real",  key: "fecha_pago_real",  type: "date" },
+                    { label: "Responsable",   key: "responsable",      type: "text" },
+                    { label: "Notas",         key: "notas",            type: "text" },
+                  ].map(({ label, key, type }) => (
+                    <div key={key}>
+                      <label className="text-xs text-gray-500 block mb-1">{label}</label>
+                      {type === "select-cat" ? (
+                        <select value={newRow.categoria} onChange={e => setNewRow(p => ({ ...p, categoria: e.target.value }))}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
+                          {Object.entries(CATEGORIA_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                        </select>
+                      ) : type === "select-est" ? (
+                        <select value={newRow.estatus} onChange={e => setNewRow(p => ({ ...p, estatus: e.target.value }))}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
+                          {ESTATUS_OPT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      ) : (
+                        <input type={type} value={newRow[key] || ""} placeholder={key === "monto" ? "0" : ""}
+                          onChange={e => setNewRow(p => ({ ...p, [key]: e.target.value }))}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button onClick={handleAdd} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors">
+                    Guardar registro
+                  </button>
+                  <button onClick={() => setShowAdd(false)} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Folio</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 min-w-36">Concepto {DB_CONFIGURED && <span className="text-blue-300 normal-case font-normal">(click p/editar)</span>}</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Categoría</th>
+                    <th className="text-right text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Monto</th>
+                    <th className="text-center text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Estatus</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">F. Compromiso</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">F. Pago Real</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Responsable</th>
+                    <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3">Notas</th>
+                    {DB_CONFIGURED && <th className="pb-3 w-8"></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((row, i) => (
+                    <tr key={row.id} className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${i % 2 === 1 ? "bg-gray-50/30" : ""}`}>
+                      <td className="py-2.5 pr-3">
+                        <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">{row.folio}</span>
+                      </td>
+                      <td className="py-2.5 pr-3 min-w-36">{renderCell(row, "concepto")}</td>
+                      <td className="py-2.5 pr-3">{renderCell(row, "categoria", "sel-cat")}</td>
+                      <td className="py-2.5 pr-3 text-right">{renderCell(row, "monto", "number")}</td>
+                      <td className="py-2.5 pr-3 text-center">{renderCell(row, "estatus", "sel-estatus")}</td>
+                      <td className="py-2.5 pr-3">{renderCell(row, "fecha_compromiso", "date")}</td>
+                      <td className="py-2.5 pr-3">{renderCell(row, "fecha_pago_real", "date")}</td>
+                      <td className="py-2.5 pr-3">{renderCell(row, "responsable")}</td>
+                      <td className="py-2.5">{renderCell(row, "notas")}</td>
+                      {DB_CONFIGURED && (
+                        <td className="py-2.5 pl-1">
+                          <button onClick={() => handleDelete(row.id)}
+                            className="text-gray-300 hover:text-red-500 transition-colors text-base" title="Eliminar registro">🗑</button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filtered.length === 0 && (
+                <div className="text-center py-8 text-gray-400">
+                  <p className="text-3xl mb-2">📭</p>
+                  <p className="text-sm">No hay registros{catActiva !== "todas" ? " en esta categoría" : ""}</p>
+                </div>
+              )}
+            </div>
+            <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+              <p className="text-xs text-gray-400">
+                {DB_CONFIGURED ? "✅ Cambios guardados y sincronizados para todo el equipo." : "⚠️ Modo lectura — configura Supabase para habilitar la edición."}
+                {" "}💡 <strong className="text-gray-600">Pendiente</strong> · <strong className="text-gray-600">En Proceso</strong> · <strong className="text-gray-600">Pagado</strong> · <strong className="text-gray-600">Vencido</strong>
+              </p>
+            </div>
+          </div>
+
+          {/* Monthly summary table */}
+          {(() => {
+            const mb = monthlyBreakdown();
+            if (mb.length === 0) return null;
+            return (
+              <div className="bg-white rounded-2xl shadow-sm p-5">
+                <CardHeader titulo="Resumen General por Mes y Categoría" icono="📅" />
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left text-xs text-gray-400 uppercase pb-3 pr-4">Mes</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.promociones.color }}>Promociones</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.marketing.color }}>Marketing</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.gastosFijos.color }}>Gastos Fijos</th>
+                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.gastosVariables.color }}>G. Variables</th>
+                        <th className="text-right text-xs text-gray-700 uppercase font-bold pb-3">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mb.map(m => {
+                        const [yr, mo] = m.mes.split("-");
+                        return (
+                          <tr key={m.mes} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                            <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTO[mo]} {yr}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.gastosFijos    > 0 ? formatMXN(m.gastosFijos)    : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.gastosVariables> 0 ? formatMXN(m.gastosVariables): <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2.5 text-right font-bold text-gray-800">{formatMXN(m.total)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-gray-200">
+                        <td className="pt-3 font-bold text-gray-700 text-sm">TOTAL ANUAL</td>
+                        {["promociones","marketing","gastosFijos","gastosVariables"].map(cat => (
+                          <td key={cat} className="pt-3 pr-4 text-right font-bold text-gray-700">
+                            {formatMXN(registros.filter(r => r.categoria === cat).reduce((s, r) => s + (r.monto || 0), 0))}
+                          </td>
+                        ))}
+                        <td className="pt-3 text-right font-bold text-blue-700">{formatMXN(totalAnio)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+        </>
+      )}
+
+    </div>
+  );
+}
+
+
+// ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
+export default function App() {
+  const [clienteActivo, setClienteActivo] = useState("digitalife");
   const [modoPresent, setModoPresent] = useState(false);
   const [paginaActiva, setPaginaActiva] = useState("home");
-  const [showUpdatePanel, setShowUpdatePanel] = useState(false);
-  const [showUpload, setShowUpload] = useState(false);
-  const [vistaActual, setVistaActual] = useState(null);
-  const [clienteKey, setClienteKey] = useState(null);
+  const [perfil, setPerfil] = useState(null);
 
-  // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ DATOS DESDE SUPABASE (ventas_mensuales) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ
-  const [ventasDB, setVentasDB] = React.useState(null);
-  const [ventasVer, setVentasVer] = React.useState(0);
-
-  React.useEffect(() => {
-    if (!DB_CONFIGURED) return;
-    supabase.from("ventas_mensuales").select("*")
-      .eq("cliente", clienteActivo).eq("anio", 2026).order("mes")
-      .then(({ data }) => setVentasDB(data || []));
-  }, [clienteActivo, ventasVer]);
-
-  const c = React.useMemo(() => {
-    const base = clientesDinamicos[clienteActivo];
-    if (!base) return { kpis: {}, pagos: [], promociones: [], minuta: [], pendientes: [], nombre: '', ventas: {} };
-    if (!ventasDB || ventasDB.length === 0) return base;
-    const sellInMap = {};
-    const sellOutMap = {};
-    ventasDB.forEach(r => { sellInMap[r.mes] = r.sell_in; sellOutMap[r.mes] = r.sell_out; });
-    const ultimoMes = Math.max(...ventasDB.map(r => r.mes));
-    const lastRow = ventasDB.find(r => r.mes === ultimoMes);
-    const cuotaAcum = Object.entries(DIGITALIFE_REAL.cuota30M)
-      .filter(([m]) => parseInt(m) <= ultimoMes)
-      .reduce((a, [, v]) => a + v, 0);
-    return {
-      ...base,
-      kpis: {
-        ...base.kpis,
-        sellInMes: sellInMap[ultimoMes] || base.kpis.sellInMes,
-        sellOut: sellOutMap[ultimoMes] || base.kpis.sellOut,
-        sellInAcumulado: Object.values(sellInMap).reduce((a, b) => a + b, 0),
-        sellOutAcumulado: Object.values(sellOutMap).reduce((a, b) => a + b, 0),
-        cuotaAcumulada: cuotaAcum || base.kpis.cuotaAcumulada,
-        cuotaMes: DIGITALIFE_REAL.cuota30M[ultimoMes] || base.kpis.cuotaMes,
-        cuotaMes25M: DIGITALIFE_REAL.cuota25M[ultimoMes] || base.kpis.cuotaMes25M,
-        diasInventario: lastRow?.inventario_dias ?? base.kpis.diasInventario,
-        inventarioValor: lastRow?.inventario_valor ?? base.kpis.inventarioValor,
-        ultimoMes: NOMBRES_MES[ultimoMes] || base.kpis.ultimoMes,
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        const email = data?.user?.email || null;
+        const rol = email && ADMIN_EMAILS.includes(email.toLowerCase()) ? 'admin' : 'user';
+        setPerfil({ email, rol });
+      } catch {
+        setPerfil({ email: null, rol: 'user' });
       }
-    };
-  }, [clienteActivo, ventasDB]);
+    })();
+  }, []);
+
+  const esAdmin = perfil?.rol === 'admin';
+  const c = clientes[clienteActivo];
 
   // Al cambiar de cliente, volver al home
   const handleClienteChange = (key) => {
@@ -285,96 +1407,138 @@ export default function App() {
     setPaginaActiva("home");
   };
 
-  // Sidebar navigation bridge
-  const handleNavegar = (clienteId, paginaId) => {
-    if (paginaId === 'configuracion') { setVistaActual('configuracion'); return; }
-    setVistaActual(null);
-    if (clienteId) {
-      handleClienteChange(clienteId);
-      setPaginaActiva(paginaId);
-    } else {
-      setClienteActivo(null);
-      setPaginaActiva(paginaId);
-    }
-  };
-
   const navItems = [
-    { id: "home",       label: "Resumen",               icono: "Ã°ÂÂÂ ", habilitado: true  },
-    { id: "analisis",   label: "AnÃÂ¡lisis",                icono: "Ã°ÂÂÂ", habilitado: true  },
-    { id: "estrategia", label: "Estrategia de Producto", icono: "Ã°ÂÂÂ¦", habilitado: true  },
-    { id: "marketing",  label: "Marketing",              icono: "Ã°ÂÂÂ£", habilitado: clienteActivo !== "pcel"  },
-    { id: "pagos",      label: "Pagos",                  icono: "Ã°ÂÂÂ°", habilitado: true  },
-    { id: "cartera",    label: "CrÃÂ©dito y Cobranza",     icono: "Ã°ÂÂÂ", habilitado: true  },
-  ]
-
-  
-  if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><p className="text-gray-400">Cargando...</p></div>;
-  if (!authUser || !perfil) return <LoginPage onLogin={handleLogin} />;
-
+    { id: "home",      label: "Resumen",    icono: "🏠",  habilitado: true  },
+    { id: "cartera",   label: "Crédito y Cobranza", icono: "📊", habilitado: true  },
+    { id: "pagos",     label: "Pagos",      icono: "💰",  habilitado: true  },
+    { id: "analisis",  label: "Análisis",   icono: "📊",  habilitado: false },
+    { id: "estrategia",label: "Estrategia", icono: "🗺️", habilitado: false },
+    ...(esAdmin ? [{ id: "actualizacion", label: "Actualización de datos", icono: "🔄", habilitado: true, admin: true }] : []),
+  ];
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans">
 
       {/* SIDEBAR */}
-      <Sidebar
-        clienteActivo={clienteActivo}
-        paginaActiva={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva}
-        onNavegar={handleNavegar}
-        onActualizarDatos={() => setShowUpdatePanel(true)}
-        onCerrarSesion={handleLogout}
-        perfilUsuario={perfil}
-        modoPresent={false}
-      />
+      <aside className="w-64 bg-white border-r border-gray-100 flex flex-col shadow-sm shrink-0">
+
+        {/* Logo + Botón Modo Presentación */}
+        <div className="p-5 border-b border-gray-100">
+          {!modoPresent ? (
+            <>
+              <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Dashboard Clientes</p>
+              <div className="flex gap-2 mb-3">
+                <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-semibold">Acteck</span>
+                <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-semibold">Balam Rush</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+              <p className="text-xs text-green-600 font-semibold uppercase tracking-widest">Modo Presentación</p>
+            </div>
+          )}
+          <button
+            onClick={() => setModoPresent(!modoPresent)}
+            className={`w-full text-xs font-semibold px-3 py-2 rounded-xl transition-all flex items-center justify-center gap-2 ${
+              modoPresent
+                ? "bg-gray-800 text-white hover:bg-gray-700"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            {modoPresent ? (
+              <><span>🔒</span> Salir de Presentación</>
+            ) : (
+              <><span>👁️</span> Modo Presentación</>
+            )}
+          </button>
+        </div>
+
+        {/* Selector de cliente — se oculta en modo presentación */}
+        {!modoPresent && (
+          <div className="p-4 border-b border-gray-100">
+            <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Cliente</p>
+            <div className="space-y-1">
+              {Object.entries(clientes).map(([key, cl]) => (
+                <button
+                  key={key}
+                  onClick={() => handleClienteChange(key)}
+                  className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    clienteActivo === key
+                      ? "bg-gray-800 text-white"
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cl.color }}></span>
+                    {cl.nombre}
+                    <span className="ml-auto text-xs opacity-60">{cl.marca}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* En modo presentación: mostrar solo el cliente activo */}
+        {modoPresent && (
+          <div className="p-4 border-b border-gray-100">
+            <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Cliente</p>
+            <div className="px-3 py-2.5 rounded-xl bg-gray-800 text-white text-sm font-medium flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.color }}></span>
+              {c.nombre}
+              <span className="ml-auto text-xs opacity-60">{c.marca}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Navegación */}
+        <nav className="p-4 flex-1">
+          <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Secciones</p>
+          <div className="space-y-1">
+            {navItems.map(item => (
+              <button
+                key={item.id}
+                onClick={() => item.habilitado && setPaginaActiva(item.id)}
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                  !item.habilitado
+                    ? "text-gray-400 hover:bg-gray-50 hover:text-gray-600 cursor-not-allowed opacity-60"
+                    : paginaActiva === item.id
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-800"
+                }`}
+                disabled={!item.habilitado}
+                title={!item.habilitado ? "Próximamente" : ""}
+              >
+                <span>{item.icono}</span>
+                {item.label}
+                {!item.habilitado && (
+                  <span className="ml-auto text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">Pronto</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-gray-100">
+          <p className="text-xs text-gray-300 text-center">v1.0 · Abril 2026</p>
+        </div>
+      </aside>
 
       {/* CONTENIDO */}
       <main className="flex-1 overflow-y-auto">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-          {vistaActual === "configuracion" ? (
-            <Configuracion session={{user: authUser, perfil}} />
-          ) : (
-            <>
-            {/* Banner modo presentaciÃÂ³n */}
-        { /* Banner removed */ }
-          {paginaActiva === "resumen" && <ResumenCuentas />}
-          {paginaActiva === "reporte" && <ReporteTab />}
-          {paginaActiva === "resumenClientes" && <ResumenClientesTab />}
-          {paginaActiva === "forecastClientes" && <ForecastClientesTab />}
-          <>
-            <>
-        {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} isML={clienteActivo === "mercadolibre"} />}
-        {paginaActiva === "cartera" && <CreditoCobranza cliente={c} clienteKey={clienteActivo} />}
-        {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
-          {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
-            {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "{c.nombre}"}  clienteKey={clienteActivo} />}
-        {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: clienteActivo })}
-                    {paginaActiva === "forecast" && React.createElement(ForecastCliente, { cliente: c.nombre, clienteKey: clienteActivo })}
-</>
-          </>
-            </>
-          )}
-        </div>
-        </main>
-      {showUpdatePanel && React.createElement(PanelActualizacion, {
-        onClose: function() { setShowUpdatePanel(false); },
-        cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo,
-        clienteKey: clienteActivo,
-        anio: 2026,
-        onVentasUpdate: function() { setVentasVer(function(v) { return v + 1; }); }
-      })}
-
-      {/* Boton flotante Subir Excel central */}
-      {React.createElement('button', {
-        onClick: function() { setShowUpload(true); },
-        className: 'fixed bottom-6 right-6 z-40 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-full shadow-lg font-semibold text-sm',
-        title: 'Subir archivo Excel central',
-        style: { cursor: 'pointer' }
-      }, '📤 Subir Excel central')}
-
-      {React.createElement('div', {
-        className: 'fixed top-3 right-4 z-40 bg-white px-3 py-1 rounded-full shadow border border-gray-200'
-      }, React.createElement(UpdatedAtBadgeX, null))}
-
-      {showUpload && React.createElement(UploadModalX, { onClose: function() { setShowUpload(false); } })}
+        {/* Banner modo presentación */}
+        {modoPresent && (
+          <div className="bg-green-600 text-white text-xs text-center py-1.5 font-medium tracking-wide">
+            Modo Presentación activo — Solo se muestra información de {c.nombre}
+          </div>
+        )}
+        {paginaActiva === "home"    && <HomeCliente cliente={c} />}
+        {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
+        {paginaActiva === "pagos"   && <PagosCliente cliente={c} />}
+        {paginaActiva === "actualizacion" && esAdmin && <ActualizacionDatos perfil={perfil} />}
+      </main>
 
     </div>
   );
