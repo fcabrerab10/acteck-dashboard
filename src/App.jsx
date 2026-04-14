@@ -4,6 +4,9 @@ import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_
 import { formatMXN, formatUSD, formatFecha, diasRestantes, calcularSalud, loadSheetJS } from './lib/utils';
 import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, Sidebar } from './components';
 import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, ForecastCliente } from './modules/comercial';
+import ReporteTab from './modules/comercial/ReporteTab';
+import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
+import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
 import LoginPage from './modules/auth/LoginPage';
 import { Configuracion } from './modules/configuracion';
 
@@ -332,24 +335,9 @@ export default function App() {
             {/* Banner modo presentaciÃÂ³n */}
         { /* Banner removed */ }
           {paginaActiva === "resumen" && <ResumenCuentas />}
-          {paginaActiva === "resumenClientes" && (
-            <div className="p-10">
-              <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
-                <div className="text-6xl mb-4">ð§</div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">Resumen de Clientes</h2>
-                <p className="text-gray-500">En construcciÃ³n â PrÃ³ximamente verÃ¡s el total consolidado de los 3 clientes y un mini resumen de cada uno.</p>
-              </div>
-            </div>
-          )}
-          {paginaActiva === "forecastClientes" && (
-            <div className="p-10">
-              <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
-                <div className="text-6xl mb-4">ð¯</div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">Forecast Clientes</h2>
-                <p className="text-gray-500">En construcciÃ³n â AquÃ­ verÃ¡s el forecast consolidado de Digitalife, PCEL y Mercado Libre.</p>
-              </div>
-            </div>
-          )}
+          {paginaActiva === "reporte" && <ReporteTab />}
+          {paginaActiva === "resumenClientes" && <ResumenClientesTab />}
+          {paginaActiva === "forecastClientes" && <ForecastClientesTab />}
           <>
             <>
         {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} isML={clienteActivo === "mercadolibre"} />}

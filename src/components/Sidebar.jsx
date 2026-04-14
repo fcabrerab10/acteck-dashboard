@@ -68,6 +68,7 @@ const MENU_CONFIG = [
     label: 'Dirección Comercial',
     emoji: '📊',
     items: [
+      { id: 'reporte',          label: 'Reporte',              emoji: '📋' },
       { id: 'resumenClientes',  label: 'Resumen de Clientes', emoji: '📈' },
       { id: 'forecastClientes', label: 'Forecast Clientes',   emoji: '🎯' },
       { id: 'adminClientes',    label: 'Administración de Clientes', emoji: '👥', type: 'clientes' },

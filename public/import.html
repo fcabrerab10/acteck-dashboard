@@ -176,9 +176,9 @@ const SHEETS = [
   { name: 'Vw_TablaH_Ventas',      table: 'ventas_erp',          map: mapVentas,    filter: r => r.venta_id!==null && r.venta_renglon!==null, async: false, chunk: 150 },
   { name: 'Sellout Digitalife',    table: 'sellout_detalle',     map: mapSelloutDL, filter: r => r.fecha && r.no_parte, async: true, uniqueKey: r => r.cliente+'|'+r.fecha+'|'+r.no_parte+'|'+r.row_hash },
   { name: 'Inventario Digitalife', table: 'inventario_cliente',  map: mapInvDL,     filter: r => r.sku, async: false },
-  { name: 'Roadmap Q2 2026',       table: 'roadmap_sku',         map: mapRoadmap,   filter: r => r && r.sku, async: false, uniqueKey: r => r.sku },
-  { name: 'BD Lista de Precios',   table: 'precios_sku',         map: mapPrecios,   filter: r => r && r.sku, async: false, uniqueKey: r => r.sku },
-  { name: 'Transito y Arribos',    table: 'transito_sku',        map: mapTransito,  filter: r => r && r.sku, async: true,  uniqueKey: r => r.sku+'|'+r.row_hash }
+  { name: 'Roadmap Q2 2026',       table: 'roadmap_sku',         map: mapRoadmap,   filter: r => r && r.sku, async: false, addSortOrder: true, uniqueKey: r => r.sku },
+  { name: 'BD Lista de Precios',   table: 'precios_sku',         map: mapPrecios,   filter: r => r && r.sku, async: false, addSortOrder: true, uniqueKey: r => r.sku },
+  { name: 'Transito y Arribos',    table: 'transito_sku',        map: mapTransito,  filter: r => r && r.sku, async: true,  addSortOrder: true, uniqueKey: r => r.sku+'|'+r.row_hash }
 ];
 
 async function postChunk(table, rows, attempt = 1) {
@@ -233,6 +233,7 @@ $('go').addEventListener('click', async () => {
       if (cfg.async) mapped = await Promise.all(raw.map(cfg.map));
       else mapped = raw.map(cfg.map);
       mapped = mapped.filter(cfg.filter);
+      if (cfg.addSortOrder) mapped = mapped.map((r, i) => Object.assign({}, r, { sort_order: i + 1 }));
           if (cfg.uniqueKey) { const seen = new Set(); const dedup = []; for (const row of mapped) { const k = cfg.uniqueKey(row); if (k == null) { dedup.push(row); continue; } if (!seen.has(k)) { seen.add(k); dedup.push(row); } } if (dedup.length !== mapped.length) log('  (dedup: ' + (mapped.length - dedup.length) + ' duplicados removidos en ' + cfg.table + ')'); mapped = dedup; }
       totalRows += mapped.length;
       plans.push({ cfg, rows: mapped });
