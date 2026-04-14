@@ -251,6 +251,7 @@ export default function App() {
 
   const c = React.useMemo(() => {
     const base = clientesDinamicos[clienteActivo];
+    if (!base) return { kpis: {}, pagos: [], promociones: [], minuta: [], pendientes: [], nombre: '', ventas: {} };
     if (!ventasDB || ventasDB.length === 0) return base;
     const sellInMap = {};
     const sellOutMap = {};
