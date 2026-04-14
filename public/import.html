@@ -174,11 +174,11 @@ async function mapTransito(r) {
 const SHEETS = [
   { name: 'Vw_TablaH_Inventario',  table: 'inventario_acteck',   map: mapInvActeck, filter: r => r.articulo && r.no_almacen!==null, async: false },
   { name: 'Vw_TablaH_Ventas',      table: 'ventas_erp',          map: mapVentas,    filter: r => r.venta_id!==null && r.venta_renglon!==null, async: false, chunk: 150 },
-  { name: 'Sellout Digitalife',    table: 'sellout_detalle',     map: mapSelloutDL, filter: r => r.fecha && r.no_parte, async: true, uniqueKey: r => r.cliente+'|'+r.fecha+'|'+r.no_parte+'|'+r.row_hash },
+  { name: 'Sellout Digitalife',    table: 'sellout_detalle',     map: mapSelloutDL, filter: r => r.fecha && r.no_parte, async: true, uniqueKey: r => r.cliente+'|'+r.fecha+'|'+r.no_parte },
   { name: 'Inventario Digitalife', table: 'inventario_cliente',  map: mapInvDL,     filter: r => r.sku, async: false },
   { name: 'Roadmap Q2 2026',       table: 'roadmap_sku',         map: mapRoadmap,   filter: r => r && r.sku, async: false, addSortOrder: true, uniqueKey: r => r.sku },
   { name: 'BD Lista de Precios',   table: 'precios_sku',         map: mapPrecios,   filter: r => r && r.sku, async: false, addSortOrder: true, uniqueKey: r => r.sku },
-  { name: 'Transito y Arribos',    table: 'transito_sku',        map: mapTransito,  filter: r => r && r.sku, async: true,  addSortOrder: true, uniqueKey: r => r.sku+'|'+r.row_hash }
+  { name: 'Transito y Arribos',    table: 'transito_sku',        map: mapTransito,  filter: r => r && r.sku, async: true,  addSortOrder: true, uniqueKey: r => r.sku }
 ];
 
 async function postChunk(table, rows, attempt = 1) {
