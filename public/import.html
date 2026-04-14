@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Subir Excel Central — Acteck Dashboard</title>
+<title>Subir Excel Central â Acteck Dashboard</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
   body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 2rem; }
@@ -23,7 +23,7 @@
 <body>
   <div class="card">
     <h1>Subir Excel Central</h1>
-    <p class="sub">Selecciona el Excel maestro. Pestañas procesadas: <b>Vw_TablaH_Inventario</b>, <b>Vw_TablaH_Ventas</b>, <b>Sellout Digitalife</b>, <b>Inventario Digitalife</b>. Se ignoran Hoja1/2/3 y BD. Upsert SKU por SKU (solo actualiza lo que cambió).</p>
+    <p class="sub">Selecciona el Excel maestro. PestaÃ±as procesadas: <b>Vw_TablaH_Inventario</b>, <b>Vw_TablaH_Ventas</b>, <b>Sellout Digitalife</b>, <b>Inventario Digitalife</b>. Se ignoran Hoja1/2/3 y BD. Upsert SKU por SKU (solo actualiza lo que cambiÃ³).</p>
     <input type="file" id="file" accept=".xlsx,.xls" />
     <div class="row">
       <button id="go">Subir y procesar</button>
@@ -31,7 +31,7 @@
     </div>
     <div class="bar"><div id="bar"></div></div>
     <pre id="log"></pre>
-    <p style="margin-top:1.5rem;color:#64748b;font-size:.85rem"><a href="/">← Volver al dashboard</a></p>
+    <p style="margin-top:1.5rem;color:#64748b;font-size:.85rem"><a href="/">â Volver al dashboard</a></p>
   </div>
 <script>
 const $ = id => document.getElementById(id);
@@ -117,20 +117,68 @@ async function mapSelloutDL(r) {
 
 const mapInvDL = r => ({
   cliente: 'digitalife', sku: s(r.Parte), marca: s(r.Marca),
-  titulo: s(r['Título']) || s(r.Titulo),
+  titulo: s(r['TÃ­tulo']) || s(r.Titulo),
   stock: i(r.Stock),
   costo_convenio: n(r['Costo Convenio']), precio_venta: n(r['Precio Venta']),
   fecha_ultima_venta: d2date(r['Fecha Ultima Venta']),
-  dias_sin_venta: n(r['Días sin Venta']) ?? n(r['Dias sin Venta']),
+  dias_sin_venta: n(r['DÃ­as sin Venta']) ?? n(r['Dias sin Venta']),
   valor: n(r.Valor),
   updated_at: new Date().toISOString()
 });
 
+const pickFirst = (r, aliases) => {
+  if (!r) return null;
+  const keys = Object.keys(r);
+  for (const a of aliases) {
+    const la = a.toString().trim().toLowerCase();
+    for (const k of keys) { if (k && k.toString().trim().toLowerCase() === la) return r[k]; }
+  }
+  return null;
+};
+const mapRoadmap = r => {
+  const sku = s(pickFirst(r, ['SKU','Articulo','Artículo','No_Parte','No Parte']));
+  if (!sku) return null;
+  return {
+    sku,
+    rdmp: s(pickFirst(r, ['RDMP','Roadmap','Road Map','RDMP Q2 2026'])),
+    descripcion: s(pickFirst(r, ['Descripcion','Descripción','Descripcion1','Descripción 1'])),
+    payload: r,
+    updated_at: new Date().toISOString()
+  };
+};
+const mapPrecios = r => {
+  const sku = s(pickFirst(r, ['SKU','Articulo','Artículo','No_Parte','No Parte']));
+  if (!sku) return null;
+  return {
+    sku,
+    precio_aaa: n(pickFirst(r, ['Precio AAA','PrecioAAA','AAA','Precio_AAA'])),
+    descuento: n(pickFirst(r, ['Descuento','Dcto','% Descuento','Descto','%Descuento'])),
+    precio_descuento: n(pickFirst(r, ['Precio con descuento','Precio Descuento','Precio Neto','Precio c/Desc'])),
+    payload: r,
+    updated_at: new Date().toISOString()
+  };
+};
+async function mapTransito(r) {
+  const sku = s(pickFirst(r, ['SKU','Articulo','Artículo','No_Parte','No Parte']));
+  if (!sku) return null;
+  const base = {
+    sku,
+    inventario_transito: n(pickFirst(r, ['Inventario en Transito','Inventario en Tránsito','Inv Transito','Transito','Tránsito'])),
+    siguiente_arribo: d2date(pickFirst(r, ['Siguiente Arribo','Próximo Arribo','Proximo Arribo','ETA','Fecha Arribo'])),
+    payload: r
+  };
+  base.row_hash = await rowHash(base);
+  base.updated_at = new Date().toISOString();
+  return base;
+}
 const SHEETS = [
   { name: 'Vw_TablaH_Inventario',  table: 'inventario_acteck',   map: mapInvActeck, filter: r => r.articulo && r.no_almacen!==null, async: false },
   { name: 'Vw_TablaH_Ventas',      table: 'ventas_erp',          map: mapVentas,    filter: r => r.venta_id!==null && r.venta_renglon!==null, async: false, chunk: 150 },
-  { name: 'Sellout Digitalife',    table: 'sellout_detalle',     map: mapSelloutDL, filter: r => r.fecha && r.no_parte, async: true },
-  { name: 'Inventario Digitalife', table: 'inventario_cliente',  map: mapInvDL,     filter: r => r.sku, async: false }
+  { name: 'Sellout Digitalife',    table: 'sellout_detalle',     map: mapSelloutDL, filter: r => r.fecha && r.no_parte, async: true, uniqueKey: r => r.cliente+'|'+r.fecha+'|'+r.no_parte+'|'+r.row_hash },
+  { name: 'Inventario Digitalife', table: 'inventario_cliente',  map: mapInvDL,     filter: r => r.sku, async: false },
+  { name: 'Roadmap Q2 2026',       table: 'roadmap_sku',         map: mapRoadmap,   filter: r => r && r.sku, async: false, uniqueKey: r => r.sku },
+  { name: 'BD Lista de Precios',   table: 'precios_sku',         map: mapPrecios,   filter: r => r && r.sku, async: false, uniqueKey: r => r.sku },
+  { name: 'Transito y Arribos',    table: 'transito_sku',        map: mapTransito,  filter: r => r && r.sku, async: true,  uniqueKey: r => r.sku+'|'+r.row_hash }
 ];
 
 async function postChunk(table, rows, attempt = 1) {
@@ -172,7 +220,7 @@ $('go').addEventListener('click', async () => {
     log('Archivo: ' + f.name + ' (' + (f.size/1024/1024).toFixed(2) + ' MB)');
     const buf = await f.arrayBuffer();
     const wb = XLSX.read(buf, { cellDates: true });
-    log('Pestañas encontradas: ' + wb.SheetNames.join(', '));
+    log('PestaÃ±as encontradas: ' + wb.SheetNames.join(', '));
 
     // Count total rows to upload for progress
     let totalRows = 0;
@@ -180,21 +228,22 @@ $('go').addEventListener('click', async () => {
     for (const cfg of SHEETS) {
       if (!wb.SheetNames.includes(cfg.name)) { log('(omitida: ' + cfg.name + ' no existe)'); continue; }
       const raw = XLSX.utils.sheet_to_json(wb.Sheets[cfg.name], { defval: null });
-      if (!raw.length) { log('(vacía: ' + cfg.name + ')'); continue; }
+      if (!raw.length) { log('(vacÃ­a: ' + cfg.name + ')'); continue; }
       let mapped;
       if (cfg.async) mapped = await Promise.all(raw.map(cfg.map));
       else mapped = raw.map(cfg.map);
       mapped = mapped.filter(cfg.filter);
+          if (cfg.uniqueKey) { const seen = new Set(); const dedup = []; for (const row of mapped) { const k = cfg.uniqueKey(row); if (k == null) { dedup.push(row); continue; } if (!seen.has(k)) { seen.add(k); dedup.push(row); } } if (dedup.length !== mapped.length) log('  (dedup: ' + (mapped.length - dedup.length) + ' duplicados removidos en ' + cfg.table + ')'); mapped = dedup; }
       totalRows += mapped.length;
       plans.push({ cfg, rows: mapped });
-      log(cfg.name + ' → ' + cfg.table + ': ' + mapped.length + ' filas');
+      log(cfg.name + ' â ' + cfg.table + ': ' + mapped.length + ' filas');
     }
     if (!totalRows) { $('status').innerHTML = '<span class="err">Sin datos para subir</span>'; $('go').disabled = false; return; }
 
     let done = 0;
     for (const { cfg, rows } of plans) {
       const chunkSize = cfg.chunk || 500;
-      log('\n── Subiendo ' + cfg.table + ' (' + rows.length + ' filas, chunks de ' + chunkSize + ')');
+      log('\nââ Subiendo ' + cfg.table + ' (' + rows.length + ' filas, chunks de ' + chunkSize + ')');
       for (let off = 0; off < rows.length; off += chunkSize) {
         const slice = rows.slice(off, off + chunkSize);
         const t0 = Date.now();
@@ -205,9 +254,9 @@ $('go').addEventListener('click', async () => {
         $('status').textContent = `Procesando... ${done.toLocaleString()} / ${totalRows.toLocaleString()} (${Math.round(100*done/totalRows)}%)`;
         if (off === 0 || off % (chunkSize * 10) === 0) log(`  [${cfg.table}] +${slice.length} filas (${dt}ms)`);
       }
-      log('✓ ' + cfg.table + ' completo');
+      log('â ' + cfg.table + ' completo');
     }
-    $('status').innerHTML = '<span class="ok">✓ Carga completa: ' + done.toLocaleString() + ' filas</span>';
+    $('status').innerHTML = '<span class="ok">â Carga completa: ' + done.toLocaleString() + ' filas</span>';
     setBar(100);
   } catch (e) {
     $('status').innerHTML = '<span class="err">Error</span>';
