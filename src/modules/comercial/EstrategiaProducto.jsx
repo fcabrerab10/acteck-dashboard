@@ -12,7 +12,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   const [sugeridoEdits, setSugeridoEdits] = React.useState({});
 
   const formatMXN = (n) => {
-    if (n == null || isNaN(n)) return "—";
+    if (n == null || isNaN(n)) return "â";
     return "$" + Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   };
 
@@ -407,7 +407,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     // By categoria
     const byCategoria = {};
     datos.productos.forEach(p => {
-      const cat = p.categoria || "Sin Categoría";
+      const cat = p.categoria || "Sin CategorÃ­a";
       if (!byCategoria[cat]) byCategoria[cat] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0, invValor: 0 };
       const siForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
       const siMontoForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.monto_pesos || 0), 0);
@@ -448,11 +448,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const minPorTienda = clienteKey === "digitalife" && promedio90d > 0 ? 11 : 0;
         const sugerido = Math.max(minPorTienda, base);
 
+        const precioSku = Number(p.precio_venta) > 0 ? Number(p.precio_venta) : Number(invData && invData.precio_venta || 0);
         return {
           sku: p.sku,
           descripcion: p.descripcion,
           marca: p.marca,
           estado: p.estado,
+          roadmap: p.roadmap || "",
+          precio: precioSku,
           siPiezasTotal,
           promedio90d,
           stock,
@@ -475,26 +478,43 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
       const exportToExcel = async () => {
     const XLSX = await loadSheetJS();
-    if (!XLSX) { alert("Error cargando librería Excel"); return; }
-    const rows = skuDetail.map(s => ({
-      SKU: s.sku,
-      Descripcion: s.descripcion,
-      Marca: s.marca,
-      Estado: s.estado,
-      "SI Piezas": s.siPiezasTotal,
-      "Prom 90d": s.promedio90d,
-      "Stock": s.stock,
-      "Valor Inv": s.valorInv,
-      "SO Monto": s.soMontoTotal,
-      "Sugerido": sugeridoEdits[s.sku] !== undefined ? sugeridoEdits[s.sku] : s.sugerido,
-    }));
+    if (!XLSX) { alert("Error cargando librerÃ­a Excel"); return; }
+    const rows = skuDetail.map(function(s) {
+      var sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
+      var precio = Number(s.precio || 0);
+      var total = sug * precio;
+      return {
+        SKU: s.sku,
+        Descripcion: s.descripcion,
+        Marca: s.marca,
+        Roadmap: s.roadmap || "",
+        Estado: s.estado,
+        "SI Piezas": s.siPiezasTotal,
+        "Prom 90d": s.promedio90d,
+        "Stock": s.stock,
+        "Valor Inv": s.valorInv,
+        "SO Monto": s.soMontoTotal,
+        "Sugerido": sug,
+        "Precio": precio,
+        "Total": total,
+      };
+    }).filter(function(r) {
+      // No exportar renglones en 0
+      return (Number(r.Sugerido) || 0) > 0 && (Number(r.Total) || 0) > 0;
+    });
+    // Fila de totales al final
+    if (rows.length > 0) {
+      var sumSug = rows.reduce(function(a,r){ return a + (Number(r.Sugerido)||0); }, 0);
+      var sumTot = rows.reduce(function(a,r){ return a + (Number(r.Total)||0); }, 0);
+      rows.push({ SKU: "TOTAL", Descripcion: "", Marca: "", Roadmap: "", Estado: "", "SI Piezas": "", "Prom 90d": "", "Stock": "", "Valor Inv": "", "SO Monto": "", "Sugerido": sumSug, "Precio": "", "Total": sumTot });
+    }
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Estrategia");
     XLSX.writeFile(wb, "Estrategia_" + (clienteKey || cliente) + ".xlsx");
   };
 
-  // ———— RENDER ————
+  // ââââ RENDER ââââ
 
   if (!datos && !loading) {
     return React.createElement("div", { className: "max-w-4xl mx-auto p-6" },
@@ -506,7 +526,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             className: "border-2 border-dashed border-blue-300 rounded-xl p-6 text-center bg-blue-50 cursor-pointer transition-all hover:border-blue-500",
             onClick: () => document.getElementById("file-input").click(),
           },
-            React.createElement("p", { className: "text-blue-700 font-semibold mb-2" }, "📁 Selecciona archivos Excel"),
+            React.createElement("p", { className: "text-blue-700 font-semibold mb-2" }, "ð Selecciona archivos Excel"),
             React.createElement("p", { className: "text-sm text-gray-600" }, "Reporte Acteck y/o Resumen Digitalife"),
             React.createElement("input", {
               id: "file-input",
@@ -531,7 +551,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         React.createElement("button", {
           className: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium",
           onClick: () => document.getElementById("file-input-update").click(),
-        }, "📤 Actualizar datos"),
+        }, "ð¤ Actualizar datos"),
         React.createElement("input", {
           id: "file-input-update",
           type: "file",
@@ -550,13 +570,13 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         React.createElement("p", { className: "text-xs text-gray-400 uppercase tracking-wide mb-2" }, "Sell In"),
         React.createElement("p", { className: "text-2xl font-bold text-gray-800 mb-1" }, formatMXN(aggs.sellInTotal)),
         React.createElement("p", { className: "text-xs text-gray-600 mb-3" }, `${aggs.sellInPiezas.toLocaleString("es-MX")} piezas YTD`),
-        React.createElement("p", { className: "text-xs text-gray-500" }, `Mayor: ${MESES_ABREV[aggs.maxSIMes] || "—"}`),
+        React.createElement("p", { className: "text-xs text-gray-500" }, `Mayor: ${MESES_ABREV[aggs.maxSIMes] || "â"}`),
       ),
       React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6 border-t-4", style: { borderColor: "#8B5CF6" } },
         React.createElement("p", { className: "text-xs text-gray-400 uppercase tracking-wide mb-2" }, "Sell Out"),
         React.createElement("p", { className: "text-2xl font-bold text-gray-800 mb-1" }, formatMXN(aggs.sellOutTotal)),
         React.createElement("p", { className: "text-xs text-gray-600 mb-3" }, `${aggs.sellOutPiezas.toLocaleString("es-MX")} piezas YTD`),
-        React.createElement("p", { className: "text-xs text-gray-500" }, `Mayor: ${MESES_ABREV[aggs.maxSOMes] || "—"}`),
+        React.createElement("p", { className: "text-xs text-gray-500" }, `Mayor: ${MESES_ABREV[aggs.maxSOMes] || "â"}`),
       ),
     ),
 
@@ -692,14 +712,19 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 thSort("Valor Inv", "valorInv"),
                 thSort("Prom 90d", "promedio90d"),
                 thSort("Sugerido", "sugerido"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 700, color: "#065F46", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#ECFDF5" } },
+                  React.createElement("div", { style: { fontSize: 10, color: "#10B981", fontWeight: 600 } }, "Σ " + formatMXN((skuDetail || []).reduce(function(acc, r){ var sug = sugeridoEdits[r.sku] !== undefined ? Number(sugeridoEdits[r.sku]) : Number(r.sugerido || 0); return acc + sug * Number(r.precio || 0); }, 0))),
+                  React.createElement("div", {}, "Total")
+                ),
               ),
             ),
             React.createElement("tbody", {},
               skuDetail.map(function(s, idx) {
                 return React.createElement("tr", { key: s.sku, style: { borderBottom: "1px solid #F1F5F9", background: idx % 2 === 0 ? "#fff" : "#FAFBFC" } },
                   React.createElement("td", { style: { padding: "6px", fontWeight: 500, color: "#1E293B", whiteSpace: "nowrap", fontSize: 11 } }, s.sku),
-                  React.createElement("td", { style: { padding: "6px", color: "#64748B", fontSize: 11 } },
-                    React.createElement("span", { style: { padding: "2px 6px", borderRadius: 4, background: s.estado === "D" ? "#D1FAE5" : s.estado === "NVS" ? "#FEF3C7" : "#DBEAFE", color: s.estado === "D" ? "#065F46" : s.estado === "NVS" ? "#92400E" : "#1E40AF", fontSize: 10, fontWeight: 600 } }, s.estado || "-")
+                  React.createElement("td", { style: { padding: "6px", color: "#475569", fontSize: 11, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: (s.roadmap || "") + (s.estado ? " · " + s.estado : "") },
+                    s.roadmap && s.roadmap.length > 0 ? React.createElement("span", { style: { color: "#1E293B", fontWeight: 500 } }, s.roadmap) : React.createElement("span", { style: { padding: "2px 6px", borderRadius: 4, background: s.estado === "D" ? "#D1FAE5" : s.estado === "NVS" ? "#FEF3C7" : "#DBEAFE", color: s.estado === "D" ? "#065F46" : s.estado === "NVS" ? "#92400E" : "#1E40AF", fontSize: 10, fontWeight: 600 } }, s.estado || "-")
                   ),
                   React.createElement("td", { style: { padding: "6px", color: "#475569", fontSize: 11, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.descripcion }, s.descripcion),
                   [1,2,3,4,5,6,7,8,9,10,11,12].map(function(m) {
@@ -718,6 +743,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       style: { width: 60, padding: "2px 4px", border: "1px solid #E2E8F0", borderRadius: 4, textAlign: "right", fontSize: 11 }
                     })
                   ),
+                  React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11, whiteSpace: "nowrap" } }, (s.precio && s.precio > 0) ? ("$" + Number(s.precio).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })) : "-"),
+                  (function(){ var sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0); var tot = sug * Number(s.precio || 0); return React.createElement("td", { style: { textAlign: "right", padding: "6px", color: tot > 0 ? "#065F46" : "#CBD5E1", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", background: tot > 0 ? "#F0FDF4" : "transparent" } }, tot > 0 ? ("$" + Math.round(tot).toLocaleString("es-MX")) : "-"); })(),
                 );
               }),
             ),
@@ -729,18 +756,18 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
 
 
-// ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
+// âââ APP PRINCIPAL ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
-// ——— MARKETING (Supabase) ———
+// âââ MARKETING (Supabase) âââ
 const TIPO_ACTIVIDAD = {
-  banner:     { label: "Banner",      color: "#8b5cf6", icon: "🖼️", tipo: "digital" },
-  mailing:    { label: "Mailing",     color: "#3b82f6", icon: "📧", tipo: "digital" },
-  reel:       { label: "Reel",        color: "#ec4899", icon: "🎬", tipo: "digital" },
-  google_ads: { label: "Google Ads",  color: "#f59e0b", icon: "📢", tipo: "digital" },
-  meta_ads:   { label: "Meta Ads",    color: "#6366f1", icon: "📱", tipo: "digital" },
-  demo:       { label: "Demo Tienda", color: "#10b981", icon: "🏪", tipo: "presencial" },
-  pop:        { label: "Material POP",color: "#14b8a6", icon: "🪧", tipo: "presencial" },
-  taller:     { label: "Taller",      color: "#f97316", icon: "🔧", tipo: "presencial" },
+  banner:     { label: "Banner",      color: "#8b5cf6", icon: "ð¼ï¸", tipo: "digital" },
+  mailing:    { label: "Mailing",     color: "#3b82f6", icon: "ð§", tipo: "digital" },
+  reel:       { label: "Reel",        color: "#ec4899", icon: "ð¬", tipo: "digital" },
+  google_ads: { label: "Google Ads",  color: "#f59e0b", icon: "ð¢", tipo: "digital" },
+  meta_ads:   { label: "Meta Ads",    color: "#6366f1", icon: "ð±", tipo: "digital" },
+  demo:       { label: "Demo Tienda", color: "#10b981", icon: "ðª", tipo: "presencial" },
+  pop:        { label: "Material POP",color: "#14b8a6", icon: "ðª§", tipo: "presencial" },
+  taller:     { label: "Taller",      color: "#f97316", icon: "ð§", tipo: "presencial" },
 };
 
 const MKT_ESTATUS = [
@@ -751,14 +778,14 @@ const MKT_ESTATUS = [
 ];
 
 const TEMPORALIDADES = {
-  semana_santa: { label: "Semana Santa", emoji: "🐣", color: "#ffeaa7" },
-  dia_nino:     { label: "Día del Niño", emoji: "🎈", color: "#fd79a8" },
-  dia_madres:   { label: "Día Madres",   emoji: "💐", color: "#fab1a0" },
-  dia_maestro:  { label: "Día Maestro",  emoji: "📚", color: "#74b9ff" },
-  hot_sale:     { label: "HOT SALE",     emoji: "🔥", color: "#ff7675" },
-  lluvias:      { label: "Temp. Lluvias",emoji: "🌧️", color: "#a29bfe" },
-  buen_fin:     { label: "Buen Fin",     emoji: "🛒", color: "#e17055" },
-  navidad:      { label: "Navidad",      emoji: "🎄", color: "#00b894" },
-  regreso_clases:{ label: "Regreso Clases",emoji: "📓", color: "#fdcb6e" },
+  semana_santa: { label: "Semana Santa", emoji: "ð£", color: "#ffeaa7" },
+  dia_nino:     { label: "DÃ­a del NiÃ±o", emoji: "ð", color: "#fd79a8" },
+  dia_madres:   { label: "DÃ­a Madres",   emoji: "ð", color: "#fab1a0" },
+  dia_maestro:  { label: "DÃ­a Maestro",  emoji: "ð", color: "#74b9ff" },
+  hot_sale:     { label: "HOT SALE",     emoji: "ð¥", color: "#ff7675" },
+  lluvias:      { label: "Temp. Lluvias",emoji: "ð§ï¸", color: "#a29bfe" },
+  buen_fin:     { label: "Buen Fin",     emoji: "ð", color: "#e17055" },
+  navidad:      { label: "Navidad",      emoji: "ð", color: "#00b894" },
+  regreso_clases:{ label: "Regreso Clases",emoji: "ð", color: "#fdcb6e" },
 };
 
