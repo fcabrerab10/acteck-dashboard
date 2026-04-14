@@ -1,35 +1,44 @@
 import { useState, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Lock } from 'lucide-react';
+
+const ChevronRight = ({ className = '' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+);
+const ChevronDown = ({ className = '' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+);
+const Lock = ({ className = '' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+);
 
 /**
- * Sidebar — navegación jerárquica de 3 niveles
+ * Sidebar â navegaciÃ³n jerÃ¡rquica de 3 niveles
  * Preserva el look & feel del dashboard actual (fondo blanco, emojis, acento azul).
  *
  * Props:
- *   clienteActivo  — 'digitalife' | 'pcel' | 'mercadolibre' | null
- *   paginaActiva   — id de la vista actual ('home', 'analisis', 'estrategia',
+ *   clienteActivo  â 'digitalife' | 'pcel' | 'mercadolibre' | null
+ *   paginaActiva   â id de la vista actual ('home', 'analisis', 'estrategia',
  *                    'marketing', 'pagos', 'cartera', 'forecast',
  *                    'resumenClientes', 'forecastClientes', 'configuracion')
- *   onNavegar      — (clienteId | null, paginaId) => void
- *   onActualizarDatos — () => void   (opcional, botón "Actualizar Datos")
- *   onCerrarSesion    — () => void
- *   perfilUsuario  — { nombre, email, rol }
- *   modoPresent    — bool (si true, oculta cosas sensibles)
+ *   onNavegar      â (clienteId | null, paginaId) => void
+ *   onActualizarDatos â () => void   (opcional, botÃ³n "Actualizar Datos")
+ *   onCerrarSesion    â () => void
+ *   perfilUsuario  â { nombre, email, rol }
+ *   modoPresent    â bool (si true, oculta cosas sensibles)
  */
 
-// Pestañas por cliente — IDs idénticos al App.jsx actual
+// PestaÃ±as por cliente â IDs idÃ©nticos al App.jsx actual
 const PESTANAS_POR_CLIENTE = {
   digitalife: {
     label: 'Digitalife',
     badge: { text: 'Acteck', cls: 'bg-red-100 text-red-700' },
     activo: true,
     pestanas: [
-      { id: 'home',       label: 'Resumen',                emoji: '🏠' },
-      { id: 'analisis',   label: 'Análisis',               emoji: '📈' },
-      { id: 'estrategia', label: 'Estrategia de Producto', emoji: '📦' },
-      { id: 'marketing',  label: 'Marketing',              emoji: '📢' },
-      { id: 'pagos',      label: 'Pagos',                  emoji: '💰' },
-      { id: 'cartera',    label: 'Crédito y Cobranza',     emoji: '📊' },
+      { id: 'home',       label: 'Resumen',                emoji: 'ð ' },
+      { id: 'analisis',   label: 'AnÃ¡lisis',               emoji: 'ð' },
+      { id: 'estrategia', label: 'Estrategia de Producto', emoji: 'ð¦' },
+      { id: 'marketing',  label: 'Marketing',              emoji: 'ð¢' },
+      { id: 'pagos',      label: 'Pagos',                  emoji: 'ð°' },
+      { id: 'cartera',    label: 'CrÃ©dito y Cobranza',     emoji: 'ð' },
     ],
   },
   pcel: {
@@ -37,12 +46,12 @@ const PESTANAS_POR_CLIENTE = {
     badge: { text: 'Acteck', cls: 'bg-red-100 text-red-700' },
     activo: true,
     pestanas: [
-      { id: 'home',       label: 'Resumen',                emoji: '🏠' },
-      { id: 'analisis',   label: 'Análisis',               emoji: '📈' },
-      { id: 'estrategia', label: 'Estrategia de Producto', emoji: '📦' },
-      { id: 'marketing',  label: 'Marketing',              emoji: '📢', disabled: true, hint: 'Pronto' },
-      { id: 'pagos',      label: 'Pagos',                  emoji: '💰' },
-      { id: 'cartera',    label: 'Crédito y Cobranza',     emoji: '📊' },
+      { id: 'home',       label: 'Resumen',                emoji: 'ð ' },
+      { id: 'analisis',   label: 'AnÃ¡lisis',               emoji: 'ð' },
+      { id: 'estrategia', label: 'Estrategia de Producto', emoji: 'ð¦' },
+      { id: 'marketing',  label: 'Marketing',              emoji: 'ð¢', disabled: true, hint: 'Pronto' },
+      { id: 'pagos',      label: 'Pagos',                  emoji: 'ð°' },
+      { id: 'cartera',    label: 'CrÃ©dito y Cobranza',     emoji: 'ð' },
     ],
   },
   mercadolibre: {
@@ -50,12 +59,12 @@ const PESTANAS_POR_CLIENTE = {
     badge: { text: 'Balam Rush', cls: 'bg-blue-100 text-blue-700' },
     activo: true,
     pestanas: [
-      { id: 'home',       label: 'Resumen',                emoji: '🏠' },
-      { id: 'analisis',   label: 'Análisis',               emoji: '📈' },
-      { id: 'estrategia', label: 'Estrategia de Producto', emoji: '📦' },
-      { id: 'marketing',  label: 'Marketing',              emoji: '📢' },
-      { id: 'pagos',      label: 'Pagos',                  emoji: '💰' },
-      { id: 'cartera',    label: 'Crédito y Cobranza',     emoji: '📊' },
+      { id: 'home',       label: 'Resumen',                emoji: 'ð ' },
+      { id: 'analisis',   label: 'AnÃ¡lisis',               emoji: 'ð' },
+      { id: 'estrategia', label: 'Estrategia de Producto', emoji: 'ð¦' },
+      { id: 'marketing',  label: 'Marketing',              emoji: 'ð¢' },
+      { id: 'pagos',      label: 'Pagos',                  emoji: 'ð°' },
+      { id: 'cartera',    label: 'CrÃ©dito y Cobranza',     emoji: 'ð' },
     ],
   },
 };
@@ -65,21 +74,21 @@ const MENU_CONFIG = [
   {
     id: 'negocio',
     label: 'Negocio',
-    emoji: '💼',
+    emoji: 'ð¼',
     items: [
-      { id: 'estadoResultados', label: 'Estado de Resultados', emoji: '📊', disabled: true, hint: 'Próximamente' },
-      { id: 'preciosMargenes',  label: 'Precios y Márgenes',   emoji: '💲', disabled: true, hint: 'Próximamente' },
-      { id: 'forecastNegocio',  label: 'Forecast General',     emoji: '🎯', disabled: true, hint: 'Próximamente' },
+      { id: 'estadoResultados', label: 'Estado de Resultados', emoji: 'ð', disabled: true, hint: 'PrÃ³ximamente' },
+      { id: 'preciosMargenes',  label: 'Precios y MÃ¡rgenes',   emoji: 'ð²', disabled: true, hint: 'PrÃ³ximamente' },
+      { id: 'forecastNegocio',  label: 'Forecast General',     emoji: 'ð¯', disabled: true, hint: 'PrÃ³ximamente' },
     ],
   },
   {
     id: 'direccionComercial',
-    label: 'Dirección Comercial',
-    emoji: '📊',
+    label: 'DirecciÃ³n Comercial',
+    emoji: 'ð',
     items: [
-      { id: 'resumenClientes',  label: 'Resumen de Clientes', emoji: '📈' },
-      { id: 'forecastClientes', label: 'Forecast Clientes',   emoji: '🎯' },
-      { id: 'adminClientes',    label: 'Administración de Clientes', emoji: '👥', type: 'clientes' },
+      { id: 'resumenClientes',  label: 'Resumen de Clientes', emoji: 'ð' },
+      { id: 'forecastClientes', label: 'Forecast Clientes',   emoji: 'ð¯' },
+      { id: 'adminClientes',    label: 'AdministraciÃ³n de Clientes', emoji: 'ð¥', type: 'clientes' },
     ],
   },
 ];
@@ -101,9 +110,9 @@ const saveExpanded = (obj) => {
   try { localStorage.setItem(LS_KEY, JSON.stringify(obj)); } catch {}
 };
 
-// ────────────────────────────────────────────────────────────
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 //  COMPONENTE
-// ────────────────────────────────────────────────────────────
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 export default function Sidebar({
   clienteActivo,
   paginaActiva,
@@ -116,7 +125,7 @@ export default function Sidebar({
   const [expanded, setExpanded] = useState(loadExpanded);
   useEffect(() => { saveExpanded(expanded); }, [expanded]);
 
-  // Asegurar que el cliente activo esté expandido automáticamente
+  // Asegurar que el cliente activo estÃ© expandido automÃ¡ticamente
   useEffect(() => {
     if (clienteActivo) {
       setExpanded((prev) => ({
@@ -160,7 +169,7 @@ export default function Sidebar({
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
             <p className="text-xs text-green-600 font-semibold uppercase tracking-widest">
-              Modo Presentación
+              Modo PresentaciÃ³n
             </p>
           </div>
         )}
@@ -190,12 +199,12 @@ export default function Sidebar({
             onClick={onActualizarDatos}
             className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow hover:shadow-md transition-all flex items-center justify-center gap-2"
           >
-            🔄 Actualizar Datos
+            ð Actualizar Datos
           </button>
         </div>
       )}
 
-      {/* Configuración */}
+      {/* ConfiguraciÃ³n */}
       {esAdmin && (
         <div className="px-3 pb-2">
           <button
@@ -207,12 +216,12 @@ export default function Sidebar({
                 : 'bg-gray-900 text-white hover:bg-black',
             ].join(' ')}
           >
-            ⚙️ Configuración
+            âï¸ ConfiguraciÃ³n
           </button>
         </div>
       )}
 
-      {/* Footer: usuario + cerrar sesión */}
+      {/* Footer: usuario + cerrar sesiÃ³n */}
       <div className="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
         {perfilUsuario?.nombre && (
           <div className="font-medium text-gray-700 truncate">{perfilUsuario.nombre}</div>
@@ -222,18 +231,18 @@ export default function Sidebar({
             onClick={onCerrarSesion}
             className="text-gray-500 hover:text-gray-800 transition-colors"
           >
-            Cerrar sesión
+            Cerrar sesiÃ³n
           </button>
         )}
-        <div className="text-gray-400 mt-1">v1.0 · Abril 2026</div>
+        <div className="text-gray-400 mt-1">v1.0 Â· Abril 2026</div>
       </div>
     </aside>
   );
 }
 
-// ────────────────────────────────────────────────────────────
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 //  SUBCOMPONENTES
-// ────────────────────────────────────────────────────────────
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function GrupoBloque({ grupo, expanded, toggle, clienteActivo, paginaActiva, onNavegar, isActiveLeaf, isActiveGlobal }) {
   const isOpen = expanded[grupo.id];
   const hasItems = grupo.items && grupo.items.length > 0;
@@ -285,7 +294,7 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, paginaActiva, onN
                 </div>
               );
             }
-            // Ítem normal dentro del grupo
+            // Ãtem normal dentro del grupo
             return (
               <NavItem
                 key={item.id}
