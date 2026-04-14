@@ -627,7 +627,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       // Header
       React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: "1px solid #E2E8F0", background: tipo === "comercial" ? "#EFF6FF" : "#F0FDF4" } },
         React.createElement("h4", { style: { margin: 0, fontSize: 14, color: "#334155" } },
-          (tipo === "comercial" ? "Pendientes Comerciales" : "Pendientes Marketing")),
+          (tipo === "comercial" ? "Pendientes Ferru" : "Pendientes Karo")),
         React.createElement("div", { style: { display: "flex", gap: 6 } },
           React.createElement("button", {
             onClick: () => setShowForm(!showForm),

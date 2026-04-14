@@ -111,7 +111,7 @@ export default function Sidebar({
   const esAdmin = perfilUsuario?.rol === 'admin';
 
   return (
-    <aside className="w-60 bg-white border-r border-gray-100 flex flex-col shadow-sm shrink-0 overflow-y-auto">
+    <aside className="w-72 bg-white border-r border-gray-100 flex flex-col shadow-sm shrink-0 overflow-y-auto">
       <div className="p-3 border-b border-gray-100">
         {!modoPresent ? (
           <>
