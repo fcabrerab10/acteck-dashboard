@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Subir Excel Central — Acteck Dashboard</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 2rem; }
+  .card { max-width: 760px; margin: 0 auto; background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 2rem; }
+  h1 { margin: 0 0 .5rem; font-size: 1.5rem; color: #10b981; }
+  p.sub { color: #94a3b8; margin: 0 0 1.5rem; }
+  input[type=file] { display: block; margin: 1rem 0; padding: .6rem; background: #0f172a; color: #e2e8f0; border: 1px dashed #475569; border-radius: 8px; width: 100%; }
+  button { background: #10b981; color: white; border: 0; padding: .75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 1rem; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  pre { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 1rem; max-height: 420px; overflow: auto; font-size: .8rem; color: #cbd5e1; white-space: pre-wrap; }
+  .row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+  .ok { color: #10b981; } .err { color: #ef4444; } .info { color: #60a5fa; }
+  a { color: #60a5fa; }
+  .bar { height: 6px; background: #334155; border-radius: 3px; overflow: hidden; margin: .5rem 0; }
+  .bar > div { height: 100%; background: #10b981; width: 0; transition: width .15s; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Subir Excel Central</h1>
+    <p class="sub">Selecciona el Excel maestro. Pestañas procesadas: <b>Vw_TablaH_Inventario</b>, <b>Vw_TablaH_Ventas</b>, <b>Sellout Digitalife</b>, <b>Inventario Digitalife</b>. Se ignoran Hoja1/2/3 y BD. Upsert SKU por SKU (solo actualiza lo que cambió).</p>
+    <input type="file" id="file" accept=".xlsx,.xls" />
+    <div class="row">
+      <button id="go">Subir y procesar</button>
+      <span id="status" class="info"></span>
+    </div>
+    <div class="bar"><div id="bar"></div></div>
+    <pre id="log"></pre>
+    <p style="margin-top:1.5rem;color:#64748b;font-size:.85rem"><a href="/">← Volver al dashboard</a></p>
+  </div>
+<script>
+const $ = id => document.getElementById(id);
+const log = m => { $('log').textContent += m + '\n'; $('log').scrollTop = 1e9; };
+const setBar = p => { $('bar').style.width = Math.min(100, Math.max(0, p)) + '%'; };
+
+// ---------- mappers (MUST match Supabase schema) ----------
+const s = v => (v===null||v===undefined||v==='') ? null : String(v);
+const n = v => { if (v===null||v===undefined||v==='') return null; const x=Number(v); return isFinite(x)?x:null; };
+const i = v => { const x=n(v); return x===null?null:Math.round(x); };
+const b = v => v===true||v==='true'||v===1||v==='1'||v==='TRUE';
+
+function d2date(v) {
+  if (v==null||v==='') return null;
+  if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
+  if (typeof v === 'number') { const d=XLSX.SSF.parse_date_code(v); if(!d) return null; return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`; }
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const d = new Date(v); return isNaN(d)?null:d.toISOString().slice(0,10);
+}
+function d2ts(v) {
+  if (v==null||v==='') return null;
+  if (v instanceof Date && !isNaN(v)) return v.toISOString();
+  if (typeof v === 'number') { const d=XLSX.SSF.parse_date_code(v); if(!d) return null;
+    return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}T${String(d.H||0).padStart(2,'0')}:${String(d.M||0).padStart(2,'0')}:${String(Math.floor(d.S||0)).padStart(2,'0')}Z`; }
+  const d = new Date(v); return isNaN(d)?null:d.toISOString();
+}
+
+async function rowHash(o) {
+  const enc = new TextEncoder().encode(JSON.stringify(o));
+  const h = await crypto.subtle.digest('SHA-1', enc);
+  const bytes = new Uint8Array(h);
+  return Array.from(bytes.slice(0,8)).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+const mapInvActeck = r => ({
+  articulo: s(r.articulo), no_almacen: i(r.No_Almacen), no_cedis: i(r.No_cedis),
+  almacen_nombre: s(r.Almacen_nombre), cedis: s(r.cedis),
+  disponible: n(r.disponible), inventario: n(r.inventario),
+  costopromedio: n(r.costopromedio), costodisponible: n(r.CostoDisponible), costoinventario: n(r.CostoInventario),
+  updated_at: new Date().toISOString()
+});
+
+const mapVentas = r => ({
+  venta_id: i(r.VentaId), venta_renglon: i(r.VentaRenglon),
+  articulo: s(r.Articulo), descripcion1: s(r.Descripcion1),
+  grupo_linea: s(r['Grupo(Linea)']), categoria_sublinea: s(r['Categoria(SubLinea)']),
+  familia: s(r.Familia), rama: s(r.Rama), linea_subfamilia: s(r['Linea(SubFamilia)']),
+  marca: s(r.Marca), rotacion: s(r.Rotacion), estatus: s(r.Estatus),
+  fecha_creacion: d2ts(r.FechaDeCreacion), periodo: d2date(r.periodo),
+  anio: i(r.anio), mes: i(r.mes), dia: i(r.dia),
+  piezas: n(r.Piezas), almacen: i(r.Almacen), contid: n(r.ContID),
+  precio_unidad_pesos: n(r.PrecioPorUnidadPesos), costo_pieza_pesos: n(r.CostoPorPiezaPesos),
+  folio: s(r.Folio), referencia: s(r.Referencia), observaciones: s(r.Observaciones),
+  moneda: s(r.Moneda), id_vendedor: s(r.IDVendedor), vendedor: s(r.Vendedor),
+  cliente: s(r.Cliente), id_row: n(r.id), cliente_nombre: s(r.ClienteNombre),
+  canal: s(r.Canal), admin_interna: s(r.Admin_Interna), industria: s(r.Industria),
+  ciudad: s(r.Ciudad), estado: s(r.Estado), pais: s(r.Pais),
+  enviar_a_nombre: s(r.EnviarANombre), enviar_a_ciudad: s(r.EnviarACiudad), enviar_a_estado: s(r.EnviarAEstadp),
+  zona: s(r.Zona), codigo_postal: s(r.codigopostal), usuario: s(r.Usuario),
+  aplicacion: i(r.Aplicacion), tipo_cambio: n(r.TipoCambio),
+  monto_venta_pesos: n(r.MontoVentaPesos), costo_venta_pesos: n(r.CostoVentaPesos),
+  ub: n(r.UB), movimiento_venta: s(r.MovimientoVenta), movimiento_venta_id: s(r.MovimientoVentaID),
+  servicio_tipo: s(r.ServicioTipo), estatus_venta: s(r.estatusventa),
+  categoria_revko: s(r.CategoriaRevko), sub_categoria_revko: s(r.SubCategoriaRevko), familia_revko: s(r.FamiliaRevko),
+  version_emp: s(r.VersionEmp), formato_tienda: s(r.FormatoTienda), subcanal: s(r.Subcanal),
+  cte_agente: s(r.Cteagente), cte_ruta: s(r.CteRuta), se_compra: b(r.SeCompra),
+  canal_articulo: s(r.CanalArticulo), oferta_id: n(r.OfertaID),
+  instruccion: s(r.Instruccion), temporada: s(r.temporada), cuenta: s(r.cuenta), lista_precios_esp: s(r.ListaPreciosEsp),
+  updated_at: new Date().toISOString()
+});
+
+async function mapSelloutDL(r) {
+  const base = {
+    cliente: 'digitalife', fecha: d2date(r.FECHA), marca: s(r.MARCA),
+    no_parte: s(r.NO_PARTE), descripcion: s(r.DESCRIPCION),
+    cantidad: n(r.CANTIDAD), precio: n(r.PRECIO), descuento: n(r.DESCUENTO),
+    iva: n(r.IVA), subtotal: n(r.SUBTOTAL), total: n(r.TOTAL)
+  };
+  base.row_hash = await rowHash(base);
+  base.updated_at = new Date().toISOString();
+  return base;
+}
+
+const mapInvDL = r => ({
+  cliente: 'digitalife', sku: s(r.Parte), marca: s(r.Marca),
+  titulo: s(r['Título']) || s(r.Titulo),
+  stock: i(r.Stock),
+  costo_convenio: n(r['Costo Convenio']), precio_venta: n(r['Precio Venta']),
+  fecha_ultima_venta: d2date(r['Fecha Ultima Venta']),
+  dias_sin_venta: n(r['Días sin Venta']) ?? n(r['Dias sin Venta']),
+  valor: n(r.Valor),
+  updated_at: new Date().toISOString()
+});
+
+const SHEETS = [
+  { name: 'Vw_TablaH_Inventario',  table: 'inventario_acteck',   map: mapInvActeck, filter: r => r.articulo && r.no_almacen!==null, async: false },
+  { name: 'Vw_TablaH_Ventas',      table: 'ventas_erp',          map: mapVentas,    filter: r => r.venta_id!==null && r.venta_renglon!==null, async: false, chunk: 300 },
+  { name: 'Sellout Digitalife',    table: 'sellout_detalle',     map: mapSelloutDL, filter: r => r.fecha && r.no_parte, async: true },
+  { name: 'Inventario Digitalife', table: 'inventario_cliente',  map: mapInvDL,     filter: r => r.sku, async: false }
+];
+
+async function postChunk(table, rows) {
+  const r = await fetch('/api/import-central', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ table, rows })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(`${table} HTTP ${r.status}: ${JSON.stringify(j).slice(0,300)}`);
+  return j;
+}
+
+$('go').addEventListener('click', async () => {
+  const f = $('file').files[0];
+  if (!f) { $('status').innerHTML = '<span class="err">Selecciona un archivo primero</span>'; return; }
+  $('go').disabled = true; $('log').textContent=''; setBar(0);
+  $('status').textContent = 'Leyendo archivo...';
+
+  try {
+    log('Archivo: ' + f.name + ' (' + (f.size/1024/1024).toFixed(2) + ' MB)');
+    const buf = await f.arrayBuffer();
+    const wb = XLSX.read(buf, { cellDates: true });
+    log('Pestañas encontradas: ' + wb.SheetNames.join(', '));
+
+    // Count total rows to upload for progress
+    let totalRows = 0;
+    const plans = [];
+    for (const cfg of SHEETS) {
+      if (!wb.SheetNames.includes(cfg.name)) { log('(omitida: ' + cfg.name + ' no existe)'); continue; }
+      const raw = XLSX.utils.sheet_to_json(wb.Sheets[cfg.name], { defval: null });
+      if (!raw.length) { log('(vacía: ' + cfg.name + ')'); continue; }
+      let mapped;
+      if (cfg.async) mapped = await Promise.all(raw.map(cfg.map));
+      else mapped = raw.map(cfg.map);
+      mapped = mapped.filter(cfg.filter);
+      totalRows += mapped.length;
+      plans.push({ cfg, rows: mapped });
+      log(cfg.name + ' → ' + cfg.table + ': ' + mapped.length + ' filas');
+    }
+    if (!totalRows) { $('status').innerHTML = '<span class="err">Sin datos para subir</span>'; $('go').disabled = false; return; }
+
+    let done = 0;
+    for (const { cfg, rows } of plans) {
+      const chunkSize = cfg.chunk || 500;
+      log('\n── Subiendo ' + cfg.table + ' (' + rows.length + ' filas, chunks de ' + chunkSize + ')');
+      for (let off = 0; off < rows.length; off += chunkSize) {
+        const slice = rows.slice(off, off + chunkSize);
+        const t0 = Date.now();
+        const res = await postChunk(cfg.table, slice);
+        const dt = Date.now() - t0;
+        done += slice.length;
+        setBar(100 * done / totalRows);
+        $('status').textContent = `Procesando... ${done.toLocaleString()} / ${totalRows.toLocaleString()} (${Math.round(100*done/totalRows)}%)`;
+        if (off === 0 || off % (chunkSize * 10) === 0) log(`  [${cfg.table}] +${slice.length} filas (${dt}ms)`);
+      }
+      log('✓ ' + cfg.table + ' completo');
+    }
+    $('status').innerHTML = '<span class="ok">✓ Carga completa: ' + done.toLocaleString() + ' filas</span>';
+    setBar(100);
+  } catch (e) {
+    $('status').innerHTML = '<span class="err">Error</span>';
+    log('EXCEPTION: ' + (e.stack || e.message));
+  } finally {
+    $('go').disabled = false;
+  }
+});
+</script>
+</body>
+</html>
