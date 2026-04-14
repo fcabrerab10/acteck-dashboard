@@ -129,8 +129,34 @@ function ResumenCuentas() {
   );
 }
 
+function UploadModalX({ onClose }) {
+  return (
+    React.createElement('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4', style: { backgroundColor: 'rgba(0,0,0,0.6)' } },
+      React.createElement('div', { className: 'bg-white rounded-lg shadow-2xl w-full flex flex-col overflow-hidden', style: { maxWidth: '1100px', height: '90vh' } },
+        React.createElement('div', { className: 'flex items-center justify-between px-4 py-3 bg-gray-800 text-white' },
+          React.createElement('div', { className: 'font-semibold' }, '📤 Subir Excel central — Importador de tablas'),
+          React.createElement('button', { onClick: onClose, className: 'px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm' }, 'Cerrar ✕')
+        ),
+        React.createElement('iframe', { src: '/import.html', className: 'flex-1 w-full', style: { border: 0 }, title: 'Importador Excel' })
+      )
+    )
+  );
+}
+
+function UpdatedAtBadgeX() {
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    fetch('/api/last-update').then(r => r.json()).then(setInfo).catch(() => setInfo({ error: true }));
+  }, []);
+  if (!info) return React.createElement('span', { className: 'text-xs text-gray-400' }, 'cargando…');
+  if (info.error || !info.last_update) return React.createElement('span', { className: 'text-xs text-gray-400' }, 'sin datos');
+  const d = new Date(info.last_update);
+  const txt = d.toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return React.createElement('span', { className: 'text-xs text-gray-600', title: info.last_update }, '🕒 Últ. actualización: ' + txt);
+}
+
 export default function App() {
-  // âââ AUTH STATE âââââââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ AUTH STATE Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   const [authUser, setAuthUser] = useState(null);
   const [perfil, setPerfil] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -205,10 +231,11 @@ export default function App() {
   const [modoPresent, setModoPresent] = useState(false);
   const [paginaActiva, setPaginaActiva] = useState("home");
   const [showUpdatePanel, setShowUpdatePanel] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
   const [vistaActual, setVistaActual] = useState(null);
   const [clienteKey, setClienteKey] = useState(null);
 
-  // âââ DATOS DESDE SUPABASE (ventas_mensuales) âââ
+  // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ DATOS DESDE SUPABASE (ventas_mensuales) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   const [ventasDB, setVentasDB] = React.useState(null);
   const [ventasVer, setVentasVer] = React.useState(0);
 
@@ -268,12 +295,12 @@ export default function App() {
   };
 
   const navItems = [
-    { id: "home",       label: "Resumen",               icono: "ð ", habilitado: true  },
-    { id: "analisis",   label: "AnÃ¡lisis",                icono: "ð", habilitado: true  },
-    { id: "estrategia", label: "Estrategia de Producto", icono: "ð¦", habilitado: true  },
-    { id: "marketing",  label: "Marketing",              icono: "ð£", habilitado: clienteActivo !== "pcel"  },
-    { id: "pagos",      label: "Pagos",                  icono: "ð°", habilitado: true  },
-    { id: "cartera",    label: "CrÃ©dito y Cobranza",     icono: "ð", habilitado: true  },
+    { id: "home",       label: "Resumen",               icono: "Ã°ÂÂÂ ", habilitado: true  },
+    { id: "analisis",   label: "AnÃÂ¡lisis",                icono: "Ã°ÂÂÂ", habilitado: true  },
+    { id: "estrategia", label: "Estrategia de Producto", icono: "Ã°ÂÂÂ¦", habilitado: true  },
+    { id: "marketing",  label: "Marketing",              icono: "Ã°ÂÂÂ£", habilitado: clienteActivo !== "pcel"  },
+    { id: "pagos",      label: "Pagos",                  icono: "Ã°ÂÂÂ°", habilitado: true  },
+    { id: "cartera",    label: "CrÃÂ©dito y Cobranza",     icono: "Ã°ÂÂÂ", habilitado: true  },
   ]
 
   
@@ -302,24 +329,24 @@ export default function App() {
             <Configuracion session={{user: authUser, perfil}} />
           ) : (
             <>
-            {/* Banner modo presentaciÃ³n */}
+            {/* Banner modo presentaciÃÂ³n */}
         { /* Banner removed */ }
           {paginaActiva === "resumen" && <ResumenCuentas />}
           {paginaActiva === "resumenClientes" && (
             <div className="p-10">
               <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
-                <div className="text-6xl mb-4">🚧</div>
+                <div className="text-6xl mb-4">ð§</div>
                 <h2 className="text-2xl font-bold text-gray-800 mb-2">Resumen de Clientes</h2>
-                <p className="text-gray-500">En construcción — Próximamente verás el total consolidado de los 3 clientes y un mini resumen de cada uno.</p>
+                <p className="text-gray-500">En construcciÃ³n â PrÃ³ximamente verÃ¡s el total consolidado de los 3 clientes y un mini resumen de cada uno.</p>
               </div>
             </div>
           )}
           {paginaActiva === "forecastClientes" && (
             <div className="p-10">
               <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
-                <div className="text-6xl mb-4">🎯</div>
+                <div className="text-6xl mb-4">ð¯</div>
                 <h2 className="text-2xl font-bold text-gray-800 mb-2">Forecast Clientes</h2>
-                <p className="text-gray-500">En construcción — Aquí verás el forecast consolidado de Digitalife, PCEL y Mercado Libre.</p>
+                <p className="text-gray-500">En construcciÃ³n â AquÃ­ verÃ¡s el forecast consolidado de Digitalife, PCEL y Mercado Libre.</p>
               </div>
             </div>
           )}
@@ -346,6 +373,19 @@ export default function App() {
         onVentasUpdate: function() { setVentasVer(function(v) { return v + 1; }); }
       })}
 
+      {/* Boton flotante Subir Excel central */}
+      {React.createElement('button', {
+        onClick: function() { setShowUpload(true); },
+        className: 'fixed bottom-6 right-6 z-40 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-full shadow-lg font-semibold text-sm',
+        title: 'Subir archivo Excel central',
+        style: { cursor: 'pointer' }
+      }, '📤 Subir Excel central')}
+
+      {React.createElement('div', {
+        className: 'fixed top-3 right-4 z-40 bg-white px-3 py-1 rounded-full shadow border border-gray-200'
+      }, React.createElement(UpdatedAtBadgeX, null))}
+
+      {showUpload && React.createElement(UploadModalX, { onClose: function() { setShowUpload(false); } })}
 
     </div>
   );
