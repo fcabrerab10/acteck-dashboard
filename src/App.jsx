@@ -297,6 +297,7 @@ export default function App() {
 
       {/* CONTENIDO */}
       <main className="flex-1 overflow-y-auto">
+          <div className="max-w-7xl mx-auto px-6 py-4">
           {vistaActual === "configuracion" ? (
             <Configuracion session={{user: authUser, perfil}} />
           ) : (
@@ -325,7 +326,7 @@ export default function App() {
           <>
             <>
         {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} isML={clienteActivo === "mercadolibre"} />}
-        {paginaActiva === "cartera" && <CreditoCobranza cliente={c} />}
+        {paginaActiva === "cartera" && <CreditoCobranza cliente={c} clienteKey={clienteActivo} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
             {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "{c.nombre}"}  clienteKey={clienteActivo} />}
@@ -335,6 +336,7 @@ export default function App() {
           </>
             </>
           )}
+        </div>
         </main>
       {showUpdatePanel && React.createElement(PanelActualizacion, {
         onClose: function() { setShowUpdatePanel(false); },

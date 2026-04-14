@@ -4,6 +4,15 @@ import { PCEL_REAL, PAGOS_DIGITALIFE_2026 } from '../../lib/constants';
 import { formatMXN, formatFecha } from '../../lib/utils';
 import { CardHeader } from '../../components';
 
+const CATEGORIA_META = {
+  promociones: { label: "Promociones", color: "#f59e0b" },
+  marketing: { label: "Marketing", color: "#8b5cf6" },
+  pagosFijos: { label: "Pagos Fijos", color: "#3b82f6" },
+  pagosVariables: { label: "Pagos Variables", color: "#10b981" },
+  rebate: { label: "Rebate", color: "#ef4444" },
+  spiff: { label: "SPIFF", color: "#9333ea" }
+};
+
 export default function PagosCliente({ cliente, clienteKey }) {
   const c = cliente;
 

@@ -3,7 +3,7 @@ import { DIGITALIFE_REAL } from '../../lib/constants';
 import { formatMXN, formatUSD, formatFecha } from '../../lib/utils';
 import { CardHeader } from '../../components';
 
-export default function CreditoCobranza({ cliente }) {
+export default function CreditoCobranza({ cliente, clienteKey }) {
   const c = cliente;
   const k = c.cartera;
   if (!k) return (
