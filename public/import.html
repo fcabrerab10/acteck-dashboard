@@ -128,19 +128,38 @@ const mapInvDL = r => ({
 
 const SHEETS = [
   { name: 'Vw_TablaH_Inventario',  table: 'inventario_acteck',   map: mapInvActeck, filter: r => r.articulo && r.no_almacen!==null, async: false },
-  { name: 'Vw_TablaH_Ventas',      table: 'ventas_erp',          map: mapVentas,    filter: r => r.venta_id!==null && r.venta_renglon!==null, async: false, chunk: 300 },
+  { name: 'Vw_TablaH_Ventas',      table: 'ventas_erp',          map: mapVentas,    filter: r => r.venta_id!==null && r.venta_renglon!==null, async: false, chunk: 150 },
   { name: 'Sellout Digitalife',    table: 'sellout_detalle',     map: mapSelloutDL, filter: r => r.fecha && r.no_parte, async: true },
   { name: 'Inventario Digitalife', table: 'inventario_cliente',  map: mapInvDL,     filter: r => r.sku, async: false }
 ];
 
-async function postChunk(table, rows) {
-  const r = await fetch('/api/import-central', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ table, rows })
-  });
-  const j = await r.json().catch(()=>({}));
-  if (!r.ok) throw new Error(`${table} HTTP ${r.status}: ${JSON.stringify(j).slice(0,300)}`);
-  return j;
+async function postChunk(table, rows, attempt = 1) {
+  const MAX_ATTEMPTS = 5;
+  try {
+    const r = await fetch('/api/import-central', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table, rows })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok) {
+      if ((r.status >= 500 || r.status === 429) && attempt < MAX_ATTEMPTS) {
+        const wait = 1000 * Math.pow(2, attempt - 1);
+        log('  retry ' + attempt + '/' + MAX_ATTEMPTS + ' ' + table + ' (HTTP ' + r.status + ') en ' + wait + 'ms');
+        await new Promise(res => setTimeout(res, wait));
+        return postChunk(table, rows, attempt + 1);
+      }
+      throw new Error(`${table} HTTP ${r.status}: ${JSON.stringify(j).slice(0,300)}`);
+    }
+    return j;
+  } catch (err) {
+    if (attempt < MAX_ATTEMPTS && (err.name === 'TypeError' || /fetch|network/i.test(err.message))) {
+      const wait = 1000 * Math.pow(2, attempt - 1);
+      log('  retry ' + attempt + '/' + MAX_ATTEMPTS + ' ' + table + ' (' + err.message.slice(0,80) + ') en ' + wait + 'ms');
+      await new Promise(res => setTimeout(res, wait));
+      return postChunk(table, rows, attempt + 1);
+    }
+    throw err;
+  }
 }
 
 $('go').addEventListener('click', async () => {

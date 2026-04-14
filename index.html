@@ -6,9 +6,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dashboard Clientes — Acteck / Balam Rush</title>
       <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+      <style>
+        #subir-excel-btn {
+          position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+          background: #10b981; color: white; border: 0;
+          padding: 14px 22px; border-radius: 999px;
+          font-weight: 700; font-size: 15px; cursor: pointer;
+          box-shadow: 0 8px 24px rgba(16,185,129,.35);
+          display: flex; align-items: center; gap: 8px;
+          transition: transform .15s, box-shadow .15s;
+          font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        }
+        #subir-excel-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(16,185,129,.45); }
+        #subir-excel-btn svg { width: 18px; height: 18px; }
+      </style>
   </head>
   <body>
     <div id="root"></div>
+    <a id="subir-excel-btn" href="/import.html" title="Subir Excel Central">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Subir Excel
+    </a>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
