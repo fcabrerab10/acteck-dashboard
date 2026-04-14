@@ -141,7 +141,7 @@ const mapRoadmap = r => {
   return {
     sku,
     rdmp: s(pickFirst(r, ['RDMP','Roadmap','Road Map','RDMP Q2 2026'])),
-    descripcion: s(pickFirst(r, ['Descripcion','Descripción','Descripcion1','Descripción 1'])),
+    descripcion: s(pickFirst(r, ['Descripcion 2','Descripción 2','Descripcion','Descripción','Descripcion1','Descripción 1'])),
     payload: r,
     updated_at: new Date().toISOString()
   };
@@ -153,18 +153,18 @@ const mapPrecios = r => {
     sku,
     precio_aaa: n(pickFirst(r, ['Precio AAA','PrecioAAA','AAA','Precio_AAA'])),
     descuento: n(pickFirst(r, ['Descuento','Dcto','% Descuento','Descto','%Descuento'])),
-    precio_descuento: n(pickFirst(r, ['Precio con descuento','Precio Descuento','Precio Neto','Precio c/Desc'])),
+    precio_descuento: n(pickFirst(r, ['Precio C/Descuento','Precio con descuento','Precio Descuento','Precio Neto','Precio c/Desc'])),
     payload: r,
     updated_at: new Date().toISOString()
   };
 };
 async function mapTransito(r) {
-  const sku = s(pickFirst(r, ['SKU','Articulo','Artículo','No_Parte','No Parte']));
+  const sku = s(pickFirst(r, ['CODIGO','SKU','Articulo','Artículo','No_Parte','No Parte']));
   if (!sku) return null;
   const base = {
     sku,
-    inventario_transito: n(pickFirst(r, ['Inventario en Transito','Inventario en Tránsito','Inv Transito','Transito','Tránsito'])),
-    siguiente_arribo: d2date(pickFirst(r, ['Siguiente Arribo','Próximo Arribo','Proximo Arribo','ETA','Fecha Arribo'])),
+    inventario_transito: n(pickFirst(r, ['SHP QTY','PO QTY','Inventario en Transito','Inventario en Tránsito','Inv Transito','Transito','Tránsito'])),
+    siguiente_arribo: d2date(pickFirst(r, ['ARRIBO A CEDIS','Siguiente Arribo','Próximo Arribo','Proximo Arribo','ETA','Fecha Arribo'])),
     payload: r
   };
   base.row_hash = await rowHash(base);
@@ -176,8 +176,8 @@ const SHEETS = [
   { name: 'Vw_TablaH_Ventas',      table: 'ventas_erp',          map: mapVentas,    filter: r => r.venta_id!==null && r.venta_renglon!==null, async: false, chunk: 150 },
   { name: 'Sellout Digitalife',    table: 'sellout_detalle',     map: mapSelloutDL, filter: r => r.fecha && r.no_parte, async: true, uniqueKey: r => r.cliente+'|'+r.fecha+'|'+r.no_parte },
   { name: 'Inventario Digitalife', table: 'inventario_cliente',  map: mapInvDL,     filter: r => r.sku, async: false },
-  { name: 'Roadmap Q2 2026',       table: 'roadmap_sku',         map: mapRoadmap,   filter: r => r && r.sku, async: false, addSortOrder: true, uniqueKey: r => r.sku },
-  { name: 'BD Lista de Precios',   table: 'precios_sku',         map: mapPrecios,   filter: r => r && r.sku, async: false, addSortOrder: true, uniqueKey: r => r.sku },
+  { name: 'Roadmap Q2 2026', headerRow: 12, table: 'roadmap_sku',         map: mapRoadmap,   filter: r => r && r.sku, async: false, addSortOrder: true, uniqueKey: r => r.sku },
+  { name: 'BD Lista de Precios', headerRow: 4, table: 'precios_sku',         map: mapPrecios,   filter: r => r && r.sku, async: false, addSortOrder: true, uniqueKey: r => r.sku },
   { name: 'Transito y Arribos',    table: 'transito_sku',        map: mapTransito,  filter: r => r && r.sku, async: true,  addSortOrder: true, uniqueKey: r => r.sku }
 ];
 
@@ -227,7 +227,7 @@ $('go').addEventListener('click', async () => {
     const plans = [];
     for (const cfg of SHEETS) {
       if (!wb.SheetNames.includes(cfg.name)) { log('(omitida: ' + cfg.name + ' no existe)'); continue; }
-      const raw = XLSX.utils.sheet_to_json(wb.Sheets[cfg.name], { defval: null });
+      const raw = XLSX.utils.sheet_to_json(wb.Sheets[cfg.name], { defval: null, range: cfg.headerRow||0 });
       if (raw.length && (cfg.table==='roadmap_sku' || cfg.table==='transito_sku' || cfg.table==='precios_sku')) { log('  (' + cfg.name + ' columnas: ' + Object.keys(raw[0]).join(' | ') + ')'); }
       if (!raw.length) { log('(vacÃ­a: ' + cfg.name + ')'); continue; }
       let mapped;
