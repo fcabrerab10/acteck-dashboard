@@ -6,3 +6,4 @@ export { TarjetaPagos } from './TarjetaPagos';
 export { TarjetaPromociones } from './TarjetaPromociones';
 export { TarjetaMinuta } from './TarjetaMinuta';
 export { BarraCuota } from './BarraCuota';
+export { default as Sidebar } from './Sidebar';
