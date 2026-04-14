@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED } from './lib/supabase';
 import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_MES, ML_SELLOUT_DEFAULT, clientes } from './lib/constants';
 import { formatMXN, formatUSD, formatFecha, diasRestantes, calcularSalud, loadSheetJS } from './lib/utils';
-import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota } from './components';
+import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, Sidebar } from './components';
 import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, ForecastCliente } from './modules/comercial';
 import LoginPage from './modules/auth/LoginPage';
 import { Configuracion } from './modules/configuracion';
@@ -130,7 +130,7 @@ function ResumenCuentas() {
 }
 
 export default function App() {
-  // ─── AUTH STATE ─────────────────────────────────────────────
+  // âââ AUTH STATE âââââââââââââââââââââââââââââââââââââââââââââ
   const [authUser, setAuthUser] = useState(null);
   const [perfil, setPerfil] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -208,7 +208,7 @@ export default function App() {
   const [vistaActual, setVistaActual] = useState(null);
   const [clienteKey, setClienteKey] = useState(null);
 
-  // ─── DATOS DESDE SUPABASE (ventas_mensuales) ───
+  // âââ DATOS DESDE SUPABASE (ventas_mensuales) âââ
   const [ventasDB, setVentasDB] = React.useState(null);
   const [ventasVer, setVentasVer] = React.useState(0);
 
@@ -254,13 +254,26 @@ export default function App() {
     setPaginaActiva("home");
   };
 
+  // Sidebar navigation bridge
+  const handleNavegar = (clienteId, paginaId) => {
+    if (paginaId === 'configuracion') { setVistaActual('configuracion'); return; }
+    setVistaActual(null);
+    if (clienteId) {
+      handleClienteChange(clienteId);
+      setPaginaActiva(paginaId);
+    } else {
+      setClienteActivo(null);
+      setPaginaActiva(paginaId);
+    }
+  };
+
   const navItems = [
-    { id: "home",       label: "Resumen",               icono: "🏠", habilitado: true  },
-    { id: "analisis",   label: "Análisis",                icono: "📈", habilitado: true  },
-    { id: "estrategia", label: "Estrategia de Producto", icono: "📦", habilitado: true  },
-    { id: "marketing",  label: "Marketing",              icono: "📣", habilitado: clienteActivo !== "pcel"  },
-    { id: "pagos",      label: "Pagos",                  icono: "💰", habilitado: true  },
-    { id: "cartera",    label: "Crédito y Cobranza",     icono: "📊", habilitado: true  },
+    { id: "home",       label: "Resumen",               icono: "ð ", habilitado: true  },
+    { id: "analisis",   label: "AnÃ¡lisis",                icono: "ð", habilitado: true  },
+    { id: "estrategia", label: "Estrategia de Producto", icono: "ð¦", habilitado: true  },
+    { id: "marketing",  label: "Marketing",              icono: "ð£", habilitado: clienteActivo !== "pcel"  },
+    { id: "pagos",      label: "Pagos",                  icono: "ð°", habilitado: true  },
+    { id: "cartera",    label: "CrÃ©dito y Cobranza",     icono: "ð", habilitado: true  },
   ]
 
   
@@ -272,151 +285,15 @@ export default function App() {
     <div className="flex h-screen bg-gray-50 font-sans">
 
       {/* SIDEBAR */}
-      <aside className="w-52 bg-white border-r border-gray-100 flex flex-col shadow-sm shrink-0 overflow-y-auto">
-
-        {/* Logo + Botón Modo Presentación */}
-        <div className="p-3 border-b border-gray-100">
-          {!modoPresent ? (
-            <>
-              <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Administración de Clientes</p>
-              <div className="flex gap-2 mb-3">
-                <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-semibold">Acteck</span>
-                <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-semibold">Balam Rush</span>
-              </div>
-            </>
-          ) : (
-            <div className="flex items-center gap-2 mb-3">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-              <p className="text-xs text-green-600 font-semibold uppercase tracking-widest">Modo Presentación</p>
-            </div>
-          )}
-          <button
-            onClick={() => setModoPresent(!modoPresent)}
-            className={`w-full text-xs font-semibold px-3 py-2 rounded-xl transition-all flex items-center justify-center gap-2 ${
-              modoPresent
-                ? "bg-gray-800 text-white hover:bg-gray-700"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            {modoPresent ? (
-              <><span>🔒</span> Salir de Presentación</>
-            ) : (
-              <><span>👁️</span> Modo Presentación</>
-            )}
-          </button>
-        </div>
-
-        {/* Botón Resumen General */}
-        <div className="px-4 py-2 border-b border-gray-100">
-          <button
-            onClick={() => setPaginaActiva("resumen")}
-            className={"w-full text-left text-sm font-medium px-3 py-2.5 rounded-xl transition-all flex items-center gap-2 " + (paginaActiva === "resumen" ? "bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-700 shadow-sm border border-indigo-100" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700")}
-          >
-            <span>{"📊"}</span>
-            <span>Resumen General</span>
-          </button>
-        </div>
-
-        {/* Botón Forecast */}
-          <div className="px-4 py-2 border-b border-gray-100">
-            <button
-              onClick={() => setPaginaActiva("forecast")}
-              className={"w-full text-left text-sm font-medium px-3 py-2.5 rounded-xl transition-all flex items-center gap-2 " + (paginaActiva === "forecast" ? "bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 shadow-sm border border-emerald-100" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700")}
-            >
-              <span>{"🔮"}</span>
-              <span>Forecast</span>
-            </button>
-          </div>
-
-          {/* Selector de cliente — se oculta en modo presentación */}
-        {!modoPresent && (
-          <div className="p-4 border-b border-gray-100">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Cliente</p>
-            <div className="space-y-1">
-              {Object.entries(clientesDinamicos).map(([key, cl]) => (
-                <button
-                  key={key}
-                  onClick={() => handleClienteChange(key)}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    clienteActivo === key
-                      ? "bg-gray-800 text-white"
-                      : "text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cl.color }}></span>
-                    {cl.nombre}
-                    <span className="ml-auto text-xs opacity-60">{cl.marca}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* En modo presentación: mostrar solo el cliente activo */}
-        {modoPresent && (
-          <div className="p-4 border-b border-gray-100">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Cliente</p>
-            <div className="px-3 py-2.5 rounded-xl bg-gray-800 text-white text-sm font-medium flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.color }}></span>
-              {c.nombre}
-              <span className="ml-auto text-xs opacity-60">{c.marca}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Navegación */}
-        <nav className="p-4 flex-1">
-          <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Secciones</p>
-          <div className="space-y-1">
-            {navItems.map(item => (
-              <button
-                key={item.id}
-                onClick={() => item.habilitado && setPaginaActiva(item.id)}
-                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
-                  !item.habilitado
-                    ? "text-gray-400 hover:bg-gray-50 hover:text-gray-600 cursor-not-allowed opacity-60"
-                    : paginaActiva === item.id
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-800"
-                }`}
-                disabled={!item.habilitado}
-                title={!item.habilitado ? "Próximamente" : ""}
-              >
-                <span>{item.icono}</span>
-                {item.label}
-                {!item.habilitado && (
-                  <span className="ml-auto text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">Pronto</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </nav>
-
-        <div className="p-4 border-t border-gray-100">
-            <button
-              onClick={() => setShowUpdatePanel(true)}
-              className="w-full text-sm font-semibold px-3 py-3 rounded-xl transition-all bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg flex items-center justify-center gap-2"
-            >
-              {"\uD83D\uDD04"} Actualizar Datos
-            </button>
-          </div>
-          {/* Footer */}
-        <div className="p-4 border-t border-gray-100">
-          {perfil.rol === "admin" && (
-            <button
-              onClick={() => { setVistaActual("configuracion"); setClienteKey(null); }}
-              className={"w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition " + (vistaActual === "configuracion" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800/50")}
-            >Configuración</button>
-          )}
-          <div className="mt-2 pt-2 border-t border-gray-700/50">
-            <p className="text-xs text-gray-500 mb-1">{perfil.nombre}</p>
-            <button onClick={handleLogout} className="w-full text-left px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-red-400 hover:bg-gray-800/50 transition">Cerrar sesión</button>
-          </div>
-          <p className="text-xs text-gray-300 text-center">v1.0 · Abril 2026</p>
-        </div>
-      </aside>
+      <Sidebar
+        clienteActivo={clienteActivo}
+        paginaActiva={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva}
+        onNavegar={handleNavegar}
+        onActualizarDatos={() => setShowUpdatePanel(true)}
+        onCerrarSesion={handleLogout}
+        perfilUsuario={perfil}
+        modoPresent={false}
+      />
 
       {/* CONTENIDO */}
       <main className="flex-1 overflow-y-auto">
@@ -424,9 +301,27 @@ export default function App() {
             <Configuracion session={{user: authUser, perfil}} />
           ) : (
             <>
-            {/* Banner modo presentación */}
+            {/* Banner modo presentaciÃ³n */}
         { /* Banner removed */ }
           {paginaActiva === "resumen" && <ResumenCuentas />}
+          {paginaActiva === "resumenClientes" && (
+            <div className="p-10">
+              <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
+                <div className="text-6xl mb-4">🚧</div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">Resumen de Clientes</h2>
+                <p className="text-gray-500">En construcción — Próximamente verás el total consolidado de los 3 clientes y un mini resumen de cada uno.</p>
+              </div>
+            </div>
+          )}
+          {paginaActiva === "forecastClientes" && (
+            <div className="p-10">
+              <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
+                <div className="text-6xl mb-4">🎯</div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">Forecast Clientes</h2>
+                <p className="text-gray-500">En construcción — Aquí verás el forecast consolidado de Digitalife, PCEL y Mercado Libre.</p>
+              </div>
+            </div>
+          )}
           <>
             <>
         {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} isML={clienteActivo === "mercadolibre"} />}
