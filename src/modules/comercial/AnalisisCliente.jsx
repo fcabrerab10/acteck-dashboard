@@ -42,14 +42,14 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     });
   }, [cliente, clienteKey, anio]);
 
-  // ── Helpers ──
+  // ââ Helpers ââ
   var fmtM = function(v) { return "$" + (Number(v||0)/1000000).toFixed(2) + "M"; };
   var fmtK = function(v) { return "$" + (Number(v||0)/1000).toFixed(0) + "K"; };
   var fmtMoney = function(v) { return "$" + Number(v||0).toLocaleString("es-MX", {minimumFractionDigits:0}); };
   var fmtPct = function(v) { return (Number(v||0)).toFixed(1) + "%"; };
   var fmtNum = function(v) { return Number(v||0).toLocaleString("es-MX"); };
 
-  // ── Sell-through by month ──
+  // ââ Sell-through by month ââ
   var ventasPorMes = React.useMemo(function() {
     var result = [];
     var siMap = {};
@@ -65,7 +65,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     return result;
   }, [sellInSku, sellOutSku]);
 
-  // ── YTD Totals ──
+  // ââ YTD Totals ââ
   var ytd = React.useMemo(function() {
     var si = ventasPorMes.reduce(function(s,v) { return s + v.sell_in; }, 0);
     var so = ventasPorMes.reduce(function(s,v) { return s + v.sell_out; }, 0);
@@ -79,7 +79,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     return { si: si, so: so, st: st, mesesConDatos: mesesConDatos, avgSI: avgSI, avgSO: avgSO, projSI: projSI, projSO: projSO };
   }, [ventasPorMes]);
 
-  // ── Marketing aggregates by month ──
+  // ââ Marketing aggregates by month ââ
   var mktPorMes = React.useMemo(function() {
     var m = {};
     for (var i = 1; i <= 12; i++) m[i] = { inv: 0, ventas: 0, alcance: 0, count: 0 };
@@ -101,7 +101,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     return { inv: inv, ven: ven, roi: inv > 0 ? ((ven-inv)/inv*100) : 0 };
   }, [marketing]);
 
-  // ── SKU-level analysis (when data available) ──
+  // ââ SKU-level analysis (when data available) ââ
   var skuAnalysis = React.useMemo(function() {
     if (productos.length === 0) return null;
     var skuMap = {};
@@ -146,7 +146,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   var totalCuotaMinA = cuotasMens.reduce(function(s, cm) { return s + (Number(cm.cuota_min) || 0); }, 0);
   var cumpCuotaA = totalCuotaIdealA > 0 ? (ytd.si / totalCuotaIdealA * 100) : 0;
 
-  // ── Scorecard ──
+  // ââ Scorecard ââ
   var scorecard = React.useMemo(function() {
     var items = [];
     if (!skuAnalysis) return items;
@@ -155,7 +155,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     var totalSkus = skuAnalysis.all.length;
     var skuColor = skusConInv > totalSkus * 0.5 ? "#10b981" : skusConInv > totalSkus * 0.25 ? "#f59e0b" : "#ef4444";
     items.push({ label: "SKUs con Inventario", value: fmtNum(skusConInv), color: skuColor, detail: "de " + fmtNum(totalSkus) + " totales" });
-    // 2. Días de inventario
+    // 2. DÃ­as de inventario
     var invValorTotal = inventario.reduce(function(s, r) { return s + (Number(r.valor) || 0); }, 0);
     var soTotal = ytd.so;
     var mesesConDatos = ytd.mesesConDatos || 1;
@@ -163,12 +163,12 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     var diasInv = soDiario > 0 ? Math.round(invValorTotal / soDiario) : 0;
     var diasColor = diasInv <= 90 ? "#10b981" : diasInv <= 150 ? "#f59e0b" : "#ef4444";
     items.push({ label: "D\u00edas de Inventario", value: diasInv + " d\u00edas", color: diasColor, detail: "Basado en SO promedio diario" });
-    // 3. Valor del inventario (stock × costo_convenio)
+    // 3. Valor del inventario (stock Ã costo_convenio)
     items.push({ label: "Valor del Inventario", value: fmtMoney(invValorTotal), color: "#3B82F6", detail: "Stock \u00d7 Costo Convenio" });
     return items;
   }, [skuAnalysis, inventario, ytd]);
 
-  // ── RENDER ──
+  // ââ RENDER ââ
   if (loading) return el("div", { style: { textAlign:"center", color:"#64748b", padding:60 } }, "Cargando an\u00E1lisis...");
 
   // Section card helper
@@ -205,13 +205,13 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   return el("div", { style: { maxWidth:1100, margin:"0 auto", color:"#1e293b" } },
     // Header
     el("div", { style: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 } },
-      el("h2", { style: { margin:0, fontSize:20, fontWeight:700 } }, "\uD83D\uDCC8 An\u00E1lisis — " + (cliente || clienteKey)),
+      el("h2", { style: { margin:0, fontSize:20, fontWeight:700 } }, "\uD83D\uDCC8 An\u00E1lisis â " + (cliente || clienteKey)),
       el("select", { value: anio, onChange: function(e) { setAnio(Number(e.target.value)); }, style: { padding:"5px 10px", borderRadius:8, border:"1px solid #cbd5e1", background:"#f1f5f9", color:"#1e293b", fontSize:12 } },
         el("option", { value: 2025 }, "2025"), el("option", { value: 2026 }, "2026"), el("option", { value: 2027 }, "2027")
       )
     ),
 
-    // ═══ 1. SCORECARD ═══
+    // âââ 1. SCORECARD âââ
     section("Scorecard", "\uD83D\uDEA6",
       el("div", { style: { display:"flex", gap:10, flexWrap:"wrap" } },
         scorecard.map(function(s, i) {
@@ -224,7 +224,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       )
     ),
 
-    // ═══ 2. SELL-THROUGH POR MES ═══
+    // âââ 2. SELL-THROUGH POR MES âââ
     section("Eficiencia de Venta Mensual", "\uD83D\uDD04",
         el("div", { style: { background: "#F0F9FF", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#334155", lineHeight: 1.5, border: "1px solid #BAE6FD" } },
           el("strong", null, "\u00bfQu\u00e9 es la Eficiencia de Venta? "),
@@ -263,7 +263,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
               var color = !hasST ? "#334155" : v.sellThrough >= 80 ? "#10b981" : v.sellThrough >= 50 ? "#f59e0b" : "#ef4444";
               return el("div", { key: v.mes, style: { textAlign:"center", width:70, background:"#f1f5f9", borderRadius:8, padding:"8px 4px", borderBottom:"3px solid " + color } },
                 el("div", { style: { fontSize:10, color:"#94a3b8" } }, v.label),
-                el("div", { style: { fontSize:16, fontWeight:700, color: hasST ? color : "#475569" } }, hasST ? fmtPct(v.sellThrough) : "—")
+                el("div", { style: { fontSize:16, fontWeight:700, color: hasST ? color : "#475569" } }, hasST ? fmtPct(v.sellThrough) : "â")
               );
             })
           )
@@ -271,13 +271,13 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       )
     ),
 
-    // ═══ 3. MARKETING vs VENTAS ═══
+    // âââ 3. MARKETING vs VENTAS âââ
     section("Marketing vs Ventas", "\uD83D\uDCE3",
       el("div", null,
         el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
           metricBox("Inversi\u00F3n Mkt", fmtMoney(mktTotals.inv), marketing.length + " actividades", "#8b5cf6"),
           metricBox("Sell Out Total", fmtM(ytd.so), null, "#10b981"),
-          metricBox("Costo x Peso Vendido", ytd.so > 0 ? "$" + (mktTotals.inv / ytd.so).toFixed(2) : "—", ytd.so > 0 ? "Por cada $1 de sell out" : "Sin sell out", "#f59e0b")
+          metricBox("Costo x Peso Vendido", ytd.so > 0 ? "$" + (mktTotals.inv / ytd.so).toFixed(2) : "â", ytd.so > 0 ? "Por cada $1 de sell out" : "Sin sell out", "#f59e0b")
         ),
         // Monthly comparison
         el("div", { style: { fontSize:12, color:"#94a3b8", marginBottom:8, fontWeight:600 } }, "Inversi\u00F3n Marketing vs Sell Out por Mes"),
@@ -288,9 +288,9 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
             var hasSO = v.sell_out > 0;
             return el("div", { key: v.mes, style: { background:"#f1f5f9", borderRadius:8, padding:"10px 8px", textAlign:"center" } },
               el("div", { style: { fontSize:10, color:"#94a3b8", marginBottom:6 } }, v.label),
-              el("div", { style: { fontSize:11, color:"#8b5cf6", fontWeight:600 } }, hasMkt ? fmtK(mktMes.inv) : "—"),
+              el("div", { style: { fontSize:11, color:"#8b5cf6", fontWeight:600 } }, hasMkt ? fmtK(mktMes.inv) : "â"),
               el("div", { style: { fontSize:9, color:"#64748b", margin:"2px 0" } }, "mkt"),
-              el("div", { style: { fontSize:11, color:"#10b981", fontWeight:600 } }, hasSO ? fmtK(v.sell_out) : "—"),
+              el("div", { style: { fontSize:11, color:"#10b981", fontWeight:600 } }, hasSO ? fmtK(v.sell_out) : "â"),
               el("div", { style: { fontSize:9, color:"#64748b" } }, "sell out")
             );
           })
@@ -298,57 +298,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       )
     ),
 
-    // ═══ 4. MÁRGENES DEL CANAL ═══
-    skuAnalysis ? section("Margen de Digitalife", "\uD83D\uDCB0",
-      el("div", null,
-        el("div", { style: { fontSize:12, color:"#94a3b8", marginBottom:12 } }, "Comparativa: Costo Acteck vs Precio " + (cliente || clienteKey) + " — Margen que se lleva el cliente"),
-        // By brand summary
-        Object.keys(skuAnalysis.byMarca).length > 0 ? el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
-          Object.keys(skuAnalysis.byMarca).map(function(marca) {
-            var d = skuAnalysis.byMarca[marca];
-            return el("div", { key: marca, style: { flex:1, minWidth:200, background:"#f1f5f9", borderRadius:10, padding:"12px 16px" } },
-              el("div", { style: { fontSize:13, fontWeight:600, color:"#1e293b", marginBottom:6 } }, marca || "Sin marca"),
-              el("div", { style: { fontSize:11, color:"#94a3b8" } }, fmtNum(d.piezas) + " pzas vendidas"),
-              el("div", { style: { fontSize:11, color:"#10b981", fontWeight:600 } }, "Margen cliente: " + fmtMoney(d.margenTotal))
-            );
-          })
-        ) : null,
-        // Top SKUs by margin
-        el("div", { style: { fontSize:12, color:"#94a3b8", marginBottom:8, fontWeight:600 } }, "Top 10 SKUs por Margen del Cliente"),
-        el("div", { style: { overflowX:"auto" } },
-          el("table", { style: { width:"100%", fontSize:11, borderCollapse:"collapse" } },
-            el("thead", null,
-              el("tr", { style: { borderBottom:"1px solid #e2e8f0" } },
-                ["SKU","Descripci\u00F3n","Costo Acteck","Precio Cliente","Margen %","Pzas SO","Margen $"].map(function(h) {
-                  return el("th", { key: h, style: { textAlign:"left", padding:"6px 8px", color:"#94a3b8", fontWeight:600 } }, h);
-                })
-              )
-            ),
-            el("tbody", null,
-              skuAnalysis.all.filter(function(s){return s.margenPesos>0;}).sort(function(a,b){return b.margenPesos-a.margenPesos;}).slice(0,10).map(function(s) {
-                return el("tr", { key: s.sku, style: { borderBottom:"1px solid #e2e8f0" } },
-                  el("td", { style: { padding:"6px 8px", color:"#94a3b8", fontFamily:"monospace", fontSize:10 } }, s.sku),
-                  el("td", { style: { padding:"6px 8px", color:"#1e293b", maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" } }, s.desc),
-                  el("td", { style: { padding:"6px 8px", color:"#3b82f6" } }, fmtMoney(s.costo)),
-                  el("td", { style: { padding:"6px 8px", color:"#10b981" } }, fmtMoney(s.precio)),
-                  el("td", { style: { padding:"6px 8px", color:"#f59e0b", fontWeight:600 } }, fmtPct(s.margenCliente)),
-                  el("td", { style: { padding:"6px 8px", color:"#94a3b8" } }, fmtNum(s.soTotal)),
-                  el("td", { style: { padding:"6px 8px", color:"#10b981", fontWeight:600 } }, fmtMoney(s.margenPesos))
-                );
-              })
-            )
-          )
-        )
-      )
-    ) : section("Margen de Digitalife", "\uD83D\uDCB0",
-      el("div", { style: { textAlign:"center", padding:20, color:"#475569" } },
-        el("div", { style: { fontSize:28, marginBottom:8 } }, "\uD83D\uDCE6"),
-        el("div", { style: { fontSize:13 } }, "Sube los archivos de Estrategia de Producto para activar el an\u00E1lisis de m\u00E1rgenes"),
-        el("div", { style: { fontSize:11, marginTop:4 } }, "Necesitas: Reporte Acteck + Resumen " + (cliente || clienteKey))
-      )
-    ),
-
-    // ═══ 5. TOP/BOTTOM SKUs ═══
+    // âââ 5. TOP/BOTTOM SKUs âââ
     skuAnalysis ? section("Top / Bottom SKUs", "\uD83C\uDFC6",
       el("div", { style: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 } },
         el("div", null,
@@ -379,7 +329,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       )
     ),
 
-    // ═══ 6. SALUD DEL INVENTARIO ═══
+    // âââ 6. SALUD DEL INVENTARIO âââ
     skuAnalysis ? section("Salud del Inventario", "\uD83D\uDCE6",
       el("div", null,
         el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
@@ -409,14 +359,14 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       )
     ),
 
-    // ═══ 7. PROYECCIÓN ═══
+    // âââ 7. PROYECCIÃN âââ
     section("Proyecci\u00F3n de Cierre Anual", "\uD83D\uDD2E",
       el("div", null,
         ytd.mesesConDatos >= 2 ? el("div", null,
           el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
             metricBox("Promedio Mensual SI", fmtM(ytd.avgSI), "\u00DAltimos " + ytd.mesesConDatos + " meses", "#3b82f6"),
             metricBox("Proyecci\u00F3n SI Anual", fmtM(ytd.projSI), "Estimado cierre " + anio, "#8b5cf6"),
-            metricBox("Ratio SI/SO", ytd.so > 0 ? fmtPct(ytd.so/ytd.si*100) : "—", ytd.st < 50 ? "â ️ Riesgo alto de sobreinventario" : ytd.st < 70 ? "â ️ Inventario acumulado" : "Rotación saludable", ytd.st < 50 ? "#ef4444" : ytd.st < 70 ? "#f59e0b" : "#10b981"),
+            metricBox("Ratio SI/SO", ytd.so > 0 ? fmtPct(ytd.so/ytd.si*100) : "â", ytd.st < 50 ? "Ã¢ÂÂ ï¸ Riesgo alto de sobreinventario" : ytd.st < 70 ? "Ã¢ÂÂ ï¸ Inventario acumulado" : "RotaciÃ³n saludable", ytd.st < 50 ? "#ef4444" : ytd.st < 70 ? "#f59e0b" : "#10b981"),
           metricBox("Cuota Ideal Anual", totalCuotaIdealA > 0 ? fmtM(totalCuotaIdealA) : "Sin datos", totalCuotaIdealA > 0 ? "Cump: " + fmtPct(cumpCuotaA) : "Subir cuotas", "#F59E0B"),
             metricBox("Promedio Mensual SO", fmtM(ytd.avgSO), "\u00DAltimos " + ytd.mesesConDatos + " meses", "#10b981"),
             metricBox("Proyecci\u00F3n SO Anual", fmtM(ytd.projSO), "Estimado cierre " + anio, "#059669")
@@ -451,7 +401,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
             })
           ),
           ytd.st < 60 ? el("div", { style: { background:"#fef2f2", border:"1px solid #fecaca", borderRadius:10, padding:"12px 16px", marginTop:12, display:"flex", alignItems:"center", gap:10 } },
-            el("span", { style: { fontSize:20 } }, "â ️"),
+            el("span", { style: { fontSize:20 } }, "Ã¢ÂÂ ï¸"),
             el("div", null,
               el("div", { style: { fontSize:13, fontWeight:600, color:"#dc2626" } }, "Alerta: Sell Out proyectado muy por debajo del Sell In"),
               el("div", { style: { fontSize:11, color:"#991b1b" } }, "Posible sobreinventario de " + fmtM(ytd.projSI - ytd.projSO) + ". Considerar ajustar sell in o impulsar sell out.")
