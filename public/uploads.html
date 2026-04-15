@@ -5,356 +5,238 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Actualizar datos — Acteck Dashboard</title>
 <style>
-  :root { --azul:#1e40af; --gris:#f3f4f6; --bord:#e5e7eb; --ok:#059669; --err:#dc2626; --warn:#d97706; }
-  *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#fff;color:#111}
-  header{padding:24px 32px;border-bottom:1px solid var(--bord);display:flex;justify-content:space-between;align-items:center}
-  header h1{margin:0;font-size:22px}
-  header a{color:var(--azul);text-decoration:none;font-size:14px}
-  main{padding:24px 32px;max-width:1200px;margin:0 auto}
-  .intro{color:#555;margin-bottom:24px;line-height:1.5}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
-  .card{border:1px solid var(--bord);border-radius:10px;padding:16px;background:#fff;display:flex;flex-direction:column;gap:10px}
-  .card h3{margin:0;font-size:15px}
-  .card .desc{color:#666;font-size:13px;min-height:36px}
-  .card .meta{font-size:12px;color:#888}
-  .card .actions{display:flex;gap:8px;align-items:center;margin-top:auto}
-  .card input[type=file]{flex:1;font-size:12px}
-  .btn{background:var(--azul);color:#fff;border:0;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:13px}
-  .btn:disabled{opacity:.5;cursor:not-allowed}
-  .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
-  .b-ok{background:#dcfce7;color:var(--ok)}
-  .b-err{background:#fee2e2;color:var(--err)}
-  .b-warn{background:#fef3c7;color:var(--warn)}
-  .b-idle{background:#e5e7eb;color:#374151}
-  .log{max-height:140px;overflow:auto;font-family:ui-monospace,monospace;font-size:11px;background:#0b1020;color:#d1d5db;border-radius:6px;padding:8px;white-space:pre-wrap;display:none}
-  .log.open{display:block}
-  .status-line{font-size:12px;min-height:18px}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f8fafc;color:#0f172a}
+header{padding:20px 32px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center}
+header h1{margin:0;font-size:20px}
+header a{color:#1e40af;text-decoration:none;font-size:14px}
+main{padding:24px 32px;max-width:1280px;margin:0 auto}
+.intro{color:#475569;margin-bottom:20px;line-height:1.5;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.card h3{margin:0;font-size:15px;font-weight:700}
+.card .desc{color:#64748b;font-size:12px;line-height:1.4}
+.card .meta{font-size:11px;color:#94a3b8;font-family:ui-monospace,monospace}
+.drop{border:2px dashed #cbd5e1;border-radius:10px;padding:18px 12px;text-align:center;background:#f8fafc;cursor:pointer;transition:all .15s;position:relative;display:block}
+.drop:hover{border-color:#1e40af;background:#eff6ff}
+.drop.has-file{border-color:#059669;background:#f0fdf4;border-style:solid}
+.drop .icon{font-size:28px;display:block;margin-bottom:4px}
+.drop .label{font-size:13px;font-weight:600;color:#334155;display:block}
+.drop .fname{font-size:12px;color:#059669;margin-top:4px;font-weight:600;word-break:break-all;display:block}
+.drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.row{display:flex;gap:8px;align-items:center}
+.btn{background:#1e40af;color:#fff;border:0;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;flex:1}
+.btn:hover:not(:disabled){background:#1e3a8a}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.status{font-size:12px;min-height:16px;font-weight:500}
+.s-ok{color:#059669}.s-err{color:#dc2626}.s-warn{color:#d97706}.s-info{color:#1e40af}
+.log{max-height:120px;overflow:auto;font-family:ui-monospace,monospace;font-size:11px;background:#0f172a;color:#cbd5e1;border-radius:6px;padding:8px;white-space:pre-wrap;display:none}
+.log.open{display:block}
+.tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:600;background:#fef3c7;color:#92400e;margin-left:6px}
 </style>
 </head>
 <body>
 <header>
-  <h1>⚙️ Actualizar datos</h1>
-  <a href="/">← Volver al dashboard</a>
+<h1>⚙️ Actualizar datos (Excel → Supabase)</h1>
+<a href="/">← Volver al dashboard</a>
 </header>
 <main>
-  <p class="intro">Sube cada archivo <strong>tal como te lo comparten</strong>. El sistema lo parsea y actualiza Supabase según la estrategia correcta para cada fuente.</p>
-  <div class="grid" id="grid"></div>
+<p class="intro">Selecciona cada archivo <strong>tal como te lo comparten</strong>. Cada tarjeta procesa un archivo y actualiza la tabla correspondiente en Supabase.</p>
+<div class="grid" id="grid"></div>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const SOURCES = [
-  { id:'erp-ventas', title:'ERP · Ventas', desc:'Vw_TablaH_Ventas del ERP (upsert incremental, histórico completo).', file:'Actualizaciones ERP.xlsx', table:'ventas_erp', onConflict:'venta_id,venta_renglon', parser:'erpVentas' },
-  { id:'erp-inventario', title:'ERP · Inventario', desc:'Vw_TablaH_Inventario del ERP (replace total).', file:'Actualizaciones ERP.xlsx', table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', replace:true },
-  { id:'digitalife-sellout', title:'Digitalife · Sellout semanal', desc:'Archivo Acteck_BalamRush_Ventas (Hoja40). Append histórico con dedup.', file:'Acteck_BalamRush_Ventas.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
-  { id:'digitalife-inv', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Replace cliente=digitalife.', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku', parser:'digitalifeInv', replaceWhere:{cliente:'digitalife'} },
-  { id:'pcel-vm', title:'PCEL · venta-marca semanal', desc:'Archivo venta-marca-ACTECK. Upsert (anio, semana, sku).', file:'venta-marca-ACTECK.xlsx', table:'sellout_pcel', onConflict:'anio,semana,sku', parser:'pcelVentaMarca' },
-  { id:'ec-pcel', title:'Estado de cuenta · PCEL', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
-  { id:'ec-digitalife', title:'Estado de cuenta · Digitalife', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
-  { id:'roadmap-precios', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
-  { id:'master-embarques', title:'Master Embarques (Google Drive)', desc:'Auto-sync desde Google Sheets. Pendiente de service account.', file:'(Drive)', table:'embarques_compras', parser:'masterEmbarques', disabled:true },
+  { id:'erp-ventas', title:'ERP Acteck — Ventas', desc:'Vw_TablaH_Ventas (upsert incremental).', file:'Actualizaciones ERP.xlsx', sheet:'Ventas', table:'ventas_erp', onConflict:'venta_id,venta_renglon', parser:'erpVentas' },
+  { id:'erp-inv', title:'ERP Acteck — Inventario', desc:'Vw_TablaH_Inventario (reemplazo total).', file:'Actualizaciones ERP.xlsx', sheet:'Inventario', table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInv', replace:true },
+  { id:'dl-sellout', title:'Digitalife — Sellout semanal', desc:'Acteck_BalamRush_Ventas (Hoja40). Append con dedup.', file:'Acteck_BalamRush_Ventas.xlsx', sheet:'Hoja40', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'dlSellout' },
+  { id:'dl-inv', title:'Digitalife — Inventario actual', desc:'Inventario cliente (reemplazo total).', file:'Inventario_Digitalife.xlsx', sheet:'', table:'inventario_cliente', onConflict:'cliente,no_parte', parser:'dlInv', replace:true },
+  { id:'pcel-vm', title:'PCEL — Venta Marca', desc:'Reporte_VM_PCEL con sell in/out semanal.', file:'Reporte_VM_PCEL.xlsx', sheet:'', table:'sellout_pcel', onConflict:'anio,semana,sku', parser:'pcelVM' },
+  { id:'ec-pcel', title:'Estado de Cuenta — PCEL', desc:'Aging por semana (0-30/31-60/61-90/91-180).', file:'EC_PCEL.xlsx', sheet:'', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'ecPcel', cliente:'PCEL' },
+  { id:'ec-dl', title:'Estado de Cuenta — Digitalife', desc:'Aging Digitalife por semana.', file:'EC_Digitalife.xlsx', sheet:'', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'ecPcel', cliente:'DIGITALIFE' },
+  { id:'rp', title:'Roadmap — Precios SKU', desc:'Catálogo SKU/EAN con precios lista.', file:'Roadmap_SKU.xlsx', sheet:'', table:'precios_sku', onConflict:'sku', parser:'roadmap' }
 ];
 
-const CHUNK = 500;
-
-// ===== Parsers =====
-function toISODate(v){
-  if (v == null || v === '') return null;
-  if (typeof v === 'number') {
-    // Excel serial date
-    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
-    return isNaN(d) ? null : d.toISOString().slice(0,10);
-  }
-  const d = new Date(v);
-  return isNaN(d) ? null : d.toISOString().slice(0,10);
-}
-function toNum(v){ if (v==null||v===''||v==='#N/A') return null; const n=Number(v); return isNaN(n)?null:n; }
-function toInt(v){ const n=toNum(v); return n==null?null:Math.round(n); }
-function toStr(v){ if (v==null) return null; const s=String(v).trim(); return s===''||s==='#N/A'?null:s; }
-function hash(s){ let h=0; for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;} return String(h); }
-function snake(s){ return String(s).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+const toNum = v => { if(v==null||v==='')return 0; const n=+String(v).replace(/[,$\s]/g,''); return isFinite(n)?n:0; };
+const toStr = v => v==null?'':String(v).trim();
+const toISO = v => { if(!v)return null; if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return d?d.y+'-'+String(d.m).padStart(2,'0')+'-'+String(d.d).padStart(2,'0'):null;} const s=String(v); const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?m[0]:null; };
+const hash = s => { let h=0; for(let i=0;i<s.length;i++){h=((h<<5)-h+s.charCodeAt(i))|0;} return String(h); };
 
 const PARSERS = {
-  erpVentas(wb){
-    const sh = wb.Sheets['Vw_TablaH_Ventas'] || wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
-    return rows.map(r => {
-      const out = {};
-      for (const k of Object.keys(r)) out[snake(k)] = r[k];
-      // Normalize key columns that may have been renamed
-      out.venta_id = toInt(out.venta_id ?? out.ventaid);
-      out.venta_renglon = toInt(out.venta_renglon ?? out.ventarenglon);
-      if (out.venta_id == null || out.venta_renglon == null) return null;
-      return out;
-    }).filter(Boolean);
-  },
-  erpInventario(wb){
-    const sh = wb.Sheets['Vw_TablaH_Inventario'] || wb.Sheets[wb.SheetNames[1]];
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
-    return rows.map(r => ({
-      articulo: toStr(r.articulo ?? r.Articulo),
-      no_almacen: toInt(r.No_Almacen ?? r.no_almacen),
-      no_cedis: toInt(r.No_Cedis ?? r.no_cedis),
-      almacen_nombre: toStr(r.Almacen_Nombre ?? r.almacen_nombre),
-      cedis: toStr(r.Cedis ?? r.cedis),
-      disponible: toNum(r.Disponible ?? r.disponible),
-      inventario: toNum(r.Inventario ?? r.inventario),
-      costopromedio: toNum(r.CostoPromedio ?? r.costopromedio),
-      costodisponible: toNum(r.CostoDisponible ?? r.costodisponible),
-      costoinventario: toNum(r.CostoInventario ?? r.costoinventario),
-    })).filter(r => r.articulo && r.no_almacen != null);
-  },
-  digitalifeSellout(wb){
-    const sh = wb.Sheets['Hoja40'] || wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
-    return rows.map(r => {
-      const obj = {};
-      for (const k of Object.keys(r)) obj[snake(k)] = r[k];
-      const o = {
-        cliente: 'digitalife',
-        fecha: toISODate(obj.fecha),
-        marca: toStr(obj.marca),
-        no_parte: toStr(obj.no_parte ?? obj.noparte ?? obj.parte),
-        descripcion: toStr(obj.descripcion ?? obj.descripcion_1 ?? obj.titulo),
-        cantidad: toNum(obj.cantidad),
-        precio: toNum(obj.precio),
-        descuento: toNum(obj.descuento),
-        iva: toNum(obj.iva),
-        subtotal: toNum(obj.subtotal),
-        total: toNum(obj.total),
-      };
-      if (!o.fecha || !o.no_parte) return null;
-      o.row_hash = hash([o.fecha,o.no_parte,o.cantidad,o.total].join('|'));
-      return o;
-    }).filter(Boolean);
-  },
-  digitalifeInv(wb){
-    const sh = wb.Sheets['Hoja39'] || wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
-    return rows.map(r => {
-      const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
-      return {
-        cliente: 'digitalife',
-        sku: toStr(obj.parte ?? obj.sku ?? obj.no_parte),
-        marca: toStr(obj.marca),
-        titulo: toStr(obj.titulo ?? obj.descripcion),
-        stock: toInt(obj.stock ?? obj.inventario),
-        costo_convenio: toNum(obj.costo_convenio),
-        precio_venta: toNum(obj.precio_venta),
-        fecha_ultima_venta: toISODate(obj.fecha_ultima_venta),
-        dias_sin_venta: toNum(obj.dias_sin_venta),
-        valor: toNum(obj.valor),
-      };
-    }).filter(r => r.sku);
-  },
-  pcelVentaMarca(wb){
-    const sh = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
-    // Find the "Vta Semana N" column to parse the week number
-    let semana = null;
-    const headers = Object.keys(rows[0] || {});
-    for (const h of headers) {
-      const m = String(h).match(/vta\s+semana\s+(\d+)/i);
-      if (m) { semana = parseInt(m[1],10); break; }
-    }
-    const year = new Date().getFullYear();
-    return rows.map(r => {
-      const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
-      const vtaSemKey = Object.keys(obj).find(k => /vta_semana_\d+/.test(k));
-      return {
-        anio: year,
-        semana: semana,
-        sku: toStr(obj.sku ?? obj.pcel_sku),
-        pcel_sku: toStr(obj.sku ?? obj.pcel_sku),
-        marca: toStr(obj.marca),
-        producto: toStr(obj.producto ?? obj.descripcion),
-        familia: toStr(obj.familia),
-        subfamilia: toStr(obj.subfamilia),
-        inventario: toInt(obj.inventario),
-        costo_promedio: toNum(obj.costo_promedio ?? obj.costo),
-        antiguedad: toInt(obj.antiguedad),
-        transito: toInt(obj.transito ?? obj.tra_nsito),
-        back_order: toInt(obj.back_order ?? obj.backorder),
-        vta_semana: toInt(vtaSemKey ? obj[vtaSemKey] : null),
-        vta_mes_actual: toInt(obj.vta_mes_actual),
-        vta_mes_1: toInt(obj.vta_mes_1),
-        vta_mes_2: toInt(obj.vta_mes_2),
-        vta_mes_3: toInt(obj.vta_mes_3),
-      };
-    }).filter(r => r.sku && r.semana != null);
-  },
-  estadoCuenta(wb, cliente, filename){
-    // Parse year and week from filename like "00473Semana16.xlsx"
-    const m = String(filename||'').match(/Semana\s*(\d+)/i);
-    const semana = m ? parseInt(m[1],10) : null;
-    const year = new Date().getFullYear();
-    const sh = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null, range: 6}); // headers on row 7 (0-indexed 6)
-    // Aggregate resumen (sum of saldos)
-    let saldo_actual=0, saldo_vencido=0, notas_credito=0, saldo_a_vencer=0;
-    const detalle = [];
-    for (const r of rows) {
-      const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
-      const importe = toNum(obj.importe_factura ?? obj.importe);
-      const saldo = toNum(obj.saldo_actual ?? obj.saldo);
-      const aging = {
-        corriente: toNum(obj.corriente ?? obj.aging_corriente) || 0,
-        d01_30: toNum(obj._1_30 ?? obj.aging_01_30 ?? obj.dias_1_30) || 0,
-        d31_60: toNum(obj._31_60 ?? obj.aging_31_60) || 0,
-        d61_90: toNum(obj._61_90 ?? obj.aging_61_90) || 0,
-        d91_180: toNum(obj._91_180 ?? obj.aging_91_180) || 0,
-        d181: toNum(obj._181_mas ?? obj.aging_181_mas ?? obj.mas_181) || 0,
-      };
-      if (saldo) saldo_actual += saldo;
-      saldo_vencido += (aging.d01_30+aging.d31_60+aging.d61_90+aging.d91_180+aging.d181);
-      detalle.push({
-        movimiento: toStr(obj.movimiento),
-        condicion: toStr(obj.condicion),
-        referencia: toStr(obj.referencia),
-        fecha_emision: toISODate(obj.fecha_emision ?? obj.emision),
-        vencimiento: toISODate(obj.vencimiento),
-        importe_factura: importe,
-        dias_moratorios: toInt(obj.dias_moratorios ?? obj.dias),
-        saldo_actual: saldo,
-        aging_corriente: aging.corriente,
-        aging_01_30: aging.d01_30,
-        aging_31_60: aging.d31_60,
-        aging_61_90: aging.d61_90,
-        aging_91_180: aging.d91_180,
-        aging_181_mas: aging.d181,
-      });
-    }
-    return {
-      resumen: [{ cliente, anio: year, semana, fecha_corte: new Date().toISOString().slice(0,10), saldo_actual, saldo_vencido, notas_credito, saldo_a_vencer, razon_social: cliente==='pcel'?'PC ONLINE':'API GLOBAL' }],
-      detalle: detalle
+  erpVentas: rows => rows.map(r => ({
+    venta_id: toStr(r.Venta||r.venta),
+    venta_renglon: toNum(r.Renglon||r.renglon),
+    fecha: toISO(r.Fecha||r.fecha),
+    cliente: toStr(r.Cliente||r.cliente),
+    articulo: toStr(r.Articulo||r.articulo),
+    cantidad: toNum(r.Cantidad||r.cantidad),
+    precio_unitario: toNum(r.PrecioUnitario||r.precio_unitario||r.Precio),
+    descuento: toNum(r.Descuento||r.descuento),
+    importe: toNum(r.Importe||r.importe),
+    vendedor: toStr(r.Vendedor||r.vendedor),
+    almacen: toStr(r.Almacen||r.almacen)
+  })).filter(r => r.venta_id),
+  erpInv: rows => rows.map(r => ({
+    articulo: toStr(r.Articulo||r.articulo),
+    no_almacen: toStr(r.Almacen||r.almacen||r.NoAlmacen),
+    descripcion: toStr(r.Descripcion||r.descripcion),
+    existencia: toNum(r.Existencia||r.existencia),
+    disponible: toNum(r.Disponible||r.disponible)
+  })).filter(r => r.articulo),
+  dlSellout: rows => rows.map(r => {
+    const base = {
+      cliente: toStr(r.Cliente||r.cliente||'DIGITALIFE'),
+      fecha: toISO(r.Fecha||r.fecha),
+      no_parte: toStr(r.NoParte||r.no_parte||r.SKU||r.sku),
+      descripcion: toStr(r.Descripcion||r.descripcion),
+      cantidad: toNum(r.Cantidad||r.cantidad),
+      precio: toNum(r.Precio||r.precio),
+      importe: toNum(r.Importe||r.importe)
     };
+    base.row_hash = hash([base.cliente,base.fecha,base.no_parte,base.cantidad,base.importe].join('|'));
+    return base;
+  }).filter(r => r.no_parte && r.fecha),
+  dlInv: rows => rows.map(r => ({
+    cliente: toStr(r.Cliente||r.cliente||'DIGITALIFE'),
+    no_parte: toStr(r.NoParte||r.no_parte||r.SKU||r.sku),
+    descripcion: toStr(r.Descripcion||r.descripcion),
+    existencia: toNum(r.Existencia||r.existencia||r.Stock)
+  })).filter(r => r.no_parte),
+  pcelVM: rows => rows.map(r => ({
+    anio: toNum(r.Anio||r.anio||r.Year),
+    semana: toNum(r.Semana||r.semana||r.Week),
+    sku: toStr(r.SKU||r.sku||r.NoParte),
+    descripcion: toStr(r.Descripcion||r.descripcion),
+    sell_in: toNum(r.SellIn||r.sell_in||r['Sell In']),
+    sell_out: toNum(r.SellOut||r.sell_out||r['Sell Out']),
+    inventario: toNum(r.Inventario||r.inventario||r.Stock)
+  })).filter(r => r.sku && r.anio),
+  ecPcel: (rows, cliente) => {
+    const out = {};
+    rows.forEach(r => {
+      const anio = toNum(r.Anio||r.anio||new Date().getFullYear());
+      const semana = toNum(r.Semana||r.semana);
+      if(!semana) return;
+      const k = anio+'|'+semana;
+      if(!out[k]) out[k] = { cliente, anio, semana, d0_30:0, d31_60:0, d61_90:0, d91_180:0, d_vencido:0, saldo_total:0 };
+      out[k].d0_30 += toNum(r['0-30']||r.d0_30);
+      out[k].d31_60 += toNum(r['31-60']||r.d31_60);
+      out[k].d61_90 += toNum(r['61-90']||r.d61_90);
+      out[k].d91_180 += toNum(r['91-180']||r.d91_180);
+      out[k].d_vencido += toNum(r.Vencido||r.d_vencido||r['>180']);
+      out[k].saldo_total += toNum(r.Saldo||r.saldo_total||r.Total);
+    });
+    return Object.values(out);
   },
-  roadmapPrecios(wb){
-    const shR = wb.Sheets['Roadmap Q2 2026'] || wb.Sheets[wb.SheetNames[0]];
-    const shP = wb.Sheets['BD Lista de Precios'] || wb.Sheets[wb.SheetNames[1]];
-    const roadmap = XLSX.utils.sheet_to_json(shR, {defval:null, range:12}).map((r,i) => {
-      const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
-      return {
-        sku: toStr(obj.sku),
-        rdmp: toStr(obj.roadmap ?? obj.rdmp),
-        descripcion: toStr(obj.descripcion_2 ?? obj.descripcion ?? obj.descripcion_1),
-        sort_order: i
-      };
-    }).filter(r => r.sku);
-    const precios = XLSX.utils.sheet_to_json(shP, {defval:null, range:4}).map((r,i) => {
-      const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
-      const pd = obj.precio_c_descuento ?? obj.precio_descuento;
-      return {
-        sku: toStr(obj.sku),
-        precio_aaa: toNum(obj.aaa ?? obj.precio_aaa),
-        descuento: toNum(obj.descuento),
-        precio_descuento: pd==='Consultar' ? null : toNum(pd),
-        sort_order: i
-      };
-    }).filter(r => r.sku);
-    return { roadmap, precios };
-  }
+  roadmap: rows => rows.map(r => ({
+    sku: toStr(r.SKU||r.sku||r.NoParte),
+    ean: toStr(r.EAN||r.ean),
+    descripcion: toStr(r.Descripcion||r.descripcion),
+    precio_lista: toNum(r.PrecioLista||r.precio_lista||r.Precio),
+    cliente: toStr(r.Cliente||r.cliente),
+    categoria: toStr(r.Categoria||r.categoria),
+    marca: toStr(r.Marca||r.marca)
+  })).filter(r => r.sku)
 };
 
-// ===== UI =====
-function el(tag, attrs={}, ...kids){
-  const n = document.createElement(tag);
-  for (const k in attrs) {
-    if (k === 'class') n.className = attrs[k];
-    else if (k.startsWith('on')) n.addEventListener(k.slice(2), attrs[k]);
-    else n.setAttribute(k, attrs[k]);
-  }
-  for (const k of kids.flat()) if (k != null) n.append(k.nodeType ? k : document.createTextNode(k));
-  return n;
-}
-
-function renderCards(){
-  const grid = document.getElementById('grid');
-  for (const src of SOURCES) {
-    const log = el('pre', {class:'log', id:`log-${src.id}`});
-    const status = el('div', {class:'status-line'}, el('span', {class:'badge b-idle'}, 'Esperando archivo'));
-    const file = el('input', {type:'file', accept:'.xlsx,.xls', id:`file-${src.id}`});
-    const btn = el('button', {class:'btn', onclick: () => handleUpload(src)}, 'Subir');
-    if (src.disabled) { btn.disabled = true; btn.textContent = 'Próximamente'; }
-    const card = el('div', {class:'card'},
-      el('h3', {}, src.title),
-      el('div', {class:'desc'}, src.desc),
-      el('div', {class:'meta'}, `📄 ${src.file} · 🎯 ${src.table}`),
-      status,
-      el('div', {class:'actions'}, file, btn),
-      log
-    );
-    grid.appendChild(card);
-  }
-}
-
-function setStatus(src, cls, text){
-  const card = document.getElementById(`file-${src.id}`).closest('.card');
-  const line = card.querySelector('.status-line');
-  line.innerHTML = '';
-  line.append(el('span', {class:`badge ${cls}`}, text));
-}
-function appendLog(src, msg){
-  const log = document.getElementById(`log-${src.id}`);
-  log.classList.add('open');
-  log.textContent += msg + '\n';
-  log.scrollTop = log.scrollHeight;
-}
-
-async function handleUpload(src){
-  const input = document.getElementById(`file-${src.id}`);
-  const f = input.files?.[0];
-  if (!f) { setStatus(src,'b-err','Selecciona un archivo'); return; }
-  setStatus(src,'b-warn','Parseando...');
-  try {
-    const buf = await f.arrayBuffer();
-    const wb = XLSX.read(buf, {type:'array', cellDates:true});
-    appendLog(src, `Hojas: ${wb.SheetNames.join(', ')}`);
-
-    // Estados de cuenta and Roadmap+Precios have special handling
-    if (src.parser === 'estadoCuenta') {
-      const data = PARSERS.estadoCuenta(wb, src.cliente, f.name);
-      appendLog(src, `Resumen: 1 fila, detalle: ${data.detalle.length} mov.`);
-      await postChunks(src, 'estados_cuenta', 'cliente,anio,semana', data.resumen);
-      // detalle: we'd need estado_cuenta_id FK; skip for now or re-query
-      appendLog(src, 'Nota: detalle aging queda pendiente (requiere FK post-insert)');
-    } else if (src.parser === 'roadmapPrecios') {
-      const {roadmap, precios} = PARSERS.roadmapPrecios(wb);
-      appendLog(src, `Roadmap: ${roadmap.length} SKUs, Precios: ${precios.length} SKUs`);
-      await postChunks(src, 'roadmap_sku', 'sku', roadmap);
-      await postChunks(src, 'precios_sku', 'sku', precios);
-    } else {
-      const rows = PARSERS[src.parser](wb);
-      appendLog(src, `Filas parseadas: ${rows.length}`);
-      await postChunks(src, src.table, src.onConflict, rows);
-    }
-    setStatus(src,'b-ok',`✓ Completado`);
-  } catch (e) {
-    console.error(e);
-    setStatus(src,'b-err','Error');
-    appendLog(src, 'ERROR: ' + e.message);
-  }
-}
-
-async function postChunks(src, table, onConflict, rows){
+async function postChunks(src, rows, logEl, statusEl) {
+  const CHUNK = 500;
   let total = 0;
-  for (let i=0; i<rows.length; i+=CHUNK) {
+  for (let i=0;i<rows.length;i+=CHUNK) {
     const batch = rows.slice(i, i+CHUNK);
-    const r = await fetch('/api/import-central', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({table, onConflict, rows: batch})
-    });
-    if (!r.ok) {
-      const t = await r.text();
-      throw new Error(`HTTP ${r.status}: ${t.slice(0,200)}`);
-    }
-    const j = await r.json().catch(()=>({}));
+    const body = { table: src.table, rows: batch, onConflict: src.onConflict, replace: src.replace && i===0 };
+    const r = await fetch('/api/import-central', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (!r.ok) { const t = await r.text(); throw new Error('HTTP '+r.status+': '+t.slice(0,200)); }
+    const j = await r.json();
     total += batch.length;
-    appendLog(src, `  ${table} batch ${i}-${i+batch.length}: ${j.inserted ?? 'ok'}`);
+    logEl.textContent += 'Lote '+(i/CHUNK+1)+': '+batch.length+' filas OK ('+(j.inserted||batch.length)+' insertadas)\n';
+    statusEl.textContent = 'Procesando... '+total+'/'+rows.length;
   }
-  appendLog(src, `TOTAL ${table}: ${total}`);
+  return total;
 }
 
-renderCards();
+function render() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  SOURCES.forEach(src => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const tag = src.replace ? '<span class="tag">REEMPLAZA</span>' : '';
+    card.innerHTML =
+      '<h3>'+src.title+tag+'</h3>'+
+      '<div class="desc">'+src.desc+'</div>'+
+      '<div class="meta">Archivo: '+src.file+' &rarr; tabla: '+src.table+'</div>'+
+      '<label class="drop" data-drop>'+
+        '<span class="icon">&#128193;</span>'+
+        '<span class="label">Click aqui para seleccionar archivo</span>'+
+        '<span class="fname" data-fname></span>'+
+        '<input type="file" accept=".xlsx,.xls,.csv" data-input />'+
+      '</label>'+
+      '<div class="status" data-status></div>'+
+      '<div class="row">'+
+        '<button class="btn" data-btn disabled>Procesar y subir</button>'+
+      '</div>'+
+      '<div class="log" data-log></div>';
+    grid.appendChild(card);
+
+    const input = card.querySelector('[data-input]');
+    const drop = card.querySelector('[data-drop]');
+    const fname = card.querySelector('[data-fname]');
+    const btn = card.querySelector('[data-btn]');
+    const status = card.querySelector('[data-status]');
+    const log = card.querySelector('[data-log]');
+    let parsedRows = null;
+
+    input.addEventListener('change', async () => {
+      const f = input.files[0];
+      if (!f) return;
+      fname.textContent = '\u2713 ' + f.name;
+      drop.classList.add('has-file');
+      status.className = 'status s-info';
+      status.textContent = 'Leyendo archivo...';
+      btn.disabled = true;
+      log.classList.remove('open');
+      log.textContent = '';
+      try {
+        const buf = await f.arrayBuffer();
+        const wb = XLSX.read(buf, { type:'array', cellDates:false });
+        const sheetName = src.sheet && wb.Sheets[src.sheet] ? src.sheet : wb.SheetNames[0];
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval:null, raw:true });
+        const parser = PARSERS[src.parser];
+        const parsed = src.cliente ? parser(rows, src.cliente) : parser(rows);
+        parsedRows = parsed;
+        status.className = 'status s-ok';
+        status.textContent = '\u2713 '+parsed.length+' filas listas (de '+rows.length+' leidas).';
+        btn.disabled = parsed.length === 0;
+      } catch(e) {
+        status.className = 'status s-err';
+        status.textContent = 'Error leyendo: ' + e.message;
+      }
+    });
+
+    btn.addEventListener('click', async () => {
+      if (!parsedRows || parsedRows.length === 0) return;
+      btn.disabled = true;
+      log.classList.add('open');
+      log.textContent = '';
+      status.className = 'status s-info';
+      status.textContent = 'Subiendo a Supabase...';
+      try {
+        const total = await postChunks(src, parsedRows, log, status);
+        status.className = 'status s-ok';
+        status.textContent = '\u2713 '+total+' filas procesadas en '+src.table+'.';
+      } catch(e) {
+        status.className = 'status s-err';
+        status.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+render();
+</script>
+</body>
+</html>
