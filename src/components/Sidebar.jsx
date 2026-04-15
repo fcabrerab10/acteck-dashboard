@@ -202,11 +202,6 @@ export default function Sidebar({
     
       {/* Acciones rapidas */}
       <div className="mt-4 pt-3 border-t border-slate-700/40 flex flex-col gap-0.5 text-xs">
-        {onActualizarDatos && (
-          <button onClick={onActualizarDatos} className="text-left text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-700/30 transition">
-            Actualizar Datos
-          </button>
-        )}
         <a href="/uploads.html" className="text-left text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-700/30 transition">
           Actualizar Excel
         </a>
