@@ -195,6 +195,13 @@ export default function Sidebar({
         </div>
       )}
 
+      {/* Actualizar datos (uploader Excel) */}
+      <div className="px-3 pb-2">
+        <a href="/uploads.html" className="w-full block text-center px-4 py-2 bg-slate-700 text-white rounded-lg text-sm font-semibold shadow hover:bg-slate-600 transition-all">
+          ⚙️ Actualizar datos (Excel)
+        </a>
+      </div>
+
       {/* Configuración */}
       {esAdmin && (
         <div className="px-3 pb-2">
