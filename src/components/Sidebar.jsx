@@ -183,42 +183,7 @@ export default function Sidebar({
         ))}
       </nav>
 
-      {/* Actualizar Datos */}
-      {onActualizarDatos && esAdmin && !modoPresent && (
-        <div className="px-3 pb-2">
-          <button
-            onClick={onActualizarDatos}
-            className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow hover:shadow-md transition-all flex items-center justify-center gap-2"
-          >
-            🔄 Actualizar Datos
-          </button>
-        </div>
-      )}
-
-      {/* Actualizar datos (uploader Excel) */}
-      <div className="px-3 pb-2">
-        <a href="/uploads.html" className="w-full block text-center px-4 py-2 bg-slate-700 text-white rounded-lg text-sm font-semibold shadow hover:bg-slate-600 transition-all">
-          ⚙️ Actualizar datos (Excel)
-        </a>
-      </div>
-
-      {/* Configuración */}
-      {esAdmin && (
-        <div className="px-3 pb-2">
-          <button
-            onClick={() => onNavegar(null, 'configuracion')}
-            className={[
-              'w-full py-2 px-3 rounded-lg text-sm font-semibold transition-all flex items-center gap-2',
-              isActiveGlobal('configuracion')
-                ? 'bg-black text-white'
-                : 'bg-gray-900 text-white hover:bg-black',
-            ].join(' ')}
-          >
-            ⚙️ Configuración
-          </button>
-        </div>
-      )}
-
+      
       {/* Footer: usuario + cerrar sesión */}
       <div className="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
         {perfilUsuario?.nombre && (
@@ -233,6 +198,21 @@ export default function Sidebar({
           </button>
         )}
         <div className="text-gray-400 mt-1">v1.0 · Abril 2026</div>
+      </div>
+    
+      {/* Acciones rapidas */}
+      <div className="mt-4 pt-3 border-t border-slate-700/40 flex flex-col gap-0.5 text-xs">
+        {onActualizarDatos && (
+          <button onClick={onActualizarDatos} className="text-left text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-700/30 transition">
+            Actualizar Datos
+          </button>
+        )}
+        <a href="/uploads.html" className="text-left text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-700/30 transition">
+          Actualizar Excel
+        </a>
+        <button onClick={() => onNavegar(null, 'configuracion')} className="text-left text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-700/30 transition">
+          Configuracion
+        </button>
       </div>
     </aside>
   );
