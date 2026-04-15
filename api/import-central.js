@@ -1,5 +1,5 @@
 // api/import-central.js
-// Endpoint simple de upsert por chunks. El cliente parsea el Excel y envÃ­a
+// Endpoint simple de upsert por chunks. El cliente parsea el Excel y envÃÂ­a
 // lotes de filas ya mapeadas: { table, rows, onConflict }
 //
 // Tablas permitidas y sus unique keys:
@@ -20,7 +20,11 @@ const ALLOWED = {
   inventario_cliente: 'cliente,sku',
   roadmap_sku:       'sku',
   precios_sku:       'sku',
-  transito_sku:      'sku,row_hash'
+  transito_sku:      'sku,row_hash',
+  sellout_pcel:          'anio,semana,sku',
+  estados_cuenta:        'cliente,anio,semana',
+  estados_cuenta_detalle:'id',
+  embarques_compras:     'po,codigo'
 };
 
 export default async function handler(req, res) {
