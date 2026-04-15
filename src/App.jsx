@@ -299,6 +299,7 @@ export default function App() {
     }
   };
 
+  const esAdmin = perfil?.rol === "admin" || perfil?.rol === "super_admin";
   const navItems = [
     { id: "home",       label: "Resumen",               icono: "ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ ", habilitado: true  },
     { id: "analisis",   label: "AnÃÂÃÂÃÂÃÂ¡lisis",                icono: "ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ", habilitado: true  },
