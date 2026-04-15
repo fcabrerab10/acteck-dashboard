@@ -111,9 +111,9 @@ export default function Sidebar({
   onActualizarDatos,
   onCerrarSesion,
   perfilUsuario,
-  modoPresent = false,
 }) {
   const [expanded, setExpanded] = useState(loadExpanded);
+  const [modoPresent, setModoPresent] = useState(false);
   useEffect(() => { saveExpanded(expanded); }, [expanded]);
 
   // Asegurar que el cliente activo esté expandido automáticamente
@@ -179,13 +179,54 @@ export default function Sidebar({
             onNavegar={onNavegar}
             isActiveLeaf={isActiveLeaf}
             isActiveGlobal={isActiveGlobal}
+            modoPresent={modoPresent}
           />
         ))}
       </nav>
 
-      
-      {/* Footer: usuario + cerrar sesión */}
+      {/* Actualizar Datos */}
+      {onActualizarDatos && esAdmin && !modoPresent && (
+        <div className="px-3 pb-2">
+          <button
+            onClick={onActualizarDatos}
+            className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow hover:shadow-md transition-all flex items-center justify-center gap-2"
+          >
+            🔄 Actualizar Datos
+          </button>
+        </div>
+      )}
+
+      {/* Configuración */}
+      {esAdmin && (
+        <div className="px-3 pb-2">
+          <button
+            onClick={() => onNavegar(null, 'configuracion')}
+            className={[
+              'w-full py-2 px-3 rounded-lg text-sm font-semibold transition-all flex items-center gap-2',
+              isActiveGlobal('configuracion')
+                ? 'bg-black text-white'
+                : 'bg-gray-900 text-white hover:bg-black',
+            ].join(' ')}
+          >
+            ⚙️ Configuración
+          </button>
+        </div>
+      )}
+
+      {/* Footer: modo presentación + usuario + cerrar sesión */}
       <div className="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
+        {/* Botón Modo Presentación */}
+        <button
+          onClick={() => setModoPresent(!modoPresent)}
+          className={`w-full mb-2 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center justify-center gap-2 ${
+            modoPresent
+              ? 'bg-gray-800 text-white hover:bg-gray-700'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          {modoPresent ? <>🔒 Salir de Presentación</> : <>👁️ Modo Presentación</>}
+        </button>
+
         {perfilUsuario?.nombre && (
           <div className="font-medium text-gray-700 truncate">{perfilUsuario.nombre}</div>
         )}
@@ -199,16 +240,6 @@ export default function Sidebar({
         )}
         <div className="text-gray-400 mt-1">v1.0 · Abril 2026</div>
       </div>
-    
-      {/* Acciones rapidas */}
-      <div className="mt-4 pt-3 border-t border-slate-700/40 flex flex-col gap-0.5 text-xs">
-        <a href="/uploads.html" className="text-left text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-700/30 transition">
-          Actualizar Excel
-        </a>
-        <button onClick={() => onNavegar(null, 'configuracion')} className="text-left text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-slate-700/30 transition">
-          Configuracion
-        </button>
-      </div>
     </aside>
   );
 }
@@ -216,7 +247,7 @@ export default function Sidebar({
 // ────────────────────────────────────────────────────────────
 //  SUBCOMPONENTES
 // ────────────────────────────────────────────────────────────
-function GrupoBloque({ grupo, expanded, toggle, clienteActivo, paginaActiva, onNavegar, isActiveLeaf, isActiveGlobal }) {
+function GrupoBloque({ grupo, expanded, toggle, clienteActivo, paginaActiva, onNavegar, isActiveLeaf, isActiveGlobal, modoPresent }) {
   const isOpen = expanded[grupo.id];
   const hasItems = grupo.items && grupo.items.length > 0;
 
@@ -250,7 +281,9 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, paginaActiva, onN
                   </button>
                   {isAdminOpen && (
                     <div className="ml-3 mt-0.5 pl-2 border-l border-gray-100 space-y-0.5">
-                      {Object.entries(PESTANAS_POR_CLIENTE).map(([cid, cfg]) => (
+                      {Object.entries(PESTANAS_POR_CLIENTE)
+                        .filter(([cid]) => !modoPresent || cid === clienteActivo)
+                        .map(([cid, cfg]) => (
                         <ClienteBloque
                           key={cid}
                           clienteId={cid}
@@ -310,7 +343,7 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
           isClienteActual ? 'text-blue-700' : 'text-gray-700 hover:bg-gray-50',
         ].join(' ')}
       >
-        {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
+        {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" /> : <ChevronRight classNama="w-3.5 h-3.5 text-gray-400" />}
         <span className="flex-1 text-left">{cfg.label}</span>
         {cfg.badge && (
           <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${cfg.badge.cls}`}>
