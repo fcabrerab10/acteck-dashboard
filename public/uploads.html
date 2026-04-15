@@ -33,6 +33,10 @@ main{padding:24px 32px;max-width:1280px;margin:0 auto}
 .log{max-height:120px;overflow:auto;font-family:ui-monospace,monospace;font-size:11px;background:#0f172a;color:#cbd5e1;border-radius:6px;padding:8px;white-space:pre-wrap;display:none}
 .log.open{display:block}
 .tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:600;background:#fef3c7;color:#92400e;margin-left:6px}
+.last{font-size:11px;color:#64748b;background:#f1f5f9;border-left:3px solid #94a3b8;padding:5px 8px;border-radius:4px}
+.last.fresh{color:#065f46;background:#ecfdf5;border-left-color:#10b981}
+.last.stale{color:#92400e;background:#fef3c7;border-left-color:#f59e0b}
+.last.never{color:#9ca3af;background:#f9fafb;border-left-color:#d1d5db;font-style:italic}
 </style>
 </head>
 <body>
@@ -167,6 +171,7 @@ function render() {
       '<h3>'+src.title+tag+'</h3>'+
       '<div class="desc">'+src.desc+'</div>'+
       '<div class="meta">Archivo: '+src.file+' &rarr; tabla: '+src.table+'</div>'+
+      '<div class="last" data-last>Sin actualizar todavia</div>'+
       '<label class="drop" data-drop>'+
         '<span class="icon">&#128193;</span>'+
         '<span class="label">Click aqui para seleccionar archivo</span>'+
@@ -186,7 +191,26 @@ function render() {
     const btn = card.querySelector('[data-btn]');
     const status = card.querySelector('[data-status]');
     const log = card.querySelector('[data-log]');
+    const lastEl = card.querySelector('[data-last]');
     let parsedRows = null;
+
+    // Mostrar ultima actualizacion guardada
+    const renderLast = () => {
+      const iso = localStorage.getItem('lastUpdate_' + src.id);
+      if (!iso) { lastEl.className = 'last never'; lastEl.textContent = 'Sin actualizar todavia'; return; }
+      const d = new Date(iso);
+      const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+      let texto;
+      let cls = 'last fresh';
+      if (mins < 1) texto = 'hace unos segundos';
+      else if (mins < 60) texto = 'hace ' + mins + ' min';
+      else if (mins < 1440) texto = 'hace ' + Math.floor(mins/60) + ' h';
+      else { texto = 'hace ' + Math.floor(mins/1440) + ' dias'; cls = mins/1440 > 7 ? 'last stale' : 'last'; }
+      const fecha = d.toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+      lastEl.className = cls;
+      lastEl.textContent = 'Ultima actualizacion: ' + fecha + ' (' + texto + ')';
+    };
+    renderLast();
 
     input.addEventListener('change', async () => {
       const f = input.files[0];
@@ -226,6 +250,8 @@ function render() {
         const total = await postChunks(src, parsedRows, log, status);
         status.className = 'status s-ok';
         status.textContent = '\u2713 '+total+' filas procesadas en '+src.table+'.';
+        localStorage.setItem('lastUpdate_' + src.id, new Date().toISOString());
+        renderLast();
       } catch(e) {
         status.className = 'status s-err';
         status.textContent = e.message;
