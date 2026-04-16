@@ -234,7 +234,6 @@ export default function App() {
     const [clienteActivo, setClienteActivo] = useState("digitalife");
   const [modoPresent, setModoPresent] = useState(false);
   const [paginaActiva, setPaginaActiva] = useState("home");
-  const [showUpdatePanel, setShowUpdatePanel] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [vistaActual, setVistaActual] = useState(null);
   const [clienteKey, setClienteKey] = useState(null);
@@ -323,7 +322,6 @@ export default function App() {
         clienteActivo={clienteActivo}
         paginaActiva={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva}
         onNavegar={handleNavegar}
-        onActualizarDatos={() => setShowUpdatePanel(true)}
         onCerrarSesion={handleLogout}
         perfilUsuario={perfil}
         modoPresent={false}
@@ -358,22 +356,6 @@ export default function App() {
           )}
         </div>
         </main>
-      {showUpdatePanel && React.createElement(PanelActualizacion, {
-        onClose: function() { setShowUpdatePanel(false); },
-        cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo,
-        clienteKey: clienteActivo,
-        anio: 2026,
-        onVentasUpdate: function() { setVentasVer(function(v) { return v + 1; }); }
-      })}
-
-      {/* Boton flotante Subir Excel central */}
-      {React.createElement('button', {
-        onClick: function() { setShowUpload(true); },
-        className: 'fixed bottom-6 right-6 z-40 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-full shadow-lg font-semibold text-sm',
-        title: 'Subir archivo Excel central',
-        style: { cursor: 'pointer' }
-      }, '📤 Subir Excel central')}
-
       {React.createElement('div', {
         className: 'fixed top-3 right-4 z-40 bg-white px-3 py-1 rounded-full shadow border border-gray-200'
       }, React.createElement(UpdatedAtBadgeX, null))}
