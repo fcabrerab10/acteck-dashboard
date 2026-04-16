@@ -52,7 +52,7 @@ const SOURCES = [
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true }
     ]
   },
-  { id:'digitalife-sellout', title:'Digitalife · Sellout semanal', desc:'Archivo Acteck_BalamRush_Ventas (Hoja40). Append histórico con dedup.', file:'Acteck_BalamRush_Ventas.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
+  { id:'digitalife-sellout', title:'Digitalife · Sellout histórico', desc:'Historico Sellout Digitalife (hoja "Sellout Digitalife"). Append con dedup por fecha+parte+cantidad+total.', file:'Historico Sellout Digitalife.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
   { id:'digitalife-inv', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Replace cliente=digitalife.', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku', parser:'digitalifeInv', replaceWhere:{cliente:'digitalife'} },
   { id:'pcel-vm', title:'PCEL · venta-marca semanal', desc:'Archivo venta-marca-ACTECK. Upsert (anio, semana, sku).', file:'venta-marca-ACTECK.xlsx', table:'sellout_pcel', onConflict:'anio,semana,sku', parser:'pcelVentaMarca' },
   { id:'ec-pcel', title:'Estado de cuenta · PCEL', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
@@ -112,7 +112,7 @@ const PARSERS = {
     })).filter(r => r.articulo && r.no_almacen != null);
   },
   digitalifeSellout(wb){
-    const sh = wb.Sheets['Hoja40'] || wb.Sheets[wb.SheetNames[0]];
+    const sh = wb.Sheets['Sellout Digitalife'] || wb.Sheets['Hoja40'] || wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
     return rows.map(r => {
       const obj = {};
@@ -155,7 +155,7 @@ const PARSERS = {
     }).filter(r => r.sku);
   },
   pcelVentaMarca(wb){
-    const sh = wb.Sheets[wb.SheetNames[0]];
+    const sh = wb.Sheets['Ventas por Fabricante'] || wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
     // Find the "Vta Semana N" column to parse the week number
     let semana = null;
@@ -164,29 +164,32 @@ const PARSERS = {
       const m = String(h).match(/vta\s+semana\s+(\d+)/i);
       if (m) { semana = parseInt(m[1],10); break; }
     }
+    // Map month columns dynamically: "Vta Abr" → vta_abr, "Vta Mar" → vta_mar, etc.
     const year = new Date().getFullYear();
     return rows.map(r => {
       const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
       const vtaSemKey = Object.keys(obj).find(k => /vta_semana_\d+/.test(k));
+      // Find month columns dynamically (vta_ene, vta_feb, vta_mar, vta_abr, etc.)
+      const monthKeys = Object.keys(obj).filter(k => /^vta_[a-z]{3}$/.test(k)).sort();
       return {
         anio: year,
         semana: semana,
-        sku: toStr(obj.sku ?? obj.pcel_sku),
-        pcel_sku: toStr(obj.sku ?? obj.pcel_sku),
+        sku: toStr(obj.sku),
+        pcel_sku: toStr(obj.sku),
         marca: toStr(obj.marca),
-        producto: toStr(obj.producto ?? obj.descripcion),
+        producto: toStr(obj.producto ?? obj.modelo),
         familia: toStr(obj.familia),
         subfamilia: toStr(obj.subfamilia),
         inventario: toInt(obj.inventario),
-        costo_promedio: toNum(obj.costo_promedio ?? obj.costo),
+        costo_promedio: toNum(obj.costo_promedio),
         antiguedad: toInt(obj.antiguedad),
-        transito: toInt(obj.transito ?? obj.tra_nsito),
-        back_order: toInt(obj.back_order ?? obj.backorder),
+        transito: toInt(obj.transito),
+        back_order: toInt(obj.back_order),
         vta_semana: toInt(vtaSemKey ? obj[vtaSemKey] : null),
-        vta_mes_actual: toInt(obj.vta_mes_actual),
-        vta_mes_1: toInt(obj.vta_mes_1),
-        vta_mes_2: toInt(obj.vta_mes_2),
-        vta_mes_3: toInt(obj.vta_mes_3),
+        vta_mes_actual: toInt(monthKeys[0] ? obj[monthKeys[0]] : null),
+        vta_mes_1: toInt(monthKeys[1] ? obj[monthKeys[1]] : null),
+        vta_mes_2: toInt(monthKeys[2] ? obj[monthKeys[2]] : null),
+        vta_mes_3: toInt(monthKeys[3] ? obj[monthKeys[3]] : null),
       };
     }).filter(r => r.sku && r.semana != null);
   },
@@ -196,32 +199,36 @@ const PARSERS = {
     const semana = m ? parseInt(m[1],10) : null;
     const year = new Date().getFullYear();
     const sh = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null, range: 6}); // headers on row 7 (0-indexed 6)
-    // Aggregate resumen (sum of saldos)
-    let saldo_actual=0, saldo_vencido=0, notas_credito=0, saldo_a_vencer=0;
+    // Read resumen from row 8 (cells F8:I8) — Saldo Actual, Saldo Vencido, Notas Credito, Saldo a Vencer
+    const cellVal = (ref) => { const c = sh[ref]; return c ? (c.v ?? null) : null; };
+    const saldo_actual = toNum(cellVal('F8')) || 0;
+    const saldo_vencido = toNum(cellVal('G8')) || 0;
+    const notas_credito = toNum(cellVal('H8')) || 0;
+    const saldo_a_vencer = toNum(cellVal('I8')) || 0;
+    // Detail rows: headers on row 10 (0-indexed range: 9)
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null, range: 9});
     const detalle = [];
     for (const r of rows) {
       const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
       const importe = toNum(obj.importe_factura ?? obj.importe);
       const saldo = toNum(obj.saldo_actual ?? obj.saldo);
+      if (!obj.movimientos && !importe && !saldo) continue; // skip empty rows
       const aging = {
-        corriente: toNum(obj.corriente ?? obj.aging_corriente) || 0,
-        d01_30: toNum(obj._1_30 ?? obj.aging_01_30 ?? obj.dias_1_30) || 0,
-        d31_60: toNum(obj._31_60 ?? obj.aging_31_60) || 0,
-        d61_90: toNum(obj._61_90 ?? obj.aging_61_90) || 0,
-        d91_180: toNum(obj._91_180 ?? obj.aging_91_180) || 0,
-        d181: toNum(obj._181_mas ?? obj.aging_181_mas ?? obj.mas_181) || 0,
+        corriente: toNum(obj.corriente) || 0,
+        d01_30: toNum(obj['01_30_dias'] ?? obj._01_30_dias) || 0,
+        d31_60: toNum(obj['31_60_dias'] ?? obj._31_60_dias) || 0,
+        d61_90: toNum(obj['61_90_dias'] ?? obj._61_90_dias) || 0,
+        d91_180: toNum(obj['91_180_dias'] ?? obj._91_180_dias) || 0,
+        d181: toNum(obj.mas_de_181_dias ?? obj._mas_de_181_dias) || 0,
       };
-      if (saldo) saldo_actual += saldo;
-      saldo_vencido += (aging.d01_30+aging.d31_60+aging.d61_90+aging.d91_180+aging.d181);
       detalle.push({
-        movimiento: toStr(obj.movimiento),
+        movimiento: toStr(obj.movimientos ?? obj.movimiento),
         condicion: toStr(obj.condicion),
         referencia: toStr(obj.referencia),
-        fecha_emision: toISODate(obj.fecha_emision ?? obj.emision),
+        fecha_emision: toISODate(obj.fecha_emision),
         vencimiento: toISODate(obj.vencimiento),
         importe_factura: importe,
-        dias_moratorios: toInt(obj.dias_moratorios ?? obj.dias),
+        dias_moratorios: toInt(obj.dias_moratorios),
         saldo_actual: saldo,
         aging_corriente: aging.corriente,
         aging_01_30: aging.d01_30,
