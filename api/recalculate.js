@@ -229,7 +229,39 @@ export default async function handler(req, res) {
   if (!SRK) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
 
   try {
-    const { tables, debug, reset } = req.body || {};
+    const { tables, debug, reset, migrate } = req.body || {};
+
+    // Migrate mode: run predefined schema migrations
+    // Uses the pg meta /query endpoint with service role
+    if (migrate) {
+      const migrations = {
+        marketing_v2: `ALTER TABLE marketing_actividades
+          ADD COLUMN IF NOT EXISTS marca TEXT,
+          ADD COLUMN IF NOT EXISTS red_social TEXT,
+          ADD COLUMN IF NOT EXISTS metricas JSONB DEFAULT '{}'::jsonb,
+          ADD COLUMN IF NOT EXISTS fecha DATE,
+          ADD COLUMN IF NOT EXISTS evento_sucursal TEXT,
+          ADD COLUMN IF NOT EXISTS evento_pop TEXT;
+          DROP POLICY IF EXISTS "Anon all marketing_actividades" ON marketing_actividades;
+          CREATE POLICY "Anon all marketing_actividades" ON marketing_actividades FOR ALL TO anon USING (true) WITH CHECK (true);`,
+      };
+      const sql = migrations[migrate];
+      if (!sql) {
+        return res.status(400).json({ error: 'unknown migration. options: ' + Object.keys(migrations).join(', ') });
+      }
+      // Use Supabase REST admin API via pg-meta endpoint
+      const mr = await fetch(`${SB_URL}/rest/v1/rpc/exec_sql`, {
+        method: 'POST',
+        headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql }),
+      });
+      if (!mr.ok) {
+        const errText = await mr.text();
+        // Fallback: try execute via database URL direct pg-meta (Supabase admin API)
+        return res.status(500).json({ error: 'RPC exec_sql not available. Run SQL manually in Supabase SQL Editor.', sql, rpc_error: errText.slice(0, 200) });
+      }
+      return res.status(200).json({ ok: true, migrate, sql });
+    }
 
     // Reset mode: delete all rows from a logical group of tables
     // { reset: 'sellout' } → wipes sellout_detalle and sellout_sku
