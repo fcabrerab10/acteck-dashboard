@@ -267,6 +267,11 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   const [cuotasMensuales, setCuotasMensuales] = React.useState([]);
   const [selloutSem, setSelloutSem] = React.useState([]);  // sellout_detalle para comparativa semanal
   const [estadoCuenta, setEstadoCuenta] = React.useState(null);  // último estado de cuenta
+  const [tareas, setTareas] = React.useState([]);  // pendientes del cliente
+  const [nuevaTarea, setNuevaTarea] = React.useState({ descripcion: '', responsable: '', fecha_entrega: '' });
+  const [mostrandoFormTarea, setMostrandoFormTarea] = React.useState(false);
+  const [productos, setProductos] = React.useState([]);
+  const [invActeck, setInvActeck] = React.useState([]);
 
   const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
   const ESTADOS = [
@@ -299,16 +304,20 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       // Get last ~8 weeks of sellout_detalle for weekly comparison
       const hoy = new Date();
       const hace56dias = new Date(hoy.getTime() - 56 * 86400000).toISOString().slice(0, 10);
-      const [siData, soData, mR, imR, minR, invData, cuotasR, sdR, ecR] = await Promise.all([
+      const ACTECK_ALMACENES = [1, 2, 3, 4, 14, 16, 17, 25, 44];
+      const [siData, soData, mR, imR, minR, invData, cuotasR, sdR, ecR, tareasR, prodData, invActData] = await Promise.all([
         fetchAllPages(() => supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
         fetchAllPages(() => supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
         supabase.from("metas_anuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).maybeSingle(),
         supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).order("mes"),
         supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
-        fetchAllPages(() => supabase.from("inventario_cliente").select("sku,stock,valor,costo_convenio,dias_sin_venta,anio,semana,titulo").eq("cliente", clienteKey)),
+        fetchAllPages(() => supabase.from("inventario_cliente").select("sku,stock,valor,costo_convenio,dias_sin_venta,anio,semana,titulo,marca").eq("cliente", clienteKey)),
         supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
-        fetchAllPages(() => supabase.from("sellout_detalle").select("fecha,total,cantidad,no_parte").eq("cliente", clienteKey).gte("fecha", hace56dias)),
+        fetchAllPages(() => supabase.from("sellout_detalle").select("fecha,total,cantidad,no_parte,marca").eq("cliente", clienteKey).gte("fecha", hace56dias)),
         supabase.from("estados_cuenta").select("*").eq("cliente", clienteKey).order("anio", { ascending: false }).order("semana", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("archivado", false).order("created_at", { ascending: false }),
+        fetchAllPages(() => supabase.from("productos_cliente").select("sku,marca,precio_venta").eq("cliente", clienteKey)),
+        fetchAllPages(() => supabase.from("inventario_acteck").select("articulo,no_almacen,disponible").in("no_almacen", ACTECK_ALMACENES)),
       ]);
       setSellInSku(siData);
       setSellOutSku(soData);
@@ -319,6 +328,9 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       setCuotasMensuales(cuotasR?.data || []);
       setSelloutSem(sdR);
       setEstadoCuenta(ecR?.data || null);
+      setTareas(tareasR.data || []);
+      setProductos(prodData);
+      setInvActeck(invActData);
       setLoading(false);
     })();
   }, [clienteKey, anioResumen]);
@@ -454,6 +466,71 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     });
     return criticos.sort((a, b) => b.urgencia - a.urgencia || a.diasCob - b.diasCob).slice(0, 8);
   }, [sellOutSku, invClienteLatest]);
+
+  // ─── MARCAS TOP (Acteck vs Balam Rush) del sellout YTD ────────────────────
+  const _marcasTop = React.useMemo(() => {
+    const marcas = {};
+    // Use inventario titulo/marca to map sku -> marca
+    const skuMarca = {};
+    invClienteLatest.forEach(inv => { if (inv.sku && inv.marca) skuMarca[inv.sku] = inv.marca; });
+    productos.forEach(p => { if (p.sku && p.marca && !skuMarca[p.sku]) skuMarca[p.sku] = p.marca; });
+    sellOutSku.forEach(r => {
+      const marca = (skuMarca[r.sku] || 'Sin marca').toUpperCase();
+      const key = marca.includes('BALAM') ? 'Balam Rush' : marca.includes('ACTECK') ? 'Acteck' : 'Otras';
+      if (!marcas[key]) marcas[key] = { monto: 0, piezas: 0 };
+      marcas[key].monto += Number(r.monto_pesos) || 0;
+      marcas[key].piezas += Number(r.piezas) || 0;
+    });
+    const total = Object.values(marcas).reduce((s, m) => s + m.monto, 0);
+    return Object.entries(marcas)
+      .map(([k, v]) => ({ marca: k, ...v, pct: total > 0 ? (v.monto / total * 100) : 0 }))
+      .sort((a, b) => b.monto - a.monto);
+  }, [sellOutSku, invClienteLatest, productos]);
+
+  // ─── SUGERIDO TOTAL DE REPOSICIÓN ($ pendiente por cerrar) ────────────────
+  const _sugeridoTotal = React.useMemo(() => {
+    if (!sellOutSku.length || !invClienteLatest.length) return { piezas: 0, monto: 0, skus: 0 };
+    // Aggregate Acteck stock by SKU
+    const actStockBySku = {};
+    invActeck.forEach(r => {
+      if (!r.articulo) return;
+      actStockBySku[r.articulo] = (actStockBySku[r.articulo] || 0) + (Number(r.disponible) || 0);
+    });
+    // Inventory cliente by SKU
+    const stockBySku = {};
+    invClienteLatest.forEach(inv => { stockBySku[inv.sku] = Number(inv.stock) || 0; });
+    // Rotation last 3 months
+    const ultMes = Math.max(...sellOutSku.map(r => Number(r.mes) || 0), 0);
+    const tres = Math.max(1, ultMes - 2);
+    const rotBySku = {};
+    sellOutSku.forEach(r => {
+      const m = Number(r.mes) || 0;
+      if (m < tres || m > ultMes) return;
+      if (!rotBySku[r.sku]) rotBySku[r.sku] = { piezas: 0, meses: new Set() };
+      rotBySku[r.sku].piezas += Number(r.piezas) || 0;
+      rotBySku[r.sku].meses.add(m);
+    });
+    // Precio por SKU
+    const precioBySku = {};
+    productos.forEach(p => { if (p.sku) precioBySku[p.sku] = Number(p.precio_venta) || 0; });
+    // Compute
+    let totPiezas = 0, totMonto = 0, skusAplic = 0;
+    Object.entries(rotBySku).forEach(([sku, data]) => {
+      const promMes = data.piezas / Math.max(data.meses.size, 1);
+      if (promMes <= 0) return;
+      const stock = stockBySku[sku] || 0;
+      let sug = Math.max(0, Math.round(promMes * 3 - stock));
+      if (clienteKey === 'digitalife' && stock < promMes && sug < 11) sug = 11;
+      const disponible = actStockBySku[sku] || 0;
+      sug = Math.min(sug, disponible);
+      if (sug > 0) {
+        totPiezas += sug;
+        totMonto += sug * (precioBySku[sku] || 0);
+        skusAplic++;
+      }
+    });
+    return { piezas: totPiezas, monto: totMonto, skus: skusAplic };
+  }, [sellOutSku, invClienteLatest, productos, invActeck, clienteKey]);
 
   // ─── DÍAS DE COBERTURA INVENTARIO ────────────────────────────────────────
   const _diasCobertura = React.useMemo(() => {
@@ -721,20 +798,33 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
             "Esta: " + formatMXN(_weeklySellout.last?.total || 0) + " · Prev: " + formatMXN(_weeklySellout.prev?.total || 0))
         ) : React.createElement("div", { style: { fontSize: 12, color: "#94A3B8" } }, "Se necesitan 2 semanas de datos")
       ),
-      // SKUs críticos
+      // Marcas Top
       React.createElement("div", { style: { paddingTop: 10, borderTop: "1px dashed #E2E8F0" } },
-        React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 6 } }, "SKUs críticos (alta rotación, <30 días cobertura)"),
-        _skusCriticos.length === 0
-          ? React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", fontStyle: "italic" } }, "Sin SKUs en riesgo")
-          : _skusCriticos.slice(0, 5).map((s, i) =>
-            React.createElement("div", { key: s.sku, style: { display: "flex", alignItems: "center", gap: 8, padding: "3px 0", fontSize: 11 } },
-              React.createElement("span", { style: { width: 8, height: 8, borderRadius: 4, background: s.urgencia === 3 ? "#EF4444" : s.urgencia === 2 ? "#F59E0B" : "#FCD34D", flexShrink: 0 } }),
-              React.createElement("span", { style: { fontFamily: "ui-monospace,monospace", color: "#475569", minWidth: 70 } }, s.sku),
-              React.createElement("span", { style: { flex: 1, color: "#1E293B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.titulo }, s.titulo.slice(0, 32)),
-              React.createElement("span", { style: { color: "#EF4444", fontWeight: 600, minWidth: 40, textAlign: "right" } }, s.diasCob + "d"),
-              React.createElement("span", { style: { color: "#94A3B8", minWidth: 45, textAlign: "right" } }, s.stock + " pzs")
-            )
-          )
+        React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 6 } }, "Mix de marcas (Sell Out YTD)"),
+        _marcasTop.length === 0
+          ? React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", fontStyle: "italic" } }, "Sin datos")
+          : _marcasTop.map((m) => {
+            const color = m.marca === 'Acteck' ? '#3B82F6' : m.marca === 'Balam Rush' ? '#8B5CF6' : '#94A3B8';
+            return React.createElement("div", { key: m.marca, style: { marginBottom: 6 } },
+              React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 11 } },
+                React.createElement("span", { style: { fontWeight: 600, color: "#1E293B" } }, m.marca),
+                React.createElement("span", { style: { color: color, fontWeight: 700 } }, m.pct.toFixed(1) + "%")
+              ),
+              React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94A3B8", marginBottom: 2 } },
+                React.createElement("span", null, formatMXN(m.monto)),
+                React.createElement("span", null, m.piezas.toLocaleString("es-MX") + " pzs")
+              ),
+              React.createElement("div", { style: { height: 4, background: "#E2E8F0", borderRadius: 2, overflow: "hidden" } },
+                React.createElement("div", { style: { height: "100%", width: m.pct + "%", background: color, borderRadius: 2, transition: "width .6s" } })
+              )
+            );
+          })
+      ),
+      // Sugerido total reposición
+      React.createElement("div", { style: { paddingTop: 10, borderTop: "1px dashed #E2E8F0", background: "#F0FDF4", padding: "10px 12px", margin: "8px -16px -16px", borderBottomLeftRadius: 12, borderBottomRightRadius: 12 } },
+        React.createElement("div", { style: { fontSize: 11, color: "#065F46", fontWeight: 600, marginBottom: 2 } }, "💡 Sugerido reposición pendiente"),
+        React.createElement("div", { style: { fontSize: 18, fontWeight: 700, color: "#047857" } }, formatMXN(_sugeridoTotal.monto)),
+        React.createElement("div", { style: { fontSize: 10, color: "#047857" } }, _sugeridoTotal.piezas.toLocaleString("es-MX") + " pzs en " + _sugeridoTotal.skus + " SKUs")
       )
     );
   }
@@ -757,6 +847,120 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
             React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, _diasCobertura <= 90 ? "Óptimo" : _diasCobertura <= 150 ? "Atención" : "Sobreinventario"))
           : React.createElement("div", { style: { fontSize: 12, color: "#94A3B8" } }, "Sin suficientes datos")
       )
+    );
+  }
+
+  // ─── TAREAS CARD (lista de tareas con checkbox + timestamp) ──────────────
+  function TareasCard() {
+    const toggleTarea = async (tarea) => {
+      const esCompletada = tarea.estado === 'completado';
+      const nuevoEstado = esCompletada ? 'pendiente' : 'completado';
+      const updates = { estado: nuevoEstado, updated_at: new Date().toISOString() };
+      const { error } = await supabase.from("pendientes").update(updates).eq("id", tarea.id);
+      if (!error) {
+        setTareas(prev => prev.map(t => t.id === tarea.id ? { ...t, ...updates } : t));
+      }
+    };
+    const addTarea = async () => {
+      if (!nuevaTarea.descripcion.trim()) return;
+      const payload = {
+        cliente: clienteKey,
+        tipo: 'comercial',
+        titulo: nuevaTarea.descripcion.trim().slice(0, 60),
+        descripcion: nuevaTarea.descripcion.trim(),
+        responsable: nuevaTarea.responsable.trim() || null,
+        fecha_entrega: nuevaTarea.fecha_entrega || null,
+        estado: 'pendiente',
+        archivado: false,
+      };
+      const { data, error } = await supabase.from("pendientes").insert(payload).select().single();
+      if (!error && data) {
+        setTareas(prev => [data, ...prev]);
+        setNuevaTarea({ descripcion: '', responsable: '', fecha_entrega: '' });
+        setMostrandoFormTarea(false);
+      }
+    };
+    const delTarea = async (id) => {
+      const { error } = await supabase.from("pendientes").update({ archivado: true }).eq("id", id);
+      if (!error) setTareas(prev => prev.filter(t => t.id !== id));
+    };
+    const fmtCheckFecha = (iso) => {
+      if (!iso) return '';
+      const d = new Date(iso);
+      return d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" }) + " " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+    };
+    return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 16 } },
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } },
+        React.createElement("h4", { style: { margin: 0, fontSize: 14, color: "#1E293B", fontWeight: 700 } }, "📋 Tareas"),
+        React.createElement("button", {
+          onClick: () => setMostrandoFormTarea(!mostrandoFormTarea),
+          style: { padding: "6px 12px", background: mostrandoFormTarea ? "#E2E8F0" : "#3B82F6", color: mostrandoFormTarea ? "#475569" : "#fff", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer", fontWeight: 600 }
+        }, mostrandoFormTarea ? "Cancelar" : "+ Nueva tarea")
+      ),
+      mostrandoFormTarea && React.createElement("div", { style: { background: "#F8FAFC", padding: 12, borderRadius: 8, marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" } },
+        React.createElement("input", {
+          type: "text", placeholder: "Descripción...", value: nuevaTarea.descripcion,
+          onChange: e => setNuevaTarea(p => ({ ...p, descripcion: e.target.value })),
+          style: { flex: "2 1 200px", padding: "6px 10px", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 13 }
+        }),
+        React.createElement("input", {
+          type: "text", placeholder: "Responsable", value: nuevaTarea.responsable,
+          onChange: e => setNuevaTarea(p => ({ ...p, responsable: e.target.value })),
+          style: { flex: "1 1 100px", padding: "6px 10px", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 13 }
+        }),
+        React.createElement("input", {
+          type: "date", value: nuevaTarea.fecha_entrega,
+          onChange: e => setNuevaTarea(p => ({ ...p, fecha_entrega: e.target.value })),
+          style: { padding: "6px 10px", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 13 }
+        }),
+        React.createElement("button", {
+          onClick: addTarea,
+          style: { padding: "6px 16px", background: "#10B981", color: "#fff", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer", fontWeight: 600 }
+        }, "Agregar")
+      ),
+      // Tabla
+      tareas.length === 0
+        ? React.createElement("div", { style: { textAlign: "center", padding: 20, color: "#94A3B8", fontSize: 13, fontStyle: "italic" } }, "Sin tareas. Agrega la primera con “+ Nueva tarea”.")
+        : React.createElement("div", { style: { overflowX: "auto" } },
+          React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+            React.createElement("thead", null,
+              React.createElement("tr", { style: { background: "#F8FAFC", borderBottom: "2px solid #E2E8F0" } },
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11 } }, "Descripción"),
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11, width: 120 } }, "Responsable"),
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11, width: 110 } }, "Compromiso"),
+                React.createElement("th", { style: { textAlign: "center", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11, width: 60 } }, "✓"),
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11, width: 130 } }, "Hecho el"),
+                React.createElement("th", { style: { width: 30 } })
+              )
+            ),
+            React.createElement("tbody", null,
+              tareas.map(t => {
+                const done = t.estado === 'completado';
+                return React.createElement("tr", { key: t.id, style: { borderBottom: "1px solid #F1F5F9", opacity: done ? 0.6 : 1 } },
+                  React.createElement("td", { style: { padding: "8px 10px", color: "#1E293B", textDecoration: done ? "line-through" : "none" } }, t.descripcion || t.titulo || "—"),
+                  React.createElement("td", { style: { padding: "8px 10px", color: "#475569" } }, t.responsable || "—"),
+                  React.createElement("td", { style: { padding: "8px 10px", color: "#475569", fontSize: 11 } }, t.fecha_entrega ? formatFecha(t.fecha_entrega) : "—"),
+                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "center" } },
+                    React.createElement("input", {
+                      type: "checkbox", checked: done,
+                      onChange: () => toggleTarea(t),
+                      style: { width: 18, height: 18, cursor: "pointer" }
+                    })
+                  ),
+                  React.createElement("td", { style: { padding: "8px 10px", color: "#10B981", fontSize: 11, fontFamily: "ui-monospace,monospace" } },
+                    done && t.updated_at ? fmtCheckFecha(t.updated_at) : "—"),
+                  React.createElement("td", { style: { padding: "8px 6px", textAlign: "center" } },
+                    React.createElement("button", {
+                      onClick: () => delTarea(t.id),
+                      title: "Archivar",
+                      style: { background: "none", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 14, padding: 4 }
+                    }, "×")
+                  )
+                );
+              })
+            )
+          )
+        )
     );
   }
 
@@ -1112,8 +1316,8 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       React.createElement(InventarioCard, null),
       React.createElement(FinancieraCard, null)
     ),
-    // Row 3: Minutas (al final)
-    React.createElement(MinutaPlaud, null)
+    // Row 3: Tareas del cliente
+    React.createElement(TareasCard, null)
   );
 }
 
