@@ -197,24 +197,47 @@ export default function MarketingCliente({ cliente, clienteKey }) {
       producto: "",
     };
     let err = null;
+    let saved = null;
     if (editId) {
-      const { error } = await supabase.from("marketing_actividades").update(payload).eq("id", editId);
-      err = error;
+      const { data, error } = await supabase.from("marketing_actividades").update(payload).eq("id", editId).select().single();
+      err = error; saved = data;
     } else {
-      const { error } = await supabase.from("marketing_actividades").insert(payload);
-      err = error;
+      const { data, error } = await supabase.from("marketing_actividades").insert(payload).select().single();
+      err = error; saved = data;
     }
     setSaving(false);
     if (err) { alert("Error guardando: " + err.message); return; }
+    // Actualizar estado local de inmediato (no depender solo de realtime)
+    if (saved) {
+      if (editId) {
+        setActividades(p => p.map(a => a.id === editId ? saved : a));
+      } else {
+        setActividades(p => [...p.filter(a => a.id !== saved.id), saved]);
+      }
+    }
     closeForm();
   };
   const deleteAct = async (id) => {
-    if (!confirm("¿Eliminar esta actividad?")) return;
-    await supabase.from("marketing_actividades").delete().eq("id", id);
+    if (!window.confirm("¿Eliminar esta actividad?")) return;
+    // Optimistic: remove from local state immediately
+    setActividades(p => p.filter(a => a.id !== id));
+    const { error } = await supabase.from("marketing_actividades").delete().eq("id", id);
+    if (error) {
+      alert("Error al eliminar: " + error.message);
+      // Revert: reload from DB
+      const { data } = await supabase.from("marketing_actividades").select("*").eq("cliente", ck).eq("anio", anio);
+      setActividades(data || []);
+    }
   };
   const toggleCompletada = async (a) => {
     const nuevoEstatus = (a.estatus === "completado" || a.estatus === "archivado") ? "activo" : "completado";
-    await supabase.from("marketing_actividades").update({ estatus: nuevoEstatus }).eq("id", a.id);
+    // Optimistic
+    setActividades(p => p.map(x => x.id === a.id ? { ...x, estatus: nuevoEstatus } : x));
+    const { error } = await supabase.from("marketing_actividades").update({ estatus: nuevoEstatus }).eq("id", a.id);
+    if (error) {
+      alert("Error al cambiar estatus: " + error.message);
+      setActividades(p => p.map(x => x.id === a.id ? a : x));
+    }
   };
 
   // ─── Totales ────────────────────────────────────────────────
