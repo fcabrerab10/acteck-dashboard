@@ -77,21 +77,31 @@ async function recalcVentasMensuales() {
   const upsertRows = Object.values(agg);
   if (!upsertRows.length) return { table: 'ventas_mensuales', count: 0 };
 
-  // Upsert in chunks
+  // Delete existing sell_in data first (preserve sell_out by updating, not replacing)
+  // We delete all rows and re-insert to avoid stale data from old calculations
+  const clients = [...new Set(upsertRows.map(r => r.cliente))];
+  for (const c of clients) {
+    await fetch(`${SB_URL}/rest/v1/ventas_mensuales?cliente=eq.${c}`, {
+      method: 'DELETE',
+      headers: { apikey: SRK, Authorization: 'Bearer ' + SRK },
+    });
+  }
+
+  // Insert fresh rows
   const CHUNK = 200;
   for (let i = 0; i < upsertRows.length; i += CHUNK) {
     const batch = upsertRows.slice(i, i + CHUNK);
-    const ur = await fetch(`${SB_URL}/rest/v1/ventas_mensuales?on_conflict=cliente,anio,mes`, {
+    const ur = await fetch(`${SB_URL}/rest/v1/ventas_mensuales`, {
       method: 'POST',
       headers: {
         apikey: SRK,
         Authorization: 'Bearer ' + SRK,
         'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates,return=minimal',
+        Prefer: 'return=minimal',
       },
       body: JSON.stringify(batch),
     });
-    if (!ur.ok) throw new Error('ventas_mensuales upsert failed: ' + (await ur.text()).slice(0, 200));
+    if (!ur.ok) throw new Error('ventas_mensuales insert failed: ' + (await ur.text()).slice(0, 200));
   }
   return { table: 'ventas_mensuales', count: upsertRows.length };
 }
@@ -122,20 +132,30 @@ async function recalcSellInSku() {
   const upsertRows = Object.values(agg);
   if (!upsertRows.length) return { table: 'sell_in_sku', count: 0 };
 
+  // Delete stale data first (old rows may have wrong SKU from canal_articulo bug)
+  const clients = [...new Set(upsertRows.map(r => r.cliente))];
+  for (const c of clients) {
+    await fetch(`${SB_URL}/rest/v1/sell_in_sku?cliente=eq.${c}`, {
+      method: 'DELETE',
+      headers: { apikey: SRK, Authorization: 'Bearer ' + SRK },
+    });
+  }
+
+  // Insert fresh rows
   const CHUNK = 200;
   for (let i = 0; i < upsertRows.length; i += CHUNK) {
     const batch = upsertRows.slice(i, i + CHUNK);
-    const ur = await fetch(`${SB_URL}/rest/v1/sell_in_sku?on_conflict=cliente,sku,anio,mes`, {
+    const ur = await fetch(`${SB_URL}/rest/v1/sell_in_sku`, {
       method: 'POST',
       headers: {
         apikey: SRK,
         Authorization: 'Bearer ' + SRK,
         'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates,return=minimal',
+        Prefer: 'return=minimal',
       },
       body: JSON.stringify(batch),
     });
-    if (!ur.ok) throw new Error('sell_in_sku upsert failed: ' + (await ur.text()).slice(0, 200));
+    if (!ur.ok) throw new Error('sell_in_sku insert failed: ' + (await ur.text()).slice(0, 200));
   }
   return { table: 'sell_in_sku', count: upsertRows.length };
 }
