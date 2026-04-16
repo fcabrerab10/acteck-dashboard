@@ -17,7 +17,7 @@ const ALLOWED = {
   inventario_acteck:  'articulo,no_almacen',
   ventas_erp:         'venta_id,venta_renglon',
   sellout_detalle:    'cliente,fecha,no_parte,row_hash',
-  inventario_cliente: 'cliente,sku',
+  inventario_cliente: 'cliente,sku,anio,semana',
   roadmap_sku:       'sku',
   precios_sku:       'sku',
   transito_sku:      'sku,row_hash',

@@ -53,12 +53,12 @@ const SOURCES = [
     ]
   },
   { id:'digitalife-sellout', title:'Digitalife · Sellout histórico', desc:'Historico Sellout Digitalife (hoja "Sellout Digitalife"). Append con dedup por fecha+parte+cantidad+total.', file:'Historico Sellout Digitalife.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
-  { id:'digitalife-inv', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Replace cliente=digitalife.', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku', parser:'digitalifeInv', replaceWhere:{cliente:'digitalife'} },
+  { id:'digitalife-inv', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Snapshot semanal por (cliente, sku, anio, semana).', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv' },
   { id:'pcel-vm', title:'PCEL · venta-marca semanal', desc:'Archivo venta-marca-ACTECK. Upsert (anio, semana, sku).', file:'venta-marca-ACTECK.xlsx', table:'sellout_pcel', onConflict:'anio,semana,sku', parser:'pcelVentaMarca' },
   { id:'ec-pcel', title:'Estado de cuenta · PCEL', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
   { id:'ec-digitalife', title:'Estado de cuenta · Digitalife', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
   { id:'roadmap-precios', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
-  { id:'master-embarques', title:'Master Embarques (Google Drive)', desc:'Auto-sync desde Google Sheets. Pendiente de service account.', file:'(Drive)', table:'embarques_compras', parser:'masterEmbarques', disabled:true },
+  { id:'master-embarques', title:'Master Embarques (Google Drive)', desc:'Sincroniza desde Google Sheets. Clic en "Sincronizar" para importar la hoja completa.', file:'(Google Sheets)', table:'embarques_compras', parser:'masterEmbarques', syncMode:true },
 ];
 
 const CHUNK = 200;
@@ -138,11 +138,19 @@ const PARSERS = {
   digitalifeInv(wb){
     const sh = wb.Sheets['Hoja39'] || wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
+    // ISO week calculation
+    const now = new Date();
+    const anio = now.getFullYear();
+    const jan1 = new Date(anio, 0, 1);
+    const days = Math.floor((now - jan1) / 86400000);
+    const semana = Math.ceil((days + jan1.getDay() + 1) / 7);
     return rows.map(r => {
       const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
       return {
         cliente: 'digitalife',
         sku: toStr(obj.parte ?? obj.sku ?? obj.no_parte),
+        anio,
+        semana,
         marca: toStr(obj.marca),
         titulo: toStr(obj.titulo ?? obj.descripcion),
         stock: toInt(obj.stock ?? obj.inventario),
@@ -300,9 +308,15 @@ function renderCards(){
   for (const src of SOURCES) {
     const log = el('pre', {class:'log', id:`log-${src.id}`});
     const status = el('div', {class:'status-line'}, el('span', {class:'badge b-idle'}, 'Esperando archivo'));
-    const file = el('input', {type:'file', accept:'.xlsx,.xls', id:`file-${src.id}`});
-    const btn = el('button', {class:'btn', onclick: () => handleUpload(src)}, 'Subir');
-    if (src.disabled) { btn.disabled = true; btn.textContent = 'Próximamente'; }
+    let file, btn;
+    if (src.syncMode) {
+      file = el('span', {}, '');
+      btn = el('button', {class:'btn', onclick: () => handleSync(src)}, '🔄 Sincronizar');
+    } else {
+      file = el('input', {type:'file', accept:'.xlsx,.xls', id:`file-${src.id}`});
+      btn = el('button', {class:'btn', onclick: () => handleUpload(src)}, 'Subir');
+      if (src.disabled) { btn.disabled = true; btn.textContent = 'Próximamente'; }
+    }
     // Last-updated badge
     const lastUp = getLastUpdated(src.id);
     const updBadge = el('div', {class:'last-updated', id:`updated-${src.id}`},
@@ -372,6 +386,34 @@ async function handleUpload(src){
       await postChunks(src, src.table, src.onConflict, rows);
     }
 
+    // Auto-recalculate intermediate tables after certain uploads
+    const recalcMap = {
+      'erp-acteck': ['ventas_mensuales', 'sell_in_sku'],
+      'digitalife-sellout': ['sellout_sku'],
+    };
+    const recalcTables = recalcMap[src.id];
+    if (recalcTables) {
+      appendLog(src, `Recalculando: ${recalcTables.join(', ')}...`);
+      setStatus(src,'b-warn','Recalculando...');
+      try {
+        const rr = await fetch('/api/recalculate', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({tables: recalcTables})
+        });
+        const rj = await rr.json();
+        if (rj.ok) {
+          for (const r of rj.results) {
+            appendLog(src, `  ✓ ${r.table}: ${r.count ?? 0} filas${r.error ? ' ERROR: '+r.error : ''}`);
+          }
+        } else {
+          appendLog(src, `  ⚠ Recalc error: ${rj.error}`);
+        }
+      } catch(re) {
+        appendLog(src, `  ⚠ Recalc failed: ${re.message}`);
+      }
+    }
+
     saveLastUpdated(src.id);
     const badge = document.getElementById(`updated-${src.id}`);
     badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
@@ -381,6 +423,35 @@ async function handleUpload(src){
     console.error(e);
     setStatus(src,'b-err','Error');
     appendLog(src, 'ERROR: ' + e.message);
+  }
+}
+
+// Sync Master Embarques from Google Drive
+async function handleSync(src){
+  setStatus(src,'b-warn','Sincronizando desde Google Sheets...');
+  const log = document.getElementById(`log-${src.id}`);
+  log.classList.add('open');
+  appendLog(src, 'Fetching Google Sheet → embarques_compras...');
+  try {
+    const r = await fetch('/api/sync-embarques', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'}
+    });
+    const j = await r.json();
+    if (j.ok) {
+      appendLog(src, `✓ ${j.count} filas sincronizadas`);
+      saveLastUpdated(src.id);
+      const badge = document.getElementById(`updated-${src.id}`);
+      badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
+      badge.style.display = '';
+      setStatus(src,'b-ok','✓ Sincronizado');
+    } else {
+      appendLog(src, `ERROR: ${j.error}${j.detail ? ' — '+j.detail : ''}`);
+      setStatus(src,'b-err','Error');
+    }
+  } catch(e) {
+    appendLog(src, 'ERROR: ' + e.message);
+    setStatus(src,'b-err','Error');
   }
 }
 
