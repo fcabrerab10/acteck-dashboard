@@ -179,11 +179,11 @@ export default function MarketingCliente({ cliente, clienteKey }) {
       tipo: form.tipo,
       marca: form.marca,
       nombre: form.nombre.trim(),
-      mensaje: form.mensaje || null,
+      mensaje: form.mensaje || "",
       red_social: form.red_social || null,
       fecha: form.fecha || null,
       anio: fechaDate ? fechaDate.getFullYear() : anio,
-      mes: fechaDate ? fechaDate.getMonth() + 1 : mesSel,
+      mes: String(fechaDate ? fechaDate.getMonth() + 1 : mesSel),
       inversion: Number(form.inversion) || 0,
       metricas: form.metricas || {},
       evento_sucursal: form.evento_sucursal || null,
@@ -191,6 +191,10 @@ export default function MarketingCliente({ cliente, clienteKey }) {
       notas: form.notas || null,
       responsable: form.responsable || null,
       estatus: "activo",
+      // Valores por defecto para columnas legacy NOT NULL
+      subtipo: form.fecha || "",
+      temporalidad: form.fecha || "",
+      producto: "",
     };
     let err = null;
     if (editId) {
