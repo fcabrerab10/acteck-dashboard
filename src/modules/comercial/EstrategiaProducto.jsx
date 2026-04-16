@@ -503,22 +503,62 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   }, [datos, aggs, clienteKey]);
 
   // Roadmap + Tránsito cruce: identifica productos nuevos (en tránsito sin roadmap)
+  // Solo considera SKUs que empiezan con "AC" o "BR"
   const roadmapCruce = React.useMemo(() => {
     if (!datos || !datos.roadmap || !datos.transito) return null;
-    const roadmapSet = new Set(datos.roadmap.map(r => r.sku));
+    const isAcBr = (sku) => {
+      if (!sku) return false;
+      const s = String(sku).toUpperCase();
+      return s.startsWith("AC-") || s.startsWith("BR-") || s.startsWith("AC") || s.startsWith("BR");
+    };
+    const roadmapFiltered = datos.roadmap.filter(r => isAcBr(r.sku));
+    const transitoFiltered = datos.transito.filter(t => isAcBr(t.sku));
+    const roadmapSet = new Set(roadmapFiltered.map(r => r.sku));
     const transitoMap = {};
-    datos.transito.forEach(t => { transitoMap[t.sku] = t; });
+    transitoFiltered.forEach(t => { transitoMap[t.sku] = t; });
+
+    // Helpers para extraer info del payload
+    const getDesc = (t, fallback) => {
+      const p = t && t.payload;
+      if (p) {
+        return p["DESCRIPCIÓN"] || p["Descripcion"] || p["DESCRIPCION"] || p.descripcion || fallback || "";
+      }
+      return fallback || "";
+    };
+    const getArriboCedis = (t) => {
+      const p = t && t.payload;
+      if (p) return p["ARRIBO A CEDIS"] || p["arribo_cedis"] || p["Arribo a CEDIS"] || null;
+      return null;
+    };
+    const getCedis = (t) => {
+      const p = t && t.payload;
+      if (p) return p.CEDIS || p.cedis || null;
+      return null;
+    };
+
     // Productos nuevos = en tránsito pero NO en roadmap
-    const nuevos = datos.transito.filter(t => !roadmapSet.has(t.sku));
-    // En tránsito + roadmap = reposición planeada
-    const enCamino = datos.roadmap.filter(r => transitoMap[r.sku]).map(r => ({
-      ...r,
-      transito: transitoMap[r.sku].inventario_transito,
-      arribo: transitoMap[r.sku].siguiente_arribo,
+    const nuevos = transitoFiltered.filter(t => !roadmapSet.has(t.sku)).map(t => ({
+      sku: t.sku,
+      descripcion: getDesc(t, "—"),
+      piezas: Number(t.inventario_transito) || 0,
+      arribo: getArriboCedis(t),
+      cedis: getCedis(t),
     }));
-    // Solo roadmap (planeado sin arribo inmediato)
-    const soloRoadmap = datos.roadmap.filter(r => !transitoMap[r.sku]);
-    return { nuevos, enCamino, soloRoadmap, total: datos.roadmap.length };
+    // En tránsito + roadmap = reposición planeada (incluye inv Acteck actual)
+    const actStockBySku = datos.actStockBySku || {};
+    const enCamino = roadmapFiltered.filter(r => transitoMap[r.sku]).map(r => {
+      const t = transitoMap[r.sku];
+      return {
+        sku: r.sku,
+        descripcion: r.descripcion || getDesc(t, ""),
+        rdmp: r.rdmp,
+        piezas: Number(t.inventario_transito) || 0,
+        arribo: getArriboCedis(t),
+        cedis: getCedis(t),
+        invActeck: Number(actStockBySku[r.sku]) || 0,
+      };
+    });
+    return { nuevos, enCamino, total: roadmapFiltered.length };
   }, [datos]);
 
   // Filtered & sorted SKUs
@@ -828,10 +868,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             React.createElement("span", { style: { color: "#059669", fontWeight: 700 } }, "Nuevos: " + roadmapCruce.nuevos.length)
           )
         ),
-        // Productos NUEVOS (en tránsito sin roadmap) — al principio, destacados
+        // Productos NUEVOS (en tránsito sin roadmap, solo AC/BR) — al principio, destacados
         roadmapCruce.nuevos.length > 0 && React.createElement("div", { style: { background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 10, padding: 14, marginBottom: 16 } },
           React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#065F46", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 } },
-            "\uD83C\uDD95 Productos NUEVOS detectados (en tr\u00e1nsito, no est\u00e1n en roadmap)"
+            "\uD83C\uDD95 Productos NUEVOS detectados (en tr\u00e1nsito, no est\u00e1n en roadmap) \u2014 " + roadmapCruce.nuevos.length + " SKUs"
           ),
           React.createElement("div", { style: { overflowX: "auto" } },
             React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
@@ -839,54 +879,54 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 React.createElement("tr", { style: { background: "#D1FAE5", borderBottom: "1px solid #A7F3D0" } },
                   React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46" } }, "SKU"),
                   React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46" } }, "Descripci\u00f3n"),
-                  React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 110 } }, "Piezas"),
-                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 130 } }, "Arribo")
+                  React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 90 } }, "Piezas"),
+                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 160 } }, "Arribo a CEDIS")
                 )
               ),
               React.createElement("tbody", null,
-                roadmapCruce.nuevos.slice(0, 15).map(function(t) {
-                  var payload = t.payload || {};
-                  var desc = payload.Descripcion || payload["Descripcion 2"] || payload.descripcion || "Nuevo producto";
-                  var arribo = t.siguiente_arribo ? new Date(t.siguiente_arribo).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }) : "Sin fecha";
+                roadmapCruce.nuevos.slice(0, 20).map(function(t) {
+                  var arriboTxt = t.arribo ? (t.cedis ? (t.arribo + " \u00b7 " + t.cedis) : t.arribo) : "Sin fecha";
                   return React.createElement("tr", { key: t.sku, style: { borderBottom: "1px solid #D1FAE5" } },
                     React.createElement("td", { style: { padding: "6px 10px", fontWeight: 600, color: "#065F46", fontFamily: "ui-monospace,monospace" } }, t.sku),
-                    React.createElement("td", { style: { padding: "6px 10px", color: "#1E293B", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: desc }, String(desc).slice(0, 70)),
-                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#047857", fontWeight: 700 } }, (t.inventario_transito || 0).toLocaleString("es-MX")),
-                    React.createElement("td", { style: { padding: "6px 10px", color: "#065F46" } }, arribo)
+                    React.createElement("td", { style: { padding: "6px 10px", color: "#1E293B", maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: t.descripcion }, t.descripcion),
+                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#047857", fontWeight: 700 } }, t.piezas.toLocaleString("es-MX")),
+                    React.createElement("td", { style: { padding: "6px 10px", color: "#065F46", fontSize: 11 } }, arriboTxt)
                   );
                 })
               )
             )
           ),
-          roadmapCruce.nuevos.length > 15 && React.createElement("div", { style: { fontSize: 11, color: "#065F46", marginTop: 6, fontStyle: "italic" } }, "Y " + (roadmapCruce.nuevos.length - 15) + " m\u00e1s...")
+          roadmapCruce.nuevos.length > 20 && React.createElement("div", { style: { fontSize: 11, color: "#065F46", marginTop: 6, fontStyle: "italic" } }, "Y " + (roadmapCruce.nuevos.length - 20) + " m\u00e1s...")
         ),
-        // En camino (roadmap + tránsito)
+        // En camino (roadmap + tránsito) — ahora con Inv Acteck actual
         roadmapCruce.enCamino.length > 0 && React.createElement("div", { style: { marginBottom: 16 } },
           React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#1E40AF", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 } },
-            "\uD83D\uDEA2 En camino (llegando seg\u00fan roadmap)"
+            "\uD83D\uDEA2 En camino (llegando seg\u00fan roadmap) \u2014 " + roadmapCruce.enCamino.length + " SKUs"
           ),
-          React.createElement("div", { style: { overflowX: "auto", maxHeight: 300, overflowY: "auto" } },
+          React.createElement("div", { style: { overflowX: "auto", maxHeight: 400, overflowY: "auto" } },
             React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
               React.createElement("thead", null,
                 React.createElement("tr", { style: { background: "#DBEAFE", position: "sticky", top: 0 } },
                   React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF" } }, "SKU"),
                   React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF" } }, "Descripci\u00f3n"),
                   React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 80 } }, "Roadmap"),
-                  React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 110 } }, "Piezas"),
-                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 130 } }, "Arribo")
+                  React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 100 } }, "Inv Acteck"),
+                  React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 100 } }, "Piezas"),
+                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 180 } }, "Arribo a CEDIS")
                 )
               ),
               React.createElement("tbody", null,
                 roadmapCruce.enCamino.map(function(r, i) {
-                  var arribo = r.arribo ? new Date(r.arribo).toLocaleDateString("es-MX", { day: "2-digit", month: "short" }) : "\u2014";
+                  var arriboTxt = r.arribo ? (r.cedis ? (r.arribo + " \u00b7 " + r.cedis) : r.arribo) : "\u2014";
                   return React.createElement("tr", { key: r.sku, style: { borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#FAFBFC" } },
                     React.createElement("td", { style: { padding: "6px 10px", fontFamily: "ui-monospace,monospace", color: "#1E293B" } }, r.sku),
-                    React.createElement("td", { style: { padding: "6px 10px", color: "#475569", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: r.descripcion }, (r.descripcion || "").slice(0, 70)),
+                    React.createElement("td", { style: { padding: "6px 10px", color: "#475569", maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: r.descripcion }, (r.descripcion || "").slice(0, 80)),
                     React.createElement("td", { style: { padding: "6px 10px", textAlign: "center" } },
                       React.createElement("span", { style: { padding: "2px 8px", borderRadius: 6, background: ESTADO_COLORES[r.rdmp] || "#64748B", color: "#fff", fontSize: 10, fontWeight: 600 } }, r.rdmp || "-")
                     ),
-                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#1E40AF", fontWeight: 600 } }, (r.transito || 0).toLocaleString("es-MX")),
-                    React.createElement("td", { style: { padding: "6px 10px", color: "#475569" } }, arribo)
+                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: r.invActeck > 0 ? "#1E293B" : "#94A3B8", fontWeight: r.invActeck > 0 ? 600 : 400 } }, r.invActeck.toLocaleString("es-MX")),
+                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#1E40AF", fontWeight: 600 } }, r.piezas.toLocaleString("es-MX")),
+                    React.createElement("td", { style: { padding: "6px 10px", color: "#475569", fontSize: 11 } }, arriboTxt)
                   );
                 })
               )
