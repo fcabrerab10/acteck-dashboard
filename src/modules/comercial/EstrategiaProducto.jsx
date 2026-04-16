@@ -598,6 +598,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   // Filtered & sorted SKUs
   const skuDetail = React.useMemo(() => {
     if (!datos) return [];
+    // Build roadmap lookup from roadmap_sku (real status como RMI, RML, 2026, D, NVS)
+    const roadmapBySku = {};
+    (datos.roadmap || []).forEach(r => { if (r.sku) roadmapBySku[r.sku] = r.rdmp || ""; });
     return datos.productos
       .filter(p => !searchFilter || p.sku.toUpperCase().includes(searchFilter.toUpperCase()) || p.descripcion.toUpperCase().includes(searchFilter.toUpperCase()))
       .map(p => {
@@ -640,7 +643,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           marca: p.marca,
           categoria: p.categoria || "",
           estado: p.estado,
-          roadmap: p.roadmap || "",
+          roadmap: roadmapBySku[p.sku] || p.roadmap || "",   // desde roadmap_sku real
           precio: precioSku,
           siPiezasTotal,
           promedio90d,
@@ -984,10 +987,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#065F46", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 } },
             "\uD83C\uDD95 Productos NUEVOS detectados (en tr\u00e1nsito, no est\u00e1n en roadmap) \u2014 " + roadmapCruce.nuevos.length + " SKUs"
           ),
-          React.createElement("div", { style: { overflowX: "auto" } },
+          React.createElement("div", { style: { overflowX: "auto", maxHeight: 400, overflowY: "auto" } },
             React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
               React.createElement("thead", null,
-                React.createElement("tr", { style: { background: "#D1FAE5", borderBottom: "1px solid #A7F3D0" } },
+                React.createElement("tr", { style: { background: "#D1FAE5", borderBottom: "1px solid #A7F3D0", position: "sticky", top: 0 } },
                   React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46" } }, "SKU"),
                   React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46" } }, "Descripci\u00f3n"),
                   React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 90 } }, "Piezas"),
@@ -995,7 +998,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 )
               ),
               React.createElement("tbody", null,
-                roadmapCruce.nuevos.slice(0, 20).map(function(t) {
+                roadmapCruce.nuevos.map(function(t) {
                   var arriboTxt = t.arribo ? (t.cedis ? (t.arribo + " \u00b7 " + t.cedis) : t.arribo) : "Sin fecha";
                   return React.createElement("tr", { key: t.sku, style: { borderBottom: "1px solid #D1FAE5" } },
                     React.createElement("td", { style: { padding: "6px 10px", fontWeight: 600, color: "#065F46", fontFamily: "ui-monospace,monospace" } }, t.sku),
@@ -1006,8 +1009,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 })
               )
             )
-          ),
-          roadmapCruce.nuevos.length > 20 && React.createElement("div", { style: { fontSize: 11, color: "#065F46", marginTop: 6, fontStyle: "italic" } }, "Y " + (roadmapCruce.nuevos.length - 20) + " m\u00e1s...")
+          )
         ),
         // En camino (roadmap + tránsito) — ahora con Inv Acteck actual
         roadmapCruce.enCamino.length > 0 && React.createElement("div", { style: { marginBottom: 16 } },
@@ -1090,8 +1092,20 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
               skuDetail.map(function(s, idx) {
                 return React.createElement("tr", { key: s.sku, style: { borderBottom: "1px solid #F1F5F9", background: idx % 2 === 0 ? "#fff" : "#FAFBFC" } },
                   React.createElement("td", { style: { padding: "6px", fontWeight: 500, color: "#1E293B", whiteSpace: "nowrap", fontSize: 11 } }, s.sku),
-                  React.createElement("td", { style: { padding: "6px", color: "#475569", fontSize: 11, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: (s.roadmap || "") + (s.estado ? " · " + s.estado : "") },
-                    s.roadmap && s.roadmap.length > 0 ? React.createElement("span", { style: { color: "#1E293B", fontWeight: 500 } }, s.roadmap) : React.createElement("span", { style: { padding: "2px 6px", borderRadius: 4, background: s.estado === "D" ? "#D1FAE5" : s.estado === "NVS" ? "#FEF3C7" : "#DBEAFE", color: s.estado === "D" ? "#065F46" : s.estado === "NVS" ? "#92400E" : "#1E40AF", fontSize: 10, fontWeight: 600 } }, s.estado || "-")
+                  React.createElement("td", { style: { padding: "6px", fontSize: 11, maxWidth: 100, whiteSpace: "nowrap" }, title: s.roadmap || "Sin roadmap" },
+                    (function() {
+                      var rm = s.roadmap || "";
+                      // Colores por tipo de roadmap
+                      var bg, color;
+                      if (rm === "D" || rm === "DISC") { bg = "#FEE2E2"; color = "#991B1B"; }           // Descontinuado
+                      else if (rm === "NVS" || rm === "NEW") { bg = "#FEF3C7"; color = "#92400E"; }    // Nuevo
+                      else if (rm === "RMI") { bg = "#DBEAFE"; color = "#1E40AF"; }                    // Roadmap Importar
+                      else if (rm === "RML" || rm === "RMS") { bg = "#EDE9FE"; color = "#5B21B6"; }    // Roadmap Local/Stock
+                      else if (rm === "2026" || rm === "2025") { bg = "#D1FAE5"; color = "#065F46"; }  // Activo año
+                      else if (rm && rm.length > 0) { bg = "#F1F5F9"; color = "#475569"; }
+                      else { bg = "#F8FAFC"; color = "#94A3B8"; }
+                      return React.createElement("span", { style: { padding: "2px 8px", borderRadius: 4, background: bg, color: color, fontSize: 10, fontWeight: 700 } }, rm || "—");
+                    })()
                   ),
                   React.createElement("td", { style: { padding: "6px", color: "#475569", fontSize: 11, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.descripcion }, s.descripcion),
                   [1,2,3,4,5,6,7,8,9,10,11,12].map(function(m) {
