@@ -18,28 +18,42 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   var [anio, setAnio] = _s(2026);
   var [cuotasMens, setCuotasMens] = _s([]);
 
+  // Paginated fetch helper (PostgREST caps at 1000 rows)
+  async function fetchAllPages(query) {
+    var PAGE = 1000, all = [], from = 0;
+    while (true) {
+      var res = await query.range(from, from + PAGE - 1);
+      if (res.error || !res.data) break;
+      all = all.concat(res.data);
+      if (res.data.length < PAGE) break;
+      from += PAGE;
+    }
+    return all;
+  }
+
   React.useEffect(function() {
     if (!DB_CONFIGURED) { setLoading(false); return; }
     setLoading(true);
     var ck = clienteKey || cliente;
-    Promise.all([
-      supabase.from("ventas_mensuales").select("*").eq("cliente", ck).eq("anio", anio),
-      supabase.from("marketing_actividades").select("*").eq("cliente", ck).eq("anio", anio),
-      supabase.from("productos_cliente").select("*").eq("cliente", ck),
-      supabase.from("sell_in_sku").select("*").eq("cliente", ck).eq("anio", anio).limit(10000),
-      supabase.from("sellout_sku").select("*").eq("cliente", ck).eq("anio", anio).limit(10000),
-      supabase.from("inventario_cliente").select("*").eq("cliente", ck).limit(10000),
-      supabase.from("cuotas_mensuales").select("*").eq("cliente", ck).eq("anio", anio)
-    ]).then(function(results) {
+    (async function() {
+      var results = await Promise.all([
+        supabase.from("ventas_mensuales").select("*").eq("cliente", ck).eq("anio", anio),
+        supabase.from("marketing_actividades").select("*").eq("cliente", ck).eq("anio", anio),
+        supabase.from("productos_cliente").select("*").eq("cliente", ck),
+        fetchAllPages(supabase.from("sell_in_sku").select("*").eq("cliente", ck).eq("anio", anio)),
+        fetchAllPages(supabase.from("sellout_sku").select("*").eq("cliente", ck).eq("anio", anio)),
+        fetchAllPages(supabase.from("inventario_cliente").select("*").eq("cliente", ck)),
+        supabase.from("cuotas_mensuales").select("*").eq("cliente", ck).eq("anio", anio)
+      ]);
       if (results[0].data) setVentas(results[0].data);
       if (results[1].data) setMarketing(results[1].data);
       if (results[2].data) setProductos(results[2].data);
-      if (results[3].data) setSellInSku(results[3].data);
-      if (results[4].data) setSellOutSku(results[4].data);
-      if (results[5].data) setInventario(results[5].data);
-    if (results[6] && results[6].data) setCuotasMens(results[6].data);
+      setSellInSku(Array.isArray(results[3]) ? results[3] : (results[3].data || []));
+      setSellOutSku(Array.isArray(results[4]) ? results[4] : (results[4].data || []));
+      setInventario(Array.isArray(results[5]) ? results[5] : (results[5].data || []));
+      if (results[6] && results[6].data) setCuotasMens(results[6].data);
       setLoading(false);
-    });
+    })();
   }, [cliente, clienteKey, anio]);
 
   // —— Helpers ——

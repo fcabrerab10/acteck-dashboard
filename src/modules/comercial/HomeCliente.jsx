@@ -274,31 +274,47 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     { key: "completado", label: "Completado", color: "#10B981", bg: "#D1FAE5" }
   ];
 
+  // ─── PAGINATED FETCH (PostgREST max 1000 rows per request) ──────────────────
+  async function fetchAllPages(query) {
+    const PAGE = 1000;
+    let all = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await query.range(from, from + PAGE - 1);
+      if (error || !data) break;
+      all = all.concat(data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+    return all;
+  }
+
   // ─── FETCH ALL DATA ─────────────────────────────────────────────────────────
   React.useEffect(() => {
     if (!DB_CONFIGURED) { setLoading(false); return; }
-    Promise.all([
-      supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).limit(10000),
-      supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).limit(10000),
-      supabase.from("metas_anuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).maybeSingle(),
-      supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "comercial").order("created_at", { ascending: false }),
-      supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "marketing").order("created_at", { ascending: false }),
-      supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).order("mes"),
-      supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
-      supabase.from("inventario_cliente").select("valor").eq("cliente", clienteKey).limit(10000),
-      supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
-    ]).then(([siR, soR, mR, pcR, pmR, imR, minR, invCR, cuotasR]) => {
-      setSellInSku(siR.data || []);
-      setSellOutSku(soR.data || []);
+    (async () => {
+      const [siData, soData, mR, pcR, pmR, imR, minR, invData, cuotasR] = await Promise.all([
+        fetchAllPages(supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
+        fetchAllPages(supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
+        supabase.from("metas_anuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).maybeSingle(),
+        supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "comercial").order("created_at", { ascending: false }),
+        supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "marketing").order("created_at", { ascending: false }),
+        supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).order("mes"),
+        supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
+        fetchAllPages(supabase.from("inventario_cliente").select("valor").eq("cliente", clienteKey)),
+        supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
+      ]);
+      setSellInSku(siData);
+      setSellOutSku(soData);
       if (mR.data) { setMeta(mR.data); setMetaForm({ min: mR.data.meta_sell_in_min, opt: mR.data.meta_sell_in_optimista }); } else { const _cc = (clientes[clienteKey] && clientes[clienteKey].cuotaAnual) || 30000000; setMeta({ meta_sell_in_min: Math.round(_cc * 0.83), meta_sell_in_optimista: _cc }); setMetaForm({ min: Math.round(_cc * 0.83), opt: _cc }); }
       setPendCom(pcR.data || []);
       setPendMkt(pmR.data || []);
       setInvMkt(imR.data || []);
       setMinutasList(minR.data || []);
-      setInvCliente(invCR.data || []);
+      setInvCliente(invData);
       setCuotasMensuales(cuotasR?.data || []);
       setLoading(false);
-    });
+    })();
   }, [clienteKey, anioResumen]);
 
   // ─── DERIVED DATA ───────────────────────────────────────────────────────────
