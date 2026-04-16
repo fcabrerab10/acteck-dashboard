@@ -114,9 +114,9 @@ async function recalcSellInSku() {
     if (!sku) continue;
 
     const key = `${cliente}|${sku}|${anio}|${mes}`;
-    if (!agg[key]) agg[key] = { cliente, sku, anio, mes, monto_pesos: 0, cantidad: 0 };
+    if (!agg[key]) agg[key] = { cliente, sku, anio, mes, monto_pesos: 0, piezas: 0 };
     agg[key].monto_pesos += Number(row.monto_venta_pesos) || 0;
-    agg[key].cantidad += Number(row.piezas) || 0;
+    agg[key].piezas += Number(row.piezas) || 0;
   }
 
   const upsertRows = Object.values(agg);
@@ -158,8 +158,8 @@ async function recalcSelloutSku() {
     if (!sku) continue;
 
     const key = `${cliente}|${sku}|${anio}|${mes}`;
-    if (!agg[key]) agg[key] = { cliente, sku, anio, mes, cantidad: 0, monto_pesos: 0 };
-    agg[key].cantidad += Number(row.cantidad) || 0;
+    if (!agg[key]) agg[key] = { cliente, sku, anio, mes, piezas: 0, monto_pesos: 0 };
+    agg[key].piezas += Number(row.cantidad) || 0;
     agg[key].monto_pesos += Number(row.total) || 0;
   }
 
