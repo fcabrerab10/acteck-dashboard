@@ -48,7 +48,6 @@ const TIPOS = {
 const MARCAS = {
   acteck:     { label: "Acteck",     color: "#3B82F6" },
   balam_rush: { label: "Balam Rush", color: "#8B5CF6" },
-  ambas:      { label: "Ambas",      color: "#6366F1" },
 };
 
 const REDES_SOCIALES = {
@@ -88,11 +87,13 @@ export default function MarketingCliente({ cliente, clienteKey }) {
   const [filterTipo, setFilterTipo] = React.useState("todos");
   const [filterMarca, setFilterMarca] = React.useState("todas");
   const [showCalendar, setShowCalendar] = React.useState(true);
+  const [calVista, setCalVista] = React.useState("mes");  // 'mes' o 'anual'
   const [diaSeleccionado, setDiaSeleccionado] = React.useState(null);
   const [showForm, setShowForm] = React.useState(false);
   const [editId, setEditId] = React.useState(null);
   const [form, setForm] = React.useState(emptyForm());
   const [saving, setSaving] = React.useState(false);
+  const [mostrarArchivadas, setMostrarArchivadas] = React.useState(false);
 
   const ck = clienteKey || cliente;
 
@@ -115,8 +116,8 @@ export default function MarketingCliente({ cliente, clienteKey }) {
   }, [ck, anio]);
 
   // ─── Filtros aplicados ────────────────────────────────────────
-  const actividadesFiltradas = React.useMemo(() => {
-    return actividades.filter(a => {
+  const { activasFiltradas, completadasFiltradas } = React.useMemo(() => {
+    const applyFilters = (arr) => arr.filter(a => {
       const aMes = a.fecha ? new Date(a.fecha).getMonth() + 1 : Number(a.mes) || 0;
       if (aMes !== mesSel) return false;
       if (filterTipo !== "todos" && a.tipo !== filterTipo) return false;
@@ -131,6 +132,9 @@ export default function MarketingCliente({ cliente, clienteKey }) {
       const dB = b.fecha ? new Date(b.fecha) : new Date(0);
       return dA - dB;
     });
+    const activas = applyFilters(actividades.filter(a => a.estatus !== "completado" && a.estatus !== "archivado"));
+    const completadas = applyFilters(actividades.filter(a => a.estatus === "completado" || a.estatus === "archivado"));
+    return { activasFiltradas: activas, completadasFiltradas: completadas };
   }, [actividades, mesSel, filterTipo, filterMarca, diaSeleccionado]);
 
   // ─── Actividades del mes (para el calendario) ────────────────
@@ -203,6 +207,10 @@ export default function MarketingCliente({ cliente, clienteKey }) {
   const deleteAct = async (id) => {
     if (!confirm("¿Eliminar esta actividad?")) return;
     await supabase.from("marketing_actividades").delete().eq("id", id);
+  };
+  const toggleCompletada = async (a) => {
+    const nuevoEstatus = (a.estatus === "completado" || a.estatus === "archivado") ? "activo" : "completado";
+    await supabase.from("marketing_actividades").update({ estatus: nuevoEstatus }).eq("id", a.id);
   };
 
   // ─── Totales ────────────────────────────────────────────────
@@ -295,53 +303,100 @@ export default function MarketingCliente({ cliente, clienteKey }) {
       {/* Calendario */}
       {showCalendar && (
         <div style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: 14, marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <h3 style={{ margin: 0, fontSize: 14, color: "#1E293B", fontWeight: 700 }}>📅 {MESES[mesSel - 1]} {anio}</h3>
-            {diaSeleccionado && (
-              <button onClick={() => setDiaSeleccionado(null)} style={{ padding: "3px 10px", borderRadius: 8, fontSize: 11, border: "1px solid #E2E8F0", background: "#F1F5F9", cursor: "pointer" }}>
-                Limpiar día ({diaSeleccionado})
-              </button>
-            )}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 14, color: "#1E293B", fontWeight: 700 }}>📅 {calVista === "mes" ? MESES[mesSel - 1] + " " + anio : anio}</h3>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button onClick={() => setCalVista("mes")} style={{ padding: "4px 12px", fontSize: 11, borderRadius: 8, border: calVista === "mes" ? "2px solid #3B82F6" : "1px solid #E2E8F0", background: calVista === "mes" ? "#EFF6FF" : "#fff", color: calVista === "mes" ? "#3B82F6" : "#64748B", cursor: "pointer", fontWeight: 600 }}>Mes</button>
+              <button onClick={() => setCalVista("anual")} style={{ padding: "4px 12px", fontSize: 11, borderRadius: 8, border: calVista === "anual" ? "2px solid #3B82F6" : "1px solid #E2E8F0", background: calVista === "anual" ? "#EFF6FF" : "#fff", color: calVista === "anual" ? "#3B82F6" : "#64748B", cursor: "pointer", fontWeight: 600 }}>Anual</button>
+              {diaSeleccionado && (
+                <button onClick={() => setDiaSeleccionado(null)} style={{ padding: "4px 10px", borderRadius: 8, fontSize: 11, border: "1px solid #E2E8F0", background: "#F1F5F9", cursor: "pointer" }}>
+                  Limpiar día ({diaSeleccionado})
+                </button>
+              )}
+            </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, fontSize: 10, color: "#94A3B8", marginBottom: 4 }}>
-            {DIAS_SEMANA.map((d, i) => <div key={i} style={{ textAlign: "center", fontWeight: 600, padding: 4 }}>{d}</div>)}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
-            {calendario.map((cell, i) => {
-              if (!cell) return <div key={i} style={{ minHeight: 60 }}/>;
-              const isSelected = cell.day === diaSeleccionado;
-              return (
-                <div key={i} onClick={() => setDiaSeleccionado(cell.day === diaSeleccionado ? null : cell.day)}
-                  style={{
-                    minHeight: 60, background: isSelected ? "#EFF6FF" : "#F8FAFC",
-                    border: isSelected ? "2px solid #3B82F6" : "1px solid #E2E8F0",
-                    borderRadius: 6, padding: 4, cursor: "pointer",
-                    display: "flex", flexDirection: "column", gap: 3
-                  }}>
-                  <div style={{ fontSize: 11, color: "#475569", fontWeight: 600 }}>{cell.day}</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                    {cell.actividades.slice(0, 4).map(a => {
-                      const tm = tipoMeta(a.tipo);
-                      return <div key={a.id} title={tm.label + ": " + (a.nombre || "")} style={{ width: 8, height: 8, borderRadius: 4, background: tm.color }} />;
-                    })}
-                    {cell.actividades.length > 4 && <span style={{ fontSize: 9, color: "#64748B" }}>+{cell.actividades.length - 4}</span>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          {calVista === "mes" ? (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, fontSize: 10, color: "#94A3B8", marginBottom: 4 }}>
+                {DIAS_SEMANA.map((d, i) => <div key={i} style={{ textAlign: "center", fontWeight: 600, padding: 4 }}>{d}</div>)}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+                {calendario.map((cell, i) => {
+                  if (!cell) return <div key={i} style={{ minHeight: 60 }}/>;
+                  const isSelected = cell.day === diaSeleccionado;
+                  return (
+                    <div key={i} onClick={() => setDiaSeleccionado(cell.day === diaSeleccionado ? null : cell.day)}
+                      style={{
+                        minHeight: 60, background: isSelected ? "#EFF6FF" : "#F8FAFC",
+                        border: isSelected ? "2px solid #3B82F6" : "1px solid #E2E8F0",
+                        borderRadius: 6, padding: 4, cursor: "pointer",
+                        display: "flex", flexDirection: "column", gap: 3
+                      }}>
+                      <div style={{ fontSize: 11, color: "#475569", fontWeight: 600 }}>{cell.day}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+                        {cell.actividades.slice(0, 4).map(a => {
+                          const tm = tipoMeta(a.tipo);
+                          return <div key={a.id} title={tm.label + ": " + (a.nombre || "")} style={{ width: 8, height: 8, borderRadius: 4, background: tm.color }} />;
+                        })}
+                        {cell.actividades.length > 4 && <span style={{ fontSize: 9, color: "#64748B" }}>+{cell.actividades.length - 4}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <CalendarioAnual
+              anio={anio}
+              actividades={actividades}
+              filterTipo={filterTipo}
+              filterMarca={filterMarca}
+              mesSel={mesSel}
+              onSelectMes={(m) => { setMesSel(m); setCalVista("mes"); setDiaSeleccionado(null); }}
+            />
+          )}
         </div>
       )}
 
-      {/* Grid de tarjetas */}
-      {actividadesFiltradas.length === 0 ? (
+      {/* Grid de tarjetas activas */}
+      {activasFiltradas.length === 0 && completadasFiltradas.length === 0 ? (
         <div style={{ textAlign: "center", padding: 40, color: "#94A3B8", background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0" }}>
           No hay actividades para estos filtros. <button onClick={openNew} style={{ marginLeft: 8, color: "#3B82F6", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Crear la primera</button>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
-          {actividadesFiltradas.map(a => <ActividadCard key={a.id} a={a} onEdit={openEdit} onDelete={deleteAct} />)}
-        </div>
+        <>
+          {activasFiltradas.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 20, color: "#94A3B8", background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", fontSize: 13, fontStyle: "italic", marginBottom: 14 }}>
+              ✓ Sin actividades pendientes este mes. Revisa las completadas abajo.
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
+              {activasFiltradas.map(a => <ActividadCard key={a.id} a={a} onEdit={openEdit} onDelete={deleteAct} onToggle={toggleCompletada} />)}
+            </div>
+          )}
+
+          {/* Repositorio de actividades completadas (colapsable) */}
+          {completadasFiltradas.length > 0 && (
+            <div style={{ marginTop: 20, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: 14 }}>
+              <button
+                onClick={() => setMostrarArchivadas(s => !s)}
+                style={{
+                  width: "100%", background: "none", border: "none", cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: "#475569", padding: "4px 0"
+                }}
+              >
+                <span style={{ fontSize: 11, display: "inline-block", transform: mostrarArchivadas ? "rotate(90deg)" : "rotate(0)", transition: "transform .2s" }}>▶</span>
+                📁 Actividades completadas
+                <span style={{ background: "#F1F5F9", color: "#64748B", fontSize: 11, padding: "1px 8px", borderRadius: 10, fontWeight: 500 }}>{completadasFiltradas.length}</span>
+              </button>
+              {mostrarArchivadas && (
+                <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
+                  {completadasFiltradas.map(a => <ActividadCard key={a.id} a={a} onEdit={openEdit} onDelete={deleteAct} onToggle={toggleCompletada} />)}
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {/* Modal formulario */}
@@ -351,12 +406,13 @@ export default function MarketingCliente({ cliente, clienteKey }) {
 }
 
 // ═══════════ TARJETA DE ACTIVIDAD ═══════════════════════
-function ActividadCard({ a, onEdit, onDelete }) {
+function ActividadCard({ a, onEdit, onDelete, onToggle }) {
   const tm = (TIPOS[a.tipo] || { color: "#94A3B8", bg: "#F1F5F9", icon: "📌", label: a.tipo || "?", metricas: [] });
   const marca = MARCAS[a.marca] || null;
   const rs = a.red_social ? REDES_SOCIALES[a.red_social] : null;
   const metricas = a.metricas || {};
   const fechaTxt = a.fecha ? new Date(a.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short" }) : "";
+  const isCompleted = a.estatus === "completado" || a.estatus === "archivado";
 
   return (
     <div style={{
@@ -366,7 +422,8 @@ function ActividadCard({ a, onEdit, onDelete }) {
       borderTop: "4px solid " + tm.color,
       overflow: "hidden",
       display: "flex",
-      flexDirection: "column"
+      flexDirection: "column",
+      opacity: isCompleted ? 0.75 : 1,
     }}>
       {/* Header */}
       <div style={{ padding: "12px 14px 8px", background: tm.bg, borderBottom: "1px solid " + tm.color + "33" }}>
@@ -414,9 +471,14 @@ function ActividadCard({ a, onEdit, onDelete }) {
       </div>
 
       {/* Footer actions */}
-      <div style={{ padding: "8px 14px", borderTop: "1px solid #E2E8F0", background: "#FAFBFC", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <button onClick={() => onEdit(a)} style={{ padding: "4px 10px", background: "#fff", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 11, cursor: "pointer", color: "#475569" }}>✏️ Editar</button>
-        <button onClick={() => onDelete(a.id)} style={{ padding: "4px 10px", background: "#fff", border: "1px solid #FCA5A5", borderRadius: 6, fontSize: 11, cursor: "pointer", color: "#991B1B" }}>🗑</button>
+      <div style={{ padding: "8px 14px", borderTop: "1px solid #E2E8F0", background: "#FAFBFC", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <button onClick={() => onToggle(a)} style={{ padding: "4px 10px", background: isCompleted ? "#FEF3C7" : "#D1FAE5", border: "1px solid " + (isCompleted ? "#FDE68A" : "#A7F3D0"), borderRadius: 6, fontSize: 11, cursor: "pointer", color: isCompleted ? "#92400E" : "#065F46", fontWeight: 600 }}>
+          {isCompleted ? "↺ Reactivar" : "✓ Completar"}
+        </button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => onEdit(a)} style={{ padding: "4px 10px", background: "#fff", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 11, cursor: "pointer", color: "#475569" }}>✏️ Editar</button>
+          <button onClick={() => onDelete(a.id)} style={{ padding: "4px 10px", background: "#fff", border: "1px solid #FCA5A5", borderRadius: 6, fontSize: 11, cursor: "pointer", color: "#991B1B" }}>🗑</button>
+        </div>
       </div>
     </div>
   );
@@ -542,3 +604,72 @@ function Field({ label, children }) {
 }
 
 const inputStyle = { padding: "7px 10px", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 13, width: "100%", boxSizing: "border-box" };
+
+// ═══════════ CALENDARIO ANUAL ═══════════════════════
+function CalendarioAnual({ anio, actividades, filterTipo, filterMarca, mesSel, onSelectMes }) {
+  // Agrupar actividades por mes y tipo
+  const porMes = React.useMemo(() => {
+    const out = {};
+    for (let m = 1; m <= 12; m++) out[m] = { total: 0, porTipo: {}, inv: 0 };
+    actividades.forEach(a => {
+      const m = a.fecha ? new Date(a.fecha).getMonth() + 1 : Number(a.mes) || 0;
+      if (m < 1 || m > 12) return;
+      if (filterTipo !== "todos" && a.tipo !== filterTipo) return;
+      if (filterMarca !== "todas" && a.marca !== filterMarca) return;
+      out[m].total++;
+      out[m].porTipo[a.tipo] = (out[m].porTipo[a.tipo] || 0) + 1;
+      out[m].inv += Number(a.inversion) || 0;
+    });
+    return out;
+  }, [actividades, filterTipo, filterMarca]);
+
+  const totalAnual = Object.values(porMes).reduce((s, m) => s + m.total, 0);
+  const invAnual = Object.values(porMes).reduce((s, m) => s + m.inv, 0);
+
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+        {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => {
+          const data = porMes[m];
+          const isSelected = m === mesSel;
+          return (
+            <div key={m}
+              onClick={() => onSelectMes(m)}
+              style={{
+                background: isSelected ? "#EFF6FF" : "#F8FAFC",
+                border: isSelected ? "2px solid #3B82F6" : "1px solid #E2E8F0",
+                borderRadius: 8, padding: "10px 12px", cursor: "pointer",
+                display: "flex", flexDirection: "column", gap: 6, minHeight: 100
+              }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1E293B" }}>{MESES_CORTOS[m-1]}</div>
+                <div style={{ fontSize: 11, color: "#64748B" }}>{data.total} {data.total === 1 ? "act" : "acts"}</div>
+              </div>
+              {data.total > 0 && (
+                <>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                    {Object.entries(data.porTipo).map(([t, c]) => {
+                      const tm = TIPOS[t] || { color: "#94A3B8", label: t };
+                      return (
+                        <div key={t} title={tm.label + ": " + c} style={{
+                          fontSize: 9, padding: "1px 6px", borderRadius: 8,
+                          background: tm.color + "22", color: tm.color, fontWeight: 600
+                        }}>{c}</div>
+                      );
+                    })}
+                  </div>
+                  {data.inv > 0 && <div style={{ fontSize: 10, color: "#10B981", fontWeight: 600 }}>{fmtMXN(data.inv)}</div>}
+                </>
+              )}
+              {data.total === 0 && <div style={{ fontSize: 10, color: "#CBD5E1", fontStyle: "italic" }}>Sin actividad</div>}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 12, padding: "8px 12px", background: "#F8FAFC", borderRadius: 8, display: "flex", justifyContent: "space-between", fontSize: 12, color: "#475569" }}>
+        <span><strong>Total anual:</strong> {totalAnual} actividades</span>
+        <span><strong>Inversión:</strong> {fmtMXN(invAnual)}</span>
+      </div>
+    </div>
+  );
+}
