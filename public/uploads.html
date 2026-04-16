@@ -30,6 +30,7 @@
   .log{max-height:140px;overflow:auto;font-family:ui-monospace,monospace;font-size:11px;background:#0b1020;color:#d1d5db;border-radius:6px;padding:8px;white-space:pre-wrap;display:none}
   .log.open{display:block}
   .status-line{font-size:12px;min-height:18px}
+  .last-updated{font-size:11px;color:#059669;background:#dcfce7;padding:2px 8px;border-radius:12px;display:inline-block;margin-top:2px}
 </style>
 </head>
 <body>
@@ -60,7 +61,8 @@ const SOURCES = [
   { id:'master-embarques', title:'Master Embarques (Google Drive)', desc:'Auto-sync desde Google Sheets. Pendiente de service account.', file:'(Drive)', table:'embarques_compras', parser:'masterEmbarques', disabled:true },
 ];
 
-const CHUNK = 500;
+const CHUNK = 200;
+const LS_UPDATED_KEY = 'uploads_last_updated';
 
 // ===== Parsers =====
 function toISODate(v){
@@ -261,6 +263,19 @@ const PARSERS = {
   }
 };
 
+// ===== Last-updated helpers =====
+function getLastUpdated(srcId){
+  try { const d = JSON.parse(localStorage.getItem(LS_UPDATED_KEY)||'{}'); return d[srcId]||null; } catch{ return null; }
+}
+function saveLastUpdated(srcId){
+  try { const d = JSON.parse(localStorage.getItem(LS_UPDATED_KEY)||'{}'); d[srcId]=new Date().toISOString(); localStorage.setItem(LS_UPDATED_KEY,JSON.stringify(d)); } catch{}
+}
+function fmtDate(iso){
+  if(!iso) return null;
+  const d=new Date(iso);
+  return d.toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
 // ===== UI =====
 function el(tag, attrs={}, ...kids){
   const n = document.createElement(tag);
@@ -281,12 +296,18 @@ function renderCards(){
     const file = el('input', {type:'file', accept:'.xlsx,.xls', id:`file-${src.id}`});
     const btn = el('button', {class:'btn', onclick: () => handleUpload(src)}, 'Subir');
     if (src.disabled) { btn.disabled = true; btn.textContent = 'Próximamente'; }
+    // Last-updated badge
+    const lastUp = getLastUpdated(src.id);
+    const updBadge = el('div', {class:'last-updated', id:`updated-${src.id}`},
+      lastUp ? `🕐 Última actualización: ${fmtDate(lastUp)}` : '');
+    if (!lastUp) updBadge.style.display = 'none';
     const card = el('div', {class:'card'},
       el('h3', {}, src.title),
       el('div', {class:'desc'}, src.desc),
       el('div', {class:'meta'}, src.combined
         ? `📄 ${src.file} · 🎯 ${src.combined.map(c=>c.table).join(' + ')}`
         : `📄 ${src.file} · 🎯 ${src.table}`),
+      updBadge,
       status,
       el('div', {class:'actions'}, file, btn),
       log
@@ -344,6 +365,10 @@ async function handleUpload(src){
       await postChunks(src, src.table, src.onConflict, rows);
     }
 
+    saveLastUpdated(src.id);
+    const badge = document.getElementById(`updated-${src.id}`);
+    badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
+    badge.style.display = '';
     setStatus(src,'b-ok',`✓ Completado`);
   } catch (e) {
     console.error(e);
@@ -353,9 +378,22 @@ async function handleUpload(src){
 }
 
 async function postChunks(src, table, onConflict, rows){
+  // Deduplicate: keep last occurrence per conflict key to avoid
+  // "ON CONFLICT cannot affect row a second time" errors
+  const keys = onConflict.split(',').map(k => k.trim());
+  const seen = new Map();
+  for (const row of rows) {
+    const k = keys.map(c => String(row[c] ?? '')).join('||');
+    seen.set(k, row);
+  }
+  const deduped = [...seen.values()];
+  if (deduped.length < rows.length) {
+    appendLog(src, `  Dedup: ${rows.length} → ${deduped.length} filas únicas`);
+  }
+
   let total = 0;
-  for (let i=0; i<rows.length; i+=CHUNK) {
-    const batch = rows.slice(i, i+CHUNK);
+  for (let i=0; i<deduped.length; i+=CHUNK) {
+    const batch = deduped.slice(i, i+CHUNK);
     const r = await fetch('/api/import-central', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -367,7 +405,7 @@ async function postChunks(src, table, onConflict, rows){
     }
     const j = await r.json().catch(()=>({}));
     total += batch.length;
-    appendLog(src, `  ${table} batch ${i}-${i+batch.length}: ${j.inserted ?? 'ok'}`);
+    appendLog(src, `  ${table} batch ${i}-${i+batch.length}: ${j.ok ? 'ok' : 'ok'}`);
   }
   appendLog(src, `TOTAL ${table}: ${total}`);
 }
