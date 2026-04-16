@@ -275,12 +275,13 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   ];
 
   // ─── PAGINATED FETCH (PostgREST max 1000 rows per request) ──────────────────
-  async function fetchAllPages(query) {
+  // Factory pattern: each page creates a fresh query (supabase-js builders are single-use)
+  async function fetchAllPages(queryFactory) {
     const PAGE = 1000;
     let all = [];
     let from = 0;
     while (true) {
-      const { data, error } = await query.range(from, from + PAGE - 1);
+      const { data, error } = await queryFactory().range(from, from + PAGE - 1);
       if (error || !data) break;
       all = all.concat(data);
       if (data.length < PAGE) break;
@@ -294,14 +295,14 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     if (!DB_CONFIGURED) { setLoading(false); return; }
     (async () => {
       const [siData, soData, mR, pcR, pmR, imR, minR, invData, cuotasR] = await Promise.all([
-        fetchAllPages(supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
-        fetchAllPages(supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
+        fetchAllPages(() => supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
+        fetchAllPages(() => supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
         supabase.from("metas_anuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).maybeSingle(),
         supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "comercial").order("created_at", { ascending: false }),
         supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "marketing").order("created_at", { ascending: false }),
         supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).order("mes"),
         supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
-        fetchAllPages(supabase.from("inventario_cliente").select("valor,stock,costo_convenio").eq("cliente", clienteKey)),
+        fetchAllPages(() => supabase.from("inventario_cliente").select("valor,stock,costo_convenio").eq("cliente", clienteKey)),
         supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
       ]);
       setSellInSku(siData);

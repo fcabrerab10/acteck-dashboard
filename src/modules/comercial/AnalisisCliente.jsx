@@ -19,10 +19,11 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   var [cuotasMens, setCuotasMens] = _s([]);
 
   // Paginated fetch helper (PostgREST caps at 1000 rows)
-  async function fetchAllPages(query) {
+  // Factory pattern: each page creates a fresh query (supabase-js builders are single-use)
+  async function fetchAllPages(queryFactory) {
     var PAGE = 1000, all = [], from = 0;
     while (true) {
-      var res = await query.range(from, from + PAGE - 1);
+      var res = await queryFactory().range(from, from + PAGE - 1);
       if (res.error || !res.data) break;
       all = all.concat(res.data);
       if (res.data.length < PAGE) break;
@@ -39,10 +40,10 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       var results = await Promise.all([
         supabase.from("ventas_mensuales").select("*").eq("cliente", ck).eq("anio", anio),
         supabase.from("marketing_actividades").select("*").eq("cliente", ck).eq("anio", anio),
-        fetchAllPages(supabase.from("productos_cliente").select("*").eq("cliente", ck)),
-        fetchAllPages(supabase.from("sell_in_sku").select("*").eq("cliente", ck).eq("anio", anio)),
-        fetchAllPages(supabase.from("sellout_sku").select("*").eq("cliente", ck).eq("anio", anio)),
-        fetchAllPages(supabase.from("inventario_cliente").select("*").eq("cliente", ck)),
+        fetchAllPages(function() { return supabase.from("productos_cliente").select("*").eq("cliente", ck); }),
+        fetchAllPages(function() { return supabase.from("sell_in_sku").select("*").eq("cliente", ck).eq("anio", anio); }),
+        fetchAllPages(function() { return supabase.from("sellout_sku").select("*").eq("cliente", ck).eq("anio", anio); }),
+        fetchAllPages(function() { return supabase.from("inventario_cliente").select("*").eq("cliente", ck); }),
         supabase.from("cuotas_mensuales").select("*").eq("cliente", ck).eq("anio", anio)
       ]);
       if (results[0].data) setVentas(results[0].data);
