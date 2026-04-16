@@ -343,8 +343,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     try {
       const [productos, sellIn, sellOut, inventario] = await Promise.all([
         supabase.from("productos_cliente").select("*").eq("cliente", clienteKey),
-        supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026),
-        supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026),
+        supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026).limit(10000),
+        supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026).limit(10000),
         supabase.from("inventario_cliente").select("*").eq("cliente", clienteKey),
       ]);
 

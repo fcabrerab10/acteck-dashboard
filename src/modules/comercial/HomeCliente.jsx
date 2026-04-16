@@ -278,8 +278,8 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   React.useEffect(() => {
     if (!DB_CONFIGURED) { setLoading(false); return; }
     Promise.all([
-      supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
-      supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
+      supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).limit(10000),
+      supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).limit(10000),
       supabase.from("metas_anuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).maybeSingle(),
       supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "comercial").order("created_at", { ascending: false }),
       supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "marketing").order("created_at", { ascending: false }),

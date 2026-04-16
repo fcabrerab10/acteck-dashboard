@@ -49,7 +49,7 @@ export default function MarketingCliente({ cliente = "Digitalife", clienteKey })
     Promise.all([
       supabase.from("marketing_actividades").select("*").eq("cliente", clienteKey || cliente).eq("anio", anio),
       supabase.from("pagos").select("*").eq("categoria", "marketing"),
-      supabase.from("sellout_sku").select("*").eq("cliente", clienteKey || cliente),
+      supabase.from("sellout_sku").select("*").eq("cliente", clienteKey || cliente).limit(10000),
     ]).then(([actRes, pagRes, soRes]) => {
       if (actRes.data) setActividades(actRes.data);
       if (pagRes.data) setPagosMarketing(pagRes.data);
