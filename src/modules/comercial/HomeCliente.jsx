@@ -302,7 +302,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "marketing").order("created_at", { ascending: false }),
         supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).order("mes"),
         supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
-        fetchAllPages(() => supabase.from("inventario_cliente").select("valor,stock,costo_convenio").eq("cliente", clienteKey)),
+        fetchAllPages(() => supabase.from("inventario_cliente").select("valor,stock,costo_convenio,anio,semana").eq("cliente", clienteKey)),
         supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
       ]);
       setSellInSku(siData);
@@ -383,8 +383,22 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     if (v > 0) return v;
     return (Number(r.stock) || 0) * (Number(r.costo_convenio) || 0);
   };
-  const totalInvValor = invCliente.reduce(function(s, r) { return s + _invValor(r); }, 0);
-  const avgInvValor = invCliente.length > 0 ? totalInvValor / invCliente.length : 0;
+  // Filter inventory to most recent snapshot (anio, semana) to avoid summing historical weeks
+  const _latestWeek = React.useMemo(() => {
+    if (!invCliente.length) return { anio: null, semana: null };
+    let maxAnio = 0, maxSemana = 0;
+    invCliente.forEach(r => {
+      const a = Number(r.anio) || 0;
+      const s = Number(r.semana) || 0;
+      if (a > maxAnio || (a === maxAnio && s > maxSemana)) { maxAnio = a; maxSemana = s; }
+    });
+    return { anio: maxAnio, semana: maxSemana };
+  }, [invCliente]);
+  const invClienteLatest = invCliente.filter(r =>
+    Number(r.anio) === _latestWeek.anio && Number(r.semana) === _latestWeek.semana
+  );
+  const totalInvValor = invClienteLatest.reduce(function(s, r) { return s + _invValor(r); }, 0);
+  const avgInvValor = invClienteLatest.length > 0 ? totalInvValor / invClienteLatest.length : 0;
   const lastInvValor = totalInvValor;
   const totalInvCliente = totalInvValor;
 
@@ -612,7 +626,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       React.createElement("h4", { style: { margin: "0 0 8px", fontSize: 14, color: "#334155" } }, "Valor de Inventario"),
       React.createElement("div", { style: { fontSize: 28, fontWeight: 700, color: "#1E293B" } }, formatMXN(totalInvCliente > 0 ? totalInvCliente : lastInvValor)),
       React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 4 } },
-        totalInvCliente > 0 ? invCliente.length + " SKUs en inventario" : (ventas.length > 0 ? "Mes m\u00e1s reciente con datos" : "Sin datos"))
+        totalInvCliente > 0 ? invClienteLatest.length + " SKUs en inventario (sem " + _latestWeek.semana + "/" + _latestWeek.anio + ")" : (ventas.length > 0 ? "Mes m\u00e1s reciente con datos" : "Sin datos"))
     );
   }
 

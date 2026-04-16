@@ -367,8 +367,21 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         transitoBySku[r.sku] = (transitoBySku[r.sku] || 0) + (Number(r.inventario_transito) || 0);
       });
 
+      // Filter inventario_cliente to most recent snapshot week (avoid stale history)
+      let maxA = 0, maxS = 0;
+      inventario.forEach(inv => {
+        const a = Number(inv.anio) || 0, s = Number(inv.semana) || 0;
+        if (a > maxA || (a === maxA && s > maxS)) { maxA = a; maxS = s; }
+      });
+      const inventarioLatest = maxA > 0 ? inventario.filter(inv =>
+        Number(inv.anio) === maxA && Number(inv.semana) === maxS
+      ) : inventario;
+
       setDatos({
-        productos, sellIn, sellOut, inventario,
+        productos, sellIn, sellOut,
+        inventario: inventarioLatest,
+        inventarioAll: inventario,   // preserved for future historical views
+        latestWeek: { anio: maxA, semana: maxS },
         actStockBySku, transitoBySku,
       });
     } catch (err) {

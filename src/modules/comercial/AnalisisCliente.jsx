@@ -120,6 +120,15 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   var skuAnalysis = React.useMemo(function() {
     // If no data anywhere, skip
     if (productos.length === 0 && inventario.length === 0 && sellInSku.length === 0 && sellOutSku.length === 0) return null;
+    // Filter inventario to most recent week snapshot only (avoid summing historical weeks)
+    var maxA = 0, maxS = 0;
+    inventario.forEach(function(inv) {
+      var a = Number(inv.anio) || 0, s = Number(inv.semana) || 0;
+      if (a > maxA || (a === maxA && s > maxS)) { maxA = a; maxS = s; }
+    });
+    var inventarioLatest = maxA > 0 ? inventario.filter(function(inv) {
+      return Number(inv.anio) === maxA && Number(inv.semana) === maxS;
+    }) : inventario;
     var skuMap = {};
     var ensure = function(sku) {
       if (!skuMap[sku]) {
@@ -136,8 +145,8 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       s.costo = Number(p.costo_promedio || 0);
       s.precio = Number(p.precio_venta || 0);
     });
-    // Enrich with inventario_cliente (has titulo as descripcion fallback)
-    inventario.forEach(function(inv) {
+    // Enrich with inventario_cliente LATEST WEEK only (has titulo as descripcion fallback)
+    inventarioLatest.forEach(function(inv) {
       var s = ensure(inv.sku);
       s.invStock = Number(inv.stock || 0);
       // If valor is null, compute from stock × costo_convenio as fallback
@@ -192,7 +201,16 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     var skuColor = skusConInv > totalSkus * 0.5 ? "#10b981" : skusConInv > totalSkus * 0.25 ? "#f59e0b" : "#ef4444";
     items.push({ label: "SKUs con Inventario", value: fmtNum(skusConInv), color: skuColor, detail: "de " + fmtNum(totalSkus) + " totales" });
     // 2. Días de inventario
-    var invValorTotal = inventario.reduce(function(s, r) {
+    // Only sum most recent week snapshot (avoid historical double-counting)
+    var _maxA = 0, _maxS = 0;
+    inventario.forEach(function(inv) {
+      var a = Number(inv.anio) || 0, s = Number(inv.semana) || 0;
+      if (a > _maxA || (a === _maxA && s > _maxS)) { _maxA = a; _maxS = s; }
+    });
+    var _invLatest = _maxA > 0 ? inventario.filter(function(inv) {
+      return Number(inv.anio) === _maxA && Number(inv.semana) === _maxS;
+    }) : inventario;
+    var invValorTotal = _invLatest.reduce(function(s, r) {
       var v = Number(r.valor) || 0;
       if (v > 0) return s + v;
       return s + (Number(r.stock) || 0) * (Number(r.costo_convenio) || 0);
