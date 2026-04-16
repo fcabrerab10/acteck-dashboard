@@ -56,25 +56,22 @@ async function fetchAll(path) {
 
 // Recalc ventas_mensuales from ventas_erp
 async function recalcVentasMensuales() {
-  const rows = await fetchAll('ventas_erp?select=clientenombre,ventafecha,cantidad,total');
+  const rows = await fetchAll('ventas_erp?select=cliente_nombre,anio,mes,monto_venta_pesos&cliente_nombre=not.is.null');
 
   // Aggregate by (cliente, anio, mes)
   const agg = {};
   for (const row of rows) {
-    const clienteNombre = String(row.clientenombre || '').trim();
+    const clienteNombre = String(row.cliente_nombre || '').trim();
     const cliente = CLIENT_MAP[clienteNombre];
     if (!cliente) continue;
 
-    let fecha = row.ventafecha;
-    if (typeof fecha === 'string') fecha = new Date(fecha);
-    else if (typeof fecha === 'number') fecha = new Date(Math.round((fecha - 25569) * 86400 * 1000));
-    if (!fecha || isNaN(fecha)) continue;
+    const anio = parseInt(row.anio);
+    const mes = parseInt(row.mes);
+    if (!anio || !mes) continue;
 
-    const anio = fecha.getFullYear ? fecha.getFullYear() : new Date(fecha).getFullYear();
-    const mes = (fecha.getMonth ? fecha.getMonth() : new Date(fecha).getMonth()) + 1;
     const key = `${cliente}|${anio}|${mes}`;
     if (!agg[key]) agg[key] = { cliente, anio, mes, sell_in: 0 };
-    agg[key].sell_in += Number(row.total) || 0;
+    agg[key].sell_in += Number(row.monto_venta_pesos) || 0;
   }
 
   const upsertRows = Object.values(agg);
@@ -101,28 +98,25 @@ async function recalcVentasMensuales() {
 
 // Recalc sell_in_sku from ventas_erp
 async function recalcSellInSku() {
-  const rows = await fetchAll('ventas_erp?select=clientenombre,ventafecha,canalarticulo,cantidad,total');
+  const rows = await fetchAll('ventas_erp?select=cliente_nombre,anio,mes,canal_articulo,piezas,monto_venta_pesos&cliente_nombre=not.is.null');
 
   const agg = {};
   for (const row of rows) {
-    const clienteNombre = String(row.clientenombre || '').trim();
+    const clienteNombre = String(row.cliente_nombre || '').trim();
     const cliente = CLIENT_MAP[clienteNombre];
     if (!cliente) continue;
 
-    let fecha = row.ventafecha;
-    if (typeof fecha === 'string') fecha = new Date(fecha);
-    else if (typeof fecha === 'number') fecha = new Date(Math.round((fecha - 25569) * 86400 * 1000));
-    if (!fecha || isNaN(fecha)) continue;
+    const anio = parseInt(row.anio);
+    const mes = parseInt(row.mes);
+    if (!anio || !mes) continue;
 
-    const anio = fecha.getFullYear ? fecha.getFullYear() : new Date(fecha).getFullYear();
-    const mes = (fecha.getMonth ? fecha.getMonth() : new Date(fecha).getMonth()) + 1;
-    const sku = String(row.canalarticulo || '').trim();
+    const sku = String(row.canal_articulo || '').trim();
     if (!sku) continue;
 
     const key = `${cliente}|${sku}|${anio}|${mes}`;
     if (!agg[key]) agg[key] = { cliente, sku, anio, mes, monto_pesos: 0, cantidad: 0 };
-    agg[key].monto_pesos += Number(row.total) || 0;
-    agg[key].cantidad += Number(row.cantidad) || 0;
+    agg[key].monto_pesos += Number(row.monto_venta_pesos) || 0;
+    agg[key].cantidad += Number(row.piezas) || 0;
   }
 
   const upsertRows = Object.values(agg);
