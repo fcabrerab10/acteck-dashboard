@@ -301,7 +301,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "marketing").order("created_at", { ascending: false }),
         supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).order("mes"),
         supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
-        fetchAllPages(supabase.from("inventario_cliente").select("valor").eq("cliente", clienteKey)),
+        fetchAllPages(supabase.from("inventario_cliente").select("valor,stock,costo_convenio").eq("cliente", clienteKey)),
         supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
       ]);
       setSellInSku(siData);
@@ -376,10 +376,16 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   const totalCuotaIdeal = mesesFiltrados.reduce((s, m) => s + (cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : 0), 0);
   const cumplimientoMin = totalCuotaMin > 0 ? (totalSellIn / totalCuotaMin * 100) : 0;
   const cumplimientoIdeal = totalCuotaIdeal > 0 ? (totalSellIn / totalCuotaIdeal * 100) : 0;
-  const totalInvValor = invCliente.reduce(function(s, r) { return s + (Number(r.valor) || 0); }, 0);
+  // Inventory valor: if valor is null/0, compute from stock × costo_convenio
+  const _invValor = (r) => {
+    const v = Number(r.valor) || 0;
+    if (v > 0) return v;
+    return (Number(r.stock) || 0) * (Number(r.costo_convenio) || 0);
+  };
+  const totalInvValor = invCliente.reduce(function(s, r) { return s + _invValor(r); }, 0);
   const avgInvValor = invCliente.length > 0 ? totalInvValor / invCliente.length : 0;
   const lastInvValor = totalInvValor;
-  const totalInvCliente = invCliente.reduce((s, r) => s + (Number(r.valor) || 0), 0);
+  const totalInvCliente = totalInvValor;
 
   const totalInversionMkt = invMkt.reduce((s, v) => s + (Number(v.monto) || 0), 0);
   const costoXPeso = totalSellOut > 0 ? totalInversionMkt / totalSellOut : 0;

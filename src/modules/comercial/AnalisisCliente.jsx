@@ -139,12 +139,15 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     inventario.forEach(function(inv) {
       var s = ensure(inv.sku);
       s.invStock = Number(inv.stock || 0);
-      s.invValor = Number(inv.valor || 0);
+      // If valor is null, compute from stock × costo_convenio as fallback
+      var rawValor = Number(inv.valor || 0);
+      var costoConv = Number(inv.costo_convenio || 0);
+      s.invValor = rawValor > 0 ? rawValor : (s.invStock * costoConv);
       s.diasSinVenta = Number(inv.dias_sin_venta || 0);
       if (!s.desc || s.desc === s.sku) s.desc = inv.titulo || inv.descripcion || s.sku;
       if (!s.marca) s.marca = inv.marca || "";
       if (!s.precio) s.precio = Number(inv.precio_venta || 0);
-      if (!s.costo) s.costo = Number(inv.costo_convenio || 0);
+      if (!s.costo) s.costo = costoConv;
     });
     sellInSku.forEach(function(s) { ensure(s.sku).siTotal += Number(s.piezas || 0); });
     sellOutSku.forEach(function(s) { ensure(s.sku).soTotal += Number(s.piezas || 0); });
