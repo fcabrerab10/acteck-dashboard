@@ -30,20 +30,33 @@ async function sbQuery(sql) {
   return await r.json();
 }
 
+// Paginated fetch — PostgREST default limit is 1000
+async function fetchAll(path) {
+  const rows = [];
+  const PAGE = 1000;
+  let offset = 0;
+  while (true) {
+    const url = `${SB_URL}/rest/v1/${path}&limit=${PAGE}&offset=${offset}`;
+    const r = await fetch(url, {
+      headers: {
+        apikey: SRK,
+        Authorization: 'Bearer ' + SRK,
+        'Content-Type': 'application/json',
+        Prefer: 'count=none',
+      },
+    });
+    if (!r.ok) throw new Error('Failed to read: ' + (await r.text()).slice(0, 200));
+    const batch = await r.json();
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+    offset += PAGE;
+  }
+  return rows;
+}
+
 // Recalc ventas_mensuales from ventas_erp
 async function recalcVentasMensuales() {
-  // Step 1: Get aggregated data from ventas_erp
-  const fetchUrl = `${SB_URL}/rest/v1/ventas_erp?select=clientenombre,fecha,cantidad,total`;
-  const r = await fetch(fetchUrl, {
-    headers: {
-      apikey: SRK,
-      Authorization: 'Bearer ' + SRK,
-      'Content-Type': 'application/json',
-      Prefer: 'count=none',
-    },
-  });
-  if (!r.ok) throw new Error('Failed to read ventas_erp: ' + (await r.text()).slice(0, 200));
-  const rows = await r.json();
+  const rows = await fetchAll('ventas_erp?select=clientenombre,ventafecha,cantidad,total');
 
   // Aggregate by (cliente, anio, mes)
   const agg = {};
@@ -52,7 +65,7 @@ async function recalcVentasMensuales() {
     const cliente = CLIENT_MAP[clienteNombre];
     if (!cliente) continue;
 
-    let fecha = row.fecha;
+    let fecha = row.ventafecha;
     if (typeof fecha === 'string') fecha = new Date(fecha);
     else if (typeof fecha === 'number') fecha = new Date(Math.round((fecha - 25569) * 86400 * 1000));
     if (!fecha || isNaN(fecha)) continue;
@@ -88,17 +101,7 @@ async function recalcVentasMensuales() {
 
 // Recalc sell_in_sku from ventas_erp
 async function recalcSellInSku() {
-  const fetchUrl = `${SB_URL}/rest/v1/ventas_erp?select=clientenombre,fecha,canalarticulo,cantidad,total`;
-  const r = await fetch(fetchUrl, {
-    headers: {
-      apikey: SRK,
-      Authorization: 'Bearer ' + SRK,
-      'Content-Type': 'application/json',
-      Prefer: 'count=none',
-    },
-  });
-  if (!r.ok) throw new Error('Failed to read ventas_erp: ' + (await r.text()).slice(0, 200));
-  const rows = await r.json();
+  const rows = await fetchAll('ventas_erp?select=clientenombre,ventafecha,canalarticulo,cantidad,total');
 
   const agg = {};
   for (const row of rows) {
@@ -106,7 +109,7 @@ async function recalcSellInSku() {
     const cliente = CLIENT_MAP[clienteNombre];
     if (!cliente) continue;
 
-    let fecha = row.fecha;
+    let fecha = row.ventafecha;
     if (typeof fecha === 'string') fecha = new Date(fecha);
     else if (typeof fecha === 'number') fecha = new Date(Math.round((fecha - 25569) * 86400 * 1000));
     if (!fecha || isNaN(fecha)) continue;
@@ -145,17 +148,7 @@ async function recalcSellInSku() {
 
 // Recalc sellout_sku from sellout_detalle
 async function recalcSelloutSku() {
-  const fetchUrl = `${SB_URL}/rest/v1/sellout_detalle?select=cliente,fecha,no_parte,cantidad,total`;
-  const r = await fetch(fetchUrl, {
-    headers: {
-      apikey: SRK,
-      Authorization: 'Bearer ' + SRK,
-      'Content-Type': 'application/json',
-      Prefer: 'count=none',
-    },
-  });
-  if (!r.ok) throw new Error('Failed to read sellout_detalle: ' + (await r.text()).slice(0, 200));
-  const rows = await r.json();
+  const rows = await fetchAll('sellout_detalle?select=cliente,fecha,no_parte,cantidad,total');
 
   const agg = {};
   for (const row of rows) {
