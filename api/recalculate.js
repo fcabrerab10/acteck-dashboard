@@ -236,10 +236,25 @@ export default async function handler(req, res) {
     if (reset) {
       const resetMap = {
         sellout: ['sellout_detalle', 'sellout_sku'],
+        inventario_cliente_current_week: ['inventario_cliente_current_week'], // special handler below
       };
       const tablesToWipe = resetMap[reset];
       if (!tablesToWipe) {
         return res.status(400).json({ error: 'unknown reset group. options: ' + Object.keys(resetMap).join(', ') });
+      }
+
+      // Special handler: delete only current ISO week of inventario_cliente
+      if (reset === 'inventario_cliente_current_week') {
+        const now = new Date();
+        const anio = now.getFullYear();
+        const jan1 = new Date(anio, 0, 1);
+        const days = Math.floor((now - jan1) / 86400000);
+        const semana = Math.ceil((days + jan1.getDay() + 1) / 7);
+        const r = await fetch(`${SB_URL}/rest/v1/inventario_cliente?anio=eq.${anio}&semana=eq.${semana}`, {
+          method: 'DELETE',
+          headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, Prefer: 'count=exact' },
+        });
+        return res.status(200).json({ ok: true, reset, anio, semana, deleted: r.headers.get('content-range'), ok_http: r.ok });
       }
       const wipeResults = [];
       for (const t of tablesToWipe) {
