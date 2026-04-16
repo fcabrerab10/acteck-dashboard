@@ -39,7 +39,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       var results = await Promise.all([
         supabase.from("ventas_mensuales").select("*").eq("cliente", ck).eq("anio", anio),
         supabase.from("marketing_actividades").select("*").eq("cliente", ck).eq("anio", anio),
-        supabase.from("productos_cliente").select("*").eq("cliente", ck),
+        fetchAllPages(supabase.from("productos_cliente").select("*").eq("cliente", ck)),
         fetchAllPages(supabase.from("sell_in_sku").select("*").eq("cliente", ck).eq("anio", anio)),
         fetchAllPages(supabase.from("sellout_sku").select("*").eq("cliente", ck).eq("anio", anio)),
         fetchAllPages(supabase.from("inventario_cliente").select("*").eq("cliente", ck)),
@@ -47,7 +47,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       ]);
       if (results[0].data) setVentas(results[0].data);
       if (results[1].data) setMarketing(results[1].data);
-      if (results[2].data) setProductos(results[2].data);
+      setProductos(Array.isArray(results[2]) ? results[2] : (results[2].data || []));
       setSellInSku(Array.isArray(results[3]) ? results[3] : (results[3].data || []));
       setSellOutSku(Array.isArray(results[4]) ? results[4] : (results[4].data || []));
       setInventario(Array.isArray(results[5]) ? results[5] : (results[5].data || []));
@@ -115,22 +115,39 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     return { inv: inv, ven: ven, roi: inv > 0 ? ((ven-inv)/inv*100) : 0 };
   }, [marketing]);
 
-  // —— SKU-level analysis (when data available) ——
+  // —— SKU-level analysis (builds skuMap from union of all sources) ——
   var skuAnalysis = React.useMemo(function() {
-    if (productos.length === 0) return null;
+    // If no data anywhere, skip
+    if (productos.length === 0 && inventario.length === 0 && sellInSku.length === 0 && sellOutSku.length === 0) return null;
     var skuMap = {};
-    productos.forEach(function(p) {
-      skuMap[p.sku] = { sku: p.sku, desc: p.descripcion || p.sku, marca: p.marca || "", categoria: p.categoria || "", costo: Number(p.costo_promedio || 0), precio: Number(p.precio_venta || 0), siTotal: 0, soTotal: 0, invStock: 0, invValor: 0, diasSinVenta: 0 };
-    });
-    sellInSku.forEach(function(s) { if (skuMap[s.sku]) skuMap[s.sku].siTotal += Number(s.piezas || 0); });
-    sellOutSku.forEach(function(s) { if (skuMap[s.sku]) skuMap[s.sku].soTotal += Number(s.piezas || 0); });
-    inventario.forEach(function(inv) {
-      if (skuMap[inv.sku]) {
-        skuMap[inv.sku].invStock = Number(inv.stock || 0);
-        skuMap[inv.sku].invValor = Number(inv.valor || 0);
-        skuMap[inv.sku].diasSinVenta = Number(inv.dias_sin_venta || 0);
+    var ensure = function(sku) {
+      if (!skuMap[sku]) {
+        skuMap[sku] = { sku: sku, desc: sku, marca: "", categoria: "", costo: 0, precio: 0, siTotal: 0, soTotal: 0, invStock: 0, invValor: 0, diasSinVenta: 0 };
       }
+      return skuMap[sku];
+    };
+    // Seed with productos_cliente (master data with descripcion, marca, precio, costo)
+    productos.forEach(function(p) {
+      var s = ensure(p.sku);
+      s.desc = p.descripcion || p.sku;
+      s.marca = p.marca || "";
+      s.categoria = p.categoria || "";
+      s.costo = Number(p.costo_promedio || 0);
+      s.precio = Number(p.precio_venta || 0);
     });
+    // Enrich with inventario_cliente (has titulo as descripcion fallback)
+    inventario.forEach(function(inv) {
+      var s = ensure(inv.sku);
+      s.invStock = Number(inv.stock || 0);
+      s.invValor = Number(inv.valor || 0);
+      s.diasSinVenta = Number(inv.dias_sin_venta || 0);
+      if (!s.desc || s.desc === s.sku) s.desc = inv.titulo || inv.descripcion || s.sku;
+      if (!s.marca) s.marca = inv.marca || "";
+      if (!s.precio) s.precio = Number(inv.precio_venta || 0);
+      if (!s.costo) s.costo = Number(inv.costo_convenio || 0);
+    });
+    sellInSku.forEach(function(s) { ensure(s.sku).siTotal += Number(s.piezas || 0); });
+    sellOutSku.forEach(function(s) { ensure(s.sku).soTotal += Number(s.piezas || 0); });
     var all = Object.values(skuMap);
     // Margins
     all.forEach(function(s) {
@@ -141,9 +158,10 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     // Sort for top/bottom
     var topSO = all.filter(function(s){return s.soTotal>0;}).sort(function(a,b){return b.soTotal-a.soTotal;}).slice(0,10);
     var bottomSO = all.filter(function(s){return s.siTotal>0 && s.soTotal===0;}).sort(function(a,b){return b.siTotal-a.siTotal;}).slice(0,10);
-    // Inventory health
-    var sinVenta60 = all.filter(function(s){return s.diasSinVenta>60;});
-    var sinVenta90 = all.filter(function(s){return s.diasSinVenta>90;});
+    // Inventory health — only count SKUs with actual stock (invStock > 0)
+    // SKUs with stock=0 already sold out, not "dead inventory"
+    var sinVenta60 = all.filter(function(s){return s.diasSinVenta>60 && s.invStock>0;});
+    var sinVenta90 = all.filter(function(s){return s.diasSinVenta>90 && s.invStock>0;});
     var invMuerto = sinVenta90.reduce(function(s,p){return s+p.invValor;},0);
     // Margins by brand
     var byMarca = {};
