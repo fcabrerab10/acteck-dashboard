@@ -270,6 +270,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   const [tareas, setTareas] = React.useState([]);  // pendientes del cliente
   const [nuevaTarea, setNuevaTarea] = React.useState({ descripcion: '', responsable: '', fecha_entrega: '' });
   const [mostrandoFormTarea, setMostrandoFormTarea] = React.useState(false);
+  const [mostrarCompletadas, setMostrarCompletadas] = React.useState(false);
   const [productos, setProductos] = React.useState([]);
   const [invActeck, setInvActeck] = React.useState([]);
 
@@ -918,49 +919,78 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
           style: { padding: "6px 16px", background: "#10B981", color: "#fff", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer", fontWeight: 600 }
         }, "Agregar")
       ),
-      // Tabla
-      tareas.length === 0
-        ? React.createElement("div", { style: { textAlign: "center", padding: 20, color: "#94A3B8", fontSize: 13, fontStyle: "italic" } }, "Sin tareas. Agrega la primera con “+ Nueva tarea”.")
-        : React.createElement("div", { style: { overflowX: "auto" } },
-          React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
-            React.createElement("thead", null,
-              React.createElement("tr", { style: { background: "#F8FAFC", borderBottom: "2px solid #E2E8F0" } },
-                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11 } }, "Descripción"),
-                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11, width: 120 } }, "Responsable"),
-                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11, width: 110 } }, "Compromiso"),
-                React.createElement("th", { style: { textAlign: "center", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11, width: 60 } }, "✓"),
-                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11, width: 130 } }, "Hecho el"),
-                React.createElement("th", { style: { width: 30 } })
-              )
-            ),
-            React.createElement("tbody", null,
-              tareas.map(t => {
-                const done = t.estado === 'completado';
-                return React.createElement("tr", { key: t.id, style: { borderBottom: "1px solid #F1F5F9", opacity: done ? 0.6 : 1 } },
-                  React.createElement("td", { style: { padding: "8px 10px", color: "#1E293B", textDecoration: done ? "line-through" : "none" } }, t.descripcion || t.titulo || "—"),
-                  React.createElement("td", { style: { padding: "8px 10px", color: "#475569" } }, t.responsable || "—"),
-                  React.createElement("td", { style: { padding: "8px 10px", color: "#475569", fontSize: 11 } }, t.fecha_entrega ? formatFecha(t.fecha_entrega) : "—"),
-                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "center" } },
-                    React.createElement("input", {
-                      type: "checkbox", checked: done,
-                      onChange: () => toggleTarea(t),
-                      style: { width: 18, height: 18, cursor: "pointer" }
-                    })
-                  ),
-                  React.createElement("td", { style: { padding: "8px 10px", color: "#10B981", fontSize: 11, fontFamily: "ui-monospace,monospace" } },
-                    done && t.updated_at ? fmtCheckFecha(t.updated_at) : "—"),
-                  React.createElement("td", { style: { padding: "8px 6px", textAlign: "center" } },
-                    React.createElement("button", {
-                      onClick: () => delTarea(t.id),
-                      title: "Archivar",
-                      style: { background: "none", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 14, padding: 4 }
-                    }, "×")
-                  )
-                );
+      // Tablas (separadas: pendientes arriba, completadas abajo en repositorio)
+      (function() {
+        const pendientesList = tareas.filter(t => t.estado !== 'completado');
+        const completadasList = tareas.filter(t => t.estado === 'completado')
+          .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
+
+        const renderRow = (t, isCompleted) => {
+          return React.createElement("tr", { key: t.id, style: { borderBottom: "1px solid #F1F5F9", opacity: isCompleted ? 0.75 : 1 } },
+            React.createElement("td", { style: { padding: "8px 10px", color: "#1E293B", textDecoration: isCompleted ? "line-through" : "none" } }, t.descripcion || t.titulo || "—"),
+            React.createElement("td", { style: { padding: "8px 10px", color: "#475569" } }, t.responsable || "—"),
+            React.createElement("td", { style: { padding: "8px 10px", color: "#475569", fontSize: 11 } }, t.fecha_entrega ? formatFecha(t.fecha_entrega) : "—"),
+            React.createElement("td", { style: { padding: "8px 10px", textAlign: "center" } },
+              React.createElement("input", {
+                type: "checkbox", checked: isCompleted,
+                onChange: () => toggleTarea(t),
+                style: { width: 18, height: 18, cursor: "pointer" }
               })
+            ),
+            React.createElement("td", { style: { padding: "8px 10px", color: "#10B981", fontSize: 11, fontFamily: "ui-monospace,monospace" } },
+              isCompleted && t.updated_at ? fmtCheckFecha(t.updated_at) : "—"),
+            React.createElement("td", { style: { padding: "8px 6px", textAlign: "center" } },
+              React.createElement("button", {
+                onClick: () => delTarea(t.id),
+                title: "Archivar",
+                style: { background: "none", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 14, padding: 4 }
+              }, "×")
+            )
+          );
+        };
+
+        const renderHeader = () => React.createElement("thead", null,
+          React.createElement("tr", { style: { background: "#F8FAFC", borderBottom: "2px solid #E2E8F0" } },
+            React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11 } }, "Descripción"),
+            React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11, width: 120 } }, "Responsable"),
+            React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11, width: 110 } }, "Compromiso"),
+            React.createElement("th", { style: { textAlign: "center", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11, width: 60 } }, "✓"),
+            React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#475569", fontSize: 11, width: 130 } }, "Hecho el"),
+            React.createElement("th", { style: { width: 30 } })
+          )
+        );
+
+        return React.createElement(React.Fragment, null,
+          // Sección ACTIVAS
+          pendientesList.length === 0 && completadasList.length === 0
+            ? React.createElement("div", { style: { textAlign: "center", padding: 20, color: "#94A3B8", fontSize: 13, fontStyle: "italic" } }, "Sin tareas. Agrega la primera con “+ Nueva tarea”.")
+            : pendientesList.length === 0
+              ? React.createElement("div", { style: { textAlign: "center", padding: 16, color: "#94A3B8", fontSize: 12, fontStyle: "italic" } }, "✓ No hay tareas pendientes")
+              : React.createElement("div", { style: { overflowX: "auto" } },
+                React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+                  renderHeader(),
+                  React.createElement("tbody", null, pendientesList.map(t => renderRow(t, false)))
+                )
+              ),
+          // Sección COMPLETADAS (repositorio colapsable)
+          completadasList.length > 0 && React.createElement("div", { style: { marginTop: 16, borderTop: "1px solid #E2E8F0", paddingTop: 12 } },
+            React.createElement("button", {
+              onClick: () => setMostrarCompletadas(!mostrarCompletadas),
+              style: { background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 13, fontWeight: 600, padding: "4px 0", display: "flex", alignItems: "center", gap: 6 }
+            },
+              React.createElement("span", { style: { fontSize: 11, transition: "transform .2s", display: "inline-block", transform: mostrarCompletadas ? "rotate(90deg)" : "rotate(0)" } }, "▶"),
+              "📁 Repositorio de completadas",
+              React.createElement("span", { style: { background: "#F1F5F9", color: "#64748B", fontSize: 11, padding: "1px 8px", borderRadius: 10, fontWeight: 500 } }, completadasList.length)
+            ),
+            mostrarCompletadas && React.createElement("div", { style: { marginTop: 10, overflowX: "auto" } },
+              React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+                renderHeader(),
+                React.createElement("tbody", null, completadasList.map(t => renderRow(t, true)))
+              )
             )
           )
-        )
+        );
+      })()
     );
   }
 
