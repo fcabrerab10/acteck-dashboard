@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { supabase, DB_CONFIGURED } from '../../lib/supabase';
+import { supabase, DB_CONFIGURED, fetchAllPagesREST } from '../../lib/supabase';
 import { formatMXN, loadSheetJS } from '../../lib/utils';
 
 export default function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
@@ -337,23 +337,6 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   };
 
   // Load data from Supabase
-  // Paginated fetch helper (PostgREST max 1000 rows per request)
-  // Takes a factory function so each page creates a FRESH query (supabase-js
-  // query builders are single-use once awaited).
-  const fetchAllPages = async (queryFactory) => {
-    const PAGE = 1000;
-    let all = [];
-    let from = 0;
-    while (true) {
-      const { data, error } = await queryFactory().range(from, from + PAGE - 1);
-      if (error || !data) break;
-      all = all.concat(data);
-      if (data.length < PAGE) break;
-      from += PAGE;
-    }
-    return all;
-  };
-
   // Acteck warehouses to sum for "Inv Acteck" column
   const ACTECK_ALMACENES = [1, 2, 3, 4, 14, 16, 17, 25, 44];
 
@@ -362,12 +345,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     setLoading(true);
     try {
       const [productos, sellIn, sellOut, inventario, invActeck, transito] = await Promise.all([
-        fetchAllPages(() => supabase.from("productos_cliente").select("*").eq("cliente", clienteKey)),
-        fetchAllPages(() => supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026)),
-        fetchAllPages(() => supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026)),
-        fetchAllPages(() => supabase.from("inventario_cliente").select("*").eq("cliente", clienteKey)),
-        fetchAllPages(() => supabase.from("inventario_acteck").select("articulo,no_almacen,disponible").in("no_almacen", ACTECK_ALMACENES)),
-        fetchAllPages(() => supabase.from("transito_sku").select("sku,inventario_transito")),
+        fetchAllPagesREST(`productos_cliente?select=*&cliente=eq.${clienteKey}`),
+        fetchAllPagesREST(`sell_in_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
+        fetchAllPagesREST(`sellout_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
+        fetchAllPagesREST(`inventario_cliente?select=*&cliente=eq.${clienteKey}`),
+        fetchAllPagesREST(`inventario_acteck?select=articulo,no_almacen,disponible&no_almacen=in.(${ACTECK_ALMACENES.join(',')})`),
+        fetchAllPagesREST(`transito_sku?select=sku,inventario_transito`),
       ]);
 
       // Pre-aggregate Acteck inventory by SKU (sum across all 9 warehouses)
