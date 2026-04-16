@@ -191,7 +191,11 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     var skuColor = skusConInv > totalSkus * 0.5 ? "#10b981" : skusConInv > totalSkus * 0.25 ? "#f59e0b" : "#ef4444";
     items.push({ label: "SKUs con Inventario", value: fmtNum(skusConInv), color: skuColor, detail: "de " + fmtNum(totalSkus) + " totales" });
     // 2. Días de inventario
-    var invValorTotal = inventario.reduce(function(s, r) { return s + (Number(r.valor) || 0); }, 0);
+    var invValorTotal = inventario.reduce(function(s, r) {
+      var v = Number(r.valor) || 0;
+      if (v > 0) return s + v;
+      return s + (Number(r.stock) || 0) * (Number(r.costo_convenio) || 0);
+    }, 0);
     var soTotal = ytd.so;
     var mesesConDatos = ytd.mesesConDatos || 1;
     var soDiario = mesesConDatos > 0 ? soTotal / (mesesConDatos * 30) : 0;
