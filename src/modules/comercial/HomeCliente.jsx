@@ -355,6 +355,27 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     return map;
   }, [cuotasMensuales, clienteKey]);
 
+  // ─── INVENTARIO HELPERS (declarados temprano para que _skusCriticos pueda usarlos) ─
+  const _invValor = (r) => {
+    const v = Number(r.valor) || 0;
+    if (v > 0) return v;
+    return (Number(r.stock) || 0) * (Number(r.costo_convenio) || 0);
+  };
+  const _latestWeek = React.useMemo(() => {
+    if (!invCliente.length) return { anio: null, semana: null };
+    let maxAnio = 0, maxSemana = 0;
+    invCliente.forEach(r => {
+      const a = Number(r.anio) || 0;
+      const s = Number(r.semana) || 0;
+      if (a > maxAnio || (a === maxAnio && s > maxSemana)) { maxAnio = a; maxSemana = s; }
+    });
+    return { anio: maxAnio, semana: maxSemana };
+  }, [invCliente]);
+  const invClienteLatest = invCliente.filter(r =>
+    Number(r.anio) === _latestWeek.anio && Number(r.semana) === _latestWeek.semana
+  );
+  const totalInvValor = invClienteLatest.reduce(function(s, r) { return s + _invValor(r); }, 0);
+
   // ─── PROGRESO MES/TRIMESTRE/AÑO ─────────────────────────────────────────
   const mesActual = new Date().getMonth() + 1;
   const trimActual = Math.ceil(mesActual / 3);
@@ -477,27 +498,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   const totalCuotaIdeal = mesesFiltrados.reduce((s, m) => s + (cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : 0), 0);
   const cumplimientoMin = totalCuotaMin > 0 ? (totalSellIn / totalCuotaMin * 100) : 0;
   const cumplimientoIdeal = totalCuotaIdeal > 0 ? (totalSellIn / totalCuotaIdeal * 100) : 0;
-  // Inventory valor: if valor is null/0, compute from stock × costo_convenio
-  const _invValor = (r) => {
-    const v = Number(r.valor) || 0;
-    if (v > 0) return v;
-    return (Number(r.stock) || 0) * (Number(r.costo_convenio) || 0);
-  };
-  // Filter inventory to most recent snapshot (anio, semana) to avoid summing historical weeks
-  const _latestWeek = React.useMemo(() => {
-    if (!invCliente.length) return { anio: null, semana: null };
-    let maxAnio = 0, maxSemana = 0;
-    invCliente.forEach(r => {
-      const a = Number(r.anio) || 0;
-      const s = Number(r.semana) || 0;
-      if (a > maxAnio || (a === maxAnio && s > maxSemana)) { maxAnio = a; maxSemana = s; }
-    });
-    return { anio: maxAnio, semana: maxSemana };
-  }, [invCliente]);
-  const invClienteLatest = invCliente.filter(r =>
-    Number(r.anio) === _latestWeek.anio && Number(r.semana) === _latestWeek.semana
-  );
-  const totalInvValor = invClienteLatest.reduce(function(s, r) { return s + _invValor(r); }, 0);
+  // Inventory derived (uses totalInvValor declared above)
   const avgInvValor = invClienteLatest.length > 0 ? totalInvValor / invClienteLatest.length : 0;
   const lastInvValor = totalInvValor;
   const totalInvCliente = totalInvValor;
