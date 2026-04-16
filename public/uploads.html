@@ -58,7 +58,7 @@ const SOURCES = [
   { id:'ec-pcel', title:'Estado de cuenta · PCEL', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
   { id:'ec-digitalife', title:'Estado de cuenta · Digitalife', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
   { id:'roadmap-precios', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
-  { id:'master-embarques', title:'Master Embarques (Google Drive)', desc:'Sincroniza desde Google Sheets. Clic en "Sincronizar" para importar la hoja completa.', file:'(Google Sheets)', table:'embarques_compras', parser:'masterEmbarques', syncMode:true },
+  { id:'master-embarques', title:'Master Embarques (Google Drive)', desc:'Sincroniza desde tu Google Drive. Usa tu sesión de Google para descargar y parsear automáticamente.', file:'(Google Drive)', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', syncMode:true },
 ];
 
 const CHUNK = 200;
@@ -251,6 +251,51 @@ const PARSERS = {
       detalle: detalle
     };
   },
+  masterEmbarques(wb){
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
+    return rows.map(r => {
+      const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
+      const po = toStr(obj.po);
+      const codigo = toStr(obj.codigo);
+      if (!po && !codigo) return null;
+      return {
+        po,
+        codigo,
+        fecha_emision: toISODate(obj.fecha_emision),
+        grupo: toStr(obj.grupo),
+        cbm: toNum(obj.cbm),
+        fraccion_arancelaria: toStr(obj.f_a ?? obj.fa),
+        porcentaje: toNum(obj['%'] ?? obj.porcentaje),
+        familia: toStr(obj.familia),
+        descripcion: toStr(obj.descripcion),
+        po_qty: toInt(obj.po_qty),
+        shp_qty: toInt(obj.shp_qty),
+        unit_price: toNum(obj.unit_price),
+        total_amount: toNum(obj.total_amount),
+        metodo_pago: toStr(obj.metodo_de_pago),
+        supplier: toStr(obj.supplier),
+        fecha_inicio_produccion: toISODate(obj.fecha_inicio_de_produccion),
+        fin_produccion: toISODate(obj.fin_de_produccion),
+        ref_ff: toStr(obj.ref_ff),
+        naviera: toStr(obj.naviera),
+        tipo_carga: toStr(obj.tipo_de_carga),
+        tipo_contenedor: toStr(obj.tipo_de_cont),
+        costo_flete: toNum(obj.costo_flete),
+        fdw: toStr(obj.fdw),
+        contenedor: toStr(obj.contenedor),
+        etd: toISODate(obj.etd),
+        eta_puerto: toISODate(obj.eta_puerto),
+        agente_aduanal: toStr(obj.a_a ?? obj.aa),
+        arribo_cedis: toISODate(obj.arribo_a_cedis),
+        lt: toStr(obj.lt),
+        cedis: toStr(obj.cedis),
+        estatus: toStr(obj.estatus),
+        comentarios_trafico: toStr(obj.comentarios_trafico),
+        comentarios_diseno: toStr(obj.comentarios_diseno),
+      };
+    }).filter(Boolean);
+  },
   roadmapPrecios(wb){
     const shR = wb.Sheets['Roadmap Q2 2026'] || wb.Sheets[wb.SheetNames[0]];
     const shP = wb.Sheets['BD Lista de Precios'] || wb.Sheets[wb.SheetNames[1]];
@@ -426,30 +471,41 @@ async function handleUpload(src){
   }
 }
 
-// Sync Master Embarques from Google Drive
+// Sync Master Embarques from Google Drive (browser-side fetch using user's Google session)
+const SHEET_XLSX_URL = 'https://docs.google.com/spreadsheets/d/1m2I_oTd4EYTQ1v5KQOAZGIPmt58K3jRUbHGk0ed0JoQ/export?format=xlsx';
+
 async function handleSync(src){
-  setStatus(src,'b-warn','Sincronizando desde Google Sheets...');
+  setStatus(src,'b-warn','Descargando desde Google Drive...');
   const log = document.getElementById(`log-${src.id}`);
   log.classList.add('open');
-  appendLog(src, 'Fetching Google Sheet → embarques_compras...');
+  appendLog(src, 'Descargando Excel desde Google Sheets...');
   try {
-    const r = await fetch('/api/sync-embarques', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'}
-    });
-    const j = await r.json();
-    if (j.ok) {
-      appendLog(src, `✓ ${j.count} filas sincronizadas`);
-      saveLastUpdated(src.id);
-      const badge = document.getElementById(`updated-${src.id}`);
-      badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
-      badge.style.display = '';
-      setStatus(src,'b-ok','✓ Sincronizado');
-    } else {
-      appendLog(src, `ERROR: ${j.error}${j.detail ? ' — '+j.detail : ''}`);
-      setStatus(src,'b-err','Error');
+    // Fetch XLSX using user's browser cookies (Google session)
+    const resp = await fetch(SHEET_XLSX_URL);
+    if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 403) {
+        appendLog(src, 'ERROR: No tienes acceso al archivo. Asegúrate de estar logueado en Google en este navegador.');
+      }
+      throw new Error(`HTTP ${resp.status} al descargar Google Sheet`);
     }
+    const buf = await resp.arrayBuffer();
+    appendLog(src, `Archivo descargado (${(buf.byteLength/1024).toFixed(0)} KB). Parseando...`);
+
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    appendLog(src, `Hojas: ${wb.SheetNames.join(', ')}`);
+
+    const rows = PARSERS.masterEmbarques(wb);
+    appendLog(src, `Filas parseadas: ${rows.length}`);
+
+    await postChunks(src, 'embarques_compras', 'po,codigo', rows);
+
+    saveLastUpdated(src.id);
+    const badge = document.getElementById(`updated-${src.id}`);
+    badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
+    badge.style.display = '';
+    setStatus(src,'b-ok','✓ Sincronizado');
   } catch(e) {
+    console.error(e);
     appendLog(src, 'ERROR: ' + e.message);
     setStatus(src,'b-err','Error');
   }
