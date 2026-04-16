@@ -23,6 +23,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   // Period comparison state
   var [compA, setCompA] = _s({ tipo: 'ytd', anio: 2026, mes: null });
   var [compB, setCompB] = _s({ tipo: 'ytd', anio: 2025, mes: null });
+  var [vistaModo, setVistaModo] = _s('simple');  // 'simple' | 'trimestre' | 'mes'
 
   // Paginated fetch helper (PostgREST caps at 1000 rows)
   // Factory pattern: each page creates a fresh query (supabase-js builders are single-use)
@@ -534,8 +535,23 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     // === 3. COMPARATIVA PERIODO A vs B ===
     section("Comparativa entre Periodos", "\uD83D\uDD04",
       el("div", null,
-        // Selectores
-        el("div", { style: { display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" } },
+        // Selector de modo
+        el("div", { style: { display: "flex", gap: 6, marginBottom: 12 } },
+          ['simple', 'trimestre', 'mes'].map(function(m) {
+            return el("button", {
+              key: m,
+              onClick: function() { setVistaModo(m); },
+              style: {
+                padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                border: vistaModo === m ? "2px solid #4472c4" : "1px solid #e2e8f0",
+                background: vistaModo === m ? "#eff6ff" : "#fff",
+                color: vistaModo === m ? "#4472c4" : "#64748b"
+              }
+            }, m === 'simple' ? 'A vs B' : m === 'trimestre' ? 'Por Trimestre' : 'Por Mes');
+          })
+        ),
+        // Selectores (solo en modo simple)
+        vistaModo === 'simple' && el("div", { style: { display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" } },
           el("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
             el("span", { style: { fontSize: 12, color: "#475569", fontWeight: 600 } }, "A:"),
             el("select", { value: compA.tipo, onChange: function(e) { setCompA(Object.assign({}, compA, { tipo: e.target.value, mes: e.target.value === 'mes' || e.target.value === 'trimestre' ? (compA.mes || 1) : null })); },
@@ -582,8 +598,8 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
             )
           )
         ),
-        // Tabla comparativa
-        el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
+        // Tabla comparativa A vs B (modo simple)
+        vistaModo === 'simple' && el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
           el("thead", null,
             el("tr", { style: { background: "#f8fafc", borderBottom: "2px solid #e2e8f0" } },
               el("th", { style: { textAlign: "left", padding: "8px 12px", color: "#475569", fontWeight: 600 } }, "Métrica"),
@@ -612,7 +628,92 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
               );
             })
           )
-        )
+        ),
+        // === Vista POR TRIMESTRE (2026 Q1-Q4 vs 2025 Q1-Q4) ===
+        vistaModo === 'trimestre' && (function() {
+          var periodos = [];
+          for (var q = 1; q <= 4; q++) {
+            periodos.push({ label: "Q" + q, a: computePeriodo({ tipo: 'trimestre', anio: 2026, mes: (q-1)*3 + 1 }), b: computePeriodo({ tipo: 'trimestre', anio: 2025, mes: (q-1)*3 + 1 }) });
+          }
+          return el("div", { style: { overflowX: "auto" } },
+            el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+              el("thead", null,
+                el("tr", { style: { background: "#f8fafc", borderBottom: "2px solid #e2e8f0" } },
+                  el("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Trimestre"),
+                  el("th", { style: { textAlign: "right", padding: "8px 10px", color: "#3b82f6", fontWeight: 600 } }, "SI 2026"),
+                  el("th", { style: { textAlign: "right", padding: "8px 10px", color: "#8b5cf6", fontWeight: 600 } }, "SI 2025"),
+                  el("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600, width: 90 } }, "Δ% SI"),
+                  el("th", { style: { textAlign: "right", padding: "8px 10px", color: "#10b981", fontWeight: 600 } }, "SO 2026"),
+                  el("th", { style: { textAlign: "right", padding: "8px 10px", color: "#059669", fontWeight: 600 } }, "SO 2025"),
+                  el("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600, width: 90 } }, "Δ% SO"),
+                  el("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Efi 2026"),
+                  el("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Efi 2025")
+                )
+              ),
+              el("tbody", null,
+                periodos.map(function(p, i) {
+                  var dSI = p.b.si > 0 ? (p.a.si - p.b.si) / p.b.si * 100 : null;
+                  var dSO = p.b.so > 0 ? (p.a.so - p.b.so) / p.b.so * 100 : null;
+                  var cSI = dSI === null ? "#94a3b8" : dSI >= 0 ? "#10b981" : "#ef4444";
+                  var cSO = dSO === null ? "#94a3b8" : dSO >= 0 ? "#10b981" : "#ef4444";
+                  return el("tr", { key: i, style: { borderBottom: "1px solid #f1f5f9" } },
+                    el("td", { style: { padding: "8px 10px", fontWeight: 600, color: "#1e293b" } }, p.label),
+                    el("td", { style: { padding: "8px 10px", textAlign: "right" } }, p.a.si > 0 ? fmtMoney(p.a.si) : "—"),
+                    el("td", { style: { padding: "8px 10px", textAlign: "right", color: "#64748b" } }, p.b.si > 0 ? fmtMoney(p.b.si) : "—"),
+                    el("td", { style: { padding: "8px 10px", textAlign: "right", color: cSI, fontWeight: 600 } }, dSI === null ? "—" : (dSI >= 0 ? "+" : "") + dSI.toFixed(1) + "%"),
+                    el("td", { style: { padding: "8px 10px", textAlign: "right" } }, p.a.so > 0 ? fmtMoney(p.a.so) : "—"),
+                    el("td", { style: { padding: "8px 10px", textAlign: "right", color: "#64748b" } }, p.b.so > 0 ? fmtMoney(p.b.so) : "—"),
+                    el("td", { style: { padding: "8px 10px", textAlign: "right", color: cSO, fontWeight: 600 } }, dSO === null ? "—" : (dSO >= 0 ? "+" : "") + dSO.toFixed(1) + "%"),
+                    el("td", { style: { padding: "8px 10px", textAlign: "right", color: p.a.ef >= 80 ? "#10b981" : p.a.ef >= 50 ? "#f59e0b" : p.a.ef > 0 ? "#ef4444" : "#94a3b8" } }, p.a.ef > 0 ? fmtPct(p.a.ef) : "—"),
+                    el("td", { style: { padding: "8px 10px", textAlign: "right", color: "#64748b" } }, p.b.ef > 0 ? fmtPct(p.b.ef) : "—")
+                  );
+                })
+              )
+            )
+          );
+        })(),
+        // === Vista POR MES (2026 vs 2025, 12 meses) ===
+        vistaModo === 'mes' && (function() {
+          var mesesArr = [];
+          for (var m = 1; m <= 12; m++) {
+            mesesArr.push({ label: MESES[m-1], a: computePeriodo({ tipo: 'mes', anio: 2026, mes: m }), b: computePeriodo({ tipo: 'mes', anio: 2025, mes: m }) });
+          }
+          return el("div", { style: { overflowX: "auto" } },
+            el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 11 } },
+              el("thead", null,
+                el("tr", { style: { background: "#f8fafc", borderBottom: "2px solid #e2e8f0" } },
+                  el("th", { style: { textAlign: "left", padding: "6px 8px", color: "#475569", fontWeight: 600 } }, "Mes"),
+                  el("th", { style: { textAlign: "right", padding: "6px 8px", color: "#3b82f6", fontWeight: 600 } }, "SI 2026"),
+                  el("th", { style: { textAlign: "right", padding: "6px 8px", color: "#8b5cf6", fontWeight: 600 } }, "SI 2025"),
+                  el("th", { style: { textAlign: "right", padding: "6px 8px", color: "#475569", fontWeight: 600, width: 80 } }, "Δ SI"),
+                  el("th", { style: { textAlign: "right", padding: "6px 8px", color: "#10b981", fontWeight: 600 } }, "SO 2026"),
+                  el("th", { style: { textAlign: "right", padding: "6px 8px", color: "#059669", fontWeight: 600 } }, "SO 2025"),
+                  el("th", { style: { textAlign: "right", padding: "6px 8px", color: "#475569", fontWeight: 600, width: 80 } }, "Δ SO"),
+                  el("th", { style: { textAlign: "right", padding: "6px 8px", color: "#475569", fontWeight: 600 } }, "Efi 2026")
+                )
+              ),
+              el("tbody", null,
+                mesesArr.map(function(p, i) {
+                  var dSI = p.b.si > 0 ? (p.a.si - p.b.si) / p.b.si * 100 : null;
+                  var dSO = p.b.so > 0 ? (p.a.so - p.b.so) / p.b.so * 100 : null;
+                  var cSI = dSI === null ? "#94a3b8" : dSI >= 0 ? "#10b981" : "#ef4444";
+                  var cSO = dSO === null ? "#94a3b8" : dSO >= 0 ? "#10b981" : "#ef4444";
+                  var hasData = p.a.si > 0 || p.a.so > 0 || p.b.si > 0 || p.b.so > 0;
+                  return el("tr", { key: i, style: { borderBottom: "1px solid #f1f5f9", opacity: hasData ? 1 : 0.4 } },
+                    el("td", { style: { padding: "6px 8px", fontWeight: 600, color: "#1e293b" } }, p.label),
+                    el("td", { style: { padding: "6px 8px", textAlign: "right" } }, p.a.si > 0 ? fmtK(p.a.si) : "—"),
+                    el("td", { style: { padding: "6px 8px", textAlign: "right", color: "#64748b" } }, p.b.si > 0 ? fmtK(p.b.si) : "—"),
+                    el("td", { style: { padding: "6px 8px", textAlign: "right", color: cSI, fontWeight: 600 } }, dSI === null ? "—" : (dSI >= 0 ? "+" : "") + dSI.toFixed(0) + "%"),
+                    el("td", { style: { padding: "6px 8px", textAlign: "right" } }, p.a.so > 0 ? fmtK(p.a.so) : "—"),
+                    el("td", { style: { padding: "6px 8px", textAlign: "right", color: "#64748b" } }, p.b.so > 0 ? fmtK(p.b.so) : "—"),
+                    el("td", { style: { padding: "6px 8px", textAlign: "right", color: cSO, fontWeight: 600 } }, dSO === null ? "—" : (dSO >= 0 ? "+" : "") + dSO.toFixed(0) + "%"),
+                    el("td", { style: { padding: "6px 8px", textAlign: "right", color: p.a.ef >= 80 ? "#10b981" : p.a.ef >= 50 ? "#f59e0b" : p.a.ef > 0 ? "#ef4444" : "#94a3b8" } }, p.a.ef > 0 ? fmtPct(p.a.ef) : "—")
+                  );
+                })
+              )
+            )
+          );
+        })()
       )
     ),
 
@@ -620,13 +721,52 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     section("Proyecci\u00F3n de Cierre Anual", "\uD83D\uDD2E",
       el("div", null,
         ytd.mesesConDatos >= 2 ? el("div", null,
+          // Banner cuotas con gap para superar ideal
+          (function() {
+            var cuotaMin = totalCuotaMinA > 0 ? totalCuotaMinA : 0;
+            var cuotaIdeal = totalCuotaIdealA > 0 ? totalCuotaIdealA : 0;
+            var mesesRest = 12 - ytd.mesesConDatos;
+            var gapMin = cuotaMin - ytd.si;
+            var gapIdeal = cuotaIdeal - ytd.si;
+            var mensualParaMin = mesesRest > 0 && gapMin > 0 ? gapMin / mesesRest : 0;
+            var mensualParaIdeal = mesesRest > 0 && gapIdeal > 0 ? gapIdeal / mesesRest : 0;
+            return el("div", { style: { background: "linear-gradient(135deg, #fef3c7, #fde68a)", borderRadius: 10, padding: "14px 18px", marginBottom: 14 } },
+              el("div", { style: { fontSize: 13, fontWeight: 700, color: "#92400e", marginBottom: 8 } }, "🎯 Esfuerzo para superar cuotas"),
+              el("div", { style: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 } },
+                el("div", null,
+                  el("div", { style: { fontSize: 10, color: "#78350f", fontWeight: 600 } }, "CUOTA MÍNIMA"),
+                  el("div", { style: { fontSize: 18, fontWeight: 700, color: "#b45309" } }, fmtM(cuotaMin))
+                ),
+                el("div", null,
+                  el("div", { style: { fontSize: 10, color: "#78350f", fontWeight: 600 } }, "CUOTA IDEAL"),
+                  el("div", { style: { fontSize: 18, fontWeight: 700, color: "#d97706" } }, fmtM(cuotaIdeal))
+                ),
+                el("div", null,
+                  el("div", { style: { fontSize: 10, color: "#78350f", fontWeight: 600 } }, "PARA CERRAR EN MÍN (prom/mes)"),
+                  el("div", { style: { fontSize: 16, fontWeight: 700, color: gapMin <= 0 ? "#065f46" : "#b45309" } },
+                    gapMin <= 0 ? "✓ Ya superado" : (fmtM(mensualParaMin) + "/mes en " + mesesRest + " m"))
+                ),
+                el("div", null,
+                  el("div", { style: { fontSize: 10, color: "#78350f", fontWeight: 600 } }, "PARA SUPERAR IDEAL (prom/mes)"),
+                  el("div", { style: { fontSize: 16, fontWeight: 700, color: gapIdeal <= 0 ? "#065f46" : "#d97706" } },
+                    gapIdeal <= 0 ? "✓ Ya superado" : (fmtM(mensualParaIdeal) + "/mes en " + mesesRest + " m"))
+                )
+              )
+            );
+          })(),
+          // Proyección base: usa CUOTA MÍNIMA como referencia
           el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
-            metricBox("Promedio Mensual SI", fmtM(ytd.avgSI), "\u00DAltimos " + ytd.mesesConDatos + " meses", "#3b82f6"),
-            metricBox("Proyecci\u00F3n SI Anual", fmtM(ytd.projSI), "Estimado cierre " + anio, "#8b5cf6"),
-            metricBox("Ratio SI/SO", ytd.so > 0 ? fmtPct(ytd.so/ytd.si*100) : "—", ytd.st < 50 ? "⚠️ Riesgo alto de sobreinventario" : ytd.st < 70 ? "⚠️ Inventario acumulado" : "Rotación saludable", ytd.st < 50 ? "#ef4444" : ytd.st < 70 ? "#f59e0b" : "#10b981"),
-          metricBox("Cuota Ideal Anual", totalCuotaIdealA > 0 ? fmtM(totalCuotaIdealA) : "Sin datos", totalCuotaIdealA > 0 ? "Cump: " + fmtPct(cumpCuotaA) : "Subir cuotas", "#F59E0B"),
-            metricBox("Promedio Mensual SO", fmtM(ytd.avgSO), "\u00DAltimos " + ytd.mesesConDatos + " meses", "#10b981"),
-            metricBox("Proyecci\u00F3n SO Anual", fmtM(ytd.projSO), "Estimado cierre " + anio, "#059669")
+            metricBox("Promedio Mensual SI", fmtM(ytd.avgSI), "Últimos " + ytd.mesesConDatos + " meses", "#3b82f6"),
+            metricBox("Proyección SI Anual", fmtM(ytd.projSI),
+              totalCuotaMinA > 0 ? "vs Mín: " + fmtPct(ytd.projSI / totalCuotaMinA * 100) + (ytd.projSI >= totalCuotaMinA ? " ✓" : " ⚠") : "Estimado cierre " + anio,
+              ytd.projSI >= totalCuotaMinA ? "#10b981" : "#ef4444"),
+            metricBox("Ratio SI/SO", ytd.so > 0 ? fmtPct(ytd.so/ytd.si*100) : "—",
+              ytd.st < 50 ? "⚠️ Riesgo sobreinventario" : ytd.st < 70 ? "⚠️ Inventario acumulado" : "Rotación saludable",
+              ytd.st < 50 ? "#ef4444" : ytd.st < 70 ? "#f59e0b" : "#10b981"),
+            metricBox("Promedio Mensual SO", fmtM(ytd.avgSO), "Últimos " + ytd.mesesConDatos + " meses", "#10b981"),
+            metricBox("Proyección SO Anual", fmtM(ytd.projSO),
+              totalCuotaMinA > 0 ? "vs Mín: " + fmtPct(ytd.projSO / totalCuotaMinA * 100) + (ytd.projSO >= totalCuotaMinA ? " ✓" : " ⚠") : "Estimado cierre " + anio,
+              ytd.projSO >= totalCuotaMinA ? "#10b981" : "#ef4444")
           ),
           // Monthly projection bars
           el("div", { style: { fontSize:12, color:"#94a3b8", marginBottom:8, fontWeight:600 } }, "Sell In: Real vs Proyectado"),
