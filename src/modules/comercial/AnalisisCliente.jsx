@@ -22,7 +22,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   var [estadoCuenta, setEstadoCuenta] = _s(null);
   // Period comparison state
   var [compA, setCompA] = _s({ tipo: 'ytd', anio: 2026, mes: null });
-  var [compB, setCompB] = _s({ tipo: 'anio', anio: 2025, mes: null });
+  var [compB, setCompB] = _s({ tipo: 'ytd', anio: 2025, mes: null });
 
   // Paginated fetch helper (PostgREST caps at 1000 rows)
   // Factory pattern: each page creates a fresh query (supabase-js builders are single-use)
@@ -187,8 +187,16 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       });
     }
 
-    // Sobreinventario + SKUs más lentos para acelerar
-    var invValorTotal = inventario.reduce(function(s, r) {
+    // Sobreinventario + SKUs más lentos para acelerar (solo semana más reciente)
+    var _maxA = 0, _maxS = 0;
+    inventario.forEach(function(inv) {
+      var a = Number(inv.anio) || 0, s = Number(inv.semana) || 0;
+      if (a > _maxA || (a === _maxA && s > _maxS)) { _maxA = a; _maxS = s; }
+    });
+    var _invLatestI = _maxA > 0 ? inventario.filter(function(inv) {
+      return Number(inv.anio) === _maxA && Number(inv.semana) === _maxS;
+    }) : inventario;
+    var invValorTotal = _invLatestI.reduce(function(s, r) {
       var v = Number(r.valor) || 0;
       return s + (v > 0 ? v : (Number(r.stock) || 0) * (Number(r.costo_convenio) || 0));
     }, 0);
@@ -201,10 +209,11 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
           .filter(function(s) { return s.invStock > 0 && s.diasSinVenta > 30; })
           .sort(function(a, b) { return b.invValor - a.invValor; })
           .slice(0, 3);
+        var mesesCob = (diasCob / 30).toFixed(1);
         lista.push({
-          tipo: 'alerta', icono: '📦', titulo: 'Sobreinventario (' + diasCob + ' días de cobertura)',
-          descripcion: 'Inventario de ' + fmtMoney(invValorTotal) + ' equivale a más de 4 meses de ventas.',
-          accion: 'Acelerar desplazamiento de estos SKUs clave:',
+          tipo: 'alerta', icono: '📦', titulo: 'Sobreinventario (' + diasCob + ' días ≈ ' + mesesCob + ' meses)',
+          descripcion: 'Inventario de ' + fmtMoney(invValorTotal) + ' con rotación actual cubre demasiado tiempo.',
+          accion: 'Acelerar desplazamiento de estos SKUs lentos con promoción/marketing:',
           sublist: topLentos.map(function(s) {
             return { sku: s.sku, desc: s.desc, detail: fmtNum(s.invStock) + ' pzs · ' + fmtMoney(s.invValor) + ' · ' + (s.diasSinVenta||0).toFixed(0) + 'd sin vender' };
           })
