@@ -502,6 +502,40 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     return { efi, skusActivos, skusConInv, diasCob, invActeckPiezas, sugPiezas, sugMonto, sugSkus };
   }, [datos, aggs, clienteKey]);
 
+  // SKUs en riesgo de desabasto (rotación alta vs stock bajo)
+  const skusRiesgo = React.useMemo(() => {
+    if (!datos) return [];
+    const mesActual = new Date().getMonth() + 1;
+    const transitoBySku = datos.transitoBySku || {};
+    const actStockBySku = datos.actStockBySku || {};
+    const riesgo = [];
+    const skusAll = new Set();
+    datos.sellOut.forEach(r => { if (r.sku) skusAll.add(r.sku); });
+    skusAll.forEach(sku => {
+      const soData = datos.sellOut.filter(r => r.sku === sku);
+      const soSinMes = soData.filter(r => Number(r.mes) < mesActual);
+      const prom = soSinMes.slice(-3).length > 0 ? soSinMes.slice(-3).reduce((s, r) => s + (r.piezas || 0), 0) / Math.min(3, soSinMes.slice(-3).length) : 0;
+      if (prom < 2) return; // filtro mínimo de rotación para no inundar
+      const invData = datos.inventario.find(r => r.sku === sku);
+      const stock = Number(invData?.stock) || 0;
+      const diasRestantes = prom > 0 ? Math.round((stock / prom) * 30) : 999;
+      if (diasRestantes >= 30) return; // solo los que se agotan en menos de 30 días
+      const prod = datos.productos.find(p => p.sku === sku);
+      const titulo = (invData && invData.titulo) || (prod && prod.descripcion) || sku;
+      riesgo.push({
+        sku,
+        titulo,
+        stock,
+        promMes: Math.round(prom),
+        diasRestantes,
+        invActeck: actStockBySku[sku] || 0,
+        transito: transitoBySku[sku] || 0,
+        urgencia: diasRestantes < 7 ? 3 : diasRestantes < 15 ? 2 : 1,
+      });
+    });
+    return riesgo.sort((a, b) => a.diasRestantes - b.diasRestantes);
+  }, [datos]);
+
   // Roadmap + Tránsito cruce: identifica productos nuevos (en tránsito sin roadmap)
   // Solo considera SKUs que empiezan con "AC" o "BR"
   const roadmapCruce = React.useMemo(() => {
@@ -859,6 +893,50 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           ),
         ),
       ),
+      // SKUs en riesgo de desabasto
+      skusRiesgo.length > 0 && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 } },
+          React.createElement("h3", { className: "font-bold text-gray-800" }, "\u26A0\uFE0F SKUs en riesgo de desabasto"),
+          React.createElement("div", { style: { fontSize: 12, color: "#64748B" } },
+            skusRiesgo.length + " SKUs se agotan en menos de 30 d\u00edas con la rotaci\u00f3n actual"
+          )
+        ),
+        React.createElement("div", { style: { overflowX: "auto", maxHeight: 400, overflowY: "auto" } },
+          React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+            React.createElement("thead", null,
+              React.createElement("tr", { style: { background: "#FEF2F2", position: "sticky", top: 0 } },
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 20 } }, "⚠"),
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA" } }, "SKU"),
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA" } }, "Descripci\u00f3n"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Stock hoy"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Rotaci\u00f3n/mes"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "D\u00edas restantes"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Inv Acteck"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Tr\u00e1nsito")
+              )
+            ),
+            React.createElement("tbody", null,
+              skusRiesgo.map(function(s, i) {
+                var bg = s.urgencia === 3 ? "#FEF2F2" : s.urgencia === 2 ? "#FFFBEB" : "#FEFCE8";
+                var dot = s.urgencia === 3 ? "#EF4444" : s.urgencia === 2 ? "#F59E0B" : "#FBBF24";
+                return React.createElement("tr", { key: s.sku, style: { borderBottom: "1px solid #f1f5f9", background: bg } },
+                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "center" } },
+                    React.createElement("span", { style: { display: "inline-block", width: 10, height: 10, borderRadius: 5, background: dot } })
+                  ),
+                  React.createElement("td", { style: { padding: "8px 10px", fontFamily: "ui-monospace,monospace", color: "#1E293B", fontWeight: 600 } }, s.sku),
+                  React.createElement("td", { style: { padding: "8px 10px", color: "#475569", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.titulo }, s.titulo.slice(0, 70)),
+                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E293B", fontWeight: 600 } }, s.stock.toLocaleString("es-MX")),
+                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#475569" } }, s.promMes.toLocaleString("es-MX")),
+                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: dot, fontWeight: 700 } }, s.diasRestantes + "d"),
+                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: s.invActeck > 0 ? "#10B981" : "#94A3B8", fontWeight: s.invActeck > 0 ? 600 : 400 } }, s.invActeck.toLocaleString("es-MX")),
+                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: s.transito > 0 ? "#7C3AED" : "#94A3B8" } }, s.transito > 0 ? s.transito.toLocaleString("es-MX") : "—")
+                );
+              })
+            )
+          )
+        )
+      ),
+
       // Roadmap + Tránsito — catálogo completo con productos nuevos detectados
       roadmapCruce && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
         React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 } },
