@@ -11,12 +11,18 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   var [ventas, setVentas] = _s([]);
   var [marketing, setMarketing] = _s([]);
   var [productos, setProductos] = _s([]);
-  var [sellInSku, setSellInSku] = _s([]);
-  var [sellOutSku, setSellOutSku] = _s([]);
+  var [sellInSku, setSellInSku] = _s([]);           // año actual
+  var [sellOutSku, setSellOutSku] = _s([]);         // año actual
+  var [sellInSkuAll, setSellInSkuAll] = _s([]);     // últimos 2 años (para comparativas)
+  var [sellOutSkuAll, setSellOutSkuAll] = _s([]);   // últimos 2 años
   var [inventario, setInventario] = _s([]);
   var [loading, setLoading] = _s(true);
   var [anio, setAnio] = _s(2026);
   var [cuotasMens, setCuotasMens] = _s([]);
+  var [estadoCuenta, setEstadoCuenta] = _s(null);
+  // Period comparison state
+  var [compA, setCompA] = _s({ tipo: 'ytd', anio: 2026, mes: null });
+  var [compB, setCompB] = _s({ tipo: 'anio', anio: 2025, mes: null });
 
   // Paginated fetch helper (PostgREST caps at 1000 rows)
   // Factory pattern: each page creates a fresh query (supabase-js builders are single-use)
@@ -44,7 +50,12 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
         fetchAllPages(function() { return supabase.from("sell_in_sku").select("*").eq("cliente", ck).eq("anio", anio); }),
         fetchAllPages(function() { return supabase.from("sellout_sku").select("*").eq("cliente", ck).eq("anio", anio); }),
         fetchAllPages(function() { return supabase.from("inventario_cliente").select("*").eq("cliente", ck); }),
-        supabase.from("cuotas_mensuales").select("*").eq("cliente", ck).eq("anio", anio)
+        supabase.from("cuotas_mensuales").select("*").eq("cliente", ck).eq("anio", anio),
+        // Para comparativas: últimos 2 años (actual y anterior)
+        fetchAllPages(function() { return supabase.from("sell_in_sku").select("*").eq("cliente", ck).gte("anio", anio - 1).lte("anio", anio); }),
+        fetchAllPages(function() { return supabase.from("sellout_sku").select("*").eq("cliente", ck).gte("anio", anio - 1).lte("anio", anio); }),
+        // Último estado de cuenta
+        supabase.from("estados_cuenta").select("*").eq("cliente", ck).order("anio", { ascending: false }).order("semana", { ascending: false }).limit(1).maybeSingle(),
       ]);
       if (results[0].data) setVentas(results[0].data);
       if (results[1].data) setMarketing(results[1].data);
@@ -53,6 +64,9 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       setSellOutSku(Array.isArray(results[4]) ? results[4] : (results[4].data || []));
       setInventario(Array.isArray(results[5]) ? results[5] : (results[5].data || []));
       if (results[6] && results[6].data) setCuotasMens(results[6].data);
+      setSellInSkuAll(Array.isArray(results[7]) ? results[7] : (results[7].data || []));
+      setSellOutSkuAll(Array.isArray(results[8]) ? results[8] : (results[8].data || []));
+      setEstadoCuenta(results[9]?.data || null);
       setLoading(false);
     })();
   }, [cliente, clienteKey, anio]);
@@ -93,6 +107,185 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     var projSO = so + avgSO * (12 - mesesConDatos);
     return { si: si, so: so, st: st, mesesConDatos: mesesConDatos, avgSI: avgSI, avgSO: avgSO, projSI: projSI, projSO: projSO };
   }, [ventasPorMes]);
+
+  // —— COMPARATIVA: filtrar data por periodo ——
+  var labelPeriodo = function(comp) {
+    var mesNames = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+    if (comp.tipo === 'ytd') return "YTD " + comp.anio;
+    if (comp.tipo === 'anio') return "Año " + comp.anio;
+    if (comp.tipo === 'mes') return mesNames[comp.mes - 1] + " " + comp.anio;
+    if (comp.tipo === 'trimestre') return "Q" + Math.ceil(comp.mes / 3) + " " + comp.anio;
+    return "";
+  };
+  var filterPeriodo = function(rows, comp) {
+    var now = new Date();
+    var curMes = now.getMonth() + 1;
+    var curYear = now.getFullYear();
+    return rows.filter(function(r) {
+      var rA = Number(r.anio) || 0, rM = Number(r.mes) || 0;
+      if (rA !== comp.anio) return false;
+      if (comp.tipo === 'anio') return true;
+      if (comp.tipo === 'ytd') return rA !== curYear ? true : rM <= curMes;
+      if (comp.tipo === 'mes') return rM === comp.mes;
+      if (comp.tipo === 'trimestre') {
+        var q = Math.ceil(comp.mes / 3);
+        var mesIni = (q - 1) * 3 + 1, mesFin = q * 3;
+        return rM >= mesIni && rM <= mesFin;
+      }
+      return false;
+    });
+  };
+  var computePeriodo = function(comp) {
+    var siRows = filterPeriodo(sellInSkuAll, comp);
+    var soRows = filterPeriodo(sellOutSkuAll, comp);
+    var si = siRows.reduce(function(s, r) { return s + (Number(r.monto_pesos) || 0); }, 0);
+    var so = soRows.reduce(function(s, r) { return s + (Number(r.monto_pesos) || 0); }, 0);
+    var siPz = siRows.reduce(function(s, r) { return s + (Number(r.piezas) || 0); }, 0);
+    var soPz = soRows.reduce(function(s, r) { return s + (Number(r.piezas) || 0); }, 0);
+    var skus = new Set();
+    siRows.forEach(function(r) { if (r.sku) skus.add(r.sku); });
+    soRows.forEach(function(r) { if (r.sku) skus.add(r.sku); });
+    var ef = si > 0 && so > 0 ? (so / si * 100) : 0;
+    // Top producto (SKU) por venta de sellout
+    var soBySku = {};
+    soRows.forEach(function(r) {
+      if (!soBySku[r.sku]) soBySku[r.sku] = 0;
+      soBySku[r.sku] += Number(r.monto_pesos) || 0;
+    });
+    var topSku = Object.entries(soBySku).sort(function(a,b) { return b[1] - a[1]; })[0];
+    return { si: si, so: so, ef: ef, skus: skus.size, piezasSO: soPz, topSku: topSku ? topSku[0] : null, topSkuMonto: topSku ? topSku[1] : 0, soBySku: soBySku };
+  };
+  var compAData = React.useMemo(function() { return computePeriodo(compA); }, [sellInSkuAll, sellOutSkuAll, compA]);
+  var compBData = React.useMemo(function() { return computePeriodo(compB); }, [sellInSkuAll, sellOutSkuAll, compB]);
+
+  // —— PRODUCTO CON MAYOR CRECIMIENTO entre periodos A y B ——
+  var productoCrecimiento = React.useMemo(function() {
+    var crecimiento = [];
+    var skusUnion = new Set([...Object.keys(compAData.soBySku || {}), ...Object.keys(compBData.soBySku || {})]);
+    skusUnion.forEach(function(sku) {
+      var a = compAData.soBySku[sku] || 0;
+      var b = compBData.soBySku[sku] || 0;
+      if (b > 0 && a > b) {  // creció de B a A
+        var pct = (a - b) / b * 100;
+        crecimiento.push({ sku: sku, a: a, b: b, pct: pct });
+      }
+    });
+    return crecimiento.sort(function(x, y) { return y.pct - x.pct; })[0] || null;
+  }, [compAData, compBData]);
+
+  // —— INSIGHTS: "Cosas por Hacer" ——
+  var insights = React.useMemo(function() {
+    var lista = [];
+    var ck = clienteKey || cliente;
+
+    // Saldo vencido
+    if (estadoCuenta && Number(estadoCuenta.saldo_vencido) > 0) {
+      lista.push({
+        tipo: 'critico', icono: '🔴', titulo: 'Saldo vencido',
+        descripcion: 'El cliente debe ' + fmtMoney(Number(estadoCuenta.saldo_vencido)) + ' vencido.',
+        accion: 'Priorizar cobranza con el cliente esta semana.',
+      });
+    }
+
+    // Sobreinventario + SKUs más lentos para acelerar
+    var invValorTotal = inventario.reduce(function(s, r) {
+      var v = Number(r.valor) || 0;
+      return s + (v > 0 ? v : (Number(r.stock) || 0) * (Number(r.costo_convenio) || 0));
+    }, 0);
+    if (ytd.mesesConDatos > 0 && ytd.so > 0 && invValorTotal > 0) {
+      var soDiario = ytd.so / (ytd.mesesConDatos * 30);
+      var diasCob = soDiario > 0 ? Math.round(invValorTotal / soDiario) : 0;
+      if (diasCob > 120) {
+        // Top SKUs por inventario parado (stock * costo, con días sin venta > 30)
+        var topLentos = (skuAnalysis && skuAnalysis.all ? skuAnalysis.all : [])
+          .filter(function(s) { return s.invStock > 0 && s.diasSinVenta > 30; })
+          .sort(function(a, b) { return b.invValor - a.invValor; })
+          .slice(0, 3);
+        lista.push({
+          tipo: 'alerta', icono: '📦', titulo: 'Sobreinventario (' + diasCob + ' días de cobertura)',
+          descripcion: 'Inventario de ' + fmtMoney(invValorTotal) + ' equivale a más de 4 meses de ventas.',
+          accion: 'Acelerar desplazamiento de estos SKUs clave:',
+          sublist: topLentos.map(function(s) {
+            return { sku: s.sku, desc: s.desc, detail: fmtNum(s.invStock) + ' pzs · ' + fmtMoney(s.invValor) + ' · ' + (s.diasSinVenta||0).toFixed(0) + 'd sin vender' };
+          })
+        });
+      }
+    }
+
+    // SKUs en desabasto con venta activa
+    if (skuAnalysis && skuAnalysis.all) {
+      var desabastoActivo = skuAnalysis.all.filter(function(s) {
+        return s.invStock === 0 && s.soTotal > 0;
+      });
+      if (desabastoActivo.length > 0) {
+        var sorted = desabastoActivo.sort(function(a, b) { return b.soTotal - a.soTotal; }).slice(0, 5);
+        lista.push({
+          tipo: 'alerta', icono: '⚠️', titulo: desabastoActivo.length + ' SKUs agotados con venta activa',
+          descripcion: 'Estos SKUs venden pero ya están en 0 piezas — perdiendo ventas.',
+          accion: 'Reponer urgente:',
+          sublist: sorted.map(function(s) { return { sku: s.sku, desc: s.desc, detail: fmtNum(s.soTotal) + ' pzs vendidas YTD' }; })
+        });
+      }
+    }
+
+    // Caída en sell-out vs periodo B
+    if (compBData.so > 0 && compAData.so > 0) {
+      var deltaSO = (compAData.so - compBData.so) / compBData.so * 100;
+      if (deltaSO < -10) {
+        lista.push({
+          tipo: 'alerta', icono: '📉', titulo: 'Sell Out cayó ' + Math.abs(deltaSO).toFixed(1) + '%',
+          descripcion: labelPeriodo(compA) + ' (' + fmtMoney(compAData.so) + ') vs ' + labelPeriodo(compB) + ' (' + fmtMoney(compBData.so) + ').',
+          accion: 'Investigar causas: rotación, precios, marketing o competencia.'
+        });
+      }
+    }
+
+    // Producto con mayor crecimiento
+    if (productoCrecimiento && productoCrecimiento.pct > 20) {
+      var desc = productos.find(function(p) { return p.sku === productoCrecimiento.sku; });
+      lista.push({
+        tipo: 'positivo', icono: '🚀', titulo: 'Producto con crecimiento destacado',
+        descripcion: productoCrecimiento.sku + (desc && desc.descripcion ? ' · ' + desc.descripcion.slice(0, 60) : '') +
+          ' creció +' + productoCrecimiento.pct.toFixed(1) + '% (' + fmtMoney(productoCrecimiento.b) + ' → ' + fmtMoney(productoCrecimiento.a) + ').',
+        accion: 'Reforzar: más inventario, exhibición y promoción en este producto.'
+      });
+    }
+
+    // Oportunidad de reposición pendiente (usa skuAnalysis para sugerencia rápida)
+    if (skuAnalysis && skuAnalysis.all) {
+      var ultMes = Math.max.apply(null, (sellOutSku || []).map(function(r) { return Number(r.mes) || 0; }).concat([0]));
+      var tres = Math.max(1, ultMes - 2);
+      var rot = {};
+      (sellOutSku || []).forEach(function(r) {
+        var m = Number(r.mes) || 0;
+        if (m < tres || m > ultMes) return;
+        rot[r.sku] = (rot[r.sku] || 0) + Number(r.piezas) || 0;
+      });
+      var stockBy = {};
+      (skuAnalysis.all || []).forEach(function(s) { stockBy[s.sku] = s.invStock; });
+      var precioBy = {};
+      productos.forEach(function(p) { precioBy[p.sku] = Number(p.precio_venta) || 0; });
+      var sugPiezas = 0, sugMonto = 0, sugSkus = 0;
+      Object.entries(rot).forEach(function(e) {
+        var sku = e[0], piezas = e[1];
+        var promMes = piezas / 3;
+        if (promMes <= 0) return;
+        var stk = stockBy[sku] || 0;
+        var sug = Math.max(0, Math.round(promMes * 3 - stk));
+        if (clienteKey === 'digitalife' && stk < promMes && sug < 11) sug = 11;
+        if (sug > 0) { sugPiezas += sug; sugMonto += sug * (precioBy[sku] || 0); sugSkus++; }
+      });
+      if (sugMonto > 0) {
+        lista.push({
+          tipo: 'positivo', icono: '💰', titulo: 'Oportunidad de reposición',
+          descripcion: sugSkus + ' SKUs necesitan reponerse con ' + fmtNum(sugPiezas) + ' piezas.',
+          accion: 'Cerrar propuesta con el cliente por ' + fmtMoney(sugMonto) + '.'
+        });
+      }
+    }
+
+    return lista;
+  }, [estadoCuenta, inventario, ytd, skuAnalysis, compAData, compBData, productoCrecimiento, productos, sellOutSku, clienteKey]);
 
   // —— Marketing aggregates by month ——
   var mktPorMes = React.useMemo(function() {
@@ -329,64 +522,92 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       )
     ),
 
-    // === 3. MARKETING vs VENTAS ===
-    section("Marketing vs Ventas", "\uD83D\uDCE3",
+    // === 3. COMPARATIVA PERIODO A vs B ===
+    section("Comparativa entre Periodos", "\uD83D\uDD04",
       el("div", null,
-        el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
-          metricBox("Inversi\u00F3n Mkt", fmtMoney(mktTotals.inv), marketing.length + " actividades", "#8b5cf6"),
-          metricBox("Sell Out Total", fmtM(ytd.so), null, "#10b981"),
-          metricBox("Costo x Peso Vendido", ytd.so > 0 ? "$" + (mktTotals.inv / ytd.so).toFixed(2) : "—", ytd.so > 0 ? "Por cada $1 de sell out" : "Sin sell out", "#f59e0b")
+        // Selectores
+        el("div", { style: { display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" } },
+          el("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+            el("span", { style: { fontSize: 12, color: "#475569", fontWeight: 600 } }, "A:"),
+            el("select", { value: compA.tipo, onChange: function(e) { setCompA(Object.assign({}, compA, { tipo: e.target.value, mes: e.target.value === 'mes' || e.target.value === 'trimestre' ? (compA.mes || 1) : null })); },
+              style: { padding: "5px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 } },
+              el("option", { value: "ytd" }, "YTD"),
+              el("option", { value: "anio" }, "Año completo"),
+              el("option", { value: "trimestre" }, "Trimestre"),
+              el("option", { value: "mes" }, "Mes")
+            ),
+            el("select", { value: compA.anio, onChange: function(e) { setCompA(Object.assign({}, compA, { anio: Number(e.target.value) })); },
+              style: { padding: "5px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 } },
+              el("option", { value: 2025 }, "2025"), el("option", { value: 2026 }, "2026")
+            ),
+            compA.tipo === 'mes' && el("select", { value: compA.mes || 1, onChange: function(e) { setCompA(Object.assign({}, compA, { mes: Number(e.target.value) })); },
+              style: { padding: "5px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 } },
+              MESES.map(function(m, i) { return el("option", { key: i, value: i + 1 }, m); })
+            ),
+            compA.tipo === 'trimestre' && el("select", { value: Math.ceil((compA.mes || 1) / 3), onChange: function(e) { setCompA(Object.assign({}, compA, { mes: (Number(e.target.value) - 1) * 3 + 1 })); },
+              style: { padding: "5px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 } },
+              [1,2,3,4].map(function(q) { return el("option", { key: q, value: q }, "Q" + q); })
+            )
+          ),
+          el("span", { style: { fontSize: 18, color: "#94a3b8" } }, "vs"),
+          el("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+            el("span", { style: { fontSize: 12, color: "#475569", fontWeight: 600 } }, "B:"),
+            el("select", { value: compB.tipo, onChange: function(e) { setCompB(Object.assign({}, compB, { tipo: e.target.value, mes: e.target.value === 'mes' || e.target.value === 'trimestre' ? (compB.mes || 1) : null })); },
+              style: { padding: "5px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 } },
+              el("option", { value: "ytd" }, "YTD"),
+              el("option", { value: "anio" }, "Año completo"),
+              el("option", { value: "trimestre" }, "Trimestre"),
+              el("option", { value: "mes" }, "Mes")
+            ),
+            el("select", { value: compB.anio, onChange: function(e) { setCompB(Object.assign({}, compB, { anio: Number(e.target.value) })); },
+              style: { padding: "5px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 } },
+              el("option", { value: 2025 }, "2025"), el("option", { value: 2026 }, "2026")
+            ),
+            compB.tipo === 'mes' && el("select", { value: compB.mes || 1, onChange: function(e) { setCompB(Object.assign({}, compB, { mes: Number(e.target.value) })); },
+              style: { padding: "5px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 } },
+              MESES.map(function(m, i) { return el("option", { key: i, value: i + 1 }, m); })
+            ),
+            compB.tipo === 'trimestre' && el("select", { value: Math.ceil((compB.mes || 1) / 3), onChange: function(e) { setCompB(Object.assign({}, compB, { mes: (Number(e.target.value) - 1) * 3 + 1 })); },
+              style: { padding: "5px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 } },
+              [1,2,3,4].map(function(q) { return el("option", { key: q, value: q }, "Q" + q); })
+            )
+          )
         ),
-        // Monthly comparison
-        el("div", { style: { fontSize:12, color:"#94a3b8", marginBottom:8, fontWeight:600 } }, "Inversi\u00F3n Marketing vs Sell Out por Mes"),
-        el("div", { style: { display:"grid", gridTemplateColumns:"repeat(6, 1fr)", gap:6 } },
-          ventasPorMes.slice(0, 6).map(function(v) {
-            var mktMes = mktPorMes[v.mes];
-            var hasMkt = mktMes && mktMes.inv > 0;
-            var hasSO = v.sell_out > 0;
-            return el("div", { key: v.mes, style: { background:"#f1f5f9", borderRadius:8, padding:"10px 8px", textAlign:"center" } },
-              el("div", { style: { fontSize:10, color:"#94a3b8", marginBottom:6 } }, v.label),
-              el("div", { style: { fontSize:11, color:"#8b5cf6", fontWeight:600 } }, hasMkt ? fmtK(mktMes.inv) : "—"),
-              el("div", { style: { fontSize:9, color:"#64748b", margin:"2px 0" } }, "mkt"),
-              el("div", { style: { fontSize:11, color:"#10b981", fontWeight:600 } }, hasSO ? fmtK(v.sell_out) : "—"),
-              el("div", { style: { fontSize:9, color:"#64748b" } }, "sell out")
-            );
-          })
+        // Tabla comparativa
+        el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
+          el("thead", null,
+            el("tr", { style: { background: "#f8fafc", borderBottom: "2px solid #e2e8f0" } },
+              el("th", { style: { textAlign: "left", padding: "8px 12px", color: "#475569", fontWeight: 600 } }, "Métrica"),
+              el("th", { style: { textAlign: "right", padding: "8px 12px", color: "#3b82f6", fontWeight: 600 } }, labelPeriodo(compA)),
+              el("th", { style: { textAlign: "right", padding: "8px 12px", color: "#8b5cf6", fontWeight: 600 } }, labelPeriodo(compB)),
+              el("th", { style: { textAlign: "right", padding: "8px 12px", color: "#475569", fontWeight: 600, width: 120 } }, "Δ%")
+            )
+          ),
+          el("tbody", null,
+            [
+              { label: "Sell In", a: compAData.si, b: compBData.si, money: true },
+              { label: "Sell Out", a: compAData.so, b: compBData.so, money: true },
+              { label: "Eficiencia SI/SO", a: compAData.ef, b: compBData.ef, pct: true },
+              { label: "Piezas Sell Out", a: compAData.piezasSO, b: compBData.piezasSO, num: true },
+              { label: "SKUs activos", a: compAData.skus, b: compBData.skus, num: true }
+            ].map(function(row, i) {
+              var fmt = row.money ? fmtMoney : (row.pct ? fmtPct : fmtNum);
+              var delta = row.b > 0 ? ((row.a - row.b) / row.b * 100) : null;
+              var color = delta === null ? "#94a3b8" : delta >= 5 ? "#10b981" : delta <= -5 ? "#ef4444" : "#64748b";
+              var arrow = delta === null ? "—" : delta > 0 ? "▲ +" + delta.toFixed(1) + "%" : "▼ " + delta.toFixed(1) + "%";
+              return el("tr", { key: i, style: { borderBottom: "1px solid #f1f5f9" } },
+                el("td", { style: { padding: "10px 12px", color: "#1e293b", fontWeight: 500 } }, row.label),
+                el("td", { style: { padding: "10px 12px", textAlign: "right", color: "#1e293b" } }, fmt(row.a)),
+                el("td", { style: { padding: "10px 12px", textAlign: "right", color: "#475569" } }, fmt(row.b)),
+                el("td", { style: { padding: "10px 12px", textAlign: "right", color: color, fontWeight: 700 } }, arrow)
+              );
+            })
+          )
         )
       )
     ),
 
-    // === 5. SALUD DEL INVENTARIO ===
-    skuAnalysis ? section("Salud del Inventario", "\uD83D\uDCE6",
-      el("div", null,
-        el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
-          metricBox("Total SKUs", fmtNum(skuAnalysis.total), null, "#3b82f6"),
-              metricBox("D\u00edas de Inventario", skuAnalysis.diasCobertura ? fmtNum(skuAnalysis.diasCobertura) + "d" : (inventario.length > 0 && ytd.so > 0 ? fmtNum(Math.round(inventario.reduce(function(s,x){return s+(Number(x.valor)||0);},0) / (ytd.so / ytd.mesesConDatos) * 30)) + "d" : "\u2014"), "Cobertura estimada", "#8b5cf6"),
-          metricBox(">60 d\u00EDas sin venta", fmtNum(skuAnalysis.sinVenta60.length), "SKUs en riesgo", skuAnalysis.sinVenta60.length > 10 ? "#ef4444" : "#f59e0b"),
-          metricBox(">90 d\u00EDas sin venta", fmtNum(skuAnalysis.sinVenta90.length), "Inventario muerto", skuAnalysis.sinVenta90.length > 5 ? "#ef4444" : "#f59e0b"),
-          metricBox("Valor Muerto", fmtMoney(skuAnalysis.invMuerto), ">90 d\u00EDas", "#ef4444")
-        ),
-        skuAnalysis.sinVenta90.length > 0 ? el("div", null,
-          el("div", { style: { fontSize:12, color:"#ef4444", marginBottom:8, fontWeight:600 } }, "SKUs cr\u00EDticos (+90 d\u00EDas sin venta)"),
-          skuAnalysis.sinVenta90.slice(0, 8).map(function(s) {
-            return el("div", { key: s.sku, style: { display:"flex", alignItems:"center", gap:8, padding:"6px 10px", background:"#f1f5f9", borderRadius:6, marginBottom:4, fontSize:11 } },
-              el("span", { style: { color:"#94a3b8", fontFamily:"monospace", fontSize:10, width:80 } }, s.sku),
-              el("span", { style: { flex:1, color:"#1e293b" } }, s.desc),
-              el("span", { style: { color:"#ef4444" } }, s.diasSinVenta + "d"),
-              el("span", { style: { color:"#f59e0b" } }, fmtNum(s.invStock) + " pzas"),
-              el("span", { style: { color:"#94a3b8" } }, fmtMoney(s.invValor))
-            );
-          })
-        ) : null
-      )
-    ) : section("Salud del Inventario", "\uD83D\uDCE6",
-      el("div", { style: { textAlign:"center", padding:20, color:"#475569" } },
-        el("div", { style: { fontSize:28, marginBottom:8 } }, "\uD83D\uDCE6"),
-        el("div", { style: { fontSize:13 } }, "Sube los archivos de Estrategia de Producto para activar el an\u00E1lisis de inventario")
-      )
-    ),
-
-    // === 7. PROYECCIÓN ===
+    // === 4. PROYECCIÓN ===
     section("Proyecci\u00F3n de Cierre Anual", "\uD83D\uDD2E",
       el("div", null,
         ytd.mesesConDatos >= 2 ? el("div", null,
@@ -437,6 +658,38 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
 
         ) : el("div", { style: { textAlign:"center", padding:20, color:"#475569", fontSize:13 } }, "Se necesitan al menos 2 meses de datos para proyectar")
       )
+    ),
+
+    // === 5. INSIGHTS / COSAS POR HACER ===
+    section("Cosas por Hacer", "\uD83D\uDCA1",
+      insights.length === 0
+        ? el("div", { style: { textAlign: "center", padding: 20, color: "#10b981", fontSize: 13, fontStyle: "italic" } }, "✓ Todo en orden. Sin acciones pendientes detectadas.")
+        : el("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+          insights.map(function(ins, i) {
+            var bg = ins.tipo === 'critico' ? "#fef2f2" : ins.tipo === 'alerta' ? "#fffbeb" : "#ecfdf5";
+            var borderColor = ins.tipo === 'critico' ? "#fecaca" : ins.tipo === 'alerta' ? "#fde68a" : "#a7f3d0";
+            var titleColor = ins.tipo === 'critico' ? "#991b1b" : ins.tipo === 'alerta' ? "#92400e" : "#065f46";
+            return el("div", { key: i, style: { background: bg, border: "1px solid " + borderColor, borderRadius: 10, padding: "12px 14px" } },
+              el("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } },
+                el("span", { style: { fontSize: 22, lineHeight: 1 } }, ins.icono),
+                el("div", { style: { flex: 1 } },
+                  el("div", { style: { fontSize: 13, fontWeight: 700, color: titleColor, marginBottom: 2 } }, ins.titulo),
+                  el("div", { style: { fontSize: 12, color: "#334155", marginBottom: 4 } }, ins.descripcion),
+                  ins.accion && el("div", { style: { fontSize: 12, color: titleColor, fontWeight: 600 } }, "→ " + ins.accion),
+                  ins.sublist && el("ul", { style: { margin: "6px 0 0 16px", padding: 0, fontSize: 11 } },
+                    ins.sublist.map(function(item, j) {
+                      return el("li", { key: j, style: { color: "#475569", padding: "2px 0" } },
+                        el("span", { style: { fontFamily: "ui-monospace,monospace", color: "#1e293b", marginRight: 6 } }, item.sku),
+                        el("span", null, (item.desc || '').slice(0, 50)),
+                        item.detail ? el("span", { style: { color: "#94a3b8", marginLeft: 6 } }, "— " + item.detail) : null
+                      );
+                    })
+                  )
+                )
+              )
+            );
+          })
+        )
     )
   );
 }
