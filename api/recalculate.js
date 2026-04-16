@@ -186,20 +186,34 @@ async function recalcSelloutSku() {
   const upsertRows = Object.values(agg);
   if (!upsertRows.length) return { table: 'sellout_sku', count: 0 };
 
+  // Delete stale/test data first, then insert fresh
+  const clients = [...new Set(upsertRows.map(r => r.cliente))];
+  for (const c of clients) {
+    await fetch(`${SB_URL}/rest/v1/sellout_sku?cliente=eq.${c}`, {
+      method: 'DELETE',
+      headers: { apikey: SRK, Authorization: 'Bearer ' + SRK },
+    });
+  }
+  // Also clean up any test rows
+  await fetch(`${SB_URL}/rest/v1/sellout_sku?cliente=like.*test*`, {
+    method: 'DELETE',
+    headers: { apikey: SRK, Authorization: 'Bearer ' + SRK },
+  });
+
   const CHUNK = 200;
   for (let i = 0; i < upsertRows.length; i += CHUNK) {
     const batch = upsertRows.slice(i, i + CHUNK);
-    const ur = await fetch(`${SB_URL}/rest/v1/sellout_sku?on_conflict=cliente,sku,anio,mes`, {
+    const ur = await fetch(`${SB_URL}/rest/v1/sellout_sku`, {
       method: 'POST',
       headers: {
         apikey: SRK,
         Authorization: 'Bearer ' + SRK,
         'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates,return=minimal',
+        Prefer: 'return=minimal',
       },
       body: JSON.stringify(batch),
     });
-    if (!ur.ok) throw new Error('sellout_sku upsert failed: ' + (await ur.text()).slice(0, 200));
+    if (!ur.ok) throw new Error('sellout_sku insert failed: ' + (await ur.text()).slice(0, 200));
   }
   return { table: 'sellout_sku', count: upsertRows.length };
 }
