@@ -229,7 +229,38 @@ export default async function handler(req, res) {
   if (!SRK) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
 
   try {
-    const { tables, debug } = req.body || {};
+    const { tables, debug, reset } = req.body || {};
+
+    // Reset mode: delete all rows from a logical group of tables
+    // { reset: 'sellout' } → wipes sellout_detalle and sellout_sku
+    if (reset) {
+      const resetMap = {
+        sellout: ['sellout_detalle', 'sellout_sku'],
+      };
+      const tablesToWipe = resetMap[reset];
+      if (!tablesToWipe) {
+        return res.status(400).json({ error: 'unknown reset group. options: ' + Object.keys(resetMap).join(', ') });
+      }
+      const wipeResults = [];
+      for (const t of tablesToWipe) {
+        const r = await fetch(`${SB_URL}/rest/v1/${t}?id=gte.0`, {
+          method: 'DELETE',
+          headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, Prefer: 'count=exact' },
+        });
+        // Fallback for tables without numeric id: delete via a column that always exists
+        if (!r.ok) {
+          // try by cliente (works for sellout_detalle & sellout_sku)
+          const r2 = await fetch(`${SB_URL}/rest/v1/${t}?cliente=not.is.null`, {
+            method: 'DELETE',
+            headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, Prefer: 'count=exact' },
+          });
+          wipeResults.push({ table: t, deleted: r2.headers.get('content-range'), ok: r2.ok });
+        } else {
+          wipeResults.push({ table: t, deleted: r.headers.get('content-range'), ok: true });
+        }
+      }
+      return res.status(200).json({ ok: true, reset, results: wipeResults });
+    }
 
     // Debug mode: return column names of a table
     if (debug) {
