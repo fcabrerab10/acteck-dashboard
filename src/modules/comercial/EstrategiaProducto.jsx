@@ -344,13 +344,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     if (!DB_CONFIGURED || !supabase) return;
     setLoading(true);
     try {
-      const [productos, sellIn, sellOut, inventario, invActeck, transito] = await Promise.all([
+      const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap] = await Promise.all([
         fetchAllPagesREST(`productos_cliente?select=*&cliente=eq.${clienteKey}`),
         fetchAllPagesREST(`sell_in_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
         fetchAllPagesREST(`sellout_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
         fetchAllPagesREST(`inventario_cliente?select=*&cliente=eq.${clienteKey}`),
         fetchAllPagesREST(`inventario_acteck?select=articulo,no_almacen,disponible&no_almacen=in.(${ACTECK_ALMACENES.join(',')})`),
-        fetchAllPagesREST(`transito_sku?select=sku,inventario_transito`),
+        fetchAllPagesREST(`transito_sku?select=sku,inventario_transito,siguiente_arribo,payload,sort_order`),
+        fetchAllPagesREST(`roadmap_sku?select=sku,rdmp,descripcion,payload,sort_order&order=sort_order.asc`),
       ]);
 
       // Pre-aggregate Acteck inventory by SKU (sum across all 9 warehouses)
@@ -383,6 +384,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         inventarioAll: inventario,   // preserved for future historical views
         latestWeek: { anio: maxA, semana: maxS },
         actStockBySku, transitoBySku,
+        transito,
+        roadmap,
       });
     } catch (err) {
       console.error("Error loading data:", err);
@@ -453,6 +456,69 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       sellInTotal, sellInPiezas, sellOutTotal, sellOutPiezas, invTotal, invPiezas,
       maxSIMes, maxSOMes, byMarca, byCategoria,
     };
+  }, [datos]);
+
+  // KPIs extendidos para tarjetas arriba
+  const kpis = React.useMemo(() => {
+    if (!datos || !aggs) return null;
+    // Eficiencia SI/SO
+    const efi = aggs.sellInTotal > 0 && aggs.sellOutTotal > 0 ? (aggs.sellOutTotal / aggs.sellInTotal * 100) : 0;
+    // SKUs activos (con ventas YTD o inventario > 0)
+    const skusConVenta = new Set();
+    datos.sellIn.forEach(r => skusConVenta.add(r.sku));
+    datos.sellOut.forEach(r => skusConVenta.add(r.sku));
+    const skusActivos = skusConVenta.size;
+    const skusConInv = datos.inventario.filter(r => (Number(r.stock) || 0) > 0).length;
+    // Días de cobertura
+    const mesesConDatos = Math.max(1, new Set(datos.sellOut.map(r => Number(r.mes) || 0).filter(m => m > 0 && m < new Date().getMonth() + 1)).size);
+    const soDiario = mesesConDatos > 0 ? aggs.sellOutTotal / (mesesConDatos * 30) : 0;
+    const diasCob = soDiario > 0 ? Math.round(aggs.invTotal / soDiario) : null;
+    // Inv Acteck disponible (piezas totales en los 9 almacenes)
+    const invActeckPiezas = Object.values(datos.actStockBySku || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+    // Sugerido total $
+    const mesActual = new Date().getMonth() + 1;
+    let sugPiezas = 0, sugMonto = 0, sugSkus = 0;
+    const skusAll = new Set();
+    datos.sellOut.forEach(r => skusAll.add(r.sku));
+    skusAll.forEach(sku => {
+      const soData = datos.sellOut.filter(r => r.sku === sku);
+      const soSinMes = soData.filter(r => Number(r.mes) < mesActual);
+      const prom = soSinMes.slice(-3).length > 0 ? Math.round(soSinMes.slice(-3).reduce((s, r) => s + (r.piezas || 0), 0) / Math.min(3, soSinMes.slice(-3).length)) : 0;
+      if (prom <= 0) return;
+      const stock = (datos.inventario.find(r => r.sku === sku) || {}).stock || 0;
+      const invAct = datos.actStockBySku[sku] || 0;
+      const invTr = datos.transitoBySku[sku] || 0;
+      let sug = Math.max(0, prom * 3 - stock);
+      if (clienteKey === 'digitalife' && stock < prom && sug < 11) sug = 11;
+      sug = Math.min(sug, invAct + invTr);
+      if (sug > 0) {
+        const prod = datos.productos.find(p => p.sku === sku);
+        const precio = Number(prod?.precio_venta) || 0;
+        sugPiezas += sug;
+        sugMonto += sug * precio;
+        sugSkus++;
+      }
+    });
+    return { efi, skusActivos, skusConInv, diasCob, invActeckPiezas, sugPiezas, sugMonto, sugSkus };
+  }, [datos, aggs, clienteKey]);
+
+  // Roadmap + Tránsito cruce: identifica productos nuevos (en tránsito sin roadmap)
+  const roadmapCruce = React.useMemo(() => {
+    if (!datos || !datos.roadmap || !datos.transito) return null;
+    const roadmapSet = new Set(datos.roadmap.map(r => r.sku));
+    const transitoMap = {};
+    datos.transito.forEach(t => { transitoMap[t.sku] = t; });
+    // Productos nuevos = en tránsito pero NO en roadmap
+    const nuevos = datos.transito.filter(t => !roadmapSet.has(t.sku));
+    // En tránsito + roadmap = reposición planeada
+    const enCamino = datos.roadmap.filter(r => transitoMap[r.sku]).map(r => ({
+      ...r,
+      transito: transitoMap[r.sku].inventario_transito,
+      arribo: transitoMap[r.sku].siguiente_arribo,
+    }));
+    // Solo roadmap (planeado sin arribo inmediato)
+    const soloRoadmap = datos.roadmap.filter(r => !transitoMap[r.sku]);
+    return { nuevos, enCamino, soloRoadmap, total: datos.roadmap.length };
   }, [datos]);
 
   // Filtered & sorted SKUs
@@ -613,20 +679,43 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       message && React.createElement("p", { className: `text-sm ${message.includes("Error") ? "text-red-600" : "text-green-600"}` }, message),
     ),
 
-    // Summary Cards
-    aggs && React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6" },
-      React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6 border-t-4", style: { borderColor: "#4472C4" } },
-        React.createElement("p", { className: "text-xs text-gray-400 uppercase tracking-wide mb-2" }, "Sell In"),
-        React.createElement("p", { className: "text-2xl font-bold text-gray-800 mb-1" }, formatMXN(aggs.sellInTotal)),
-        React.createElement("p", { className: "text-xs text-gray-600 mb-3" }, `${aggs.sellInPiezas.toLocaleString("es-MX")} piezas YTD`),
-        React.createElement("p", { className: "text-xs text-gray-500" }, `Mayor: ${MESES_ABREV[aggs.maxSIMes] || "â"}`),
+    // Summary Cards — 7 KPIs
+    aggs && kpis && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 } },
+      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: "#3B82F6" } },
+        React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "Sell In"),
+        React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, formatMXN(aggs.sellInTotal)),
+        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } }, aggs.sellInPiezas.toLocaleString("es-MX") + " pzs \u00b7 Mayor: " + (MESES_ABREV[aggs.maxSIMes] || "\u2014"))
       ),
-      React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6 border-t-4", style: { borderColor: "#8B5CF6" } },
-        React.createElement("p", { className: "text-xs text-gray-400 uppercase tracking-wide mb-2" }, "Sell Out"),
-        React.createElement("p", { className: "text-2xl font-bold text-gray-800 mb-1" }, formatMXN(aggs.sellOutTotal)),
-        React.createElement("p", { className: "text-xs text-gray-600 mb-3" }, `${aggs.sellOutPiezas.toLocaleString("es-MX")} piezas YTD`),
-        React.createElement("p", { className: "text-xs text-gray-500" }, `Mayor: ${MESES_ABREV[aggs.maxSOMes] || "â"}`),
+      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: "#8B5CF6" } },
+        React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "Sell Out"),
+        React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, formatMXN(aggs.sellOutTotal)),
+        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } }, aggs.sellOutPiezas.toLocaleString("es-MX") + " pzs \u00b7 Mayor: " + (MESES_ABREV[aggs.maxSOMes] || "\u2014"))
       ),
+      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: kpis.efi >= 90 && kpis.efi <= 110 ? "#10B981" : (kpis.efi >= 70 || kpis.efi > 110) ? "#F59E0B" : "#EF4444" } },
+        React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "Eficiencia SI/SO"),
+        React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: kpis.efi >= 90 && kpis.efi <= 110 ? "#10B981" : (kpis.efi >= 70 || kpis.efi > 110) ? "#F59E0B" : "#EF4444", marginBottom: 2 } }, kpis.efi.toFixed(1) + "%"),
+        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } }, kpis.efi >= 90 && kpis.efi <= 110 ? "\u2713 Balance ideal" : kpis.efi > 110 ? "Reduciendo stock" : "Acumulando stock")
+      ),
+      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: "#06B6D4" } },
+        React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "SKUs Activos"),
+        React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, kpis.skusActivos.toLocaleString("es-MX")),
+        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } }, kpis.skusConInv + " con inventario")
+      ),
+      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: kpis.diasCob === null ? "#94A3B8" : (kpis.diasCob >= 80 && kpis.diasCob <= 120) ? "#10B981" : (kpis.diasCob >= 60 && kpis.diasCob <= 140) ? "#F59E0B" : "#EF4444" } },
+        React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "D\u00edas Cobertura"),
+        React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, kpis.diasCob === null ? "\u2014" : (kpis.diasCob + "d")),
+        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } }, kpis.diasCob === null ? "Sin datos" : (kpis.diasCob >= 90 && kpis.diasCob <= 110) ? "\u2713 Ideal (90-110d)" : kpis.diasCob < 70 ? "\u26a0 Desabasto" : kpis.diasCob > 130 ? "\u26a0 Sobreinventario" : "Cercano al rango")
+      ),
+      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: "#F59E0B" } },
+        React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "Inventario"),
+        React.createElement("p", { style: { fontSize: 18, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, "Cliente: " + formatMXN(aggs.invTotal)),
+        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } }, "Acteck disp: " + kpis.invActeckPiezas.toLocaleString("es-MX") + " pzs")
+      ),
+      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: kpis.sugMonto > 0 ? "#10B981" : "#94A3B8", background: kpis.sugMonto > 0 ? "#F0FDF4" : "#fff" } },
+        React.createElement("p", { style: { fontSize: 10, color: "#065F46", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "\ud83d\udca1 Sugerido Total"),
+        React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: kpis.sugMonto > 0 ? "#047857" : "#94A3B8", marginBottom: 2 } }, formatMXN(kpis.sugMonto)),
+        React.createElement("p", { style: { fontSize: 11, color: "#065F46" } }, kpis.sugSkus + " SKUs \u00b7 " + kpis.sugPiezas.toLocaleString("es-MX") + " pzs")
+      )
     ),
 
     // Marca Comparison
@@ -730,6 +819,82 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           ),
         ),
       ),
+      // Roadmap + Tránsito — catálogo completo con productos nuevos detectados
+      roadmapCruce && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 } },
+          React.createElement("h3", { className: "font-bold text-gray-800" }, "\uD83D\uDCCB Roadmap + Tr\u00e1nsito"),
+          React.createElement("div", { style: { fontSize: 12, color: "#64748B" } },
+            "Roadmap: " + roadmapCruce.total + " SKUs \u00b7 En camino: " + roadmapCruce.enCamino.length + " \u00b7 ",
+            React.createElement("span", { style: { color: "#059669", fontWeight: 700 } }, "Nuevos: " + roadmapCruce.nuevos.length)
+          )
+        ),
+        // Productos NUEVOS (en tránsito sin roadmap) — al principio, destacados
+        roadmapCruce.nuevos.length > 0 && React.createElement("div", { style: { background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 10, padding: 14, marginBottom: 16 } },
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#065F46", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 } },
+            "\uD83C\uDD95 Productos NUEVOS detectados (en tr\u00e1nsito, no est\u00e1n en roadmap)"
+          ),
+          React.createElement("div", { style: { overflowX: "auto" } },
+            React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+              React.createElement("thead", null,
+                React.createElement("tr", { style: { background: "#D1FAE5", borderBottom: "1px solid #A7F3D0" } },
+                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46" } }, "SKU"),
+                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46" } }, "Descripci\u00f3n"),
+                  React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 110 } }, "Piezas"),
+                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 130 } }, "Arribo")
+                )
+              ),
+              React.createElement("tbody", null,
+                roadmapCruce.nuevos.slice(0, 15).map(function(t) {
+                  var payload = t.payload || {};
+                  var desc = payload.Descripcion || payload["Descripcion 2"] || payload.descripcion || "Nuevo producto";
+                  var arribo = t.siguiente_arribo ? new Date(t.siguiente_arribo).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }) : "Sin fecha";
+                  return React.createElement("tr", { key: t.sku, style: { borderBottom: "1px solid #D1FAE5" } },
+                    React.createElement("td", { style: { padding: "6px 10px", fontWeight: 600, color: "#065F46", fontFamily: "ui-monospace,monospace" } }, t.sku),
+                    React.createElement("td", { style: { padding: "6px 10px", color: "#1E293B", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: desc }, String(desc).slice(0, 70)),
+                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#047857", fontWeight: 700 } }, (t.inventario_transito || 0).toLocaleString("es-MX")),
+                    React.createElement("td", { style: { padding: "6px 10px", color: "#065F46" } }, arribo)
+                  );
+                })
+              )
+            )
+          ),
+          roadmapCruce.nuevos.length > 15 && React.createElement("div", { style: { fontSize: 11, color: "#065F46", marginTop: 6, fontStyle: "italic" } }, "Y " + (roadmapCruce.nuevos.length - 15) + " m\u00e1s...")
+        ),
+        // En camino (roadmap + tránsito)
+        roadmapCruce.enCamino.length > 0 && React.createElement("div", { style: { marginBottom: 16 } },
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#1E40AF", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 } },
+            "\uD83D\uDEA2 En camino (llegando seg\u00fan roadmap)"
+          ),
+          React.createElement("div", { style: { overflowX: "auto", maxHeight: 300, overflowY: "auto" } },
+            React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+              React.createElement("thead", null,
+                React.createElement("tr", { style: { background: "#DBEAFE", position: "sticky", top: 0 } },
+                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF" } }, "SKU"),
+                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF" } }, "Descripci\u00f3n"),
+                  React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 80 } }, "Roadmap"),
+                  React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 110 } }, "Piezas"),
+                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 130 } }, "Arribo")
+                )
+              ),
+              React.createElement("tbody", null,
+                roadmapCruce.enCamino.map(function(r, i) {
+                  var arribo = r.arribo ? new Date(r.arribo).toLocaleDateString("es-MX", { day: "2-digit", month: "short" }) : "\u2014";
+                  return React.createElement("tr", { key: r.sku, style: { borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#FAFBFC" } },
+                    React.createElement("td", { style: { padding: "6px 10px", fontFamily: "ui-monospace,monospace", color: "#1E293B" } }, r.sku),
+                    React.createElement("td", { style: { padding: "6px 10px", color: "#475569", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: r.descripcion }, (r.descripcion || "").slice(0, 70)),
+                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "center" } },
+                      React.createElement("span", { style: { padding: "2px 8px", borderRadius: 6, background: ESTADO_COLORES[r.rdmp] || "#64748B", color: "#fff", fontSize: 10, fontWeight: 600 } }, r.rdmp || "-")
+                    ),
+                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#1E40AF", fontWeight: 600 } }, (r.transito || 0).toLocaleString("es-MX")),
+                    React.createElement("td", { style: { padding: "6px 10px", color: "#475569" } }, arribo)
+                  );
+                })
+              )
+            )
+          )
+        )
+      ),
+
       // SKU Detail - Full Table
       React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
         React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 } },
