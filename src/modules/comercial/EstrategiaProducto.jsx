@@ -337,25 +337,55 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   };
 
   // Load data from Supabase
+  // Paginated fetch helper (PostgREST max 1000 rows per request)
+  const fetchAllPages = async (query) => {
+    const PAGE = 1000;
+    let all = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await query.range(from, from + PAGE - 1);
+      if (error || !data) break;
+      all = all.concat(data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+    return all;
+  };
+
+  // Acteck warehouses to sum for "Inv Acteck" column
+  const ACTECK_ALMACENES = [1, 2, 3, 4, 14, 16, 17, 25, 44];
+
   const loadData = async () => {
     if (!DB_CONFIGURED || !supabase) return;
     setLoading(true);
     try {
-      const [productos, sellIn, sellOut, inventario] = await Promise.all([
-        supabase.from("productos_cliente").select("*").eq("cliente", clienteKey),
-        supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026).limit(10000),
-        supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026).limit(10000),
-        supabase.from("inventario_cliente").select("*").eq("cliente", clienteKey).limit(10000),
+      const [productos, sellIn, sellOut, inventario, invActeck, transito] = await Promise.all([
+        fetchAllPages(supabase.from("productos_cliente").select("*").eq("cliente", clienteKey)),
+        fetchAllPages(supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026)),
+        fetchAllPages(supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026)),
+        fetchAllPages(supabase.from("inventario_cliente").select("*").eq("cliente", clienteKey)),
+        fetchAllPages(supabase.from("inventario_acteck").select("articulo,no_almacen,disponible").in("no_almacen", ACTECK_ALMACENES)),
+        fetchAllPages(supabase.from("transito_sku").select("sku,inventario_transito")),
       ]);
 
-      if (productos.data && sellIn.data && sellOut.data && inventario.data) {
-        setDatos({
-          productos: productos.data || [],
-          sellIn: sellIn.data || [],
-          sellOut: sellOut.data || [],
-          inventario: inventario.data || [],
-        });
-      }
+      // Pre-aggregate Acteck inventory by SKU (sum across all 9 warehouses)
+      const actStockBySku = {};
+      invActeck.forEach(r => {
+        if (!r.articulo) return;
+        actStockBySku[r.articulo] = (actStockBySku[r.articulo] || 0) + (Number(r.disponible) || 0);
+      });
+
+      // Transit by SKU
+      const transitoBySku = {};
+      transito.forEach(r => {
+        if (!r.sku) return;
+        transitoBySku[r.sku] = (transitoBySku[r.sku] || 0) + (Number(r.inventario_transito) || 0);
+      });
+
+      setDatos({
+        productos, sellIn, sellOut, inventario,
+        actStockBySku, transitoBySku,
+      });
     } catch (err) {
       console.error("Error loading data:", err);
     }
@@ -441,12 +471,29 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const soMontoTotal = soData.reduce((s, r) => s + (r.monto_pesos || 0), 0);
         const mesActual = new Date().getMonth() + 1;
         const soSinMesActual = soData.filter(r => Number(r.mes) < mesActual);
+        // promedio90d = promedio mensual de piezas vendidas en últimos 3 meses completos
         const promedio90d = soSinMesActual.slice(-3).length > 0 ? Math.round(soSinMesActual.slice(-3).reduce((s, r) => s + (r.piezas || 0), 0) / Math.min(3, soSinMesActual.slice(-3).length)) : 0;
         const stock = invData?.stock || 0;
         const valorInv = invData?.valor || 0;
-        const base = promedio90d * 3 - stock;
-        const minPorTienda = clienteKey === "digitalife" && promedio90d > 0 ? 11 : 0;
-        const sugerido = Math.max(minPorTienda, base);
+
+        // Acteck inventory (9 almacenes) + tránsito
+        const invActeck = (datos.actStockBySku && datos.actStockBySku[p.sku]) || 0;
+        const invTransito = (datos.transitoBySku && datos.transitoBySku[p.sku]) || 0;
+        const disponibleReponer = invActeck + invTransito;
+
+        // Sugerido = reponer 90 días de venta basado en rotación (promedio_mensual × 3) − stock cliente
+        // Mínimo 11 solo si Digitalife tiene venta activa Y stock < 1 mes de rotación
+        let sugerido = 0;
+        if (promedio90d > 0) {
+          const necesidad = (promedio90d * 3) - stock;
+          sugerido = Math.max(0, necesidad);
+          // Aplicar mínimo 11 solo si Digitalife tiene stock bajo (< 1 mes)
+          if (clienteKey === "digitalife" && stock < promedio90d && sugerido < 11) {
+            sugerido = 11;
+          }
+          // Limitar al disponible en Acteck + tránsito (no podemos enviar lo que no tenemos)
+          sugerido = Math.min(sugerido, disponibleReponer);
+        }
 
         const precioSku = Number(p.precio_venta) > 0 ? Number(p.precio_venta) : Number(invData && invData.precio_venta || 0);
         return {
@@ -460,6 +507,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           promedio90d,
           stock,
           valorInv,
+          invActeck,
+          invTransito,
           sugerido,
           soMontoTotal,
         };
@@ -491,8 +540,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         Estado: s.estado,
         "SI Piezas": s.siPiezasTotal,
         "Prom 90d": s.promedio90d,
-        "Stock": s.stock,
+        "Stock Cliente": s.stock,
         "Valor Inv": s.valorInv,
+        "Inv Acteck": s.invActeck,
+        "Transito": s.invTransito,
         "SO Monto": s.soMontoTotal,
         "Sugerido": sug,
         "Precio": precio,
@@ -506,7 +557,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     if (rows.length > 0) {
       var sumSug = rows.reduce(function(a,r){ return a + (Number(r.Sugerido)||0); }, 0);
       var sumTot = rows.reduce(function(a,r){ return a + (Number(r.Total)||0); }, 0);
-      rows.push({ SKU: "TOTAL", Descripcion: "", Marca: "", Roadmap: "", Estado: "", "SI Piezas": "", "Prom 90d": "", "Stock": "", "Valor Inv": "", "SO Monto": "", "Sugerido": sumSug, "Precio": "", "Total": sumTot });
+      rows.push({ SKU: "TOTAL", Descripcion: "", Marca: "", Roadmap: "", Estado: "", "SI Piezas": "", "Prom 90d": "", "Stock Cliente": "", "Valor Inv": "", "Inv Acteck": "", "Transito": "", "SO Monto": "", "Sugerido": sumSug, "Precio": "", "Total": sumTot });
     }
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -708,9 +759,11 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 [1,2,3,4,5,6,7,8,9,10,11,12].map(function(m) {
                   return React.createElement("th", { key: "h"+m, style: { textAlign: "right", padding: "8px 4px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][m-1]);
                 }),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", color: sortCol === "stock" ? "#1D4ED8" : "#475569" }, onClick: () => handleSort("stock") }, "Inv" + sortArrow("stock")),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", color: sortCol === "stock" ? "#1D4ED8" : "#475569" }, onClick: () => handleSort("stock") }, "Inv Cliente" + sortArrow("stock")),
                 thSort("Valor Inv", "valorInv"),
                 thSort("Prom 90d", "promedio90d"),
+                thSort("Inv Acteck", "invActeck"),
+                thSort("Tr\u00e1nsito", "invTransito"),
                 thSort("Sugerido", "sugerido"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 700, color: "#065F46", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#ECFDF5" } },
@@ -735,6 +788,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", fontWeight: 500, color: "#1E293B", fontSize: 11 } }, (s.stock || 0).toLocaleString("es-MX")),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11 } }, s.valorInv > 0 ? "$" + Math.round(s.valorInv).toLocaleString("es-MX") : "-"),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11 } }, (s.promedio90d || 0).toLocaleString("es-MX")),
+                  React.createElement("td", { style: { textAlign: "right", padding: "6px", color: s.invActeck > 0 ? "#1E293B" : "#CBD5E1", fontSize: 11, fontWeight: s.invActeck > 0 ? 500 : 400 } }, (s.invActeck || 0).toLocaleString("es-MX")),
+                  React.createElement("td", { style: { textAlign: "right", padding: "6px", color: s.invTransito > 0 ? "#7C3AED" : "#CBD5E1", fontSize: 11 } }, s.invTransito > 0 ? s.invTransito.toLocaleString("es-MX") : "-"),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", fontSize: 11 } },
                     React.createElement("input", {
                       type: "number", min: 0,
