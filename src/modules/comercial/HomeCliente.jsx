@@ -649,9 +649,9 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
 }
 
   // ─── PROGRESS BAR ──────────────────────────────────────────────────────────
-  // ─── PROGRESO DE CUOTA (Mes grande / Trimestre medio / Año chico) ────────
+  // ─── PROGRESO DE CUOTA (compacto 3-niveles) ──────────────────────────────
   function ProgresoCuotaCard() {
-    const MESES_FULL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    const MESES_FULL = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
     const m = _progCalc.mes, t = _progCalc.tri, a = _progCalc.anio;
     const pctMes = m.cuota > 0 ? (m.si / m.cuota) * 100 : 0;
     const pctTri = t.cuota > 0 ? (t.si / t.cuota) * 100 : 0;
@@ -660,46 +660,40 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     const bar = (pct, color, height) => React.createElement("div", {
       style: { height: height, background: "#E2E8F0", borderRadius: height/2, overflow: "hidden" }
     }, React.createElement("div", {
-      style: { height: "100%", width: Math.min(pct, 100) + "%", background: "linear-gradient(90deg," + color + "," + color + "cc)", transition: "width .6s", borderRadius: height/2 }
+      style: { height: "100%", width: Math.min(pct, 100) + "%", background: color, transition: "width .6s", borderRadius: height/2 }
     }));
 
-    return React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 12, padding: 20 } },
-      React.createElement("h4", { style: { margin: "0 0 12px", fontSize: 13, color: "#334155", fontWeight: 600 } }, "Progreso vs Cuota"),
-      // MES (grande)
-      React.createElement("div", { style: { marginBottom: 18 } },
-        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 } },
-          React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, MESES_FULL[mesActual-1] + " (mes actual)"),
-          React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "Cuota: " + formatMXN(m.cuota))
+    return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 14, display: "flex", flexDirection: "column", gap: 10 } },
+      React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700 } }, "🎯 Cuota"),
+      // MES
+      React.createElement("div", null,
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" } },
+          React.createElement("span", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, MESES_FULL[mesActual-1] + " (mes)"),
+          React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: colorPct(pctMes) } }, pctMes.toFixed(1) + "%")
         ),
-        React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 } },
-          React.createElement("span", { style: { fontSize: 30, fontWeight: 700, color: "#1E293B" } }, formatMXN(m.si)),
-          React.createElement("span", { style: { fontSize: 18, fontWeight: 700, color: colorPct(pctMes) } }, pctMes.toFixed(1) + "%")
-        ),
-        bar(pctMes, colorPct(pctMes), 14)
+        React.createElement("div", { style: { fontSize: 16, fontWeight: 700, color: "#1E293B", marginTop: 2, marginBottom: 4 } }, formatMXN(m.si)),
+        bar(pctMes, colorPct(pctMes), 6),
+        React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 2 } }, "de " + formatMXN(m.cuota))
       ),
-      // TRIMESTRE (medio)
-      React.createElement("div", { style: { marginBottom: 14, paddingTop: 10, borderTop: "1px dashed #E2E8F0" } },
-        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 } },
-          React.createElement("span", { style: { fontSize: 12, color: "#64748B" } }, "Q" + trimActual + " (trimestre)"),
-          React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "Cuota: " + formatMXN(t.cuota))
+      // TRIMESTRE
+      React.createElement("div", { style: { paddingTop: 8, borderTop: "1px dashed #E2E8F0" } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" } },
+          React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, "Q" + trimActual),
+          React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: colorPct(pctTri) } }, pctTri.toFixed(1) + "%")
         ),
-        React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 } },
-          React.createElement("span", { style: { fontSize: 20, fontWeight: 700, color: "#334155" } }, formatMXN(t.si)),
-          React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: colorPct(pctTri) } }, pctTri.toFixed(1) + "%")
-        ),
-        bar(pctTri, colorPct(pctTri), 8)
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155", marginTop: 2, marginBottom: 3 } }, formatMXN(t.si)),
+        bar(pctTri, colorPct(pctTri), 4),
+        React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 2 } }, "de " + formatMXN(t.cuota))
       ),
-      // AÑO (chico)
-      React.createElement("div", { style: { paddingTop: 10, borderTop: "1px dashed #E2E8F0" } },
-        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 } },
-          React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, anioResumen + " (año)"),
-          React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, "Cuota: " + formatMXN(a.cuota))
-        ),
-        React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 } },
-          React.createElement("span", { style: { fontSize: 14, fontWeight: 600, color: "#475569" } }, formatMXN(a.si)),
+      // AÑO
+      React.createElement("div", { style: { paddingTop: 8, borderTop: "1px dashed #E2E8F0" } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" } },
+          React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, anioResumen),
           React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: colorPct(pctAnio) } }, pctAnio.toFixed(1) + "%")
         ),
-        bar(pctAnio, colorPct(pctAnio), 5)
+        React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: "#475569", marginTop: 2, marginBottom: 2 } }, formatMXN(a.si)),
+        bar(pctAnio, colorPct(pctAnio), 3),
+        React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", marginTop: 2 } }, "de " + formatMXN(a.cuota))
       )
     );
   }
@@ -1106,20 +1100,19 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         React.createElement("span", { style: { color: cumplimientoMin >= 100 ? "#10B981" : cumplimientoMin >= 80 ? "#F59E0B" : "#EF4444", fontWeight: 700 } }, "Cump: " + cumplimientoMin.toFixed(1) + "%")
       )
     ),
-    // Row 1: Progreso cuota (Mes/Q/Año)
-    React.createElement(ProgresoCuotaCard, null),
-    // Row 2: Gráfica Sell In vs Sell Out
+    // Row 1: Gráfica Sell In vs Sell Out (full width)
     React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 20 } },
       React.createElement("h3", { style: { margin: "0 0 12px", fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out — " + (cliente?.nombre || clienteKey) + " 2026"),
       React.createElement(LineChartSellInOut, null)
     ),
-    // Row 3: Panel operativo 3 columnas (Comercial / Inventario / Financiera)
-    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 16 } },
+    // Row 2: Panel operativo 4 columnas (Cuota / Comercial / Inventario / Financiera)
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "0.9fr 1.3fr 1fr 1fr", gap: 14 } },
+      React.createElement(ProgresoCuotaCard, null),
       React.createElement(ComercialCard, null),
       React.createElement(InventarioCard, null),
       React.createElement(FinancieraCard, null)
     ),
-    // Row 4: Minutas (al final)
+    // Row 3: Minutas (al final)
     React.createElement(MinutaPlaud, null)
   );
 }
