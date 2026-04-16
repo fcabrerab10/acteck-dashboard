@@ -265,6 +265,8 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   const [periodoMes, setPeriodoMes] = React.useState(new Date().getMonth() + 1);
   const [periodoRango, setPeriodoRango] = React.useState([1, 12]);
   const [cuotasMensuales, setCuotasMensuales] = React.useState([]);
+  const [selloutSem, setSelloutSem] = React.useState([]);  // sellout_detalle para comparativa semanal
+  const [estadoCuenta, setEstadoCuenta] = React.useState(null);  // último estado de cuenta
 
   const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
   const ESTADOS = [
@@ -294,26 +296,29 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   React.useEffect(() => {
     if (!DB_CONFIGURED) { setLoading(false); return; }
     (async () => {
-      const [siData, soData, mR, pcR, pmR, imR, minR, invData, cuotasR] = await Promise.all([
+      // Get last ~8 weeks of sellout_detalle for weekly comparison
+      const hoy = new Date();
+      const hace56dias = new Date(hoy.getTime() - 56 * 86400000).toISOString().slice(0, 10);
+      const [siData, soData, mR, imR, minR, invData, cuotasR, sdR, ecR] = await Promise.all([
         fetchAllPages(() => supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
         fetchAllPages(() => supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
         supabase.from("metas_anuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).maybeSingle(),
-        supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "comercial").order("created_at", { ascending: false }),
-        supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "marketing").order("created_at", { ascending: false }),
         supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).order("mes"),
         supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
-        fetchAllPages(() => supabase.from("inventario_cliente").select("valor,stock,costo_convenio,anio,semana").eq("cliente", clienteKey)),
+        fetchAllPages(() => supabase.from("inventario_cliente").select("sku,stock,valor,costo_convenio,dias_sin_venta,anio,semana,titulo").eq("cliente", clienteKey)),
         supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
+        fetchAllPages(() => supabase.from("sellout_detalle").select("fecha,total,cantidad,no_parte").eq("cliente", clienteKey).gte("fecha", hace56dias)),
+        supabase.from("estados_cuenta").select("*").eq("cliente", clienteKey).order("anio", { ascending: false }).order("semana", { ascending: false }).limit(1).maybeSingle(),
       ]);
       setSellInSku(siData);
       setSellOutSku(soData);
       if (mR.data) { setMeta(mR.data); setMetaForm({ min: mR.data.meta_sell_in_min, opt: mR.data.meta_sell_in_optimista }); } else { const _cc = (clientes[clienteKey] && clientes[clienteKey].cuotaAnual) || 30000000; setMeta({ meta_sell_in_min: Math.round(_cc * 0.83), meta_sell_in_optimista: _cc }); setMetaForm({ min: Math.round(_cc * 0.83), opt: _cc }); }
-      setPendCom(pcR.data || []);
-      setPendMkt(pmR.data || []);
       setInvMkt(imR.data || []);
       setMinutasList(minR.data || []);
       setInvCliente(invData);
       setCuotasMensuales(cuotasR?.data || []);
+      setSelloutSem(sdR);
+      setEstadoCuenta(ecR?.data || null);
       setLoading(false);
     })();
   }, [clienteKey, anioResumen]);
@@ -349,6 +354,101 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     }
     return map;
   }, [cuotasMensuales, clienteKey]);
+
+  // ─── PROGRESO MES/TRIMESTRE/AÑO ─────────────────────────────────────────
+  const mesActual = new Date().getMonth() + 1;
+  const trimActual = Math.ceil(mesActual / 3);
+  const mesesTrim = [(trimActual - 1) * 3 + 1, (trimActual - 1) * 3 + 2, (trimActual - 1) * 3 + 3];
+  const _progCalc = React.useMemo(() => {
+    const sumSI = (meses) => meses.reduce((s, m) => s + (Number((ventasPorMes[m] || {}).sell_in) || 0), 0);
+    const sumCuotaIdeal = (meses) => meses.reduce((s, m) => s + (cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : 0), 0);
+    const sumCuotaMin = (meses) => meses.reduce((s, m) => s + (cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_min) || 0 : 0), 0);
+    return {
+      mes: { si: sumSI([mesActual]), cuota: sumCuotaIdeal([mesActual]), cuotaMin: sumCuotaMin([mesActual]) },
+      tri: { si: sumSI(mesesTrim), cuota: sumCuotaIdeal(mesesTrim), cuotaMin: sumCuotaMin(mesesTrim) },
+      anio: { si: sumSI([1,2,3,4,5,6,7,8,9,10,11,12]), cuota: sumCuotaIdeal([1,2,3,4,5,6,7,8,9,10,11,12]), cuotaMin: sumCuotaMin([1,2,3,4,5,6,7,8,9,10,11,12]) },
+    };
+  }, [ventasPorMes, cuotasPorMes, mesActual, mesesTrim]);
+
+  // ─── WEEKLY SELLOUT COMPARISON ─────────────────────────────────────────
+  const _weeklySellout = React.useMemo(() => {
+    // Group sellout_detalle by ISO week
+    const getISOWeek = (d) => {
+      const date = new Date(d);
+      const thursday = new Date(date.valueOf());
+      thursday.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
+      const jan4 = new Date(thursday.getFullYear(), 0, 4);
+      return 1 + Math.round(((thursday - jan4) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+    };
+    const weekMap = {};
+    selloutSem.forEach(r => {
+      if (!r.fecha) return;
+      const d = new Date(r.fecha);
+      const key = d.getFullYear() + "-W" + String(getISOWeek(d)).padStart(2, "0");
+      if (!weekMap[key]) weekMap[key] = { key, total: 0, piezas: 0, date: d };
+      weekMap[key].total += Number(r.total) || 0;
+      weekMap[key].piezas += Number(r.cantidad) || 0;
+    });
+    const sorted = Object.values(weekMap).sort((a, b) => a.date - b.date);
+    const last = sorted[sorted.length - 1];
+    const prev = sorted[sorted.length - 2];
+    const deltaPct = prev && prev.total > 0 ? ((last.total - prev.total) / prev.total * 100) : null;
+    return { last, prev, deltaPct, weeks: sorted };
+  }, [selloutSem]);
+
+  // ─── SKUS CRÍTICOS: ALTA ROTACIÓN, STOCK BAJO ────────────────────────────
+  const _skusCriticos = React.useMemo(() => {
+    // rotation per SKU (avg piezas/mes last 3 months from sellout_sku)
+    const rotBySku = {};
+    const ultMes = Math.max(...sellOutSku.map(r => Number(r.mes) || 0), 0);
+    const tresMesesAtras = Math.max(1, ultMes - 2);
+    sellOutSku.forEach(r => {
+      const m = Number(r.mes) || 0;
+      if (m < tresMesesAtras || m > ultMes) return;
+      const sku = r.sku;
+      if (!rotBySku[sku]) rotBySku[sku] = { piezas: 0, meses: new Set() };
+      rotBySku[sku].piezas += Number(r.piezas) || 0;
+      rotBySku[sku].meses.add(m);
+    });
+    // stock per SKU (latest week)
+    const invBySku = {};
+    invClienteLatest.forEach(inv => {
+      invBySku[inv.sku] = { stock: Number(inv.stock) || 0, titulo: inv.titulo, valor: _invValor(inv) };
+    });
+    // Compute risk: SKUs with rotation > 0 AND stock < rotation*1month (less than 30 days)
+    const criticos = [];
+    Object.entries(rotBySku).forEach(([sku, data]) => {
+      const meses = Math.max(data.meses.size, 1);
+      const promMes = data.piezas / meses;
+      if (promMes <= 0) return;
+      const stock = invBySku[sku] ? invBySku[sku].stock : 0;
+      const diasCob = promMes > 0 ? (stock / promMes) * 30 : 999;
+      if (diasCob < 30) {  // menos de 1 mes de cobertura
+        criticos.push({
+          sku, promMes: Math.round(promMes), stock, diasCob: Math.round(diasCob),
+          titulo: (invBySku[sku] && invBySku[sku].titulo) || sku,
+          urgencia: diasCob < 7 ? 3 : diasCob < 15 ? 2 : 1,
+        });
+      }
+    });
+    return criticos.sort((a, b) => b.urgencia - a.urgencia || a.diasCob - b.diasCob).slice(0, 8);
+  }, [sellOutSku, invClienteLatest]);
+
+  // ─── DÍAS DE COBERTURA INVENTARIO ────────────────────────────────────────
+  const _diasCobertura = React.useMemo(() => {
+    if (totalInvValor <= 0) return null;
+    // Promedio de sellout diario (últimos 3 meses o YTD)
+    const ultMes = Math.max(...sellOutSku.map(r => Number(r.mes) || 0), 0);
+    if (ultMes === 0) return null;
+    const tresMeses = Math.max(1, ultMes - 2);
+    const montoSO = sellOutSku.filter(r => {
+      const m = Number(r.mes) || 0;
+      return m >= tresMeses && m <= ultMes;
+    }).reduce((s, r) => s + (Number(r.monto_pesos) || 0), 0);
+    const dias = (ultMes - tresMeses + 1) * 30;
+    const soDiario = dias > 0 ? montoSO / dias : 0;
+    return soDiario > 0 ? Math.round(totalInvValor / soDiario) : null;
+  }, [totalInvValor, sellOutSku]);
 
   // ─── PERIOD FILTER ────────────────────────────────────────────────────────
   const mesesFiltrados = React.useMemo(() => {
@@ -548,85 +648,149 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
 }
 
   // ─── PROGRESS BAR ──────────────────────────────────────────────────────────
-  function ProgresoAnual() {
-    const cuotaIdealEff = totalCuotaIdeal > 0 ? totalCuotaIdeal : meta.meta_sell_in_optimista;
-    const cuotaMinEff = totalCuotaMin > 0 ? totalCuotaMin : meta.meta_sell_in_min;
-    const pctOpt = cuotaIdealEff > 0 ? (totalSellIn / cuotaIdealEff) * 100 : 0;
-    const pctMin = cuotaMinEff > 0 ? (totalSellIn / cuotaMinEff) * 100 : 0;
-    const minPctOfOpt = cuotaIdealEff > 0 ? (cuotaMinEff / cuotaIdealEff) * 100 : 0;
-
-    const saveMeta = async () => {
-      if (!DB_CONFIGURED) return;
-      await supabase.from("metas_anuales").upsert({
-        cliente: clienteKey, anio: 2026,
-        meta_sell_in_min: Number(metaForm.min),
-        meta_sell_in_optimista: Number(metaForm.opt)
-      }, { onConflict: "cliente,anio" });
-      setMeta(prev => ({ ...prev, meta_sell_in_min: Number(metaForm.min), meta_sell_in_optimista: Number(metaForm.opt) }));
-      setEditingMeta(false);
-    };
+  // ─── PROGRESO DE CUOTA (Mes grande / Trimestre medio / Año chico) ────────
+  function ProgresoCuotaCard() {
+    const MESES_FULL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    const m = _progCalc.mes, t = _progCalc.tri, a = _progCalc.anio;
+    const pctMes = m.cuota > 0 ? (m.si / m.cuota) * 100 : 0;
+    const pctTri = t.cuota > 0 ? (t.si / t.cuota) * 100 : 0;
+    const pctAnio = a.cuota > 0 ? (a.si / a.cuota) * 100 : 0;
+    const colorPct = (p) => p >= 100 ? "#10B981" : p >= 80 ? "#F59E0B" : "#EF4444";
+    const bar = (pct, color, height) => React.createElement("div", {
+      style: { height: height, background: "#E2E8F0", borderRadius: height/2, overflow: "hidden" }
+    }, React.createElement("div", {
+      style: { height: "100%", width: Math.min(pct, 100) + "%", background: "linear-gradient(90deg," + color + "," + color + "cc)", transition: "width .6s", borderRadius: height/2 }
+    }));
 
     return React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 12, padding: 20 } },
-      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } },
-        React.createElement("h4", { style: { margin: 0, fontSize: 14, color: "#334155" } }, "Progreso Anual Sell In"),
-        React.createElement("button", {
-          onClick: () => setEditingMeta(!editingMeta),
-          style: { background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "#4472C4" }
-        }, editingMeta ? "Cancelar" : "Editar meta")
-      ),
-      editingMeta && React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" } },
-        React.createElement("label", { style: { fontSize: 12, color: "#64748B" } }, "Meta m\u00ednima:",
-          React.createElement("input", {
-            type: "number", value: metaForm.min,
-            onChange: e => setMetaForm(p => ({ ...p, min: e.target.value })),
-            style: { width: 120, marginLeft: 4, padding: "4px 8px", borderRadius: 6, border: "1px solid #CBD5E1", fontSize: 12 }
-          })
+      React.createElement("h4", { style: { margin: "0 0 12px", fontSize: 13, color: "#334155", fontWeight: 600 } }, "Progreso vs Cuota"),
+      // MES (grande)
+      React.createElement("div", { style: { marginBottom: 18 } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 } },
+          React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, MESES_FULL[mesActual-1] + " (mes actual)"),
+          React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "Cuota: " + formatMXN(m.cuota))
         ),
-        React.createElement("label", { style: { fontSize: 12, color: "#64748B" } }, "Meta optimista:",
-          React.createElement("input", {
-            type: "number", value: metaForm.opt,
-            onChange: e => setMetaForm(p => ({ ...p, opt: e.target.value })),
-            style: { width: 120, marginLeft: 4, padding: "4px 8px", borderRadius: 6, border: "1px solid #CBD5E1", fontSize: 12 }
-          })
+        React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 } },
+          React.createElement("span", { style: { fontSize: 30, fontWeight: 700, color: "#1E293B" } }, formatMXN(m.si)),
+          React.createElement("span", { style: { fontSize: 18, fontWeight: 700, color: colorPct(pctMes) } }, pctMes.toFixed(1) + "%")
         ),
-        React.createElement("button", { onClick: saveMeta, style: { padding: "4px 12px", background: "#4472C4", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer" } }, "Guardar")
+        bar(pctMes, colorPct(pctMes), 14)
       ),
-      // Big number
-      React.createElement("div", { style: { fontSize: 28, fontWeight: 700, color: "#1E293B", marginBottom: 4 } }, formatMXN(totalSellIn)),
-      React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 12 } },
-        pctOpt.toFixed(1) + "% de cuota ideal (" + formatMXN(cuotaIdealEff) + ")"),
-      // Bar
-      React.createElement("div", { style: { position: "relative", height: 24, background: "#E2E8F0", borderRadius: 12, overflow: "hidden" } },
-        React.createElement("div", { style: {
-          position: "absolute", left: 0, top: 0, height: "100%", width: Math.min(pctOpt, 100) + "%",
-          background: pctOpt >= 100 ? "linear-gradient(90deg,#10B981,#059669)" : "linear-gradient(90deg,#4472C4,#60A5FA)",
-          borderRadius: 12, transition: "width 0.6s ease"
-        } }),
-        // Min marker
-        React.createElement("div", { style: {
-          position: "absolute", left: Math.min(minPctOfOpt, 100) + "%", top: 0, height: "100%", width: 2, background: "#F59E0B", zIndex: 2
-        } })
+      // TRIMESTRE (medio)
+      React.createElement("div", { style: { marginBottom: 14, paddingTop: 10, borderTop: "1px dashed #E2E8F0" } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 } },
+          React.createElement("span", { style: { fontSize: 12, color: "#64748B" } }, "Q" + trimActual + " (trimestre)"),
+          React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "Cuota: " + formatMXN(t.cuota))
+        ),
+        React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 } },
+          React.createElement("span", { style: { fontSize: 20, fontWeight: 700, color: "#334155" } }, formatMXN(t.si)),
+          React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: colorPct(pctTri) } }, pctTri.toFixed(1) + "%")
+        ),
+        bar(pctTri, colorPct(pctTri), 8)
       ),
-      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 11, color: "#94A3B8" } },
-        React.createElement("span", null, "0"),
-        React.createElement("span", { style: { color: "#F59E0B" } }, "M\u00edn: " + formatMXN(cuotaMinEff)),
-        React.createElement("span", null, formatMXN(cuotaIdealEff))
+      // AÑO (chico)
+      React.createElement("div", { style: { paddingTop: 10, borderTop: "1px dashed #E2E8F0" } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 } },
+          React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, anioResumen + " (año)"),
+          React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, "Cuota: " + formatMXN(a.cuota))
+        ),
+        React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 } },
+          React.createElement("span", { style: { fontSize: 14, fontWeight: 600, color: "#475569" } }, formatMXN(a.si)),
+          React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: colorPct(pctAnio) } }, pctAnio.toFixed(1) + "%")
+        ),
+        bar(pctAnio, colorPct(pctAnio), 5)
+      )
+    );
+  }
+
+  // ─── COMERCIAL CARD (eficiencia, Δ semana, SKUs críticos) ────────────────
+  function ComercialCard() {
+    const eficienciaPct = totalSellIn > 0 && totalSellOut > 0 ? (totalSellOut / totalSellIn * 100) : 0;
+    const colorEf = eficienciaPct >= 80 ? "#10B981" : eficienciaPct >= 50 ? "#F59E0B" : "#EF4444";
+    const delta = _weeklySellout.deltaPct;
+    const deltaColor = delta === null ? "#94A3B8" : delta >= 0 ? "#10B981" : "#EF4444";
+    return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 16, display: "flex", flexDirection: "column", gap: 12 } },
+      React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700 } }, "📊 Comercial"),
+      // Eficiencia
+      React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 2 } }, "Eficiencia Sell In/Out"),
+        React.createElement("div", { style: { fontSize: 22, fontWeight: 700, color: colorEf } }, eficienciaPct > 0 ? eficienciaPct.toFixed(1) + "%" : "—"),
+        React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, eficienciaPct >= 80 ? "Saludable" : eficienciaPct >= 50 ? "Moderado" : eficienciaPct > 0 ? "Bajo — sobreinventario" : "Sin datos")
       ),
-      // Sell Out mini
-      React.createElement("div", { style: { marginTop: 16, paddingTop: 12, borderTop: "1px solid #E2E8F0" } },
-        React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Sell Out Acumulado"),
-        React.createElement("div", { style: { fontSize: 20, fontWeight: 700, color: "#10B981" } }, formatMXN(totalSellOut))
+      // Delta semana
+      React.createElement("div", { style: { paddingTop: 10, borderTop: "1px dashed #E2E8F0" } },
+        React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 2 } }, "Sell Out semana vs anterior"),
+        delta !== null ? React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 20, fontWeight: 700, color: deltaColor } }, (delta >= 0 ? "▲ +" : "▼ ") + Math.abs(delta).toFixed(1) + "%"),
+          React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } },
+            "Esta: " + formatMXN(_weeklySellout.last?.total || 0) + " · Prev: " + formatMXN(_weeklySellout.prev?.total || 0))
+        ) : React.createElement("div", { style: { fontSize: 12, color: "#94A3B8" } }, "Se necesitan 2 semanas de datos")
+      ),
+      // SKUs críticos
+      React.createElement("div", { style: { paddingTop: 10, borderTop: "1px dashed #E2E8F0" } },
+        React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 6 } }, "SKUs críticos (alta rotación, <30 días cobertura)"),
+        _skusCriticos.length === 0
+          ? React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", fontStyle: "italic" } }, "Sin SKUs en riesgo")
+          : _skusCriticos.slice(0, 5).map((s, i) =>
+            React.createElement("div", { key: s.sku, style: { display: "flex", alignItems: "center", gap: 8, padding: "3px 0", fontSize: 11 } },
+              React.createElement("span", { style: { width: 8, height: 8, borderRadius: 4, background: s.urgencia === 3 ? "#EF4444" : s.urgencia === 2 ? "#F59E0B" : "#FCD34D", flexShrink: 0 } }),
+              React.createElement("span", { style: { fontFamily: "ui-monospace,monospace", color: "#475569", minWidth: 70 } }, s.sku),
+              React.createElement("span", { style: { flex: 1, color: "#1E293B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.titulo }, s.titulo.slice(0, 32)),
+              React.createElement("span", { style: { color: "#EF4444", fontWeight: 600, minWidth: 40, textAlign: "right" } }, s.diasCob + "d"),
+              React.createElement("span", { style: { color: "#94A3B8", minWidth: 45, textAlign: "right" } }, s.stock + " pzs")
+            )
+          )
       )
     );
   }
 
   // ─── INVENTARIO CARD ────────────────────────────────────────────────────────
   function InventarioCard() {
-    return React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 12, padding: 20 } },
-      React.createElement("h4", { style: { margin: "0 0 8px", fontSize: 14, color: "#334155" } }, "Valor de Inventario"),
-      React.createElement("div", { style: { fontSize: 28, fontWeight: 700, color: "#1E293B" } }, formatMXN(totalInvCliente > 0 ? totalInvCliente : lastInvValor)),
-      React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 4 } },
-        totalInvCliente > 0 ? invClienteLatest.length + " SKUs en inventario (sem " + _latestWeek.semana + "/" + _latestWeek.anio + ")" : (ventas.length > 0 ? "Mes m\u00e1s reciente con datos" : "Sin datos"))
+    const semInfo = _latestWeek.semana ? " (sem " + _latestWeek.semana + "/" + _latestWeek.anio + ")" : "";
+    return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 16, display: "flex", flexDirection: "column", gap: 12 } },
+      React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700 } }, "📦 Inventario" + semInfo),
+      React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 2 } }, "Valor inventario cliente"),
+        React.createElement("div", { style: { fontSize: 24, fontWeight: 700, color: "#1E293B" } }, formatMXN(totalInvValor)),
+        React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, invClienteLatest.length + " SKUs")
+      ),
+      React.createElement("div", { style: { paddingTop: 10, borderTop: "1px dashed #E2E8F0" } },
+        React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 2 } }, "Días de cobertura"),
+        _diasCobertura !== null
+          ? React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: 20, fontWeight: 700, color: _diasCobertura <= 90 ? "#10B981" : _diasCobertura <= 150 ? "#F59E0B" : "#EF4444" } }, _diasCobertura + " días"),
+            React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, _diasCobertura <= 90 ? "Óptimo" : _diasCobertura <= 150 ? "Atención" : "Sobreinventario"))
+          : React.createElement("div", { style: { fontSize: 12, color: "#94A3B8" } }, "Sin suficientes datos")
+      )
+    );
+  }
+
+  // ─── FINANCIERA CARD ──────────────────────────────────────────────────────
+  function FinancieraCard() {
+    const ec = estadoCuenta;
+    return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 16, display: "flex", flexDirection: "column", gap: 12 } },
+      React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700 } },
+        "💰 Financiera" + (ec ? " (al " + formatFecha(ec.fecha_corte) + ")" : "")),
+      !ec ? React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", fontStyle: "italic" } }, "Sin estado de cuenta aún") :
+      React.createElement(React.Fragment, null,
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 2 } }, "Saldo actual (CxC)"),
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B" } }, formatMXN(Number(ec.saldo_actual) || 0))
+        ),
+        React.createElement("div", { style: { paddingTop: 10, borderTop: "1px dashed #E2E8F0" } },
+          React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 2 } }, "Saldo vencido"),
+          React.createElement("div", { style: { fontSize: 18, fontWeight: 700, color: Number(ec.saldo_vencido) > 0 ? "#EF4444" : "#10B981" } }, formatMXN(Number(ec.saldo_vencido) || 0)),
+          Number(ec.saldo_vencido) === 0 && React.createElement("div", { style: { fontSize: 10, color: "#10B981" } }, "✓ Al corriente")
+        ),
+        React.createElement("div", { style: { paddingTop: 10, borderTop: "1px dashed #E2E8F0" } },
+          React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 2 } }, "Por vencer"),
+          React.createElement("div", { style: { fontSize: 16, fontWeight: 700, color: "#F59E0B" } }, formatMXN(Number(ec.saldo_a_vencer) || 0))
+        ),
+        Number(ec.notas_credito) > 0 && React.createElement("div", { style: { paddingTop: 10, borderTop: "1px dashed #E2E8F0" } },
+          React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "Notas de crédito"),
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#8B5CF6" } }, formatMXN(Number(ec.notas_credito)))
+        )
+      )
     );
   }
 
@@ -941,24 +1105,20 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         React.createElement("span", { style: { color: cumplimientoMin >= 100 ? "#10B981" : cumplimientoMin >= 80 ? "#F59E0B" : "#EF4444", fontWeight: 700 } }, "Cump: " + cumplimientoMin.toFixed(1) + "%")
       )
     ),
-    // Row 1: Line chart
+    // Row 1: Progreso cuota (Mes/Q/Año)
+    React.createElement(ProgresoCuotaCard, null),
+    // Row 2: Gráfica Sell In vs Sell Out
     React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 20 } },
       React.createElement("h3", { style: { margin: "0 0 12px", fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out — " + (cliente?.nombre || clienteKey) + " 2026"),
       React.createElement(LineChartSellInOut, null)
     ),
-    // Row 2: Progress + Inventario
-    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 } },
-      React.createElement(ProgresoAnual, null),
-      React.createElement(InventarioCard, null)
+    // Row 3: Panel operativo 3 columnas (Comercial / Inventario / Financiera)
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 16 } },
+      React.createElement(ComercialCard, null),
+      React.createElement(InventarioCard, null),
+      React.createElement(FinancieraCard, null)
     ),
-    // Row 3: Pendientes
-    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } },
-      React.createElement(TarjetaPendientesEditable, { tipo: "comercial", items: pendCom, setItems: setPendCom }),
-      React.createElement(TarjetaPendientesEditable, { tipo: "marketing", items: pendMkt, setItems: setPendMkt })
-    ),
-    // Row 4: Marketing metrics
-    React.createElement(MetricasMarketing, null),
-    // Row 5: Minuta
+    // Row 4: Minutas (al final)
     React.createElement(MinutaPlaud, null)
   );
 }
