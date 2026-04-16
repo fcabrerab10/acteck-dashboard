@@ -98,7 +98,7 @@ async function recalcVentasMensuales() {
 
 // Recalc sell_in_sku from ventas_erp
 async function recalcSellInSku() {
-  const rows = await fetchAll('ventas_erp?select=cliente_nombre,anio,mes,canal_articulo,piezas,monto_venta_pesos&cliente_nombre=not.is.null');
+  const rows = await fetchAll('ventas_erp?select=cliente_nombre,anio,mes,articulo,piezas,monto_venta_pesos&cliente_nombre=not.is.null');
 
   const agg = {};
   for (const row of rows) {
@@ -110,7 +110,7 @@ async function recalcSellInSku() {
     const mes = parseInt(row.mes);
     if (!anio || !mes) continue;
 
-    const sku = String(row.canal_articulo || '').trim();
+    const sku = String(row.articulo || '').trim();
     if (!sku) continue;
 
     const key = `${cliente}|${sku}|${anio}|${mes}`;

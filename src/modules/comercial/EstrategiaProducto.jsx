@@ -345,7 +345,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         supabase.from("productos_cliente").select("*").eq("cliente", clienteKey),
         supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026).limit(10000),
         supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", 2026).limit(10000),
-        supabase.from("inventario_cliente").select("*").eq("cliente", clienteKey),
+        supabase.from("inventario_cliente").select("*").eq("cliente", clienteKey).limit(10000),
       ]);
 
       if (productos.data && sellIn.data && sellOut.data && inventario.data) {

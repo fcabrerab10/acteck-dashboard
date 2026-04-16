@@ -285,7 +285,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("tipo", "marketing").order("created_at", { ascending: false }),
       supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).order("mes"),
       supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
-      supabase.from("inventario_cliente").select("valor").eq("cliente", clienteKey),
+      supabase.from("inventario_cliente").select("valor").eq("cliente", clienteKey).limit(10000),
       supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
     ]).then(([siR, soR, mR, pcR, pmR, imR, minR, invCR, cuotasR]) => {
       setSellInSku(siR.data || []);

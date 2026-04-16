@@ -28,7 +28,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
       supabase.from("productos_cliente").select("*").eq("cliente", ck),
       supabase.from("sell_in_sku").select("*").eq("cliente", ck).eq("anio", anio).limit(10000),
       supabase.from("sellout_sku").select("*").eq("cliente", ck).eq("anio", anio).limit(10000),
-      supabase.from("inventario_cliente").select("*").eq("cliente", ck),
+      supabase.from("inventario_cliente").select("*").eq("cliente", ck).limit(10000),
       supabase.from("cuotas_mensuales").select("*").eq("cliente", ck).eq("anio", anio)
     ]).then(function(results) {
       if (results[0].data) setVentas(results[0].data);
