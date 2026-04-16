@@ -96,18 +96,34 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   }, [sellInSku, sellOutSku]);
 
   // —— YTD Totals ——
+  // Para calcular promedios mensuales saludables, EXCLUIMOS el mes actual
+  // si está corriendo (datos parciales harían bajar el promedio artificialmente).
   var ytd = React.useMemo(function() {
+    var now = new Date();
+    var mesActualReal = now.getMonth() + 1;
+    var esAnioActual = anio === now.getFullYear();
     var si = ventasPorMes.reduce(function(s,v) { return s + v.sell_in; }, 0);
     var so = ventasPorMes.reduce(function(s,v) { return s + v.sell_out; }, 0);
     var st = si > 0 && so > 0 ? (so / si * 100) : 0;
-    var mesesConDatos = ventasPorMes.filter(function(v) { return v.sell_in > 0 || v.sell_out > 0; }).length;
-    // Projection
-    var avgSI = mesesConDatos > 0 ? si / mesesConDatos : 0;
-    var avgSO = mesesConDatos > 0 ? so / mesesConDatos : 0;
-    var projSI = si + avgSI * (12 - mesesConDatos);
-    var projSO = so + avgSO * (12 - mesesConDatos);
-    return { si: si, so: so, st: st, mesesConDatos: mesesConDatos, avgSI: avgSI, avgSO: avgSO, projSI: projSI, projSO: projSO };
-  }, [ventasPorMes]);
+    // Meses completos con datos (excluyendo el mes actual si es año actual)
+    var mesesCompletos = ventasPorMes.filter(function(v) {
+      var tieneDatos = v.sell_in > 0 || v.sell_out > 0;
+      if (!tieneDatos) return false;
+      if (esAnioActual && v.mes === mesActualReal) return false;  // excluye mes corriendo
+      return true;
+    });
+    var mesesConDatos = mesesCompletos.length;
+    // Suma solo de meses completos (para el promedio)
+    var siCompletos = mesesCompletos.reduce(function(s,v) { return s + v.sell_in; }, 0);
+    var soCompletos = mesesCompletos.reduce(function(s,v) { return s + v.sell_out; }, 0);
+    var avgSI = mesesConDatos > 0 ? siCompletos / mesesConDatos : 0;
+    var avgSO = mesesConDatos > 0 ? soCompletos / mesesConDatos : 0;
+    // Proyección: YTD completo + promedio × meses restantes
+    var mesesTotales = ventasPorMes.filter(function(v) { return v.sell_in > 0 || v.sell_out > 0; }).length;
+    var projSI = si + avgSI * (12 - mesesTotales);
+    var projSO = so + avgSO * (12 - mesesTotales);
+    return { si: si, so: so, st: st, mesesConDatos: mesesConDatos, avgSI: avgSI, avgSO: avgSO, projSI: projSI, projSO: projSO, mesActual: mesActualReal };
+  }, [ventasPorMes, anio]);
 
   // —— COMPARATIVA: filtrar data por periodo ——
   var labelPeriodo = function(comp) {
@@ -422,10 +438,17 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
     var mesesConDatos = ytd.mesesConDatos || 1;
     var soDiario = mesesConDatos > 0 ? soTotal / (mesesConDatos * 30) : 0;
     var diasInv = soDiario > 0 ? Math.round(invValorTotal / soDiario) : 0;
-    var diasColor = diasInv <= 90 ? "#10b981" : diasInv <= 150 ? "#f59e0b" : "#ef4444";
-    items.push({ label: "D\u00edas de Inventario", value: diasInv + " d\u00edas", color: diasColor, detail: "Basado en SO promedio diario" });
+    // Rango saludable: 90-110 días. <70 desabasto, >130 sobreinventario
+    var diasColor = (diasInv >= 80 && diasInv <= 120) ? "#10b981" : (diasInv >= 60 && diasInv <= 140) ? "#f59e0b" : "#ef4444";
+    var diasDetalle = diasInv < 70 ? "⚠ Riesgo de desabasto" : diasInv > 130 ? "⚠ Sobreinventario" : diasInv >= 90 && diasInv <= 110 ? "✓ Saludable (90-110d)" : "Cercano a rango ideal";
+    items.push({ label: "D\u00edas de Inventario", value: diasInv + " d\u00edas", color: diasColor, detail: diasDetalle });
     // 3. Valor del inventario (stock × costo_convenio)
     items.push({ label: "Valor del Inventario", value: fmtMoney(invValorTotal), color: "#3B82F6", detail: "Stock \u00d7 Costo Convenio" });
+    // 4. Rotación Mensual: % del inventario que se vende al mes (ideal ~33% = 3 meses de stock)
+    var rotMensual = invValorTotal > 0 && ytd.avgSO > 0 ? (ytd.avgSO / invValorTotal * 100) : 0;
+    var rotColor = (rotMensual >= 28 && rotMensual <= 38) ? "#10b981" : (rotMensual >= 20 && rotMensual <= 45) ? "#f59e0b" : "#ef4444";
+    var rotDetalle = rotMensual < 20 ? "⚠ Rotación lenta" : rotMensual > 45 ? "⚠ Rotación muy alta" : rotMensual >= 28 && rotMensual <= 38 ? "✓ Ideal (~33%)" : "Cercano a rango ideal";
+    items.push({ label: "Rotación Mensual", value: rotMensual.toFixed(1) + "%", color: rotColor, detail: rotDetalle });
     return items;
   }, [skuAnalysis, inventario, ytd]);
 
@@ -490,14 +513,14 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
         el("div", { style: { background: "#F0F9FF", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#334155", lineHeight: 1.5, border: "1px solid #BAE6FD" } },
           el("strong", null, "\u00bfQu\u00e9 es la Eficiencia de Venta? "),
           "Mide la relaci\u00f3n entre lo que el cliente nos compra (Sell In) y lo que vende a sus clientes (Sell Out). ",
-          "Una eficiencia \u2265 80% indica un balance saludable. Valores bajos sugieren sobreinventario; valores muy altos pueden indicar riesgo de desabasto."
+          "Un balance ideal es ~100% (entra lo mismo que sale y mantiene 90-110 días de inventario). <90% = cliente acumulando stock; >110% = reduciendo inventario hacia rango saludable."
         ),
       el("div", null,
         // YTD summary row
         el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
           metricBox("Sell In YTD", fmtM(ytd.si), null, "#3b82f6"),
           metricBox("Sell Out YTD", fmtM(ytd.so), null, "#10b981"),
-          metricBox("Eficiencia de Venta YTD", fmtPct(ytd.st), ytd.st >= 80 ? "Saludable" : ytd.st >= 50 ? "Moderado" : "Bajo", ytd.st >= 80 ? "#10b981" : ytd.st >= 50 ? "#f59e0b" : "#ef4444")
+          metricBox("Eficiencia de Venta YTD", fmtPct(ytd.st), ytd.st >= 90 && ytd.st <= 110 ? "✓ Balance ideal (~100%)" : ytd.st > 110 ? "Vendiendo más del stock (reducir sobreinv.)" : ytd.st >= 70 ? "Acumulando stock" : "Acumulando mucho stock", ytd.st >= 90 && ytd.st <= 110 ? "#10b981" : ytd.st >= 70 || ytd.st > 110 ? "#f59e0b" : "#ef4444")
         ),
         // Monthly bars
         el("div", { style: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 } },
@@ -756,14 +779,14 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
           })(),
           // Proyección base: usa CUOTA MÍNIMA como referencia
           el("div", { style: { display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" } },
-            metricBox("Promedio Mensual SI", fmtM(ytd.avgSI), "Últimos " + ytd.mesesConDatos + " meses", "#3b82f6"),
+            metricBox("Promedio Mensual SI", fmtM(ytd.avgSI), ytd.mesesConDatos + " meses completos (excluye mes en curso)", "#3b82f6"),
             metricBox("Proyección SI Anual", fmtM(ytd.projSI),
               totalCuotaMinA > 0 ? "vs Mín: " + fmtPct(ytd.projSI / totalCuotaMinA * 100) + (ytd.projSI >= totalCuotaMinA ? " ✓" : " ⚠") : "Estimado cierre " + anio,
               ytd.projSI >= totalCuotaMinA ? "#10b981" : "#ef4444"),
             metricBox("Ratio SI/SO", ytd.so > 0 ? fmtPct(ytd.so/ytd.si*100) : "—",
               ytd.st < 50 ? "⚠️ Riesgo sobreinventario" : ytd.st < 70 ? "⚠️ Inventario acumulado" : "Rotación saludable",
               ytd.st < 50 ? "#ef4444" : ytd.st < 70 ? "#f59e0b" : "#10b981"),
-            metricBox("Promedio Mensual SO", fmtM(ytd.avgSO), "Últimos " + ytd.mesesConDatos + " meses", "#10b981"),
+            metricBox("Promedio Mensual SO", fmtM(ytd.avgSO), ytd.mesesConDatos + " meses completos (excluye mes en curso)", "#10b981"),
             metricBox("Proyección SO Anual", fmtM(ytd.projSO),
               totalCuotaMinA > 0 ? "vs Mín: " + fmtPct(ytd.projSO / totalCuotaMinA * 100) + (ytd.projSO >= totalCuotaMinA ? " ✓" : " ⚠") : "Estimado cierre " + anio,
               ytd.projSO >= totalCuotaMinA ? "#10b981" : "#ef4444")
