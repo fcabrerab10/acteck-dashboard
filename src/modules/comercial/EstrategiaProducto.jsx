@@ -638,6 +638,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           sku: p.sku,
           descripcion: p.descripcion,
           marca: p.marca,
+          categoria: p.categoria || "",
           estado: p.estado,
           roadmap: p.roadmap || "",
           precio: precioSku,
@@ -665,42 +666,74 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
       const exportToExcel = async () => {
     const XLSX = await loadSheetJS();
-    if (!XLSX) { alert("Error cargando librerÃ­a Excel"); return; }
-    const rows = skuDetail.map(function(s) {
-      var sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
-      var precio = Number(s.precio || 0);
-      var total = sug * precio;
+    if (!XLSX) { alert("Error cargando librería Excel"); return; }
+
+    // 1) Armar filas simplificadas para propuesta al cliente
+    const allRows = skuDetail.map(function(s) {
+      const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
+      const precio = Number(s.precio || 0);
+      const total = sug * precio;
       return {
         SKU: s.sku,
-        Descripcion: s.descripcion,
-        Marca: s.marca,
-        Roadmap: s.roadmap || "",
-        Estado: s.estado,
-        "SI Piezas": s.siPiezasTotal,
-        "Prom 90d": s.promedio90d,
-        "Stock Cliente": s.stock,
-        "Valor Inv": s.valorInv,
-        "Inv Acteck": s.invActeck,
-        "Transito": s.invTransito,
-        "SO Monto": s.soMontoTotal,
+        "Descripción": s.descripcion,
+        "Stock Cliente": Number(s.stock) || 0,
+        "Promedio 90d": Number(s.promedio90d) || 0,
         "Sugerido": sug,
         "Precio": precio,
         "Total": total,
+        _sug: sug, _total: total, _cat: (s.categoria || "").toLowerCase(),
       };
-    }).filter(function(r) {
-      // No exportar renglones en 0
-      return (Number(r.Sugerido) || 0) > 0 && (Number(r.Total) || 0) > 0;
-    });
-    // Fila de totales al final
-    if (rows.length > 0) {
-      var sumSug = rows.reduce(function(a,r){ return a + (Number(r.Sugerido)||0); }, 0);
-      var sumTot = rows.reduce(function(a,r){ return a + (Number(r.Total)||0); }, 0);
-      rows.push({ SKU: "TOTAL", Descripcion: "", Marca: "", Roadmap: "", Estado: "", "SI Piezas": "", "Prom 90d": "", "Stock Cliente": "", "Valor Inv": "", "Inv Acteck": "", "Transito": "", "SO Monto": "", "Sugerido": sumSug, "Precio": "", "Total": sumTot });
-    }
-    const ws = XLSX.utils.json_to_sheet(rows);
+    }).filter(r => r._sug > 0 && r._total > 0);
+
+    // 2) Clasificar por categoría → 3 hojas: Monitores / Sillas / Otros
+    const isMonitor = (c) => c.includes("monitor");
+    const isSilla = (c) => c.includes("silla");
+    const monitores = allRows.filter(r => isMonitor(r._cat));
+    const sillas = allRows.filter(r => isSilla(r._cat));
+    const otros = allRows.filter(r => !isMonitor(r._cat) && !isSilla(r._cat));
+
+    // Helper: crear hoja con totales
+    const makeSheet = (rows, nombre) => {
+      const clean = rows.map(r => {
+        const o = Object.assign({}, r);
+        delete o._sug; delete o._total; delete o._cat;
+        return o;
+      });
+      if (clean.length > 0) {
+        const sumSug = rows.reduce((a, r) => a + r._sug, 0);
+        const sumTot = rows.reduce((a, r) => a + r._total, 0);
+        clean.push({
+          SKU: "TOTAL",
+          "Descripción": "",
+          "Stock Cliente": "",
+          "Promedio 90d": "",
+          "Sugerido": sumSug,
+          "Precio": "",
+          "Total": sumTot,
+        });
+      } else {
+        clean.push({ SKU: "(Sin propuestas en " + nombre + ")", "Descripción": "", "Stock Cliente": "", "Promedio 90d": "", "Sugerido": "", "Precio": "", "Total": "" });
+      }
+      return XLSX.utils.json_to_sheet(clean);
+    };
+
+    // 3) Hoja Resumen: totales por categoría
+    const sumBy = (arr, key) => arr.reduce((a, r) => a + (r[key] || 0), 0);
+    const resumenRows = [
+      { "Categoría": "Monitores", "# SKUs": monitores.length, "Piezas": sumBy(monitores, "_sug"), "Total $": sumBy(monitores, "_total") },
+      { "Categoría": "Sillas", "# SKUs": sillas.length, "Piezas": sumBy(sillas, "_sug"), "Total $": sumBy(sillas, "_total") },
+      { "Categoría": "Otros", "# SKUs": otros.length, "Piezas": sumBy(otros, "_sug"), "Total $": sumBy(otros, "_total") },
+      { "Categoría": "GRAN TOTAL", "# SKUs": allRows.length, "Piezas": sumBy(allRows, "_sug"), "Total $": sumBy(allRows, "_total") },
+    ];
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Estrategia");
-    XLSX.writeFile(wb, "Estrategia_" + (clienteKey || cliente) + ".xlsx");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumenRows), "Resumen");
+    XLSX.utils.book_append_sheet(wb, makeSheet(monitores, "Monitores"), "Monitores");
+    XLSX.utils.book_append_sheet(wb, makeSheet(sillas, "Sillas"), "Sillas");
+    XLSX.utils.book_append_sheet(wb, makeSheet(otros, "Otros"), "Otros");
+
+    const fecha = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, "Propuesta_" + (clienteKey || cliente) + "_" + fecha + ".xlsx");
   };
 
   // ââââ RENDER ââââ
