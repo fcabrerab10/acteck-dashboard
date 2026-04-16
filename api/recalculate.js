@@ -201,7 +201,18 @@ export default async function handler(req, res) {
   if (!SRK) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
 
   try {
-    const { tables } = req.body || {};
+    const { tables, debug } = req.body || {};
+
+    // Debug mode: return column names of a table
+    if (debug) {
+      const r = await fetch(`${SB_URL}/rest/v1/${debug}?limit=1`, {
+        headers: { apikey: SRK, Authorization: 'Bearer ' + SRK },
+      });
+      if (!r.ok) return res.status(r.status).json({ error: await r.text() });
+      const data = await r.json();
+      return res.status(200).json({ columns: data.length ? Object.keys(data[0]) : 'empty', sample: data[0] || null });
+    }
+
     if (!Array.isArray(tables) || !tables.length) {
       return res.status(400).json({ error: 'tables[] required. Options: ' + Object.keys(RECALC_MAP).join(', ') });
     }
