@@ -74,11 +74,14 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [rebateSynced, setRebateSynced] = useState({});
 
   // ── SPIFF Digitalife: por crecimiento de Sellout ──
-  // Cuota anual SO = $25M (meta real), distribuida con temporalidad de Cuota SI Mín
+  // Cuota anual SO = $23M, con 40% asignado a H1 (Ene-Jun) y 60% a H2 (Jul-Dic)
+  // para cargar más al segundo semestre (temporada alta).
+  // Dentro de cada semestre, la distribución mantiene la temporalidad Cuota SI.
   // Tiers: 90-100% → 0.10% · 100-120% → 0.16% · 120%+ → 0.18% · Tope $4,000
   // Ajustes manuales: meses cuya cuota se fija a mano; el faltante se redistribuye
   // en meses de temporada alta (Jul-Dic) proporcional a su Cuota SI.
-  const SPIFF_CUOTA_ANUAL = 25000000;
+  const SPIFF_CUOTA_ANUAL = 23000000;
+  const SPIFF_H1_PCT = 0.40; // % del total anual asignado a Ene-Jun (H2 = 60%)
   const SPIFF_CUOTA_OVERRIDES = {
     2: 1533103, // Feb: cuota ajustada para que SO real ($1,379,793) = 90% → Básico mínimo
   };
@@ -141,13 +144,20 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const totalSI = digiCuotas.reduce((s, c) => s + (Number(c.cuota_min) || 0), 0);
     const anio = new Date().getFullYear();
 
-    // Paso 1: cuota base por temporalidad SI
+    // Paso 1: cuota base con tilt H1/H2 (40/60) y temporalidad SI dentro de cada semestre
+    const sumSI_H1 = digiCuotas.filter(x => Number(x.mes) <= 6).reduce((s, c) => s + (Number(c.cuota_min) || 0), 0);
+    const sumSI_H2 = totalSI - sumSI_H1;
+    const cuotaH1 = SPIFF_CUOTA_ANUAL * SPIFF_H1_PCT;
+    const cuotaH2 = SPIFF_CUOTA_ANUAL * (1 - SPIFF_H1_PCT);
     const baseCuotaSO = {};
     for (let m = 1; m <= 12; m++) {
       const cRow = digiCuotas.find(x => Number(x.mes) === m);
       const cuotaSI = cRow ? Number(cRow.cuota_min) || 0 : 0;
-      const pctMes = totalSI > 0 ? cuotaSI / totalSI : 1 / 12;
-      baseCuotaSO[m] = SPIFF_CUOTA_ANUAL * pctMes;
+      if (m <= 6) {
+        baseCuotaSO[m] = sumSI_H1 > 0 ? (cuotaSI / sumSI_H1) * cuotaH1 : 0;
+      } else {
+        baseCuotaSO[m] = sumSI_H2 > 0 ? (cuotaSI / sumSI_H2) * cuotaH2 : 0;
+      }
     }
 
     // Paso 2: aplicar overrides y calcular faltante liberado
@@ -1335,7 +1345,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                     <h3 className="text-lg font-bold text-gray-800">SPIFF por Crecimiento — Digitalife {new Date().getFullYear()}</h3>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Cuota anual SO: {formatMXN(SPIFF_CUOTA_ANUAL)} · Distribución temporalidad Cuota SI · Tope mensual {formatMXN(SPIFF_TOPE)}
+                    Cuota anual SO: {formatMXN(SPIFF_CUOTA_ANUAL)} · {(SPIFF_H1_PCT*100).toFixed(0)}% H1 / {((1-SPIFF_H1_PCT)*100).toFixed(0)}% H2 · Temporalidad SI intra-semestre · Tope {formatMXN(SPIFF_TOPE)}/mes
                   </p>
                 </div>
                 <div className="text-right">
