@@ -112,12 +112,24 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
     : dso <= PLAZO + 15   ? { label: "Ligeramente alto", text: "text-yellow-700", dot: "bg-yellow-500" }
     :                       { label: "Pago rezagado",    text: "text-red-700",    dot: "bg-red-500" };
 
-  // Proyección Sell Out (tendencia + cuotas)
-  const soValues   = Object.entries(sellOut).map(([m, v]) => ({ mes: Number(m), v })).sort((a, b) => a.mes - b.mes);
-  const hasSellOut = soValues.length >= 2;
-  const ultimos    = soValues.slice(-2);
-  const tasaCrec   = hasSellOut && ultimos[0].v > 0 ? ultimos[1].v / ultimos[0].v : 1;
-  const soBase     = hasSellOut ? ultimos[ultimos.length - 1].v : 0;
+  // Proyección Sell Out — Híbrido: max(cuota SO mes, promedio real)
+  // Mes actual se anualiza (si solo llevamos parte del mes, se escala al mes completo)
+  const mesHoy  = hoy.getMonth() + 1;
+  const anioHoy = hoy.getFullYear();
+  const diasHoy = hoy.getDate();
+  const diasMesHoy = new Date(anioHoy, mesHoy, 0).getDate();
+  const soValuesRaw = Object.entries(sellOut).map(([m, v]) => ({ mes: Number(m), v })).sort((a, b) => a.mes - b.mes);
+  const soValues = soValuesRaw.map(x => {
+    // Anualizar si es el mes en curso
+    if (x.mes === mesHoy && diasHoy < diasMesHoy) {
+      return { mes: x.mes, v: x.v * (diasMesHoy / diasHoy), anualizado: true };
+    }
+    return { ...x, anualizado: false };
+  });
+  const hasSellOut = soValues.length >= 1;
+  const soPromedio = hasSellOut ? soValues.reduce((s, x) => s + x.v, 0) / soValues.length : 0;
+  const soBase     = soPromedio;  // Base para el pie de la tabla
+  const tasaCrec   = 1; // ya no se usa; se mantiene por compatibilidad de pie
 
   // Flujo Facturación (cuota SI) vs Cobranza (venc_mes) próximos 3 meses
   const flujo3m = mesesVenc.map(v => {
@@ -132,11 +144,13 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
   });
   const hasFlujo = flujo3m.some(f => f.facturar > 0 || f.cobrar > 0);
 
-  // Proyección combinada: tendencia Sell Out vs vencimiento
-  const proyeccion = mesesVenc.map((v, i) => ({
-    ...v,
-    cobro: hasSellOut ? soBase * Math.pow(tasaCrec, i + 1) : 0,
-  }));
+  // Proyección híbrida: max(cuota SO mes, promedio real anualizado)
+  const proyeccion = mesesVenc.map(v => {
+    const cuotaMes = cuotas.find(q => Number(q.mes) === v.mes);
+    const cuotaMin = cuotaMes ? Number(cuotaMes.cuota_min) || 0 : 0;
+    const cobro    = hasSellOut ? Math.max(cuotaMin, soPromedio) : cuotaMin;
+    return { ...v, cobro, cuotaMin, base: soPromedio };
+  });
 
   // Tendencia histórica (mientras solo haya 1-2 cortes, se muestra placeholder)
   const hasTendencia = historico.length >= 3;
@@ -444,17 +458,23 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
       )}
 
       {/* PROYECCIÓN vs SELL OUT */}
-      {hasSellOut && hasVencMes && (
+      {hasVencMes && (
         <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
           <CardHeader titulo="¿El cliente generará flujo para pagarnos?" icono="📈" />
           <p className="text-xs text-gray-400 mb-3">
-            Sell Out base (último mes con dato): <strong>{formatMXN(soBase)}</strong> · Crecimiento mensual proyectado: <strong>{((tasaCrec - 1) * 100).toFixed(1)}%</strong>
+            Proyección mensual = <strong>max(Cuota Sell Out mín, Promedio real)</strong>
+            {hasSellOut && (
+              <> · Promedio {soValues.length} mes(es) con dato: <strong>{formatMXN(soPromedio)}</strong>
+                {soValues.some(x => x.anualizado) && <> (mes en curso anualizado)</>}
+              </>
+            )}
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="text-left text-xs text-gray-400 uppercase pb-2">Mes</th>
+                  <th className="text-right text-xs text-gray-400 uppercase pb-2">Cuota SO mín</th>
                   <th className="text-right text-xs text-gray-400 uppercase pb-2">Vencimiento</th>
                   <th className="text-right text-xs text-gray-400 uppercase pb-2">Sell Out proy.</th>
                   <th className="text-right text-xs text-gray-400 uppercase pb-2">Balance</th>
@@ -462,12 +482,13 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {proyeccion.map(({ label, monto, cobro }) => {
+                {proyeccion.map(({ label, monto, cobro, cuotaMin }) => {
                   const balance = cobro - monto;
                   const cobertura = monto > 0 ? Math.round((cobro / monto) * 100) : 0;
                   return (
                     <tr key={label} className="text-sm">
                       <td className="py-3 font-semibold text-gray-700">{label}</td>
+                      <td className="py-3 text-right text-gray-500">{cuotaMin > 0 ? formatMXN(cuotaMin) : "—"}</td>
                       <td className="py-3 text-right text-gray-700">{formatMXN(monto)}</td>
                       <td className="py-3 text-right text-blue-700 font-semibold">{formatMXN(cobro)}</td>
                       <td className={`py-3 text-right font-semibold ${balance >= 0 ? "text-green-600" : "text-red-600"}`}>
@@ -485,7 +506,7 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
             </table>
           </div>
           <p className="text-xs text-gray-400 mt-3 italic">
-            * Proyección lineal con base en el crecimiento entre los últimos 2 meses con dato.
+            * Fórmula híbrida: asume que el cliente venderá al menos su cuota mensual mínima o lo que históricamente ha vendido (lo que sea mayor). Conservador.
           </p>
         </div>
       )}
