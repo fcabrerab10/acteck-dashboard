@@ -13,6 +13,14 @@ const CATEGORIA_META = {
   spiff: { label: "SPIFF", color: "#9333ea" }
 };
 
+const ESTATUS_OPT = [
+  { value: "pendiente",  label: "💡 Pendiente",  color: "#f59e0b" },
+  { value: "en_proceso", label: "⏳ En Proceso", color: "#3b82f6" },
+  { value: "pagado",     label: "✓ Pagado",      color: "#10b981" },
+  { value: "vencido",    label: "⚠ Vencido",     color: "#ef4444" },
+  { value: "cancelado",  label: "✕ Cancelado",   color: "#94a3b8" },
+];
+
 export default function PagosCliente({ cliente, clienteKey }) {
   const c = cliente;
 
@@ -68,7 +76,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   // ── SPIFF Digitalife: por crecimiento de Sellout ──
   // Cuota anual SO = $18.5M, distribuida con temporalidad de Cuota SI Mín
   // Tiers: 90-100% → 0.10% · 100-120% → 0.16% · 120%+ → 0.18% · Tope $4,000
-  const SPIFF_CUOTA_ANUAL = 18500000;
+  const SPIFF_CUOTA_ANUAL = 21000000;
   const SPIFF_TIERS = [
     { key: "alto",    umbral: 1.20, pct: 0.0018, icon: "🥇", label: "Alto" },
     { key: "medio",   umbral: 1.00, pct: 0.0016, icon: "🥈", label: "Medio" },
