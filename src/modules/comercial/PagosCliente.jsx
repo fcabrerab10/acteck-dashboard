@@ -74,9 +74,15 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [rebateSynced, setRebateSynced] = useState({});
 
   // ── SPIFF Digitalife: por crecimiento de Sellout ──
-  // Cuota anual SO = $18.5M, distribuida con temporalidad de Cuota SI Mín
+  // Cuota anual SO = $25M (meta real), distribuida con temporalidad de Cuota SI Mín
   // Tiers: 90-100% → 0.10% · 100-120% → 0.16% · 120%+ → 0.18% · Tope $4,000
-  const SPIFF_CUOTA_ANUAL = 21000000;
+  // Ajustes manuales: meses cuya cuota se fija a mano; el faltante se redistribuye
+  // en meses de temporada alta (Jul-Dic) proporcional a su Cuota SI.
+  const SPIFF_CUOTA_ANUAL = 25000000;
+  const SPIFF_CUOTA_OVERRIDES = {
+    2: 1533103, // Feb: cuota ajustada para que SO real ($1,379,793) = 90% → Básico mínimo
+  };
+  const SPIFF_REDISTRIBUIR_EN = [7, 8, 9, 10, 11, 12]; // Jul-Dic absorben el faltante
   const SPIFF_TIERS = [
     { key: "alto",    umbral: 1.20, pct: 0.0018, icon: "🥇", label: "Alto" },
     { key: "medio",   umbral: 1.00, pct: 0.0016, icon: "🥈", label: "Medio" },
@@ -134,20 +140,53 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (clienteKey !== "digitalife" || digiCuotas.length === 0) return null;
     const totalSI = digiCuotas.reduce((s, c) => s + (Number(c.cuota_min) || 0), 0);
     const anio = new Date().getFullYear();
+
+    // Paso 1: cuota base por temporalidad SI
+    const baseCuotaSO = {};
+    for (let m = 1; m <= 12; m++) {
+      const cRow = digiCuotas.find(x => Number(x.mes) === m);
+      const cuotaSI = cRow ? Number(cRow.cuota_min) || 0 : 0;
+      const pctMes = totalSI > 0 ? cuotaSI / totalSI : 1 / 12;
+      baseCuotaSO[m] = SPIFF_CUOTA_ANUAL * pctMes;
+    }
+
+    // Paso 2: aplicar overrides y calcular faltante liberado
+    let faltante = 0;
+    for (const [mStr, val] of Object.entries(SPIFF_CUOTA_OVERRIDES)) {
+      const m = Number(mStr);
+      faltante += baseCuotaSO[m] - val;
+      baseCuotaSO[m] = val;
+    }
+
+    // Paso 3: redistribuir faltante en meses de temporada alta (proporcional a SI)
+    const mesesRedist = SPIFF_REDISTRIBUIR_EN.filter(m => SPIFF_CUOTA_OVERRIDES[m] === undefined);
+    const siRedist = mesesRedist.reduce((s, m) => {
+      const cRow = digiCuotas.find(x => Number(x.mes) === m);
+      return s + (cRow ? Number(cRow.cuota_min) || 0 : 0);
+    }, 0);
+    if (siRedist > 0 && faltante !== 0) {
+      for (const m of mesesRedist) {
+        const cRow = digiCuotas.find(x => Number(x.mes) === m);
+        const cuotaSI = cRow ? Number(cRow.cuota_min) || 0 : 0;
+        baseCuotaSO[m] += (cuotaSI / siRedist) * faltante;
+      }
+    }
+
+    // Paso 4: calcular tier y comisión
     const results = [];
     for (let m = 1; m <= 12; m++) {
-      const c = digiCuotas.find(x => Number(x.mes) === m);
-      const cuotaSI = c ? Number(c.cuota_min) : 0;
-      const pctMes = totalSI > 0 ? cuotaSI / totalSI : 1 / 12;
-      const cuotaSOMin = SPIFF_CUOTA_ANUAL * pctMes;
+      const cRow = digiCuotas.find(x => Number(x.mes) === m);
+      const cuotaSI = cRow ? Number(cRow.cuota_min) || 0 : 0;
+      const cuotaSOMin = baseCuotaSO[m];
       const soActual = digiSellOut26[m] || 0;
       const alcance = cuotaSOMin > 0 ? soActual / cuotaSOMin : 0;
       const tier = SPIFF_TIERS.find(t => alcance >= t.umbral);
       const comisionRaw = tier ? soActual * tier.pct : 0;
       const comision = Math.min(comisionRaw, SPIFF_TOPE);
       const capped = comisionRaw > SPIFF_TOPE;
+      const ajustado = SPIFF_CUOTA_OVERRIDES[m] !== undefined;
       const key = `${anio}-${String(m).padStart(2, "0")}`;
-      results.push({ mes: m, cuotaSI, cuotaSOMin, soActual, alcance, tier, comisionRaw, comision, capped, pagoExistente: spiffPagos[key] });
+      results.push({ mes: m, cuotaSI, cuotaSOMin, soActual, alcance, tier, comisionRaw, comision, capped, ajustado, pagoExistente: spiffPagos[key] });
     }
     return results;
   }, [clienteKey, digiCuotas, digiSellOut26, spiffPagos]);
@@ -173,7 +212,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
       concepto: `SPIFF ${mesLabel} ${anio} — ${calc.tier?.label || "Sin tier"}`,
       monto: calc.comision,
       estatus: "pendiente", fecha_compromiso: fechaCompromiso,
-      responsable: "Karolina Veliz",
+      responsable: "PM Digitalife",
       notas: `Sell Out: ${formatMXN(calc.soActual)} · Cuota SO Mín: ${formatMXN(calc.cuotaSOMin)} · Alcance ${(calc.alcance*100).toFixed(0)}%${calc.capped ? " · Capeado a " + formatMXN(SPIFF_TOPE) : ""}`,
     };
     const { data, error } = await supabase.from("pagos").insert(row).select().single();
@@ -1348,7 +1387,10 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         <tr key={c.mes} className={`border-b border-gray-100 ${isNoAplica ? "opacity-50" : ""}`}>
                           <td className="py-2 px-3 font-medium text-gray-800">{MESES_F[c.mes - 1]}</td>
                           <td className="py-2 px-3 text-right text-gray-500 text-xs">{formatMXN(c.cuotaSI)}</td>
-                          <td className="py-2 px-3 text-right text-gray-700">{formatMXN(c.cuotaSOMin)}</td>
+                          <td className="py-2 px-3 text-right text-gray-700">
+                            {formatMXN(c.cuotaSOMin)}
+                            {c.ajustado && <span className="ml-1 text-[10px] text-blue-600" title="Cuota ajustada manualmente">⚙</span>}
+                          </td>
                           <td className="py-2 px-3 text-right text-gray-700 font-medium">{c.soActual > 0 ? formatMXN(c.soActual) : "—"}</td>
                           <td className="py-2 px-3 text-right font-bold" style={{ color: alcanceColor }}>
                             {c.soActual > 0 ? alcancePct + "%" : "—"}
@@ -1406,7 +1448,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
               </div>
 
               <div className="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                💡 <strong>Fecha de pago automática:</strong> día 15 del mes siguiente · <strong>Responsable:</strong> Karolina Veliz
+                💡 <strong>Fecha de pago automática:</strong> día 15 del mes siguiente · <strong>Responsable:</strong> PM Digitalife
               </div>
             </div>
           )}
