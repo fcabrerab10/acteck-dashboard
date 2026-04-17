@@ -65,6 +65,143 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [rebateAllQ, setRebateAllQ] = useState({ 1: 0, 2: 0, 3: 0, 4: 0 });
   const [rebateSynced, setRebateSynced] = useState({});
 
+  // ── SPIFF Digitalife: por crecimiento de Sellout ──
+  // Cuota anual SO = $18.5M, distribuida con temporalidad de Cuota SI Mín
+  // Tiers: 90-100% → 0.10% · 100-120% → 0.16% · 120%+ → 0.18% · Tope $4,000
+  const SPIFF_CUOTA_ANUAL = 18500000;
+  const SPIFF_TIERS = [
+    { key: "alto",    umbral: 1.20, pct: 0.0018, icon: "🥇", label: "Alto" },
+    { key: "medio",   umbral: 1.00, pct: 0.0016, icon: "🥈", label: "Medio" },
+    { key: "basico",  umbral: 0.90, pct: 0.0010, icon: "🥉", label: "Básico" },
+  ];
+  const SPIFF_TOPE = 4000;
+  const [digiSellOut26, setDigiSellOut26] = useState({});
+  const [digiCuotas, setDigiCuotas] = useState([]);
+  const [spiffPagos, setSpiffPagos] = useState({});  // { "2026-01": pagoRow, ... }
+  const [spiffLoading, setSpiffLoading] = useState(false);
+
+  useEffect(() => {
+    if (clienteKey !== "digitalife" || !DB_CONFIGURED) return;
+    setSpiffLoading(true);
+    (async () => {
+      const anio = new Date().getFullYear();
+      // Paginación para sellout_sku
+      const fetchAll = async (qs) => {
+        let all = [], from = 0, PAGE = 1000;
+        while (true) {
+          const { data } = await supabase.from("sellout_sku").select(qs).eq("cliente", "digitalife").eq("anio", anio).range(from, from + PAGE - 1);
+          if (!data || data.length === 0) break;
+          all = all.concat(data);
+          if (data.length < PAGE) break;
+          from += PAGE;
+        }
+        return all;
+      };
+      const [soData, cuotasData, existingSpiffPagos] = await Promise.all([
+        fetchAll("mes,monto_pesos"),
+        supabase.from("cuotas_mensuales").select("mes,cuota_min,cuota_ideal").eq("cliente", "digitalife").eq("anio", anio).order("mes"),
+        supabase.from("pagos").select("*").eq("cliente", "digitalife").eq("categoria", "spiff"),
+      ]);
+      const byMes = {};
+      soData.forEach(r => { const m = Number(r.mes); byMes[m] = (byMes[m] || 0) + (Number(r.monto_pesos) || 0); });
+      setDigiSellOut26(byMes);
+      setDigiCuotas(cuotasData.data || []);
+      // Mapear pagos spiff por mes
+      const spMap = {};
+      (existingSpiffPagos.data || []).forEach(p => {
+        const match = p.concepto && p.concepto.match(/SPIFF (\w+) (\d{4})/);
+        if (match) {
+          const mesNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+          const mesIdx = mesNames.indexOf(match[1]);
+          if (mesIdx >= 0) spMap[`${match[2]}-${String(mesIdx + 1).padStart(2, "0")}`] = p;
+        }
+      });
+      setSpiffPagos(spMap);
+      setSpiffLoading(false);
+    })();
+  }, [clienteKey, registros.length]);
+
+  // Cálculo del SPIFF por mes
+  const spiffCalc = React.useMemo(() => {
+    if (clienteKey !== "digitalife" || digiCuotas.length === 0) return null;
+    const totalSI = digiCuotas.reduce((s, c) => s + (Number(c.cuota_min) || 0), 0);
+    const anio = new Date().getFullYear();
+    const results = [];
+    for (let m = 1; m <= 12; m++) {
+      const c = digiCuotas.find(x => Number(x.mes) === m);
+      const cuotaSI = c ? Number(c.cuota_min) : 0;
+      const pctMes = totalSI > 0 ? cuotaSI / totalSI : 1 / 12;
+      const cuotaSOMin = SPIFF_CUOTA_ANUAL * pctMes;
+      const soActual = digiSellOut26[m] || 0;
+      const alcance = cuotaSOMin > 0 ? soActual / cuotaSOMin : 0;
+      const tier = SPIFF_TIERS.find(t => alcance >= t.umbral);
+      const comisionRaw = tier ? soActual * tier.pct : 0;
+      const comision = Math.min(comisionRaw, SPIFF_TOPE);
+      const capped = comisionRaw > SPIFF_TOPE;
+      const key = `${anio}-${String(m).padStart(2, "0")}`;
+      results.push({ mes: m, cuotaSI, cuotaSOMin, soActual, alcance, tier, comisionRaw, comision, capped, pagoExistente: spiffPagos[key] });
+    }
+    return results;
+  }, [clienteKey, digiCuotas, digiSellOut26, spiffPagos]);
+
+  const spiffTotalYTD = React.useMemo(() => {
+    if (!spiffCalc) return 0;
+    return spiffCalc.reduce((s, c) => {
+      const p = c.pagoExistente;
+      if (p && p.estatus === "cancelado") return s;   // No aplica = 0
+      if (p) return s + (Number(p.monto) || 0);       // Pago ya creado usa su monto
+      return s + c.comision;                          // Calculado (aún no creado)
+    }, 0);
+  }, [spiffCalc]);
+
+  const crearSpiffPago = async (calc) => {
+    const mesLabel = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][calc.mes - 1];
+    const anio = new Date().getFullYear();
+    const nextMes = calc.mes === 12 ? 1 : calc.mes + 1;
+    const nextAnio = calc.mes === 12 ? anio + 1 : anio;
+    const fechaCompromiso = `${nextAnio}-${String(nextMes).padStart(2, "0")}-15`;
+    const row = {
+      cliente: "digitalife", categoria: "spiff", folio: null,
+      concepto: `SPIFF ${mesLabel} ${anio} — ${calc.tier?.label || "Sin tier"}`,
+      monto: calc.comision,
+      estatus: "pendiente", fecha_compromiso: fechaCompromiso,
+      responsable: "Karolina Veliz",
+      notas: `Sell Out: ${formatMXN(calc.soActual)} · Cuota SO Mín: ${formatMXN(calc.cuotaSOMin)} · Alcance ${(calc.alcance*100).toFixed(0)}%${calc.capped ? " · Capeado a " + formatMXN(SPIFF_TOPE) : ""}`,
+    };
+    const { data, error } = await supabase.from("pagos").insert(row).select().single();
+    if (error) { alert("Error creando pago: " + error.message); return; }
+    setSpiffPagos(p => ({ ...p, [`${anio}-${String(calc.mes).padStart(2, "0")}`]: data }));
+    flash("✓ Pago SPIFF generado");
+  };
+
+  const marcarSpiffNoAplica = async (mes) => {
+    const mesLabel = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][mes - 1];
+    const anio = new Date().getFullYear();
+    const row = {
+      cliente: "digitalife", categoria: "spiff", folio: null,
+      concepto: `SPIFF ${mesLabel} ${anio} — No aplica`,
+      monto: 0, estatus: "cancelado",
+      responsable: "Fernando Cabrera",
+      notas: "Marcado como No aplica manualmente",
+    };
+    const { data, error } = await supabase.from("pagos").insert(row).select().single();
+    if (error) { alert("Error: " + error.message); return; }
+    setSpiffPagos(p => ({ ...p, [`${anio}-${String(mes).padStart(2, "0")}`]: data }));
+    flash("✓ Marcado como No aplica");
+  };
+
+  const revertirSpiff = async (pagoId) => {
+    if (!window.confirm("¿Eliminar este registro de SPIFF?")) return;
+    const { error } = await supabase.from("pagos").delete().eq("id", pagoId);
+    if (error) { alert("Error: " + error.message); return; }
+    setSpiffPagos(p => {
+      const copy = { ...p };
+      Object.keys(copy).forEach(k => { if (copy[k] && copy[k].id === pagoId) delete copy[k]; });
+      return copy;
+    });
+    flash("✓ Revertido");
+  };
+
   useEffect(() => {
     if (clienteKey !== "digitalife" || !DB_CONFIGURED) return;
     setRebateLoading(true);
@@ -1048,7 +1185,132 @@ export default function PagosCliente({ cliente, clienteKey }) {
             </div>
           )}
 
-          
+
+          {/* Calculadora SPIFF Digitalife — por crecimiento de Sellout */}
+          {clienteKey === "digitalife" && catActiva === "spiff" && spiffCalc && (
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🚀</span>
+                    <h3 className="text-lg font-bold text-gray-800">SPIFF por Crecimiento — Digitalife {new Date().getFullYear()}</h3>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Cuota anual SO: {formatMXN(SPIFF_CUOTA_ANUAL)} · Distribución temporalidad Cuota SI · Tope mensual {formatMXN(SPIFF_TOPE)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-gray-400 uppercase">Acumulado YTD</p>
+                  <p className="text-2xl font-bold text-purple-600">{formatMXN(spiffTotalYTD)}</p>
+                </div>
+              </div>
+
+              {/* Tiers info */}
+              <div className="flex flex-wrap gap-2 mb-4 text-xs">
+                {[...SPIFF_TIERS].reverse().map(t => (
+                  <span key={t.key} className="px-3 py-1 rounded-full bg-gray-50 border border-gray-200 text-gray-700">
+                    {t.icon} <strong>{t.label}</strong> · {(t.umbral * 100).toFixed(0)}%+ alcance · {(t.pct * 100).toFixed(2)}%
+                  </span>
+                ))}
+                <span className="px-3 py-1 rounded-full bg-gray-50 border border-gray-200 text-gray-400">
+                  &lt;90% → Sin SPIFF
+                </span>
+              </div>
+
+              {/* Tabla mensual */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-left py-2 px-3 font-semibold text-gray-600">Mes</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Cuota SI Mín</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Cuota SO Mín</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell Out Real</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Alcance</th>
+                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Tier</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Comisión</th>
+                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {spiffCalc.map(c => {
+                      const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+                      const p = c.pagoExistente;
+                      const isNoAplica = p && p.estatus === "cancelado";
+                      const isGenerado = p && p.estatus !== "cancelado";
+                      const alcancePct = (c.alcance * 100).toFixed(0);
+                      let alcanceColor = "#94a3b8";
+                      if (c.alcance >= 1.20) alcanceColor = "#10b981";
+                      else if (c.alcance >= 1.00) alcanceColor = "#3b82f6";
+                      else if (c.alcance >= 0.90) alcanceColor = "#f59e0b";
+                      else if (c.soActual > 0) alcanceColor = "#ef4444";
+                      return (
+                        <tr key={c.mes} className={`border-b border-gray-100 ${isNoAplica ? "opacity-50" : ""}`}>
+                          <td className="py-2 px-3 font-medium text-gray-800">{MESES_F[c.mes - 1]}</td>
+                          <td className="py-2 px-3 text-right text-gray-500 text-xs">{formatMXN(c.cuotaSI)}</td>
+                          <td className="py-2 px-3 text-right text-gray-700">{formatMXN(c.cuotaSOMin)}</td>
+                          <td className="py-2 px-3 text-right text-gray-700 font-medium">{c.soActual > 0 ? formatMXN(c.soActual) : "—"}</td>
+                          <td className="py-2 px-3 text-right font-bold" style={{ color: alcanceColor }}>
+                            {c.soActual > 0 ? alcancePct + "%" : "—"}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {c.tier ? <span className="text-lg" title={c.tier.label}>{c.tier.icon}</span> : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="py-2 px-3 text-right font-bold text-purple-700">
+                            {isNoAplica ? <span className="text-gray-400">—</span> : c.comision > 0 ? formatMXN(c.comision) : <span className="text-gray-300">—</span>}
+                            {c.capped && !isNoAplica && <div className="text-xs text-gray-400">cap</div>}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {isNoAplica ? (
+                              <button
+                                onClick={() => revertirSpiff(p.id)}
+                                className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1"
+                                title="Revertir 'No aplica'"
+                              >↺ Revertir</button>
+                            ) : isGenerado ? (
+                              <div className="flex items-center gap-1 justify-center">
+                                <span className={`text-xs px-2 py-1 rounded ${p.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                                  {p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}
+                                </span>
+                                <button
+                                  onClick={() => revertirSpiff(p.id)}
+                                  className="text-xs text-red-500 hover:text-red-700"
+                                  title="Eliminar pago"
+                                >🗑</button>
+                              </div>
+                            ) : c.tier && c.comision > 0 ? (
+                              <div className="flex gap-1 justify-center flex-wrap">
+                                <button
+                                  onClick={() => crearSpiffPago(c)}
+                                  className="text-xs bg-purple-600 text-white rounded px-2 py-1 hover:bg-purple-700"
+                                >💰 Generar pago</button>
+                                <button
+                                  onClick={() => marcarSpiffNoAplica(c.mes)}
+                                  className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 hover:bg-gray-200"
+                                >No aplica</button>
+                              </div>
+                            ) : c.soActual > 0 ? (
+                              <button
+                                onClick={() => marcarSpiffNoAplica(c.mes)}
+                                className="text-xs bg-gray-100 text-gray-500 rounded px-2 py-1 hover:bg-gray-200"
+                              >No aplica</button>
+                            ) : (
+                              <span className="text-xs text-gray-300">Sin datos</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500">
+                💡 <strong>Fecha de pago automática:</strong> día 15 del mes siguiente · <strong>Responsable:</strong> Karolina Veliz
+              </div>
+            </div>
+          )}
+
           {/* Calculadora de Rebate Trimestral */}
           {clienteKey === "digitalife" && catActiva === "rebate" && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">

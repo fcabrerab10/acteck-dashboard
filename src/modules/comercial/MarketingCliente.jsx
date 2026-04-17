@@ -283,13 +283,14 @@ export default function MarketingCliente({ cliente, clienteKey }) {
     const confirmMsg = `Cerrar ${mesLabel} ${anio}:\n\n• ${actsACerrar.length} actividad(es) se consolidar\u00e1n en un solo pago\n• Total: ${fmtMXN(totalInv)}\n\n\u00bfContinuar?`;
     if (!window.confirm(confirmMsg)) return;
 
-    // Último día del mes como fecha de compromiso
-    const ultDia = new Date(anio, mesSel, 0).getDate();
-    const fechaCompromiso = `${anio}-${String(mesSel).padStart(2, "0")}-${String(ultDia).padStart(2, "0")}`;
+    // Fecha compromiso = día 15 del MES SIGUIENTE (el folio lo pone Fernando manualmente cuando se paga)
+    const nextMes = mesSel === 12 ? 1 : mesSel + 1;
+    const nextAnio = mesSel === 12 ? anio + 1 : anio;
+    const fechaCompromiso = `${nextAnio}-${String(nextMes).padStart(2, "0")}-15`;
     const pagoPayload = {
       cliente: ck,
       categoria: "marketing",
-      folio: `MKT-${anio}-${String(mesSel).padStart(2, "0")}`,
+      folio: null,  // Fernando lo agrega manualmente al efectuar el pago
       concepto: `Marketing ${mesLabel} ${anio} — ${actsACerrar.length} actividad(es)`,
       monto: totalInv,
       estatus: "pendiente",
