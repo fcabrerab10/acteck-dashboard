@@ -1186,6 +1186,98 @@ export default function PagosCliente({ cliente, clienteKey }) {
           )}
 
 
+          {/* Calculadora de Rebate Trimestral */}
+          {clienteKey === "digitalife" && catActiva === "rebate" && (
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">💰</span>
+                  <h3 className="text-lg font-bold text-gray-800">Calculadora Rebate Q{rebateQ} {new Date().getFullYear()}</h3>
+                </div>
+                <div className="flex gap-1">
+                  {[1,2,3,4].map(q => (
+                    <button key={q} onClick={() => setRebateQ(q)}
+                      className={"px-3 py-1 rounded-full text-xs font-bold transition-all " + (rebateQ === q ? "bg-red-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}>
+                      Q{q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {rebateLoading ? (
+                <div className="text-center py-6 text-gray-400">Cargando datos de Sell In...</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b-2 border-gray-200">
+                        <th className="text-left py-2 px-3 font-bold text-gray-700">Categoria</th>
+                        <th className="text-right py-2 px-3 font-bold text-gray-700">Sell In</th>
+                        <th className="text-right py-2 px-3 font-bold text-gray-700">Rebate (%)</th>
+                        <th className="text-right py-2 px-3 font-bold text-red-600">Rebate ($)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { label: "Monitores", key: "monitores" },
+                        { label: "Sillas", key: "sillas" },
+                        { label: "Accesorios", key: "accesorios" }
+                      ].map(row => {
+                        const si = rebateData[row.key] || 0;
+                        const pct = REBATE_PCT[row.key];
+                        const reb = Math.round(si * pct);
+                        return (
+                          <tr key={row.key} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-2 px-3 font-semibold text-gray-700">{row.label}</td>
+                            <td className="py-2 px-3 text-right text-gray-600">{si > 0 ? "$" + si.toLocaleString("es-MX") : "—"}</td>
+                            <td className="py-2 px-3 text-right text-gray-500">{(pct * 100).toFixed(0)}%</td>
+                            <td className="py-2 px-3 text-right font-bold" style={{ color: reb > 0 ? "#ef4444" : "#9ca3af" }}>{reb > 0 ? "$" + reb.toLocaleString("es-MX") : "—"}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="border-t-2 border-gray-300 bg-gray-50">
+                        <td className="py-2 px-3 font-bold text-gray-800">Total</td>
+                        <td className="py-2 px-3 text-right font-bold text-gray-800">{"$" + (rebateData.monitores + rebateData.sillas + rebateData.accesorios).toLocaleString("es-MX")}</td>
+                        <td className="py-2 px-3"></td>
+                        <td className="py-2 px-3 text-right font-bold text-red-600">{"$" + Math.round(rebateData.monitores * REBATE_PCT.monitores + rebateData.sillas * REBATE_PCT.sillas + rebateData.accesorios * REBATE_PCT.accesorios).toLocaleString("es-MX")}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div className="flex items-center justify-between mt-4">
+                    <p className="text-xs text-gray-400">* Rebate basado en Sell In del trimestre. Se paga al cierre de Q{rebateQ}. Monitores y Sillas: 2%, Accesorios (todo lo demas): 3%.</p>
+                    {(() => {
+                      const totalReb = Math.round(rebateData.monitores * REBATE_PCT.monitores + rebateData.sillas * REBATE_PCT.sillas + rebateData.accesorios * REBATE_PCT.accesorios);
+                      if (totalReb <= 0) return null;
+                      if (rebateSynced[rebateQ]) return <span className="text-xs text-green-600 font-semibold ml-2">Pago registrado</span>;
+                      return <button onClick={async () => {
+                        const anio = new Date().getFullYear();
+                        const fechaQ = rebateQ === 4 ? (anio + 1) + Q_FECHA_PAGO[4] : anio + Q_FECHA_PAGO[rebateQ];
+                        const record = {
+                          concepto: "Rebate Q" + rebateQ + " " + anio,
+                          categoria: "rebate",
+                          monto: totalReb,
+                          estatus: "pendiente",
+                          fecha_compromiso: fechaQ,
+                          responsable: "Acteck",
+                          notas: "Monitores: $" + Math.round(rebateData.monitores).toLocaleString("es-MX") + " (2%), Sillas: $" + Math.round(rebateData.sillas).toLocaleString("es-MX") + " (2%), Accesorios: $" + Math.round(rebateData.accesorios).toLocaleString("es-MX") + " (3%)",
+                          cliente: "digitalife"
+                        };
+                        const { data, error } = await supabase.from("pagos").insert(record).select().single();
+                        if (!error && data) {
+                          setRegistros(prev => [...prev, data]);
+                          flash("Pago de Rebate Q" + rebateQ + " registrado", "ok");
+                        } else {
+                          flash("Error al registrar rebate", "err");
+                        }
+                      }} className="px-4 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg hover:bg-red-600 transition-colors ml-2">
+                        Registrar Pago Q{rebateQ}
+                      </button>;
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Calculadora SPIFF Digitalife — por crecimiento de Sellout */}
           {clienteKey === "digitalife" && catActiva === "spiff" && spiffCalc && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
@@ -1311,97 +1403,6 @@ export default function PagosCliente({ cliente, clienteKey }) {
             </div>
           )}
 
-          {/* Calculadora de Rebate Trimestral */}
-          {clienteKey === "digitalife" && catActiva === "rebate" && (
-            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">💰</span>
-                  <h3 className="text-lg font-bold text-gray-800">Calculadora Rebate Q{rebateQ} {new Date().getFullYear()}</h3>
-                </div>
-                <div className="flex gap-1">
-                  {[1,2,3,4].map(q => (
-                    <button key={q} onClick={() => setRebateQ(q)}
-                      className={"px-3 py-1 rounded-full text-xs font-bold transition-all " + (rebateQ === q ? "bg-red-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}>
-                      Q{q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {rebateLoading ? (
-                <div className="text-center py-6 text-gray-400">Cargando datos de Sell In...</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b-2 border-gray-200">
-                        <th className="text-left py-2 px-3 font-bold text-gray-700">Categoria</th>
-                        <th className="text-right py-2 px-3 font-bold text-gray-700">Sell In</th>
-                        <th className="text-right py-2 px-3 font-bold text-gray-700">Rebate (%)</th>
-                        <th className="text-right py-2 px-3 font-bold text-red-600">Rebate ($)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        { label: "Monitores", key: "monitores" },
-                        { label: "Sillas", key: "sillas" },
-                        { label: "Accesorios", key: "accesorios" }
-                      ].map(row => {
-                        const si = rebateData[row.key] || 0;
-                        const pct = REBATE_PCT[row.key];
-                        const reb = Math.round(si * pct);
-                        return (
-                          <tr key={row.key} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="py-2 px-3 font-semibold text-gray-700">{row.label}</td>
-                            <td className="py-2 px-3 text-right text-gray-600">{si > 0 ? "$" + si.toLocaleString("es-MX") : "—"}</td>
-                            <td className="py-2 px-3 text-right text-gray-500">{(pct * 100).toFixed(0)}%</td>
-                            <td className="py-2 px-3 text-right font-bold" style={{ color: reb > 0 ? "#ef4444" : "#9ca3af" }}>{reb > 0 ? "$" + reb.toLocaleString("es-MX") : "—"}</td>
-                          </tr>
-                        );
-                      })}
-                      <tr className="border-t-2 border-gray-300 bg-gray-50">
-                        <td className="py-2 px-3 font-bold text-gray-800">Total</td>
-                        <td className="py-2 px-3 text-right font-bold text-gray-800">{"$" + (rebateData.monitores + rebateData.sillas + rebateData.accesorios).toLocaleString("es-MX")}</td>
-                        <td className="py-2 px-3"></td>
-                        <td className="py-2 px-3 text-right font-bold text-red-600">{"$" + Math.round(rebateData.monitores * REBATE_PCT.monitores + rebateData.sillas * REBATE_PCT.sillas + rebateData.accesorios * REBATE_PCT.accesorios).toLocaleString("es-MX")}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div className="flex items-center justify-between mt-4">
-                    <p className="text-xs text-gray-400">* Rebate basado en Sell In del trimestre. Se paga al cierre de Q{rebateQ}. Monitores y Sillas: 2%, Accesorios (todo lo demas): 3%.</p>
-                    {(() => {
-                      const totalReb = Math.round(rebateData.monitores * REBATE_PCT.monitores + rebateData.sillas * REBATE_PCT.sillas + rebateData.accesorios * REBATE_PCT.accesorios);
-                      if (totalReb <= 0) return null;
-                      if (rebateSynced[rebateQ]) return <span className="text-xs text-green-600 font-semibold ml-2">Pago registrado</span>;
-                      return <button onClick={async () => {
-                        const anio = new Date().getFullYear();
-                        const fechaQ = rebateQ === 4 ? (anio + 1) + Q_FECHA_PAGO[4] : anio + Q_FECHA_PAGO[rebateQ];
-                        const record = {
-                          concepto: "Rebate Q" + rebateQ + " " + anio,
-                          categoria: "rebate",
-                          monto: totalReb,
-                          estatus: "pendiente",
-                          fecha_compromiso: fechaQ,
-                          responsable: "Acteck",
-                          notas: "Monitores: $" + Math.round(rebateData.monitores).toLocaleString("es-MX") + " (2%), Sillas: $" + Math.round(rebateData.sillas).toLocaleString("es-MX") + " (2%), Accesorios: $" + Math.round(rebateData.accesorios).toLocaleString("es-MX") + " (3%)",
-                          cliente: "digitalife"
-                        };
-                        const { data, error } = await supabase.from("pagos").insert(record).select().single();
-                        if (!error && data) {
-                          setRegistros(prev => [...prev, data]);
-                          flash("Pago de Rebate Q" + rebateQ + " registrado", "ok");
-                        } else {
-                          flash("Error al registrar rebate", "err");
-                        }
-                      }} className="px-4 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg hover:bg-red-600 transition-colors ml-2">
-                        Registrar Pago Q{rebateQ}
-                      </button>;
-                    })()}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
           {/* {/* ═══ Calculadora REBATE Trimestral PCEL ═══ */}
           {clienteKey === "pcel" && catActiva === "rebate" && pcelCalc && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
