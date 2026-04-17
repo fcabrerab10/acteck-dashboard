@@ -208,10 +208,10 @@ export default function Sidebar({
           <button
             onClick={() => onNavegar(null, 'configuracion')}
             className={[
-              'w-full py-1.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center gap-2',
+              'block text-left transition-colors',
               isActiveGlobal('configuracion')
-                ? 'bg-black text-white'
-                : 'bg-gray-900 text-white hover:bg-black',
+                ? 'text-gray-800 font-semibold'
+                : 'text-gray-500 hover:text-gray-800',
             ].join(' ')}
           >
             ⚙️ Configuración
@@ -222,7 +222,7 @@ export default function Sidebar({
         {puedeActualizar && !modoPresent && (
           <a
             href="/uploads.html"
-            className="w-full py-1.5 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-semibold shadow hover:shadow-md transition-all flex items-center justify-center gap-2"
+            className="block text-gray-500 hover:text-gray-800 transition-colors"
           >
             🔄 Actualizar Datos
           </a>
