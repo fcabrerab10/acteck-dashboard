@@ -115,35 +115,47 @@ export default function MarketingCliente({ cliente, clienteKey }) {
     return () => { supabase.removeChannel(chan); };
   }, [ck, anio]);
 
+  // Parse YYYY-MM-DD sin timezone shift
+  const parseFecha = (f) => {
+    if (!f) return null;
+    const p = String(f).slice(0, 10).split("-").map(n => parseInt(n, 10));
+    if (p.length !== 3 || !p[0]) return null;
+    return { y: p[0], m: p[1], d: p[2] };
+  };
+
   // ─── Filtros aplicados ────────────────────────────────────────
   const { activasFiltradas, completadasFiltradas } = React.useMemo(() => {
     const applyFilters = (arr) => arr.filter(a => {
-      const aMes = a.fecha ? new Date(a.fecha).getMonth() + 1 : Number(a.mes) || 0;
+      const pf = parseFecha(a.fecha);
+      const aMes = pf ? pf.m : Number(a.mes) || 0;
+      const aAnio = pf ? pf.y : Number(a.anio) || 0;
+      if (aAnio !== anio) return false;
       if (aMes !== mesSel) return false;
       if (filterTipo !== "todos" && a.tipo !== filterTipo) return false;
       if (filterMarca !== "todas" && a.marca !== filterMarca) return false;
-      if (diaSeleccionado && a.fecha) {
-        const d = new Date(a.fecha).getDate();
-        if (d !== diaSeleccionado) return false;
+      if (diaSeleccionado && pf) {
+        if (pf.d !== diaSeleccionado) return false;
       }
       return true;
     }).sort((a, b) => {
-      const dA = a.fecha ? new Date(a.fecha) : new Date(0);
-      const dB = b.fecha ? new Date(b.fecha) : new Date(0);
+      const pa = parseFecha(a.fecha), pb = parseFecha(b.fecha);
+      const dA = pa ? pa.d : 0; const dB = pb ? pb.d : 0;
       return dA - dB;
     });
     const activas = applyFilters(actividades.filter(a => a.estatus !== "completado" && a.estatus !== "archivado"));
     const completadas = applyFilters(actividades.filter(a => a.estatus === "completado" || a.estatus === "archivado"));
     return { activasFiltradas: activas, completadasFiltradas: completadas };
-  }, [actividades, mesSel, filterTipo, filterMarca, diaSeleccionado]);
+  }, [actividades, anio, mesSel, filterTipo, filterMarca, diaSeleccionado]);
 
   // ─── Actividades del mes (para el calendario) ────────────────
   const actividadesDelMes = React.useMemo(() => {
     return actividades.filter(a => {
-      const m = a.fecha ? new Date(a.fecha).getMonth() + 1 : Number(a.mes) || 0;
-      return m === mesSel;
+      const pf = parseFecha(a.fecha);
+      const m = pf ? pf.m : Number(a.mes) || 0;
+      const y = pf ? pf.y : Number(a.anio) || 0;
+      return y === anio && m === mesSel;
     });
-  }, [actividades, mesSel]);
+  }, [actividades, anio, mesSel]);
 
   // ─── CRUD ────────────────────────────────────────────────────
   const openNew = () => {
@@ -173,7 +185,12 @@ export default function MarketingCliente({ cliente, clienteKey }) {
   const save = async () => {
     if (!form.nombre.trim()) { alert("Falta el nombre de la actividad"); return; }
     setSaving(true);
-    const fechaDate = form.fecha ? new Date(form.fecha) : null;
+    // Parse YYYY-MM-DD SIN conversión de timezone (new Date() lo interpreta como UTC)
+    let fAnio = anio, fMes = mesSel;
+    if (form.fecha) {
+      const parts = form.fecha.split("-").map(n => parseInt(n, 10));
+      if (parts.length === 3 && parts[0] && parts[1]) { fAnio = parts[0]; fMes = parts[1]; }
+    }
     const payload = {
       cliente: ck,
       tipo: form.tipo,
@@ -182,8 +199,8 @@ export default function MarketingCliente({ cliente, clienteKey }) {
       mensaje: form.mensaje || "",
       red_social: form.red_social || null,
       fecha: form.fecha || null,
-      anio: fechaDate ? fechaDate.getFullYear() : anio,
-      mes: String(fechaDate ? fechaDate.getMonth() + 1 : mesSel),
+      anio: fAnio,
+      mes: String(fMes),
       inversion: Number(form.inversion) || 0,
       metricas: form.metricas || {},
       evento_sucursal: form.evento_sucursal || null,
@@ -261,8 +278,8 @@ export default function MarketingCliente({ cliente, clienteKey }) {
     for (let i = 0; i < startOffset; i++) days.push(null);
     for (let d = 1; d <= lastDay; d++) {
       const acts = actividadesDelMes.filter(a => {
-        if (!a.fecha) return false;
-        return new Date(a.fecha).getDate() === d;
+        const pf = parseFecha(a.fecha);
+        return pf && pf.d === d;
       });
       days.push({ day: d, actividades: acts });
     }
@@ -638,8 +655,12 @@ function CalendarioAnual({ anio, actividades, filterTipo, filterMarca, mesSel, o
   const porMes = React.useMemo(() => {
     const out = {};
     for (let m = 1; m <= 12; m++) out[m] = { total: 0, porTipo: {}, inv: 0 };
+    const parse = (f) => { if (!f) return null; const p = String(f).slice(0,10).split("-").map(n => parseInt(n,10)); return p.length === 3 && p[0] ? { y: p[0], m: p[1] } : null; };
     actividades.forEach(a => {
-      const m = a.fecha ? new Date(a.fecha).getMonth() + 1 : Number(a.mes) || 0;
+      const pf = parse(a.fecha);
+      const m = pf ? pf.m : Number(a.mes) || 0;
+      const y = pf ? pf.y : Number(a.anio) || 0;
+      if (y !== anio) return;
       if (m < 1 || m > 12) return;
       if (filterTipo !== "todos" && a.tipo !== filterTipo) return;
       if (filterMarca !== "todas" && a.marca !== filterMarca) return;
@@ -648,7 +669,7 @@ function CalendarioAnual({ anio, actividades, filterTipo, filterMarca, mesSel, o
       out[m].inv += Number(a.inversion) || 0;
     });
     return out;
-  }, [actividades, filterTipo, filterMarca]);
+  }, [actividades, anio, filterTipo, filterMarca]);
 
   const totalAnual = Object.values(porMes).reduce((s, m) => s + m.total, 0);
   const invAnual = Object.values(porMes).reduce((s, m) => s + m.inv, 0);
