@@ -226,7 +226,11 @@ export default function PagosCliente({ cliente, clienteKey }) {
       notas: `Sell Out: ${formatMXN(calc.soActual)} · Cuota SO Mín: ${formatMXN(calc.cuotaSOMin)} · Alcance ${(calc.alcance*100).toFixed(0)}%${calc.capped ? " · Capeado a " + formatMXN(SPIFF_TOPE) : ""}`,
     };
     const { data, error } = await supabase.from("pagos").insert(row).select().single();
-    if (error) { alert("Error creando pago: " + error.message); return; }
+    if (error) {
+      console.error("crearSpiffPago error:", error, "row:", row);
+      alert("Error creando pago: " + (error.message || JSON.stringify(error)));
+      return;
+    }
     setSpiffPagos(p => ({ ...p, [`${anio}-${String(calc.mes).padStart(2, "0")}`]: data }));
     flash("✓ Pago SPIFF generado");
   };
@@ -234,15 +238,23 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const marcarSpiffNoAplica = async (mes) => {
     const mesLabel = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][mes - 1];
     const anio = new Date().getFullYear();
+    const nextMes = mes === 12 ? 1 : mes + 1;
+    const nextAnio = mes === 12 ? anio + 1 : anio;
+    const fechaCompromiso = `${nextAnio}-${String(nextMes).padStart(2, "0")}-15`;
     const row = {
       cliente: "digitalife", categoria: "spiff", folio: null,
       concepto: `SPIFF ${mesLabel} ${anio} — No aplica`,
       monto: 0, estatus: "cancelado",
+      fecha_compromiso: fechaCompromiso,
       responsable: "Fernando Cabrera",
       notas: "Marcado como No aplica manualmente",
     };
     const { data, error } = await supabase.from("pagos").insert(row).select().single();
-    if (error) { alert("Error: " + error.message); return; }
+    if (error) {
+      console.error("marcarSpiffNoAplica error:", error, "row:", row);
+      alert("Error: " + (error.message || JSON.stringify(error)));
+      return;
+    }
     setSpiffPagos(p => ({ ...p, [`${anio}-${String(mes).padStart(2, "0")}`]: data }));
     flash("✓ Marcado como No aplica");
   };
@@ -478,19 +490,24 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (!newRow.concepto.trim()) return;
     const record = {
       ...newRow,
+      cliente: clienteKey,
       folio: newRow.folio.trim() || "",
       monto: parseFloat(newRow.monto) || 0,
       fecha_compromiso: newRow.fecha_compromiso || null,
       fecha_pago_real: newRow.fecha_pago_real || null,
     };
     const { data, error } = await supabase.from("pagos").insert(record).select().single();
-    if (error) { flash("Error al agregar â", "err"); return; }
+    if (error) {
+      console.error("handleAdd error:", error, "record:", record);
+      alert("Error al agregar: " + (error.message || JSON.stringify(error)));
+      return;
+    }
     setRegistros(prev => [...prev, data]);
     setNewRow({ folio: "", concepto: "", categoria: "promociones", monto: "",
                 estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
                 responsable: "", notas: "" });
     setShowAdd(false);
-    flash("Registro agregado â");
+    flash("Registro agregado ✓");
   };
 
   // ── Add Pago Fijo (creates 12 monthly records) ──
