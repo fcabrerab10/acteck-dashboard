@@ -1,182 +1,266 @@
-import React, { useState, useEffect } from "react";
-import { DIGITALIFE_REAL } from '../../lib/constants';
+import React, { useState, useEffect, useMemo } from "react";
+import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { formatMXN, formatUSD, formatFecha } from '../../lib/utils';
 import { CardHeader } from '../../components';
 
+const NOMBRES_MES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
 export default function CreditoCobranza({ cliente, clienteKey }) {
   const c = cliente;
-  const k = c.cartera;
-  if (!k) return (
-    <div className="p-6 text-gray-400 text-sm">Sin datos de crédito y cobranza disponibles.</div>
-  );
+  const [estado, setEstado]     = useState(null);
+  const [sellOut, setSellOut]   = useState({});
+  const [loading, setLoading]   = useState(true);
 
-  const lineaMXN = k.lineaCreditoUSD * k.tipoCambio;
-  const usoPct = Math.round((k.saldoActual / lineaMXN) * 100);
-  const disponibleMXN = lineaMXN - k.saldoActual;
-  const disponibleUSD = disponibleMXN / k.tipoCambio;
+  useEffect(() => {
+    if (!DB_CONFIGURED) { setLoading(false); return; }
+    (async () => {
+      setLoading(true);
+      const anio = new Date().getFullYear();
+      const [ecRes, soRes] = await Promise.all([
+        supabase.from("estados_cuenta")
+          .select("*")
+          .eq("cliente", clienteKey)
+          .order("anio", { ascending: false })
+          .order("semana", { ascending: false })
+          .limit(1),
+        supabase.from("sellout_sku")
+          .select("mes, monto_pesos")
+          .eq("cliente", clienteKey)
+          .eq("anio", anio),
+      ]);
+      const byMes = {};
+      (soRes.data || []).forEach(r => {
+        const m = Number(r.mes);
+        byMes[m] = (byMes[m] || 0) + (Number(r.monto_pesos) || 0);
+      });
+      setSellOut(byMes);
+      setEstado((ecRes.data && ecRes.data[0]) || null);
+      setLoading(false);
+    })();
+  }, [clienteKey]);
 
-  // Semáforo línea de crédito
-  const lineaColor = usoPct >= 90 ? { bar: "#ef4444", bg: "bg-red-50", border: "border-red-200", text: "text-red-700", label: "Crítico — Línea casi agotada" }
-                   : usoPct >= 70 ? { bar: "#eab308", bg: "bg-yellow-50", border: "border-yellow-200", text: "text-yellow-700", label: "Atención — Uso elevado" }
-                   :                { bar: "#22c55e", bg: "bg-green-50",  border: "border-green-200",  text: "text-green-700",  label: "Saludable — Línea disponible" };
+  // Vencimientos por mes (hooks antes del primer return)
+  const hoy = new Date();
+  const mesesVenc = useMemo(() => {
+    if (!estado) return [];
+    return [
+      { k: 1, monto: Number(estado.venc_mes_1) || 0 },
+      { k: 2, monto: Number(estado.venc_mes_2) || 0 },
+      { k: 3, monto: Number(estado.venc_mes_3) || 0 },
+    ].map(x => {
+      const d = new Date(hoy.getFullYear(), hoy.getMonth() + x.k - 1, 1);
+      return { ...x, label: NOMBRES_MES[d.getMonth()], mes: d.getMonth() + 1, anio: d.getFullYear() };
+    });
+  }, [estado]);
 
-  // Aging total y porcentajes
-  const ag = k.aging;
-  const agTotal = ag.d0_30 + ag.d31_60 + ag.d61_90 + ag.mas90;
-  const agPct = (v) => Math.round((v / agTotal) * 100);
+  // Estados: sin DB / cargando / sin datos
+  if (!DB_CONFIGURED) {
+    return <div className="p-6 text-gray-400 text-sm">Supabase no configurado.</div>;
+  }
+  if (loading) {
+    return <div className="p-6 text-gray-400 text-sm">Cargando estado de cuenta…</div>;
+  }
+  if (!estado) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="bg-white rounded-2xl shadow-sm p-6 max-w-xl mx-auto text-center">
+          <p className="text-4xl mb-3">📭</p>
+          <h2 className="text-lg font-semibold text-gray-800 mb-1">Sin estado de cuenta cargado</h2>
+          <p className="text-sm text-gray-500">Sube el corte más reciente de <strong>{c.nombre}</strong> desde <a href="/uploads.html" className="text-blue-600 hover:underline">Actualizar datos</a>.</p>
+        </div>
+      </div>
+    );
+  }
 
-  // Vencimientos por mes
-  const mesesLabel = { "2026-04": "Abril", "2026-05": "Mayo", "2026-06": "Junio" };
-  const vmEntries = Object.entries(k.vencimientosMes);
-  const vmMax = Math.max(...vmEntries.map(([,v]) => v));
+  // Derivados
+  const saldoActual     = Number(estado.saldo_actual) || 0;
+  const saldoVencido    = Number(estado.saldo_vencido) || 0;
+  const saldoAVencer    = Number(estado.saldo_a_vencer) || 0;
+  const notasCredito    = Math.abs(Number(estado.notas_credito) || 0);
+  const lineaUSD        = Number(estado.linea_credito_usd) || 0;
+  const tipoCambio      = Number(estado.tipo_cambio) || 0;
+  const dso             = estado.dso != null ? Number(estado.dso) : null;
+  const lineaMXN        = lineaUSD * tipoCambio;
+  const usoPct          = lineaMXN > 0 ? Math.min(Math.round((saldoActual / lineaMXN) * 100), 999) : null;
 
-  // Proyección basada en tendencia de crecimiento real 2026
-  const soValues = Object.values(DIGITALIFE_REAL.sellOut);
-  const soUltimo = soValues[soValues.length - 1];           // Mar 2026: último mes con dato
-  const soAnterior = soValues[soValues.length - 2];         // Feb 2026: mes previo
-  const tasaCrecMensual = soUltimo / soAnterior;            // Tasa real mensual 2026
-  const soPromedio = soValues.reduce((a, b) => a + b, 0) / soValues.length; // referencia
-  const proyMeses = [
-    { mes: "Abril",  monto: k.vencimientosMes["2026-04"], cobro: soUltimo * tasaCrecMensual },
-    { mes: "Mayo",   monto: k.vencimientosMes["2026-05"], cobro: soUltimo * Math.pow(tasaCrecMensual, 2) },
-    { mes: "Junio",  monto: k.vencimientosMes["2026-06"], cobro: soUltimo * Math.pow(tasaCrecMensual, 3) },
-  ];
+  const aging = {
+    d0_30:  Number(estado.aging_d0_30)  || 0,
+    d31_60: Number(estado.aging_d31_60) || 0,
+    d61_90: Number(estado.aging_d61_90) || 0,
+    mas90:  Number(estado.aging_mas90)  || 0,
+  };
+  const agTotal  = aging.d0_30 + aging.d31_60 + aging.d61_90 + aging.mas90;
+  const hasAging = agTotal > 0;
+  const agPct    = (v) => agTotal > 0 ? Math.round((v / agTotal) * 100) : 0;
+
+  const lineaStatus = usoPct == null ? null
+    : usoPct >= 90 ? { label: "Crítico",   color: "#ef4444", text: "text-red-700",    emoji: "🔴" }
+    : usoPct >= 70 ? { label: "Atención",  color: "#eab308", text: "text-yellow-700", emoji: "🟡" }
+    :                { label: "Saludable", color: "#22c55e", text: "text-green-700",  emoji: "🟢" };
+
+  const hasVencMes = mesesVenc.some(v => v.monto > 0);
+  const vencTotal  = mesesVenc.reduce((s, v) => s + v.monto, 0) + saldoVencido;
+  const vencMax    = Math.max(saldoVencido, ...mesesVenc.map(v => v.monto), 1);
+
+  // Proyección
+  const soValues   = Object.entries(sellOut).map(([m, v]) => ({ mes: Number(m), v })).sort((a, b) => a.mes - b.mes);
+  const hasSellOut = soValues.length >= 2;
+  const ultimos    = soValues.slice(-2);
+  const tasaCrec   = hasSellOut && ultimos[0].v > 0 ? ultimos[1].v / ultimos[0].v : 1;
+  const soBase     = hasSellOut ? ultimos[ultimos.length - 1].v : 0;
+  const proyeccion = mesesVenc.map((v, i) => ({
+    ...v,
+    cobro: hasSellOut ? soBase * Math.pow(tasaCrec, i + 1) : 0,
+  }));
+
+  const fechaCorteStr = estado.fecha_corte ? formatFecha(estado.fecha_corte) : `Sem ${estado.semana}/${estado.anio}`;
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
 
-      {/* ── ENCABEZADO ── */}
-      <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+      {/* HEADER */}
+      <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
                  style={{ backgroundColor: c.color }}>💳</div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Crédito y Cobranza</h1>
-              <p className="text-sm text-gray-400 mt-0.5">
+              <h1 className="text-xl font-bold text-gray-800">{c.nombre} — ¿Cuánto nos deben?</h1>
+              <p className="text-xs text-gray-500 mt-0.5">
                 <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
-                {" · "}Semana {k.semana} · {k.periodo}
+                {estado.razon_social ? <> · {estado.razon_social}</> : null}
+                {" · "}Corte: {fechaCorteStr}
               </p>
             </div>
           </div>
           <div className="text-right">
-            <span className="text-xs text-gray-400 block">
-              Actualizado: {formatFecha(k.ultimaActualizacion)}{k.horaActualizacion ? ` · ${k.horaActualizacion} hrs` : ""}
+            {tipoCambio > 0 && (
+              <span className="text-xs text-gray-400 block">TC Banxico: ${tipoCambio.toFixed(2)} MXN/USD</span>
+            )}
+            <span className="inline-flex items-center gap-1 text-xs text-green-700 font-semibold mt-0.5">
+              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+              Sincronizado
             </span>
-            <span className="text-xs text-gray-400">TC: ${k.tipoCambio.toFixed(2)} MXN/USD</span>
           </div>
         </div>
       </div>
 
-      {/* ── ALERTA VENCIDO ── */}
-      {k.saldoVencido > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
-          <span className="text-red-500 text-xl">â ️</span>
-          <div>
-            <p className="text-sm font-semibold text-red-700">Saldo Vencido — Gestión inmediata requerida</p>
-            <p className="text-xs text-red-600 mt-0.5">
-              <strong>{formatMXN(k.saldoVencido)}</strong> en cartera vencida
-              ({" "}{formatMXN(ag.d61_90)} entre 61-90 días y{" "}
-              {formatMXN(ag.mas90)} con más de 90 días).
-            </p>
+      {/* NÚMERO ESTELAR */}
+      <div className="bg-white rounded-2xl shadow-sm p-8 mb-6 text-center">
+        <p className="text-xs text-gray-400 uppercase tracking-widest mb-2">Total por cobrar</p>
+        <p className="text-5xl font-bold text-gray-800 mb-2">{formatMXN(saldoActual)}</p>
+        {saldoVencido > 0 ? (
+          <p className="text-sm text-gray-600">
+            de los cuales <strong className="text-red-600">{formatMXN(saldoVencido)}</strong> están
+            <span className="ml-1 text-red-600 font-semibold">VENCIDOS 🔴</span>
+            {dso != null && <span className="text-gray-400"> · DSO: {dso} días</span>}
+          </p>
+        ) : (
+          <p className="text-sm text-green-700">
+            <strong>Sin cartera vencida ✓</strong>
+            {dso != null && <span className="text-gray-400 ml-2"> · DSO: {dso} días</span>}
+          </p>
+        )}
+      </div>
+
+      {/* KPI STRIP */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className={`bg-white rounded-2xl shadow-sm p-4 border-t-4 ${saldoVencido > 0 ? "border-red-500" : "border-green-500"}`}>
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Vencido</p>
+          <p className={`text-2xl font-bold ${saldoVencido > 0 ? "text-red-600" : "text-green-600"}`}>{formatMXN(saldoVencido)}</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {saldoVencido > 0 && saldoActual > 0 ? `${Math.round((saldoVencido / saldoActual) * 100)}% del saldo total` : "Sin vencidos"}
+          </p>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm p-4 border-t-4 border-yellow-400">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">A vencer 7 días</p>
+          <p className="text-2xl font-bold text-gray-800">{formatMXN(saldoAVencer)}</p>
+          <p className="text-xs text-gray-400 mt-1">Próximos cobros</p>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm p-4 border-t-4 border-purple-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Notas de crédito</p>
+          <p className="text-2xl font-bold text-purple-700">{formatMXN(notasCredito)}</p>
+          <p className="text-xs text-gray-400 mt-1">{notasCredito > 0 ? "A aplicar" : "Sin NC"}</p>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm p-4 border-t-4 border-blue-500">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Línea de crédito</p>
+          {lineaStatus ? (
+            <>
+              <p className={`text-2xl font-bold ${lineaStatus.text}`}>{usoPct}% <span className="text-xs font-normal text-gray-400">uso</span></p>
+              <div className="h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${Math.min(usoPct, 100)}%`, backgroundColor: lineaStatus.color }}></div>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                {lineaStatus.emoji} {lineaStatus.label} · {formatUSD(lineaUSD)}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-2xl font-bold text-gray-300">—</p>
+              <p className="text-xs text-gray-400 mt-1">Sin datos</p>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* CUÁNDO NOS PAGAN */}
+      {(hasVencMes || saldoVencido > 0) && (
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+          <CardHeader titulo="Cuándo nos pagan" icono="📅" />
+          <div className="space-y-3 mt-1">
+            {saldoVencido > 0 && (
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="font-semibold text-red-600">⚠️ Vencido (cobrar YA)</span>
+                  <span className="font-bold text-red-600">{formatMXN(saldoVencido)}</span>
+                </div>
+                <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-red-500" style={{ width: `${Math.round((saldoVencido / vencMax) * 100)}%` }}></div>
+                </div>
+              </div>
+            )}
+            {mesesVenc.map(v => (
+              v.monto > 0 && (
+                <div key={v.k}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="font-semibold text-gray-700">{v.label}</span>
+                    <span className="font-bold text-gray-800">{formatMXN(v.monto)}</span>
+                  </div>
+                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.round((v.monto / vencMax) * 100)}%` }}></div>
+                  </div>
+                </div>
+              )
+            ))}
+            {!hasVencMes && (
+              <p className="text-xs text-gray-400 italic">
+                Vencimientos por mes sin datos. Súbelos desde el uploader cuando estén disponibles.
+              </p>
+            )}
           </div>
+          {vencTotal > 0 && (
+            <div className="mt-4 pt-3 border-t flex justify-between text-sm">
+              <span className="text-gray-500">Total (vencido + próximos 3 meses)</span>
+              <span className="font-bold text-gray-800">{formatMXN(vencTotal)}</span>
+            </div>
+          )}
         </div>
       )}
 
-      {/* ── SEMÁFORO LÍNEA DE CRÉDITO ── */}
-      <div className={`${lineaColor.bg} border ${lineaColor.border} rounded-2xl p-5 mb-6`}>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Línea de Crédito</p>
-            <p className="text-xl font-bold text-gray-800">
-              {formatUSD(k.lineaCreditoUSD)} USD
-              <span className="text-sm font-normal text-gray-400 ml-2">= {formatMXN(lineaMXN)}</span>
-            </p>
-          </div>
-          <div className="text-right">
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${lineaColor.bg} ${lineaColor.text} border ${lineaColor.border}`}>
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: lineaColor.bar }}></span>
-              {lineaColor.label}
-            </span>
-          </div>
-        </div>
-        {/* Barra de utilización */}
-        <div className="mb-3">
-          <div className="flex justify-between text-xs text-gray-500 mb-1">
-            <span>Utilización: <strong className={lineaColor.text}>{usoPct}%</strong></span>
-            <span>Disponible: <strong className="text-green-700">{formatUSD(disponibleUSD)} ({formatMXN(disponibleMXN)})</strong></span>
-          </div>
-          <div className="h-4 bg-white rounded-full overflow-hidden border border-gray-200 shadow-inner">
-            <div className="h-full rounded-full transition-all relative"
-                 style={{ width: `${Math.min(usoPct, 100)}%`, backgroundColor: lineaColor.bar }}>
-            </div>
-          </div>
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
-            <span>$0</span>
-            <span className="text-yellow-500">70% · Alerta</span>
-            <span className="text-red-500">90% · Crítico</span>
-            <span>{formatUSD(k.lineaCreditoUSD)}</span>
-          </div>
-        </div>
-        {/* Desglose numérico */}
-        <div className="grid grid-cols-3 gap-3 mt-3">
-          <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-            <p className="text-xs text-gray-400 mb-1">Saldo Usado</p>
-            <p className="text-base font-bold text-gray-800">{formatMXN(k.saldoActual)}</p>
-            <p className="text-xs text-gray-400">{formatUSD(k.saldoActual / k.tipoCambio)}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-            <p className="text-xs text-gray-400 mb-1">Disponible</p>
-            <p className="text-base font-bold text-green-700">{formatMXN(disponibleMXN)}</p>
-            <p className="text-xs text-gray-400">{formatUSD(disponibleUSD)}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-            <p className="text-xs text-gray-400 mb-1">DSO Actual</p>
-            <p className="text-base font-bold text-blue-700">{k.dso} días</p>
-            <p className="text-xs text-gray-400">promedio de cobro</p>
-          </div>
-        </div>
-      </div>
-
-      {/* ── KPI CARDS ── */}
-      <div className={`grid grid-cols-2 gap-4 mb-6 ${clienteKey === "digitalife" ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-blue-500 flex flex-col justify-between">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Total</p>
-          <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoActual)}</p>
-          <p className="text-xs text-gray-400 mt-1">{usoPct}% de la línea usada</p>
-        </div>
-        <div className={`bg-white rounded-2xl shadow-sm p-5 border-t-4 ${k.saldoVencido > 0 ? "border-red-500" : "border-green-500"}`}>
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Vencido</p>
-          <p className={`text-2xl font-bold ${k.saldoVencido > 0 ? "text-red-600" : "text-green-600"}`}>
-            {formatMXN(k.saldoVencido)}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">{k.saldoVencido > 0 ? `${Math.round((k.saldoVencido / k.saldoActual) * 100)}% del saldo total` : "Sin vencidos"}</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-purple-500">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Notas de Crédito</p>
-          <p className="text-2xl font-bold text-purple-700">{formatMXN(k.saldoNC)}</p>
-          <p className="text-xs text-gray-400 mt-1">A aplicar en próximos pagos</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-5 border-t-4 border-yellow-400 flex flex-col justify-between">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">A Vencer (semana)</p>
-          <p className="text-2xl font-bold text-gray-800">{formatMXN(k.saldoAVencer)}</p>
-          <p className="text-xs text-gray-400 mt-1">Próximos 7 días</p>
-        </div>
-      </div>
-
-      {/* ── AGING DE FACTURAS + VENCIMIENTOS POR MES ── */}
-      <div className="grid grid-cols-1 gap-6 mb-6 md:grid-cols-2">
-
-        {/* Aging */}
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <CardHeader titulo="Aging de Facturas" icono="📅" />
-          <div className="space-y-3">
+      {/* AGING */}
+      {hasAging && (
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+          <CardHeader titulo="Aging de la cartera" icono="⏳" />
+          <div className="space-y-3 mt-1">
             {[
-              { label: "0 – 30 días",  monto: ag.d0_30,  color: "#22c55e", bg: "bg-green-500",  tag: "bg-green-100 text-green-700",  icono: "â" },
-              { label: "31 – 60 días", monto: ag.d31_60, color: "#3b82f6", bg: "bg-blue-400",   tag: "bg-blue-100 text-blue-700",    icono: "🔵" },
-              { label: "61 – 90 días", monto: ag.d61_90, color: "#eab308", bg: "bg-yellow-400", tag: "bg-yellow-100 text-yellow-700", icono: "â ️" },
-              { label: "+ 90 días",    monto: ag.mas90,  color: "#ef4444", bg: "bg-red-500",    tag: "bg-red-100 text-red-700",       icono: "🔴" },
-            ].map(({ label, monto, color, bg, tag, icono }) => (
+              { label: "0 – 30 días",  monto: aging.d0_30,  bg: "bg-green-500",  tag: "bg-green-100 text-green-700",  icono: "✓"  },
+              { label: "31 – 60 días", monto: aging.d31_60, bg: "bg-blue-400",   tag: "bg-blue-100 text-blue-700",    icono: "🔵" },
+              { label: "61 – 90 días", monto: aging.d61_90, bg: "bg-yellow-400", tag: "bg-yellow-100 text-yellow-700", icono: "⚠️" },
+              { label: "+ 90 días",    monto: aging.mas90,  bg: "bg-red-500",    tag: "bg-red-100 text-red-700",       icono: "🔴" },
+            ].map(({ label, monto, bg, tag, icono }) => (
               <div key={label}>
                 <div className="flex justify-between items-center text-sm mb-1">
                   <div className="flex items-center gap-1.5">
@@ -194,128 +278,60 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
               </div>
             ))}
             <div className="border-t pt-3 flex justify-between text-sm">
-              <span className="text-gray-500">Total cartera</span>
+              <span className="text-gray-500">Total cartera con aging</span>
               <span className="font-bold text-gray-800">{formatMXN(agTotal)}</span>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Vencimientos por mes */}
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <CardHeader titulo="Vencimientos por Mes" icono="🗓️" />
-          <div className="space-y-4">
-            {vmEntries.map(([mes, monto]) => {
-              const pct = Math.round((monto / vmMax) * 100);
-              const isPast = mes < "2026-04";
-              return (
-                <div key={mes}>
-                  <div className="flex justify-between items-center text-sm mb-1">
-                    <span className="font-semibold text-gray-700">{mesesLabel[mes] || mes}</span>
-                    <span className="font-bold text-gray-800">{formatMXN(monto)}</span>
-                  </div>
-                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-blue-500"
-                         style={{ width: `${pct}%` }}></div>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-0.5">{pct}% del mes con mayor vencimiento</p>
-                </div>
-              );
-            })}
+      {/* PROYECCIÓN vs SELL OUT */}
+      {hasSellOut && hasVencMes && (
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+          <CardHeader titulo="¿El cliente generará flujo para pagarnos?" icono="📈" />
+          <p className="text-xs text-gray-400 mb-3">
+            Sell Out base (último mes con dato): <strong>{formatMXN(soBase)}</strong> · Crecimiento mensual proyectado: <strong>{((tasaCrec - 1) * 100).toFixed(1)}%</strong>
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left text-xs text-gray-400 uppercase pb-2">Mes</th>
+                  <th className="text-right text-xs text-gray-400 uppercase pb-2">Vencimiento</th>
+                  <th className="text-right text-xs text-gray-400 uppercase pb-2">Sell Out proy.</th>
+                  <th className="text-right text-xs text-gray-400 uppercase pb-2">Balance</th>
+                  <th className="text-center text-xs text-gray-400 uppercase pb-2">Cobertura</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {proyeccion.map(({ label, monto, cobro }) => {
+                  const balance = cobro - monto;
+                  const cobertura = monto > 0 ? Math.round((cobro / monto) * 100) : 0;
+                  return (
+                    <tr key={label} className="text-sm">
+                      <td className="py-3 font-semibold text-gray-700">{label}</td>
+                      <td className="py-3 text-right text-gray-700">{formatMXN(monto)}</td>
+                      <td className="py-3 text-right text-blue-700 font-semibold">{formatMXN(cobro)}</td>
+                      <td className={`py-3 text-right font-semibold ${balance >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {balance >= 0 ? "+" : ""}{formatMXN(balance)}
+                      </td>
+                      <td className="py-3 text-center">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${cobertura >= 100 ? "bg-green-100 text-green-700" : cobertura >= 80 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
+                          {cobertura}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-          {/* Mini-resumen */}
-          <div className="mt-4 border-t pt-3 grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <p className="text-gray-400">Total a vencer (3 meses)</p>
-              <p className="font-bold text-gray-800">{formatMXN(Object.values(k.vencimientosMes).reduce((a,b)=>a+b,0))}</p>
-            </div>
-            <div>
-              <p className="text-gray-400">Mes con mayor vencimiento</p>
-              <p className="font-bold text-blue-700">{mesesLabel[vmEntries.reduce((a,b)=>b[1]>a[1]?b:a)[0]]}</p>
-            </div>
-          </div>
+          <p className="text-xs text-gray-400 mt-3 italic">
+            * Proyección lineal con base en el crecimiento entre los últimos 2 meses con dato. No considera estacionalidad ni acuerdos comerciales específicos.
+          </p>
         </div>
-      </div>
-
-      {/* ── PROYECCIÓN DE COBRO ── */}
-      <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-        <CardHeader titulo="Proyección de Cobro (basada en Sell Out)" icono="📈" />
-        <p className="text-xs text-gray-400 mb-4">
-          Sell out Mar 2026: <strong>{formatMXN(soUltimo)}</strong> · Crecimiento mensual: <strong>+{((tasaCrecMensual - 1) * 100).toFixed(1)}%</strong> · DSO: <strong>{k.dso} días</strong> · TC: ${k.tipoCambio.toFixed(2)} MXN/USD
-        </p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left text-xs text-gray-400 uppercase pb-2">Mes</th>
-                <th className="text-right text-xs text-gray-400 uppercase pb-2">Vencimiento</th>
-                <th className="text-right text-xs text-gray-400 uppercase pb-2">Venta Sell Out</th>
-                <th className="text-right text-xs text-gray-400 uppercase pb-2">Balance</th>
-                <th className="text-center text-xs text-gray-400 uppercase pb-2">Cobertura</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {proyMeses.map(({ mes, monto, cobro }) => {
-                const balance = cobro - monto;
-                const cobertura = Math.round((cobro / monto) * 100);
-                return (
-                  <tr key={mes} className="text-sm">
-                    <td className="py-3 font-semibold text-gray-700">{mes}</td>
-                    <td className="py-3 text-right text-gray-700">{formatMXN(monto)}</td>
-                    <td className="py-3 text-right text-blue-700 font-semibold">{formatMXN(cobro)}</td>
-                    <td className={`py-3 text-right font-semibold ${balance >= 0 ? "text-green-600" : "text-red-600"}`}>
-                      {balance >= 0 ? "+" : ""}{formatMXN(balance)}
-                    </td>
-                    <td className="py-3 text-center">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${cobertura >= 100 ? "bg-green-100 text-green-700" : cobertura >= 80 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
-                        {cobertura}%
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <p className="text-xs text-gray-400 mt-3 italic">
-          * Venta Sell Out proyectada con base en la tendencia de crecimiento mensual 2026 (Ene–Mar). No incluye facturas diferidas ni acuerdos comerciales específicos.
-        </p>
-      </div>
-
-      {/* ── FUENTE DEL DATO ── */}
-      <div className="bg-white rounded-2xl shadow-sm p-5">
-        <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Fuente del dato</p>
-        <p className="text-sm text-gray-700 font-medium">{k.correoSemana}</p>
-        <p className="text-xs text-gray-400 mt-1">
-          Correo enviado cada lunes · intranet@acteck.com · Actualización automática 4pm
-          {" · "}TC Banxico {formatFecha(k.ultimaActualizacion)}: ${k.tipoCambio.toFixed(2)} MXN/USD
-        </p>
-      </div>
+      )}
 
     </div>
   );
 }
-
-// ——— PAGOS Y COMPROMISOS (Supabase) ———
-const CATEGORIA_META = {
-  promociones:    { label: "Promociones",      color: "#f59e0b" },
-  marketing:      { label: "Marketing",        color: "#8b5cf6" },
-  pagosFijos:     { label: "Pagos Fijos",      color: "#3b82f6" },
-  pagosVariables: { label: "Pagos Variables",  color: "#10b981" },
-  rebate:         { label: "Rebate",           color: "#ef4444" },
-  spiff: { label: "SPIFF", color: "#9333ea" },
-};
-
-const ESTATUS_OPT = [
-  { value: "pendiente",  label: "Pendiente" },
-  { value: "en_proceso", label: "En Proceso" },
-  { value: "pagado",     label: "Pagado" },
-  { value: "vencido",    label: "Vencido" },
-];
-
-const MESES_CORTOS = {
-  "01": "Ene", "02": "Feb", "03": "Mar", "04": "Abr",
-  "05": "May", "06": "Jun", "07": "Jul", "08": "Ago",
-  "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dic",
-};
-
-
