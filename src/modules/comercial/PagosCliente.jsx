@@ -585,6 +585,108 @@ export default function PagosCliente({ cliente, clienteKey }) {
               </div>
             </div>
 
+          {/* Calendario mensual de pagos 2026 */}
+          <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-700">📅 Calendario de Pagos 2026</h3>
+              <span className="text-xs text-gray-400">Agrupado por fecha de pago real (o compromiso si está pendiente)</span>
+            </div>
+            {(() => {
+              const regs = registros.filter(r => r.cliente === clienteKey);
+              // Agrupar por mes: fecha_pago_real si existe, si no fecha_compromiso
+              const porMes = {};
+              for (let m = 1; m <= 12; m++) {
+                porMes[m] = { total: 0, pagado: 0, pendiente: 0, porCat: {}, nPend: 0, nPag: 0, vencidos: 0 };
+              }
+              const hoy = new Date();
+              regs.forEach(r => {
+                const fechaStr = r.fecha_pago_real || r.fecha_compromiso;
+                if (!fechaStr) return;
+                const parts = String(fechaStr).slice(0, 10).split("-").map(n => parseInt(n, 10));
+                if (parts.length !== 3 || parts[0] !== 2026) return;
+                const m = parts[1];
+                if (m < 1 || m > 12) return;
+                const monto = Number(r.monto) || 0;
+                const isPagado = !!r.fecha_pago_real || r.estatus === "pagado";
+                porMes[m].total += monto;
+                if (isPagado) { porMes[m].pagado += monto; porMes[m].nPag++; }
+                else {
+                  porMes[m].pendiente += monto;
+                  porMes[m].nPend++;
+                  // Vencido: fecha de compromiso pasada y no pagado
+                  if (r.fecha_compromiso) {
+                    const pp = String(r.fecha_compromiso).slice(0, 10).split("-").map(n => parseInt(n, 10));
+                    if (pp.length === 3) {
+                      const fc = new Date(pp[0], pp[1] - 1, pp[2]);
+                      if (fc < hoy) porMes[m].vencidos++;
+                    }
+                  }
+                }
+                const cat = r.categoria || "otros";
+                porMes[m].porCat[cat] = (porMes[m].porCat[cat] || 0) + monto;
+              });
+              return React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 } },
+                [1,2,3,4,5,6,7,8,9,10,11,12].map(m => {
+                  const data = porMes[m];
+                  const hasData = data.total > 0;
+                  const pct = data.total > 0 ? (data.pagado / data.total * 100) : 0;
+                  const MESES_FULL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+                  return React.createElement("div", {
+                    key: m,
+                    style: {
+                      background: data.vencidos > 0 ? "#FEF2F2" : "#FAFBFC",
+                      border: data.vencidos > 0 ? "2px solid #FCA5A5" : "1px solid #E2E8F0",
+                      borderRadius: 10, padding: "12px 14px",
+                      display: "flex", flexDirection: "column", gap: 8,
+                      opacity: hasData ? 1 : 0.5,
+                    }
+                  },
+                    // Header mes
+                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+                      React.createElement("span", { style: { fontWeight: 700, color: "#1E293B", fontSize: 14 } }, MESES_FULL[m - 1]),
+                      data.vencidos > 0 && React.createElement("span", { style: { fontSize: 10, background: "#FEE2E2", color: "#991B1B", padding: "2px 8px", borderRadius: 10, fontWeight: 700 } },
+                        "⚠ " + data.vencidos + " venc" + (data.vencidos === 1 ? "ido" : "idos")
+                      )
+                    ),
+                    // Totales
+                    hasData ? React.createElement(React.Fragment, null,
+                      React.createElement("div", null,
+                        React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", fontWeight: 600 } }, "Compromiso"),
+                        React.createElement("div", { style: { fontSize: 16, fontWeight: 700, color: "#1E293B" } }, formatMXN(data.total))
+                      ),
+                      // Progreso
+                      React.createElement("div", null,
+                        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 } },
+                          React.createElement("span", { style: { color: "#10B981", fontWeight: 600 } }, "Pagado " + formatMXN(data.pagado)),
+                          React.createElement("span", { style: { color: "#475569", fontWeight: 600 } }, pct.toFixed(0) + "%")
+                        ),
+                        React.createElement("div", { style: { height: 6, background: "#E2E8F0", borderRadius: 3, overflow: "hidden" } },
+                          React.createElement("div", { style: { height: "100%", width: Math.min(pct, 100) + "%", background: pct >= 100 ? "#10B981" : pct >= 50 ? "#3B82F6" : "#F59E0B", borderRadius: 3, transition: "width .5s" } })
+                        )
+                      ),
+                      // Desglose por categoría
+                      Object.keys(data.porCat).length > 0 && React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4 } },
+                        Object.entries(data.porCat).map(([cat, monto]) => {
+                          const meta = CATEGORIA_META[cat] || { label: cat, color: "#64748B" };
+                          return React.createElement("span", {
+                            key: cat,
+                            title: meta.label + ": " + formatMXN(monto),
+                            style: { fontSize: 10, padding: "1px 6px", borderRadius: 6, background: meta.color + "22", color: meta.color, fontWeight: 600 }
+                          }, meta.label + " " + formatMXN(monto));
+                        })
+                      ),
+                      // Contadores
+                      React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", display: "flex", gap: 10, paddingTop: 4, borderTop: "1px dashed #E2E8F0" } },
+                        React.createElement("span", null, "✓ " + data.nPag + " pagados"),
+                        React.createElement("span", null, "○ " + data.nPend + " pendientes")
+                      )
+                    ) : React.createElement("div", { style: { fontSize: 11, color: "#CBD5E1", fontStyle: "italic" } }, "Sin pagos")
+                  );
+                })
+              );
+            })()}
+          </div>
+
           {/* Monthly summary table */}
           {(() => {
             const mb = monthlyBreakdown();

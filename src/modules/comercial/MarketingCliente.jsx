@@ -259,14 +259,60 @@ export default function MarketingCliente({ cliente, clienteKey }) {
 
   // ─── Totales ────────────────────────────────────────────────
   const totales = React.useMemo(() => {
-    const t = { actividades: actividadesDelMes.length, inversion: 0, porTipo: {} };
+    const t = { actividades: actividadesDelMes.length, inversion: 0, porTipo: {}, sinPago: 0, inversionSinPago: 0, conPago: 0 };
     actividadesDelMes.forEach(a => {
-      t.inversion += Number(a.inversion) || 0;
+      const inv = Number(a.inversion) || 0;
+      t.inversion += inv;
       if (!t.porTipo[a.tipo]) t.porTipo[a.tipo] = 0;
       t.porTipo[a.tipo]++;
+      if (a.pago_id) { t.conPago++; }
+      else { t.sinPago++; t.inversionSinPago += inv; }
     });
     return t;
   }, [actividadesDelMes]);
+
+  // ─── Cerrar mes: consolida actividades sin pago en un solo pago ──
+  const cerrarMes = async () => {
+    const actsACerrar = actividadesDelMes.filter(a => !a.pago_id);
+    if (actsACerrar.length === 0) {
+      alert("No hay actividades pendientes de cerrar en este mes.");
+      return;
+    }
+    const totalInv = actsACerrar.reduce((s, a) => s + (Number(a.inversion) || 0), 0);
+    const mesLabel = MESES[mesSel - 1];
+    const confirmMsg = `Cerrar ${mesLabel} ${anio}:\n\n• ${actsACerrar.length} actividad(es) se consolidar\u00e1n en un solo pago\n• Total: ${fmtMXN(totalInv)}\n\n\u00bfContinuar?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    // Último día del mes como fecha de compromiso
+    const ultDia = new Date(anio, mesSel, 0).getDate();
+    const fechaCompromiso = `${anio}-${String(mesSel).padStart(2, "0")}-${String(ultDia).padStart(2, "0")}`;
+    const pagoPayload = {
+      cliente: ck,
+      categoria: "marketing",
+      folio: `MKT-${anio}-${String(mesSel).padStart(2, "0")}`,
+      concepto: `Marketing ${mesLabel} ${anio} — ${actsACerrar.length} actividad(es)`,
+      monto: totalInv,
+      estatus: "pendiente",
+      fecha_compromiso: fechaCompromiso,
+      responsable: "Fernando Cabrera",
+      notas: actsACerrar.map(a => `• ${a.nombre} (${TIPOS[a.tipo]?.label || a.tipo}): ${fmtMXN(a.inversion || 0)}`).join("\n"),
+    };
+    const { data: pagoData, error: pagoError } = await supabase.from("pagos").insert(pagoPayload).select().single();
+    if (pagoError) {
+      alert("Error creando el pago: " + pagoError.message);
+      return;
+    }
+    // Ligar todas las actividades al pago
+    const ids = actsACerrar.map(a => a.id);
+    const { error: updError } = await supabase.from("marketing_actividades").update({ pago_id: pagoData.id }).in("id", ids);
+    if (updError) {
+      alert("Pago creado pero no se pudieron ligar las actividades: " + updError.message);
+      return;
+    }
+    // Actualizar estado local
+    setActividades(p => p.map(a => ids.includes(a.id) ? { ...a, pago_id: pagoData.id } : a));
+    alert(`\u2713 Mes cerrado. Pago ${fmtMXN(totalInv)} creado para ${mesLabel} ${anio}.`);
+  };
 
   // ─── Construcción del calendario ────────────────────────────
   const calendario = React.useMemo(() => {
@@ -309,6 +355,15 @@ export default function MarketingCliente({ cliente, clienteKey }) {
           <select value={mesSel} onChange={e => { setMesSel(Number(e.target.value)); setDiaSeleccionado(null); }} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}>
             {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
+          {totales.sinPago > 0 && totales.inversionSinPago > 0 && (
+            <button
+              onClick={cerrarMes}
+              title={`Genera un pago consolidado de ${fmtMXN(totales.inversionSinPago)} por ${totales.sinPago} actividad(es)`}
+              style={{ padding: "8px 14px", background: "#10B981", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}
+            >
+              🔒 Cerrar mes ({fmtMXN(totales.inversionSinPago)})
+            </button>
+          )}
           <button onClick={openNew} style={{ padding: "8px 14px", background: "#3B82F6", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>+ Nueva actividad</button>
         </div>
       </div>
@@ -485,6 +540,7 @@ function ActividadCard({ a, onEdit, onDelete, onToggle }) {
           {fechaTxt && <span>📆 {fechaTxt}</span>}
           {Number(a.inversion) > 0 && <span style={{ fontWeight: 600, color: "#10B981" }}>💰 {fmtMXN(a.inversion)}</span>}
           {a.responsable && <span>👤 {a.responsable}</span>}
+          {a.pago_id && <span style={{ background: "#D1FAE5", color: "#065F46", padding: "1px 8px", borderRadius: 8, fontWeight: 600 }}>🔒 En pago</span>}
         </div>
         {a.mensaje && <div style={{ fontSize: 12, color: "#475569", marginTop: 6, fontStyle: "italic" }}>"{a.mensaje}"</div>}
       </div>
