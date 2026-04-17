@@ -447,14 +447,22 @@ export default function PagosCliente({ cliente, clienteKey }) {
     }
     fetchData();
     const channel = supabase
-      .channel("pagos-sync")
+      .channel(`pagos-sync-${clienteKey}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "pagos" }, fetchData)
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, []);
+  }, [clienteKey]);
 
   const fetchData = async () => {
-    const { data } = await supabase.from("pagos").select("*").order("created_at");
+    // Filtrar por cliente activo (incluye registros legados sin cliente=NULL solo para digitalife,
+    // ya que la columna cliente se agregó después y los registros viejos son de Digitalife)
+    let query = supabase.from("pagos").select("*").order("created_at");
+    if (clienteKey === "digitalife") {
+      query = query.or(`cliente.eq.${clienteKey},cliente.is.null`);
+    } else {
+      query = query.eq("cliente", clienteKey);
+    }
+    const { data } = await query;
     setRegistros(data || []);
     setLoading(false);
   };
