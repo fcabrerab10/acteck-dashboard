@@ -10,6 +10,34 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   const [sortCol, setSortCol] = React.useState("stock");
     const [sortDir, setSortDir] = React.useState("desc");
   const [sugeridoEdits, setSugeridoEdits] = React.useState({});
+  const [nuevosSearch, setNuevosSearch] = React.useState("");
+  const [enCaminoSearch, setEnCaminoSearch] = React.useState("");
+  const [riesgoSearch, setRiesgoSearch] = React.useState("");
+
+  // Cargar overrides persistidos desde Supabase al montar / cambiar de cliente
+  React.useEffect(() => {
+    if (!DB_CONFIGURED || !clienteKey) return;
+    (async () => {
+      const { data } = await supabase
+        .from("sugerido_overrides")
+        .select("sku, sugerido")
+        .eq("cliente", clienteKey);
+      const map = {};
+      (data || []).forEach(r => { map[r.sku] = Number(r.sugerido); });
+      setSugeridoEdits(map);
+    })();
+  }, [clienteKey]);
+
+  // Guardar edit en Supabase (upsert por cliente+sku)
+  const saveSugeridoOverride = async (sku, valor) => {
+    if (!DB_CONFIGURED) return;
+    const v = Number(valor) || 0;
+    const { error } = await supabase
+      .from("sugerido_overrides")
+      .upsert({ cliente: clienteKey, sku, sugerido: v, updated_at: new Date().toISOString() },
+              { onConflict: "cliente,sku" });
+    if (error) console.error("saveSugeridoOverride error:", error);
+  };
 
   const formatMXN = (n) => {
     if (n == null || isNaN(n)) return "â";
@@ -611,29 +639,45 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const siPiezasTotal = siData.reduce((s, r) => s + (r.piezas || 0), 0);
         const soMontoTotal = soData.reduce((s, r) => s + (r.monto_pesos || 0), 0);
         const mesActual = new Date().getMonth() + 1;
-        const soSinMesActual = soData.filter(r => Number(r.mes) < mesActual);
+        const soSinMesActual = soData.filter(r => Number(r.mes) < mesActual).sort((a, b) => Number(a.mes) - Number(b.mes));
         // promedio90d = promedio mensual de piezas vendidas en últimos 3 meses completos
-        const promedio90d = soSinMesActual.slice(-3).length > 0 ? Math.round(soSinMesActual.slice(-3).reduce((s, r) => s + (r.piezas || 0), 0) / Math.min(3, soSinMesActual.slice(-3).length)) : 0;
+        const ultimos3 = soSinMesActual.slice(-3);
+        const promedio90d = ultimos3.length > 0 ? Math.round(ultimos3.reduce((s, r) => s + (r.piezas || 0), 0) / ultimos3.length) : 0;
+
+        // Factor estacional: últimos 3 meses vs 3 meses anteriores (si hay historial suficiente)
+        let factorEstacional = 1.0;
+        if (soSinMesActual.length >= 6) {
+          const anteriores3 = soSinMesActual.slice(-6, -3);
+          const sumUltimos3 = ultimos3.reduce((s, r) => s + (r.piezas || 0), 0);
+          const sumAnt3 = anteriores3.reduce((s, r) => s + (r.piezas || 0), 0);
+          if (sumAnt3 > 0) {
+            factorEstacional = sumUltimos3 / sumAnt3;
+            // Clamp 0.7 - 1.5 para evitar extremos
+            factorEstacional = Math.max(0.7, Math.min(1.5, factorEstacional));
+          }
+        }
+
         const stock = invData?.stock || 0;
         const valorInv = invData?.valor || 0;
 
         // Acteck inventory (9 almacenes) + tránsito
         const invActeck = (datos.actStockBySku && datos.actStockBySku[p.sku]) || 0;
         const invTransito = (datos.transitoBySku && datos.transitoBySku[p.sku]) || 0;
-        const disponibleReponer = invActeck + invTransito;
 
-        // Sugerido = reponer 90 días de venta basado en rotación (promedio_mensual × 3) − stock cliente
-        // Mínimo 11 solo si Digitalife tiene venta activa Y stock < 1 mes de rotación
+        // ═══ FÓRMULA DEL SUGERIDO v3 ═══
+        // Regla 1: si invActeck < 10, sugerido = 0 (no se puede reponer)
+        // Regla 2: tránsito NO cuenta (solo invActeck real)
+        // Regla 3: cobertura objetivo = 90 días × factor estacional
+        // Regla 4: mínimo 20 piezas cuando sugerido > 0
+        // Regla 5: cap al invActeck
         let sugerido = 0;
-        if (promedio90d > 0) {
-          const necesidad = (promedio90d * 3) - stock;
-          sugerido = Math.max(0, necesidad);
-          // Aplicar mínimo 11 solo si Digitalife tiene stock bajo (< 1 mes)
-          if (clienteKey === "digitalife" && stock < promedio90d && sugerido < 11) {
-            sugerido = 11;
-          }
-          // Limitar al disponible en Acteck + tránsito (no podemos enviar lo que no tenemos)
-          sugerido = Math.min(sugerido, disponibleReponer);
+        if (invActeck >= 10 && promedio90d > 0) {
+          const necesidad = (promedio90d * 3 * factorEstacional) - stock;
+          sugerido = Math.max(0, Math.round(necesidad));
+          // Mínimo 20 piezas si hay algo de sugerido
+          if (sugerido > 0 && sugerido < 20) sugerido = 20;
+          // Cap al inventario Acteck real (sin tránsito)
+          sugerido = Math.min(sugerido, invActeck);
         }
 
         const precioSku = Number(p.precio_venta) > 0 ? Number(p.precio_venta) : Number(invData && invData.precio_venta || 0);
@@ -768,7 +812,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     );
   }
 
-  return React.createElement("div", { className: "max-w-7xl mx-auto p-6 space-y-6" },
+  return React.createElement("div", { className: "max-w-none mx-auto p-6 space-y-6" },
     // Header
     React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
       React.createElement("div", { className: "flex justify-between items-start mb-4" },
@@ -983,69 +1027,101 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           )
         ),
         // Productos NUEVOS (en tránsito sin roadmap, solo AC/BR) — al principio, destacados
-        roadmapCruce.nuevos.length > 0 && React.createElement("div", { style: { background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 10, padding: 14, marginBottom: 16 } },
-          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#065F46", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 } },
-            "\uD83C\uDD95 Productos NUEVOS detectados (en tr\u00e1nsito, no est\u00e1n en roadmap) \u2014 " + roadmapCruce.nuevos.length + " SKUs"
-          ),
-          React.createElement("div", { style: { overflowX: "auto", maxHeight: 400, overflowY: "auto" } },
-            React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
-              React.createElement("thead", null,
-                React.createElement("tr", { style: { background: "#D1FAE5", borderBottom: "1px solid #A7F3D0", position: "sticky", top: 0 } },
-                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46" } }, "SKU"),
-                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46" } }, "Descripci\u00f3n"),
-                  React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 90 } }, "Piezas"),
-                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 160 } }, "Arribo a CEDIS")
-                )
+        roadmapCruce.nuevos.length > 0 && (function() {
+          var nuevosFiltrados = nuevosSearch
+            ? roadmapCruce.nuevos.filter(function(t) {
+                var q = nuevosSearch.toLowerCase();
+                return (t.sku || "").toLowerCase().includes(q) || (t.descripcion || "").toLowerCase().includes(q);
+              })
+            : roadmapCruce.nuevos;
+          return React.createElement("div", { style: { background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 10, padding: 14, marginBottom: 16 } },
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" } },
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#065F46", display: "flex", alignItems: "center", gap: 6 } },
+                "\uD83C\uDD95 Productos NUEVOS detectados (en tr\u00e1nsito, no est\u00e1n en roadmap) \u2014 " + roadmapCruce.nuevos.length + " SKUs"
               ),
-              React.createElement("tbody", null,
-                roadmapCruce.nuevos.map(function(t) {
-                  var arriboTxt = t.arribo ? (t.cedis ? (t.arribo + " \u00b7 " + t.cedis) : t.arribo) : "Sin fecha";
-                  return React.createElement("tr", { key: t.sku, style: { borderBottom: "1px solid #D1FAE5" } },
-                    React.createElement("td", { style: { padding: "6px 10px", fontWeight: 600, color: "#065F46", fontFamily: "ui-monospace,monospace" } }, t.sku),
-                    React.createElement("td", { style: { padding: "6px 10px", color: "#1E293B", maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: t.descripcion }, t.descripcion),
-                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#047857", fontWeight: 700 } }, t.piezas.toLocaleString("es-MX")),
-                    React.createElement("td", { style: { padding: "6px 10px", color: "#065F46", fontSize: 11 } }, arriboTxt)
-                  );
-                })
+              React.createElement("input", {
+                type: "text", placeholder: "Buscar SKU o descripci\u00f3n...",
+                value: nuevosSearch,
+                onChange: function(e) { setNuevosSearch(e.target.value); },
+                style: { padding: "5px 10px", border: "1px solid #A7F3D0", borderRadius: 6, fontSize: 12, width: 220, background: "#fff" }
+              })
+            ),
+            React.createElement("div", { style: { overflowX: "auto", maxHeight: 400, overflowY: "auto" } },
+              React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+                React.createElement("thead", null,
+                  React.createElement("tr", { style: { background: "#D1FAE5", borderBottom: "1px solid #A7F3D0", position: "sticky", top: 0 } },
+                    React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46" } }, "SKU"),
+                    React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46" } }, "Descripci\u00f3n"),
+                    React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 90 } }, "Piezas"),
+                    React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 160 } }, "Arribo a CEDIS")
+                  )
+                ),
+                React.createElement("tbody", null,
+                  nuevosFiltrados.map(function(t) {
+                    var arriboTxt = t.arribo ? (t.cedis ? (t.arribo + " \u00b7 " + t.cedis) : t.arribo) : "Sin fecha";
+                    return React.createElement("tr", { key: t.sku, style: { borderBottom: "1px solid #D1FAE5" } },
+                      React.createElement("td", { style: { padding: "6px 10px", fontWeight: 600, color: "#065F46", fontFamily: "ui-monospace,monospace" } }, t.sku),
+                      React.createElement("td", { style: { padding: "6px 10px", color: "#1E293B", maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: t.descripcion }, t.descripcion),
+                      React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#047857", fontWeight: 700 } }, t.piezas.toLocaleString("es-MX")),
+                      React.createElement("td", { style: { padding: "6px 10px", color: "#065F46", fontSize: 11 } }, arriboTxt)
+                    );
+                  })
+                )
               )
             )
-          )
-        ),
+          );
+        })(),
         // En camino (roadmap + tránsito) — ahora con Inv Acteck actual
-        roadmapCruce.enCamino.length > 0 && React.createElement("div", { style: { marginBottom: 16 } },
-          React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#1E40AF", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 } },
-            "\uD83D\uDEA2 En camino (llegando seg\u00fan roadmap) \u2014 " + roadmapCruce.enCamino.length + " SKUs"
-          ),
-          React.createElement("div", { style: { overflowX: "auto", maxHeight: 400, overflowY: "auto" } },
-            React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
-              React.createElement("thead", null,
-                React.createElement("tr", { style: { background: "#DBEAFE", position: "sticky", top: 0 } },
-                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF" } }, "SKU"),
-                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF" } }, "Descripci\u00f3n"),
-                  React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 80 } }, "Roadmap"),
-                  React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 100 } }, "Inv Acteck"),
-                  React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 100 } }, "Piezas"),
-                  React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 180 } }, "Arribo a CEDIS")
-                )
+        roadmapCruce.enCamino.length > 0 && (function() {
+          var enCaminoFiltrados = enCaminoSearch
+            ? roadmapCruce.enCamino.filter(function(r) {
+                var q = enCaminoSearch.toLowerCase();
+                return (r.sku || "").toLowerCase().includes(q) || (r.descripcion || "").toLowerCase().includes(q);
+              })
+            : roadmapCruce.enCamino;
+          return React.createElement("div", { style: { marginBottom: 16 } },
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" } },
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#1E40AF", display: "flex", alignItems: "center", gap: 6 } },
+                "\uD83D\uDEA2 En camino (llegando seg\u00fan roadmap) \u2014 " + roadmapCruce.enCamino.length + " SKUs"
               ),
-              React.createElement("tbody", null,
-                roadmapCruce.enCamino.map(function(r, i) {
-                  var arriboTxt = r.arribo ? (r.cedis ? (r.arribo + " \u00b7 " + r.cedis) : r.arribo) : "\u2014";
-                  return React.createElement("tr", { key: r.sku, style: { borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#FAFBFC" } },
-                    React.createElement("td", { style: { padding: "6px 10px", fontFamily: "ui-monospace,monospace", color: "#1E293B" } }, r.sku),
-                    React.createElement("td", { style: { padding: "6px 10px", color: "#475569", maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: r.descripcion }, (r.descripcion || "").slice(0, 80)),
-                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "center" } },
-                      React.createElement("span", { style: { padding: "2px 8px", borderRadius: 6, background: ESTADO_COLORES[r.rdmp] || "#64748B", color: "#fff", fontSize: 10, fontWeight: 600 } }, r.rdmp || "-")
-                    ),
-                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: r.invActeck > 0 ? "#1E293B" : "#94A3B8", fontWeight: r.invActeck > 0 ? 600 : 400 } }, r.invActeck.toLocaleString("es-MX")),
-                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#1E40AF", fontWeight: 600 } }, r.piezas.toLocaleString("es-MX")),
-                    React.createElement("td", { style: { padding: "6px 10px", color: "#475569", fontSize: 11 } }, arriboTxt)
-                  );
-                })
+              React.createElement("input", {
+                type: "text", placeholder: "Buscar SKU o descripci\u00f3n...",
+                value: enCaminoSearch,
+                onChange: function(e) { setEnCaminoSearch(e.target.value); },
+                style: { padding: "5px 10px", border: "1px solid #BFDBFE", borderRadius: 6, fontSize: 12, width: 220, background: "#fff" }
+              })
+            ),
+            React.createElement("div", { style: { overflowX: "auto", maxHeight: 400, overflowY: "auto" } },
+              React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+                React.createElement("thead", null,
+                  React.createElement("tr", { style: { background: "#DBEAFE", position: "sticky", top: 0 } },
+                    React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF" } }, "SKU"),
+                    React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF" } }, "Descripci\u00f3n"),
+                    React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 80 } }, "Roadmap"),
+                    React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 100 } }, "Inv Acteck"),
+                    React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 100 } }, "Piezas"),
+                    React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 180 } }, "Arribo a CEDIS")
+                  )
+                ),
+                React.createElement("tbody", null,
+                  enCaminoFiltrados.map(function(r, i) {
+                    var arriboTxt = r.arribo ? (r.cedis ? (r.arribo + " \u00b7 " + r.cedis) : r.arribo) : "\u2014";
+                    return React.createElement("tr", { key: r.sku, style: { borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#FAFBFC" } },
+                      React.createElement("td", { style: { padding: "6px 10px", fontFamily: "ui-monospace,monospace", color: "#1E293B" } }, r.sku),
+                      React.createElement("td", { style: { padding: "6px 10px", color: "#475569", maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: r.descripcion }, (r.descripcion || "").slice(0, 80)),
+                      React.createElement("td", { style: { padding: "6px 10px", textAlign: "center" } },
+                        React.createElement("span", { style: { padding: "2px 8px", borderRadius: 6, background: ESTADO_COLORES[r.rdmp] || "#64748B", color: "#fff", fontSize: 10, fontWeight: 600 } }, r.rdmp || "-")
+                      ),
+                      React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: r.invActeck > 0 ? "#1E293B" : "#94A3B8", fontWeight: r.invActeck > 0 ? 600 : 400 } }, r.invActeck.toLocaleString("es-MX")),
+                      React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#1E40AF", fontWeight: 600 } }, r.piezas.toLocaleString("es-MX")),
+                      React.createElement("td", { style: { padding: "6px 10px", color: "#475569", fontSize: 11 } }, arriboTxt)
+                    );
+                  })
+                )
               )
             )
-          )
-        )
+          );
+        })()
       ),
 
       // SKU Detail - Full Table
@@ -1122,7 +1198,15 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                     React.createElement("input", {
                       type: "number", min: 0,
                       value: sugeridoEdits[s.sku] !== undefined ? sugeridoEdits[s.sku] : (s.sugerido || 0),
-                      onChange: function(e) { var v = {}; v[s.sku] = Number(e.target.value) || 0; setSugeridoEdits(Object.assign({}, sugeridoEdits, v)); },
+                      onChange: function(e) {
+                        var nv = Number(e.target.value) || 0;
+                        var v = {}; v[s.sku] = nv;
+                        setSugeridoEdits(Object.assign({}, sugeridoEdits, v));
+                      },
+                      onBlur: function(e) {
+                        // Persistir en Supabase al salir del input
+                        saveSugeridoOverride(s.sku, Number(e.target.value) || 0);
+                      },
                       style: { width: 60, padding: "2px 4px", border: "1px solid #E2E8F0", borderRadius: 4, textAlign: "right", fontSize: 11 }
                     })
                   ),

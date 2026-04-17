@@ -334,7 +334,7 @@ export default function App() {
 
       {/* CONTENIDO */}
       <main className="flex-1 overflow-y-auto">
-          <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="w-full px-6 py-4">
           {vistaActual === "configuracion" ? (
             puedeVerConfig ? <Configuracion session={{user: authUser, perfil}} /> : <SinAcceso motivo="Solo el Super Admin puede ver Configuración." />
           ) : (
