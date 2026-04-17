@@ -10,6 +10,7 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
   const [estado, setEstado]       = useState(null);
   const [historico, setHistorico] = useState([]);
   const [sellIn, setSellIn]       = useState(0);
+  const [sellInByMes, setSellInByMes] = useState({});
   const [sellOut, setSellOut]     = useState({});
   const [cuotas, setCuotas]       = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -24,13 +25,19 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
           .order("anio", { ascending: false }).order("semana", { ascending: false }).limit(1),
         supabase.from("estados_cuenta").select("anio, semana, fecha_corte, saldo_actual, saldo_vencido, dso")
           .eq("cliente", clienteKey).order("anio", { ascending: true }).order("semana", { ascending: true }).limit(20),
-        supabase.from("sell_in_sku").select("monto_pesos").eq("cliente", clienteKey).eq("anio", anio),
+        supabase.from("sell_in_sku").select("mes, monto_pesos").eq("cliente", clienteKey).eq("anio", anio),
         supabase.from("sellout_sku").select("mes, monto_pesos").eq("cliente", clienteKey).eq("anio", anio),
         supabase.from("cuotas_mensuales").select("mes, cuota_min").eq("cliente", clienteKey).eq("anio", anio).order("mes"),
       ]);
       setEstado((ecRes.data && ecRes.data[0]) || null);
       setHistorico(histRes.data || []);
-      setSellIn((siRes.data || []).reduce((s, r) => s + (Number(r.monto_pesos) || 0), 0));
+      const siAll = siRes.data || [];
+      setSellIn(siAll.reduce((s, r) => s + (Number(r.monto_pesos) || 0), 0));
+      const siByMes = {};
+      siAll.forEach(r => {
+        const m = Number(r.mes); siByMes[m] = (siByMes[m] || 0) + (Number(r.monto_pesos) || 0);
+      });
+      setSellInByMes(siByMes);
       const byMes = {};
       (soRes.data || []).forEach(r => {
         const m = Number(r.mes); byMes[m] = (byMes[m] || 0) + (Number(r.monto_pesos) || 0);
@@ -132,24 +139,41 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
   const tasaCrec   = 1; // ya no se usa; se mantiene por compatibilidad de pie
 
   // Flujo Facturación (cuota SI) vs Cobranza (venc_mes) próximos 3 meses
+  const mesHoyFlujo = hoy.getMonth() + 1;
   const flujo3m = mesesVenc.map(v => {
     const cuotaMes = cuotas.find(q => Number(q.mes) === v.mes);
     const facturar = cuotaMes ? Number(cuotaMes.cuota_min) || 0 : 0;
+    const facturadoReal = sellInByMes[v.mes] || 0; // sell in real del mes
+    const esMesActual = v.mes === mesHoyFlujo && v.anio === hoy.getFullYear();
     return {
       ...v,
       facturar,
+      facturadoReal,
+      esMesActual,
       cobrar: v.monto,
       balance: v.monto - facturar,
     };
   });
   const hasFlujo = flujo3m.some(f => f.facturar > 0 || f.cobrar > 0);
 
+  // Acumulado histórico inicial: sell out de meses cerrados antes del mes actual,
+  // menos el saldo vencido (lo que el cliente trae rezagado de pagar).
+  // Representa la "capacidad de pago" pre-proyección.
+  const soHistorico = soValues
+    .filter(x => x.mes < mesHoy && !x.anualizado)
+    .reduce((s, x) => s + x.v, 0);
+  const acumInicial = soHistorico - saldoVencido;
+
   // Proyección híbrida: max(cuota SO mes, promedio real anualizado)
+  // con acumulado que arrastra excesos/déficits mes a mes.
+  let acumRun = acumInicial;
   const proyeccion = mesesVenc.map(v => {
     const cuotaMes = cuotas.find(q => Number(q.mes) === v.mes);
     const cuotaMin = cuotaMes ? Number(cuotaMes.cuota_min) || 0 : 0;
     const cobro    = hasSellOut ? Math.max(cuotaMin, soPromedio) : cuotaMin;
-    return { ...v, cobro, cuotaMin, base: soPromedio };
+    const balance  = cobro - v.monto;
+    acumRun += balance;
+    return { ...v, cobro, cuotaMin, base: soPromedio, balance, acumulado: acumRun };
   });
 
   // Tendencia histórica (mientras solo haya 1-2 cortes, se muestra placeholder)
@@ -425,34 +449,53 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
         <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
           <CardHeader titulo="Flujo: Facturación vs Cobranza (3 meses)" icono="🔄" />
           <p className="text-xs text-gray-400 mb-3">
-            Comparación de lo que vas a facturarle al cliente (Cuota SI mín) contra lo que ya está programado a cobrar (vencimientos).
+            Compara lo que vas a facturarle al cliente (Cuota SI mín anual $25M con temporalidad) vs lo ya facturado real y los vencimientos por cobrar.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="text-left text-xs text-gray-400 uppercase pb-2">Mes</th>
-                  <th className="text-right text-xs text-gray-400 uppercase pb-2">A Facturar (Cuota SI)</th>
+                  <th className="text-right text-xs text-gray-400 uppercase pb-2">A Facturar (Cuota $25M)</th>
+                  <th className="text-right text-xs text-gray-400 uppercase pb-2">Facturado Real</th>
                   <th className="text-right text-xs text-gray-400 uppercase pb-2">A Cobrar (Venc)</th>
                   <th className="text-right text-xs text-gray-400 uppercase pb-2">Balance Neto</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {flujo3m.map(f => (
-                  <tr key={f.k} className="text-sm">
-                    <td className="py-3 font-semibold text-gray-700">{f.label}</td>
-                    <td className="py-3 text-right text-gray-700">{f.facturar > 0 ? formatMXN(f.facturar) : "—"}</td>
-                    <td className="py-3 text-right text-blue-700 font-semibold">{f.cobrar > 0 ? formatMXN(f.cobrar) : "—"}</td>
-                    <td className={`py-3 text-right font-semibold ${f.balance >= 0 ? "text-green-600" : "text-red-600"}`}>
-                      {f.balance >= 0 ? "+" : ""}{formatMXN(f.balance)}
-                    </td>
-                  </tr>
-                ))}
+                {flujo3m.map(f => {
+                  const pctReal = f.facturar > 0 ? Math.round((f.facturadoReal / f.facturar) * 100) : 0;
+                  return (
+                    <tr key={f.k} className="text-sm">
+                      <td className="py-3 font-semibold text-gray-700">
+                        {f.label}
+                        {f.esMesActual && <span className="ml-1 text-[10px] text-blue-500">(en curso)</span>}
+                      </td>
+                      <td className="py-3 text-right text-gray-700">{f.facturar > 0 ? formatMXN(f.facturar) : "—"}</td>
+                      <td className="py-3 text-right">
+                        {f.facturadoReal > 0 ? (
+                          <div>
+                            <span className="text-gray-800 font-semibold">{formatMXN(f.facturadoReal)}</span>
+                            {f.facturar > 0 && (
+                              <span className={`ml-1 text-[10px] px-1.5 py-0.5 rounded-full ${pctReal >= 100 ? "bg-green-100 text-green-700" : pctReal >= 70 ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500"}`}>
+                                {pctReal}%
+                              </span>
+                            )}
+                          </div>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="py-3 text-right text-blue-700 font-semibold">{f.cobrar > 0 ? formatMXN(f.cobrar) : "—"}</td>
+                      <td className={`py-3 text-right font-semibold ${f.balance >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {f.balance >= 0 ? "+" : ""}{formatMXN(f.balance)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
           <p className="text-xs text-gray-400 mt-3 italic">
-            * Balance positivo = cobranza superior a facturación (libera línea). Balance negativo = más pedidos que cobros (consume línea).
+            * "Facturado Real" viene de sell_in_sku del mes (lo que ya emitiste de factura). Balance positivo = cobranza supera facturación pendiente (libera línea).
           </p>
         </div>
       )}
@@ -464,10 +507,13 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
           <p className="text-xs text-gray-400 mb-3">
             Proyección mensual = <strong>max(Cuota Sell Out mín, Promedio real)</strong>
             {hasSellOut && (
-              <> · Promedio {soValues.length} mes(es) con dato: <strong>{formatMXN(soPromedio)}</strong>
+              <> · Promedio {soValues.length} mes(es): <strong>{formatMXN(soPromedio)}</strong>
                 {soValues.some(x => x.anualizado) && <> (mes en curso anualizado)</>}
               </>
             )}
+          </p>
+          <p className="text-xs text-gray-400 mb-3">
+            <strong>Acumulado inicial</strong> = Sell Out histórico ({formatMXN(soHistorico)}) − Saldo vencido ({formatMXN(saldoVencido)}) = <strong className={acumInicial >= 0 ? "text-green-600" : "text-red-600"}>{formatMXN(acumInicial)}</strong> · Representa la capacidad de pago que el cliente trae del pasado.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -477,13 +523,25 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
                   <th className="text-right text-xs text-gray-400 uppercase pb-2">Cuota SO mín</th>
                   <th className="text-right text-xs text-gray-400 uppercase pb-2">Vencimiento</th>
                   <th className="text-right text-xs text-gray-400 uppercase pb-2">Sell Out proy.</th>
-                  <th className="text-right text-xs text-gray-400 uppercase pb-2">Balance</th>
+                  <th className="text-right text-xs text-gray-400 uppercase pb-2">Balance mes</th>
+                  <th className="text-right text-xs text-gray-400 uppercase pb-2">Acumulado</th>
                   <th className="text-center text-xs text-gray-400 uppercase pb-2">Cobertura</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {proyeccion.map(({ label, monto, cobro, cuotaMin }) => {
-                  const balance = cobro - monto;
+                {/* Fila inicial de acumulado histórico */}
+                <tr className="text-sm bg-gray-50">
+                  <td className="py-2 font-semibold text-gray-500 italic">Inicial (histórico)</td>
+                  <td className="py-2"></td>
+                  <td className="py-2"></td>
+                  <td className="py-2"></td>
+                  <td className="py-2"></td>
+                  <td className={`py-2 text-right font-semibold ${acumInicial >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    {acumInicial >= 0 ? "+" : ""}{formatMXN(acumInicial)}
+                  </td>
+                  <td className="py-2"></td>
+                </tr>
+                {proyeccion.map(({ label, monto, cobro, cuotaMin, balance, acumulado }) => {
                   const cobertura = monto > 0 ? Math.round((cobro / monto) * 100) : 0;
                   return (
                     <tr key={label} className="text-sm">
@@ -493,6 +551,9 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
                       <td className="py-3 text-right text-blue-700 font-semibold">{formatMXN(cobro)}</td>
                       <td className={`py-3 text-right font-semibold ${balance >= 0 ? "text-green-600" : "text-red-600"}`}>
                         {balance >= 0 ? "+" : ""}{formatMXN(balance)}
+                      </td>
+                      <td className={`py-3 text-right font-bold ${acumulado >= 0 ? "text-green-700" : "text-red-700"}`}>
+                        {acumulado >= 0 ? "+" : ""}{formatMXN(acumulado)}
                       </td>
                       <td className="py-3 text-center">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${cobertura >= 100 ? "bg-green-100 text-green-700" : cobertura >= 80 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
@@ -506,7 +567,7 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
             </table>
           </div>
           <p className="text-xs text-gray-400 mt-3 italic">
-            * Fórmula híbrida: asume que el cliente venderá al menos su cuota mensual mínima o lo que históricamente ha vendido (lo que sea mayor). Conservador.
+            * Fórmula híbrida: asume que el cliente venderá al menos su cuota mensual mínima o su promedio real (lo que sea mayor). La columna "Acumulado" arrastra el superávit/déficit mes a mes — si el cliente generó más Sell Out que vencimientos en meses pasados, ese exceso cubre déficits futuros.
           </p>
         </div>
       )}
