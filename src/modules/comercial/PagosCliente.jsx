@@ -915,7 +915,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${catActiva === "todas" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
                   Todas
                 </button>
-                {Object.entries(CATEGORIA_META).filter(([key]) => !(clienteKey === "pcel" && key === "pagosFijos") && !(clienteKey !== "pcel" && key === "spiff")).map(([key, meta]) => (
+                {Object.entries(CATEGORIA_META).filter(([key]) => !(clienteKey === "pcel" && key === "pagosFijos")).map(([key, meta]) => (
                   <button key={key} onClick={() => setCatActiva(catActiva === key ? "todas" : key)}
                     className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${catActiva === key ? "text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
                     style={catActiva === key ? { backgroundColor: meta.color } : {}}>
