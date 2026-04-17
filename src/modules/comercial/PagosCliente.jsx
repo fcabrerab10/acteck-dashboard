@@ -4,6 +4,8 @@ import { PCEL_REAL, PAGOS_DIGITALIFE_2026 } from '../../lib/constants';
 import { formatMXN, formatFecha } from '../../lib/utils';
 import { CardHeader } from '../../components';
 
+const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
 const CATEGORIA_META = {
   promociones: { label: "Promociones", color: "#f59e0b" },
   marketing: { label: "Marketing", color: "#8b5cf6" },
@@ -923,7 +925,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         const [yr, mo] = m.mes.split("-");
                         return (<React.Fragment key={m.mes}>
                           <tr className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setExpandedMonth(expandedMonth === m.mes ? null : m.mes)}>
-                            <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTOS[mo]} {yr}</td>
+                            <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTOS[parseInt(mo, 10) - 1]} {yr}</td>
                             <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">—</span>}</td>
                             <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">—</span>}</td>
                             <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosFijos    > 0 ? formatMXN(m.pagosFijos)    : <span className="text-gray-300">—</span>}</td>
