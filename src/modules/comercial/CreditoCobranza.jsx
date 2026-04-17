@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { formatMXN, formatUSD, formatFecha } from '../../lib/utils';
 import { CardHeader } from '../../components';
@@ -491,26 +490,38 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
         </div>
       )}
 
-      {/* TENDENCIA HISTÓRICA */}
+      {/* TENDENCIA HISTÓRICA — tabla simple hasta tener 3+ cortes */}
       <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
         <CardHeader titulo="Tendencia histórica" icono="📉" />
         {hasTendencia ? (
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={tendenciaData} margin={{ top: 10, right: 10, bottom: 5, left: 10 }}>
-              <CartesianGrid stroke="#f3f4f6" />
-              <XAxis dataKey="etiqueta" tick={{ fontSize: 11 }} />
-              <YAxis yAxisId="left" tickFormatter={v => `$${(v/1e6).toFixed(1)}M`} tick={{ fontSize: 11 }} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v, n) => n === "DSO" ? `${v} días` : formatMXN(v)} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line yAxisId="left" type="monotone" dataKey="Saldo"   stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
-              <Line yAxisId="left" type="monotone" dataKey="Vencido" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} />
-              <Line yAxisId="right" type="monotone" dataKey="DSO"    stroke="#8b5cf6" strokeWidth={2} strokeDasharray="4 3" dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left text-xs text-gray-400 uppercase pb-2">Semana</th>
+                  <th className="text-right text-xs text-gray-400 uppercase pb-2">Saldo</th>
+                  <th className="text-right text-xs text-gray-400 uppercase pb-2">Vencido</th>
+                  <th className="text-right text-xs text-gray-400 uppercase pb-2">DSO</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {tendenciaData.map((row, i) => (
+                  <tr key={i}>
+                    <td className="py-2 font-medium text-gray-700">S{row.etiqueta.replace('S','')}</td>
+                    <td className="py-2 text-right text-gray-700">{formatMXN(row.Saldo)}</td>
+                    <td className={`py-2 text-right ${row.Vencido > 0 ? "text-orange-600" : "text-gray-700"}`}>{formatMXN(row.Vencido)}</td>
+                    <td className="py-2 text-right text-purple-700">{row.DSO != null ? `${row.DSO}d` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-xs text-gray-400 mt-3 italic">
+              Gráfica disponible cuando tengas más de {Math.max(0, 4 - historico.length)} cortes adicionales.
+            </p>
+          </div>
         ) : (
           <p className="text-sm text-gray-400 mt-2 italic">
-            Se necesitan al menos 3 cortes para mostrar la tendencia. Hoy hay {historico.length} corte{historico.length !== 1 ? "s" : ""} cargado{historico.length !== 1 ? "s" : ""}. La gráfica cobra sentido después de 4-6 semanas de cargas.
+            Se necesitan al menos 3 cortes para mostrar la tendencia. Hoy hay {historico.length} corte{historico.length !== 1 ? "s" : ""} cargado{historico.length !== 1 ? "s" : ""}. La vista cobra sentido después de 4-6 semanas de cargas semanales.
           </p>
         )}
       </div>
