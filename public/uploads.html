@@ -202,53 +202,115 @@ const PARSERS = {
     }).filter(r => r.sku && r.semana != null);
   },
   estadoCuenta(wb, cliente, filename){
-    // Parse year and week from filename like "00473Semana16.xlsx"
-    const m = String(filename||'').match(/Semana\s*(\d+)/i);
-    const semana = m ? parseInt(m[1],10) : null;
-    const year = new Date().getFullYear();
     const sh = wb.Sheets[wb.SheetNames[0]];
-    // Read resumen from row 8 (cells F8:I8) — Saldo Actual, Saldo Vencido, Notas Credito, Saldo a Vencer
     const cellVal = (ref) => { const c = sh[ref]; return c ? (c.v ?? null) : null; };
-    const saldo_actual = toNum(cellVal('F8')) || 0;
-    const saldo_vencido = toNum(cellVal('G8')) || 0;
-    const notas_credito = toNum(cellVal('H8')) || 0;
+
+    // Year + week + fecha_corte del header F6 ("Estado de cuenta de la Semana X Del DD/MM/YYYY al DD/MM/YYYY")
+    let semana = null, fecha_corte = null, year = new Date().getFullYear();
+    const headerTxt = String(cellVal('F6') || '');
+    const mm = headerTxt.match(/Semana\s+(\d+)\s+Del\s+(\d{2}\/\d{2}\/\d{4})\s+al\s+(\d{2}\/\d{2}\/\d{4})/i);
+    if (mm) {
+      semana = parseInt(mm[1], 10);
+      const parts = mm[3].split('/');
+      fecha_corte = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      year = parseInt(parts[2], 10);
+    } else {
+      const m2 = String(filename||'').match(/Semana\s*(\d+)/i);
+      if (m2) semana = parseInt(m2[1],10);
+      fecha_corte = new Date().toISOString().slice(0,10);
+    }
+
+    // Razón social: B8
+    const razon_social = toStr(cellVal('B8')) || (cliente==='pcel'?'PC ONLINE':'API GLOBAL');
+
+    // Resumen
+    const saldo_actual   = toNum(cellVal('F8')) || 0;
+    const saldo_vencido  = toNum(cellVal('G8')) || 0;
+    const notas_credito  = toNum(cellVal('H8')) || 0;
     const saldo_a_vencer = toNum(cellVal('I8')) || 0;
-    // Detail rows: headers on row 10 (0-indexed range: 9)
+
+    // Detail rows: headers on row 10 (range: 9)
     const rows = XLSX.utils.sheet_to_json(sh, {defval:null, range: 9});
     const detalle = [];
+    let aging_d0_30 = 0, aging_d31_60 = 0, aging_d61_90 = 0, aging_mas90 = 0;
+    const vencMesMap = {}; // YYYY-MM -> monto
+
     for (const r of rows) {
       const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
       const importe = toNum(obj.importe_factura ?? obj.importe);
-      const saldo = toNum(obj.saldo_actual ?? obj.saldo);
-      if (!obj.movimientos && !importe && !saldo) continue; // skip empty rows
-      const aging = {
-        corriente: toNum(obj.corriente) || 0,
-        d01_30: toNum(obj['01_30_dias'] ?? obj._01_30_dias) || 0,
-        d31_60: toNum(obj['31_60_dias'] ?? obj._31_60_dias) || 0,
-        d61_90: toNum(obj['61_90_dias'] ?? obj._61_90_dias) || 0,
-        d91_180: toNum(obj['91_180_dias'] ?? obj._91_180_dias) || 0,
-        d181: toNum(obj.mas_de_181_dias ?? obj._mas_de_181_dias) || 0,
-      };
+      const saldo = toNum(obj.saldo_actual ?? obj.saldo) || 0;
+      if (!obj.movimientos && !importe && !saldo) continue;
+      const ag_corr   = toNum(obj.corriente) || 0;
+      const ag_01_30  = toNum(obj['01_30_dias'] ?? obj._01_30_dias) || 0;
+      const ag_31_60  = toNum(obj['31_60_dias'] ?? obj._31_60_dias) || 0;
+      const ag_61_90  = toNum(obj['61_90_dias'] ?? obj._61_90_dias) || 0;
+      const ag_91_180 = toNum(obj['91_180_dias'] ?? obj._91_180_dias) || 0;
+      const ag_181    = toNum(obj.mas_de_181_dias ?? obj._mas_de_181_dias) || 0;
+
+      aging_d0_30  += ag_01_30;
+      aging_d31_60 += ag_31_60;
+      aging_d61_90 += ag_61_90;
+      aging_mas90  += ag_91_180 + ag_181;
+
+      const venc = toISODate(obj.vencimiento);
+      if (venc && saldo > 0) {
+        const key = venc.slice(0,7); // YYYY-MM
+        vencMesMap[key] = (vencMesMap[key] || 0) + saldo;
+      }
+
       detalle.push({
         movimiento: toStr(obj.movimientos ?? obj.movimiento),
         condicion: toStr(obj.condicion),
         referencia: toStr(obj.referencia),
         fecha_emision: toISODate(obj.fecha_emision),
-        vencimiento: toISODate(obj.vencimiento),
+        vencimiento: venc,
         importe_factura: importe,
         dias_moratorios: toInt(obj.dias_moratorios),
         saldo_actual: saldo,
-        aging_corriente: aging.corriente,
-        aging_01_30: aging.d01_30,
-        aging_31_60: aging.d31_60,
-        aging_61_90: aging.d61_90,
-        aging_91_180: aging.d91_180,
-        aging_181_mas: aging.d181,
+        aging_corriente: ag_corr,
+        aging_01_30: ag_01_30,
+        aging_31_60: ag_31_60,
+        aging_61_90: ag_61_90,
+        aging_91_180: ag_91_180,
+        aging_181_mas: ag_181,
       });
     }
+
+    // venc_mes_1/2/3 = mes actual, +1, +2 (desde fecha_corte si se pudo leer, si no hoy)
+    const base = fecha_corte ? new Date(fecha_corte + 'T00:00:00') : new Date();
+    const offsetKey = (off) => {
+      const d = new Date(base.getFullYear(), base.getMonth() + off, 1);
+      const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0');
+      return `${y}-${m}`;
+    };
+    const venc_mes_1 = vencMesMap[offsetKey(0)] || 0;
+    const venc_mes_2 = vencMesMap[offsetKey(1)] || 0;
+    const venc_mes_3 = vencMesMap[offsetKey(2)] || 0;
+
+    // DSO: promedio ponderado de días (hoy - fecha_emision) para facturas con saldo > 0
+    const hoy = new Date();
+    let sumDays = 0, sumSaldo = 0;
+    for (const d of detalle) {
+      if (d.saldo_actual > 0 && d.fecha_emision) {
+        const fe = new Date(d.fecha_emision + 'T00:00:00');
+        const days = Math.max(0, Math.floor((hoy - fe) / 86400000));
+        sumDays += days * d.saldo_actual;
+        sumSaldo += d.saldo_actual;
+      }
+    }
+    const dso = sumSaldo > 0 ? Math.round(sumDays / sumSaldo) : null;
+
     return {
-      resumen: [{ cliente, anio: year, semana, fecha_corte: new Date().toISOString().slice(0,10), saldo_actual, saldo_vencido, notas_credito, saldo_a_vencer, razon_social: cliente==='pcel'?'PC ONLINE':'API GLOBAL' }],
-      detalle: detalle
+      resumen: {
+        cliente, anio: year, semana, fecha_corte,
+        saldo_actual, saldo_vencido, notas_credito, saldo_a_vencer,
+        razon_social,
+        aging_d0_30, aging_d31_60, aging_d61_90, aging_mas90,
+        venc_mes_1, venc_mes_2, venc_mes_3,
+        dso,
+        // NO tocamos linea_credito_usd: se conserva el valor previo de la DB
+      },
+      detalle
     };
   },
   masterEmbarques(wb){
@@ -416,10 +478,18 @@ async function handleUpload(src){
     // Estados de cuenta and Roadmap+Precios have special handling
     } else if (src.parser === 'estadoCuenta') {
       const data = PARSERS.estadoCuenta(wb, src.cliente, f.name);
-      appendLog(src, `Resumen: 1 fila, detalle: ${data.detalle.length} mov.`);
-      await postChunks(src, 'estados_cuenta', 'cliente,anio,semana', data.resumen);
-      // detalle: we'd need estado_cuenta_id FK; skip for now or re-query
-      appendLog(src, 'Nota: detalle aging queda pendiente (requiere FK post-insert)');
+      appendLog(src, `Resumen sem ${data.resumen.semana}/${data.resumen.anio} · Saldo ${data.resumen.saldo_actual?.toLocaleString()} · Vencido ${data.resumen.saldo_vencido?.toLocaleString()} · DSO ${data.resumen.dso}d`);
+      appendLog(src, `Aging: 0-30=${data.resumen.aging_d0_30.toLocaleString()} · 31-60=${data.resumen.aging_d31_60.toLocaleString()} · 61-90=${data.resumen.aging_d61_90.toLocaleString()} · +90=${data.resumen.aging_mas90.toLocaleString()}`);
+      appendLog(src, `Venc mes 1/2/3: ${data.resumen.venc_mes_1.toLocaleString()} / ${data.resumen.venc_mes_2.toLocaleString()} / ${data.resumen.venc_mes_3.toLocaleString()}`);
+      appendLog(src, `Detalle: ${data.detalle.length} facturas`);
+      const r = await fetch('/api/upload-estado-cuenta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${JSON.stringify(j).slice(0, 300)}`);
+      appendLog(src, `✓ estado_cuenta id=${j.id} · TC día: ${j.tipo_cambio ?? '—'} · ${j.detalle_insertado} facturas insertadas`);
     } else if (src.parser === 'roadmapPrecios') {
       const {roadmap, precios} = PARSERS.roadmapPrecios(wb);
       appendLog(src, `Roadmap: ${roadmap.length} SKUs, Precios: ${precios.length} SKUs`);
