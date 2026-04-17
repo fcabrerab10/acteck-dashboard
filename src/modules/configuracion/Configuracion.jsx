@@ -2,10 +2,20 @@ import React, { useState, useEffect } from "react";
 import { supabase } from '../../lib/supabase';
 
 const ROLES = [
-  { value: "admin", label: "Administrador", desc: "Acceso total, crea usuarios" },
-  { value: "vendedor", label: "Vendedor", desc: "Ve sus clientes, puede editar" },
-  { value: "viewer", label: "Viewer / Director", desc: "Ve todo, no edita" },
-  { value: "marketing", label: "Marketing", desc: "Solo módulo Marketing" },
+  { value: "super_admin", label: "Super Admin",   desc: "Control total. Único que gestiona usuarios y sube datos." },
+  { value: "admin",       label: "Administrador", desc: "Edita datos pero no gestiona usuarios ni sube datos." },
+  { value: "asistente",   label: "Asistente",     desc: "Acceso a clientes asignados. Edita si tiene permiso." },
+  { value: "cliente",     label: "Cliente",       desc: "Ve solo SU cliente y pestañas marcadas. Read-only." },
+  { value: "viewer",      label: "Viewer",        desc: "Solo lectura. Nunca edita." },
+];
+
+const PESTANAS_OPT = [
+  { value: "home",       label: "Resumen" },
+  { value: "analisis",   label: "Análisis" },
+  { value: "estrategia", label: "Estrategia de Producto" },
+  { value: "marketing",  label: "Marketing" },
+  { value: "pagos",      label: "Pagos" },
+  { value: "cartera",    label: "Crédito y Cobranza" },
 ];
 
 const CLIENTES_OPT = [
@@ -30,7 +40,7 @@ export default function Configuracion({ session }) {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ nombre: "", email: "", password: "", rol: "viewer", clientes: [], modulos: ["comercial"], puede_editar: false });
+  const [form, setForm] = useState({ nombre: "", email: "", password: "", rol: "viewer", clientes: [], modulos: ["comercial"], pestanas_cliente: [], puede_editar: false });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -53,7 +63,7 @@ export default function Configuracion({ session }) {
     try {
       const token = (await supabase.auth.getSession()).data.session?.access_token;
       if (editingId) {
-        const updates = { nombre: form.nombre, rol: form.rol, clientes: form.clientes, modulos: form.modulos, puede_editar: form.puede_editar };
+        const updates = { nombre: form.nombre, rol: form.rol, clientes: form.clientes, modulos: form.modulos, pestanas_cliente: form.pestanas_cliente, puede_editar: form.puede_editar };
         const body = { perfil_id: editingId, updates };
         if (form.password) body.new_password = form.password;
         const res = await fetch("/api/admin/update-user", {
@@ -77,7 +87,7 @@ export default function Configuracion({ session }) {
       }
       setShowForm(false);
       setEditingId(null);
-      setForm({ nombre: "", email: "", password: "", rol: "viewer", clientes: [], modulos: ["comercial"], puede_editar: false });
+      setForm({ nombre: "", email: "", password: "", rol: "viewer", clientes: [], modulos: ["comercial"], pestanas_cliente: [], puede_editar: false });
       fetchUsuarios();
     } catch (err) {
       setMsg("Error: " + err.message);
@@ -88,7 +98,7 @@ export default function Configuracion({ session }) {
 
   function startEdit(u) {
     setEditingId(u.id);
-    setForm({ nombre: u.nombre, email: u.email, password: "", rol: u.rol, clientes: u.clientes || [], modulos: u.modulos || [], puede_editar: u.puede_editar });
+    setForm({ nombre: u.nombre, email: u.email, password: "", rol: u.rol, clientes: u.clientes || [], modulos: u.modulos || [], pestanas_cliente: u.pestanas_cliente || [], puede_editar: u.puede_editar });
     setShowForm(true);
   }
 
@@ -109,7 +119,7 @@ export default function Configuracion({ session }) {
           <h2 className="text-2xl font-bold text-gray-800">Configuración</h2>
           <p className="text-sm text-gray-400">Gestión de usuarios y permisos</p>
         </div>
-        <button onClick={() => { setShowForm(true); setEditingId(null); setForm({ nombre: "", email: "", password: "", rol: "viewer", clientes: [], modulos: ["comercial"], puede_editar: false }); }} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition">+ Nuevo usuario</button>
+        <button onClick={() => { setShowForm(true); setEditingId(null); setForm({ nombre: "", email: "", password: "", rol: "viewer", clientes: [], modulos: ["comercial"], pestanas_cliente: [], puede_editar: false }); }} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition">+ Nuevo usuario</button>
       </div>
 
       {msg && <div className={"mb-4 p-3 rounded-xl text-sm " + (msg.startsWith("Error") ? "bg-red-50 text-red-600 border border-red-200" : "bg-green-50 text-green-600 border border-green-200")}>{msg}</div>}
@@ -155,10 +165,23 @@ export default function Configuracion({ session }) {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 mb-4">
-            <input type="checkbox" checked={form.puede_editar} onChange={e => setForm({...form, puede_editar: e.target.checked})} id="canEdit" className="rounded" />
-            <label htmlFor="canEdit" className="text-sm text-gray-600">Puede editar datos (no solo lectura)</label>
-          </div>
+          {form.rol === "cliente" && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Pestañas visibles para este cliente</label>
+              <p className="text-xs text-gray-500 mb-2">El usuario solo verá las pestañas que marques del/los cliente(s) asignado(s).</p>
+              <div className="flex flex-wrap gap-2">
+                {PESTANAS_OPT.map(p => (
+                  <button key={p.value} onClick={() => setForm({...form, pestanas_cliente: toggleArray(form.pestanas_cliente, p.value)})} className={"px-3 py-1.5 rounded-lg text-xs font-medium transition " + (form.pestanas_cliente.includes(p.value) ? "bg-green-600 text-white" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50")}>{p.label}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {(form.rol === "asistente" || form.rol === "admin") && (
+            <div className="flex items-center gap-2 mb-4">
+              <input type="checkbox" checked={form.puede_editar} onChange={e => setForm({...form, puede_editar: e.target.checked})} id="canEdit" className="rounded" />
+              <label htmlFor="canEdit" className="text-sm text-gray-600">Puede editar datos (si se desmarca, será solo lectura)</label>
+            </div>
+          )}
           <div className="flex gap-2">
             <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50">{saving ? "Guardando..." : (editingId ? "Guardar cambios" : "Crear usuario")}</button>
             <button onClick={() => { setShowForm(false); setEditingId(null); }} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-xl text-sm hover:bg-gray-200 transition">Cancelar</button>
@@ -191,7 +214,7 @@ export default function Configuracion({ session }) {
                   <p className="text-xs text-gray-400">{u.email}</p>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={"px-2 py-1 rounded-lg text-xs font-medium " + (u.rol === "admin" ? "bg-purple-100 text-purple-700" : u.rol === "vendedor" ? "bg-blue-100 text-blue-700" : u.rol === "marketing" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-700")}>{ROLES.find(r => r.value === u.rol)?.label || u.rol}</span>
+                  <span className={"px-2 py-1 rounded-lg text-xs font-medium " + (u.rol === "super_admin" ? "bg-purple-100 text-purple-700" : u.rol === "admin" ? "bg-indigo-100 text-indigo-700" : u.rol === "asistente" ? "bg-blue-100 text-blue-700" : u.rol === "cliente" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700")}>{ROLES.find(r => r.value === u.rol)?.label || u.rol}</span>
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-600">{(u.clientes || []).join(", ") || "Todos"}</td>
                 <td className="px-4 py-3 text-xs text-gray-600">{(u.modulos || []).join(", ") || "Todos"}</td>

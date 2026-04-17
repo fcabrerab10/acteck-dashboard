@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronRight, ChevronDown, Lock } from 'lucide-react';
+import { puedeConfigurar, puedeActualizarDatos, puedeVerCliente, puedeVerPestana, puedeVerModulo } from '../lib/permisos';
 
 /**
  * Sidebar — navegación jerárquica de 3 niveles
@@ -134,7 +135,8 @@ export default function Sidebar({
   const isActiveGlobal = (pageId) =>
     clienteActivo === null && paginaActiva === pageId;
 
-  const esAdmin = perfilUsuario?.rol === 'admin';
+  const puedeVerConfig = puedeConfigurar(perfilUsuario);
+  const puedeActualizar = puedeActualizarDatos(perfilUsuario);
 
   return (
     <aside className="w-60 bg-white border-r border-gray-100 flex flex-col shadow-sm shrink-0 overflow-y-auto">
@@ -178,6 +180,7 @@ export default function Sidebar({
             isActiveLeaf={isActiveLeaf}
             isActiveGlobal={isActiveGlobal}
             modoPresent={modoPresent}
+            perfil={perfilUsuario}
           />
         ))}
       </nav>
@@ -201,7 +204,7 @@ export default function Sidebar({
         )}
 
         {/* Configuración */}
-        {esAdmin && !modoPresent && (
+        {puedeVerConfig && !modoPresent && (
           <button
             onClick={() => onNavegar(null, 'configuracion')}
             className={[
@@ -216,7 +219,7 @@ export default function Sidebar({
         )}
 
         {/* Actualizar Datos — abre uploads.html */}
-        {esAdmin && !modoPresent && (
+        {puedeActualizar && !modoPresent && (
           <a
             href="/uploads.html"
             className="w-full py-1.5 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-semibold shadow hover:shadow-md transition-all flex items-center justify-center gap-2"
@@ -242,9 +245,25 @@ export default function Sidebar({
 // ────────────────────────────────────────────────────────────
 //  SUBCOMPONENTES
 // ────────────────────────────────────────────────────────────
-function GrupoBloque({ grupo, expanded, toggle, clienteActivo, paginaActiva, onNavegar, isActiveLeaf, isActiveGlobal, modoPresent }) {
+function GrupoBloque({ grupo, expanded, toggle, clienteActivo, paginaActiva, onNavegar, isActiveLeaf, isActiveGlobal, modoPresent, perfil }) {
   const isOpen = expanded[grupo.id];
   const hasItems = grupo.items && grupo.items.length > 0;
+
+  // Si es el grupo "Negocio", solo mostrar módulos permitidos para el usuario
+  // (super_admin ve todo, otros solo lo que tengan en perfil.modulos)
+  const MODULO_MAP = {
+    estadoResultados: 'pnl',
+    preciosMargenes:  'precios',
+    forecastNegocio:  'forecast',
+  };
+  const itemsFiltrados = (grupo.items || []).filter(item => {
+    if (grupo.id !== 'negocio') return true;
+    const moduloId = MODULO_MAP[item.id];
+    if (!moduloId) return true;
+    return puedeVerModulo(perfil, moduloId);
+  });
+  // Si tras el filtro el grupo quedó vacío, ocultarlo completo (excepto direccionComercial, que siempre existe)
+  if (grupo.id === 'negocio' && itemsFiltrados.length === 0) return null;
 
   return (
     <div>
@@ -261,9 +280,21 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, paginaActiva, onN
 
       {isOpen && hasItems && (
         <div className="ml-3 mt-0.5 pl-2 border-l border-gray-100 space-y-0.5">
-          {grupo.items.map((item) => {
+          {itemsFiltrados.map((item) => {
             if (item.type === 'clientes') {
               const isAdminOpen = expanded[item.id];
+              // Filtrar clientes por los permitidos al usuario
+              const clientesFiltrados = Object.entries(PESTANAS_POR_CLIENTE).filter(([cid]) => {
+                if (modoPresent && cid !== clienteActivo) return false;
+                return puedeVerCliente(perfil, cid);
+              });
+              if (clientesFiltrados.length === 0) {
+                return (
+                  <div key={item.id} className="px-2 py-1.5 text-xs text-gray-400 italic">
+                    Sin clientes asignados
+                  </div>
+                );
+              }
               return (
                 <div key={item.id}>
                   <button
@@ -276,9 +307,7 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, paginaActiva, onN
                   </button>
                   {isAdminOpen && (
                     <div className="ml-3 mt-0.5 pl-2 border-l border-gray-100 space-y-0.5">
-                      {Object.entries(PESTANAS_POR_CLIENTE)
-                        .filter(([cid]) => !modoPresent || cid === clienteActivo)
-                        .map(([cid, cfg]) => (
+                      {clientesFiltrados.map(([cid, cfg]) => (
                         <ClienteBloque
                           key={cid}
                           clienteId={cid}
@@ -288,6 +317,7 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, paginaActiva, onN
                           onNavegar={onNavegar}
                           isActiveLeaf={isActiveLeaf}
                           clienteActivo={clienteActivo}
+                          perfil={perfil}
                         />
                       ))}
                     </div>
@@ -314,7 +344,7 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, paginaActiva, onN
   );
 }
 
-function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLeaf, clienteActivo }) {
+function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLeaf, clienteActivo, perfil }) {
   const key = `cliente_${clienteId}`;
   const isOpen = expanded[key];
   const isClienteActual = clienteActivo === clienteId;
@@ -328,6 +358,10 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
       </div>
     );
   }
+
+  // Filtrar pestañas por permiso del usuario
+  const pestanasPermitidas = (cfg.pestanas || []).filter(p => puedeVerPestana(perfil, p.id));
+  if (pestanasPermitidas.length === 0) return null;
 
   return (
     <div>
@@ -348,7 +382,7 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
       </button>
       {isOpen && (
         <div className="ml-3 mt-0.5 pl-2 border-l border-gray-100 space-y-0.5">
-          {cfg.pestanas.map((p) => (
+          {pestanasPermitidas.map((p) => (
             <NavItem
               key={p.id}
               label={p.label}

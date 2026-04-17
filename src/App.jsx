@@ -10,6 +10,9 @@ import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
 import LoginPage from './modules/auth/LoginPage';
 import { Configuracion } from './modules/configuracion';
 import ActualizacionDatos from './modules/settings/ActualizacionDatos';
+import SinAcceso from './components/SinAcceso';
+import { puedeConfigurar, puedeActualizarDatos, puedeVerCliente, puedeVerPestana } from './lib/permisos';
+import { PerfilContext } from './lib/perfilContext';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -298,7 +301,8 @@ export default function App() {
     }
   };
 
-  const esAdmin = perfil?.rol === "admin" || perfil?.rol === "super_admin";
+  const puedeActualizar = puedeActualizarDatos(perfil);
+  const puedeVerConfig  = puedeConfigurar(perfil);
   const navItems = [
     { id: "home",       label: "Resumen",               icono: "°", habilitado: true  },
     { id: "analisis",   label: "An¡lisis",                icono: "°", habilitado: true  },
@@ -306,7 +310,7 @@ export default function App() {
     { id: "marketing",  label: "Marketing",              icono: "°", habilitado: clienteActivo !== "pcel"  },
     { id: "pagos",      label: "Pagos",                  icono: "°°", habilitado: true  },
     { id: "cartera",    label: "Crdito y Cobranza",     icono: "°", habilitado: true  },
-    ...(esAdmin ? [{ id: "actualizacion", label: "Actualizaci�n de datos", icono: "=", habilitado: true, admin: true }] : []),
+    ...(puedeActualizar ? [{ id: "actualizacion", label: "Actualizaci�n de datos", icono: "=", habilitado: true, admin: true }] : []),
   ]
 
   
@@ -315,6 +319,7 @@ export default function App() {
 
 
   return (
+    <PerfilContext.Provider value={perfil}>
     <div className="flex h-screen bg-gray-50 font-sans">
 
       {/* SIDEBAR */}
@@ -331,7 +336,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-6 py-4">
           {vistaActual === "configuracion" ? (
-            <Configuracion session={{user: authUser, perfil}} />
+            puedeVerConfig ? <Configuracion session={{user: authUser, perfil}} /> : <SinAcceso motivo="Solo el Super Admin puede ver Configuración." />
           ) : (
             <>
             {/* Banner modo presentaci³n */}
@@ -342,6 +347,12 @@ export default function App() {
           {paginaActiva === "forecastClientes" && <ForecastClientesTab />}
           <>
             <>
+        {clienteActivo && !puedeVerCliente(perfil, clienteActivo) ? (
+          <SinAcceso motivo={`No tienes acceso al cliente ${clienteActivo}.`} />
+        ) : clienteActivo && ['home','analisis','estrategia','marketing','pagos','cartera'].includes(paginaActiva) && !puedeVerPestana(perfil, paginaActiva) ? (
+          <SinAcceso motivo={`No tienes acceso a esta pestaña de ${clienteActivo}.`} />
+        ) : (
+          <>
         {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} isML={clienteActivo === "mercadolibre"} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} clienteKey={clienteActivo} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
@@ -349,7 +360,10 @@ export default function App() {
             {paginaActiva === "estrategia" && <EstrategiaProducto cliente={clienteActivo === "digitalife" ? "Digitalife" : "{c.nombre}"}  clienteKey={clienteActivo} />}
         {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: clienteActivo })}
                     {paginaActiva === "forecast" && React.createElement(ForecastCliente, { cliente: c.nombre, clienteKey: clienteActivo })}
-            {paginaActiva === "actualizacion" && esAdmin && <ActualizacionDatos perfil={perfil} />}
+          </>
+        )}
+            {paginaActiva === "actualizacion" && puedeActualizar && <ActualizacionDatos perfil={perfil} />}
+            {paginaActiva === "actualizacion" && !puedeActualizar && <SinAcceso motivo="Solo el Super Admin puede actualizar datos." />}
 </>
           </>
             </>
@@ -363,5 +377,6 @@ export default function App() {
       {showUpload && React.createElement(UploadModalX, { onClose: function() { setShowUpload(false); } })}
 
     </div>
+    </PerfilContext.Provider>
   );
 }

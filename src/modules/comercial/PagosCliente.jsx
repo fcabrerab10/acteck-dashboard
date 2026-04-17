@@ -3,6 +3,8 @@ import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { PCEL_REAL, PAGOS_DIGITALIFE_2026 } from '../../lib/constants';
 import { formatMXN, formatFecha } from '../../lib/utils';
 import { CardHeader } from '../../components';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeEditar as puedeEditarFn } from '../../lib/permisos';
 
 const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
@@ -25,6 +27,8 @@ const ESTATUS_OPT = [
 
 export default function PagosCliente({ cliente, clienteKey }) {
   const c = cliente;
+  const perfil = usePerfil();
+  const canEdit = puedeEditarFn(perfil);
 
   // ── State ──
   const [registros, setRegistros]     = useState([]);
@@ -214,6 +218,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   }, [spiffCalc]);
 
   const crearSpiffPago = async (calc) => {
+    if (!canEdit) return;
     const mesLabel = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][calc.mes - 1];
     const anio = new Date().getFullYear();
     const nextMes = calc.mes === 12 ? 1 : calc.mes + 1;
@@ -238,6 +243,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   };
 
   const marcarSpiffNoAplica = async (mes) => {
+    if (!canEdit) return;
     const mesLabel = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][mes - 1];
     const anio = new Date().getFullYear();
     const nextMes = mes === 12 ? 1 : mes + 1;
@@ -476,6 +482,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   // ── Inline edit helpers ──
   const startEdit = (id, field, value) => {
     if (!DB_CONFIGURED) return;
+    if (!canEdit) return; // Bloqueo por permisos
     setEditingCell({ id, field });
     setEditValue(value ?? "");
   };
@@ -1007,11 +1014,14 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   </button>
                 ))}
                 <span className="ml-auto text-xs text-gray-400">{filtered.length} registro{filtered.length !== 1 ? "s" : ""}</span>
-                {DB_CONFIGURED && (
+                {DB_CONFIGURED && canEdit && (
                   <button onClick={() => setShowAdd(!showAdd)}
                     className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white rounded-full text-sm font-semibold hover:bg-blue-700 transition-colors">
                     + Agregar
                   </button>
+                )}
+                {!canEdit && (
+                  <span className="text-xs text-gray-400 italic flex items-center gap-1">🔒 Modo lectura</span>
                 )}
               </div>
 

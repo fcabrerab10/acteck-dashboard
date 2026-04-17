@@ -20,11 +20,11 @@ export default async function handler(req, res) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  // Check admin role using admin client to bypass RLS
+  // Check super_admin role using admin client to bypass RLS
   const { data: callerProfile } = await supabaseAdmin.from('perfiles').select('rol').eq('user_id', user.id).single();
-  if (!callerProfile || callerProfile.rol !== 'admin') return res.status(403).json({ error: 'Solo administradores pueden crear usuarios' });
+  if (!callerProfile || callerProfile.rol !== 'super_admin') return res.status(403).json({ error: 'Solo Super Admin puede crear usuarios' });
 
-  const { email, password, nombre, rol, clientes, modulos, puede_editar } = req.body;
+  const { email, password, nombre, rol, clientes, modulos, pestanas_cliente, puede_editar } = req.body;
   if (!email || !password || !nombre || !rol) return res.status(400).json({ error: 'Faltan campos requeridos' });
 
   const { data: authData, error: createErr } = await supabaseAdmin.auth.admin.createUser({
@@ -41,6 +41,7 @@ export default async function handler(req, res) {
     rol: rol || 'viewer',
     clientes: clientes || [],
     modulos: modulos || [],
+    pestanas_cliente: pestanas_cliente || [],
     puede_editar: puede_editar !== undefined ? puede_editar : false,
     activo: true
   });

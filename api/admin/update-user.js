@@ -19,9 +19,9 @@ export default async function handler(req, res) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  // Check admin role using admin client to bypass RLS
+  // Check super_admin role using admin client to bypass RLS
   const { data: callerProfile } = await supabaseAdmin.from('perfiles').select('rol').eq('user_id', user.id).single();
-  if (!callerProfile || callerProfile.rol !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
+  if (!callerProfile || callerProfile.rol !== 'super_admin') return res.status(403).json({ error: 'Solo Super Admin' });
 
   const { perfil_id, updates, new_password } = req.body;
   if (!perfil_id) return res.status(400).json({ error: 'Falta perfil_id' });
