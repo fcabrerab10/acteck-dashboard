@@ -626,11 +626,24 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   // Filtered & sorted SKUs
   const skuDetail = React.useMemo(() => {
     if (!datos) return [];
-    // Build roadmap lookup from roadmap_sku (real status como RMI, RML, 2026, D, NVS)
+    // Build roadmap lookups:
+    //   roadmapBySku     → rdmp (estado RMI/RML/2026/D/NVS)
+    //   roadmapDescBySku → descripción corta del roadmap (para UI de tabla)
+    //   roadmapDescLongBySku → descripción larga del payload "Descripcion 2" (para Excel export)
     const roadmapBySku = {};
-    (datos.roadmap || []).forEach(r => { if (r.sku) roadmapBySku[r.sku] = r.rdmp || ""; });
+    const roadmapDescBySku = {};
+    const roadmapDescLongBySku = {};
+    (datos.roadmap || []).forEach(r => {
+      if (!r.sku) return;
+      roadmapBySku[r.sku] = r.rdmp || "";
+      roadmapDescBySku[r.sku] = r.descripcion || "";
+      const p = r.payload;
+      if (p) {
+        roadmapDescLongBySku[r.sku] = p["Descripcion 2"] || p["DESCRIPCION 2"] || p["Descripción 2"] || p["DESCRIPCIÓN 2"] || "";
+      }
+    });
     return datos.productos
-      .filter(p => !searchFilter || p.sku.toUpperCase().includes(searchFilter.toUpperCase()) || p.descripcion.toUpperCase().includes(searchFilter.toUpperCase()))
+      .filter(p => !searchFilter || p.sku.toUpperCase().includes(searchFilter.toUpperCase()) || (p.descripcion || "").toUpperCase().includes(searchFilter.toUpperCase()))
       .map(p => {
         const siData = datos.sellIn.filter(r => r.sku === p.sku);
         const soData = datos.sellOut.filter(r => r.sku === p.sku);
@@ -683,7 +696,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const precioSku = Number(p.precio_venta) > 0 ? Number(p.precio_venta) : Number(invData && invData.precio_venta || 0);
         return {
           sku: p.sku,
-          descripcion: p.descripcion,
+          // Descripción corta (para UI): prioridad roadmap → productos_cliente
+          descripcion: roadmapDescBySku[p.sku] || p.descripcion || "",
+          // Descripción larga (para Excel): prioridad payload 'Descripcion 2' → corta del roadmap → productos_cliente
+          descripcionLarga: roadmapDescLongBySku[p.sku] || roadmapDescBySku[p.sku] || p.descripcion || "",
           marca: p.marca,
           categoria: p.categoria || "",
           estado: p.estado,
@@ -716,13 +732,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     if (!XLSX) { alert("Error cargando librería Excel"); return; }
 
     // 1) Armar filas simplificadas para propuesta al cliente
+    // Descripción larga (payload 'Descripcion 2') para Excel; fallback a la corta
     const allRows = skuDetail.map(function(s) {
       const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
       const precio = Number(s.precio || 0);
       const total = sug * precio;
       return {
         SKU: s.sku,
-        "Descripción": s.descripcion,
+        "Descripción": s.descripcionLarga || s.descripcion || "",
         "Stock Cliente": Number(s.stock) || 0,
         "Promedio 90d": Number(s.promedio90d) || 0,
         "Sugerido": sug,
@@ -738,6 +755,30 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const monitores = allRows.filter(r => isMonitor(r._cat));
     const sillas = allRows.filter(r => isSilla(r._cat));
     const otros = allRows.filter(r => !isMonitor(r._cat) && !isSilla(r._cat));
+
+    // Helper: aplica formato numérico (XLSX numFmt) a las columnas de la hoja
+    // Formato: Dinero → "$#,##0.00" · Piezas (enteras) → "#,##0"
+    const FMT_MONEY = '"$"#,##0.00';
+    const FMT_INT   = '#,##0';
+    const applyNumFmt = (ws, clean) => {
+      if (!clean || clean.length === 0) return;
+      const headers = Object.keys(clean[0]);
+      const moneyCols = new Set(["Precio", "Total", "Total $"]);
+      const intCols   = new Set(["Stock Cliente", "Promedio 90d", "Sugerido", "Piezas", "# SKUs"]);
+      // Recorrer filas (desde 2 — la 1 es header) y aplicar numFmt por columna
+      for (let r = 0; r < clean.length; r++) {
+        headers.forEach((h, cIdx) => {
+          const addr = XLSX.utils.encode_cell({ c: cIdx, r: r + 1 });
+          const cell = ws[addr];
+          if (!cell) return;
+          if (moneyCols.has(h) && typeof cell.v === "number") { cell.t = "n"; cell.z = FMT_MONEY; }
+          else if (intCols.has(h) && typeof cell.v === "number") { cell.t = "n"; cell.z = FMT_INT; }
+        });
+      }
+      // Anchos de columna razonables
+      const widthMap = { SKU: 14, "Descripción": 55, "Stock Cliente": 14, "Promedio 90d": 14, "Sugerido": 12, "Precio": 14, "Total": 16, "Categoría": 18, "# SKUs": 10, "Piezas": 12, "Total $": 16 };
+      ws["!cols"] = headers.map(h => ({ wch: widthMap[h] || 14 }));
+    };
 
     // Helper: crear hoja con totales
     const makeSheet = (rows, nombre) => {
@@ -761,7 +802,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       } else {
         clean.push({ SKU: "(Sin propuestas en " + nombre + ")", "Descripción": "", "Stock Cliente": "", "Promedio 90d": "", "Sugerido": "", "Precio": "", "Total": "" });
       }
-      return XLSX.utils.json_to_sheet(clean);
+      const ws = XLSX.utils.json_to_sheet(clean);
+      applyNumFmt(ws, clean);
+      return ws;
     };
 
     // 3) Hoja Resumen: totales por categoría
@@ -774,7 +817,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     ];
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumenRows), "Resumen");
+    const resumenWs = XLSX.utils.json_to_sheet(resumenRows);
+    applyNumFmt(resumenWs, resumenRows);
+    XLSX.utils.book_append_sheet(wb, resumenWs, "Resumen");
     XLSX.utils.book_append_sheet(wb, makeSheet(monitores, "Monitores"), "Monitores");
     XLSX.utils.book_append_sheet(wb, makeSheet(sillas, "Sillas"), "Sillas");
     XLSX.utils.book_append_sheet(wb, makeSheet(otros, "Otros"), "Otros");
