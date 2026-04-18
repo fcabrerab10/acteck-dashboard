@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { usePerfil } from "../../lib/perfilContext";
 import { puedeEditar } from "../../lib/permisos";
+import { toast } from "../../lib/toast";
 import {
   Plus, Trash2, Check, Clock, Flame, PauseCircle, ChevronLeft, ChevronRight,
   CalendarDays, X, Edit3, ChevronDown, ChevronUp,
@@ -196,14 +197,24 @@ export default function AdministracionInterna() {
     const nuevo = estatusActual === "listo" ? "pendiente" : "listo";
     setPendientes((prev) => prev.map((p) => (p.id === id ? { ...p, estatus: nuevo } : p)));
     const { error } = await supabase.from("pendientes_equipo").update({ estatus: nuevo }).eq("id", id);
-    if (error) { console.error(error); cargarTodo(); }
+    if (error) {
+      console.error(error);
+      toast.error("No se pudo actualizar la tarea");
+      cargarTodo();
+    } else {
+      if (nuevo === "listo") toast.success("Tarea marcada como completada");
+    }
   }
 
   async function cambiarEstatus(id, nuevo) {
     if (!canEdit) return;
     setPendientes((prev) => prev.map((p) => (p.id === id ? { ...p, estatus: nuevo } : p)));
     const { error } = await supabase.from("pendientes_equipo").update({ estatus: nuevo }).eq("id", id);
-    if (error) { console.error(error); cargarTodo(); }
+    if (error) {
+      console.error(error);
+      toast.error("No se pudo cambiar el estatus");
+      cargarTodo();
+    }
   }
 
   async function borrarPendiente(id) {
@@ -211,7 +222,13 @@ export default function AdministracionInterna() {
     if (!confirm("¿Eliminar esta tarea?")) return;
     setPendientes((prev) => prev.filter((p) => p.id !== id));
     const { error } = await supabase.from("pendientes_equipo").delete().eq("id", id);
-    if (error) { console.error(error); cargarTodo(); }
+    if (error) {
+      console.error(error);
+      toast.error("No se pudo eliminar la tarea");
+      cargarTodo();
+    } else {
+      toast.success("Tarea eliminada");
+    }
   }
 
   async function borrarEvento(id) {
@@ -219,7 +236,13 @@ export default function AdministracionInterna() {
     if (!confirm("¿Eliminar este evento?")) return;
     setEventos((prev) => prev.filter((e) => e.id !== id));
     const { error } = await supabase.from("eventos_equipo").delete().eq("id", id);
-    if (error) { console.error(error); cargarTodo(); }
+    if (error) {
+      console.error(error);
+      toast.error("No se pudo eliminar el evento");
+      cargarTodo();
+    } else {
+      toast.success("Evento eliminado");
+    }
   }
 
   if (loading) return <div className="p-8 text-gray-400">Cargando administración interna…</div>;
@@ -919,7 +942,7 @@ function ModalTarea({ data, perfiles, onClose, onGuardado }) {
   const [guardando, setGuardando] = useState(false);
 
   async function guardar() {
-    if (!form.tarea.trim()) return alert("Escribe la tarea");
+    if (!form.tarea.trim()) return toast.error("Escribe la tarea");
     setGuardando(true);
     const payload = {
       cuenta: form.cuenta,
@@ -938,7 +961,8 @@ function ModalTarea({ data, perfiles, onClose, onGuardado }) {
       ({ error: err } = await supabase.from("pendientes_equipo").update(payload).eq("id", data.tarea.id));
     }
     setGuardando(false);
-    if (err) return alert("Error: " + err.message);
+    if (err) return toast.error("No se pudo guardar: " + err.message);
+    toast.success(esNueva ? "Tarea creada" : "Tarea actualizada");
     onGuardado();
   }
 
@@ -1018,8 +1042,8 @@ function ModalEvento({ data, perfiles, onClose, onGuardado, onBorrar }) {
   const [guardando, setGuardando] = useState(false);
 
   async function guardar() {
-    if (!form.titulo.trim()) return alert("Pon un título");
-    if (form.fecha_fin < form.fecha_ini) return alert("La fecha fin debe ser ≥ a la inicial");
+    if (!form.titulo.trim()) return toast.error("Pon un título");
+    if (form.fecha_fin < form.fecha_ini) return toast.error("La fecha fin debe ser mayor o igual a la inicial");
     setGuardando(true);
     const payload = {
       titulo: form.titulo.trim(),
@@ -1037,7 +1061,8 @@ function ModalEvento({ data, perfiles, onClose, onGuardado, onBorrar }) {
       ({ error: err } = await supabase.from("eventos_equipo").update(payload).eq("id", data.evento.id));
     }
     setGuardando(false);
-    if (err) return alert("Error: " + err.message);
+    if (err) return toast.error("No se pudo guardar: " + err.message);
+    toast.success(esNuevo ? "Evento creado" : "Evento actualizado");
     onGuardado();
   }
 

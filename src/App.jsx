@@ -4,6 +4,11 @@ import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_
 import { formatMXN, formatUSD, formatFecha, diasRestantes, calcularSalud, loadSheetJS } from './lib/utils';
 import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, Sidebar } from './components';
 import { CLIENTES as SIDEBAR_CLIENTES } from './components/Sidebar';
+import { Toaster } from './lib/toast';
+import {
+  Home, TrendingUp, Package, Megaphone, Wallet, CreditCard,
+  BarChart3, Target, ClipboardList, Settings as SettingsIcon, Building2,
+} from 'lucide-react';
 import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, ForecastCliente } from './modules/comercial';
 import ReporteTab from './modules/comercial/ReporteTab';
 import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
@@ -154,23 +159,23 @@ function UploadModalX({ onClose }) {
 
 // ── Breadcrumb arriba del contenido ──
 const PESTANAS_INFO = {
-  home:       { label: 'Resumen',                emoji: '🏠' },
-  analisis:   { label: 'Análisis',               emoji: '📈' },
-  estrategia: { label: 'Estrategia de Producto', emoji: '📦' },
-  marketing:  { label: 'Marketing',              emoji: '📢' },
-  pagos:      { label: 'Pagos',                  emoji: '💰' },
-  cartera:    { label: 'Crédito y Cobranza',     emoji: '📊' },
+  home:       { label: 'Resumen',                icon: Home },
+  analisis:   { label: 'Análisis',               icon: TrendingUp },
+  estrategia: { label: 'Estrategia de Producto', icon: Package },
+  marketing:  { label: 'Marketing',              icon: Megaphone },
+  pagos:      { label: 'Pagos',                  icon: Wallet },
+  cartera:    { label: 'Crédito y Cobranza',     icon: CreditCard },
 };
 const GLOBAL_PAGES_INFO = {
-  resumenClientes:  { label: 'Resumen de Clientes',    emoji: '📈' },
-  forecastClientes: { label: 'Forecast de Clientes',   emoji: '🎯' },
-  adminInterna:     { label: 'Administración Interna', emoji: '🏢' },
+  resumenClientes:  { label: 'Resumen de Clientes',    icon: BarChart3 },
+  forecastClientes: { label: 'Forecast de Clientes',   icon: Target },
+  adminInterna:     { label: 'Administración Interna', icon: Building2 },
 };
 function Breadcrumb({ clienteActivo, paginaActiva, vistaActual }) {
   if (vistaActual === 'configuracion') {
     return (
       <div className="mb-4 flex items-center gap-2 text-sm">
-        <span className="text-gray-400">⚙️</span>
+        <SettingsIcon className="w-4 h-4 text-gray-500" />
         <span className="font-semibold text-gray-800">Configuración</span>
       </div>
     );
@@ -178,20 +183,26 @@ function Breadcrumb({ clienteActivo, paginaActiva, vistaActual }) {
   if (clienteActivo && PESTANAS_INFO[paginaActiva]) {
     const cli = SIDEBAR_CLIENTES[clienteActivo];
     const pag = PESTANAS_INFO[paginaActiva];
+    const PagIcon = pag.icon;
     return (
       <div className="mb-4 flex items-center gap-2 text-sm">
         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cli?.color || '#999' }} />
         <span className="font-semibold text-gray-800">{cli?.label || clienteActivo}</span>
         <span className="text-gray-300">›</span>
-        <span className="text-gray-600">{pag.emoji} {pag.label}</span>
+        <span className="flex items-center gap-1.5 text-gray-600">
+          {PagIcon && <PagIcon className="w-3.5 h-3.5" />}
+          {pag.label}
+        </span>
       </div>
     );
   }
   if (GLOBAL_PAGES_INFO[paginaActiva]) {
     const p = GLOBAL_PAGES_INFO[paginaActiva];
+    const Icon = p.icon;
     return (
       <div className="mb-4 flex items-center gap-2 text-sm">
-        <span className="font-semibold text-gray-800">{p.emoji} {p.label}</span>
+        {Icon && <Icon className="w-4 h-4 text-gray-600" />}
+        <span className="font-semibold text-gray-800">{p.label}</span>
       </div>
     );
   }
@@ -456,6 +467,7 @@ export default function App() {
 
       {showUpload && React.createElement(UploadModalX, { onClose: function() { setShowUpload(false); } })}
 
+      <Toaster />
     </div>
     </PerfilContext.Provider>
   );

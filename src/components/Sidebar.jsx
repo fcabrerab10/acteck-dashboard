@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Lock, LogOut, Eye, Settings, RefreshCw } from 'lucide-react';
+import {
+  ChevronRight, ChevronDown, Lock, LogOut, Eye, Settings, RefreshCw,
+  Home, TrendingUp, Package, Megaphone, Wallet, CreditCard,
+  BarChart3, Target, ClipboardList,
+} from 'lucide-react';
 import { puedeConfigurar, puedeActualizarDatos, puedeVerCliente, puedeVerPestana } from '../lib/permisos';
 
 /**
@@ -14,12 +18,12 @@ const CLIENTES = {
     color: '#EF4444',
     activo: true,
     pestanas: [
-      { id: 'home',       label: 'Resumen',                emoji: '🏠' },
-      { id: 'analisis',   label: 'Análisis',               emoji: '📈' },
-      { id: 'estrategia', label: 'Estrategia de Producto', emoji: '📦' },
-      { id: 'marketing',  label: 'Marketing',              emoji: '📢' },
-      { id: 'pagos',      label: 'Pagos',                  emoji: '💰' },
-      { id: 'cartera',    label: 'Crédito y Cobranza',     emoji: '📊' },
+      { id: 'home',       label: 'Resumen',                icon: Home },
+      { id: 'analisis',   label: 'Análisis',               icon: TrendingUp },
+      { id: 'estrategia', label: 'Estrategia de Producto', icon: Package },
+      { id: 'marketing',  label: 'Marketing',              icon: Megaphone },
+      { id: 'pagos',      label: 'Pagos',                  icon: Wallet },
+      { id: 'cartera',    label: 'Crédito y Cobranza',     icon: CreditCard },
     ],
   },
   pcel: {
@@ -27,12 +31,12 @@ const CLIENTES = {
     color: '#EF4444',
     activo: true,
     pestanas: [
-      { id: 'home',       label: 'Resumen',                emoji: '🏠' },
-      { id: 'analisis',   label: 'Análisis',               emoji: '📈' },
-      { id: 'estrategia', label: 'Estrategia de Producto', emoji: '📦' },
-      { id: 'marketing',  label: 'Marketing',              emoji: '📢', disabled: true, hint: 'Pronto' },
-      { id: 'pagos',      label: 'Pagos',                  emoji: '💰' },
-      { id: 'cartera',    label: 'Crédito y Cobranza',     emoji: '📊' },
+      { id: 'home',       label: 'Resumen',                icon: Home },
+      { id: 'analisis',   label: 'Análisis',               icon: TrendingUp },
+      { id: 'estrategia', label: 'Estrategia de Producto', icon: Package },
+      { id: 'marketing',  label: 'Marketing',              icon: Megaphone, disabled: true, hint: 'Pronto' },
+      { id: 'pagos',      label: 'Pagos',                  icon: Wallet },
+      { id: 'cartera',    label: 'Crédito y Cobranza',     icon: CreditCard },
     ],
   },
   mercadolibre: {
@@ -40,12 +44,12 @@ const CLIENTES = {
     color: '#3B82F6',
     activo: true,
     pestanas: [
-      { id: 'home',       label: 'Resumen',                emoji: '🏠' },
-      { id: 'analisis',   label: 'Análisis',               emoji: '📈' },
-      { id: 'estrategia', label: 'Estrategia de Producto', emoji: '📦' },
-      { id: 'marketing',  label: 'Marketing',              emoji: '📢' },
-      { id: 'pagos',      label: 'Pagos',                  emoji: '💰' },
-      { id: 'cartera',    label: 'Crédito y Cobranza',     emoji: '📊' },
+      { id: 'home',       label: 'Resumen',                icon: Home },
+      { id: 'analisis',   label: 'Análisis',               icon: TrendingUp },
+      { id: 'estrategia', label: 'Estrategia de Producto', icon: Package },
+      { id: 'marketing',  label: 'Marketing',              icon: Megaphone },
+      { id: 'pagos',      label: 'Pagos',                  icon: Wallet },
+      { id: 'cartera',    label: 'Crédito y Cobranza',     icon: CreditCard },
     ],
   },
 };
@@ -56,8 +60,8 @@ const MENU_CONFIG = [
     label: 'Dirección Comercial',
     emoji: '📊',
     items: [
-      { id: 'resumenClientes',  label: 'Resumen de Clientes', emoji: '📈' },
-      { id: 'forecastClientes', label: 'Forecast Clientes',   emoji: '🎯' },
+      { id: 'resumenClientes',  label: 'Resumen de Clientes', icon: BarChart3 },
+      { id: 'forecastClientes', label: 'Forecast Clientes',   icon: Target },
       { type: 'separator', label: 'Clientes' },
       { type: 'cliente', clienteId: 'digitalife' },
       { type: 'cliente', clienteId: 'pcel' },
@@ -70,7 +74,7 @@ const MENU_CONFIG = [
     emoji: '🏢',
     rolesPermitidos: ['super_admin', 'asistente'],
     items: [
-      { id: 'adminInterna', label: 'Pendientes & Calendario', emoji: '📋' },
+      { id: 'adminInterna', label: 'Pendientes & Calendario', icon: ClipboardList },
     ],
   },
 ];
@@ -326,6 +330,7 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, onNavegar, isActi
               <NavItem
                 key={item.id}
                 label={item.label}
+                icon={item.icon}
                 emoji={item.emoji}
                 disabled={item.disabled}
                 hint={item.hint}
@@ -382,6 +387,7 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
             <NavItem
               key={p.id}
               label={p.label}
+              icon={p.icon}
               emoji={p.emoji}
               disabled={p.disabled}
               hint={p.hint}
@@ -397,7 +403,7 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
 }
 
 // ────────── NavItem ──────────
-function NavItem({ label, emoji, active, disabled, hint, onClick, small = false }) {
+function NavItem({ label, icon: Icon, emoji, active, disabled, hint, onClick, small = false }) {
   return (
     <button
       onClick={onClick}
@@ -413,7 +419,15 @@ function NavItem({ label, emoji, active, disabled, hint, onClick, small = false 
           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
       ].join(' ')}
     >
-      {emoji && <span className="shrink-0">{emoji}</span>}
+      {Icon ? (
+        <Icon className={[
+          'shrink-0',
+          small ? 'w-3.5 h-3.5' : 'w-4 h-4',
+          active ? 'text-blue-600' : 'text-gray-500',
+        ].join(' ')} />
+      ) : emoji ? (
+        <span className="shrink-0">{emoji}</span>
+      ) : null}
       <span className="flex-1 truncate">{label}</span>
       {hint && !active && (
         <span className="text-[9px] text-gray-400 uppercase">{hint}</span>
