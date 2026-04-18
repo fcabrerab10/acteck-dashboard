@@ -1173,6 +1173,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
       // SKU Detail - Full Table
       (function() {
+        // Guard: datos puede ser null en el render inicial (antes de cargar)
+        if (!datos) return null;
         // Lista de categorías disponibles desde productos_cliente (ordenadas alfabéticamente)
         const categoriasUnicas = Array.from(new Set((datos.productos || []).map(p => p.categoria).filter(Boolean))).sort();
         return React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
