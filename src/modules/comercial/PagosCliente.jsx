@@ -498,8 +498,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
       .update({ [field]: value, updated_at: new Date().toISOString(), ...(field === "fecha_pago_real" && value ? { estatus: "pagado" } : {}) })
       .eq("id", id);
     setSaving(false);
-    if (error) { flash("Error al guardar â", "err"); fetchData(); }
-    else flash("Guardado â");
+    if (error) { flash("Error al guardar ✗", "err"); fetchData(); }
+    else flash("Guardado ✓");
   };
 
   // ── Add record (non-fijos) ──
@@ -564,8 +564,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (!window.confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")) return;
     setRegistros(prev => prev.filter(r => r.id !== id));
     const { error } = await supabase.from("pagos").delete().eq("id", id);
-    if (error) { flash("Error al eliminar â", "err"); fetchData(); }
-    else flash("Eliminado â");
+    if (error) { flash("Error al eliminar ✗", "err"); fetchData(); }
+    else flash("Eliminado ✓");
   };
 
   // ── Delete all months of a fijo concept ──
@@ -575,7 +575,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     for (const id of ids) {
       await supabase.from("pagos").delete().eq("id", id);
     }
-    flash(`"${conceptoKey}" eliminado â`);
+    flash(`"${conceptoKey}" eliminado ✓`);
   };
 
   // ── Toggle expand fijo ──
@@ -724,7 +724,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
               <p className="text-sm text-gray-400 mt-0.5">
                 <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
                 {" · "}Promociones · Marketing{clienteKey !== "pcel" && " · Pagos Fijos"} · Variables
-                {saving && <span className="ml-2 text-blue-400 animate-pulse">â Guardando...</span>}
+                {saving && <span className="ml-2 text-blue-400 animate-pulse">● Guardando...</span>}
               </p>
             </div>
           </div>
@@ -737,7 +737,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
               <span className="text-xs text-gray-400">TC: ${c.cartera.tipoCambio.toFixed(2)} MXN/USD</span>
             )}
             <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-semibold ${DB_CONFIGURED ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
-              {DB_CONFIGURED ? "â Sincronizado" : "â ️ Solo lectura"}
+              {DB_CONFIGURED ? "✅ Sincronizado" : "⚠️ Solo lectura"}
             </span>
           </div>
         </div>
@@ -746,7 +746,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
       {/* Banner de configuración pendiente */}
       {!DB_CONFIGURED && (
         <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 mb-6 flex items-start gap-3">
-          <span className="text-2xl">â️</span>
+          <span className="text-2xl">⚙️</span>
           <div>
             <p className="font-semibold text-orange-800 mb-1">Configuración requerida para guardar cambios</p>
             <p className="text-sm text-orange-700 mb-2">
@@ -1272,7 +1272,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
               </div>)}
               <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
                 <p className="text-xs text-gray-400">
-                  {DB_CONFIGURED ? "â Cambios guardados y sincronizados para todo el equipo." : "â ️ Modo lectura — configura Supabase para habilitar la edición."}
+                  {DB_CONFIGURED ? "✅ Cambios guardados y sincronizados para todo el equipo." : "⚠️ Modo lectura — configura Supabase para habilitar la edición."}
                   {" "}💡 <strong className="text-gray-600">Pendiente</strong> · <strong className="text-gray-600">En Proceso</strong> · <strong className="text-gray-600">Pagado</strong> · <strong className="text-gray-600">Vencido</strong>
                 </p>
               </div>

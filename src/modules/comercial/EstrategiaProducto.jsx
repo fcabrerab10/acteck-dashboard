@@ -41,7 +41,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   };
 
   const formatMXN = (n) => {
-    if (n == null || isNaN(n)) return "â";
+    if (n == null || isNaN(n)) return "—";
     return "$" + Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   };
 
@@ -467,7 +467,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     // By categoria
     const byCategoria = {};
     datos.productos.forEach(p => {
-      const cat = p.categoria || "Sin CategorÃ­a";
+      const cat = p.categoria || "Sin Categoría";
       if (!byCategoria[cat]) byCategoria[cat] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0, invValor: 0 };
       const siForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
       const siMontoForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.monto_pesos || 0), 0);
@@ -830,7 +830,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     XLSX.writeFile(wb, "Propuesta_" + (clienteKey || cliente) + "_" + fecha + ".xlsx");
   };
 
-  // ââââ RENDER ââââ
+  // ———— RENDER ————
 
   if (!datos && !loading) {
     return React.createElement("div", { className: "max-w-4xl mx-auto p-6" },
@@ -842,7 +842,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             className: "border-2 border-dashed border-blue-300 rounded-xl p-6 text-center bg-blue-50 cursor-pointer transition-all hover:border-blue-500",
             onClick: () => document.getElementById("file-input").click(),
           },
-            React.createElement("p", { className: "text-blue-700 font-semibold mb-2" }, "ð Selecciona archivos Excel"),
+            React.createElement("p", { className: "text-blue-700 font-semibold mb-2" }, "📁 Selecciona archivos Excel"),
             React.createElement("p", { className: "text-sm text-gray-600" }, "Reporte Acteck y/o Resumen Digitalife"),
             React.createElement("input", {
               id: "file-input",
@@ -867,7 +867,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         React.createElement("button", {
           className: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium",
           onClick: () => document.getElementById("file-input-update").click(),
-        }, "ð¤ Actualizar datos"),
+        }, "📤 Actualizar datos"),
         React.createElement("input", {
           id: "file-input-update",
           type: "file",
@@ -1287,18 +1287,18 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
 
 
-// âââ APP PRINCIPAL ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
 
-// âââ MARKETING (Supabase) âââ
+// ——— MARKETING (Supabase) ———
 const TIPO_ACTIVIDAD = {
-  banner:     { label: "Banner",      color: "#8b5cf6", icon: "ð¼ï¸", tipo: "digital" },
-  mailing:    { label: "Mailing",     color: "#3b82f6", icon: "ð§", tipo: "digital" },
-  reel:       { label: "Reel",        color: "#ec4899", icon: "ð¬", tipo: "digital" },
-  google_ads: { label: "Google Ads",  color: "#f59e0b", icon: "ð¢", tipo: "digital" },
-  meta_ads:   { label: "Meta Ads",    color: "#6366f1", icon: "ð±", tipo: "digital" },
-  demo:       { label: "Demo Tienda", color: "#10b981", icon: "ðª", tipo: "presencial" },
-  pop:        { label: "Material POP",color: "#14b8a6", icon: "ðª§", tipo: "presencial" },
-  taller:     { label: "Taller",      color: "#f97316", icon: "ð§", tipo: "presencial" },
+  banner:     { label: "Banner",      color: "#8b5cf6", icon: "🖼️", tipo: "digital" },
+  mailing:    { label: "Mailing",     color: "#3b82f6", icon: "📧", tipo: "digital" },
+  reel:       { label: "Reel",        color: "#ec4899", icon: "🎬", tipo: "digital" },
+  google_ads: { label: "Google Ads",  color: "#f59e0b", icon: "📢", tipo: "digital" },
+  meta_ads:   { label: "Meta Ads",    color: "#6366f1", icon: "📱", tipo: "digital" },
+  demo:       { label: "Demo Tienda", color: "#10b981", icon: "🏪", tipo: "presencial" },
+  pop:        { label: "Material POP",color: "#14b8a6", icon: "🪧", tipo: "presencial" },
+  taller:     { label: "Taller",      color: "#f97316", icon: "🔧", tipo: "presencial" },
 };
 
 const MKT_ESTATUS = [
@@ -1309,15 +1309,15 @@ const MKT_ESTATUS = [
 ];
 
 const TEMPORALIDADES = {
-  semana_santa: { label: "Semana Santa", emoji: "ð£", color: "#ffeaa7" },
-  dia_nino:     { label: "DÃ­a del NiÃ±o", emoji: "ð", color: "#fd79a8" },
-  dia_madres:   { label: "DÃ­a Madres",   emoji: "ð", color: "#fab1a0" },
-  dia_maestro:  { label: "DÃ­a Maestro",  emoji: "ð", color: "#74b9ff" },
-  hot_sale:     { label: "HOT SALE",     emoji: "ð¥", color: "#ff7675" },
-  lluvias:      { label: "Temp. Lluvias",emoji: "ð§ï¸", color: "#a29bfe" },
-  buen_fin:     { label: "Buen Fin",     emoji: "ð", color: "#e17055" },
-  navidad:      { label: "Navidad",      emoji: "ð", color: "#00b894" },
-  regreso_clases:{ label: "Regreso Clases",emoji: "ð", color: "#fdcb6e" },
+  semana_santa: { label: "Semana Santa", emoji: "🐣", color: "#ffeaa7" },
+  dia_nino:     { label: "Día del Niño", emoji: "🎈", color: "#fd79a8" },
+  dia_madres:   { label: "Día Madres",   emoji: "💐", color: "#fab1a0" },
+  dia_maestro:  { label: "Día Maestro",  emoji: "📚", color: "#74b9ff" },
+  hot_sale:     { label: "HOT SALE",     emoji: "🔥", color: "#ff7675" },
+  lluvias:      { label: "Temp. Lluvias",emoji: "🌧️", color: "#a29bfe" },
+  buen_fin:     { label: "Buen Fin",     emoji: "🛒", color: "#e17055" },
+  navidad:      { label: "Navidad",      emoji: "🎄", color: "#00b894" },
+  regreso_clases:{ label: "Regreso Clases",emoji: "📓", color: "#fdcb6e" },
 };
 
 // rebuild 1776356434
