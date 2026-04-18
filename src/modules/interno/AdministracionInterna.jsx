@@ -40,14 +40,6 @@ const TIPOS_EVENTO = [
   { id: "reunion",        label: "Reunión interna",     color: "#14b8a6" },
 ];
 
-const CATEGORIAS_SUGERIDAS = [
-  "Reputación ML", "Mensajes postventa / Reclamos y Preguntas", "Publicaciones",
-  "Campañas y promociones", "Materiales de marketing", "Plan de MKT",
-  "Carga de productos / catálogo", "Seguimiento de solicitud de diseños",
-  "Seguimiento de pagos / facturas", "Envío de cotizaciones", "Ayuda a Hans",
-  "Clips / Contenido", "Revisión", "Excel", "Cobranza", "Reunión", "Administrativo",
-];
-
 const DIAS_SEMANA_LARGO = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const DIAS_SEMANA_CORTO = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
 const MESES_LARGO = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -965,13 +957,11 @@ function ModalTarea({ data, perfiles, onClose, onGuardado }) {
             placeholder="Ej. Revisar reputación ML" autoFocus />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Categoría (libre)">
-            <input value={form.categoria} list="categorias-sugeridas"
+          <Field label="Categoría">
+            <input value={form.categoria}
               onChange={(e) => setForm({ ...form, categoria: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" placeholder="Opcional" />
-            <datalist id="categorias-sugeridas">
-              {CATEGORIAS_SUGERIDAS.map((c) => <option key={c} value={c} />)}
-            </datalist>
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+              placeholder="Escribe la categoría que quieras" />
           </Field>
           <Field label="Fecha límite">
             <input type="date" value={form.fecha_limite}
