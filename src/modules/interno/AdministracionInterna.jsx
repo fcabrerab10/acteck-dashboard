@@ -233,9 +233,9 @@ export default function AdministracionInterna() {
   if (loading) return <div className="p-8 text-gray-400">Cargando administración interna…</div>;
 
   const tabs = [
-    { id: "mios",     label: "Míos",        count: pendientes.filter((p) => p.responsable === yoId && p.estatus !== "listo").length },
-    { id: "karolina", label: "De Karolina", count: pendientes.filter((p) => p.responsable === karolinaId && p.estatus !== "listo").length, disabled: !karolinaId },
-    { id: "todos",    label: "Todos",       count: pendientes.filter((p) => p.estatus !== "listo").length },
+    { id: "mios",     label: "Ferru", count: pendientes.filter((p) => p.responsable === yoId && p.estatus !== "listo").length },
+    { id: "karolina", label: "Karo",  count: pendientes.filter((p) => p.responsable === karolinaId && p.estatus !== "listo").length, disabled: !karolinaId },
+    { id: "todos",    label: "Todos", count: pendientes.filter((p) => p.estatus !== "listo").length },
   ];
 
   return (
@@ -285,6 +285,8 @@ export default function AdministracionInterna() {
             setMesVisibleISO={setMesVisibleISO}
             eventos={eventos}
             nombrePorUserId={nombrePorUserId}
+            yoId={yoId}
+            karolinaId={karolinaId}
             canEdit={canEdit}
             onClickEvento={(ev) => setModalEvento({ evento: ev })}
             onClickDia={(fecha) => canEdit && setModalEvento({ fechaDefault: fecha })}
@@ -370,20 +372,23 @@ export default function AdministracionInterna() {
                 const d = new Date(semanaVisible); d.setDate(d.getDate() - 7); setSemanaISO(toISO(d));
               }}
               className="p-1.5 hover:bg-gray-100 text-gray-600 rounded-l-lg"
+              title="Semana anterior"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={() => setSemanaISO(toISO(lunesDeSemana(new Date())))}
               className="text-xs px-2 py-1 hover:bg-gray-100 text-gray-700 font-medium"
+              title="Ir a la semana actual"
             >
-              Hoy
+              Esta semana
             </button>
             <button
               onClick={() => {
                 const d = new Date(semanaVisible); d.setDate(d.getDate() + 7); setSemanaISO(toISO(d));
               }}
               className="p-1.5 hover:bg-gray-100 text-gray-600 rounded-r-lg"
+              title="Semana siguiente"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -762,7 +767,18 @@ function TareaCard({ t, canEdit, nombrePorUserId, onToggleCheck, onCambiarEstatu
 }
 
 // ────────── Calendario ──────────
-function Calendario({ mesVisible, setMesVisibleISO, eventos, nombrePorUserId, canEdit, onClickEvento, onClickDia }) {
+// Color por persona: Ferru azul, Karo rosa, otros gris
+const COLOR_FERRU = "#3B82F6";   // azul
+const COLOR_KAROL = "#EC4899";   // rosa
+const COLOR_OTROS = "#94A3B8";   // slate
+
+function colorDePersona(userId, yoId, karolinaId) {
+  if (userId && userId === yoId) return COLOR_FERRU;
+  if (userId && userId === karolinaId) return COLOR_KAROL;
+  return COLOR_OTROS;
+}
+
+function Calendario({ mesVisible, setMesVisibleISO, eventos, nombrePorUserId, yoId, karolinaId, canEdit, onClickEvento, onClickDia }) {
   const primerDia = new Date(mesVisible); primerDia.setDate(1);
   const startOffset = (primerDia.getDay() + 6) % 7;
   const inicio = new Date(primerDia); inicio.setDate(1 - startOffset);
@@ -791,14 +807,25 @@ function Calendario({ mesVisible, setMesVisibleISO, eventos, nombrePorUserId, ca
   return (
     <div>
       {/* Controles */}
-      <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between">
-        <div className="flex flex-wrap gap-3 text-xs">
-          {TIPOS_EVENTO.map((t) => (
-            <span key={t.id} className="flex items-center gap-1.5 text-gray-600">
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.color }} />
-              {t.label}
-            </span>
-          ))}
+      <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+        {/* Leyenda por persona */}
+        <div className="flex flex-wrap gap-3 text-xs items-center">
+          <span className="flex items-center gap-1.5 text-gray-700">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLOR_FERRU }} />
+            <span className="font-medium">Ferru</span>
+          </span>
+          <span className="flex items-center gap-1.5 text-gray-700">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLOR_KAROL }} />
+            <span className="font-medium">Karo</span>
+          </span>
+          <span className="flex items-center gap-1.5 text-gray-500">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLOR_OTROS }} />
+            Sin asignar
+          </span>
+          <span className="text-gray-300 mx-1">|</span>
+          <span className="text-[11px] text-gray-500">
+            Tipos: {TIPOS_EVENTO.map((t) => t.label).join(" · ")}
+          </span>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -806,20 +833,23 @@ function Calendario({ mesVisible, setMesVisibleISO, eventos, nombrePorUserId, ca
               const d = new Date(mesVisible); d.setMonth(d.getMonth() - 1); setMesVisibleISO(toISO(new Date(d.getFullYear(), d.getMonth(), 1)));
             }}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"
+            title="Mes anterior"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
             onClick={() => { const d = new Date(); setMesVisibleISO(toISO(new Date(d.getFullYear(), d.getMonth(), 1))); }}
             className="text-xs px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+            title="Ir al mes actual"
           >
-            Hoy
+            Este mes
           </button>
           <button
             onClick={() => {
               const d = new Date(mesVisible); d.setMonth(d.getMonth() + 1); setMesVisibleISO(toISO(new Date(d.getFullYear(), d.getMonth(), 1)));
             }}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"
+            title="Mes siguiente"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -855,15 +885,18 @@ function Calendario({ mesVisible, setMesVisibleISO, eventos, nombrePorUserId, ca
               <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
                 {evts.slice(0, 3).map((ev) => {
                   const tipo = TIPOS_EVENTO.find((t) => t.id === ev.tipo);
+                  const colorPersona = colorDePersona(ev.responsable, yoId, karolinaId);
+                  const persona = ev.responsable === yoId ? "Ferru" :
+                                  ev.responsable === karolinaId ? "Karo" :
+                                  (nombrePorUserId[ev.responsable] || "Sin asignar");
                   return (
                     <button
                       key={ev.id + "_" + idx}
                       onClick={(e) => { e.stopPropagation(); onClickEvento(ev); }}
-                      className="text-[10px] px-1.5 py-0.5 rounded truncate flex items-center gap-1 text-left hover:brightness-95"
-                      style={{ backgroundColor: `${tipo?.color || "#999"}22`, color: tipo?.color || "#555" }}
-                      title={`${tipo?.label || ev.tipo} · ${nombrePorUserId[ev.responsable] || "—"}`}
+                      className="text-[10px] px-1.5 py-0.5 rounded truncate flex items-center gap-1 text-left hover:brightness-95 font-medium"
+                      style={{ backgroundColor: `${colorPersona}22`, color: colorPersona, borderLeft: `3px solid ${colorPersona}` }}
+                      title={`${persona} · ${tipo?.label || ev.tipo} · ${ev.titulo}`}
                     >
-                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: tipo?.color || "#999" }} />
                       <span className="truncate">{ev.titulo}</span>
                     </button>
                   );
