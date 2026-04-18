@@ -6,6 +6,7 @@ import { CardHeader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditar as puedeEditarFn } from '../../lib/permisos';
 import { Wallet, CalendarDays, BarChart3, ClipboardList } from 'lucide-react';
+import { NuevaPromocionButton, ListaPromociones } from './PagosPromociones';
 
 const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
@@ -35,6 +36,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [registros, setRegistros]     = useState([]);
   const [loading, setLoading]         = useState(true);
   const [catActiva, setCatActiva]     = useState("todas");
+  const [promosVer, setPromosVer]     = useState(0);
   const [expandedMonth, setExpandedMonth] = useState(null);
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue]     = useState("");
@@ -1018,7 +1020,12 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   </button>
                 ))}
                 <span className="ml-auto text-xs text-gray-400">{filtered.length} registro{filtered.length !== 1 ? "s" : ""}</span>
-                {DB_CONFIGURED && canEdit && (
+                {/* Botón especializado por categoría */}
+                {DB_CONFIGURED && canEdit && catActiva === "promociones" && (
+                  <NuevaPromocionButton clienteKey={clienteKey} onCreated={() => setPromosVer(v => v + 1)} />
+                )}
+                {/* Botón genérico (legacy) — solo cuando NO estás en una categoría especializada */}
+                {DB_CONFIGURED && canEdit && catActiva !== "promociones" && (
                   <button onClick={() => setShowAdd(!showAdd)}
                     className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white rounded-full text-sm font-semibold hover:bg-blue-700 transition-colors">
                     + Agregar
@@ -1028,6 +1035,13 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   <span className="text-xs text-gray-400 italic flex items-center gap-1">🔒 Modo lectura</span>
                 )}
               </div>
+
+              {/* Lista de promociones cuando estás en la categoría */}
+              {catActiva === "promociones" && (
+                <div className="mb-5">
+                  <ListaPromociones clienteKey={clienteKey} refreshKey={promosVer} />
+                </div>
+              )}
 
               {/* Add form */}
               {showAdd && DB_CONFIGURED && (
