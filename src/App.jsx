@@ -370,9 +370,6 @@ export default function App() {
           )}
         </div>
         </main>
-      {React.createElement('div', {
-        className: 'fixed top-3 right-4 z-40 bg-white px-3 py-1 rounded-full shadow border border-gray-200'
-      }, React.createElement(UpdatedAtBadgeX, null))}
 
       {showUpload && React.createElement(UploadModalX, { onClose: function() { setShowUpload(false); } })}
 
