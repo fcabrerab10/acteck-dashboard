@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS public.promociones (
   monto_aprobado          NUMERIC,  -- lo que Fernando/Karo aprueba (puede ajustar)
 
   -- Resultado
-  pago_id         BIGINT REFERENCES public.pagos(id) ON DELETE SET NULL,
+  pago_id         UUID REFERENCES public.pagos(id) ON DELETE SET NULL,
   folio_nc        TEXT,             -- folio de la nota de crédito
   fecha_pago      DATE,
 
