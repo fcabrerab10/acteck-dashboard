@@ -1,5 +1,6 @@
 import React from "react";
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
+import { Megaphone, CalendarDays } from 'lucide-react';
 
 // ═══════════ CONFIG DE TIPOS DE ACTIVIDAD ═══════════════════════
 // Cada tipo tiene color, icono y lista de métricas específicas
@@ -343,7 +344,10 @@ export default function MarketingCliente({ cliente, clienteKey }) {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>📢 Marketing — {cliente || ck}</h2>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+            <Megaphone style={{ width: 24, height: 24, color: "#374151" }} />
+            Marketing — {cliente || ck}
+          </h2>
           <div style={{ fontSize: 13, color: "#64748B", marginTop: 2 }}>
             {totales.actividades} actividades en {MESES[mesSel - 1]} · Inversión: {fmtMXN(totales.inversion)}
           </div>
@@ -404,7 +408,10 @@ export default function MarketingCliente({ cliente, clienteKey }) {
       {showCalendar && (
         <div style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: 14, marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: 14, color: "#1E293B", fontWeight: 700 }}>📅 {calVista === "mes" ? MESES[mesSel - 1] + " " + anio : anio}</h3>
+            <h3 style={{ margin: 0, fontSize: 14, color: "#1E293B", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+              <CalendarDays style={{ width: 16, height: 16 }} />
+              {calVista === "mes" ? MESES[mesSel - 1] + " " + anio : anio}
+            </h3>
             <div style={{ display: "flex", gap: 4 }}>
               <button onClick={() => setCalVista("mes")} style={{ padding: "4px 12px", fontSize: 11, borderRadius: 8, border: calVista === "mes" ? "2px solid #3B82F6" : "1px solid #E2E8F0", background: calVista === "mes" ? "#EFF6FF" : "#fff", color: calVista === "mes" ? "#3B82F6" : "#64748B", cursor: "pointer", fontWeight: 600 }}>Mes</button>
               <button onClick={() => setCalVista("anual")} style={{ padding: "4px 12px", fontSize: 11, borderRadius: 8, border: calVista === "anual" ? "2px solid #3B82F6" : "1px solid #E2E8F0", background: calVista === "anual" ? "#EFF6FF" : "#fff", color: calVista === "anual" ? "#3B82F6" : "#64748B", cursor: "pointer", fontWeight: 600 }}>Anual</button>

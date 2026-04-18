@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
+import { Target, Package } from 'lucide-react';
 
 const CLIENTES = ['digitalife', 'pcel', 'mercadolibre'];
 const NOMBRE = { digitalife: 'Digitalife', pcel: 'PCEL', mercadolibre: 'Mercado Libre' };
@@ -66,7 +67,10 @@ export default function ForecastClientesTab() {
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">🎯 Forecast de Inventario a Reservar</h2>
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <Target className="w-6 h-6 text-gray-700" />
+            Forecast de Inventario a Reservar
+          </h2>
           <p className="text-gray-500 text-sm">Proyección de demanda esperada de Digitalife, PCEL y Mercado Libre basada en sell-out últimos 90 días. Reserva para que otros vendedores no tomen el inventario.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -82,7 +86,7 @@ export default function ForecastClientesTab() {
       </div>
       {reserva.length === 0 ? (
         <div className="p-10 text-center bg-white rounded-lg border border-gray-100">
-          <div className="text-4xl mb-2">📦</div>
+          <div className="mb-2"><Package className="w-10 h-10 text-gray-400 mx-auto" /></div>
           <p className="text-gray-500">Sin histórico de sell-out para los 3 clientes en los últimos 90 días.</p>
         </div>
       ) : (

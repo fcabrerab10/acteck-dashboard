@@ -5,6 +5,7 @@ import { formatMXN, formatFecha } from '../../lib/utils';
 import { CardHeader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditar as puedeEditarFn } from '../../lib/permisos';
+import { Wallet, CalendarDays, BarChart3, ClipboardList } from 'lucide-react';
 
 const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
@@ -718,7 +719,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
-                 style={{ backgroundColor: c.color }}>💰</div>
+                 style={{ backgroundColor: c.color }}><Wallet className="w-4 h-4 text-white" /></div>
             <div>
               <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Pagos y Compromisos</h1>
               <p className="text-sm text-gray-400 mt-0.5">
@@ -816,7 +817,10 @@ export default function PagosCliente({ cliente, clienteKey }) {
           {/* Calendario mensual de pagos 2026 */}
           <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-700">📅 Calendario de Pagos 2026</h3>
+              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                <CalendarDays className="w-4 h-4 text-gray-600" />
+                Calendario de Pagos 2026
+              </h3>
               <span className="text-xs text-gray-400">Agrupado por fecha de pago real (o compromiso si está pendiente)</span>
             </div>
             {(() => {
@@ -921,7 +925,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
             if (mb.length === 0) return null;
             return (
               <div className="bg-white rounded-2xl shadow-sm p-5">
-                <CardHeader titulo="Resumen General por Mes y Categoría" icono="📅" />
+                <CardHeader titulo="Resumen General por Mes y Categoría" icon={CalendarDays} />
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -1153,7 +1157,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   )}
                   {Object.keys(fijoGroups).length === 0 ? (
                     <div className="text-center py-10 text-gray-400">
-                      <p className="text-3xl mb-2">📋</p>
+                      <p className="mb-2"><ClipboardList className="w-8 h-8 text-gray-400 mx-auto" /></p>
                       <p className="text-sm">No hay pagos fijos registrados</p>
                     </div>
                   ) : (
@@ -1285,7 +1289,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">💰</span>
+                  <Wallet className="w-5 h-5 text-gray-700" />
                   <h3 className="text-lg font-bold text-gray-800">Calculadora Rebate Q{rebateQ} {new Date().getFullYear()}</h3>
                 </div>
                 <div className="flex gap-1">
@@ -1472,7 +1476,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                 <button
                                   onClick={() => crearSpiffPago(c)}
                                   className="text-xs bg-purple-600 text-white rounded px-2 py-1 hover:bg-purple-700"
-                                >💰 Generar pago</button>
+                                ><Wallet className="w-3.5 h-3.5 inline mr-1" />Generar pago</button>
                                 <button
                                   onClick={() => marcarSpiffNoAplica(c.mes)}
                                   className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 hover:bg-gray-200"
@@ -1505,7 +1509,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">📊</span>
+                  <BarChart3 className="w-5 h-5 text-gray-700" />
                   <h3 className="text-lg font-bold text-gray-800">Calculadora Rebate Trimestral {new Date().getFullYear()}</h3>
                 </div>
               </div>
@@ -1582,7 +1586,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">💰</span>
+                  <Wallet className="w-5 h-5 text-gray-700" />
                   <h3 className="text-lg font-bold text-gray-800">Calculadora SPIFF Mensual {new Date().getFullYear()}</h3>
                 </div>
                 <span className="px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700">{(SPIFF_PCT * 100).toFixed(2)}% sobre Sell In</span>

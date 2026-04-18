@@ -1,11 +1,12 @@
 import React from "react";
 import { formatMXN } from "../lib/utils";
 import { CardHeader } from './CardHeader';
+import { Target } from 'lucide-react';
 
 export function TarjetaPromociones({ promos }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5">
-      <CardHeader titulo="Promociones Activas" icono="🎯" />
+      <CardHeader titulo="Promociones Activas" icon={Target} />
       <div className="space-y-4">
         {promos.map(p => {
           const total = p.aportacionActeck + p.aportacionCliente;

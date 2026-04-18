@@ -6,6 +6,7 @@ import { toast } from "../../lib/toast";
 import {
   Plus, Trash2, Check, Clock, Flame, PauseCircle, ChevronLeft, ChevronRight,
   CalendarDays, X, Edit3, ChevronDown, ChevronUp,
+  Building2, Tag, StickyNote, Inbox,
 } from "lucide-react";
 
 /**
@@ -258,7 +259,10 @@ export default function AdministracionInterna() {
       {/* HEADER */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">🏢 Administración Interna</h1>
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <Building2 className="w-6 h-6 text-gray-700" />
+            Administración Interna
+          </h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Pendientes del equipo · Calendario · Vacaciones y salidas
           </p>
@@ -289,8 +293,9 @@ export default function AdministracionInterna() {
           onClick={() => setCalExpanded(!calExpanded)}
           className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50"
         >
-          <span className="font-semibold text-gray-800">
-            📅 Calendario · {MESES_LARGO[mesVisible.getMonth()]} {mesVisible.getFullYear()}
+          <span className="font-semibold text-gray-800 flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-gray-600" />
+            Calendario · {MESES_LARGO[mesVisible.getMonth()]} {mesVisible.getFullYear()}
           </span>
           {calExpanded ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
         </button>
@@ -614,7 +619,8 @@ function SinFechaBloque({ tareas, canEdit, nombrePorUserId, onToggleCheck, onEdi
         className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50"
       >
         <span className="font-semibold text-gray-800 text-sm flex items-center gap-2">
-          📌 Sin fecha asignada
+          <Inbox className="w-4 h-4 text-gray-500" />
+          Sin fecha asignada
           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-normal">
             {tareas.length}
           </span>
@@ -716,15 +722,15 @@ function TareaCard({ t, canEdit, nombrePorUserId, onToggleCheck, onCambiarEstatu
 
               {/* Categoría */}
               {t.categoria && (
-                <span className="text-gray-500 truncate max-w-[120px]" title={t.categoria}>
-                  🏷️ {t.categoria}
+                <span className="text-gray-500 truncate max-w-[120px] inline-flex items-center gap-0.5" title={t.categoria}>
+                  <Tag className="w-2.5 h-2.5" /> {t.categoria}
                 </span>
               )}
 
               {/* Notas */}
               {t.notas && (
-                <span className="text-gray-400 italic truncate max-w-[140px]" title={t.notas}>
-                  📝 {t.notas}
+                <span className="text-gray-400 italic truncate max-w-[140px] inline-flex items-center gap-0.5" title={t.notas}>
+                  <StickyNote className="w-2.5 h-2.5" /> {t.notas}
                 </span>
               )}
             </div>

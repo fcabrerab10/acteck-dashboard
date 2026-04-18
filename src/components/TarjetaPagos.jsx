@@ -1,6 +1,7 @@
 import React from "react";
 import { formatMXN, formatFecha, diasRestantes } from "../lib/utils";
 import { CardHeader } from './CardHeader';
+import { CreditCard } from 'lucide-react';
 
 export function TarjetaPagos({ pagos }) {
   const colores = {
@@ -11,7 +12,7 @@ export function TarjetaPagos({ pagos }) {
   const total = pagos.reduce((s, p) => s + p.monto, 0);
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5">
-      <CardHeader titulo="Pagos Pendientes" icono="💳" />
+      <CardHeader titulo="Pagos Pendientes" icon={CreditCard} />
       <div className="space-y-3 mb-4">
         {pagos.map(p => {
           const c = colores[p.estado];

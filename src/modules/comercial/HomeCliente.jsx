@@ -3,6 +3,11 @@ import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { clientes } from '../../lib/constants';
 import { formatMXN, formatFecha, calcularSalud, loadSheetJS } from '../../lib/utils';
 import { Semaforo, TarjetaPendientes } from '../../components';
+import { TrendingUp, Wallet, ClipboardList, Target, BarChart3, Package } from 'lucide-react';
+
+const iconStyle14 = { width: 14, height: 14, verticalAlign: "middle", marginRight: 4 };
+const iconStyle16 = { width: 16, height: 16, verticalAlign: "middle", marginRight: 6 };
+const iconStyle18 = { width: 18, height: 18 };
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
   const [cargando, setCargando] = React.useState(false);
@@ -148,7 +153,7 @@ function TarjetaTendenciaML({ sellOutPorMesMarca }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-lg">📈</span>
+        <TrendingUp className="w-5 h-5 text-gray-700" />
         <h3 className="font-semibold text-gray-800">Tendencia Sell Out ML por Mes</h3>
       </div>
       <div className="space-y-3">
@@ -201,28 +206,28 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-lg">💰</span>
+              <Wallet className="w-5 h-5 text-blue-600" />
               <span className="text-xs text-gray-500 font-semibold uppercase">Sell Out {mesLabel}</span>
             </div>
             <p className="text-2xl font-bold text-blue-700">{"$"}{sellOutMes.toLocaleString("es-MX")}</p>
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-lg">📈</span>
+              <TrendingUp className="w-5 h-5 text-green-600" />
               <span className="text-xs text-gray-500 font-semibold uppercase">Acumulado 2026</span>
             </div>
             <p className="text-2xl font-bold text-green-700">{"$"}{acumulado.toLocaleString("es-MX")}</p>
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-lg">📋</span>
+              <ClipboardList className="w-5 h-5 text-purple-600" />
               <span className="text-xs text-gray-500 font-semibold uppercase">Total Ordenes 2026</span>
             </div>
             <p className="text-2xl font-bold text-purple-700">{ordenes.toLocaleString("es-MX")}</p>
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-lg">🎯</span>
+              <Target className="w-5 h-5 text-amber-600" />
               <span className="text-xs text-gray-500 font-semibold uppercase">Ticket Promedio</span>
             </div>
             <p className="text-2xl font-bold text-orange-700">{"$"}{ticketProm.toLocaleString("es-MX")}</p>
@@ -766,7 +771,8 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     }));
 
     return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 14, display: "flex", flexDirection: "column", gap: 10 } },
-      React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700 } }, "🎯 Cuota"),
+      React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 } },
+        React.createElement(Target, { style: iconStyle14 }), "Cuota"),
       // MES
       React.createElement("div", null,
         React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" } },
@@ -808,7 +814,8 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     const deltaColor = delta === null ? "#94A3B8" : delta >= 0 ? "#10B981" : "#EF4444";
     return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 16, display: "flex", flexDirection: "column", gap: 12 } },
       React.createElement("div", null,
-        React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700 } }, "📊 Comercial"),
+        React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 } },
+          React.createElement(BarChart3, { style: iconStyle14 }), "Comercial"),
         _ultimaFechaSellOut && React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 2 } }, "Sell Out al " + _ultimaFechaSellOut.label)
       ),
       // Eficiencia
@@ -861,7 +868,8 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   function InventarioCard() {
     const semInfo = _latestWeek.semana ? " (sem " + _latestWeek.semana + "/" + _latestWeek.anio + ")" : "";
     return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 16, display: "flex", flexDirection: "column", gap: 12 } },
-      React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700 } }, "📦 Inventario" + semInfo),
+      React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 } },
+        React.createElement(Package, { style: iconStyle14 }), "Inventario" + semInfo),
       React.createElement("div", null,
         React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 2 } }, "Valor inventario cliente"),
         React.createElement("div", { style: { fontSize: 24, fontWeight: 700, color: "#1E293B" } }, formatMXN(totalInvValor)),
@@ -919,7 +927,8 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     };
     return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 16 } },
       React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } },
-        React.createElement("h4", { style: { margin: 0, fontSize: 14, color: "#1E293B", fontWeight: 700 } }, "📋 Tareas"),
+        React.createElement("h4", { style: { margin: 0, fontSize: 14, color: "#1E293B", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 } },
+          React.createElement(ClipboardList, { style: iconStyle16 }), "Tareas"),
         React.createElement("button", {
           onClick: () => setMostrandoFormTarea(!mostrandoFormTarea),
           style: { padding: "6px 12px", background: mostrandoFormTarea ? "#E2E8F0" : "#3B82F6", color: mostrandoFormTarea ? "#475569" : "#fff", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer", fontWeight: 600 }
@@ -1025,8 +1034,9 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   function FinancieraCard() {
     const ec = estadoCuenta;
     return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 16, display: "flex", flexDirection: "column", gap: 12 } },
-      React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700 } },
-        "💰 Financiera" + (ec ? " (al " + formatFecha(ec.fecha_corte) + ")" : "")),
+      React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 } },
+        React.createElement(Wallet, { style: iconStyle14 }),
+        "Financiera" + (ec ? " (al " + formatFecha(ec.fecha_corte) + ")" : "")),
       !ec ? React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", fontStyle: "italic" } }, "Sin estado de cuenta aún") :
       React.createElement(React.Fragment, null,
         React.createElement("div", null,

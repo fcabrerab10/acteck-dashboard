@@ -1,6 +1,7 @@
 import React from "react";
 import { formatFecha } from "../lib/utils";
 import { CardHeader } from './CardHeader';
+import { ClipboardList } from 'lucide-react';
 
 export function TarjetaPendientes({ pendientes }) {
   const colores = {
@@ -10,7 +11,7 @@ export function TarjetaPendientes({ pendientes }) {
   };
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5">
-      <CardHeader titulo="Pendientes" icono="📋" />
+      <CardHeader titulo="Pendientes" icon={ClipboardList} />
       <div className="space-y-3">
         {pendientes.map(p => (
           <div key={p.id} className="flex items-start justify-between gap-3 text-sm">

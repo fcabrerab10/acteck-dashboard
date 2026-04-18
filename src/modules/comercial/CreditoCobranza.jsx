@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { formatMXN, formatUSD, formatFecha } from '../../lib/utils';
 import { CardHeader } from '../../components';
+import { BarChart3, CalendarDays, TrendingUp, CreditCard } from 'lucide-react';
 
 const NOMBRES_MES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -195,7 +196,7 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
-                 style={{ backgroundColor: c.color }}>💳</div>
+                 style={{ backgroundColor: c.color }}><CreditCard className="w-4 h-4 text-white" /></div>
             <div>
               <h1 className="text-xl font-bold text-gray-800">{c.nombre} — ¿Cuánto nos deben?</h1>
               <p className="text-xs text-gray-500 mt-0.5">
@@ -276,7 +277,7 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {/* Ratio Saldo / Sell In */}
         <div className="bg-white rounded-2xl shadow-sm p-5">
-          <CardHeader titulo="Saldo vs Sell In YTD" icono="📊" />
+          <CardHeader titulo="Saldo vs Sell In YTD" icon={BarChart3} />
           {ratioSaldoSellIn != null ? (
             <div className="mt-1">
               <div className="flex items-baseline gap-2">
@@ -373,7 +374,7 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
       {/* CUÁNDO NOS PAGAN */}
       {(hasVencMes || saldoVencido > 0) && (
         <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-          <CardHeader titulo="Cuándo nos pagan" icono="📅" />
+          <CardHeader titulo="Cuándo nos pagan" icon={CalendarDays} />
           <div className="space-y-3 mt-1">
             {saldoVencido > 0 && (
               <div>
@@ -503,7 +504,7 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
       {/* PROYECCIÓN vs SELL OUT */}
       {hasVencMes && (
         <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-          <CardHeader titulo="¿El cliente generará flujo para pagarnos?" icono="📈" />
+          <CardHeader titulo="¿El cliente generará flujo para pagarnos?" icon={TrendingUp} />
           <p className="text-xs text-gray-400 mb-3">
             Proyección mensual = <strong>max(Cuota Sell Out mín, Promedio real)</strong>
             {hasSellOut && (

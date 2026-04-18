@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
+import { ClipboardList } from 'lucide-react';
 
 // Alias mapping for inventory columns (almacen numeric codes)
 const ALM_LABEL = {
@@ -89,7 +90,7 @@ export default function ReporteTab() {
   if (!rows) return <div className="p-6 text-gray-400">Cargando reporte…</div>;
   if (rows.length === 0) return (
     <div className="p-10 text-center">
-      <div className="text-5xl mb-3">📋</div>
+      <div className="mb-3"><ClipboardList className="w-12 h-12 text-gray-400 mx-auto" /></div>
       <h2 className="text-2xl font-bold text-gray-800 mb-2">Reporte</h2>
       <p className="text-gray-500">No hay SKUs en roadmap_sku todavía. Sube el Excel central (botón azul abajo a la derecha) e incluye la hoja <code>Roadmap Q2 2026</code>.</p>
     </div>
@@ -98,7 +99,10 @@ export default function ReporteTab() {
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xl font-bold text-gray-800">📋 Reporte — Disponibilidad por SKU</h2>
+        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+          <ClipboardList className="w-5 h-5 text-gray-700" />
+          Reporte — Disponibilidad por SKU
+        </h2>
         <div className="flex items-center gap-2">
           <input type="text" placeholder="Filtrar SKU / RDMP / descripción" value={filter} onChange={e => setFilter(e.target.value)}
             className="border border-gray-300 rounded px-2 py-1 text-sm w-72" />
