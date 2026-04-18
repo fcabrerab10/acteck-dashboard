@@ -235,11 +235,40 @@ export default function App() {
   }
 
   
-    const [clienteActivo, setClienteActivo] = useState("digitalife");
+    // ── Navegación persistente (se guarda la pestaña al recargar) ──
+    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','forecastClientes','adminInterna']), []);
+    const [paginaActiva, setPaginaActiva] = useState(() => {
+      try { return localStorage.getItem('nav_pagina') || 'home'; } catch { return 'home'; }
+    });
+    const [clienteActivo, setClienteActivo] = useState(() => {
+      try {
+        const pag = localStorage.getItem('nav_pagina') || 'home';
+        const globals = new Set(['resumen','reporte','resumenClientes','forecastClientes','adminInterna']);
+        if (globals.has(pag)) return null;
+        return localStorage.getItem('nav_cliente') || 'digitalife';
+      } catch { return 'digitalife'; }
+    });
+    const [vistaActual, setVistaActual] = useState(() => {
+      try { return localStorage.getItem('nav_vista') || null; } catch { return null; }
+    });
+    React.useEffect(() => {
+      try { localStorage.setItem('nav_pagina', paginaActiva); } catch {}
+    }, [paginaActiva]);
+    React.useEffect(() => {
+      try {
+        if (clienteActivo) localStorage.setItem('nav_cliente', clienteActivo);
+        else localStorage.removeItem('nav_cliente');
+      } catch {}
+    }, [clienteActivo]);
+    React.useEffect(() => {
+      try {
+        if (vistaActual) localStorage.setItem('nav_vista', vistaActual);
+        else localStorage.removeItem('nav_vista');
+      } catch {}
+    }, [vistaActual]);
+
   const [modoPresent, setModoPresent] = useState(false);
-  const [paginaActiva, setPaginaActiva] = useState("home");
   const [showUpload, setShowUpload] = useState(false);
-  const [vistaActual, setVistaActual] = useState(null);
   const [clienteKey, setClienteKey] = useState(null);
 
   //  DATOS DESDE SUPABASE (ventas_mensuales) 
