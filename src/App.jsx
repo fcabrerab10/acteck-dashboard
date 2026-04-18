@@ -3,6 +3,7 @@ import { supabase, DB_CONFIGURED } from './lib/supabase';
 import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_MES, ML_SELLOUT_DEFAULT, clientes } from './lib/constants';
 import { formatMXN, formatUSD, formatFecha, diasRestantes, calcularSalud, loadSheetJS } from './lib/utils';
 import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, Sidebar } from './components';
+import { CLIENTES as SIDEBAR_CLIENTES } from './components/Sidebar';
 import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, ForecastCliente } from './modules/comercial';
 import ReporteTab from './modules/comercial/ReporteTab';
 import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
@@ -149,6 +150,52 @@ function UploadModalX({ onClose }) {
       )
     )
   );
+}
+
+// ── Breadcrumb arriba del contenido ──
+const PESTANAS_INFO = {
+  home:       { label: 'Resumen',                emoji: '🏠' },
+  analisis:   { label: 'Análisis',               emoji: '📈' },
+  estrategia: { label: 'Estrategia de Producto', emoji: '📦' },
+  marketing:  { label: 'Marketing',              emoji: '📢' },
+  pagos:      { label: 'Pagos',                  emoji: '💰' },
+  cartera:    { label: 'Crédito y Cobranza',     emoji: '📊' },
+};
+const GLOBAL_PAGES_INFO = {
+  resumenClientes:  { label: 'Resumen de Clientes',    emoji: '📈' },
+  forecastClientes: { label: 'Forecast de Clientes',   emoji: '🎯' },
+  adminInterna:     { label: 'Administración Interna', emoji: '🏢' },
+};
+function Breadcrumb({ clienteActivo, paginaActiva, vistaActual }) {
+  if (vistaActual === 'configuracion') {
+    return (
+      <div className="mb-4 flex items-center gap-2 text-sm">
+        <span className="text-gray-400">⚙️</span>
+        <span className="font-semibold text-gray-800">Configuración</span>
+      </div>
+    );
+  }
+  if (clienteActivo && PESTANAS_INFO[paginaActiva]) {
+    const cli = SIDEBAR_CLIENTES[clienteActivo];
+    const pag = PESTANAS_INFO[paginaActiva];
+    return (
+      <div className="mb-4 flex items-center gap-2 text-sm">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cli?.color || '#999' }} />
+        <span className="font-semibold text-gray-800">{cli?.label || clienteActivo}</span>
+        <span className="text-gray-300">›</span>
+        <span className="text-gray-600">{pag.emoji} {pag.label}</span>
+      </div>
+    );
+  }
+  if (GLOBAL_PAGES_INFO[paginaActiva]) {
+    const p = GLOBAL_PAGES_INFO[paginaActiva];
+    return (
+      <div className="mb-4 flex items-center gap-2 text-sm">
+        <span className="font-semibold text-gray-800">{p.emoji} {p.label}</span>
+      </div>
+    );
+  }
+  return null;
 }
 
 function UpdatedAtBadgeX() {
@@ -365,6 +412,7 @@ export default function App() {
       {/* CONTENIDO */}
       <main className="flex-1 overflow-y-auto">
           <div className="w-full px-6 py-4">
+          <Breadcrumb clienteActivo={clienteActivo} paginaActiva={paginaActiva} vistaActual={vistaActual} />
           {vistaActual === "configuracion" ? (
             puedeVerConfig ? <Configuracion session={{user: authUser, perfil}} /> : <SinAcceso motivo="Solo el Super Admin puede ver Configuración." />
           ) : (
