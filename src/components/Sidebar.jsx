@@ -82,6 +82,15 @@ const MENU_CONFIG = [
       { id: 'adminClientes',    label: 'Administración de Clientes', emoji: '👥', type: 'clientes' },
     ],
   },
+  {
+    id: 'internaGrupo',
+    label: 'Administración Interna',
+    emoji: '🏢',
+    rolesPermitidos: ['super_admin', 'asistente'],
+    items: [
+      { id: 'adminInterna', label: 'Pendientes & Calendario', emoji: '📋' },
+    ],
+  },
 ];
 
 // Estado expandido persistente
@@ -168,7 +177,15 @@ export default function Sidebar({
 
       {/* Nav scrollable */}
       <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-        {MENU_CONFIG.map((grupo) => (
+        {MENU_CONFIG
+          .filter((grupo) => {
+            // Grupos con rolesPermitidos solo visibles para esos roles
+            if (grupo.rolesPermitidos && grupo.rolesPermitidos.length > 0) {
+              return perfilUsuario && grupo.rolesPermitidos.includes(perfilUsuario.rol);
+            }
+            return true;
+          })
+          .map((grupo) => (
           <GrupoBloque
             key={grupo.id}
             grupo={grupo}

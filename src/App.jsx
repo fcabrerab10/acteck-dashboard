@@ -10,6 +10,7 @@ import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
 import LoginPage from './modules/auth/LoginPage';
 import { Configuracion } from './modules/configuracion';
 import ActualizacionDatos from './modules/settings/ActualizacionDatos';
+import { AdministracionInterna } from './modules/interno';
 import SinAcceso from './components/SinAcceso';
 import { puedeConfigurar, puedeActualizarDatos, puedeVerCliente, puedeVerPestana } from './lib/permisos';
 import { PerfilContext } from './lib/perfilContext';
@@ -345,6 +346,11 @@ export default function App() {
           {paginaActiva === "reporte" && <ReporteTab />}
           {paginaActiva === "resumenClientes" && <ResumenClientesTab />}
           {paginaActiva === "forecastClientes" && <ForecastClientesTab />}
+          {paginaActiva === "adminInterna" && (
+            (perfil?.rol === "super_admin" || perfil?.rol === "asistente")
+              ? <AdministracionInterna />
+              : <SinAcceso motivo="Solo el Super Admin y Asistentes pueden acceder a Administración Interna." />
+          )}
           <>
             <>
         {clienteActivo && !puedeVerCliente(perfil, clienteActivo) ? (
