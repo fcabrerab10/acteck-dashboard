@@ -27,6 +27,18 @@ const ESTATUS_OPT = [
   { value: "cancelado",  label: "✕ Cancelado",   color: "#94a3b8" },
 ];
 
+// Helper: ¿el mes de la fecha es posterior al mes actual? (no se cuenta como pendiente todavía)
+function esMesFuturo(fechaStr) {
+  if (!fechaStr) return false;
+  const s = String(fechaStr).slice(0, 10);
+  const [y, m] = s.split("-").map((n) => parseInt(n, 10));
+  if (!y || !m) return false;
+  const hoy = new Date();
+  const hy = hoy.getFullYear();
+  const hm = hoy.getMonth() + 1; // 1-12
+  return y > hy || (y === hy && m > hm);
+}
+
 export default function PagosCliente({ cliente, clienteKey }) {
   const c = cliente;
   const perfil = usePerfil();
@@ -37,6 +49,12 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [loading, setLoading]         = useState(true);
   const [catActiva, setCatActiva]     = useState("todas");
   const [promosVer, setPromosVer]     = useState(0);
+  const [mostrarFuturos, setMostrarFuturos] = useState(() => {
+    try { return localStorage.getItem("pagos_mostrar_futuros") === "true"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("pagos_mostrar_futuros", String(mostrarFuturos)); } catch {}
+  }, [mostrarFuturos]);
   const [expandedMonth, setExpandedMonth] = useState(null);
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue]     = useState("");
@@ -1094,7 +1112,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
               {catActiva === "pagosFijos" && (
                 <div>
                   {DB_CONFIGURED && (
-                    <div className="mb-5">
+                    <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
                       {!showAddFijo ? (
                         <button onClick={() => setShowAddFijo(true)}
                           className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors">
@@ -1167,6 +1185,13 @@ export default function PagosCliente({ cliente, clienteKey }) {
                           </div>
                         </div>
                       )}
+                      {/* Toggle meses futuros */}
+                      <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none ml-auto">
+                        <input type="checkbox" checked={mostrarFuturos}
+                          onChange={(e) => setMostrarFuturos(e.target.checked)}
+                          className="rounded border-gray-300" />
+                        Mostrar meses futuros
+                      </label>
                     </div>
                   )}
                   {Object.keys(fijoGroups).length === 0 ? (
@@ -1179,9 +1204,15 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       {Object.entries(fijoGroups).map(([conceptoKey, records]) => {
                         const isExp = expandedFijos[conceptoKey];
                         const totalAnual = records.reduce((s, r) => s + (r.monto || 0), 0);
-                        const pagados = records.filter(r => r.estatus === "pagado").length;
+                        const pagados   = records.filter(r => r.estatus === "pagado").length;
+                        const porPagar  = records.filter(r => r.estatus === "pendiente" && !esMesFuturo(r.fecha_compromiso)).length;
+                        const futuros   = records.filter(r => r.estatus === "pendiente" && esMesFuturo(r.fecha_compromiso)).length;
+                        const vencidos  = records.filter(r => r.estatus === "vencido").length;
                         const montoMes = records[0] ? (records[0].monto || 0) : 0;
                         const sorted = [...records].sort((a, b) => (a.fecha_compromiso || "").localeCompare(b.fecha_compromiso || ""));
+                        const sortedVisible = mostrarFuturos
+                          ? sorted
+                          : sorted.filter(r => !(r.estatus === "pendiente" && esMesFuturo(r.fecha_compromiso)));
                         return (
                           <div key={conceptoKey} className="border border-gray-200 rounded-xl overflow-hidden">
                             <div className="flex items-center justify-between px-5 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
@@ -1190,7 +1221,13 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                 <span className="text-lg">{isExp ? "▾" : "▸"}</span>
                                 <div>
                                   <p className="font-semibold text-gray-800">{conceptoKey}</p>
-                                  <p className="text-xs text-gray-500">{formatMXN(montoMes)}/mes · {records.length} meses · {pagados} pagados</p>
+                                  <p className="text-xs text-gray-500">
+                                    {formatMXN(montoMes)}/mes · {records.length} meses ·{" "}
+                                    <span className="text-emerald-600 font-semibold">{pagados} pagados</span>
+                                    {porPagar > 0 && <>{" · "}<span className="text-amber-600 font-semibold">{porPagar} por pagar</span></>}
+                                    {vencidos > 0 && <>{" · "}<span className="text-red-600 font-semibold">{vencidos} vencidos</span></>}
+                                    {futuros > 0 && <>{" · "}<span className="text-gray-400">{futuros} futuros</span></>}
+                                  </p>
                                 </div>
                               </div>
                               <div className="text-right">
@@ -1212,20 +1249,36 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {sorted.map((r) => {
+                                    {sortedVisible.map((r) => {
                                       const mk = r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??";
                                       const mi = MESES_ARR.find(m => m.key === mk);
+                                      const esFuturo = r.estatus === "pendiente" && esMesFuturo(r.fecha_compromiso);
                                       return (
-                                        <tr key={r.id} className="border-b border-gray-50 hover:bg-blue-50/40">
-                                          <td className="py-2 pr-3 font-medium text-gray-700">{mi ? mi.full : mk}</td>
+                                        <tr key={r.id} className={`border-b border-gray-50 hover:bg-blue-50/40 ${esFuturo ? "bg-gray-50/60 text-gray-400" : ""}`}>
+                                          <td className="py-2 pr-3 font-medium">{mi ? mi.full : mk}</td>
                                           <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
-                                          <td className="py-2 pr-3 text-center">{renderCell(r, "estatus", "sel-estatus")}</td>
+                                          <td className="py-2 pr-3 text-center">
+                                            {esFuturo
+                                              ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-500 font-medium">Programado</span>
+                                              : renderCell(r, "estatus", "sel-estatus")}
+                                          </td>
                                           <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
                                           <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
                                           <td className="py-2">{renderCell(r, "folio")}</td>
                                         </tr>
                                       );
                                     })}
+                                    {!mostrarFuturos && sorted.length > sortedVisible.length && (
+                                      <tr>
+                                        <td colSpan={6} className="py-2 text-center text-xs text-gray-400 italic bg-gray-50/50">
+                                          {sorted.length - sortedVisible.length} mes{sorted.length - sortedVisible.length !== 1 ? "es" : ""} futuro{sorted.length - sortedVisible.length !== 1 ? "s" : ""} oculto{sorted.length - sortedVisible.length !== 1 ? "s" : ""} ·{" "}
+                                          <button onClick={(e) => { e.stopPropagation(); setMostrarFuturos(true); }}
+                                            className="text-blue-600 hover:underline font-medium">
+                                            Mostrar
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    )}
                                   </tbody>
                                 </table>
                               </div>
