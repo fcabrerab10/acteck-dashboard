@@ -4,7 +4,7 @@ import { usePerfil } from "../../lib/perfilContext";
 import { puedeEditar } from "../../lib/permisos";
 import {
   Plus, Trash2, CheckCircle2, Clock, Circle, ChevronLeft, ChevronRight,
-  CalendarDays, X, Edit3, Filter,
+  CalendarDays, X, Edit3, Filter, Flame, PauseCircle,
 } from "lucide-react";
 
 /**
@@ -16,16 +16,18 @@ import {
 
 // ────────── Constantes de dominio ──────────
 const CUENTAS = [
-  { id: "mercadolibre", label: "Mercado Libre", color: "bg-yellow-100 text-yellow-800 border-yellow-200" },
-  { id: "digitalife",   label: "Digitalife",    color: "bg-blue-100 text-blue-800 border-blue-200" },
-  { id: "pcel",         label: "PCEL",          color: "bg-red-100 text-red-800 border-red-200" },
-  { id: "otro",         label: "Otro",          color: "bg-purple-100 text-purple-800 border-purple-200" },
+  { id: "mercadolibre", label: "Mercado Libre", color: "bg-yellow-100 text-yellow-800 border-yellow-200", stripe: "#F59E0B", emoji: "🟡" },
+  { id: "digitalife",   label: "Digitalife",    color: "bg-blue-100 text-blue-800 border-blue-200",       stripe: "#3B82F6", emoji: "🔵" },
+  { id: "pcel",         label: "PCEL",          color: "bg-red-100 text-red-800 border-red-200",          stripe: "#EF4444", emoji: "🔴" },
+  { id: "otro",         label: "Otro",          color: "bg-purple-100 text-purple-800 border-purple-200", stripe: "#A855F7", emoji: "🟣" },
 ];
 
 const ESTATUS = [
-  { id: "pendiente",  label: "Pendiente",  icon: Circle,        cls: "text-gray-500 bg-gray-100" },
-  { id: "en_proceso", label: "En proceso", icon: Clock,         cls: "text-amber-700 bg-amber-100" },
-  { id: "listo",      label: "Listo",      icon: CheckCircle2,  cls: "text-emerald-700 bg-emerald-100" },
+  { id: "pendiente",  label: "Pendiente",  icon: Circle,        cls: "text-gray-600 bg-gray-100",           dot: "#9CA3AF", emoji: "⚪" },
+  { id: "en_proceso", label: "En proceso", icon: Clock,         cls: "text-amber-700 bg-amber-100",         dot: "#F59E0B", emoji: "🟡" },
+  { id: "urgente",    label: "Urgente",    icon: Flame,         cls: "text-red-700 bg-red-100",             dot: "#DC2626", emoji: "🔴" },
+  { id: "en_pausa",   label: "En pausa",   icon: PauseCircle,   cls: "text-slate-600 bg-slate-200",         dot: "#64748B", emoji: "🟨" },
+  { id: "listo",      label: "Listo",      icon: CheckCircle2,  cls: "text-emerald-700 bg-emerald-100",     dot: "#10B981", emoji: "🟢" },
 ];
 
 const TIPOS_EVENTO = [
@@ -39,9 +41,23 @@ const TIPOS_EVENTO = [
 
 // Sugerencias de categoría (autocomplete — el usuario puede tipear cualquier cosa)
 const CATEGORIAS_SUGERIDAS = [
-  "Reputación ML", "Publicaciones", "Mensajes postventa",
-  "Materiales de marketing", "Campañas", "Ayuda a Hans",
-  "Forecast", "Cobranza", "Estrategia", "Reunión", "Administrativo",
+  "Reputación ML",
+  "Mensajes postventa / Reclamos y Preguntas",
+  "Publicaciones",
+  "Campañas y promociones",
+  "Materiales de marketing",
+  "Plan de MKT",
+  "Carga de productos / catálogo",
+  "Seguimiento de solicitud de diseños",
+  "Seguimiento de pagos / facturas",
+  "Envío de cotizaciones",
+  "Ayuda a Hans",
+  "Clips / Contenido",
+  "Revisión",
+  "Excel",
+  "Cobranza",
+  "Reunión",
+  "Administrativo",
 ];
 
 const DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
@@ -169,9 +185,11 @@ export default function AdministracionInterna() {
     const all = keys.flatMap((k) => pendientesPorDia[k]);
     return {
       total: all.length,
-      pendiente: all.filter((p) => p.estatus === "pendiente").length,
+      pendiente:  all.filter((p) => p.estatus === "pendiente").length,
       en_proceso: all.filter((p) => p.estatus === "en_proceso").length,
-      listo: all.filter((p) => p.estatus === "listo").length,
+      urgente:    all.filter((p) => p.estatus === "urgente").length,
+      en_pausa:   all.filter((p) => p.estatus === "en_pausa").length,
+      listo:      all.filter((p) => p.estatus === "listo").length,
     };
   }, [pendientesPorDia]);
 
@@ -245,12 +263,38 @@ export default function AdministracionInterna() {
         onClickDia={(fecha) => canEdit && setModalEvento({ fechaDefault: fecha })}
       />
 
-      {/* STATS SEMANA */}
-      <div className="grid grid-cols-4 gap-3">
-        <StatCard label="Esta semana" value={statsSemana.total}      color="gray" />
-        <StatCard label="Pendiente"   value={statsSemana.pendiente}  color="gray" />
-        <StatCard label="En proceso"  value={statsSemana.en_proceso} color="amber" />
-        <StatCard label="Listo"       value={statsSemana.listo}      color="emerald" />
+      {/* STATS SEMANA — más visual */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-700">Resumen de la semana</h3>
+          <div className="text-xs text-gray-500">
+            {statsSemana.total > 0 && (
+              <span>
+                <span className="font-semibold text-emerald-600">{statsSemana.listo}</span>
+                /{statsSemana.total} completadas ·{" "}
+                <span className="font-semibold text-emerald-600">{Math.round((statsSemana.listo / statsSemana.total) * 100)}%</span>
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="grid grid-cols-6 gap-3">
+          <StatCard label="Total"      value={statsSemana.total}      color="gray"    emoji="📋" />
+          <StatCard label="Urgente"    value={statsSemana.urgente}    color="red"     emoji="🔴" />
+          <StatCard label="En proceso" value={statsSemana.en_proceso} color="amber"   emoji="🟡" />
+          <StatCard label="Pendiente"  value={statsSemana.pendiente}  color="gray"    emoji="⚪" />
+          <StatCard label="En pausa"   value={statsSemana.en_pausa}   color="slate"   emoji="⏸️" />
+          <StatCard label="Listo"      value={statsSemana.listo}      color="emerald" emoji="🟢" />
+        </div>
+        {/* Barra de progreso */}
+        {statsSemana.total > 0 && (
+          <div className="mt-3 h-2 rounded-full bg-gray-100 overflow-hidden flex">
+            <div className="bg-red-500"     style={{ width: `${(statsSemana.urgente    / statsSemana.total) * 100}%` }} />
+            <div className="bg-amber-400"   style={{ width: `${(statsSemana.en_proceso / statsSemana.total) * 100}%` }} />
+            <div className="bg-gray-300"    style={{ width: `${(statsSemana.pendiente  / statsSemana.total) * 100}%` }} />
+            <div className="bg-slate-400"   style={{ width: `${(statsSemana.en_pausa   / statsSemana.total) * 100}%` }} />
+            <div className="bg-emerald-500" style={{ width: `${(statsSemana.listo      / statsSemana.total) * 100}%` }} />
+          </div>
+        )}
       </div>
 
       {/* FILTROS */}
@@ -309,20 +353,23 @@ export default function AdministracionInterna() {
         </div>
       </div>
 
-      {/* PENDIENTES SEMANA */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+      {/* PENDIENTES SEMANA — grid de tarjetas por día */}
+      <div>
+        <div className="mb-3 flex items-center justify-between">
           <h2 className="font-semibold text-gray-800">
-            Pendientes · Semana del {semanaVisible.getDate()} de {MESES_LARGO[semanaVisible.getMonth()]}
+            📋 Pendientes · Semana del {semanaVisible.getDate()} de {MESES_LARGO[semanaVisible.getMonth()]}
           </h2>
         </div>
 
-        <div className="divide-y divide-gray-100">
+        <div className="space-y-3">
           {Array.from({ length: 7 }, (_, i) => {
             const d = new Date(semanaVisible); d.setDate(d.getDate() + i);
             const key = toISO(d);
             const items = pendientesPorDia[key] || [];
             const esHoy = mismaFecha(d, new Date());
+            // Ocultar sábado/domingo si están vacíos
+            const esFinde = i >= 5;
+            if (esFinde && items.length === 0) return null;
             return (
               <DiaBloque
                 key={key}
@@ -509,15 +556,20 @@ function Calendario({ mesVisible, setMesVisible, eventos, nombrePorUserId, canEd
 }
 
 // ────────── Stat Card ──────────
-function StatCard({ label, value, color }) {
+function StatCard({ label, value, color, emoji }) {
   const cls = {
-    gray:    "bg-gray-50 text-gray-700",
-    amber:   "bg-amber-50 text-amber-700",
-    emerald: "bg-emerald-50 text-emerald-700",
-  }[color] || "bg-gray-50 text-gray-700";
+    gray:    "bg-gray-50 text-gray-700 border-gray-100",
+    amber:   "bg-amber-50 text-amber-700 border-amber-100",
+    emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    red:     "bg-red-50 text-red-700 border-red-100",
+    slate:   "bg-slate-50 text-slate-700 border-slate-100",
+  }[color] || "bg-gray-50 text-gray-700 border-gray-100";
   return (
-    <div className={`rounded-xl p-3 border border-gray-100 ${cls}`}>
-      <div className="text-xs uppercase tracking-wide opacity-70">{label}</div>
+    <div className={`rounded-xl p-2.5 border ${cls}`}>
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide opacity-80">
+        {emoji && <span>{emoji}</span>}
+        {label}
+      </div>
       <div className="text-2xl font-bold mt-0.5">{value}</div>
     </div>
   );
@@ -529,30 +581,81 @@ function DiaBloque({
   nombrePorUserId, canEdit,
   onCambiarEstatus, onEditar, onBorrar, onAgregar,
 }) {
-  const label = etiquetaSinFecha
+  const diaNombre = etiquetaSinFecha
     ? "Sin fecha"
-    : `${DIAS_SEMANA[(fecha.getDay() + 6) % 7].toUpperCase()} ${fecha.getDate()}/${String(fecha.getMonth() + 1).padStart(2, "0")}`;
+    : DIAS_SEMANA[(fecha.getDay() + 6) % 7];
+  const fechaStr = etiquetaSinFecha ? "" : `${fecha.getDate()} ${MESES_LARGO[fecha.getMonth()].slice(0, 3).toLowerCase()}`;
+
+  // Progreso del día
+  const total = pendientes.length;
+  const listo = pendientes.filter((p) => p.estatus === "listo").length;
+  const urgente = pendientes.filter((p) => p.estatus === "urgente").length;
+  const enProceso = pendientes.filter((p) => p.estatus === "en_proceso").length;
+  const pendiente = pendientes.filter((p) => p.estatus === "pendiente").length;
+  const enPausa = pendientes.filter((p) => p.estatus === "en_pausa").length;
+  const pct = total > 0 ? Math.round((listo / total) * 100) : 0;
+
+  const headerCls = esHoy
+    ? "bg-gradient-to-r from-blue-50 to-blue-100/50 border-blue-200"
+    : "bg-gray-50/50 border-gray-100";
 
   return (
-    <div className="px-4 py-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className={`text-sm font-semibold ${esHoy ? "text-blue-600" : "text-gray-700"}`}>
-          {label} {esHoy && <span className="ml-1 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">Hoy</span>}
+    <div className={`bg-white rounded-xl border overflow-hidden ${esHoy ? "border-blue-200 shadow-sm" : "border-gray-100"}`}>
+      {/* Header del día */}
+      <div className={`px-4 py-3 border-b ${headerCls} flex items-center justify-between gap-3`}>
+        <div className="flex items-center gap-3 min-w-0">
+          {!etiquetaSinFecha && (
+            <div className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 ${
+              esHoy ? "bg-blue-600 text-white" : "bg-white border border-gray-200 text-gray-700"
+            }`}>
+              <span className="text-[10px] uppercase tracking-wider opacity-80 leading-none">
+                {MESES_LARGO[fecha.getMonth()].slice(0, 3)}
+              </span>
+              <span className="text-base font-bold leading-tight">{fecha.getDate()}</span>
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className={`text-sm font-bold uppercase tracking-wide ${esHoy ? "text-blue-700" : "text-gray-800"}`}>
+              {diaNombre}
+              {esHoy && <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full normal-case font-semibold">HOY</span>}
+            </div>
+            {!etiquetaSinFecha && total > 0 && (
+              <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                <span>{listo}/{total} completadas · {pct}%</span>
+                {urgente > 0   && <span className="text-red-600 font-medium">🔴 {urgente} urgente{urgente > 1 ? "s" : ""}</span>}
+                {enProceso > 0 && <span className="text-amber-600 font-medium">🟡 {enProceso} en proceso</span>}
+                {pendiente > 0 && <span className="text-gray-500 font-medium">⚪ {pendiente} pendiente{pendiente > 1 ? "s" : ""}</span>}
+                {enPausa > 0   && <span className="text-slate-500 font-medium">⏸️ {enPausa} en pausa</span>}
+              </div>
+            )}
+          </div>
         </div>
         {canEdit && !etiquetaSinFecha && (
           <button
             onClick={onAgregar}
-            className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0"
           >
-            <Plus className="w-3 h-3" /> Agregar
+            <Plus className="w-3.5 h-3.5" /> Agregar
           </button>
         )}
       </div>
 
+      {/* Progress bar */}
+      {!etiquetaSinFecha && total > 0 && (
+        <div className="h-1 bg-gray-100 flex">
+          <div className="bg-red-500"     style={{ width: `${(urgente   / total) * 100}%` }} />
+          <div className="bg-amber-400"   style={{ width: `${(enProceso / total) * 100}%` }} />
+          <div className="bg-gray-300"    style={{ width: `${(pendiente / total) * 100}%` }} />
+          <div className="bg-slate-400"   style={{ width: `${(enPausa   / total) * 100}%` }} />
+          <div className="bg-emerald-500" style={{ width: `${(listo     / total) * 100}%` }} />
+        </div>
+      )}
+
+      {/* Lista de tareas */}
       {pendientes.length === 0 ? (
-        <p className="text-xs text-gray-400 italic pl-1">Sin tareas</p>
+        <p className="text-xs text-gray-400 italic p-4 text-center">Sin tareas · usa "Agregar" para crear una</p>
       ) : (
-        <div className="space-y-1.5">
+        <div className="divide-y divide-gray-50">
           {pendientes.map((p) => (
             <PendienteRow
               key={p.id}
@@ -575,50 +678,69 @@ function PendienteRow({ p, nombrePorUserId, canEdit, onCambiarEstatus, onEditar,
   const estatus = ESTATUS.find((s) => s.id === p.estatus) || ESTATUS[0];
   const Icon = estatus.icon;
 
+  // Tono sutil de fondo cuando urgente
+  const rowBg = p.estatus === "urgente" ? "bg-red-50/40 hover:bg-red-50/70"
+             : p.estatus === "listo"    ? "hover:bg-gray-50 opacity-80"
+             : "hover:bg-gray-50";
+
   return (
-    <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 group">
-      {/* Estatus toggle */}
+    <div className={`relative flex items-center gap-3 pl-4 pr-3 py-2.5 group ${rowBg}`}>
+      {/* Stripe de cuenta (barra de color a la izquierda) */}
+      <div
+        className="absolute left-0 top-1 bottom-1 w-1 rounded-r-md"
+        style={{ backgroundColor: cuenta.stripe }}
+        title={cuenta.label}
+      />
+
+      {/* Estatus toggle — pill con icono y texto */}
       <button
         onClick={() => {
           if (!canEdit) return;
-          // ciclo pendiente → en_proceso → listo → pendiente
+          // ciclo: pendiente → en_proceso → urgente → en_pausa → listo → pendiente
           const idx = ESTATUS.findIndex((s) => s.id === p.estatus);
           const next = ESTATUS[(idx + 1) % ESTATUS.length].id;
           onCambiarEstatus(p.id, next);
         }}
         disabled={!canEdit}
-        className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${estatus.cls} ${canEdit ? "hover:opacity-80 cursor-pointer" : ""}`}
-        title={`Estatus: ${estatus.label}`}
+        className={`shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-semibold ${estatus.cls} ${canEdit ? "hover:ring-2 hover:ring-offset-1 hover:ring-current/20 cursor-pointer" : ""}`}
+        title={canEdit ? `Cambiar estatus (actual: ${estatus.label})` : estatus.label}
       >
-        <Icon className="w-4 h-4" />
+        <Icon className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">{estatus.label}</span>
       </button>
 
       {/* Cuenta */}
-      <span className={`shrink-0 text-[11px] px-2 py-0.5 rounded border ${cuenta.color}`}>
+      <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded border ${cuenta.color}`}>
         {cuenta.label}
       </span>
 
-      {/* Tarea + categoría */}
+      {/* Tarea + meta */}
       <div className="flex-1 min-w-0">
-        <div className={`text-sm truncate ${p.estatus === "listo" ? "line-through text-gray-400" : "text-gray-800"}`}>
+        <div className={`text-sm font-medium ${p.estatus === "listo" ? "line-through text-gray-400" : "text-gray-800"}`}>
           {p.tarea}
         </div>
-        <div className="text-xs text-gray-500 flex items-center gap-2 truncate">
-          {p.categoria && <span>{p.categoria}</span>}
-          {p.responsable && (
-            <span className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: paletaPorUsuario(p.responsable).dot }} />
-              {nombrePorUserId[p.responsable] || "—"}
-            </span>
-          )}
-          {p.notas && <span className="italic truncate">· {p.notas}</span>}
-        </div>
+        {(p.categoria || p.responsable || p.notas) && (
+          <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5 flex-wrap">
+            {p.categoria && (
+              <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                🏷️ {p.categoria}
+              </span>
+            )}
+            {p.responsable && (
+              <span className="inline-flex items-center gap-1">
+                <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: paletaPorUsuario(p.responsable).dot }} />
+                {nombrePorUserId[p.responsable] || "—"}
+              </span>
+            )}
+            {p.notas && <span className="italic text-gray-400 truncate max-w-xs">📝 {p.notas}</span>}
+          </div>
+        )}
       </div>
 
       {canEdit && (
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={() => onEditar(p)} className="p-1.5 rounded hover:bg-gray-200 text-gray-500"><Edit3 className="w-3.5 h-3.5" /></button>
-          <button onClick={() => onBorrar(p.id)} className="p-1.5 rounded hover:bg-red-100 text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          <button onClick={() => onEditar(p)} className="p-1.5 rounded hover:bg-gray-200 text-gray-500" title="Editar"><Edit3 className="w-3.5 h-3.5" /></button>
+          <button onClick={() => onBorrar(p.id)} className="p-1.5 rounded hover:bg-red-100 text-red-500" title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></button>
         </div>
       )}
     </div>
