@@ -139,19 +139,17 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
 
   return (
     <aside className="w-60 bg-white border-r border-gray-100 flex flex-col shrink-0">
-      {/* ─── HEADER ─── */}
-      <div className="px-4 py-3 border-b border-gray-100">
-        {!modoPresent ? (
-          <p className="text-sm font-bold text-gray-800">Dashboard</p>
-        ) : (
+      {/* ─── HEADER (solo visible en modo presentación) ─── */}
+      {modoPresent && (
+        <div className="px-4 py-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
             <p className="text-xs text-green-600 font-semibold uppercase tracking-widest">
               Modo Presentación
             </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ─── NAV ─── */}
       <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
