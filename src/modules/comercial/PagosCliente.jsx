@@ -24,6 +24,7 @@ const ESTATUS_OPT = [
   { value: "en_proceso", label: "⏳ En Proceso", color: "#3b82f6" },
   { value: "pagado",     label: "✓ Pagado",      color: "#10b981" },
   { value: "vencido",    label: "⚠ Vencido",     color: "#ef4444" },
+  { value: "no_aplica",  label: "➖ No aplica",  color: "#9ca3af" },
   { value: "cancelado",  label: "✕ Cancelado",   color: "#94a3b8" },
 ];
 
@@ -1112,7 +1113,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
               {catActiva === "pagosFijos" && (
                 <div>
                   {DB_CONFIGURED && (
-                    <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
+                    <div className="mb-5">
                       {!showAddFijo ? (
                         <button onClick={() => setShowAddFijo(true)}
                           className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors">
@@ -1185,13 +1186,6 @@ export default function PagosCliente({ cliente, clienteKey }) {
                           </div>
                         </div>
                       )}
-                      {/* Toggle meses futuros */}
-                      <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none ml-auto">
-                        <input type="checkbox" checked={mostrarFuturos}
-                          onChange={(e) => setMostrarFuturos(e.target.checked)}
-                          className="rounded border-gray-300" />
-                        Mostrar meses futuros
-                      </label>
                     </div>
                   )}
                   {Object.keys(fijoGroups).length === 0 ? (
@@ -1204,15 +1198,26 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       {Object.entries(fijoGroups).map(([conceptoKey, records]) => {
                         const isExp = expandedFijos[conceptoKey];
                         const totalAnual = records.reduce((s, r) => s + (r.monto || 0), 0);
-                        const pagados   = records.filter(r => r.estatus === "pagado").length;
+                        const pagadosN  = records.filter(r => r.estatus === "pagado").length;
                         const porPagar  = records.filter(r => r.estatus === "pendiente" && !esMesFuturo(r.fecha_compromiso)).length;
-                        const futuros   = records.filter(r => r.estatus === "pendiente" && esMesFuturo(r.fecha_compromiso)).length;
-                        const vencidos  = records.filter(r => r.estatus === "vencido").length;
+                        const futurosN  = records.filter(r => r.estatus === "pendiente" && esMesFuturo(r.fecha_compromiso)).length;
+                        const vencidosN = records.filter(r => r.estatus === "vencido").length;
+                        const inactivosN = records.filter(r => r.estatus === "no_aplica" || r.estatus === "cancelado").length;
                         const montoMes = records[0] ? (records[0].monto || 0) : 0;
                         const sorted = [...records].sort((a, b) => (a.fecha_compromiso || "").localeCompare(b.fecha_compromiso || ""));
-                        const sortedVisible = mostrarFuturos
-                          ? sorted
-                          : sorted.filter(r => !(r.estatus === "pendiente" && esMesFuturo(r.fecha_compromiso)));
+
+                        // Clasificar filas
+                        const filasActivas   = sorted.filter(r =>
+                          (r.estatus === "pendiente" && !esMesFuturo(r.fecha_compromiso))
+                          || r.estatus === "en_proceso"
+                          || r.estatus === "vencido"
+                        );
+                        const filasPagados   = sorted.filter(r => r.estatus === "pagado");
+                        const filasFuturos   = sorted.filter(r => r.estatus === "pendiente" && esMesFuturo(r.fecha_compromiso));
+                        const filasInactivos = sorted.filter(r => r.estatus === "no_aplica" || r.estatus === "cancelado");
+                        const keyP  = `${conceptoKey}::pagados`;
+                        const keyF  = `${conceptoKey}::futuros`;
+                        const keyI  = `${conceptoKey}::inactivos`;
                         return (
                           <div key={conceptoKey} className="border border-gray-200 rounded-xl overflow-hidden">
                             <div className="flex items-center justify-between px-5 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
@@ -1223,10 +1228,11 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                   <p className="font-semibold text-gray-800">{conceptoKey}</p>
                                   <p className="text-xs text-gray-500">
                                     {formatMXN(montoMes)}/mes · {records.length} meses ·{" "}
-                                    <span className="text-emerald-600 font-semibold">{pagados} pagados</span>
+                                    <span className="text-emerald-600 font-semibold">{pagadosN} pagados</span>
                                     {porPagar > 0 && <>{" · "}<span className="text-amber-600 font-semibold">{porPagar} por pagar</span></>}
-                                    {vencidos > 0 && <>{" · "}<span className="text-red-600 font-semibold">{vencidos} vencidos</span></>}
-                                    {futuros > 0 && <>{" · "}<span className="text-gray-400">{futuros} futuros</span></>}
+                                    {vencidosN > 0 && <>{" · "}<span className="text-red-600 font-semibold">{vencidosN} vencidos</span></>}
+                                    {futurosN > 0 && <>{" · "}<span className="text-gray-400">{futurosN} futuros</span></>}
+                                    {inactivosN > 0 && <>{" · "}<span className="text-gray-400">{inactivosN} no aplica</span></>}
                                   </p>
                                 </div>
                               </div>
@@ -1249,35 +1255,111 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {sortedVisible.map((r) => {
-                                      const mk = r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??";
-                                      const mi = MESES_ARR.find(m => m.key === mk);
-                                      const esFuturo = r.estatus === "pendiente" && esMesFuturo(r.fecha_compromiso);
-                                      return (
-                                        <tr key={r.id} className={`border-b border-gray-50 hover:bg-blue-50/40 ${esFuturo ? "bg-gray-50/60 text-gray-400" : ""}`}>
-                                          <td className="py-2 pr-3 font-medium">{mi ? mi.full : mk}</td>
-                                          <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
-                                          <td className="py-2 pr-3 text-center">
-                                            {esFuturo
-                                              ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-500 font-medium">Programado</span>
-                                              : renderCell(r, "estatus", "sel-estatus")}
-                                          </td>
-                                          <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
-                                          <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
-                                          <td className="py-2">{renderCell(r, "folio")}</td>
-                                        </tr>
-                                      );
-                                    })}
-                                    {!mostrarFuturos && sorted.length > sortedVisible.length && (
+                                    {/* Activas: lo que sí requiere atención */}
+                                    {filasActivas.length === 0 ? (
                                       <tr>
-                                        <td colSpan={6} className="py-2 text-center text-xs text-gray-400 italic bg-gray-50/50">
-                                          {sorted.length - sortedVisible.length} mes{sorted.length - sortedVisible.length !== 1 ? "es" : ""} futuro{sorted.length - sortedVisible.length !== 1 ? "s" : ""} oculto{sorted.length - sortedVisible.length !== 1 ? "s" : ""} ·{" "}
-                                          <button onClick={(e) => { e.stopPropagation(); setMostrarFuturos(true); }}
-                                            className="text-blue-600 hover:underline font-medium">
-                                            Mostrar
-                                          </button>
+                                        <td colSpan={6} className="py-4 text-center text-xs text-emerald-600 italic bg-emerald-50/40">
+                                          ✓ No hay pagos pendientes en este concepto
                                         </td>
                                       </tr>
+                                    ) : (
+                                      filasActivas.map((r) => {
+                                        const mk = r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??";
+                                        const mi = MESES_ARR.find(m => m.key === mk);
+                                        return (
+                                          <tr key={r.id} className="border-b border-gray-50 hover:bg-amber-50/40">
+                                            <td className="py-2 pr-3 font-medium">{mi ? mi.full : mk}</td>
+                                            <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
+                                            <td className="py-2 pr-3 text-center">{renderCell(r, "estatus", "sel-estatus")}</td>
+                                            <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
+                                            <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
+                                            <td className="py-2">{renderCell(r, "folio")}</td>
+                                          </tr>
+                                        );
+                                      })
+                                    )}
+
+                                    {/* ═══ PAGADOS (carpeta desplegable) ═══ */}
+                                    {filasPagados.length > 0 && (
+                                      <>
+                                        <tr className="bg-emerald-50/40 hover:bg-emerald-50/70 cursor-pointer"
+                                            onClick={() => toggleFijo(keyP)}>
+                                          <td colSpan={6} className="py-2 px-2 text-xs font-semibold text-emerald-700">
+                                            {expandedFijos[keyP] ? "▾" : "▸"} ✓ {filasPagados.length} pago{filasPagados.length !== 1 ? "s" : ""} completado{filasPagados.length !== 1 ? "s" : ""}
+                                            <span className="ml-2 text-emerald-600 font-normal">
+                                              ({formatMXN(filasPagados.reduce((s, r) => s + (r.monto || 0), 0))})
+                                            </span>
+                                          </td>
+                                        </tr>
+                                        {expandedFijos[keyP] && filasPagados.map((r) => {
+                                          const mk = r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??";
+                                          const mi = MESES_ARR.find(m => m.key === mk);
+                                          return (
+                                            <tr key={r.id} className="border-b border-gray-50 bg-emerald-50/20 text-gray-500">
+                                              <td className="py-2 pr-3 pl-6 font-medium">{mi ? mi.full : mk}</td>
+                                              <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
+                                              <td className="py-2 pr-3 text-center">{renderCell(r, "estatus", "sel-estatus")}</td>
+                                              <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
+                                              <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
+                                              <td className="py-2">{renderCell(r, "folio")}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </>
+                                    )}
+
+                                    {/* ═══ FUTUROS (carpeta desplegable) ═══ */}
+                                    {filasFuturos.length > 0 && (
+                                      <>
+                                        <tr className="bg-gray-50 hover:bg-gray-100 cursor-pointer"
+                                            onClick={() => toggleFijo(keyF)}>
+                                          <td colSpan={6} className="py-2 px-2 text-xs font-semibold text-gray-600">
+                                            {expandedFijos[keyF] ? "▾" : "▸"} ⏭ {filasFuturos.length} mes{filasFuturos.length !== 1 ? "es" : ""} futuro{filasFuturos.length !== 1 ? "s" : ""} (programados)
+                                          </td>
+                                        </tr>
+                                        {expandedFijos[keyF] && filasFuturos.map((r) => {
+                                          const mk = r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??";
+                                          const mi = MESES_ARR.find(m => m.key === mk);
+                                          return (
+                                            <tr key={r.id} className="border-b border-gray-50 bg-gray-50/40 text-gray-400">
+                                              <td className="py-2 pr-3 pl-6 font-medium">{mi ? mi.full : mk}</td>
+                                              <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
+                                              <td className="py-2 pr-3 text-center">
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-500 font-medium">Programado</span>
+                                              </td>
+                                              <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
+                                              <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
+                                              <td className="py-2">{renderCell(r, "folio")}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </>
+                                    )}
+
+                                    {/* ═══ NO APLICA / CANCELADOS (carpeta desplegable) ═══ */}
+                                    {filasInactivos.length > 0 && (
+                                      <>
+                                        <tr className="bg-gray-50 hover:bg-gray-100 cursor-pointer"
+                                            onClick={() => toggleFijo(keyI)}>
+                                          <td colSpan={6} className="py-2 px-2 text-xs font-semibold text-gray-500">
+                                            {expandedFijos[keyI] ? "▾" : "▸"} ➖ {filasInactivos.length} no aplica{filasInactivos.length !== 1 ? "n" : ""} / cancelado{filasInactivos.length !== 1 ? "s" : ""}
+                                          </td>
+                                        </tr>
+                                        {expandedFijos[keyI] && filasInactivos.map((r) => {
+                                          const mk = r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??";
+                                          const mi = MESES_ARR.find(m => m.key === mk);
+                                          return (
+                                            <tr key={r.id} className="border-b border-gray-50 bg-gray-50/40 text-gray-400">
+                                              <td className="py-2 pr-3 pl-6 font-medium line-through">{mi ? mi.full : mk}</td>
+                                              <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
+                                              <td className="py-2 pr-3 text-center">{renderCell(r, "estatus", "sel-estatus")}</td>
+                                              <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
+                                              <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
+                                              <td className="py-2">{renderCell(r, "folio")}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </>
                                     )}
                                   </tbody>
                                 </table>
