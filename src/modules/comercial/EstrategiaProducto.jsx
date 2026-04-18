@@ -13,6 +13,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   const [nuevosSearch, setNuevosSearch] = React.useState("");
   const [enCaminoSearch, setEnCaminoSearch] = React.useState("");
   const [riesgoSearch, setRiesgoSearch] = React.useState("");
+  const [categoriaFilter, setCategoriaFilter] = React.useState("");
 
   // Cargar overrides persistidos desde Supabase al montar / cambiar de cliente
   React.useEffect(() => {
@@ -643,6 +644,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       }
     });
     return datos.productos
+      .filter(p => !categoriaFilter || (p.categoria || "") === categoriaFilter)
       .filter(p => !searchFilter || p.sku.toUpperCase().includes(searchFilter.toUpperCase()) || (p.descripcion || "").toUpperCase().includes(searchFilter.toUpperCase()))
       .map(p => {
         const siData = datos.sellIn.filter(r => r.sku === p.sku);
@@ -720,7 +722,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const valB = b[sortCol] || 0;
         return sortDir === "asc" ? valA - valB : valB - valA;
       });
-    }, [datos, searchFilter, sortCol, sortDir]);
+    }, [datos, searchFilter, categoriaFilter, sortCol, sortDir]);
 
   // Export to Excel
   const handleSort = (col) => { if (sortCol === col) { setSortDir(sortDir === "desc" ? "asc" : "desc"); } else { setSortCol(col); setSortDir("desc"); } };
@@ -1170,22 +1172,36 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       ),
 
       // SKU Detail - Full Table
-      React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
-        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 } },
-          React.createElement("h3", { className: "font-bold text-gray-800" }, "Detalle por SKU"),
-          React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
-            React.createElement("input", {
-              type: "text", placeholder: "Buscar SKU o descripci\u00f3n...",
-              value: searchFilter,
-              onChange: function(e) { setSearchFilter(e.target.value); },
-              style: { padding: "6px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, width: 220 }
-            }),
-            React.createElement("button", {
-              onClick: exportToExcel,
-              style: { padding: "8px 16px", background: "#10B981", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }
-            }, "\uD83D\uDCE5 Exportar Excel"),
+      (function() {
+        // Lista de categorías disponibles desde productos_cliente (ordenadas alfabéticamente)
+        const categoriasUnicas = Array.from(new Set((datos.productos || []).map(p => p.categoria).filter(Boolean))).sort();
+        return React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
+          React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 } },
+            React.createElement("h3", { className: "font-bold text-gray-800" },
+              "Detalle por SKU",
+              categoriaFilter && React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontWeight: 400, marginLeft: 8 } }, "\u00b7 " + categoriaFilter + " (" + skuDetail.length + " SKUs)")
+            ),
+            React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
+              React.createElement("select", {
+                value: categoriaFilter,
+                onChange: function(e) { setCategoriaFilter(e.target.value); },
+                style: { padding: "6px 10px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, background: "#fff", cursor: "pointer", minWidth: 160 }
+              },
+                React.createElement("option", { value: "" }, "Todas las categor\u00edas"),
+                categoriasUnicas.map(c => React.createElement("option", { key: c, value: c }, c))
+              ),
+              React.createElement("input", {
+                type: "text", placeholder: "Buscar SKU o descripci\u00f3n...",
+                value: searchFilter,
+                onChange: function(e) { setSearchFilter(e.target.value); },
+                style: { padding: "6px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, width: 220 }
+              }),
+              React.createElement("button", {
+                onClick: exportToExcel,
+                style: { padding: "8px 16px", background: "#10B981", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }
+              }, "\uD83D\uDCE5 Exportar Excel"),
+            ),
           ),
-        ),
         React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflowY: "auto" } },
           React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
             React.createElement("thead", {},
@@ -1261,8 +1277,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
               }),
             ),
           ),
-        ),
-      ),
+        )
+        );
+      })(),
   );
 }
 
