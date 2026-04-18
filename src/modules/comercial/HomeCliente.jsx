@@ -430,6 +430,30 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     return { last, prev, deltaPct, weeks: sorted };
   }, [selloutSem]);
 
+  // ── Última fecha de Sell Out disponible (para mostrar "Sell Out al <fecha>") ──
+  const _ultimaFechaSellOut = React.useMemo(() => {
+    const MESES_LARGOS = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+    // 1) sellout_detalle diario (Digitalife) → mejor precisión: día exacto
+    if (selloutSem && selloutSem.length > 0) {
+      const fechasValidas = selloutSem.map(r => r.fecha).filter(Boolean).sort();
+      const f = fechasValidas[fechasValidas.length - 1];
+      if (f) {
+        const parts = f.slice(0, 10).split("-").map(n => parseInt(n, 10));
+        if (parts.length === 3) {
+          return { label: `${parts[2]} de ${MESES_LARGOS[parts[1] - 1]} ${parts[0]}`, fecha: f };
+        }
+      }
+    }
+    // 2) sellout_sku acumulado por mes (PCEL / fallback Digitalife)
+    if (sellOutSku && sellOutSku.length > 0) {
+      const mesMax = Math.max(...sellOutSku.map(r => Number(r.mes) || 0));
+      if (mesMax > 0 && mesMax <= 12) {
+        return { label: `${MESES_LARGOS[mesMax - 1]} ${anioResumen}`, mes: mesMax, anio: anioResumen };
+      }
+    }
+    return null;
+  }, [selloutSem, sellOutSku, anioResumen]);
+
   // ─── SKUS CRÍTICOS: ALTA ROTACIÓN, STOCK BAJO ────────────────────────────
   const _skusCriticos = React.useMemo(() => {
     // rotation per SKU (avg piezas/mes last 3 months from sellout_sku)
@@ -783,7 +807,10 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     const delta = _weeklySellout.deltaPct;
     const deltaColor = delta === null ? "#94A3B8" : delta >= 0 ? "#10B981" : "#EF4444";
     return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 16, display: "flex", flexDirection: "column", gap: 12 } },
-      React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700 } }, "📊 Comercial"),
+      React.createElement("div", null,
+        React.createElement("h4", { style: { margin: 0, fontSize: 13, color: "#1E293B", fontWeight: 700 } }, "📊 Comercial"),
+        _ultimaFechaSellOut && React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 2 } }, "Sell Out al " + _ultimaFechaSellOut.label)
+      ),
       // Eficiencia
       React.createElement("div", null,
         React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 2 } }, "Eficiencia Sell In/Out"),
@@ -1336,7 +1363,12 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     ),
     // Row 1: Gráfica Sell In vs Sell Out (full width)
     React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: 20 } },
-      React.createElement("h3", { style: { margin: "0 0 12px", fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out — " + (cliente?.nombre || clienteKey) + " 2026"),
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12, flexWrap: "wrap", gap: 8 } },
+        React.createElement("h3", { style: { margin: 0, fontSize: 16, color: "#1E293B" } }, "Sell In vs Sell Out — " + (cliente?.nombre || clienteKey) + " 2026"),
+        _ultimaFechaSellOut && React.createElement("span", { style: { fontSize: 11, color: "#64748B", background: "#F1F5F9", padding: "3px 10px", borderRadius: 999, fontWeight: 500 } },
+          "Sell Out al " + _ultimaFechaSellOut.label
+        )
+      ),
       React.createElement(LineChartSellInOut, null)
     ),
     // Row 2: Panel operativo 4 columnas (Cuota / Comercial / Inventario / Financiera)
