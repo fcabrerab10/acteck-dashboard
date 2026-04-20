@@ -383,7 +383,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       const { fetchSelloutSku, fetchInventarioCliente, fetchHistoricoComprasPcel, fetchSnapshotPcel } = await import('../../lib/pcelAdapter');
       const esPcel = clienteKey === 'pcel';
 
-      const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap,
+      const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap, precios,
              histPcel, snapshotPcel] = await Promise.all([
         fetchAllPagesREST(`productos_cliente?select=*&cliente=eq.${clienteKey}`),
         fetchAllPagesREST(`sell_in_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
@@ -392,6 +392,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         fetchAllPagesREST(`inventario_acteck?select=articulo,no_almacen,disponible&no_almacen=in.(${ACTECK_ALMACENES.join(',')})`),
         fetchAllPagesREST(`transito_sku?select=sku,inventario_transito,siguiente_arribo,payload,sort_order`),
         fetchAllPagesREST(`roadmap_sku?select=sku,rdmp,descripcion,payload,sort_order&order=sort_order.asc`),
+        fetchAllPagesREST(`precios_sku?select=sku,precio_aaa,descuento,precio_descuento`),
         // Extras sólo para PCEL:
         esPcel ? fetchHistoricoComprasPcel(6) : Promise.resolve({}),
         esPcel ? fetchSnapshotPcel() : Promise.resolve([]),
@@ -420,6 +421,17 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       const inventarioLatest = maxA > 0 ? inventario.filter(inv =>
         Number(inv.anio) === maxA && Number(inv.semana) === maxS
       ) : inventario;
+
+      // Precios AAA por SKU (modelo Acteck)
+      const preciosBySku = {};
+      (precios || []).forEach(r => {
+        if (!r.sku) return;
+        preciosBySku[r.sku] = {
+          precio_aaa: Number(r.precio_aaa) || 0,
+          descuento:  Number(r.descuento) || 0,
+          precio_descuento: Number(r.precio_descuento) || 0,
+        };
+      });
 
       // Extras PCEL: diccionarios por SKU
       const backOrderBySkuPcel = {};
@@ -471,6 +483,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         actStockBySku, transitoBySku,
         transito,
         roadmap,
+        preciosBySku,
         // Extras específicos PCEL:
         histPcel,               // { [sku]: { piezas, facturas, promedio, primerFecha, ultimaFecha } }
         backOrderBySkuPcel,     // { [sku]: backOrder }
@@ -864,9 +877,18 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           };
         });
 
+        const preciosBySku = datos.preciosBySku || {};
+
         const rows = skuDetail.map(s => {
           const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
           const arribo = arriboBySku[s.modelo] || arriboBySku[s.sku] || { piezas: 0, fecha: null };
+          const prec = preciosBySku[s.modelo] || preciosBySku[s.sku] || null;
+          const precioAAAcd = prec ? Number(prec.precio_descuento) || 0 : 0;
+          const invAct = Number(s.invActeck) || 0;
+          // Si el sugerido NO se completa con inv Acteck, mostrar la próxima
+          // fecha de arribo de lo que viene en tránsito (cuándo podremos cumplir).
+          const gapSurtido = Math.max(0, sug - invAct);
+          const fechaArriboSiFalta = gapSurtido > 0 ? (arribo.fecha || "") : "";
           return {
             "SKU Cliente":             String(s.sku || ""),
             "SKU Acteck":              s.modelo || "",
@@ -874,7 +896,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             "Inventario Cliente":      Number(s.stock) || 0,
             "Promedio últimos 90 días": Number(s.promedio90d) || 0,
             "Sugerido":                sug,
-            "Inventario Acteck":       Number(s.invActeck) || 0,
+            "Precio AAA C/descuento":  precioAAAcd,
+            "Inventario Acteck":       invAct,
+            "Próx. arribo (si falta)": fechaArriboSiFalta,
             "Próximo arribo piezas":   Number(arribo.piezas) || 0,
             "Próximo arribo fecha":    arribo.fecha || "",
           };
@@ -887,14 +911,17 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const totInvCli = filtradas.reduce((s, r) => s + (r["Inventario Cliente"] || 0), 0);
         const totInvAct = filtradas.reduce((s, r) => s + (r["Inventario Acteck"] || 0), 0);
         const totArribo = filtradas.reduce((s, r) => s + (r["Próximo arribo piezas"] || 0), 0);
+        const totMonto  = filtradas.reduce((s, r) => s + (Number(r.Sugerido) || 0) * (Number(r["Precio AAA C/descuento"]) || 0), 0);
         filtradas.push({
           "SKU Cliente": "TOTAL",
           "SKU Acteck": "",
-          "Descripción": `${filtradas.length} SKUs`,
+          "Descripción": `${filtradas.length} SKUs · Monto ≈ $${Math.round(totMonto).toLocaleString("es-MX")}`,
           "Inventario Cliente": totInvCli,
           "Promedio últimos 90 días": "",
           "Sugerido": totSug,
+          "Precio AAA C/descuento": "",
           "Inventario Acteck": totInvAct,
+          "Próx. arribo (si falta)": "",
           "Próximo arribo piezas": totArribo,
           "Próximo arribo fecha": "",
         });
@@ -903,17 +930,23 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         // Anchos de columna
         ws["!cols"] = [
           { wch: 12 }, { wch: 14 }, { wch: 48 }, { wch: 14 }, { wch: 18 },
-          { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
+          { wch: 12 }, { wch: 20 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 14 },
         ];
-        // Formato número entero en columnas de piezas
-        const FMT_INT = "#,##0";
+        // Formato: enteros en piezas, dinero en precio
+        const FMT_INT   = "#,##0";
+        const FMT_MONEY = '"$"#,##0.00';
         const rangeRef = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : null;
         if (rangeRef) {
-          const numCols = [3, 4, 5, 6, 7]; // índices 0-based de las columnas numéricas
+          const intCols   = [3, 4, 5, 7, 9]; // inv cliente, prom 90d, sugerido, inv acteck, arribo piezas
+          const moneyCols = [6];             // precio AAA c/desc
           for (let R = rangeRef.s.r + 1; R <= rangeRef.e.r; R++) {
-            for (const C of numCols) {
+            for (const C of intCols) {
               const addr = XLSX.utils.encode_cell({ r: R, c: C });
               if (ws[addr] && typeof ws[addr].v === "number") ws[addr].z = FMT_INT;
+            }
+            for (const C of moneyCols) {
+              const addr = XLSX.utils.encode_cell({ r: R, c: C });
+              if (ws[addr] && typeof ws[addr].v === "number") ws[addr].z = FMT_MONEY;
             }
           }
         }
