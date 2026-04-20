@@ -1330,6 +1330,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
             React.createElement("thead", {},
               React.createElement("tr", { style: { position: "sticky", top: 0, background: "#F8FAFC", zIndex: 1 } },
+                // Solo PCEL: columna extra "SKU Cliente" (el numérico del archivo venta-marca)
+                (clienteKey === "pcel") && React.createElement("th", { key: "th-skuc", style: { textAlign: "left", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "SKU Cliente"),
                 React.createElement("th", { style: { textAlign: "left", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "SKU"),
                 React.createElement("th", { style: { textAlign: "left", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Roadmap"),
                 React.createElement("th", { style: { textAlign: "left", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", minWidth: 140 } }, "Descripci\u00f3n"),
@@ -1362,7 +1364,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             React.createElement("tbody", {},
               skuDetail.map(function(s, idx) {
                 return React.createElement("tr", { key: s.sku, style: { borderBottom: "1px solid #F1F5F9", background: idx % 2 === 0 ? "#fff" : "#FAFBFC" } },
-                  React.createElement("td", { style: { padding: "6px", fontWeight: 500, color: "#1E293B", whiteSpace: "nowrap", fontSize: 11 } }, s.sku),
+                  // PCEL: primera columna es SKU Cliente (numérico, s.sku), segunda es SKU (modelo = s.modelo)
+                  // Otros clientes: una sola columna SKU (= s.sku)
+                  (clienteKey === "pcel") && React.createElement("td", { key: "td-skuc", style: { padding: "6px", fontWeight: 500, color: "#475569", whiteSpace: "nowrap", fontSize: 11 } }, s.sku),
+                  React.createElement("td", { style: { padding: "6px", fontWeight: 500, color: "#1E293B", whiteSpace: "nowrap", fontSize: 11 } }, clienteKey === "pcel" ? (s.modelo || "—") : s.sku),
                   React.createElement("td", { style: { padding: "6px", fontSize: 11, maxWidth: 100, whiteSpace: "nowrap" }, title: s.roadmap || "Sin roadmap" },
                     (function() {
                       var rm = s.roadmap || "";
