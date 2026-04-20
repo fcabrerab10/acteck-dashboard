@@ -784,34 +784,39 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         // ═══ FÓRMULA DEL SUGERIDO ═══
         let sugerido = 0;
         if (clienteKey === 'pcel') {
-          // FÓRMULA PCEL (dinámica por sellout vs histórico)
+          // FÓRMULA PCEL v4 (basada en patrón de overrides manuales del usuario)
           //
-          // base principal: promCompra (prom piezas/factura en los últimos 6m
-          // desde ventas_erp). Fallback: promedio90d (si no hay histórico
-          // pero sí hay sellout reciente).
+          // Meta: que PCEL termine con META_COBERTURA meses de stock después de surtir.
+          // Fallback a promCompra si no hay sellout reciente.
           //
-          // Ajuste dinámico por sellout reciente:
-          //   ratio > 1              → subir proporcional
-          //   cobertura > 4 meses    → 0 (sobre-inventariado)
-          //
-          // Sugerido = ideal - lo que ya tienen + back order.
-          // NO se cappa a inv_Acteck: mostrar la propuesta ideal aunque no
-          // tengamos stock ahora. El gap de disponibilidad queda en Excel.
-          let base = promCompra > 0 ? promCompra : promedio90d;
-          if (base > 0) {
-            if (promCompra > 0 && promedio90d > 0) {
-              const ratio = promedio90d / promCompra;
-              if (ratio > 1) {
-                base = promCompra * ratio;
-              } else {
-                const cobertura = promedio90d > 0 ? (stock + transPcel) / promedio90d : Infinity;
-                if (cobertura > 4) base = 0;
-              }
+          // 1) base = META × sellout_mensual
+          // 2) ideal = base − stock_PCEL − tránsito_PCEL + back_order
+          // 3) cap al stock disponible en Acteck (inv + tránsito)
+          // 4) umbral: si Acteck tiene < ½ mes de sellout, sugerido = 0
+          //    (no comprometer lo que apenas tenemos)
+          const META_COBERTURA = 3;         // meses objetivo en PCEL
+          const UMBRAL_STOCK   = 0.5;       // múltiplo mínimo del sellout mensual
+
+          const selloutMensual = promedio90d > 0 ? promedio90d
+                                : (promCompra > 0 ? promCompra : 0);
+          const disponibleActeck = invActeck + invTransito;
+
+          if (selloutMensual > 0) {
+            // Sobre-inventariado: si ya tienen >4 meses, no sugerir
+            const coberturaActual = (stock + transPcel) / selloutMensual;
+            if (coberturaActual > 4) {
+              sugerido = 0;
+            } else {
+              const base = META_COBERTURA * selloutMensual;
+              const ideal = Math.max(0, Math.round(base - stock - transPcel)) + backOrder;
+              // Cap por disponibilidad Acteck
+              sugerido = Math.min(ideal, disponibleActeck);
+              // Umbral: si apenas hay stock Acteck, no sugerir
+              if (disponibleActeck < selloutMensual * UMBRAL_STOCK) sugerido = 0;
             }
-            sugerido = Math.max(0, Math.round(base - stock - transPcel)) + backOrder;
-          } else if (backOrder > 0) {
-            // Sin base pero debemos back order → proponer al menos eso
-            sugerido = backOrder;
+          } else if (backOrder > 0 && disponibleActeck > 0) {
+            // Sin sellout pero debemos back order y tenemos stock → surtir
+            sugerido = Math.min(backOrder, disponibleActeck);
           }
         } else {
           // FÓRMULA DIGITALIFE/ML v3 (original)
