@@ -765,10 +765,21 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const histPcelSku  = (datos.histPcel && (datos.histPcel[skuExterno] || datos.histPcel[p.sku])) || null;
         const promCompra   = histPcelSku ? Math.round(histPcelSku.promedio) : 0;
         const facturasHist = histPcelSku ? histPcelSku.facturas : 0;
-        // "Activo" para PCEL = tiene stock en algún lado vivo:
-        //   inv_Acteck > 0  OR  tránsito Acteck > 0  OR  inventario PCEL > 0
-        // Así se filtran los SKUs "dormidos" (sin stock en ningún lado).
-        const isActivo     = invActeck > 0 || invTransito > 0 || stock > 0;
+        // "Activo" para PCEL, 2 condiciones obligatorias:
+        //   (A) Tiene actividad: lo han comprado (historial ERP) O tiene
+        //       venta reciente O tiene inventario en algún lado (PCEL,
+        //       Acteck o tránsito).
+        //   (B) Está en el roadmap actual (si salió del catálogo, se quita).
+        const tieneActividad =
+          facturasHist > 0 ||        // compra histórica en ventas_erp
+          promedio90d > 0 ||         // sellout reciente
+          stock > 0 ||               // inventario en PCEL
+          invActeck > 0 ||           // inventario Acteck
+          invTransito > 0 ||         // tránsito nuestro hacia Acteck
+          transPcel > 0 ||           // tránsito hacia PCEL
+          backOrder > 0;             // back order pendiente
+        const enRoadmap    = !!(roadmapBySku[skuExterno] || roadmapBySku[p.sku]);
+        const isActivo     = enRoadmap && tieneActividad;
 
         // ═══ FÓRMULA DEL SUGERIDO ═══
         let sugerido = 0;
