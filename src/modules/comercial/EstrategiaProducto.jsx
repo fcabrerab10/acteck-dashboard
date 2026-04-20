@@ -765,8 +765,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const histPcelSku  = (datos.histPcel && (datos.histPcel[skuExterno] || datos.histPcel[p.sku])) || null;
         const promCompra   = histPcelSku ? Math.round(histPcelSku.promedio) : 0;
         const facturasHist = histPcelSku ? histPcelSku.facturas : 0;
-        // "Activo" para PCEL = su modelo está en roadmap O tiene inv en Acteck
-        const isActivo     = (!!(roadmapBySku[skuExterno])) || invActeck > 0;
+        // "Activo" para PCEL = tiene stock en algún lado vivo:
+        //   inv_Acteck > 0  OR  tránsito Acteck > 0  OR  inventario PCEL > 0
+        // Así se filtran los SKUs "dormidos" (sin stock en ningún lado).
+        const isActivo     = invActeck > 0 || invTransito > 0 || stock > 0;
 
         // ═══ FÓRMULA DEL SUGERIDO ═══
         let sugerido = 0;
@@ -1486,16 +1488,18 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 (clienteKey === "pcel") && React.createElement("th", {
                   key: "th-aaa", onClick: () => handleSort("precioAAAcd"),
                   style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "precioAAAcd" ? "#1D4ED8" : "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#F0F9FF" },
-                  title: "Precio AAA con descuento (precios_sku)"
-                }, "Precio AAA c/desc" + sortArrow("precioAAAcd")),
+                  title: "Precio AAA con descuento aplicado"
+                }, "Precio" + sortArrow("precioAAAcd")),
                 (clienteKey === "pcel") && React.createElement("th", {
                   key: "th-arr",
                   style: { textAlign: "left", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#FEF3C7" },
                   title: "Fecha de próximo arribo si el sugerido no se completa con inv Acteck"
                 }, "Pr\u00f3x. arribo (falta)"),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
+                // Para PCEL se oculta la columna "Precio" genérica (precio_venta de productos_cliente
+                // está casi siempre vacío para PCEL); el precio real es "Precio AAA c/desc" de arriba.
+                (clienteKey !== "pcel") && React.createElement("th", { key: "th-precio-gen", style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 700, color: "#065F46", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#ECFDF5" } },
-                  React.createElement("div", { style: { fontSize: 10, color: "#10B981", fontWeight: 600 } }, "Σ " + formatMXN((skuDetail || []).reduce(function(acc, r){ var sug = sugeridoEdits[r.sku] !== undefined ? Number(sugeridoEdits[r.sku]) : Number(r.sugerido || 0); return acc + sug * Number(r.precio || 0); }, 0))),
+                  React.createElement("div", { style: { fontSize: 10, color: "#10B981", fontWeight: 600 } }, "Σ " + formatMXN((skuDetail || []).reduce(function(acc, r){ var sug = sugeridoEdits[r.sku] !== undefined ? Number(sugeridoEdits[r.sku]) : Number(r.sugerido || 0); var precioBase = clienteKey === "pcel" ? Number(r.precioAAAcd || 0) : Number(r.precio || 0); return acc + sug * precioBase; }, 0))),
                   React.createElement("div", {}, "Total")
                 ),
               ),
@@ -1575,8 +1579,15 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       title: mostrar ? `Faltan ${gap} piezas · Arribo: ${s.arriboPiezas} piezas` : (s.arriboFecha ? `Stock suficiente (${s.invActeck})` : "Sin tránsito")
                     }, mostrar ? s.arriboFecha : "-");
                   })(),
-                  React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11, whiteSpace: "nowrap" } }, (s.precio && s.precio > 0) ? ("$" + Number(s.precio).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })) : "-"),
-                  (function(){ var sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0); var tot = sug * Number(s.precio || 0); return React.createElement("td", { style: { textAlign: "right", padding: "6px", color: tot > 0 ? "#065F46" : "#CBD5E1", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", background: tot > 0 ? "#F0FDF4" : "transparent" } }, tot > 0 ? ("$" + Math.round(tot).toLocaleString("es-MX")) : "-"); })(),
+                  // TD de "Precio" genérico — oculto para PCEL (su precio es el AAA c/desc de arriba)
+                  (clienteKey !== "pcel") && React.createElement("td", { key: "td-precio-gen", style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11, whiteSpace: "nowrap" } }, (s.precio && s.precio > 0) ? ("$" + Number(s.precio).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })) : "-"),
+                  (function(){
+                    var sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
+                    // Para PCEL: usar precio AAA con descuento. Otros: precio_venta.
+                    var precioBase = clienteKey === "pcel" ? Number(s.precioAAAcd || 0) : Number(s.precio || 0);
+                    var tot = sug * precioBase;
+                    return React.createElement("td", { style: { textAlign: "right", padding: "6px", color: tot > 0 ? "#065F46" : "#CBD5E1", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", background: tot > 0 ? "#F0FDF4" : "transparent" } }, tot > 0 ? ("$" + Math.round(tot).toLocaleString("es-MX")) : "-");
+                  })(),
                 );
               }),
             ),
