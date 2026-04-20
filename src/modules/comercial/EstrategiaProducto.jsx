@@ -705,8 +705,13 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     });
     return datos.productos
       .filter(p => !categoriaFilter || (p.categoria || "") === categoriaFilter)
-      .filter(p => !searchFilter || p.sku.toUpperCase().includes(searchFilter.toUpperCase()) || (p.descripcion || "").toUpperCase().includes(searchFilter.toUpperCase()))
+      .filter(p => !searchFilter || (p.sku || "").toUpperCase().includes(searchFilter.toUpperCase()) || (p.modelo || "").toUpperCase().includes(searchFilter.toUpperCase()) || (p.descripcion || "").toUpperCase().includes(searchFilter.toUpperCase()))
       .map(p => {
+        // Para PCEL, los SKUs son numéricos pero roadmap/inv_acteck/transito_sku
+        // usan el código "modelo" (AC-xxx, BR-xxx). Entonces para lookups que
+        // cruzan con tablas globales usamos el modelo; para lookups específicos
+        // de PCEL (sellout_pcel, sell_in, sellout) usamos el sku numérico.
+        const skuExterno = (clienteKey === 'pcel' && p.modelo) ? p.modelo : p.sku;
         const siData = datos.sellIn.filter(r => r.sku === p.sku);
         const soData = datos.sellOut.filter(r => r.sku === p.sku);
         const invData = datos.inventario.find(r => r.sku === p.sku);
@@ -735,18 +740,20 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const stock = invData?.stock || 0;
         const valorInv = invData?.valor || 0;
 
-        // Acteck inventory (9 almacenes) + tránsito
-        const invActeck = (datos.actStockBySku && datos.actStockBySku[p.sku]) || 0;
-        const invTransito = (datos.transitoBySku && datos.transitoBySku[p.sku]) || 0;
+        // Acteck inventory (9 almacenes) + tránsito — usan skuExterno (modelo para PCEL)
+        const invActeck = (datos.actStockBySku && datos.actStockBySku[skuExterno]) || 0;
+        const invTransito = (datos.transitoBySku && datos.transitoBySku[skuExterno]) || 0;
 
         // ═══ Campos específicos PCEL ═══
+        // backOrder y transito vienen de sellout_pcel (usa SKU numérico = p.sku)
         const backOrder    = (datos.backOrderBySkuPcel && datos.backOrderBySkuPcel[p.sku]) || 0;
         const transPcel    = (datos.transitoPcelBySku  && datos.transitoPcelBySku[p.sku])  || 0;
-        const histPcelSku  = (datos.histPcel && datos.histPcel[p.sku]) || null;
+        // histPcel viene de ventas_erp por articulo (= modelo Acteck)
+        const histPcelSku  = (datos.histPcel && (datos.histPcel[skuExterno] || datos.histPcel[p.sku])) || null;
         const promCompra   = histPcelSku ? Math.round(histPcelSku.promedio) : 0;
         const facturasHist = histPcelSku ? histPcelSku.facturas : 0;
-        // "Activo" para PCEL = está en roadmap O tiene inventario en Acteck
-        const isActivo     = (!!(roadmapBySku[p.sku])) || invActeck > 0;
+        // "Activo" para PCEL = su modelo está en roadmap O tiene inv en Acteck
+        const isActivo     = (!!(roadmapBySku[skuExterno])) || invActeck > 0;
 
         // ═══ FÓRMULA DEL SUGERIDO ═══
         let sugerido = 0;
@@ -791,13 +798,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         return {
           sku: p.sku,
           // Descripción corta (para UI): prioridad roadmap → productos_cliente
-          descripcion: roadmapDescBySku[p.sku] || p.descripcion || "",
+          descripcion: roadmapDescBySku[skuExterno] || roadmapDescBySku[p.sku] || p.descripcion || "",
           // Descripción larga (para Excel): prioridad payload 'Descripcion 2' → corta del roadmap → productos_cliente
-          descripcionLarga: roadmapDescLongBySku[p.sku] || roadmapDescBySku[p.sku] || p.descripcion || "",
+          descripcionLarga: roadmapDescLongBySku[skuExterno] || roadmapDescLongBySku[p.sku] || roadmapDescBySku[skuExterno] || roadmapDescBySku[p.sku] || p.descripcion || "",
           marca: p.marca,
+          modelo: p.modelo || "",
           categoria: p.categoria || "",
           estado: p.estado,
-          roadmap: roadmapBySku[p.sku] || p.roadmap || "",   // desde roadmap_sku real
+          roadmap: roadmapBySku[skuExterno] || roadmapBySku[p.sku] || p.roadmap || "",   // desde roadmap_sku real
           precio: precioSku,
           siPiezasTotal,
           promedio90d,
