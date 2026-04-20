@@ -1618,7 +1618,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       style: { width: 60, padding: "2px 4px", border: "1px solid #E2E8F0", borderRadius: 4, textAlign: "right", fontSize: 11 }
                     })
                   ),
-                  // PCEL: Precio editable (override o precio AAA c/desc)
+                  // PCEL: Precio editable — parece texto plano, pero al hover/focus se reveal
                   (clienteKey === "pcel") && React.createElement("td", {
                     key: "td-aaa",
                     style: { textAlign: "right", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#F0F9FF" }
@@ -1631,22 +1631,67 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                         setPrecioEdits(Object.assign({}, precioEdits, { [s.sku]: nv }));
                       },
                       onBlur: function(e) {
+                        e.target.style.border = "1px solid transparent";
+                        e.target.style.background = "transparent";
                         savePrecioOverride(s.sku, Number(e.target.value) || 0);
                       },
-                      style: { width: 80, padding: "2px 4px", border: "1px solid #E2E8F0", borderRadius: 4, textAlign: "right", fontSize: 11, background: "#fff", color: "#1E40AF", fontWeight: 500 },
-                      title: "Precio editable. Se guarda automáticamente."
+                      onFocus: function(e) {
+                        e.target.style.border = "1px solid #60A5FA";
+                        e.target.style.background = "#fff";
+                      },
+                      onMouseEnter: function(e) {
+                        if (document.activeElement !== e.target) {
+                          e.target.style.border = "1px dashed #CBD5E1";
+                        }
+                      },
+                      onMouseLeave: function(e) {
+                        if (document.activeElement !== e.target) {
+                          e.target.style.border = "1px solid transparent";
+                        }
+                      },
+                      style: {
+                        width: 80,
+                        padding: "2px 4px",
+                        border: "1px solid transparent",
+                        borderRadius: 4,
+                        textAlign: "right",
+                        fontSize: 11,
+                        background: "transparent",
+                        color: "#1E40AF",
+                        fontWeight: 500,
+                        outline: "none",
+                        MozAppearance: "textfield",
+                      },
+                      title: "Click para editar · Se guarda automáticamente"
                     })
                   ),
-                  // PCEL: Próx. arribo (si falta) — solo mostrar cuando sugerido > invActeck
+                  // PCEL: Próx. arribo (si falta) — mostrar cuando sugerido > invActeck
+                  // Si hay fecha → fecha en español. Si hay piezas pero sin fecha → "N pzas en tránsito".
                   (clienteKey === "pcel") && (function() {
                     const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
                     const gap = Math.max(0, sug - (Number(s.invActeck) || 0));
-                    const mostrar = gap > 0 && s.arriboFecha;
+                    const hayGap = gap > 0;
+                    let contenido = "-";
+                    let color = "#CBD5E1";
+                    let fw = 400;
+                    if (hayGap) {
+                      if (s.arriboFecha) {
+                        contenido = formatFechaES(s.arriboFecha);
+                        color = "#78350F";
+                        fw = 600;
+                      } else if (s.arriboPiezas > 0) {
+                        contenido = `${Number(s.arriboPiezas).toLocaleString("es-MX")} pzas (sin fecha)`;
+                        color = "#A16207";
+                        fw = 500;
+                      }
+                    }
                     return React.createElement("td", {
                       key: "td-arr",
-                      style: { textAlign: "left", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#FEF3C7", color: mostrar ? "#78350F" : "#CBD5E1", fontWeight: mostrar ? 600 : 400 },
-                      title: mostrar ? `Faltan ${gap} piezas · Arribo: ${s.arriboPiezas} piezas` : (s.arriboFecha ? `Stock suficiente (${s.invActeck})` : "Sin tránsito")
-                    }, mostrar ? formatFechaES(s.arriboFecha) : "-");
+                      style: { textAlign: "left", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#FEF3C7", color, fontWeight: fw },
+                      title: hayGap
+                        ? `Faltan ${gap} piezas · Tránsito: ${s.arriboPiezas || 0} piezas${s.arriboFecha ? ` · Arribo: ${s.arriboFecha}` : " · Sin fecha confirmada"}`
+                        : (s.arriboFecha || s.arriboPiezas ? `Stock suficiente (${s.invActeck})` : "Sin tránsito")
+                    }, contenido);
                   })(),
                   // TD de "Precio" genérico — oculto para PCEL (su precio es el AAA c/desc de arriba)
                   (clienteKey !== "pcel") && React.createElement("td", { key: "td-precio-gen", style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11, whiteSpace: "nowrap" } }, (s.precio && s.precio > 0) ? ("$" + Number(s.precio).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })) : "-"),
