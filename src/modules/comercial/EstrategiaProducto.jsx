@@ -36,15 +36,36 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     })();
   }, [clienteKey]);
 
+  // Indicadores de guardado por SKU { [sku]: "saving" | "saved" | "error" }
+  const [sugeridoSaveState, setSugeridoSaveState] = React.useState({});
+  const [precioSaveState,   setPrecioSaveState]   = React.useState({});
+  const sugeridoTimeouts = React.useRef({});
+  const precioTimeouts   = React.useRef({});
+
   // Guardar edit en Supabase (upsert por cliente+sku)
   const saveSugeridoOverride = async (sku, valor) => {
     if (!DB_CONFIGURED) return;
     const v = Number(valor) || 0;
+    setSugeridoSaveState(p => ({ ...p, [sku]: "saving" }));
     const { error } = await supabase
       .from("sugerido_overrides")
       .upsert({ cliente: clienteKey, sku, sugerido: v, updated_at: new Date().toISOString() },
               { onConflict: "cliente,sku" });
-    if (error) console.error("saveSugeridoOverride error:", error);
+    if (error) {
+      console.error("saveSugeridoOverride error:", error);
+      setSugeridoSaveState(p => ({ ...p, [sku]: "error" }));
+    } else {
+      setSugeridoSaveState(p => ({ ...p, [sku]: "saved" }));
+      setTimeout(() => setSugeridoSaveState(p => { const n = { ...p }; delete n[sku]; return n; }), 1500);
+    }
+  };
+
+  // Debounce: al cambiar, programa guardado 600ms después (se resetea si sigue escribiendo)
+  const debounceSaveSugerido = (sku, valor) => {
+    if (sugeridoTimeouts.current[sku]) clearTimeout(sugeridoTimeouts.current[sku]);
+    sugeridoTimeouts.current[sku] = setTimeout(() => {
+      saveSugeridoOverride(sku, valor);
+    }, 600);
   };
 
   // Precio overrides — mismo patrón que sugerido
@@ -64,11 +85,60 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   const savePrecioOverride = async (sku, valor) => {
     if (!DB_CONFIGURED) return;
     const v = Number(valor) || 0;
+    setPrecioSaveState(p => ({ ...p, [sku]: "saving" }));
     const { error } = await supabase
       .from("precio_overrides")
       .upsert({ cliente: clienteKey, sku, precio: v, updated_at: new Date().toISOString() },
               { onConflict: "cliente,sku" });
-    if (error) console.error("savePrecioOverride error:", error);
+    if (error) {
+      console.error("savePrecioOverride error:", error);
+      setPrecioSaveState(p => ({ ...p, [sku]: "error" }));
+    } else {
+      setPrecioSaveState(p => ({ ...p, [sku]: "saved" }));
+      setTimeout(() => setPrecioSaveState(p => { const n = { ...p }; delete n[sku]; return n; }), 1500);
+    }
+  };
+
+  const debounceSavePrecio = (sku, valor) => {
+    if (precioTimeouts.current[sku]) clearTimeout(precioTimeouts.current[sku]);
+    precioTimeouts.current[sku] = setTimeout(() => {
+      savePrecioOverride(sku, valor);
+    }, 600);
+  };
+
+  // Historial de propuestas de compra exportadas
+  const [propuestasHist, setPropuestasHist] = React.useState([]);
+  const [histAbierto, setHistAbierto] = React.useState(false);
+  const cargarPropuestasCompra = React.useCallback(async () => {
+    if (!DB_CONFIGURED || !clienteKey) return;
+    const { data } = await supabase
+      .from("propuestas_compra")
+      .select("id, fecha, skus_count, piezas_total, monto_total, filas, nota")
+      .eq("cliente", clienteKey)
+      .order("fecha", { ascending: false })
+      .limit(50);
+    setPropuestasHist(data || []);
+  }, [clienteKey]);
+  React.useEffect(() => { cargarPropuestasCompra(); }, [cargarPropuestasCompra]);
+
+  // Re-descargar un Excel histórico
+  const descargarPropuestaHistorica = async (prop) => {
+    const XLSX = await loadSheetJS();
+    if (!XLSX) { alert("Error cargando librería Excel"); return; }
+    const filas = Array.isArray(prop.filas) ? prop.filas : [];
+    if (filas.length === 0) { alert("Esta propuesta no tiene filas guardadas."); return; }
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Propuesta");
+    const fechaStr = String(prop.fecha).slice(0, 10);
+    XLSX.writeFile(wb, `propuesta-${clienteKey}-${fechaStr}-#${prop.id}.xlsx`);
+  };
+
+  const borrarPropuestaHistorica = async (id) => {
+    if (!confirm("¿Eliminar esta propuesta del historial?")) return;
+    const { error } = await supabase.from("propuestas_compra").delete().eq("id", id);
+    if (error) { alert("Error al borrar: " + error.message); return; }
+    await cargarPropuestasCompra();
   };
 
   // Formato de fecha en español medio: "5 de mayo de 2026"
@@ -855,6 +925,11 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             // Sin sellout pero debemos back order y tenemos stock → surtir
             sugerido = Math.min(backOrder, disponibleActeck);
           }
+          // Mínimo de compra: 20 piezas. Si la fórmula da algo > 0 pero < 20,
+          // subir a 20 (siempre respetando el cap de stock disponible).
+          if (sugerido > 0 && sugerido < 20) {
+            sugerido = Math.min(20, disponibleActeck);
+          }
         } else {
           // FÓRMULA DIGITALIFE/ML v3 (original)
           // Regla 1: si invActeck < 10, sugerido = 0 (no se puede reponer)
@@ -1022,6 +1097,22 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         XLSX.utils.book_append_sheet(wb, ws, "Sugerido PCEL");
         const fechaStr = new Date().toISOString().slice(0, 10);
         XLSX.writeFile(wb, `sugerido-pcel-${fechaStr}.xlsx`);
+
+        // Guardar snapshot en Supabase para historial de propuestas
+        try {
+          const filasSnapshot = filtradas.filter(r => r["SKU Cliente"] !== "TOTAL");
+          const payload = {
+            cliente: "pcel",
+            filas: filasSnapshot,
+            skus_count: filasSnapshot.length,
+            piezas_total: totSug,
+            monto_total: Math.round(totMonto),
+            nota: null,
+          };
+          const { error } = await supabase.from("propuestas_compra").insert(payload);
+          if (error) console.error("guardar propuesta error:", error);
+          else await cargarPropuestasCompra();
+        } catch (e) { console.error(e); }
       };
 
       const exportToExcel = async () => {
@@ -1602,7 +1693,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                     style: { textAlign: "right", padding: "6px", fontSize: 11, background: "#FFFBEB", color: s.promCompra > 0 ? "#78350F" : "#CBD5E1", fontWeight: 500 },
                     title: s.facturasHist > 0 ? (s.facturasHist + " compras hist\u00f3ricas") : "Sin hist\u00f3rico de compras"
                   }, s.promCompra > 0 ? s.promCompra.toLocaleString("es-MX") : "-"),
-                  React.createElement("td", { style: { textAlign: "right", padding: "6px", fontSize: 11 } },
+                  React.createElement("td", { style: { textAlign: "right", padding: "6px", fontSize: 11, position: "relative" } },
                     React.createElement("input", {
                       type: "number", min: 0,
                       value: sugeridoEdits[s.sku] !== undefined ? sugeridoEdits[s.sku] : (s.sugerido || 0),
@@ -1610,18 +1701,32 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                         var nv = Number(e.target.value) || 0;
                         var v = {}; v[s.sku] = nv;
                         setSugeridoEdits(Object.assign({}, sugeridoEdits, v));
+                        debounceSaveSugerido(s.sku, nv);
                       },
                       onBlur: function(e) {
-                        // Persistir en Supabase al salir del input
+                        // Flush inmediato al salir (cancela debounce y guarda ya)
+                        if (sugeridoTimeouts.current[s.sku]) clearTimeout(sugeridoTimeouts.current[s.sku]);
                         saveSugeridoOverride(s.sku, Number(e.target.value) || 0);
                       },
                       style: { width: 60, padding: "2px 4px", border: "1px solid #E2E8F0", borderRadius: 4, textAlign: "right", fontSize: 11 }
-                    })
+                    }),
+                    // Indicador visual del guardado
+                    sugeridoSaveState[s.sku] && React.createElement("span", {
+                      style: {
+                        position: "absolute", right: -2, top: "50%", transform: "translateY(-50%)",
+                        fontSize: 10, fontWeight: 700,
+                        color: sugeridoSaveState[s.sku] === "saved" ? "#10B981"
+                             : sugeridoSaveState[s.sku] === "saving" ? "#94A3B8"
+                             : "#EF4444",
+                        pointerEvents: "none",
+                      },
+                      title: sugeridoSaveState[s.sku] === "saved" ? "Guardado" : sugeridoSaveState[s.sku] === "saving" ? "Guardando..." : "Error al guardar"
+                    }, sugeridoSaveState[s.sku] === "saved" ? "\u2713" : sugeridoSaveState[s.sku] === "saving" ? "\u2026" : "!")
                   ),
                   // PCEL: Precio editable — parece texto plano, pero al hover/focus se reveal
                   (clienteKey === "pcel") && React.createElement("td", {
                     key: "td-aaa",
-                    style: { textAlign: "right", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#F0F9FF" }
+                    style: { textAlign: "right", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#F0F9FF", position: "relative" }
                   },
                     React.createElement("input", {
                       type: "number", min: 0, step: "0.01",
@@ -1629,10 +1734,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       onChange: function(e) {
                         var nv = Number(e.target.value) || 0;
                         setPrecioEdits(Object.assign({}, precioEdits, { [s.sku]: nv }));
+                        debounceSavePrecio(s.sku, nv);
                       },
                       onBlur: function(e) {
                         e.target.style.border = "1px solid transparent";
                         e.target.style.background = "transparent";
+                        if (precioTimeouts.current[s.sku]) clearTimeout(precioTimeouts.current[s.sku]);
                         savePrecioOverride(s.sku, Number(e.target.value) || 0);
                       },
                       onFocus: function(e) {
@@ -1663,7 +1770,18 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                         MozAppearance: "textfield",
                       },
                       title: "Click para editar · Se guarda automáticamente"
-                    })
+                    }),
+                    precioSaveState[s.sku] && React.createElement("span", {
+                      style: {
+                        position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)",
+                        fontSize: 10, fontWeight: 700,
+                        color: precioSaveState[s.sku] === "saved" ? "#10B981"
+                             : precioSaveState[s.sku] === "saving" ? "#94A3B8"
+                             : "#EF4444",
+                        pointerEvents: "none",
+                      },
+                      title: precioSaveState[s.sku] === "saved" ? "Guardado" : precioSaveState[s.sku] === "saving" ? "Guardando..." : "Error"
+                    }, precioSaveState[s.sku] === "saved" ? "\u2713" : precioSaveState[s.sku] === "saving" ? "\u2026" : "!")
                   ),
                   // PCEL: Próx. arribo (si falta) — mostrar cuando sugerido > invActeck
                   // Si hay fecha → fecha en español. Si hay piezas pero sin fecha → "N pzas en tránsito".
@@ -1708,6 +1826,69 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
               }),
             ),
           ),
+        ),
+        // ═══ Historial de propuestas exportadas (solo PCEL) ═══
+        (clienteKey === "pcel") && React.createElement("div", {
+          style: { marginTop: 16, borderTop: "1px solid #E2E8F0", paddingTop: 12 }
+        },
+          React.createElement("button", {
+            onClick: () => setHistAbierto(!histAbierto),
+            style: { display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, color: "#475569", textAlign: "left" }
+          },
+            React.createElement("span", { style: { fontSize: 14 } }, histAbierto ? "\u25BE" : "\u25B8"),
+            React.createElement("span", null, "\uD83D\uDCC1 Propuestas exportadas"),
+            React.createElement("span", { style: { marginLeft: "auto", fontSize: 11, color: "#94A3B8", fontWeight: 400 } },
+              propuestasHist.length + " propuesta" + (propuestasHist.length !== 1 ? "s" : "")
+            )
+          ),
+          histAbierto && React.createElement("div", { style: { marginTop: 8 } },
+            propuestasHist.length === 0
+              ? React.createElement("p", { style: { fontSize: 12, color: "#94A3B8", fontStyle: "italic", padding: "12px", textAlign: "center" } },
+                  "No hay propuestas exportadas todavía. Cada vez que uses el bot\u00f3n \"Exportar Excel\" se guarda aqu\u00ed.")
+              : React.createElement("div", { style: { maxHeight: 320, overflowY: "auto" } },
+                  React.createElement("table", { style: { width: "100%", fontSize: 12, borderCollapse: "collapse" } },
+                    React.createElement("thead", null,
+                      React.createElement("tr", { style: { background: "#F1F5F9", position: "sticky", top: 0 } },
+                        React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Fecha"),
+                        React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "SKUs"),
+                        React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Piezas"),
+                        React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Monto"),
+                        React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Acciones"),
+                      )
+                    ),
+                    React.createElement("tbody", null,
+                      propuestasHist.map(p => React.createElement("tr", { key: p.id, style: { borderBottom: "1px solid #F1F5F9" } },
+                        React.createElement("td", { style: { padding: "6px 10px", fontSize: 11, color: "#1E293B" } },
+                          (function() {
+                            try {
+                              const d = new Date(p.fecha);
+                              return d.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+                                + " \u00B7 " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+                            } catch { return String(p.fecha).slice(0, 16); }
+                          })()
+                        ),
+                        React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11 } }, (p.skus_count || 0).toLocaleString("es-MX")),
+                        React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11 } }, (Number(p.piezas_total) || 0).toLocaleString("es-MX")),
+                        React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11, fontWeight: 600, color: "#065F46" } },
+                          "$" + Math.round(Number(p.monto_total) || 0).toLocaleString("es-MX")
+                        ),
+                        React.createElement("td", { style: { padding: "6px 10px", textAlign: "center" } },
+                          React.createElement("button", {
+                            onClick: () => descargarPropuestaHistorica(p),
+                            style: { padding: "3px 8px", fontSize: 11, background: "#3B82F6", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", marginRight: 6 },
+                            title: "Re-descargar Excel"
+                          }, "\uD83D\uDCE5"),
+                          React.createElement("button", {
+                            onClick: () => borrarPropuestaHistorica(p.id),
+                            style: { padding: "3px 8px", fontSize: 11, background: "#fff", color: "#EF4444", border: "1px solid #FCA5A5", borderRadius: 4, cursor: "pointer" },
+                            title: "Eliminar"
+                          }, "\uD83D\uDDD1\uFE0F")
+                        ),
+                      ))
+                    )
+                  )
+                )
+          )
         )
         );
       })(),
