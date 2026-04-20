@@ -1,15 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED, fetchAllPagesREST } from '../../lib/supabase';
 import { formatMXN, loadSheetJS } from '../../lib/utils';
-import EstrategiaPcel from './EstrategiaPcel';
 
 export default function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
-  // PCEL tiene su propio módulo de Estrategia (volumen + ticket alto + compras
-  // grandes divididas). Fórmula del sugerido y columnas son distintas.
-  if (clienteKey === "pcel") {
-    return <EstrategiaPcel />;
-  }
-
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [datos, setDatos] = React.useState(null);
