@@ -14,6 +14,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   const [enCaminoSearch, setEnCaminoSearch] = React.useState("");
   const [riesgoSearch, setRiesgoSearch] = React.useState("");
   const [categoriaFilter, setCategoriaFilter] = React.useState("");
+  const [soloActivosPcel, setSoloActivosPcel] = React.useState(() => {
+    try { const v = localStorage.getItem("pcel_solo_activos"); return v === null ? true : v === "true"; } catch { return true; }
+  });
+  React.useEffect(() => {
+    try { localStorage.setItem("pcel_solo_activos", String(soloActivosPcel)); } catch {}
+  }, [soloActivosPcel]);
 
   // Cargar overrides persistidos desde Supabase al montar / cambiar de cliente
   React.useEffect(() => {
@@ -374,8 +380,11 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     setLoading(true);
     try {
       // Para PCEL: usar adapter para sellout + inventario (leen de sellout_pcel)
-      const { fetchSelloutSku, fetchInventarioCliente } = await import('../../lib/pcelAdapter');
-      const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap] = await Promise.all([
+      const { fetchSelloutSku, fetchInventarioCliente, fetchHistoricoComprasPcel, fetchSnapshotPcel } = await import('../../lib/pcelAdapter');
+      const esPcel = clienteKey === 'pcel';
+
+      const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap,
+             histPcel, snapshotPcel] = await Promise.all([
         fetchAllPagesREST(`productos_cliente?select=*&cliente=eq.${clienteKey}`),
         fetchAllPagesREST(`sell_in_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
         fetchSelloutSku(clienteKey, 2026),
@@ -383,6 +392,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         fetchAllPagesREST(`inventario_acteck?select=articulo,no_almacen,disponible&no_almacen=in.(${ACTECK_ALMACENES.join(',')})`),
         fetchAllPagesREST(`transito_sku?select=sku,inventario_transito,siguiente_arribo,payload,sort_order`),
         fetchAllPagesREST(`roadmap_sku?select=sku,rdmp,descripcion,payload,sort_order&order=sort_order.asc`),
+        // Extras sólo para PCEL:
+        esPcel ? fetchHistoricoComprasPcel(6) : Promise.resolve({}),
+        esPcel ? fetchSnapshotPcel() : Promise.resolve([]),
       ]);
 
       // Pre-aggregate Acteck inventory by SKU (sum across all 9 warehouses)
@@ -409,6 +421,15 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         Number(inv.anio) === maxA && Number(inv.semana) === maxS
       ) : inventario;
 
+      // Extras PCEL: diccionarios por SKU
+      const backOrderBySkuPcel = {};
+      const transitoPcelBySku  = {};
+      (snapshotPcel || []).forEach(r => {
+        if (!r.sku) return;
+        backOrderBySkuPcel[r.sku] = Number(r.back_order) || 0;
+        transitoPcelBySku[r.sku]  = Number(r.transito) || 0;
+      });
+
       setDatos({
         productos, sellIn, sellOut,
         inventario: inventarioLatest,
@@ -417,6 +438,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         actStockBySku, transitoBySku,
         transito,
         roadmap,
+        // Extras específicos PCEL:
+        histPcel,               // { [sku]: { piezas, facturas, promedio, primerFecha, ultimaFecha } }
+        backOrderBySkuPcel,     // { [sku]: backOrder }
+        transitoPcelBySku,      // { [sku]: transito del cliente }
       });
     } catch (err) {
       console.error("Error loading data:", err);
@@ -681,20 +706,52 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const invActeck = (datos.actStockBySku && datos.actStockBySku[p.sku]) || 0;
         const invTransito = (datos.transitoBySku && datos.transitoBySku[p.sku]) || 0;
 
-        // ═══ FÓRMULA DEL SUGERIDO v3 ═══
-        // Regla 1: si invActeck < 10, sugerido = 0 (no se puede reponer)
-        // Regla 2: tránsito NO cuenta (solo invActeck real)
-        // Regla 3: cobertura objetivo = 90 días × factor estacional
-        // Regla 4: mínimo 20 piezas cuando sugerido > 0
-        // Regla 5: cap al invActeck
+        // ═══ Campos específicos PCEL ═══
+        const backOrder    = (datos.backOrderBySkuPcel && datos.backOrderBySkuPcel[p.sku]) || 0;
+        const transPcel    = (datos.transitoPcelBySku  && datos.transitoPcelBySku[p.sku])  || 0;
+        const histPcelSku  = (datos.histPcel && datos.histPcel[p.sku]) || null;
+        const promCompra   = histPcelSku ? Math.round(histPcelSku.promedio) : 0;
+        const facturasHist = histPcelSku ? histPcelSku.facturas : 0;
+        // "Activo" para PCEL = está en roadmap O tiene inventario en Acteck
+        const isActivo     = (!!(roadmapBySku[p.sku])) || invActeck > 0;
+
+        // ═══ FÓRMULA DEL SUGERIDO ═══
         let sugerido = 0;
-        if (invActeck >= 10 && promedio90d > 0) {
-          const necesidad = (promedio90d * 3 * factorEstacional) - stock;
-          sugerido = Math.max(0, Math.round(necesidad));
-          // Mínimo 20 piezas si hay algo de sugerido
-          if (sugerido > 0 && sugerido < 20) sugerido = 20;
-          // Cap al inventario Acteck real (sin tránsito)
-          sugerido = Math.min(sugerido, invActeck);
+        if (clienteKey === 'pcel') {
+          // FÓRMULA PCEL (dinámica por sellout vs histórico)
+          // sellout reciente = promedio 3m = promedio90d (ya calculado arriba)
+          // promedio_historico = promCompra (piezas/factura últimos 6 meses)
+          if (promCompra > 0) {
+            let base = promCompra;
+            if (promedio90d > 0) {
+              const ratio = promedio90d / promCompra;
+              if (ratio > 1) {
+                base = promCompra * ratio;              // vendiendo más → sugerir más
+              } else {
+                // cobertura en meses = (stock + transPcel) / sellout mensual
+                const selloutMes = promedio90d; // ya es mensual
+                const cobertura = selloutMes > 0 ? (stock + transPcel) / selloutMes : Infinity;
+                if (cobertura > 4) base = 0;            // sobre-inventariado
+              }
+            }
+            // Descontar lo que ya tienen y sumar back order
+            sugerido = Math.max(0, Math.round(base - stock - transPcel)) + backOrder;
+            // Cap a lo que podemos surtir: inv Acteck + tránsito nuestro
+            sugerido = Math.min(sugerido, invActeck + invTransito);
+          }
+        } else {
+          // FÓRMULA DIGITALIFE/ML v3 (original)
+          // Regla 1: si invActeck < 10, sugerido = 0 (no se puede reponer)
+          // Regla 2: tránsito NO cuenta (solo invActeck real)
+          // Regla 3: cobertura objetivo = 90 días × factor estacional
+          // Regla 4: mínimo 20 piezas cuando sugerido > 0
+          // Regla 5: cap al invActeck
+          if (invActeck >= 10 && promedio90d > 0) {
+            const necesidad = (promedio90d * 3 * factorEstacional) - stock;
+            sugerido = Math.max(0, Math.round(necesidad));
+            if (sugerido > 0 && sugerido < 20) sugerido = 20;
+            sugerido = Math.min(sugerido, invActeck);
+          }
         }
 
         const precioSku = Number(p.precio_venta) > 0 ? Number(p.precio_venta) : Number(invData && invData.precio_venta || 0);
@@ -717,14 +774,25 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           invTransito,
           sugerido,
           soMontoTotal,
+          // Campos específicos PCEL:
+          backOrder,
+          transPcel,
+          promCompra,
+          facturasHist,
+          isActivo,
         };
+      })
+      .filter(r => {
+        // Filtro "Solo activos" para PCEL
+        if (clienteKey === 'pcel' && soloActivosPcel && !r.isActivo) return false;
+        return true;
       })
       .sort((a, b) => {
         const valA = a[sortCol] || 0;
         const valB = b[sortCol] || 0;
         return sortDir === "asc" ? valA - valB : valB - valA;
       });
-    }, [datos, searchFilter, categoriaFilter, sortCol, sortDir]);
+    }, [datos, searchFilter, categoriaFilter, sortCol, sortDir, clienteKey, soloActivosPcel]);
 
   // Export to Excel
   const handleSort = (col) => { if (sortCol === col) { setSortDir(sortDir === "desc" ? "asc" : "desc"); } else { setSortCol(col); setSortDir("desc"); } };
@@ -1200,6 +1268,17 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 onChange: function(e) { setSearchFilter(e.target.value); },
                 style: { padding: "6px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, width: 220 }
               }),
+              // Toggle "Solo activos" — sólo PCEL
+              (clienteKey === "pcel") && React.createElement("label", {
+                style: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#475569", cursor: "pointer", userSelect: "none", padding: "6px 10px", border: "1px solid #E2E8F0", borderRadius: 8, background: soloActivosPcel ? "#EEF2FF" : "#fff" }
+              },
+                React.createElement("input", {
+                  type: "checkbox", checked: soloActivosPcel,
+                  onChange: function(e) { setSoloActivosPcel(e.target.checked); },
+                  style: { cursor: "pointer" }
+                }),
+                "Solo activos"
+              ),
               React.createElement("button", {
                 onClick: exportToExcel,
                 style: { padding: "8px 16px", background: "#10B981", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }
@@ -1221,6 +1300,16 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 thSort("Prom 90d", "promedio90d"),
                 thSort("Inv Acteck", "invActeck"),
                 thSort("Tr\u00e1nsito", "invTransito"),
+                // Columnas específicas PCEL
+                (clienteKey === "pcel") && React.createElement("th", {
+                  key: "th-bo", onClick: () => handleSort("backOrder"),
+                  style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "backOrder" ? "#1D4ED8" : "#B91C1C", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#FEF2F2" }
+                }, "Back Order" + sortArrow("backOrder")),
+                (clienteKey === "pcel") && React.createElement("th", {
+                  key: "th-pc", onClick: () => handleSort("promCompra"),
+                  style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "promCompra" ? "#1D4ED8" : "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#FEF3C7" },
+                  title: "Promedio de piezas por compra (últimos 6 meses, ventas_erp)"
+                }, "Prom compra" + sortArrow("promCompra")),
                 thSort("Sugerido", "sugerido"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 700, color: "#065F46", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#ECFDF5" } },
@@ -1259,6 +1348,16 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11 } }, (s.promedio90d || 0).toLocaleString("es-MX")),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: s.invActeck > 0 ? "#1E293B" : "#CBD5E1", fontSize: 11, fontWeight: s.invActeck > 0 ? 500 : 400 } }, (s.invActeck || 0).toLocaleString("es-MX")),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: s.invTransito > 0 ? "#7C3AED" : "#CBD5E1", fontSize: 11 } }, s.invTransito > 0 ? s.invTransito.toLocaleString("es-MX") : "-"),
+                  // Columnas específicas PCEL
+                  (clienteKey === "pcel") && React.createElement("td", {
+                    key: "td-bo",
+                    style: { textAlign: "right", padding: "6px", fontSize: 11, background: s.backOrder > 0 ? "#FEE2E2" : "#FEF2F2", color: s.backOrder > 0 ? "#991B1B" : "#CBD5E1", fontWeight: s.backOrder > 0 ? 700 : 400 }
+                  }, s.backOrder > 0 ? s.backOrder.toLocaleString("es-MX") : "-"),
+                  (clienteKey === "pcel") && React.createElement("td", {
+                    key: "td-pc",
+                    style: { textAlign: "right", padding: "6px", fontSize: 11, background: "#FFFBEB", color: s.promCompra > 0 ? "#78350F" : "#CBD5E1", fontWeight: 500 },
+                    title: s.facturasHist > 0 ? (s.facturasHist + " compras hist\u00f3ricas") : "Sin hist\u00f3rico de compras"
+                  }, s.promCompra > 0 ? s.promCompra.toLocaleString("es-MX") : "-"),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", fontSize: 11 } },
                     React.createElement("input", {
                       type: "number", min: 0,
