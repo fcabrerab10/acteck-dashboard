@@ -22,6 +22,8 @@ const ALLOWED = {
   precios_sku:       'sku',
   transito_sku:      'sku,row_hash',
   sellout_pcel:          'anio,semana,sku',
+  sellout_pcel_mensual:  'anio,mes,sku',
+  catalogo_sku_pcel:     'sku',
   estados_cuenta:        'cliente,anio,semana',
   estados_cuenta_detalle:'id',
   embarques_compras:     'po,codigo'

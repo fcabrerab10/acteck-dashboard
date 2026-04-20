@@ -54,7 +54,13 @@ const SOURCES = [
   },
   { id:'digitalife-sellout', title:'Digitalife · Sellout histórico', desc:'Historico Sellout Digitalife (hoja "Sellout Digitalife"). Append con dedup por fecha+parte+cantidad+total.', file:'Historico Sellout Digitalife.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
   { id:'digitalife-inv', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Snapshot semanal por (cliente, sku, anio, semana).', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv' },
-  { id:'pcel-vm', title:'PCEL · venta-marca semanal', desc:'Archivo venta-marca-ACTECK. Upsert (anio, semana, sku).', file:'venta-marca-ACTECK.xlsx', table:'sellout_pcel', onConflict:'anio,semana,sku', parser:'pcelVentaMarca' },
+  { id:'pcel-vm', title:'PCEL · venta-marca semanal', desc:'Archivo venta-marca-ACTECK. Actualiza sellout semanal + histórico mensual + catálogo SKU.', file:'venta-marca-ACTECK.xlsx',
+    combined: [
+      { table:'sellout_pcel',          onConflict:'anio,semana,sku', parser:'pcelVentaMarca',      label:'Semanal' },
+      { table:'sellout_pcel_mensual',  onConflict:'anio,mes,sku',    parser:'pcelMensualFromVM',   label:'Mensual histórico' },
+      { table:'catalogo_sku_pcel',     onConflict:'sku',             parser:'pcelCatalogoFromVM',  label:'Catálogo SKU' },
+    ]
+  },
   { id:'ec-pcel', title:'Estado de cuenta · PCEL', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
   { id:'ec-digitalife', title:'Estado de cuenta · Digitalife', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
   { id:'roadmap-precios', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
@@ -234,6 +240,103 @@ const PARSERS = {
         vta_mes_3_nombre:       m3.nombre || null,
       };
     }).filter(r => r.sku && r.semana != null);
+  },
+
+  /**
+   * Parser de histórico mensual a partir del mismo archivo venta-marca.
+   * Extrae los 3 meses del archivo → una fila por (sku, mes).
+   * Upsert por (anio, mes, sku): si el mes ya existe, lo actualiza.
+   */
+  pcelMensualFromVM(wb){
+    const sh = wb.Sheets['Ventas por Fabricante'] || wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
+    let semana = null;
+    const headers = Object.keys(rows[0] || {});
+    for (const h of headers) {
+      const m = String(h).match(/vta\s+semana\s+(\d+)/i);
+      if (m) { semana = parseInt(m[1],10); break; }
+    }
+    const MES_NUM = {
+      ene:1, feb:2, mar:3, abr:4, may:5, jun:6,
+      jul:7, ago:8, sep:9, set:9, oct:10, nov:11, dic:12,
+    };
+    const MES_NOMBRE = {
+      1:'Ene', 2:'Feb', 3:'Mar', 4:'Abr', 5:'May', 6:'Jun',
+      7:'Jul', 8:'Ago', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dic',
+    };
+    const year = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+
+    const out = [];
+    for (const r of rows) {
+      const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
+      const sku = toStr(obj.sku);
+      if (!sku) continue;
+
+      const monthCols = Object.keys(obj)
+        .filter(k => /^vta_[a-z]{3}$/.test(k))
+        .map(k => {
+          const abrev = k.slice(4);
+          const num = MES_NUM[abrev];
+          if (!num) return null;
+          const anio = num > currentMonth ? year - 1 : year;
+          return { key: k, mes: num, anio, nombre: MES_NOMBRE[num] };
+        })
+        .filter(Boolean);
+
+      for (const mc of monthCols) {
+        const piezas = toInt(obj[mc.key]);
+        if (piezas === null) continue;
+        out.push({
+          anio: mc.anio,
+          mes: mc.mes,
+          nombre_mes: mc.nombre,
+          sku,
+          piezas,
+          ultima_semana_cargada: semana,
+        });
+      }
+    }
+    return out;
+  },
+
+  /**
+   * Parser de catálogo SKU a partir del mismo archivo venta-marca.
+   * Una fila por SKU. Upsert por sku:
+   *   - Si es SKU nuevo → primera_aparicion = hoy, apariciones = 1
+   *   - Si ya existe   → solo actualizar ultima_aparicion = hoy, apariciones += 1
+   *                      y refresca metadata (producto, marca, etc.)
+   *
+   * Como no podemos hacer "apariciones += 1" desde un upsert simple, usamos
+   * una estrategia: enviar las filas nuevas con apariciones=1 y primera/última =
+   * hoy. El servidor hace INSERT ON CONFLICT DO UPDATE que actualiza
+   * ultima_aparicion y apariciones se queda. Para contador preciso se usaría
+   * un trigger, pero por ahora nos basta con primera/ultima aparición.
+   */
+  pcelCatalogoFromVM(wb){
+    const sh = wb.Sheets['Ventas por Fabricante'] || wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
+    const hoy = new Date().toISOString().slice(0,10);
+    const seen = new Set();
+    const out = [];
+    for (const r of rows) {
+      const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
+      const sku = toStr(obj.sku);
+      if (!sku || seen.has(sku)) continue;
+      seen.add(sku);
+      out.push({
+        sku,
+        producto:   toStr(obj.producto),
+        marca:      toStr(obj.marca),
+        modelo:     toStr(obj.modelo),
+        familia:    toStr(obj.familia),
+        subfamilia: toStr(obj.subfamilia),
+        primera_aparicion: hoy,   // se ignora si ya existe
+        ultima_aparicion:  hoy,
+        apariciones: 1,           // placeholder
+      });
+    }
+    return out;
   },
   estadoCuenta(wb, cliente, filename){
     const sh = wb.Sheets[wb.SheetNames[0]];
