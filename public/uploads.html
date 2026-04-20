@@ -172,19 +172,49 @@ const PARSERS = {
       const m = String(h).match(/vta\s+semana\s+(\d+)/i);
       if (m) { semana = parseInt(m[1],10); break; }
     }
-    // Map month columns dynamically: "Vta Abr" → vta_abr, "Vta Mar" → vta_mar, etc.
+    // Mapa de meses ES (abreviatura) → número
+    const MES_NUM = {
+      ene:1, feb:2, mar:3, abr:4, may:5, jun:6,
+      jul:7, ago:8, sep:9, set:9, oct:10, nov:11, dic:12,
+    };
+    const MES_NOMBRE = {
+      ene:'Ene', feb:'Feb', mar:'Mar', abr:'Abr', may:'May', jun:'Jun',
+      jul:'Jul', ago:'Ago', sep:'Sep', oct:'Oct', nov:'Nov', dic:'Dic',
+    };
     const year = new Date().getFullYear();
     return rows.map(r => {
       const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
       const vtaSemKey = Object.keys(obj).find(k => /vta_semana_\d+/.test(k));
-      // Find month columns dynamically (vta_ene, vta_feb, vta_mar, vta_abr, etc.)
-      const monthKeys = Object.keys(obj).filter(k => /^vta_[a-z]{3}$/.test(k)).sort();
+      // Columnas mensuales "vta_abr", "vta_mar", etc.
+      // Ordenar CRONOLÓGICAMENTE descendente (más reciente primero).
+      // Ajuste de año: si el mes del archivo es > mes actual, significa que es del año anterior.
+      const currentMonth = new Date().getMonth() + 1;
+      const monthKeys = Object.keys(obj)
+        .filter(k => /^vta_[a-z]{3}$/.test(k))
+        .map(k => {
+          const abrev = k.slice(4); // después de "vta_"
+          const num = MES_NUM[abrev];
+          if (!num) return null;
+          // Si el mes > mes actual del año, asumir año anterior
+          const anio = num > currentMonth ? year - 1 : year;
+          const sortKey = anio * 100 + num; // ej 202604
+          return { key: k, abrev, num, anio, sortKey, nombre: MES_NOMBRE[abrev] };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.sortKey - a.sortKey); // descendente
+
+      const m0 = monthKeys[0] || {};
+      const m1 = monthKeys[1] || {};
+      const m2 = monthKeys[2] || {};
+      const m3 = monthKeys[3] || {};
+
       return {
         anio: year,
         semana: semana,
         sku: toStr(obj.sku),
         pcel_sku: toStr(obj.sku),
         marca: toStr(obj.marca),
+        modelo: toStr(obj.modelo),
         producto: toStr(obj.producto ?? obj.modelo),
         familia: toStr(obj.familia),
         subfamilia: toStr(obj.subfamilia),
@@ -194,10 +224,14 @@ const PARSERS = {
         transito: toInt(obj.transito),
         back_order: toInt(obj.back_order),
         vta_semana: toInt(vtaSemKey ? obj[vtaSemKey] : null),
-        vta_mes_actual: toInt(monthKeys[0] ? obj[monthKeys[0]] : null),
-        vta_mes_1: toInt(monthKeys[1] ? obj[monthKeys[1]] : null),
-        vta_mes_2: toInt(monthKeys[2] ? obj[monthKeys[2]] : null),
-        vta_mes_3: toInt(monthKeys[3] ? obj[monthKeys[3]] : null),
+        vta_mes_actual:         toInt(m0.key ? obj[m0.key] : null),
+        vta_mes_actual_nombre:  m0.nombre || null,
+        vta_mes_1:              toInt(m1.key ? obj[m1.key] : null),
+        vta_mes_1_nombre:       m1.nombre || null,
+        vta_mes_2:              toInt(m2.key ? obj[m2.key] : null),
+        vta_mes_2_nombre:       m2.nombre || null,
+        vta_mes_3:              toInt(m3.key ? obj[m3.key] : null),
+        vta_mes_3_nombre:       m3.nombre || null,
       };
     }).filter(r => r.sku && r.semana != null);
   },
