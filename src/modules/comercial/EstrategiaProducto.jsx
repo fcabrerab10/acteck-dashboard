@@ -759,25 +759,33 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         let sugerido = 0;
         if (clienteKey === 'pcel') {
           // FÓRMULA PCEL (dinámica por sellout vs histórico)
-          // sellout reciente = promedio 3m = promedio90d (ya calculado arriba)
-          // promedio_historico = promCompra (piezas/factura últimos 6 meses)
-          if (promCompra > 0) {
-            let base = promCompra;
-            if (promedio90d > 0) {
+          //
+          // base principal: promCompra (prom piezas/factura en los últimos 6m
+          // desde ventas_erp). Fallback: promedio90d (si no hay histórico
+          // pero sí hay sellout reciente).
+          //
+          // Ajuste dinámico por sellout reciente:
+          //   ratio > 1              → subir proporcional
+          //   cobertura > 4 meses    → 0 (sobre-inventariado)
+          //
+          // Sugerido = ideal - lo que ya tienen + back order.
+          // NO se cappa a inv_Acteck: mostrar la propuesta ideal aunque no
+          // tengamos stock ahora. El gap de disponibilidad queda en Excel.
+          let base = promCompra > 0 ? promCompra : promedio90d;
+          if (base > 0) {
+            if (promCompra > 0 && promedio90d > 0) {
               const ratio = promedio90d / promCompra;
               if (ratio > 1) {
-                base = promCompra * ratio;              // vendiendo más → sugerir más
+                base = promCompra * ratio;
               } else {
-                // cobertura en meses = (stock + transPcel) / sellout mensual
-                const selloutMes = promedio90d; // ya es mensual
-                const cobertura = selloutMes > 0 ? (stock + transPcel) / selloutMes : Infinity;
-                if (cobertura > 4) base = 0;            // sobre-inventariado
+                const cobertura = promedio90d > 0 ? (stock + transPcel) / promedio90d : Infinity;
+                if (cobertura > 4) base = 0;
               }
             }
-            // Descontar lo que ya tienen y sumar back order
             sugerido = Math.max(0, Math.round(base - stock - transPcel)) + backOrder;
-            // Cap a lo que podemos surtir: inv Acteck + tránsito nuestro
-            sugerido = Math.min(sugerido, invActeck + invTransito);
+          } else if (backOrder > 0) {
+            // Sin base pero debemos back order → proponer al menos eso
+            sugerido = backOrder;
           }
         } else {
           // FÓRMULA DIGITALIFE/ML v3 (original)
@@ -840,7 +848,84 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const sortArrow = (col) => sortCol === col ? (sortDir === "desc" ? " \u25BC" : " \u25B2") : " \u25B7";
     const thSort = (label, col) => React.createElement("th", { onClick: () => handleSort(col), style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === col ? "#1D4ED8" : "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none" } }, label + sortArrow(col));
 
+      // Export específico para PCEL: columnas pensadas para la propuesta de
+      // compra al cliente + equipo interno.
+      const exportToExcelPcel = async () => {
+        const XLSX = await loadSheetJS();
+        if (!XLSX) { alert("Error cargando librería Excel"); return; }
+
+        // Diccionario de próximo arribo (de transito_sku, payload tiene fechas)
+        const arriboBySku = {};
+        (datos.transito || []).forEach(t => {
+          if (!t.sku) return;
+          arriboBySku[t.sku] = {
+            piezas: Number(t.inventario_transito) || 0,
+            fecha:  t.siguiente_arribo || null,
+          };
+        });
+
+        const rows = skuDetail.map(s => {
+          const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
+          const arribo = arriboBySku[s.modelo] || arriboBySku[s.sku] || { piezas: 0, fecha: null };
+          return {
+            "SKU Cliente":             String(s.sku || ""),
+            "SKU Acteck":              s.modelo || "",
+            "Descripción":             s.descripcionLarga || s.descripcion || "",
+            "Inventario Cliente":      Number(s.stock) || 0,
+            "Promedio últimos 90 días": Number(s.promedio90d) || 0,
+            "Sugerido":                sug,
+            "Inventario Acteck":       Number(s.invActeck) || 0,
+            "Próximo arribo piezas":   Number(arribo.piezas) || 0,
+            "Próximo arribo fecha":    arribo.fecha || "",
+          };
+        });
+        // Filtrar: solo SKUs con sugerido > 0
+        const filtradas = rows.filter(r => r.Sugerido > 0);
+
+        // Totales al pie
+        const totSug = filtradas.reduce((s, r) => s + (r.Sugerido || 0), 0);
+        const totInvCli = filtradas.reduce((s, r) => s + (r["Inventario Cliente"] || 0), 0);
+        const totInvAct = filtradas.reduce((s, r) => s + (r["Inventario Acteck"] || 0), 0);
+        const totArribo = filtradas.reduce((s, r) => s + (r["Próximo arribo piezas"] || 0), 0);
+        filtradas.push({
+          "SKU Cliente": "TOTAL",
+          "SKU Acteck": "",
+          "Descripción": `${filtradas.length} SKUs`,
+          "Inventario Cliente": totInvCli,
+          "Promedio últimos 90 días": "",
+          "Sugerido": totSug,
+          "Inventario Acteck": totInvAct,
+          "Próximo arribo piezas": totArribo,
+          "Próximo arribo fecha": "",
+        });
+
+        const ws = XLSX.utils.json_to_sheet(filtradas);
+        // Anchos de columna
+        ws["!cols"] = [
+          { wch: 12 }, { wch: 14 }, { wch: 48 }, { wch: 14 }, { wch: 18 },
+          { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
+        ];
+        // Formato número entero en columnas de piezas
+        const FMT_INT = "#,##0";
+        const rangeRef = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : null;
+        if (rangeRef) {
+          const numCols = [3, 4, 5, 6, 7]; // índices 0-based de las columnas numéricas
+          for (let R = rangeRef.s.r + 1; R <= rangeRef.e.r; R++) {
+            for (const C of numCols) {
+              const addr = XLSX.utils.encode_cell({ r: R, c: C });
+              if (ws[addr] && typeof ws[addr].v === "number") ws[addr].z = FMT_INT;
+            }
+          }
+        }
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Sugerido PCEL");
+        const fechaStr = new Date().toISOString().slice(0, 10);
+        XLSX.writeFile(wb, `sugerido-pcel-${fechaStr}.xlsx`);
+      };
+
       const exportToExcel = async () => {
+    if (clienteKey === "pcel") return exportToExcelPcel();
     const XLSX = await loadSheetJS();
     if (!XLSX) { alert("Error cargando librería Excel"); return; }
 
