@@ -842,6 +842,16 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           promCompra,
           facturasHist,
           isActivo,
+          precioAAAcd:     (datos.preciosBySku && (datos.preciosBySku[skuExterno] || datos.preciosBySku[p.sku]) || {}).precio_descuento || 0,
+          // Próximo arribo del SKU: lookup en transito_sku por modelo Acteck
+          arriboFecha: (function() {
+            const t = (datos.transito || []).find(x => x.sku === skuExterno || x.sku === p.sku);
+            return t ? (t.siguiente_arribo || null) : null;
+          })(),
+          arriboPiezas: (function() {
+            const t = (datos.transito || []).find(x => x.sku === skuExterno || x.sku === p.sku);
+            return t ? (Number(t.inventario_transito) || 0) : 0;
+          })(),
         };
       })
       .filter(r => {
@@ -1472,6 +1482,17 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   title: "Promedio de piezas por compra (últimos 6 meses, ventas_erp)"
                 }, "Prom compra" + sortArrow("promCompra")),
                 thSort("Sugerido", "sugerido"),
+                // Columnas adicionales para PCEL: Precio AAA C/desc + Próx. arribo si falta
+                (clienteKey === "pcel") && React.createElement("th", {
+                  key: "th-aaa", onClick: () => handleSort("precioAAAcd"),
+                  style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "precioAAAcd" ? "#1D4ED8" : "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#F0F9FF" },
+                  title: "Precio AAA con descuento (precios_sku)"
+                }, "Precio AAA c/desc" + sortArrow("precioAAAcd")),
+                (clienteKey === "pcel") && React.createElement("th", {
+                  key: "th-arr",
+                  style: { textAlign: "left", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#FEF3C7" },
+                  title: "Fecha de próximo arribo si el sugerido no se completa con inv Acteck"
+                }, "Pr\u00f3x. arribo (falta)"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 700, color: "#065F46", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#ECFDF5" } },
                   React.createElement("div", { style: { fontSize: 10, color: "#10B981", fontWeight: 600 } }, "Σ " + formatMXN((skuDetail || []).reduce(function(acc, r){ var sug = sugeridoEdits[r.sku] !== undefined ? Number(sugeridoEdits[r.sku]) : Number(r.sugerido || 0); return acc + sug * Number(r.precio || 0); }, 0))),
@@ -1538,6 +1559,22 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       style: { width: 60, padding: "2px 4px", border: "1px solid #E2E8F0", borderRadius: 4, textAlign: "right", fontSize: 11 }
                     })
                   ),
+                  // PCEL: Precio AAA C/descuento
+                  (clienteKey === "pcel") && React.createElement("td", {
+                    key: "td-aaa",
+                    style: { textAlign: "right", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#F0F9FF", color: s.precioAAAcd > 0 ? "#1E40AF" : "#CBD5E1", fontWeight: 500 }
+                  }, s.precioAAAcd > 0 ? ("$" + Number(s.precioAAAcd).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "-"),
+                  // PCEL: Próx. arribo (si falta) — solo mostrar cuando sugerido > invActeck
+                  (clienteKey === "pcel") && (function() {
+                    const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
+                    const gap = Math.max(0, sug - (Number(s.invActeck) || 0));
+                    const mostrar = gap > 0 && s.arriboFecha;
+                    return React.createElement("td", {
+                      key: "td-arr",
+                      style: { textAlign: "left", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#FEF3C7", color: mostrar ? "#78350F" : "#CBD5E1", fontWeight: mostrar ? 600 : 400 },
+                      title: mostrar ? `Faltan ${gap} piezas · Arribo: ${s.arriboPiezas} piezas` : (s.arriboFecha ? `Stock suficiente (${s.invActeck})` : "Sin tránsito")
+                    }, mostrar ? s.arriboFecha : "-");
+                  })(),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11, whiteSpace: "nowrap" } }, (s.precio && s.precio > 0) ? ("$" + Number(s.precio).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })) : "-"),
                   (function(){ var sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0); var tot = sug * Number(s.precio || 0); return React.createElement("td", { style: { textAlign: "right", padding: "6px", color: tot > 0 ? "#065F46" : "#CBD5E1", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", background: tot > 0 ? "#F0FDF4" : "transparent" } }, tot > 0 ? ("$" + Math.round(tot).toLocaleString("es-MX")) : "-"); })(),
                 );
