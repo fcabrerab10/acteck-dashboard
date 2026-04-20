@@ -1030,7 +1030,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           // Precio: override manual del usuario > precio AAA c/desc del roadmap
           const precioOv = precioEdits[s.sku];
           const prec = preciosBySku[s.modelo] || preciosBySku[s.sku] || null;
-          const precioFinal = precioOv !== undefined ? Number(precioOv) : (prec ? Number(prec.precio_descuento) || 0 : 0);
+          const precioFinal = Math.round(precioOv !== undefined ? Number(precioOv) : (prec ? Number(prec.precio_descuento) || 0 : 0));
           const invAct = Number(s.invActeck) || 0;
           // Si el sugerido NO se completa con inv Acteck, mostrar la próxima
           // fecha de arribo de lo que viene en tránsito (cuándo podremos cumplir).
@@ -1079,9 +1079,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           { wch: 12 }, { wch: 14 }, { wch: 48 }, { wch: 14 }, { wch: 18 },
           { wch: 12 }, { wch: 20 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 14 },
         ];
-        // Formato: enteros en piezas, dinero en precio
+        // Formato: enteros en piezas, dinero en precio (sin decimales)
         const FMT_INT   = "#,##0";
-        const FMT_MONEY = '"$"#,##0.00';
+        const FMT_MONEY = '"$"#,##0';
         const rangeRef = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : null;
         if (rangeRef) {
           const intCols   = [3, 4, 5, 7, 9]; // inv cliente, prom 90d, sugerido, inv acteck, arribo piezas
@@ -1734,10 +1734,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                     style: { textAlign: "right", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#F0F9FF", position: "relative" }
                   },
                     React.createElement("input", {
-                      type: "number", min: 0, step: "0.01",
-                      value: precioEdits[s.sku] !== undefined ? precioEdits[s.sku] : (s.precioAAAcd || 0),
+                      type: "number", min: 0, step: "1",
+                      value: precioEdits[s.sku] !== undefined
+                        ? Math.round(Number(precioEdits[s.sku]) || 0)
+                        : Math.round(Number(s.precioAAAcd) || 0),
                       onChange: function(e) {
-                        var nv = Number(e.target.value) || 0;
+                        var nv = Math.round(Number(e.target.value) || 0);
                         setPrecioEdits(Object.assign({}, precioEdits, { [s.sku]: nv }));
                         debounceSavePrecio(s.sku, nv);
                       },
