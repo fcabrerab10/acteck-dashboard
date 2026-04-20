@@ -98,6 +98,84 @@ export async function fetchSelloutSku(clienteKey, anio) {
 }
 
 /**
+ * Trae historial de ventas de PCEL desde ventas_erp (cliente_nombre='PC ONLINE')
+ * de los últimos `mesesAtras` meses. Agrupa por SKU y calcula:
+ *   - piezas_total, facturas_total, promedio_por_compra
+ *
+ * Returns: { [sku]: { piezas, facturas, promedio, primerFecha, ultimaFecha } }
+ */
+export async function fetchHistoricoComprasPcel(mesesAtras = 6) {
+  const desde = new Date();
+  desde.setMonth(desde.getMonth() - mesesAtras);
+  const desdeStr = desde.toISOString().slice(0, 10);
+
+  const rows = await fetchAllPages(() =>
+    supabase
+      .from("ventas_erp")
+      .select("articulo, piezas, periodo, folio")
+      .eq("cliente_nombre", "PC ONLINE")
+      .gte("periodo", desdeStr)
+  );
+
+  const porSku = {};
+  for (const r of rows) {
+    const sku = (r.articulo || "").toString();
+    if (!sku) continue;
+    const p = Number(r.piezas) || 0;
+    const folio = r.folio || "";
+    if (!porSku[sku]) {
+      porSku[sku] = {
+        piezas: 0,
+        facturas: new Set(),
+        primerFecha: r.periodo,
+        ultimaFecha: r.periodo,
+      };
+    }
+    const s = porSku[sku];
+    s.piezas += p;
+    if (folio) s.facturas.add(folio);
+    if (r.periodo && r.periodo < s.primerFecha) s.primerFecha = r.periodo;
+    if (r.periodo && r.periodo > s.ultimaFecha) s.ultimaFecha = r.periodo;
+  }
+
+  const out = {};
+  for (const [sku, s] of Object.entries(porSku)) {
+    const facturas = s.facturas.size;
+    out[sku] = {
+      piezas: s.piezas,
+      facturas,
+      promedio: facturas > 0 ? s.piezas / facturas : 0,
+      primerFecha: s.primerFecha,
+      ultimaFecha: s.ultimaFecha,
+    };
+  }
+  return out;
+}
+
+/**
+ * Trae snapshot más reciente de sellout_pcel por SKU con todos los campos útiles
+ * para la tabla de Estrategia. Una fila por SKU (la semana más reciente).
+ */
+export async function fetchSnapshotPcel() {
+  const rows = await fetchAllPages(() =>
+    supabase
+      .from("sellout_pcel")
+      .select("*")
+      .order("anio", { ascending: false })
+      .order("semana", { ascending: false })
+  );
+  const vistos = new Set();
+  const out = [];
+  for (const r of rows) {
+    const sku = (r.sku || "").toString();
+    if (!sku || vistos.has(sku)) continue;
+    vistos.add(sku);
+    out.push(r);
+  }
+  return out;
+}
+
+/**
  * Lee sellout para un rango de años (Análisis usa esto).
  */
 export async function fetchSelloutSkuRango(clienteKey, anioFrom, anioTo) {
