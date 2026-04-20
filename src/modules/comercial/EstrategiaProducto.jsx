@@ -903,12 +903,17 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           //    (no comprometer lo que apenas tenemos)
           const META_COBERTURA = 3;         // meses objetivo en PCEL
           const UMBRAL_STOCK   = 0.5;       // múltiplo mínimo del sellout mensual
+          const MIN_COMPRA     = 20;        // piezas mínimas para proponer
 
           const selloutMensual = promedio90d > 0 ? promedio90d
                                 : (promCompra > 0 ? promCompra : 0);
           const disponibleActeck = invActeck + invTransito;
 
-          if (selloutMensual > 0) {
+          // Regla dura: si no hay al menos MIN_COMPRA piezas disponibles en
+          // Acteck (inv + tránsito), no proponemos nada. No vale la pena.
+          if (disponibleActeck < MIN_COMPRA) {
+            sugerido = 0;
+          } else if (selloutMensual > 0) {
             // Sobre-inventariado: si ya tienen >4 meses, no sugerir
             const coberturaActual = (stock + transPcel) / selloutMensual;
             if (coberturaActual > 4) {
@@ -925,10 +930,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             // Sin sellout pero debemos back order y tenemos stock → surtir
             sugerido = Math.min(backOrder, disponibleActeck);
           }
-          // Mínimo de compra: 20 piezas. Si la fórmula da algo > 0 pero < 20,
-          // subir a 20 (siempre respetando el cap de stock disponible).
-          if (sugerido > 0 && sugerido < 20) {
-            sugerido = Math.min(20, disponibleActeck);
+          // Mínimo de compra: si la fórmula da algo > 0 pero < MIN_COMPRA,
+          // subir a MIN_COMPRA (ya garantizado que Acteck tiene ≥ 20).
+          if (sugerido > 0 && sugerido < MIN_COMPRA) {
+            sugerido = MIN_COMPRA;
           }
         } else {
           // FÓRMULA DIGITALIFE/ML v3 (original)
