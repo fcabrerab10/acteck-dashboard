@@ -424,14 +424,47 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       // Extras PCEL: diccionarios por SKU
       const backOrderBySkuPcel = {};
       const transitoPcelBySku  = {};
+      const costoPromBySkuPcel = {};
       (snapshotPcel || []).forEach(r => {
         if (!r.sku) return;
         backOrderBySkuPcel[r.sku] = Number(r.back_order) || 0;
         transitoPcelBySku[r.sku]  = Number(r.transito) || 0;
+        costoPromBySkuPcel[r.sku] = Number(r.costo_promedio) || 0;
       });
 
+      // Para PCEL: usar catalogo_sku_pcel como fuente base (906 SKUs reales)
+      // en lugar de productos_cliente (solo 25 filas).
+      let productosEfectivos = productos;
+      if (esPcel) {
+        const catPcel = await fetchAllPagesREST(`catalogo_sku_pcel?select=*`);
+        // Mapear al schema esperado por el componente (productos_cliente)
+        const prodExistentes = new Map((productos || []).map(p => [p.sku, p]));
+        productosEfectivos = (catPcel || []).map(c => {
+          const existente = prodExistentes.get(c.sku) || {};
+          return {
+            // datos base
+            sku: c.sku,
+            cliente: 'pcel',
+            marca: c.marca || existente.marca || '',
+            modelo: c.modelo || existente.modelo || '',
+            descripcion: c.producto || existente.descripcion || '',
+            familia: c.familia || existente.familia || '',
+            subfamilia: c.subfamilia || existente.subfamilia || '',
+            // si existe en productos_cliente, preservar categoria / precio / estado
+            categoria: existente.categoria || c.familia || '',
+            precio_venta: existente.precio_venta || null,
+            estado: existente.estado || 'ALTA',
+            roadmap: existente.roadmap || null,
+            // metadata catálogo
+            primera_aparicion: c.primera_aparicion,
+            ultima_aparicion:  c.ultima_aparicion,
+            apariciones:       c.apariciones,
+          };
+        });
+      }
+
       setDatos({
-        productos, sellIn, sellOut,
+        productos: productosEfectivos, sellIn, sellOut,
         inventario: inventarioLatest,
         inventarioAll: inventario,   // preserved for future historical views
         latestWeek: { anio: maxA, semana: maxS },

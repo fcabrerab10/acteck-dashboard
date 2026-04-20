@@ -60,16 +60,35 @@ export async function fetchSelloutSku(clienteKey, anio) {
       supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", anio)
     );
   }
-  // PCEL: transformar desde sellout_pcel
+
+  // PCEL — preferir sellout_pcel_mensual (datos mensuales reportados por el
+  // cliente, más precisos que agregar semanales). Fallback: agregar de
+  // sellout_pcel por ISO week → mes si la tabla mensual está vacía.
+  const mensual = await fetchAllPages(() =>
+    supabase
+      .from("sellout_pcel_mensual")
+      .select("anio, mes, sku, piezas, nombre_mes")
+      .eq("anio", anio)
+  );
+  if (mensual.length > 0) {
+    return mensual.map((r) => ({
+      cliente: "pcel",
+      sku: r.sku,
+      anio: r.anio,
+      mes: r.mes,
+      piezas: Number(r.piezas) || 0,
+      monto_pesos: 0, // sin precio venta disponible para PCEL aún
+    }));
+  }
+
+  // Fallback: agregar desde sellout_pcel semanal
   const rows = await fetchAllPages(() =>
     supabase
       .from("sellout_pcel")
       .select("sku, anio, semana, vta_semana, costo_promedio")
       .eq("anio", anio)
   );
-
-  // Agrupar por (sku, mes)
-  const bucket = new Map(); // key = sku|mes
+  const bucket = new Map();
   rows.forEach((r) => {
     const sku = (r.sku || "").toString();
     if (!sku) return;
@@ -85,14 +104,12 @@ export async function fetchSelloutSku(clienteKey, anio) {
     }
     bucket.set(key, cur);
   });
-
   return Array.from(bucket.values()).map((r) => ({
     cliente: "pcel",
     sku: r.sku,
     anio: r.anio,
     mes: r.mes,
     piezas: r.piezas,
-    // No tenemos precio venta; monto aproximado = piezas × costo promedio (placeholder)
     monto_pesos: r._n > 0 ? Math.round((r._costoAcum / r._n) * r.piezas) : 0,
   }));
 }
