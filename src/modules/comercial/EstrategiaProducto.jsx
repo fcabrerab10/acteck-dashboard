@@ -10,6 +10,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   const [sortCol, setSortCol] = React.useState("stock");
     const [sortDir, setSortDir] = React.useState("desc");
   const [sugeridoEdits, setSugeridoEdits] = React.useState({});
+  const [precioEdits, setPrecioEdits] = React.useState({});
   const [nuevosSearch, setNuevosSearch] = React.useState("");
   const [enCaminoSearch, setEnCaminoSearch] = React.useState("");
   const [riesgoSearch, setRiesgoSearch] = React.useState("");
@@ -44,6 +45,42 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       .upsert({ cliente: clienteKey, sku, sugerido: v, updated_at: new Date().toISOString() },
               { onConflict: "cliente,sku" });
     if (error) console.error("saveSugeridoOverride error:", error);
+  };
+
+  // Precio overrides — mismo patrón que sugerido
+  React.useEffect(() => {
+    if (!DB_CONFIGURED || !clienteKey) return;
+    (async () => {
+      const { data } = await supabase
+        .from("precio_overrides")
+        .select("sku, precio")
+        .eq("cliente", clienteKey);
+      const map = {};
+      (data || []).forEach(r => { map[r.sku] = Number(r.precio); });
+      setPrecioEdits(map);
+    })();
+  }, [clienteKey]);
+
+  const savePrecioOverride = async (sku, valor) => {
+    if (!DB_CONFIGURED) return;
+    const v = Number(valor) || 0;
+    const { error } = await supabase
+      .from("precio_overrides")
+      .upsert({ cliente: clienteKey, sku, precio: v, updated_at: new Date().toISOString() },
+              { onConflict: "cliente,sku" });
+    if (error) console.error("savePrecioOverride error:", error);
+  };
+
+  // Formato de fecha en español medio: "5 de mayo de 2026"
+  const formatFechaES = (s) => {
+    if (!s) return "";
+    try {
+      const str = String(s).slice(0, 10);
+      const [y, m, d] = str.split("-").map(n => parseInt(n, 10));
+      if (!y || !m || !d) return s;
+      const meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+      return `${d} de ${meses[m-1]} de ${y}`;
+    } catch { return s; }
   };
 
   const formatMXN = (n) => {
@@ -910,13 +947,15 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const rows = skuDetail.map(s => {
           const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
           const arribo = arriboBySku[s.modelo] || arriboBySku[s.sku] || { piezas: 0, fecha: null };
+          // Precio: override manual del usuario > precio AAA c/desc del roadmap
+          const precioOv = precioEdits[s.sku];
           const prec = preciosBySku[s.modelo] || preciosBySku[s.sku] || null;
-          const precioAAAcd = prec ? Number(prec.precio_descuento) || 0 : 0;
+          const precioFinal = precioOv !== undefined ? Number(precioOv) : (prec ? Number(prec.precio_descuento) || 0 : 0);
           const invAct = Number(s.invActeck) || 0;
           // Si el sugerido NO se completa con inv Acteck, mostrar la próxima
           // fecha de arribo de lo que viene en tránsito (cuándo podremos cumplir).
           const gapSurtido = Math.max(0, sug - invAct);
-          const fechaArriboSiFalta = gapSurtido > 0 ? (arribo.fecha || "") : "";
+          const fechaArriboSiFalta = gapSurtido > 0 ? formatFechaES(arribo.fecha || "") : "";
           return {
             "SKU Cliente":             String(s.sku || ""),
             "SKU Acteck":              s.modelo || "",
@@ -924,11 +963,11 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             "Inventario Cliente":      Number(s.stock) || 0,
             "Promedio últimos 90 días": Number(s.promedio90d) || 0,
             "Sugerido":                sug,
-            "Precio AAA C/descuento":  precioAAAcd,
+            "Precio":                  precioFinal,
             "Inventario Acteck":       invAct,
             "Próx. arribo (si falta)": fechaArriboSiFalta,
             "Próximo arribo piezas":   Number(arribo.piezas) || 0,
-            "Próximo arribo fecha":    arribo.fecha || "",
+            "Próximo arribo fecha":    formatFechaES(arribo.fecha || ""),
           };
         });
         // Filtrar: solo SKUs con sugerido > 0
@@ -939,7 +978,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const totInvCli = filtradas.reduce((s, r) => s + (r["Inventario Cliente"] || 0), 0);
         const totInvAct = filtradas.reduce((s, r) => s + (r["Inventario Acteck"] || 0), 0);
         const totArribo = filtradas.reduce((s, r) => s + (r["Próximo arribo piezas"] || 0), 0);
-        const totMonto  = filtradas.reduce((s, r) => s + (Number(r.Sugerido) || 0) * (Number(r["Precio AAA C/descuento"]) || 0), 0);
+        const totMonto  = filtradas.reduce((s, r) => s + (Number(r.Sugerido) || 0) * (Number(r.Precio) || 0), 0);
         filtradas.push({
           "SKU Cliente": "TOTAL",
           "SKU Acteck": "",
@@ -947,7 +986,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           "Inventario Cliente": totInvCli,
           "Promedio últimos 90 días": "",
           "Sugerido": totSug,
-          "Precio AAA C/descuento": "",
+          "Precio": "",
           "Inventario Acteck": totInvAct,
           "Próx. arribo (si falta)": "",
           "Próximo arribo piezas": totArribo,
@@ -1515,7 +1554,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 // está casi siempre vacío para PCEL); el precio real es "Precio AAA c/desc" de arriba.
                 (clienteKey !== "pcel") && React.createElement("th", { key: "th-precio-gen", style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 700, color: "#065F46", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#ECFDF5" } },
-                  React.createElement("div", { style: { fontSize: 10, color: "#10B981", fontWeight: 600 } }, "Σ " + formatMXN((skuDetail || []).reduce(function(acc, r){ var sug = sugeridoEdits[r.sku] !== undefined ? Number(sugeridoEdits[r.sku]) : Number(r.sugerido || 0); var precioBase = clienteKey === "pcel" ? Number(r.precioAAAcd || 0) : Number(r.precio || 0); return acc + sug * precioBase; }, 0))),
+                  React.createElement("div", { style: { fontSize: 10, color: "#10B981", fontWeight: 600 } }, "Σ " + formatMXN((skuDetail || []).reduce(function(acc, r){ var sug = sugeridoEdits[r.sku] !== undefined ? Number(sugeridoEdits[r.sku]) : Number(r.sugerido || 0); var precioBase = clienteKey === "pcel" ? (precioEdits[r.sku] !== undefined ? Number(precioEdits[r.sku]) : Number(r.precioAAAcd || 0)) : Number(r.precio || 0); return acc + sug * precioBase; }, 0))),
                   React.createElement("div", {}, "Total")
                 ),
               ),
@@ -1579,11 +1618,25 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       style: { width: 60, padding: "2px 4px", border: "1px solid #E2E8F0", borderRadius: 4, textAlign: "right", fontSize: 11 }
                     })
                   ),
-                  // PCEL: Precio AAA C/descuento
+                  // PCEL: Precio editable (override o precio AAA c/desc)
                   (clienteKey === "pcel") && React.createElement("td", {
                     key: "td-aaa",
-                    style: { textAlign: "right", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#F0F9FF", color: s.precioAAAcd > 0 ? "#1E40AF" : "#CBD5E1", fontWeight: 500 }
-                  }, s.precioAAAcd > 0 ? ("$" + Number(s.precioAAAcd).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "-"),
+                    style: { textAlign: "right", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#F0F9FF" }
+                  },
+                    React.createElement("input", {
+                      type: "number", min: 0, step: "0.01",
+                      value: precioEdits[s.sku] !== undefined ? precioEdits[s.sku] : (s.precioAAAcd || 0),
+                      onChange: function(e) {
+                        var nv = Number(e.target.value) || 0;
+                        setPrecioEdits(Object.assign({}, precioEdits, { [s.sku]: nv }));
+                      },
+                      onBlur: function(e) {
+                        savePrecioOverride(s.sku, Number(e.target.value) || 0);
+                      },
+                      style: { width: 80, padding: "2px 4px", border: "1px solid #E2E8F0", borderRadius: 4, textAlign: "right", fontSize: 11, background: "#fff", color: "#1E40AF", fontWeight: 500 },
+                      title: "Precio editable. Se guarda automáticamente."
+                    })
+                  ),
                   // PCEL: Próx. arribo (si falta) — solo mostrar cuando sugerido > invActeck
                   (clienteKey === "pcel") && (function() {
                     const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
@@ -1593,14 +1646,16 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       key: "td-arr",
                       style: { textAlign: "left", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#FEF3C7", color: mostrar ? "#78350F" : "#CBD5E1", fontWeight: mostrar ? 600 : 400 },
                       title: mostrar ? `Faltan ${gap} piezas · Arribo: ${s.arriboPiezas} piezas` : (s.arriboFecha ? `Stock suficiente (${s.invActeck})` : "Sin tránsito")
-                    }, mostrar ? s.arriboFecha : "-");
+                    }, mostrar ? formatFechaES(s.arriboFecha) : "-");
                   })(),
                   // TD de "Precio" genérico — oculto para PCEL (su precio es el AAA c/desc de arriba)
                   (clienteKey !== "pcel") && React.createElement("td", { key: "td-precio-gen", style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11, whiteSpace: "nowrap" } }, (s.precio && s.precio > 0) ? ("$" + Number(s.precio).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })) : "-"),
                   (function(){
                     var sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
-                    // Para PCEL: usar precio AAA con descuento. Otros: precio_venta.
-                    var precioBase = clienteKey === "pcel" ? Number(s.precioAAAcd || 0) : Number(s.precio || 0);
+                    // Para PCEL: override o precio AAA con descuento. Otros: precio_venta.
+                    var precioBase = clienteKey === "pcel"
+                      ? (precioEdits[s.sku] !== undefined ? Number(precioEdits[s.sku]) : Number(s.precioAAAcd || 0))
+                      : Number(s.precio || 0);
                     var tot = sug * precioBase;
                     return React.createElement("td", { style: { textAlign: "right", padding: "6px", color: tot > 0 ? "#065F46" : "#CBD5E1", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", background: tot > 0 ? "#F0FDF4" : "transparent" } }, tot > 0 ? ("$" + Math.round(tot).toLocaleString("es-MX")) : "-");
                   })(),
