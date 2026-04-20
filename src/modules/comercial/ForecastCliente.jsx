@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from '../../lib/supabase';
+import { fetchSelloutSku, fetchInventarioCliente } from '../../lib/pcelAdapter';
 
 export default function ForecastCliente({ cliente, clienteKey }) {
   const [loading, setLoading] = React.useState(true);
@@ -16,11 +17,12 @@ export default function ForecastCliente({ cliente, clienteKey }) {
   React.useEffect(function() {
     if (!clienteKey) return;
     setLoading(true);
+    const anioActual = new Date().getFullYear();
     Promise.all([
       supabase.from('ventas_mensuales').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),
       supabase.from('sell_in_sku').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),
-      supabase.from('sellout_sku').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),
-      supabase.from('inventario_cliente').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),
+      fetchSelloutSku(clienteKey, anioActual),
+      fetchInventarioCliente(clienteKey),
       supabase.from('inventario_en_camino').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),
       supabase.from('productos_cliente').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; })
     ]).then(function(results) {

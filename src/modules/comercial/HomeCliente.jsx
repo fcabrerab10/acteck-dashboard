@@ -4,6 +4,7 @@ import { clientes } from '../../lib/constants';
 import { formatMXN, formatFecha, calcularSalud, loadSheetJS } from '../../lib/utils';
 import { Semaforo, TarjetaPendientes } from '../../components';
 import { TrendingUp, Wallet, ClipboardList, Target, BarChart3, Package } from 'lucide-react';
+import { fetchSelloutSku, fetchInventarioCliente } from '../../lib/pcelAdapter';
 
 const iconStyle14 = { width: 14, height: 14, verticalAlign: "middle", marginRight: 4 };
 const iconStyle16 = { width: 16, height: 16, verticalAlign: "middle", marginRight: 6 };
@@ -313,11 +314,11 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       const ACTECK_ALMACENES = [1, 2, 3, 4, 14, 16, 17, 25, 44];
       const [siData, soData, mR, imR, minR, invData, cuotasR, sdR, ecR, tareasR, prodData, invActData] = await Promise.all([
         fetchAllPages(() => supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
-        fetchAllPages(() => supabase.from("sellout_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
+        fetchSelloutSku(clienteKey, anioResumen),
         supabase.from("metas_anuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).maybeSingle(),
         supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).order("mes"),
         supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
-        fetchAllPages(() => supabase.from("inventario_cliente").select("sku,stock,valor,costo_convenio,dias_sin_venta,anio,semana,titulo,marca").eq("cliente", clienteKey)),
+        fetchInventarioCliente(clienteKey),
         supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
         fetchAllPages(() => supabase.from("sellout_detalle").select("fecha,total,cantidad,no_parte,marca").eq("cliente", clienteKey).gte("fecha", hace56dias)),
         supabase.from("estados_cuenta").select("*").eq("cliente", clienteKey).order("anio", { ascending: false }).order("semana", { ascending: false }).limit(1).maybeSingle(),

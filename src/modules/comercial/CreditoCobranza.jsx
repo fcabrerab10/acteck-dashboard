@@ -3,6 +3,7 @@ import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { formatMXN, formatUSD, formatFecha } from '../../lib/utils';
 import { CardHeader } from '../../components';
 import { BarChart3, CalendarDays, TrendingUp, CreditCard } from 'lucide-react';
+import { fetchSelloutSku } from '../../lib/pcelAdapter';
 
 const NOMBRES_MES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -27,7 +28,7 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
         supabase.from("estados_cuenta").select("anio, semana, fecha_corte, saldo_actual, saldo_vencido, dso")
           .eq("cliente", clienteKey).order("anio", { ascending: true }).order("semana", { ascending: true }).limit(20),
         supabase.from("sell_in_sku").select("mes, monto_pesos").eq("cliente", clienteKey).eq("anio", anio),
-        supabase.from("sellout_sku").select("mes, monto_pesos").eq("cliente", clienteKey).eq("anio", anio),
+        fetchSelloutSku(clienteKey, anio),
         supabase.from("cuotas_mensuales").select("mes, cuota_min").eq("cliente", clienteKey).eq("anio", anio).order("mes"),
       ]);
       setEstado((ecRes.data && ecRes.data[0]) || null);
@@ -40,7 +41,9 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
       });
       setSellInByMes(siByMes);
       const byMes = {};
-      (soRes.data || []).forEach(r => {
+      // soRes puede ser array (adapter) u objeto {data, error} de supabase
+      const soArr = Array.isArray(soRes) ? soRes : (soRes.data || []);
+      soArr.forEach(r => {
         const m = Number(r.mes); byMes[m] = (byMes[m] || 0) + (Number(r.monto_pesos) || 0);
       });
       setSellOut(byMes);

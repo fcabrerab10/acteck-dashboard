@@ -373,11 +373,13 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     if (!DB_CONFIGURED || !supabase) return;
     setLoading(true);
     try {
+      // Para PCEL: usar adapter para sellout + inventario (leen de sellout_pcel)
+      const { fetchSelloutSku, fetchInventarioCliente } = await import('../../lib/pcelAdapter');
       const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap] = await Promise.all([
         fetchAllPagesREST(`productos_cliente?select=*&cliente=eq.${clienteKey}`),
         fetchAllPagesREST(`sell_in_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
-        fetchAllPagesREST(`sellout_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
-        fetchAllPagesREST(`inventario_cliente?select=*&cliente=eq.${clienteKey}`),
+        fetchSelloutSku(clienteKey, 2026),
+        fetchInventarioCliente(clienteKey),
         fetchAllPagesREST(`inventario_acteck?select=articulo,no_almacen,disponible&no_almacen=in.(${ACTECK_ALMACENES.join(',')})`),
         fetchAllPagesREST(`transito_sku?select=sku,inventario_transito,siguiente_arribo,payload,sort_order`),
         fetchAllPagesREST(`roadmap_sku?select=sku,rdmp,descripcion,payload,sort_order&order=sort_order.asc`),

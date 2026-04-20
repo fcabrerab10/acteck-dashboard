@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { clientes } from '../../lib/constants';
 import { Target } from 'lucide-react';
+import { fetchSelloutSku, fetchSelloutSkuRango, fetchInventarioCliente } from '../../lib/pcelAdapter';
 
 export default function AnalisisCliente({ cliente, clienteKey }) {
   var el = React.createElement;
@@ -50,12 +51,12 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
         supabase.from("marketing_actividades").select("*").eq("cliente", ck).eq("anio", anio),
         fetchAllPages(function() { return supabase.from("productos_cliente").select("*").eq("cliente", ck); }),
         fetchAllPages(function() { return supabase.from("sell_in_sku").select("*").eq("cliente", ck).eq("anio", anio); }),
-        fetchAllPages(function() { return supabase.from("sellout_sku").select("*").eq("cliente", ck).eq("anio", anio); }),
-        fetchAllPages(function() { return supabase.from("inventario_cliente").select("*").eq("cliente", ck); }),
+        fetchSelloutSku(ck, anio),
+        fetchInventarioCliente(ck),
         supabase.from("cuotas_mensuales").select("*").eq("cliente", ck).eq("anio", anio),
         // Para comparativas: últimos 2 años (actual y anterior)
         fetchAllPages(function() { return supabase.from("sell_in_sku").select("*").eq("cliente", ck).gte("anio", anio - 1).lte("anio", anio); }),
-        fetchAllPages(function() { return supabase.from("sellout_sku").select("*").eq("cliente", ck).gte("anio", anio - 1).lte("anio", anio); }),
+        fetchSelloutSkuRango(ck, anio - 1, anio),
         // Último estado de cuenta
         supabase.from("estados_cuenta").select("*").eq("cliente", ck).order("anio", { ascending: false }).order("semana", { ascending: false }).limit(1).maybeSingle(),
       ]);
