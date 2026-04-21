@@ -113,13 +113,45 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     if (!DB_CONFIGURED || !clienteKey) return;
     const { data } = await supabase
       .from("propuestas_compra")
-      .select("id, fecha, skus_count, piezas_total, monto_total, filas, nota")
+      .select("id, fecha, skus_count, piezas_total, monto_total, filas, nota, estatus, cerrada_at")
       .eq("cliente", clienteKey)
       .order("fecha", { ascending: false })
       .limit(50);
     setPropuestasHist(data || []);
   }, [clienteKey]);
   React.useEffect(() => { cargarPropuestasCompra(); }, [cargarPropuestasCompra]);
+
+  // SKUs que ya están en propuestas pendientes (aún no cruzadas con OC)
+  // → se excluyen de "SKUs en riesgo de desabasto"
+  const skusEnPropuestasPendientes = React.useMemo(() => {
+    const set = new Set();
+    (propuestasHist || []).forEach(p => {
+      if (p.estatus !== "pendiente") return;
+      const filas = Array.isArray(p.filas) ? p.filas : [];
+      filas.forEach(f => {
+        const sku = String(f["SKU Cliente"] || "").trim();
+        if (sku && sku !== "TOTAL") set.add(sku);
+      });
+    });
+    return set;
+  }, [propuestasHist]);
+
+  // Cerrar propuesta (pasa de pendiente → cerrada, sus SKUs vuelven a aparecer en riesgo)
+  const cerrarPropuesta = async (id) => {
+    if (!confirm("¿Marcar esta propuesta como cerrada? Los SKUs volverán a aparecer en riesgo de desabasto si aplica.")) return;
+    const { error } = await supabase.from("propuestas_compra")
+      .update({ estatus: "cerrada", cerrada_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) { alert("Error: " + error.message); return; }
+    await cargarPropuestasCompra();
+  };
+  const reactivarPropuesta = async (id) => {
+    const { error } = await supabase.from("propuestas_compra")
+      .update({ estatus: "pendiente", cerrada_at: null })
+      .eq("id", id);
+    if (error) { alert("Error: " + error.message); return; }
+    await cargarPropuestasCompra();
+  };
 
   // Re-descargar un Excel histórico
   const descargarPropuestaHistorica = async (prop) => {
@@ -784,8 +816,13 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       });
     });
 
-    return riesgo.sort((a, b) => a.diasRestantes - b.diasRestantes);
-  }, [datos, clienteKey, sugeridoEdits]);
+    // Excluir SKUs que ya están en propuestas pendientes (ya se envió sugerido)
+    const filtrado = riesgo.filter(r => !skusEnPropuestasPendientes.has(String(r.sku)));
+    return filtrado.sort((a, b) => a.diasRestantes - b.diasRestantes);
+  }, [datos, clienteKey, sugeridoEdits, skusEnPropuestasPendientes]);
+
+  // Cuántos SKUs quedaron fuera del riesgo por estar en propuestas pendientes
+  const skusOcultosEnPropuesta = React.useMemo(() => skusEnPropuestasPendientes.size, [skusEnPropuestasPendientes]);
 
   // Roadmap + Tránsito cruce: identifica productos nuevos (en tránsito sin roadmap)
   // Solo considera SKUs que empiezan con "AC" o "BR"
@@ -1562,8 +1599,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       skusRiesgo.length > 0 && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
         React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 } },
           React.createElement("h3", { className: "font-bold text-gray-800" }, "\u26A0\uFE0F SKUs en riesgo de desabasto"),
-          React.createElement("div", { style: { fontSize: 12, color: "#64748B" } },
-            skusRiesgo.length + " SKUs se agotan en menos de 30 d\u00edas con la rotaci\u00f3n actual"
+          React.createElement("div", { style: { fontSize: 12, color: "#64748B", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+            React.createElement("span", null,
+              skusRiesgo.length + " SKUs se agotan en menos de 30 d\u00edas con la rotaci\u00f3n actual"
+            ),
+            skusOcultosEnPropuesta > 0 && React.createElement("span", {
+              style: { background: "#DBEAFE", color: "#1E40AF", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 600 },
+              title: "SKUs ocultos porque ya están en propuestas exportadas pendientes. Al cerrarlas (cuando llegue la OC del cliente) volverán a aparecer si siguen en riesgo."
+            }, "\u00b7 " + skusOcultosEnPropuesta + " en propuesta pendiente")
           )
         ),
         React.createElement("div", { style: { overflowX: "auto", maxHeight: 400, overflowY: "auto" } },
@@ -2119,6 +2162,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                     React.createElement("thead", null,
                       React.createElement("tr", { style: { background: "#F1F5F9", position: "sticky", top: 0 } },
                         React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Fecha"),
+                        React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Estatus"),
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "SKUs"),
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Piezas"),
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Monto"),
@@ -2126,34 +2170,56 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       )
                     ),
                     React.createElement("tbody", null,
-                      propuestasHist.map(p => React.createElement("tr", { key: p.id, style: { borderBottom: "1px solid #F1F5F9" } },
-                        React.createElement("td", { style: { padding: "6px 10px", fontSize: 11, color: "#1E293B" } },
-                          (function() {
-                            try {
-                              const d = new Date(p.fecha);
-                              return d.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
-                                + " \u00B7 " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
-                            } catch { return String(p.fecha).slice(0, 16); }
-                          })()
-                        ),
-                        React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11 } }, (p.skus_count || 0).toLocaleString("es-MX")),
-                        React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11 } }, (Number(p.piezas_total) || 0).toLocaleString("es-MX")),
-                        React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11, fontWeight: 600, color: "#065F46" } },
-                          "$" + Math.round(Number(p.monto_total) || 0).toLocaleString("es-MX")
-                        ),
-                        React.createElement("td", { style: { padding: "6px 10px", textAlign: "center" } },
-                          React.createElement("button", {
-                            onClick: () => descargarPropuestaHistorica(p),
-                            style: { padding: "3px 8px", fontSize: 11, background: "#3B82F6", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", marginRight: 6 },
-                            title: "Re-descargar Excel"
-                          }, "\uD83D\uDCE5"),
-                          React.createElement("button", {
-                            onClick: () => borrarPropuestaHistorica(p.id),
-                            style: { padding: "3px 8px", fontSize: 11, background: "#fff", color: "#EF4444", border: "1px solid #FCA5A5", borderRadius: 4, cursor: "pointer" },
-                            title: "Eliminar"
-                          }, "\uD83D\uDDD1\uFE0F")
-                        ),
-                      ))
+                      propuestasHist.map(p => {
+                        const esPend = (p.estatus || "pendiente") === "pendiente";
+                        return React.createElement("tr", {
+                          key: p.id,
+                          style: { borderBottom: "1px solid #F1F5F9", background: esPend ? "#EFF6FF" : "#fff", opacity: esPend ? 1 : 0.75 }
+                        },
+                          React.createElement("td", { style: { padding: "6px 10px", fontSize: 11, color: "#1E293B" } },
+                            (function() {
+                              try {
+                                const d = new Date(p.fecha);
+                                return d.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+                                  + " \u00B7 " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+                              } catch { return String(p.fecha).slice(0, 16); }
+                            })()
+                          ),
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "center" } },
+                            esPend
+                              ? React.createElement("span", { style: { padding: "2px 8px", borderRadius: 10, background: "#DBEAFE", color: "#1E40AF", fontSize: 10, fontWeight: 700 } }, "\u00b7 Pendiente")
+                              : React.createElement("span", { style: { padding: "2px 8px", borderRadius: 10, background: "#D1FAE5", color: "#065F46", fontSize: 10, fontWeight: 700 } }, "\u2713 Cerrada")
+                          ),
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11 } }, (p.skus_count || 0).toLocaleString("es-MX")),
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11 } }, (Number(p.piezas_total) || 0).toLocaleString("es-MX")),
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11, fontWeight: 600, color: "#065F46" } },
+                            "$" + Math.round(Number(p.monto_total) || 0).toLocaleString("es-MX")
+                          ),
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "center", whiteSpace: "nowrap" } },
+                            React.createElement("button", {
+                              onClick: () => descargarPropuestaHistorica(p),
+                              style: { padding: "3px 8px", fontSize: 11, background: "#3B82F6", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", marginRight: 6 },
+                              title: "Re-descargar Excel"
+                            }, "\uD83D\uDCE5"),
+                            esPend
+                              ? React.createElement("button", {
+                                  onClick: () => cerrarPropuesta(p.id),
+                                  style: { padding: "3px 8px", fontSize: 11, background: "#fff", color: "#059669", border: "1px solid #6EE7B7", borderRadius: 4, cursor: "pointer", marginRight: 6 },
+                                  title: "Cerrar propuesta (los SKUs volver\u00e1n a aparecer en riesgo si aplica)"
+                                }, "\u2713 Cerrar")
+                              : React.createElement("button", {
+                                  onClick: () => reactivarPropuesta(p.id),
+                                  style: { padding: "3px 8px", fontSize: 11, background: "#fff", color: "#1E40AF", border: "1px solid #BFDBFE", borderRadius: 4, cursor: "pointer", marginRight: 6 },
+                                  title: "Reactivar propuesta"
+                                }, "\u21bb Reactivar"),
+                            React.createElement("button", {
+                              onClick: () => borrarPropuestaHistorica(p.id),
+                              style: { padding: "3px 8px", fontSize: 11, background: "#fff", color: "#EF4444", border: "1px solid #FCA5A5", borderRadius: 4, cursor: "pointer" },
+                              title: "Eliminar"
+                            }, "\uD83D\uDDD1\uFE0F")
+                          ),
+                        );
+                      })
                     )
                   )
                 )
