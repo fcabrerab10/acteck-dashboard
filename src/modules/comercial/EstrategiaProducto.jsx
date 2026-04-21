@@ -711,39 +711,81 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     return { efi, skusActivos, skusConInv, diasCob, invActeckPiezas, sugPiezas, sugMonto, sugSkus };
   }, [datos, aggs, clienteKey]);
 
-  // SKUs en riesgo de desabasto (rotación alta vs stock bajo)
+  // SKUs en riesgo de desabasto — reusa el sugerido del Detalle por SKU
+  // para consistencia. Usa los mismos overrides (sugeridoEdits) que el usuario
+  // haya editado en la tabla principal.
   const skusRiesgo = React.useMemo(() => {
     if (!datos) return [];
     const mesActual = new Date().getMonth() + 1;
     const transitoBySku = datos.transitoBySku || {};
     const actStockBySku = datos.actStockBySku || {};
     const riesgo = [];
-    const skusAll = new Set();
-    datos.sellOut.forEach(r => { if (r.sku) skusAll.add(r.sku); });
-    skusAll.forEach(sku => {
-      const soData = datos.sellOut.filter(r => r.sku === sku);
+
+    // Iteramos sobre productos (catálogo), igual que skuDetail
+    (datos.productos || []).forEach(p => {
+      const skuExterno = (clienteKey === 'pcel' && p.modelo) ? p.modelo : p.sku;
+      const soData = datos.sellOut.filter(r => r.sku === p.sku);
       const soSinMes = soData.filter(r => Number(r.mes) < mesActual);
-      const prom = soSinMes.slice(-3).length > 0 ? soSinMes.slice(-3).reduce((s, r) => s + (r.piezas || 0), 0) / Math.min(3, soSinMes.slice(-3).length) : 0;
+      const ultimos3 = soSinMes.slice(-3);
+      const prom = ultimos3.length > 0
+        ? ultimos3.reduce((s, r) => s + (r.piezas || 0), 0) / ultimos3.length
+        : 0;
       if (prom < 2) return; // filtro mínimo de rotación para no inundar
-      const invData = datos.inventario.find(r => r.sku === sku);
+
+      const invData = datos.inventario.find(r => r.sku === p.sku);
       const stock = Number(invData?.stock) || 0;
       const diasRestantes = prom > 0 ? Math.round((stock / prom) * 30) : 999;
-      if (diasRestantes >= 30) return; // solo los que se agotan en menos de 30 días
-      const prod = datos.productos.find(p => p.sku === sku);
-      const titulo = (invData && invData.titulo) || (prod && prod.descripcion) || sku;
+      if (diasRestantes >= 30) return;
+
+      const invActeck = actStockBySku[skuExterno] || actStockBySku[p.sku] || 0;
+      const invTransito = transitoBySku[skuExterno] || transitoBySku[p.sku] || 0;
+
+      // Sugerido: mismo valor que en Detalle por SKU
+      // Buscamos en skuDetail (computado en el useMemo paralelo) para tomar
+      // el mismo número ya calculado con overrides. Como skuDetail se calcula
+      // después, usamos una fórmula equivalente inline pero respetando override.
+      const sinStock = clienteKey === "pcel" && invActeck === 0 && invTransito === 0;
+      let sugerido = 0;
+      if (!sinStock && clienteKey === "pcel") {
+        // Fórmula PCEL simplificada: meta 3m cobertura, cap Acteck, mínimo 20
+        const disponibleActeck = invActeck + invTransito;
+        const META = 3, MIN = 20;
+        if (disponibleActeck >= MIN && prom > 0) {
+          const base = META * prom;
+          const transPcel = 0; // Riesgo no carga transito PCEL aquí (lo tiene skuDetail)
+          const ideal = Math.max(0, Math.round(base - stock - transPcel));
+          sugerido = Math.min(ideal, disponibleActeck);
+          if (sugerido > 0 && sugerido < MIN) sugerido = MIN;
+        }
+      }
+      // Aplicar override manual si existe
+      if (sugeridoEdits[p.sku] !== undefined) {
+        // Si está en sinStock, forzar 0 ignorando override
+        sugerido = sinStock ? 0 : Number(sugeridoEdits[p.sku]) || 0;
+      }
+
+      const prod = datos.productos.find(q => q.sku === p.sku);
+      const titulo = (invData && invData.titulo) || (prod && prod.descripcion) || p.descripcion || p.sku;
+
       riesgo.push({
-        sku,
+        sku: p.sku,
+        modelo: p.modelo || "",
         titulo,
         stock,
         promMes: Math.round(prom),
         diasRestantes,
-        invActeck: actStockBySku[sku] || 0,
-        transito: transitoBySku[sku] || 0,
-        urgencia: diasRestantes < 7 ? 3 : diasRestantes < 15 ? 2 : 1,
+        invActeck,
+        transito: invTransito,
+        sugerido,
+        sinStock,
+        urgencia: sinStock ? 3
+                : diasRestantes < 7 ? 3
+                : diasRestantes < 15 ? 2 : 1,
       });
     });
+
     return riesgo.sort((a, b) => a.diasRestantes - b.diasRestantes);
-  }, [datos]);
+  }, [datos, clienteKey, sugeridoEdits]);
 
   // Roadmap + Tránsito cruce: identifica productos nuevos (en tránsito sin roadmap)
   // Solo considera SKUs que empiezan con "AC" o "BR"
@@ -1531,28 +1573,65 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 20 } }, "⚠"),
                 React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA" } }, "SKU"),
                 React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA" } }, "Descripci\u00f3n"),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Stock hoy"),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Rotaci\u00f3n/mes"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Inv Cliente"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Prom 90d"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "D\u00edas restantes"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Inv Acteck"),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Tr\u00e1nsito")
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Tr\u00e1nsito"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90, background: "#FEE2E2" } }, "Sugerido")
               )
             ),
             React.createElement("tbody", null,
               skusRiesgo.map(function(s, i) {
-                var bg = s.urgencia === 3 ? "#FEF2F2" : s.urgencia === 2 ? "#FFFBEB" : "#FEFCE8";
-                var dot = s.urgencia === 3 ? "#EF4444" : s.urgencia === 2 ? "#F59E0B" : "#FBBF24";
-                return React.createElement("tr", { key: s.sku, style: { borderBottom: "1px solid #f1f5f9", background: bg } },
+                // sinStock (0 inv + 0 tránsito) → rojo intenso
+                var bg = s.sinStock ? "#FEE2E2"
+                       : s.urgencia === 3 ? "#FEF2F2"
+                       : s.urgencia === 2 ? "#FFFBEB"
+                       : "#FEFCE8";
+                var dot = s.sinStock ? "#B91C1C"
+                        : s.urgencia === 3 ? "#EF4444"
+                        : s.urgencia === 2 ? "#F59E0B"
+                        : "#FBBF24";
+                return React.createElement("tr", {
+                  key: s.sku,
+                  style: { borderBottom: "1px solid #f1f5f9", background: bg },
+                  title: s.sinStock ? "\u26A0 Cr\u00edtico: sin inventario Acteck ni tr\u00e1nsito \u2014 no se puede surtir" : undefined,
+                },
                   React.createElement("td", { style: { padding: "8px 10px", textAlign: "center" } },
-                    React.createElement("span", { style: { display: "inline-block", width: 10, height: 10, borderRadius: 5, background: dot } })
+                    React.createElement("span", {
+                      style: {
+                        display: "inline-block", width: 10, height: 10, borderRadius: 5,
+                        background: dot,
+                        boxShadow: s.sinStock ? "0 0 0 2px #FCA5A5" : "none",
+                      }
+                    })
                   ),
                   React.createElement("td", { style: { padding: "8px 10px", fontFamily: "ui-monospace,monospace", color: "#1E293B", fontWeight: 600 } }, s.sku),
                   React.createElement("td", { style: { padding: "8px 10px", color: "#475569", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.titulo }, s.titulo.slice(0, 70)),
                   React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E293B", fontWeight: 600 } }, s.stock.toLocaleString("es-MX")),
                   React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#475569" } }, s.promMes.toLocaleString("es-MX")),
                   React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: dot, fontWeight: 700 } }, s.diasRestantes + "d"),
-                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: s.invActeck > 0 ? "#10B981" : "#94A3B8", fontWeight: s.invActeck > 0 ? 600 : 400 } }, s.invActeck.toLocaleString("es-MX")),
-                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: s.transito > 0 ? "#7C3AED" : "#94A3B8" } }, s.transito > 0 ? s.transito.toLocaleString("es-MX") : "—")
+                  React.createElement("td", {
+                    style: {
+                      padding: "8px 10px", textAlign: "right",
+                      color: s.invActeck > 0 ? "#10B981" : "#B91C1C",
+                      fontWeight: s.invActeck > 0 ? 600 : 700,
+                    }
+                  }, s.invActeck > 0 ? s.invActeck.toLocaleString("es-MX") : "0"),
+                  React.createElement("td", {
+                    style: { padding: "8px 10px", textAlign: "right", color: s.transito > 0 ? "#7C3AED" : "#94A3B8" }
+                  }, s.transito > 0 ? s.transito.toLocaleString("es-MX") : "—"),
+                  React.createElement("td", {
+                    style: {
+                      padding: "8px 10px", textAlign: "right",
+                      background: s.sinStock ? "#FEE2E2" : "#ECFDF5",
+                      color: s.sinStock ? "#B91C1C" : (s.sugerido > 0 ? "#065F46" : "#94A3B8"),
+                      fontWeight: s.sugerido > 0 || s.sinStock ? 700 : 400,
+                    },
+                    title: s.sinStock
+                      ? "Sin inventario ni tr\u00e1nsito Acteck"
+                      : (sugeridoEdits[s.sku] !== undefined ? "Sugerido editado manualmente" : "Sugerido autom\u00e1tico"),
+                  }, s.sinStock ? "0 ⚠" : (s.sugerido > 0 ? s.sugerido.toLocaleString("es-MX") : "0"))
                 );
               })
             )
