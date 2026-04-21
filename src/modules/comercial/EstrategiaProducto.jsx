@@ -1621,17 +1621,48 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   React.createElement("td", {
                     style: { padding: "8px 10px", textAlign: "right", color: s.transito > 0 ? "#7C3AED" : "#94A3B8" }
                   }, s.transito > 0 ? s.transito.toLocaleString("es-MX") : "—"),
-                  React.createElement("td", {
-                    style: {
-                      padding: "8px 10px", textAlign: "right",
-                      background: s.sinStock ? "#FEE2E2" : "#ECFDF5",
-                      color: s.sinStock ? "#B91C1C" : (s.sugerido > 0 ? "#065F46" : "#94A3B8"),
-                      fontWeight: s.sugerido > 0 || s.sinStock ? 700 : 400,
-                    },
-                    title: s.sinStock
-                      ? "Sin inventario ni tr\u00e1nsito Acteck"
-                      : (sugeridoEdits[s.sku] !== undefined ? "Sugerido editado manualmente" : "Sugerido autom\u00e1tico"),
-                  }, s.sinStock ? "0 ⚠" : (s.sugerido > 0 ? s.sugerido.toLocaleString("es-MX") : "0"))
+                  (function() {
+                    // Tres casos visuales:
+                    //   sinStock (invAct=0 && trans=0) → rojo intenso "0 ⚠"
+                    //   sugerido = 0 con stock < 20    → ámbar "Insuficiente" (no se propone)
+                    //   sugerido > 0                   → verde con el número
+                    const totalDisponible = (s.invActeck || 0) + (s.transito || 0);
+                    let bgCell, colorCell, textoCell, titleCell, peso;
+                    if (s.sinStock) {
+                      bgCell = "#FEE2E2";
+                      colorCell = "#B91C1C";
+                      textoCell = "0 \u26A0";
+                      titleCell = "Sin inventario ni tr\u00e1nsito Acteck";
+                      peso = 700;
+                    } else if (s.sugerido === 0 && totalDisponible > 0 && totalDisponible < 20) {
+                      bgCell = "#FFFBEB";
+                      colorCell = "#92400E";
+                      textoCell = "Insuficiente";
+                      titleCell = `Solo ${totalDisponible} piezas disponibles en Acteck (m\u00ednimo: 20). No se propone.`;
+                      peso = 500;
+                    } else if (s.sugerido > 0) {
+                      bgCell = "#ECFDF5";
+                      colorCell = "#065F46";
+                      textoCell = s.sugerido.toLocaleString("es-MX");
+                      titleCell = sugeridoEdits[s.sku] !== undefined
+                        ? "Sugerido editado manualmente"
+                        : "Sugerido autom\u00e1tico";
+                      peso = 700;
+                    } else {
+                      bgCell = "#F8FAFC";
+                      colorCell = "#94A3B8";
+                      textoCell = "\u2014";
+                      titleCell = "Sin sugerido";
+                      peso = 400;
+                    }
+                    return React.createElement("td", {
+                      style: {
+                        padding: "8px 10px", textAlign: "right",
+                        background: bgCell, color: colorCell, fontWeight: peso,
+                      },
+                      title: titleCell,
+                    }, textoCell);
+                  })()
                 );
               })
             )
