@@ -190,9 +190,102 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     return "$" + Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   };
 
+  // Keys en Title Case porque aggs normaliza las marcas (ACTECK/Acteck → "Acteck",
+  // BALAM RUSH/Balam Rush → "Balam Rush"). "Balam Rush Spectrum" se consolida
+  // en "Balam Rush" en la comparativa por marca (Spectrum es modelo, no marca).
   const MARCA_COLORES = {
-    "ACTECK": "#3B82F6",
+    "Acteck": "#3B82F6",
     "Balam Rush": "#8B5CF6",
+  };
+
+  // Normaliza un modelo Acteck para matchear entre Digitalife (sku="AC-XXXXXX")
+  // y PCEL (modelo="XXXXXX"). Quita prefijo "AC-" y uniforma mayúsculas.
+  const normModelo = (s) => {
+    if (!s) return "";
+    return String(s).trim().toUpperCase().replace(/^AC-?/, "");
+  };
+
+  // Quita acentos y normaliza espacios para comparar subfamilias de PCEL
+  // (la BD a veces viene con/ sin acentos, con doble espacio, etc.)
+  const normSubfam = (s) => {
+    if (!s) return "";
+    return String(s).trim().toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ");
+  };
+
+  // Mapeo PCEL subfamilia → 13 categorías canónicas de Digitalife
+  // (Audio, Cables, Celulares, Cooling, Energía, Fuentes, Gabinetes,
+  //  Monitores, Mouse, Sillas, Soportes, Teclados, Accesorios)
+  const SUBFAM_TO_CAT = {
+    // Audio
+    "audfonos y micrfonos": "Audio",
+    "audifonos y microfonos": "Audio",
+    "bocinas": "Audio",
+    "home theaters": "Audio",
+    "home theater": "Audio",
+    "cables de audio": "Audio",
+    // Cables
+    "cables usb": "Cables",
+    "cables de video": "Cables",
+    "cables de red": "Cables",
+    "cables de energa": "Cables",
+    "cables de energia": "Cables",
+    // Celulares / Tablets
+    "accesorios para celular": "Celulares",
+    "accesorios para ipad y tablets": "Celulares",
+    "tablets": "Celulares",
+    // Cooling
+    "disipadores y ventiladores": "Cooling",
+    "pastas trmicas": "Cooling",
+    "pastas termicas": "Cooling",
+    // Energía
+    "pilas bateras y cargadores": "Energía",
+    "pilas baterias y cargadores": "Energía",
+    "reguladores multicontactos": "Energía",
+    "reguladores  multicontactos": "Energía",
+    // Fuentes
+    "fuentes de poder": "Fuentes",
+    // Gabinetes
+    "gabinetes": "Gabinetes",
+    "gabinetes y accesorios para discos duros": "Gabinetes",
+    // Monitores
+    "monitores": "Monitores",
+    // Mouse
+    "mouse ratones": "Mouse",
+    "mouse  ratones": "Mouse",
+    "mouse pads": "Mouse",
+    // Sillas
+    "sillas gamer": "Sillas",
+    "sillas para oficina": "Sillas",
+    // Soportes
+    "bases para laptops": "Soportes",
+    "soportes para tv": "Soportes",
+    // Teclados
+    "teclados": "Teclados",
+    // Accesorios (catch-all)
+    "escritorios": "Accesorios",
+    "articulos de oficina y mobiliario": "Accesorios",
+    "artculos de oficina y mobiliario": "Accesorios",
+    "cmaras web": "Accesorios",
+    "camaras web": "Accesorios",
+    "cmaras de vigilancia": "Accesorios",
+    "camaras de vigilancia": "Accesorios",
+    "controles": "Accesorios",
+    "controles remotos": "Accesorios",
+    "adaptadores bluetooth": "Accesorios",
+    "tarjetas y adaptadores inalmbricos": "Accesorios",
+    "tarjetas y adaptadores inalambricos": "Accesorios",
+    "limpieza": "Accesorios",
+    "herramientas": "Accesorios",
+    "lectores de memoria flash": "Accesorios",
+    "setup gamer": "Accesorios",
+    "desktops": "Accesorios",
+    "remate de mercanca": "Accesorios",
+    "remate de mercancia": "Accesorios",
+    "caja abierta": "Accesorios",
+    "hogar inteligente": "Accesorios",
+    "accesorios": "Accesorios",
   };
 
   const ESTADO_COLORES = {
@@ -523,7 +616,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       const esPcel = clienteKey === 'pcel';
 
       const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap, precios,
-             histPcel, snapshotPcel] = await Promise.all([
+             histPcel, snapshotPcel, dglCategoriasRaw] = await Promise.all([
         fetchAllPagesREST(`productos_cliente?select=*&cliente=eq.${clienteKey}`),
         fetchAllPagesREST(`sell_in_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
         fetchSelloutSku(clienteKey, 2026),
@@ -535,7 +628,19 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         // Extras sólo para PCEL:
         esPcel ? fetchHistoricoComprasPcel(6) : Promise.resolve({}),
         esPcel ? fetchSnapshotPcel() : Promise.resolve([]),
+        // Master de categorías = productos_cliente de Digitalife (sku = modelo Acteck).
+        // Sólo se pide cuando estamos en PCEL, para el mapeo modelo→categoría.
+        esPcel ? fetchAllPagesREST(`productos_cliente?select=sku,categoria&cliente=eq.digitalife`) : Promise.resolve([]),
       ]);
+
+      // Map Digitalife (modelo normalizado) → categoría canónica, para asignar
+      // categorías a los 906 SKUs de PCEL vía modelo. Fallback: subfamilia.
+      const dglModeloCat = {};
+      (dglCategoriasRaw || []).forEach(r => {
+        const k = normModelo(r.sku);
+        const cat = (r.categoria || "").trim();
+        if (k && cat) dglModeloCat[k] = cat;
+      });
 
       // Pre-aggregate Acteck inventory by SKU (sum across all 9 warehouses)
       const actStockBySku = {};
@@ -592,6 +697,16 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const prodExistentes = new Map((productos || []).map(p => [p.sku, p]));
         productosEfectivos = (catPcel || []).map(c => {
           const existente = prodExistentes.get(c.sku) || {};
+          // Categoría (opción C): (1) productos_cliente.pcel si ya existe,
+          // (2) match por modelo contra Digitalife, (3) fallback subfamilia → canonical.
+          const modKey = normModelo(c.modelo);
+          const catFromDgl = modKey ? dglModeloCat[modKey] : null;
+          const catFromSubfam = SUBFAM_TO_CAT[normSubfam(c.subfamilia)] || null;
+          const categoria =
+            (existente.categoria && existente.categoria.trim()) ||
+            catFromDgl ||
+            catFromSubfam ||
+            "Accesorios"; // catch-all para subfamilias no mapeadas
           return {
             // datos base
             sku: c.sku,
@@ -601,8 +716,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             descripcion: c.producto || existente.descripcion || '',
             familia: c.familia || existente.familia || '',
             subfamilia: c.subfamilia || existente.subfamilia || '',
-            // si existe en productos_cliente, preservar categoria / precio / estado
-            categoria: existente.categoria || c.familia || '',
+            // categoría ya resuelta (Digitalife-style)
+            categoria,
             precio_venta: existente.precio_venta || null,
             estado: existente.estado || 'ALTA',
             roadmap: existente.roadmap || null,
@@ -657,47 +772,84 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const maxSIMes = Object.entries(siByMes).reduce((a, b) => a[1] > b[1] ? a : b, [0, 0])[0];
     const maxSOMes = Object.entries(soByMes).reduce((a, b) => a[1] > b[1] ? a : b, [0, 0])[0];
 
-    // By marca
+    // Normalize text labels so "ACTECK"/"Acteck"/"acteck" collapse to "Acteck",
+    // and "AUDIO"/"Audio" collapse to "Audio". Sin esto, la BD tiene duplicados
+    // por case y las tablas se ven fragmentadas.
+    const normLabel = (s) => {
+      if (!s) return "";
+      const t = String(s).trim().toLowerCase();
+      return t.replace(/\b([a-záéíóúñ])/g, (m) => m.toUpperCase());
+    };
+
+    // Colapsa "Balam Rush Spectrum" → "Balam Rush" sólo para la comparativa.
+    // Spectrum es un modelo, nunca fue una marca. Se aplica sólo en byMarca.
+    const consolidaMarca = (m) => (m === "Balam Rush Spectrum" ? "Balam Rush" : m);
+
+    const esPcel = clienteKey === "pcel";
+    // Índices pre-agregados (evita O(N*M) re-filtrando en cada iter).
+    // Sell In para PCEL vive en `sell_in_sku` con sku = modelo Acteck (columna
+    // `articulo` de ventas_erp). Los productos de PCEL son catalogo_sku_pcel
+    // donde sku=numérico PCEL y modelo=modelo Acteck. Por eso en PCEL hay que
+    // indexar sellIn por modelo para que cuadre con p.modelo.
+    const siByKey = {}, siMontoByKey = {}, soByKey = {}, soMontoByKey = {};
+    datos.sellIn.forEach(r => {
+      const k = r.sku; if (!k) return;
+      siByKey[k]      = (siByKey[k] || 0)      + (Number(r.piezas) || 0);
+      siMontoByKey[k] = (siMontoByKey[k] || 0) + (Number(r.monto_pesos) || 0);
+    });
+    datos.sellOut.forEach(r => {
+      const k = r.sku; if (!k) return;
+      soByKey[k]      = (soByKey[k] || 0)      + (Number(r.piezas) || 0);
+      soMontoByKey[k] = (soMontoByKey[k] || 0) + (Number(r.monto_pesos) || 0);
+    });
+    const invBySku = {};
+    datos.inventario.forEach(r => { if (r.sku) invBySku[r.sku] = r; });
+
+    // Para PCEL, sellIn keyea por modelo Acteck; para los demás, por sku cliente.
+    const sellInKey = (p) => esPcel ? (p.modelo || "") : p.sku;
+    // sellOut: para PCEL usa el sku numérico PCEL (que es lo que hay en
+    // sellout_pcel_mensual). Para los demás, sku del cliente.
+    const sellOutKey = (p) => p.sku;
+
+    // By marca (normalizada + Spectrum consolidado)
     const byMarca = {};
     datos.productos.forEach(p => {
-      if (!byMarca[p.marca]) byMarca[p.marca] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0, invValor: 0 };
-      const siForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
-      const siMontoForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.monto_pesos || 0), 0);
-      const soForSku = datos.sellOut.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
-      const soMontoForSku = datos.sellOut.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.monto_pesos || 0), 0);
-      const invForSku = datos.inventario.find(r => r.sku === p.sku);
-      byMarca[p.marca].siPiezas += siForSku;
-      byMarca[p.marca].siMonto += siMontoForSku;
-      byMarca[p.marca].soPiezas += soForSku;
-      byMarca[p.marca].soMonto += soMontoForSku;
+      const marca = consolidaMarca(normLabel(p.marca)) || "Sin Marca";
+      if (!byMarca[marca]) byMarca[marca] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0, invValor: 0 };
+      const sik = sellInKey(p), sok = sellOutKey(p);
+      byMarca[marca].siPiezas += siByKey[sik] || 0;
+      byMarca[marca].siMonto  += siMontoByKey[sik] || 0;
+      byMarca[marca].soPiezas += soByKey[sok] || 0;
+      byMarca[marca].soMonto  += soMontoByKey[sok] || 0;
+      const invForSku = invBySku[p.sku];
       if (invForSku) {
-        byMarca[p.marca].invPiezas += invForSku.stock || 0;
-        byMarca[p.marca].invValor += invForSku.valor || 0;
+        byMarca[marca].invPiezas += Number(invForSku.stock) || 0;
+        byMarca[marca].invValor  += Number(invForSku.valor) || 0;
       }
     });
 
-    // By categoria
+    // By categoria (normalizada — Spectrum NO se consolida aquí, sólo en marca)
     const byCategoria = {};
     datos.productos.forEach(p => {
-      const cat = p.categoria || "Sin Categoría";
+      const cat = normLabel(p.categoria) || "Sin Categoría";
       if (!byCategoria[cat]) byCategoria[cat] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0, invValor: 0 };
-      const siForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
-      const siMontoForSku = datos.sellIn.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.monto_pesos || 0), 0);
-      const soForSku = datos.sellOut.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.piezas || 0), 0);
-      const soMontoForSku = datos.sellOut.filter(r => r.sku === p.sku).reduce((s, r) => s + (r.monto_pesos || 0), 0);
-      const invForSku = datos.inventario.find(r => r.sku === p.sku);
-      byCategoria[cat].siPiezas += siForSku;
-      byCategoria[cat].siMonto += siMontoForSku;
-      byCategoria[cat].soPiezas += soForSku;
-      byCategoria[cat].soMonto += soMontoForSku;
-      if (invForSku) { byCategoria[cat].invPiezas += invForSku.stock || 0; byCategoria[cat].invValor += (Number(invForSku.stock || 0)) * (Number(invForSku.costo_convenio || invForSku.costo_promedio || 0)); }
+      const sik = sellInKey(p), sok = sellOutKey(p);
+      byCategoria[cat].siPiezas += siByKey[sik] || 0;
+      byCategoria[cat].siMonto  += siMontoByKey[sik] || 0;
+      byCategoria[cat].soPiezas += soByKey[sok] || 0;
+      byCategoria[cat].soMonto  += soMontoByKey[sok] || 0;
+      const invForSku = invBySku[p.sku];
+      if (invForSku) {
+        byCategoria[cat].invPiezas += Number(invForSku.stock) || 0;
+        byCategoria[cat].invValor  += (Number(invForSku.stock) || 0) * (Number(invForSku.costo_convenio || invForSku.costo_promedio) || 0);
+      }
     });
 
     return {
       sellInTotal, sellInPiezas, sellOutTotal, sellOutPiezas, invTotal, invPiezas,
       maxSIMes, maxSOMes, byMarca, byCategoria,
     };
-  }, [datos]);
+  }, [datos, clienteKey]);
 
   // KPIs extendidos para tarjetas arriba
   const kpis = React.useMemo(() => {
