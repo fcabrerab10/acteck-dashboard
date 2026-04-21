@@ -1064,6 +1064,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const requiereTransito = baseRows.filter(r => r.gap > 0);
 
         // Helper: construir filas de una hoja
+        // Hoja 1: SKU Cliente | SKU Acteck | Descripción | Inv Cliente | Prom 90d | Sugerido | Inv Acteck | Precio | Total
         const buildStockRows = (arr) => arr.map(({ s, sug, precioFinal, invAct }) => ({
           "SKU Cliente":              String(s.sku || ""),
           "SKU Acteck":               s.modelo || "",
@@ -1071,10 +1072,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           "Inventario Cliente":       Number(s.stock) || 0,
           "Promedio últimos 90 días": Number(s.promedio90d) || 0,
           "Sugerido":                 sug,
-          "Precio":                   precioFinal,
           "Inventario Acteck":        invAct,
+          "Precio":                   precioFinal,
+          "Total":                    sug * precioFinal,
         }));
-        const buildTransitoRows = (arr) => arr.map(({ s, sug, precioFinal, invAct, arribo, gap }) => ({
+        // Hoja 2: SKU Cliente | SKU Acteck | Descripción | Inv Cliente | Prom 90d | Sugerido | Precio | Piezas tránsito | Fecha arribo | Total
+        const buildTransitoRows = (arr) => arr.map(({ s, sug, precioFinal, arribo }) => ({
           "SKU Cliente":              String(s.sku || ""),
           "SKU Acteck":               s.modelo || "",
           "Descripción":              s.descripcionLarga || s.descripcion || "",
@@ -1082,10 +1085,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           "Promedio últimos 90 días": Number(s.promedio90d) || 0,
           "Sugerido":                 sug,
           "Precio":                   precioFinal,
-          "Inventario Acteck":        invAct,
-          "Falta surtir":             gap,
           "Piezas en tránsito":       Number(arribo.piezas) || 0,
           "Fecha de arribo":          formatFechaES(arribo.fecha || ""),
+          "Total":                    sug * precioFinal,
         }));
 
         // Push fila TOTAL con sumas
@@ -1093,37 +1095,35 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           const totSug = rows.reduce((a, r) => a + (r.Sugerido || 0), 0);
           const totInvCli = rows.reduce((a, r) => a + (r["Inventario Cliente"] || 0), 0);
           const totInvAct = rows.reduce((a, r) => a + (r["Inventario Acteck"] || 0), 0);
-          const totMonto  = rows.reduce((a, r) => a + (Number(r.Sugerido) || 0) * (Number(r.Precio) || 0), 0);
+          const totMonto  = rows.reduce((a, r) => a + (Number(r.Total) || 0), 0);
           rows.push({
             "SKU Cliente": "TOTAL",
             "SKU Acteck": "",
-            "Descripción": `${rows.length} SKUs · Monto ≈ $${Math.round(totMonto).toLocaleString("es-MX")}`,
+            "Descripción": `${rows.length} SKUs`,
             "Inventario Cliente": totInvCli,
             "Promedio últimos 90 días": "",
             "Sugerido": totSug,
-            "Precio": "",
             "Inventario Acteck": totInvAct,
+            "Precio": "",
+            "Total": totMonto,
           });
         };
         const pushTotalTransito = (rows) => {
           const totSug = rows.reduce((a, r) => a + (r.Sugerido || 0), 0);
           const totInvCli = rows.reduce((a, r) => a + (r["Inventario Cliente"] || 0), 0);
-          const totInvAct = rows.reduce((a, r) => a + (r["Inventario Acteck"] || 0), 0);
-          const totFalta = rows.reduce((a, r) => a + (r["Falta surtir"] || 0), 0);
           const totTrans = rows.reduce((a, r) => a + (r["Piezas en tránsito"] || 0), 0);
-          const totMonto  = rows.reduce((a, r) => a + (Number(r.Sugerido) || 0) * (Number(r.Precio) || 0), 0);
+          const totMonto  = rows.reduce((a, r) => a + (Number(r.Total) || 0), 0);
           rows.push({
             "SKU Cliente": "TOTAL",
             "SKU Acteck": "",
-            "Descripción": `${rows.length} SKUs · Monto ≈ $${Math.round(totMonto).toLocaleString("es-MX")}`,
+            "Descripción": `${rows.length} SKUs`,
             "Inventario Cliente": totInvCli,
             "Promedio últimos 90 días": "",
             "Sugerido": totSug,
             "Precio": "",
-            "Inventario Acteck": totInvAct,
-            "Falta surtir": totFalta,
             "Piezas en tránsito": totTrans,
             "Fecha de arribo": "",
+            "Total": totMonto,
           });
         };
 
@@ -1146,23 +1146,37 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
         const wb = XLSX.utils.book_new();
 
-        // Hoja 1 — Stock disponible (si hay filas)
+        // Hoja 1 — Stock disponible (9 columnas)
+        // [SKU Cliente · SKU Acteck · Descripción · Inv Cliente · Prom 90d ·
+        //  Sugerido · Inv Acteck · Precio · Total]
         const filasStock = buildStockRows(conStock);
         if (filasStock.length > 0) {
           pushTotalStock(filasStock);
           const ws1 = XLSX.utils.json_to_sheet(filasStock);
-          ws1["!cols"] = [{ wch: 12 }, { wch: 14 }, { wch: 48 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 14 }];
-          aplicarFormatos(ws1, [3, 4, 5, 7], [6]);
+          ws1["!cols"] = [
+            { wch: 12 }, { wch: 14 }, { wch: 48 }, { wch: 14 }, { wch: 18 },
+            { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 },
+          ];
+          // int cols: Inv Cliente(3), Prom 90d(4), Sugerido(5), Inv Acteck(6)
+          // money cols: Precio(7), Total(8)
+          aplicarFormatos(ws1, [3, 4, 5, 6], [7, 8]);
           XLSX.utils.book_append_sheet(wb, ws1, "Stock disponible");
         }
 
-        // Hoja 2 — Requiere tránsito (si hay filas)
+        // Hoja 2 — Requiere tránsito (10 columnas)
+        // [SKU Cliente · SKU Acteck · Descripción · Inv Cliente · Prom 90d ·
+        //  Sugerido · Precio · Piezas tránsito · Fecha arribo · Total]
         const filasTrans = buildTransitoRows(requiereTransito);
         if (filasTrans.length > 0) {
           pushTotalTransito(filasTrans);
           const ws2 = XLSX.utils.json_to_sheet(filasTrans);
-          ws2["!cols"] = [{ wch: 12 }, { wch: 14 }, { wch: 48 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 13 }, { wch: 16 }, { wch: 22 }];
-          aplicarFormatos(ws2, [3, 4, 5, 7, 8, 9], [6]);
+          ws2["!cols"] = [
+            { wch: 12 }, { wch: 14 }, { wch: 48 }, { wch: 14 }, { wch: 18 },
+            { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 22 }, { wch: 14 },
+          ];
+          // int cols: Inv Cliente(3), Prom 90d(4), Sugerido(5), Piezas tránsito(7)
+          // money cols: Precio(6), Total(9)
+          aplicarFormatos(ws2, [3, 4, 5, 7], [6, 9]);
           XLSX.utils.book_append_sheet(wb, ws2, "Requiere tránsito");
         }
 
@@ -1172,8 +1186,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           XLSX.utils.book_append_sheet(wb, ws0, "Sugerido PCEL");
         }
 
-        const fechaStr = new Date().toISOString().slice(0, 10);
-        XLSX.writeFile(wb, `sugerido-pcel-${fechaStr}.xlsx`);
+        // Nombre del archivo: "Sugerido PCEL Abril 2026.xlsx"
+        const hoy = new Date();
+        const mesesCap = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+        const mesNombre = mesesCap[hoy.getMonth()];
+        const anioActual = hoy.getFullYear();
+        XLSX.writeFile(wb, `Sugerido PCEL ${mesNombre} ${anioActual}.xlsx`);
 
         // Para el snapshot del historial: mezclar ambas hojas en un solo array
         const filtradas = [...filasStock.filter(r => r["SKU Cliente"] !== "TOTAL"),
@@ -1296,8 +1314,16 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     XLSX.utils.book_append_sheet(wb, makeSheet(sillas, "Sillas"), "Sillas");
     XLSX.utils.book_append_sheet(wb, makeSheet(otros, "Otros"), "Otros");
 
-    const fecha = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, "Propuesta_" + (clienteKey || cliente) + "_" + fecha + ".xlsx");
+    // Nombre del archivo: "Sugerido Digitalife Abril 2026.xlsx"
+    const hoy = new Date();
+    const mesesCap = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    const mesNombre = mesesCap[hoy.getMonth()];
+    const anioActual = hoy.getFullYear();
+    // Nombre legible del cliente
+    const nombreCliente = clienteKey === "digitalife" ? "Digitalife"
+                        : clienteKey === "mercadolibre" ? "Mercado Libre"
+                        : (cliente || clienteKey || "Cliente");
+    XLSX.writeFile(wb, `Sugerido ${nombreCliente} ${mesNombre} ${anioActual}.xlsx`);
   };
 
   // ———— RENDER ————
