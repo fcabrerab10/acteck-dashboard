@@ -1776,23 +1776,42 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                     style: { textAlign: "right", padding: "6px", fontSize: 11, background: "#FFFBEB", color: s.promCompra > 0 ? "#78350F" : "#CBD5E1", fontWeight: 500 },
                     title: s.facturasHist > 0 ? (s.facturasHist + " compras hist\u00f3ricas") : "Sin hist\u00f3rico de compras"
                   }, s.promCompra > 0 ? s.promCompra.toLocaleString("es-MX") : "-"),
-                  React.createElement("td", { style: { textAlign: "right", padding: "6px", fontSize: 11, position: "relative" } },
-                    React.createElement("input", {
-                      type: "number", min: 0,
-                      value: sugeridoEdits[s.sku] !== undefined ? sugeridoEdits[s.sku] : (s.sugerido || 0),
-                      onChange: function(e) {
-                        var nv = Number(e.target.value) || 0;
-                        var v = {}; v[s.sku] = nv;
-                        setSugeridoEdits(Object.assign({}, sugeridoEdits, v));
-                        debounceSaveSugerido(s.sku, nv);
-                      },
-                      onBlur: function(e) {
-                        // Flush inmediato al salir (cancela debounce y guarda ya)
-                        if (sugeridoTimeouts.current[s.sku]) clearTimeout(sugeridoTimeouts.current[s.sku]);
-                        saveSugeridoOverride(s.sku, Number(e.target.value) || 0);
-                      },
-                      style: { width: 60, padding: "2px 4px", border: "1px solid #E2E8F0", borderRadius: 4, textAlign: "right", fontSize: 11 }
-                    }),
+                  (function(){
+                    // Gate: sin inventario ni tránsito → sugerido = 0 forzado
+                    // (ignora override manual). Input disabled para que sea obvio.
+                    const sinStock = clienteKey === "pcel"
+                      && (Number(s.invActeck) || 0) === 0
+                      && (Number(s.invTransito) || 0) === 0;
+                    const valEff = sinStock ? 0
+                      : (sugeridoEdits[s.sku] !== undefined ? sugeridoEdits[s.sku] : (s.sugerido || 0));
+                    return React.createElement("td", { style: { textAlign: "right", padding: "6px", fontSize: 11, position: "relative" } },
+                      React.createElement("input", {
+                        type: "number", min: 0,
+                        value: valEff,
+                        disabled: sinStock,
+                        title: sinStock ? "Sin inventario ni tránsito Acteck — no se puede sugerir" : undefined,
+                        onChange: function(e) {
+                          if (sinStock) return;
+                          var nv = Number(e.target.value) || 0;
+                          var v = {}; v[s.sku] = nv;
+                          setSugeridoEdits(Object.assign({}, sugeridoEdits, v));
+                          debounceSaveSugerido(s.sku, nv);
+                        },
+                        onBlur: function(e) {
+                          if (sinStock) return;
+                          // Flush inmediato al salir (cancela debounce y guarda ya)
+                          if (sugeridoTimeouts.current[s.sku]) clearTimeout(sugeridoTimeouts.current[s.sku]);
+                          saveSugeridoOverride(s.sku, Number(e.target.value) || 0);
+                        },
+                        style: {
+                          width: 60, padding: "2px 4px",
+                          border: "1px solid " + (sinStock ? "#F1F5F9" : "#E2E8F0"),
+                          borderRadius: 4, textAlign: "right", fontSize: 11,
+                          background: sinStock ? "#F8FAFC" : "#fff",
+                          color: sinStock ? "#CBD5E1" : "#1E293B",
+                          cursor: sinStock ? "not-allowed" : "text",
+                        }
+                      }),
                     // Indicador visual del guardado
                     sugeridoSaveState[s.sku] && React.createElement("span", {
                       style: {
@@ -1805,7 +1824,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       },
                       title: sugeridoSaveState[s.sku] === "saved" ? "Guardado" : sugeridoSaveState[s.sku] === "saving" ? "Guardando..." : "Error al guardar"
                     }, sugeridoSaveState[s.sku] === "saved" ? "\u2713" : sugeridoSaveState[s.sku] === "saving" ? "\u2026" : "!")
-                  ),
+                  );
+                  })(),
                   // PCEL: Precio editable — parece texto plano, pero al hover/focus se reveal
                   (clienteKey === "pcel") && React.createElement("td", {
                     key: "td-aaa",
@@ -1854,7 +1874,20 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                         outline: "none",
                         MozAppearance: "textfield",
                       },
-                      title: "Click para editar · Se guarda automáticamente"
+                      title: precioEdits[s.sku] !== undefined
+                        ? "Precio modificado manualmente · Click para editar"
+                        : "Click para editar · Se guarda automáticamente"
+                    }),
+                    // Mini marca: bullet morado cuando el precio está editado manualmente
+                    (precioEdits[s.sku] !== undefined) && React.createElement("span", {
+                      style: {
+                        position: "absolute",
+                        left: 4, top: "50%", transform: "translateY(-50%)",
+                        width: 6, height: 6, borderRadius: "50%",
+                        background: "#A855F7",
+                        pointerEvents: "none",
+                      },
+                      title: "Precio modificado manualmente"
                     }),
                     precioSaveState[s.sku] && React.createElement("span", {
                       style: {
