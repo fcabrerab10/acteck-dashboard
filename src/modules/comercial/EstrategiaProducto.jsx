@@ -995,11 +995,26 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         return true;
       })
       .sort((a, b) => {
-        const valA = a[sortCol] || 0;
-        const valB = b[sortCol] || 0;
+        // Resolver valor efectivo — considerar overrides manuales del usuario
+        const resolver = (r) => {
+          if (sortCol === "sugerido") {
+            return sugeridoEdits[r.sku] !== undefined
+              ? Number(sugeridoEdits[r.sku])
+              : Number(r.sugerido) || 0;
+          }
+          if (sortCol === "precioAAAcd" && clienteKey === "pcel") {
+            return precioEdits[r.sku] !== undefined
+              ? Number(precioEdits[r.sku])
+              : Number(r.precioAAAcd) || 0;
+          }
+          const v = r[sortCol];
+          return typeof v === "number" ? v : (Number(v) || 0);
+        };
+        const valA = resolver(a);
+        const valB = resolver(b);
         return sortDir === "asc" ? valA - valB : valB - valA;
       });
-    }, [datos, searchFilter, categoriaFilter, sortCol, sortDir, clienteKey, soloActivosPcel]);
+    }, [datos, searchFilter, categoriaFilter, sortCol, sortDir, clienteKey, soloActivosPcel, sugeridoEdits, precioEdits]);
 
   // Export to Excel
   const handleSort = (col) => { if (sortCol === col) { setSortDir(sortDir === "desc" ? "asc" : "desc"); } else { setSortCol(col); setSortDir("desc"); } };
@@ -1024,69 +1039,100 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
         const preciosBySku = datos.preciosBySku || {};
 
-        const rows = skuDetail.map(s => {
-          const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
-          const arribo = arriboBySku[s.modelo] || arriboBySku[s.sku] || { piezas: 0, fecha: null };
-          // Precio: override manual del usuario > precio AAA c/desc del roadmap
-          const precioOv = precioEdits[s.sku];
-          const prec = preciosBySku[s.modelo] || preciosBySku[s.sku] || null;
-          const precioFinal = Math.round(precioOv !== undefined ? Number(precioOv) : (prec ? Number(prec.precio_descuento) || 0 : 0));
-          const invAct = Number(s.invActeck) || 0;
-          // Si el sugerido NO se completa con inv Acteck, mostrar la próxima
-          // fecha de arribo de lo que viene en tránsito (cuándo podremos cumplir).
-          const gapSurtido = Math.max(0, sug - invAct);
-          const fechaArriboSiFalta = gapSurtido > 0 ? formatFechaES(arribo.fecha || "") : "";
-          return {
-            "SKU Cliente":             String(s.sku || ""),
-            "SKU Acteck":              s.modelo || "",
-            "Descripción":             s.descripcionLarga || s.descripcion || "",
-            "Inventario Cliente":      Number(s.stock) || 0,
-            "Promedio últimos 90 días": Number(s.promedio90d) || 0,
-            "Sugerido":                sug,
-            "Precio":                  precioFinal,
-            "Inventario Acteck":       invAct,
-            "Próx. arribo (si falta)": fechaArriboSiFalta,
-            "Próximo arribo piezas":   Number(arribo.piezas) || 0,
-            "Próximo arribo fecha":    formatFechaES(arribo.fecha || ""),
-          };
-        });
-        // Filtrar: solo SKUs con sugerido > 0
-        const filtradas = rows.filter(r => r.Sugerido > 0);
-
-        // Totales al pie
-        const totSug = filtradas.reduce((s, r) => s + (r.Sugerido || 0), 0);
-        const totInvCli = filtradas.reduce((s, r) => s + (r["Inventario Cliente"] || 0), 0);
-        const totInvAct = filtradas.reduce((s, r) => s + (r["Inventario Acteck"] || 0), 0);
-        const totArribo = filtradas.reduce((s, r) => s + (r["Próximo arribo piezas"] || 0), 0);
-        const totMonto  = filtradas.reduce((s, r) => s + (Number(r.Sugerido) || 0) * (Number(r.Precio) || 0), 0);
-        filtradas.push({
-          "SKU Cliente": "TOTAL",
-          "SKU Acteck": "",
-          "Descripción": `${filtradas.length} SKUs · Monto ≈ $${Math.round(totMonto).toLocaleString("es-MX")}`,
-          "Inventario Cliente": totInvCli,
-          "Promedio últimos 90 días": "",
-          "Sugerido": totSug,
-          "Precio": "",
-          "Inventario Acteck": totInvAct,
-          "Próx. arribo (si falta)": "",
-          "Próximo arribo piezas": totArribo,
-          "Próximo arribo fecha": "",
-        });
-
-        const ws = XLSX.utils.json_to_sheet(filtradas);
-        // Anchos de columna
-        ws["!cols"] = [
-          { wch: 12 }, { wch: 14 }, { wch: 48 }, { wch: 14 }, { wch: 18 },
-          { wch: 12 }, { wch: 20 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 14 },
-        ];
-        // Formato: enteros en piezas, dinero en precio (sin decimales)
+        // Construir filas base (todas las que tienen sugerido > 0)
         const FMT_INT   = "#,##0";
         const FMT_MONEY = '"$"#,##0';
-        const rangeRef = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : null;
-        if (rangeRef) {
-          const intCols   = [3, 4, 5, 7, 9]; // inv cliente, prom 90d, sugerido, inv acteck, arribo piezas
-          const moneyCols = [6];             // precio AAA c/desc
-          for (let R = rangeRef.s.r + 1; R <= rangeRef.e.r; R++) {
+
+        const baseRows = skuDetail
+          .filter(s => {
+            const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
+            return sug > 0;
+          })
+          .map(s => {
+            const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
+            const arribo = arriboBySku[s.modelo] || arriboBySku[s.sku] || { piezas: 0, fecha: null };
+            const precioOv = precioEdits[s.sku];
+            const prec = preciosBySku[s.modelo] || preciosBySku[s.sku] || null;
+            const precioFinal = Math.round(precioOv !== undefined ? Number(precioOv) : (prec ? Number(prec.precio_descuento) || 0 : 0));
+            const invAct = Number(s.invActeck) || 0;
+            const gap = Math.max(0, sug - invAct);
+            return { s, sug, precioFinal, invAct, arribo, gap };
+          });
+
+        // Separar: los que se surten con stock Acteck actual, y los que dependen del tránsito
+        const conStock  = baseRows.filter(r => r.gap === 0);
+        const requiereTransito = baseRows.filter(r => r.gap > 0);
+
+        // Helper: construir filas de una hoja
+        const buildStockRows = (arr) => arr.map(({ s, sug, precioFinal, invAct }) => ({
+          "SKU Cliente":              String(s.sku || ""),
+          "SKU Acteck":               s.modelo || "",
+          "Descripción":              s.descripcionLarga || s.descripcion || "",
+          "Inventario Cliente":       Number(s.stock) || 0,
+          "Promedio últimos 90 días": Number(s.promedio90d) || 0,
+          "Sugerido":                 sug,
+          "Precio":                   precioFinal,
+          "Inventario Acteck":        invAct,
+        }));
+        const buildTransitoRows = (arr) => arr.map(({ s, sug, precioFinal, invAct, arribo, gap }) => ({
+          "SKU Cliente":              String(s.sku || ""),
+          "SKU Acteck":               s.modelo || "",
+          "Descripción":              s.descripcionLarga || s.descripcion || "",
+          "Inventario Cliente":       Number(s.stock) || 0,
+          "Promedio últimos 90 días": Number(s.promedio90d) || 0,
+          "Sugerido":                 sug,
+          "Precio":                   precioFinal,
+          "Inventario Acteck":        invAct,
+          "Falta surtir":             gap,
+          "Piezas en tránsito":       Number(arribo.piezas) || 0,
+          "Fecha de arribo":          formatFechaES(arribo.fecha || ""),
+        }));
+
+        // Push fila TOTAL con sumas
+        const pushTotalStock = (rows) => {
+          const totSug = rows.reduce((a, r) => a + (r.Sugerido || 0), 0);
+          const totInvCli = rows.reduce((a, r) => a + (r["Inventario Cliente"] || 0), 0);
+          const totInvAct = rows.reduce((a, r) => a + (r["Inventario Acteck"] || 0), 0);
+          const totMonto  = rows.reduce((a, r) => a + (Number(r.Sugerido) || 0) * (Number(r.Precio) || 0), 0);
+          rows.push({
+            "SKU Cliente": "TOTAL",
+            "SKU Acteck": "",
+            "Descripción": `${rows.length} SKUs · Monto ≈ $${Math.round(totMonto).toLocaleString("es-MX")}`,
+            "Inventario Cliente": totInvCli,
+            "Promedio últimos 90 días": "",
+            "Sugerido": totSug,
+            "Precio": "",
+            "Inventario Acteck": totInvAct,
+          });
+        };
+        const pushTotalTransito = (rows) => {
+          const totSug = rows.reduce((a, r) => a + (r.Sugerido || 0), 0);
+          const totInvCli = rows.reduce((a, r) => a + (r["Inventario Cliente"] || 0), 0);
+          const totInvAct = rows.reduce((a, r) => a + (r["Inventario Acteck"] || 0), 0);
+          const totFalta = rows.reduce((a, r) => a + (r["Falta surtir"] || 0), 0);
+          const totTrans = rows.reduce((a, r) => a + (r["Piezas en tránsito"] || 0), 0);
+          const totMonto  = rows.reduce((a, r) => a + (Number(r.Sugerido) || 0) * (Number(r.Precio) || 0), 0);
+          rows.push({
+            "SKU Cliente": "TOTAL",
+            "SKU Acteck": "",
+            "Descripción": `${rows.length} SKUs · Monto ≈ $${Math.round(totMonto).toLocaleString("es-MX")}`,
+            "Inventario Cliente": totInvCli,
+            "Promedio últimos 90 días": "",
+            "Sugerido": totSug,
+            "Precio": "",
+            "Inventario Acteck": totInvAct,
+            "Falta surtir": totFalta,
+            "Piezas en tránsito": totTrans,
+            "Fecha de arribo": "",
+          });
+        };
+
+        // Helper: aplicar formato numérico a un worksheet
+        const aplicarFormatos = (ws, intCols, moneyCols) => {
+          const ref = ws["!ref"];
+          if (!ref) return;
+          const rng = XLSX.utils.decode_range(ref);
+          for (let R = rng.s.r + 1; R <= rng.e.r; R++) {
             for (const C of intCols) {
               const addr = XLSX.utils.encode_cell({ r: R, c: C });
               if (ws[addr] && typeof ws[addr].v === "number") ws[addr].z = FMT_INT;
@@ -1096,12 +1142,44 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
               if (ws[addr] && typeof ws[addr].v === "number") ws[addr].z = FMT_MONEY;
             }
           }
-        }
+        };
 
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Sugerido PCEL");
+
+        // Hoja 1 — Stock disponible (si hay filas)
+        const filasStock = buildStockRows(conStock);
+        if (filasStock.length > 0) {
+          pushTotalStock(filasStock);
+          const ws1 = XLSX.utils.json_to_sheet(filasStock);
+          ws1["!cols"] = [{ wch: 12 }, { wch: 14 }, { wch: 48 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 14 }];
+          aplicarFormatos(ws1, [3, 4, 5, 7], [6]);
+          XLSX.utils.book_append_sheet(wb, ws1, "Stock disponible");
+        }
+
+        // Hoja 2 — Requiere tránsito (si hay filas)
+        const filasTrans = buildTransitoRows(requiereTransito);
+        if (filasTrans.length > 0) {
+          pushTotalTransito(filasTrans);
+          const ws2 = XLSX.utils.json_to_sheet(filasTrans);
+          ws2["!cols"] = [{ wch: 12 }, { wch: 14 }, { wch: 48 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 13 }, { wch: 16 }, { wch: 22 }];
+          aplicarFormatos(ws2, [3, 4, 5, 7, 8, 9], [6]);
+          XLSX.utils.book_append_sheet(wb, ws2, "Requiere tránsito");
+        }
+
+        // Si ninguna hoja tiene filas, fallback a una hoja vacía con encabezado
+        if (wb.SheetNames.length === 0) {
+          const ws0 = XLSX.utils.json_to_sheet([{ "Mensaje": "No hay SKUs con sugerido > 0" }]);
+          XLSX.utils.book_append_sheet(wb, ws0, "Sugerido PCEL");
+        }
+
         const fechaStr = new Date().toISOString().slice(0, 10);
         XLSX.writeFile(wb, `sugerido-pcel-${fechaStr}.xlsx`);
+
+        // Para el snapshot del historial: mezclar ambas hojas en un solo array
+        const filtradas = [...filasStock.filter(r => r["SKU Cliente"] !== "TOTAL"),
+                           ...filasTrans.filter(r => r["SKU Cliente"] !== "TOTAL")];
+        const totSug = filtradas.reduce((a, r) => a + (r.Sugerido || 0), 0);
+        const totMonto = filtradas.reduce((a, r) => a + (Number(r.Sugerido) || 0) * (Number(r.Precio) || 0), 0);
 
         // Guardar snapshot en Supabase para historial de propuestas
         try {
