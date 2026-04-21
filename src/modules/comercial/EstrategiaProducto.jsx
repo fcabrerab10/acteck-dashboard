@@ -1583,19 +1583,34 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             ),
             React.createElement("tbody", null,
               skusRiesgo.map(function(s, i) {
-                // sinStock (0 inv + 0 tránsito) → rojo intenso
-                var bg = s.sinStock ? "#FEE2E2"
-                       : s.urgencia === 3 ? "#FEF2F2"
-                       : s.urgencia === 2 ? "#FFFBEB"
-                       : "#FEFCE8";
-                var dot = s.sinStock ? "#B91C1C"
-                        : s.urgencia === 3 ? "#EF4444"
-                        : s.urgencia === 2 ? "#F59E0B"
-                        : "#FBBF24";
+                // Color de la FILA + indicador: se alinea con el estado del Sugerido
+                //   sinStock             → rojo  (no se puede surtir)
+                //   sugerido > 0         → verde (se puede proponer)
+                //   stock 1-19           → ámbar (insuficiente para mínimo 20)
+                //   sin stock ni sug     → gris neutro
+                var totalDisponible = (s.invActeck || 0) + (s.transito || 0);
+                var bg, dot, rowTitle;
+                if (s.sinStock) {
+                  bg = "#FEE2E2"; dot = "#B91C1C";
+                  rowTitle = "⚠ Crítico: sin inventario Acteck ni tránsito — no se puede surtir";
+                } else if (s.sugerido > 0) {
+                  bg = "#ECFDF5"; dot = "#10B981";
+                  rowTitle = "Podemos surtir " + s.sugerido + " piezas";
+                } else if (totalDisponible > 0 && totalDisponible < 20) {
+                  bg = "#FFFBEB"; dot = "#F59E0B";
+                  rowTitle = "Solo " + totalDisponible + " piezas disponibles (mínimo: 20) — no se propone";
+                } else {
+                  bg = "#F8FAFC"; dot = "#94A3B8";
+                  rowTitle = "Sin sugerido";
+                }
+                // Color de "Días restantes" — independiente, refleja urgencia temporal
+                var dotDias = s.urgencia === 3 ? "#EF4444"
+                            : s.urgencia === 2 ? "#F59E0B"
+                            : "#FBBF24";
                 return React.createElement("tr", {
                   key: s.sku,
                   style: { borderBottom: "1px solid #f1f5f9", background: bg },
-                  title: s.sinStock ? "\u26A0 Cr\u00edtico: sin inventario Acteck ni tr\u00e1nsito \u2014 no se puede surtir" : undefined,
+                  title: rowTitle,
                 },
                   React.createElement("td", { style: { padding: "8px 10px", textAlign: "center" } },
                     React.createElement("span", {
@@ -1610,7 +1625,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   React.createElement("td", { style: { padding: "8px 10px", color: "#475569", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.titulo }, s.titulo.slice(0, 70)),
                   React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E293B", fontWeight: 600 } }, s.stock.toLocaleString("es-MX")),
                   React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#475569" } }, s.promMes.toLocaleString("es-MX")),
-                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: dot, fontWeight: 700 } }, s.diasRestantes + "d"),
+                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: dotDias, fontWeight: 700 } }, s.diasRestantes + "d"),
                   React.createElement("td", {
                     style: {
                       padding: "8px 10px", textAlign: "right",
