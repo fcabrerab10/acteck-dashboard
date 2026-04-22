@@ -557,21 +557,32 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const concepto = isExisting ? newFijo.existente : newFijo.concepto.trim();
     if (!concepto) return;
     const selectedMeses = newFijo.meses.length > 0 ? newFijo.meses : MESES_ARR.map(m => m.key);
-    const existingMeses = isExisting && fijoGroups[concepto] ? fijoGroups[concepto].map(r => r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : null).filter(Boolean) : [];
+    // Preferir mes_fijo; caer a fecha_compromiso.slice(5,7) para registros legacy.
+    const mesKeyDe = (r) => r.mes_fijo ? String(r.mes_fijo).padStart(2, "0")
+                         : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : null);
+    const existingMeses = isExisting && fijoGroups[concepto]
+      ? fijoGroups[concepto].map(mesKeyDe).filter(Boolean)
+      : [];
     const baseMonto = isExisting && fijoGroups[concepto] && fijoGroups[concepto][0] ? (fijoGroups[concepto][0].monto || 0) : (parseFloat(newFijo.monto) || 0);
     const baseResp = isExisting && fijoGroups[concepto] && fijoGroups[concepto][0] ? (fijoGroups[concepto][0].responsable || null) : (newFijo.responsable.trim() || null);
     const newMeses = selectedMeses.filter(m => !existingMeses.includes(m));
     if (newMeses.length === 0) { flash("Todos los meses seleccionados ya existen", "err"); return; }
+    const anioActual = new Date().getFullYear();
     const records = newMeses.map(mKey => ({
       folio: "",
       concepto,
       categoria: "pagosFijos",
+      cliente: clienteKey,
       monto: isExisting ? baseMonto : (parseFloat(newFijo.monto) || 0),
       estatus: "pendiente",
-      fecha_compromiso: `2026-${mKey}-01`,
+      fecha_compromiso: `${anioActual}-${mKey}-01`,
       fecha_pago_real: null,
       responsable: isExisting ? baseResp : (newFijo.responsable.trim() || null),
       notas: null,
+      // Mes fijo independiente de fecha_compromiso (si cambias la fecha,
+      // el pago sigue perteneciendo al mismo mes que lo creaste).
+      mes_fijo: Number(mKey),
+      anio_fijo: anioActual,
     }));
     setSaving(true);
     const { data, error } = await supabase.from("pagos").insert(records).select();
@@ -1432,7 +1443,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                 {MESES_ARR.map(m => {
                                   const sel = newFijo.meses.includes(m.key);
                                   const existingGroup = newFijo.existente !== "__nuevo__" && fijoGroups[newFijo.existente];
-                                  const alreadyExists = existingGroup ? existingGroup.some(r => r.fecha_compromiso && r.fecha_compromiso.slice(5, 7) === m.key) : false;
+                                  const alreadyExists = existingGroup ? existingGroup.some(r => (r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : null)) === m.key) : false;
                                   return (
                                     <button key={m.key} type="button" disabled={alreadyExists}
                                       onClick={() => setNewFijo(p => ({...p, meses: sel ? p.meses.filter(x => x !== m.key) : [...p.meses, m.key]}))}
@@ -1471,7 +1482,12 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         const vencidosN = records.filter(r => r.estatus === "vencido").length;
                         const inactivosN = records.filter(r => r.estatus === "no_aplica" || r.estatus === "cancelado").length;
                         const montoMes = records[0] ? (records[0].monto || 0) : 0;
-                        const sorted = [...records].sort((a, b) => (a.fecha_compromiso || "").localeCompare(b.fecha_compromiso || ""));
+                        // Ordenar por mes_fijo (independiente de fecha_compromiso);
+                        // fallback a fecha_compromiso para registros legacy sin mes_fijo.
+                        const mesKeyDeFijo = (r) => r.mes_fijo
+                          ? String(r.mes_fijo).padStart(2, "0")
+                          : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "99");
+                        const sorted = [...records].sort((a, b) => mesKeyDeFijo(a).localeCompare(mesKeyDeFijo(b)));
 
                         // Clasificar filas
                         const filasActivas   = sorted.filter(r =>
@@ -1522,6 +1538,53 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                     </tr>
                                   </thead>
                                   <tbody>
+                                    {/* Meses faltantes del año en curso (placeholder con botón + Crear) */}
+                                    {(() => {
+                                      if (!canEdit) return null;
+                                      const anioAct = new Date().getFullYear();
+                                      const mesKeysExistentes = new Set(sorted.map(r => r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : null)).filter(Boolean));
+                                      const faltantes = MESES_ARR.filter(m => !mesKeysExistentes.has(m.key));
+                                      if (faltantes.length === 0) return null;
+                                      const baseMontoExist = records[0]?.monto || 0;
+                                      const baseRespExist = records[0]?.responsable || null;
+                                      const crearMes = async (mKey) => {
+                                        const record = {
+                                          folio: "",
+                                          concepto: conceptoKey,
+                                          categoria: "pagosFijos",
+                                          cliente: clienteKey,
+                                          monto: baseMontoExist,
+                                          estatus: "pendiente",
+                                          fecha_compromiso: `${anioAct}-${mKey}-01`,
+                                          fecha_pago_real: null,
+                                          responsable: baseRespExist,
+                                          notas: null,
+                                          mes_fijo: Number(mKey),
+                                          anio_fijo: anioAct,
+                                        };
+                                        const { data, error } = await supabase.from("pagos").insert(record).select().single();
+                                        if (error) { flash("Error: " + error.message, "err"); return; }
+                                        setRegistros(prev => [...prev, data]);
+                                      };
+                                      return faltantes.map(m => (
+                                        <tr key={`faltante-${m.key}`} className="border-b border-gray-50 bg-gray-50/50">
+                                          <td className="py-1.5 pr-3 text-gray-400 italic">{m.full}</td>
+                                          <td className="py-1.5 pr-3 text-right text-gray-300 italic">{formatMXN(baseMontoExist)}</td>
+                                          <td className="py-1.5 pr-3 text-center">
+                                            <span className="text-[10px] text-gray-400 italic">sin registrar</span>
+                                          </td>
+                                          <td className="py-1.5 pr-3 text-gray-300 italic">—</td>
+                                          <td className="py-1.5 pr-3 text-gray-300 italic">—</td>
+                                          <td className="py-1.5">
+                                            <button onClick={() => crearMes(m.key)}
+                                                    className="text-[11px] px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold">
+                                              + Crear
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      ));
+                                    })()}
+
                                     {/* Activas: lo que sí requiere atención */}
                                     {filasActivas.length === 0 ? (
                                       <tr>
@@ -1531,7 +1594,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                       </tr>
                                     ) : (
                                       filasActivas.map((r) => {
-                                        const mk = r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??";
+                                        const mk = r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??");
                                         const mi = MESES_ARR.find(m => m.key === mk);
                                         return (
                                           <tr key={r.id} className="border-b border-gray-50 hover:bg-amber-50/40">
@@ -1559,7 +1622,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                           </td>
                                         </tr>
                                         {expandedFijos[keyP] && filasPagados.map((r) => {
-                                          const mk = r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??";
+                                          const mk = r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??");
                                           const mi = MESES_ARR.find(m => m.key === mk);
                                           return (
                                             <tr key={r.id} className="border-b border-gray-50 bg-emerald-50/20 text-gray-500">
@@ -1585,7 +1648,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                           </td>
                                         </tr>
                                         {expandedFijos[keyF] && filasFuturos.map((r) => {
-                                          const mk = r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??";
+                                          const mk = r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??");
                                           const mi = MESES_ARR.find(m => m.key === mk);
                                           return (
                                             <tr key={r.id} className="border-b border-gray-50 bg-gray-50/40 text-gray-400">
@@ -1613,7 +1676,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                           </td>
                                         </tr>
                                         {expandedFijos[keyI] && filasInactivos.map((r) => {
-                                          const mk = r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??";
+                                          const mk = r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??");
                                           const mi = MESES_ARR.find(m => m.key === mk);
                                           return (
                                             <tr key={r.id} className="border-b border-gray-50 bg-gray-50/40 text-gray-400">
