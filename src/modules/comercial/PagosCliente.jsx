@@ -304,42 +304,75 @@ export default function PagosCliente({ cliente, clienteKey }) {
     flash("✓ Revertido");
   };
 
-  useEffect(() => {
+  // Cálculo de rebate extraído en función reusable (para poder disparar
+  // actualizaciones manuales desde el botón "Actualizar").
+  const calcularRebate = React.useCallback(async () => {
     if (clienteKey !== "digitalife" || !DB_CONFIGURED) return;
     setRebateLoading(true);
-    (async () => {
-      const anio = new Date().getFullYear();
-      const [siRes, prodRes] = await Promise.all([
-        supabase.from("sell_in_sku").select("sku,mes,monto_pesos").eq("cliente", "digitalife").eq("anio", anio),
-        supabase.from("productos_cliente").select("sku,categoria").eq("cliente", "digitalife")
-      ]);
-      const catMap = {};
-      (prodRes.data || []).forEach(p => { catMap[p.sku] = (p.categoria || "").toLowerCase(); });
-      // Compute per-quarter totals
-      const qTotals = { 1: 0, 2: 0, 3: 0, 4: 0 };
-      const qData = { 1: { m: 0, s: 0, a: 0 }, 2: { m: 0, s: 0, a: 0 }, 3: { m: 0, s: 0, a: 0 }, 4: { m: 0, s: 0, a: 0 } };
-      (siRes.data || []).forEach(r => {
-        const cat = catMap[r.sku] || "";
-        const monto = r.monto_pesos || 0;
-        const mes = Number(r.mes);
-        const q = mes <= 3 ? 1 : mes <= 6 ? 2 : mes <= 9 ? 3 : 4;
-        if (cat.includes("monitor")) { qData[q].m += monto; qTotals[q] += monto * 0.02; }
-        else if (cat.includes("silla")) { qData[q].s += monto; qTotals[q] += monto * 0.02; }
-        else { qData[q].a += monto; qTotals[q] += monto * 0.03; }
-      });
-      setRebateAllQ(qTotals);
-      const sel = qData[rebateQ];
-      setRebateData({ monitores: sel.m, sillas: sel.s, accesorios: sel.a });
-      // Check which Qs already have rebate pagos
-      const synced = {};
-      registros.filter(r => r.categoria === "rebate").forEach(r => {
-        const m = r.concepto?.match(/Q(\d)/);
-        if (m) synced[Number(m[1])] = r.id;
-      });
-      setRebateSynced(synced);
-      setRebateLoading(false);
-    })();
-  }, [clienteKey, rebateQ, registros.length]);
+    const anio = new Date().getFullYear();
+    const [siRes, prodRes] = await Promise.all([
+      supabase.from("sell_in_sku").select("sku,mes,monto_pesos").eq("cliente", "digitalife").eq("anio", anio),
+      supabase.from("productos_cliente").select("sku,categoria").eq("cliente", "digitalife")
+    ]);
+    const catMap = {};
+    (prodRes.data || []).forEach(p => { catMap[p.sku] = (p.categoria || "").trim().toLowerCase(); });
+    const qTotals = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    const qData = { 1: { m: 0, s: 0, a: 0 }, 2: { m: 0, s: 0, a: 0 }, 3: { m: 0, s: 0, a: 0 }, 4: { m: 0, s: 0, a: 0 } };
+    (siRes.data || []).forEach(r => {
+      const cat = catMap[r.sku] || "";
+      const monto = r.monto_pesos || 0;
+      const mes = Number(r.mes);
+      const q = mes <= 3 ? 1 : mes <= 6 ? 2 : mes <= 9 ? 3 : 4;
+      // Match estricto: 'monitores' = solo la categoría exacta (no "soportes
+      // para monitor" ni "accesorios para monitor" — esos van a Accesorios).
+      if (cat === "monitores") { qData[q].m += monto; qTotals[q] += monto * 0.02; }
+      else if (cat === "sillas") { qData[q].s += monto; qTotals[q] += monto * 0.02; }
+      else { qData[q].a += monto; qTotals[q] += monto * 0.03; }
+    });
+    setRebateAllQ(qTotals);
+    const sel = qData[rebateQ];
+    setRebateData({ monitores: sel.m, sillas: sel.s, accesorios: sel.a });
+    const synced = {};
+    registros.filter(r => r.categoria === "rebate").forEach(r => {
+      const m = r.concepto?.match(/Q(\d)/);
+      if (m) synced[Number(m[1])] = r.id;
+    });
+    setRebateSynced(synced);
+    setRebateLoading(false);
+  }, [clienteKey, rebateQ, registros]);
+
+  useEffect(() => { calcularRebate(); }, [calcularRebate]);
+
+  // Borrar y actualizar el pago de rebate del Q actual
+  const borrarRebatePago = async () => {
+    if (!canEdit) return;
+    const pagoId = rebateSynced[rebateQ];
+    if (!pagoId) return;
+    if (!window.confirm(`¿Eliminar el pago registrado de Rebate Q${rebateQ}? Después podrás recalcular y registrarlo de nuevo.`)) return;
+    const { error } = await supabase.from("pagos").delete().eq("id", pagoId);
+    if (error) { flash("Error al eliminar: " + error.message, "err"); return; }
+    setRegistros(prev => prev.filter(r => r.id !== pagoId));
+    setRebateSynced(p => { const n = { ...p }; delete n[rebateQ]; return n; });
+    flash(`✓ Rebate Q${rebateQ} eliminado`);
+  };
+  const actualizarRebatePago = async () => {
+    if (!canEdit) return;
+    const pagoId = rebateSynced[rebateQ];
+    if (!pagoId) return;
+    // Recalcula con datos frescos y actualiza el registro
+    await calcularRebate();
+    const m = rebateData.monitores, s = rebateData.sillas, a = rebateData.accesorios;
+    const totalReb = Math.round(m * REBATE_PCT.monitores + s * REBATE_PCT.sillas + a * REBATE_PCT.accesorios);
+    const updates = {
+      monto: totalReb,
+      notas: `Monitores: $${Math.round(m).toLocaleString("es-MX")} (2%), Sillas: $${Math.round(s).toLocaleString("es-MX")} (2%), Accesorios: $${Math.round(a).toLocaleString("es-MX")} (3%) — Actualizado ${new Date().toLocaleDateString("es-MX")}`,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from("pagos").update(updates).eq("id", pagoId);
+    if (error) { flash("Error al actualizar: " + error.message, "err"); return; }
+    setRegistros(prev => prev.map(r => r.id === pagoId ? { ...r, ...updates } : r));
+    flash(`✓ Rebate Q${rebateQ} actualizado a ${formatMXN(totalReb)}`);
+  };
 
   // ── PCEL Condiciones Comerciales (Rebate + Fondo MKT + SPIFF) ──
   const [pcelSellIn, setPcelSellIn] = useState({});
@@ -1952,7 +1985,25 @@ export default function PagosCliente({ cliente, clienteKey }) {
                     {(() => {
                       const totalReb = Math.round(rebateData.monitores * REBATE_PCT.monitores + rebateData.sillas * REBATE_PCT.sillas + rebateData.accesorios * REBATE_PCT.accesorios);
                       if (totalReb <= 0) return null;
-                      if (rebateSynced[rebateQ]) return <span className="text-xs text-green-600 font-semibold ml-2">Pago registrado</span>;
+                      if (rebateSynced[rebateQ]) return (
+                        <div className="flex items-center gap-2 ml-2">
+                          <span className="text-xs text-green-600 font-semibold">✓ Pago Q{rebateQ} registrado</span>
+                          {canEdit && (
+                            <>
+                              <button onClick={actualizarRebatePago}
+                                className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg"
+                                title="Recalcular con Sell In actualizado y actualizar el monto del pago registrado">
+                                🔄 Actualizar
+                              </button>
+                              <button onClick={borrarRebatePago}
+                                className="px-3 py-1 bg-white hover:bg-red-50 text-red-600 border border-red-300 text-xs font-semibold rounded-lg"
+                                title="Eliminar el pago registrado (podrás registrarlo de nuevo después)">
+                                🗑️ Borrar
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      );
                       return <button onClick={async () => {
                         const anio = new Date().getFullYear();
                         const fechaQ = rebateQ === 4 ? (anio + 1) + Q_FECHA_PAGO[4] : anio + Q_FECHA_PAGO[rebateQ];
