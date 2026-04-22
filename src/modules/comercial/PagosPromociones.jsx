@@ -168,18 +168,57 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
   const [guardando, setGuardando] = useState(false);
 
   // Snapshot automático de inventario inicial (para Sellout)
+  // Lee la última semana disponible por SKU:
+  //   - PCEL: sellout_pcel (columna `inventario`, la semana más reciente por SKU)
+  //   - Resto (digitalife/ml): inventario_cliente.stock de la última semana
   async function snapshotInventario() {
     if (form.skus.length === 0) return toast.error("Agrega al menos un SKU primero");
     try {
-      const { data, error } = await supabase
-        .from("inventario_cliente")
-        .select("sku, disponible, cantidad")
-        .eq("cliente", clienteKey)
-        .in("sku", form.skus);
-      if (error) throw error;
-      const total = (data || []).reduce((s, r) => s + Number(r.disponible ?? r.cantidad ?? 0), 0);
+      let total = 0;
+      const skusNormalizados = form.skus.map((s) => String(s).trim());
+
+      if (clienteKey === "pcel") {
+        // PCEL guarda el inventario semanal en sellout_pcel
+        const { data, error } = await supabase
+          .from("sellout_pcel")
+          .select("sku, anio, semana, inventario")
+          .in("sku", skusNormalizados)
+          .order("anio", { ascending: false })
+          .order("semana", { ascending: false });
+        if (error) throw error;
+        // Tomar 1ra aparición por SKU (la semana más reciente gracias al order)
+        const vistos = new Set();
+        (data || []).forEach((r) => {
+          const k = String(r.sku);
+          if (vistos.has(k)) return;
+          vistos.add(k);
+          total += Number(r.inventario) || 0;
+        });
+      } else {
+        // Digitalife / ML: inventario_cliente (snapshot semanal, columna `stock`)
+        const { data, error } = await supabase
+          .from("inventario_cliente")
+          .select("sku, stock, anio, semana")
+          .eq("cliente", clienteKey)
+          .in("sku", skusNormalizados)
+          .order("anio", { ascending: false })
+          .order("semana", { ascending: false });
+        if (error) throw error;
+        const vistos = new Set();
+        (data || []).forEach((r) => {
+          const k = String(r.sku);
+          if (vistos.has(k)) return;
+          vistos.add(k);
+          total += Number(r.stock) || 0;
+        });
+      }
+
       setForm((f) => ({ ...f, inventario_inicial: total }));
-      toast.success(`Snapshot: ${total} piezas en los ${form.skus.length} SKU(s)`);
+      if (total === 0) {
+        toast.info(`Snapshot: 0 piezas (revisa que los SKUs existan en inventario)`);
+      } else {
+        toast.success(`Snapshot: ${total.toLocaleString("es-MX")} piezas en los ${form.skus.length} SKU(s)`);
+      }
     } catch (e) {
       toast.error("No se pudo traer el inventario: " + e.message);
     }
@@ -204,7 +243,9 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
 
   async function guardar(estatusTarget = "borrador") {
     if (!form.titulo.trim()) return toast.error("Ponle un título a la promoción");
-    if (!form.fecha_inicio || !form.fecha_fin) return toast.error("Fechas de periodo requeridas");
+    // Sólo la fecha de inicio es obligatoria. La fecha fin puede quedar en blanco
+    // ("indefinida") y se cierra después cuando se defina.
+    if (!form.fecha_inicio) return toast.error("Fecha de inicio requerida");
     if (form.skus.length === 0 && tipo !== "bolsa") return toast.error("Agrega al menos un SKU");
     if (tipo === "sellout" || tipo === "sell_in") {
       if (!form.monto_por_pieza) return toast.error("Monto por pieza requerido");
@@ -224,7 +265,7 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
       descripcion: form.descripcion.trim() || null,
       estatus: estatusTarget,
       fecha_inicio: form.fecha_inicio,
-      fecha_fin: form.fecha_fin,
+      fecha_fin: form.fecha_fin || null, // null = indefinida (se cierra después)
       skus: form.skus,
       notas: form.notas.trim() || null,
       creado_por: perfil?.user_id || null,
@@ -278,10 +319,19 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
               onChange={(e) => setForm({ ...form, fecha_inicio: e.target.value })}
               className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" />
           </Field>
-          <Field label="Fecha fin *">
-            <input type="date" value={form.fecha_fin}
-              onChange={(e) => setForm({ ...form, fecha_fin: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+          <Field label="Fecha fin (opcional — si no, queda indefinida)">
+            <div className="flex gap-2">
+              <input type="date" value={form.fecha_fin}
+                onChange={(e) => setForm({ ...form, fecha_fin: e.target.value })}
+                className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+              {form.fecha_fin && (
+                <button type="button" onClick={() => setForm({ ...form, fecha_fin: "" })}
+                  className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-medium whitespace-nowrap"
+                  title="Dejar indefinida">
+                  Limpiar
+                </button>
+              )}
+            </div>
           </Field>
         </div>
 
@@ -579,7 +629,7 @@ function PromoCard({ promo, canEdit, onCambiarEstatus, onEditar, onBorrar }) {
           <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-3 flex-wrap">
             <span className="inline-flex items-center gap-1">
               <Calendar className="w-3 h-3" />
-              {formatFecha(promo.fecha_inicio)} → {formatFecha(promo.fecha_fin)}
+              {formatFecha(promo.fecha_inicio)} → {promo.fecha_fin ? formatFecha(promo.fecha_fin) : <span className="italic text-gray-400">indefinida</span>}
             </span>
             {promo.skus?.length > 0 && (
               <span className="inline-flex items-center gap-1">
