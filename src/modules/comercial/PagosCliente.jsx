@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { PCEL_REAL, PAGOS_DIGITALIFE_2026 } from '../../lib/constants';
-import { formatMXN, formatFecha } from '../../lib/utils';
+import { formatMXN, formatFecha, loadSheetJS } from '../../lib/utils';
 import { CardHeader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditar as puedeEditarFn } from '../../lib/permisos';
@@ -57,6 +57,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
     try { localStorage.setItem("pagos_mostrar_futuros", String(mostrarFuturos)); } catch {}
   }, [mostrarFuturos]);
   const [expandedMonth, setExpandedMonth] = useState(null);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportMes, setExportMes] = useState(""); // "YYYY-MM"
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue]     = useState("");
   const [saving, setSaving]           = useState(false);
@@ -668,6 +670,69 @@ export default function PagosCliente({ cliente, clienteKey }) {
     return Object.values(months).sort((a, b) => a.mes.localeCompare(b.mes));
   };
 
+  // Export del mes seleccionado — "lo que se tiene que pagar"
+  // Incluye estatus: pendiente, en_proceso, vencido (cualquier cosa NO pagada
+  // ni cancelada/no_aplica). User view: crea el Excel → se lo manda al
+  // equipo de crédito y cobranza → ellos confirman y pagan → luego regresan
+  // folio y se marca como 'pagado'.
+  const exportarMes = async () => {
+    if (!exportMes) return alert("Elige un mes");
+    const XLSX = await loadSheetJS();
+    if (!XLSX) return alert("Error cargando librería Excel");
+    const [anioStr, mesStr] = exportMes.split("-");
+    const anio = Number(anioStr), mes = Number(mesStr);
+    const MESES_LARGOS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+    // Filtrar: de ese mes, por pagar (pendiente/en_proceso/vencido)
+    const delMes = registros.filter(r => {
+      if (!r.fecha_compromiso) return false;
+      const k = String(r.fecha_compromiso).slice(0, 7);
+      if (k !== exportMes) return false;
+      return ["pendiente", "en_proceso", "vencido"].includes(r.estatus);
+    });
+
+    if (delMes.length === 0) {
+      return alert(`No hay pagos por pagar en ${MESES_LARGOS[mes-1]} ${anio}.`);
+    }
+
+    // Ordenar por categoría (para que queden agrupados visualmente)
+    const ordenCat = ["promociones","marketing","pagosFijos","pagosVariables","rebate","spiff"];
+    delMes.sort((a, b) => {
+      const ca = ordenCat.indexOf(a.categoria); const cb = ordenCat.indexOf(b.categoria);
+      return (ca === -1 ? 99 : ca) - (cb === -1 ? 99 : cb);
+    });
+
+    // Filas: Concepto, Categoría, Monto, Notas
+    const rows = delMes.map(r => ({
+      Concepto: r.concepto || "",
+      Categoría: CATEGORIA_META[r.categoria]?.label || r.categoria || "",
+      Monto: Number(r.monto) || 0,
+      Notas: r.notas || "",
+    }));
+    // Total al final
+    const total = delMes.reduce((s, r) => s + (Number(r.monto) || 0), 0);
+    rows.push({ Concepto: "", Categoría: "", Monto: null, Notas: "" });
+    rows.push({ Concepto: "TOTAL", Categoría: "", Monto: total, Notas: "" });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    // Formato de monto con $ y sin decimales
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    for (let R = 1; R <= range.e.r; ++R) {
+      const cell = ws[XLSX.utils.encode_cell({ r: R, c: 2 })]; // col 2 = Monto
+      if (cell && typeof cell.v === "number") cell.z = '"$"#,##0';
+    }
+    // Anchos de columna
+    ws["!cols"] = [{ wch: 50 }, { wch: 18 }, { wch: 14 }, { wch: 60 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `${MESES_LARGOS[mes-1]} ${anio}`);
+
+    const clienteLabel = (cliente?.nombre || clienteKey).split(" ")[0]; // ej "Digitalife"
+    const nombreArchivo = `Pagos ${clienteLabel} ${MESES_LARGOS[mes-1]} ${anio}.xlsx`;
+    XLSX.writeFile(wb, nombreArchivo);
+    setExportModalOpen(false);
+  };
+
   // ── Inline cell renderer ──
   const renderCell = (row, field, type = "text") => {
     const isEditing = editingCell?.id === row.id && editingCell?.field === field;
@@ -968,7 +1033,23 @@ export default function PagosCliente({ cliente, clienteKey }) {
             if (mb.length === 0) return null;
             return (
               <div className="bg-white rounded-2xl shadow-sm p-5">
-                <CardHeader titulo="Resumen General por Mes y Categoría" icon={CalendarDays} />
+                <div className="flex items-center justify-between mb-3">
+                  <CardHeader titulo="Resumen General por Mes y Categoría" icon={CalendarDays} />
+                  <button
+                    onClick={() => {
+                      // preselecciona el mes anterior como default útil
+                      const hoy = new Date();
+                      const prev = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+                      const def = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+                      setExportMes(mb.some(m => m.mes === def) ? def : (mb[mb.length - 1]?.mes || ""));
+                      setExportModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5"
+                    title="Exporta a Excel los pagos por pagar de un mes"
+                  >
+                    📥 Exportar Excel
+                  </button>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -1038,6 +1119,76 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       </tr>
                     </tfoot>
                   </table>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Modal para exportar Excel por mes */}
+          {exportModalOpen && (() => {
+            const mbList = monthlyBreakdown();
+            const MESES_LARGOS_M = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+            const porPagarMes = (mesKey) => registros.filter(r =>
+              r.fecha_compromiso && String(r.fecha_compromiso).slice(0, 7) === mesKey
+              && ["pendiente","en_proceso","vencido"].includes(r.estatus)
+            );
+            const selMes = exportMes ? (() => {
+              const [a, m] = exportMes.split("-");
+              return { anio: Number(a), mes: Number(m), count: porPagarMes(exportMes).length, total: porPagarMes(exportMes).reduce((s,r) => s + (Number(r.monto)||0), 0) };
+            })() : null;
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                    <h3 className="font-bold text-gray-800">Exportar pagos por pagar</h3>
+                    <button onClick={() => setExportModalOpen(false)} className="p-1 rounded hover:bg-gray-100 text-gray-500 text-lg">✕</button>
+                  </div>
+                  <div className="p-5 space-y-4">
+                    <p className="text-xs text-gray-500">
+                      Genera un Excel con todos los pagos pendientes / en proceso / vencidos del mes elegido,
+                      agrupados por categoría. Útil para enviarle a Crédito y Cobranza.
+                    </p>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Mes a exportar</label>
+                      <select
+                        value={exportMes}
+                        onChange={e => setExportMes(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      >
+                        <option value="">— Elige un mes —</option>
+                        {mbList.map(m => {
+                          const [a, mm] = m.mes.split("-");
+                          const cnt = porPagarMes(m.mes).length;
+                          return (
+                            <option key={m.mes} value={m.mes}>
+                              {MESES_LARGOS_M[Number(mm) - 1]} {a} · {cnt} pago{cnt !== 1 ? "s" : ""} por pagar
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    {selMes && (
+                      <div className={`rounded-lg p-3 text-sm ${selMes.count > 0 ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
+                        {selMes.count > 0
+                          ? <>Se exportarán <strong>{selMes.count} pagos</strong> por un total de <strong>{formatMXN(selMes.total)}</strong>.</>
+                          : <>No hay pagos por pagar en {MESES_LARGOS_M[selMes.mes - 1]} {selMes.anio}.</>
+                        }
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-100 bg-gray-50">
+                    <button onClick={() => setExportModalOpen(false)}
+                            className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold border border-gray-300">
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={exportarMes}
+                      disabled={!exportMes || (selMes && selMes.count === 0)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-semibold"
+                    >
+                      📥 Descargar Excel
+                    </button>
+                  </div>
                 </div>
               </div>
             );
