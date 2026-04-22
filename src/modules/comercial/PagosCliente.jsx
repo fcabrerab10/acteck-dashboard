@@ -608,11 +608,24 @@ export default function PagosCliente({ cliente, clienteKey }) {
   // ── Computed ──
   const fijoRecords = registros.filter(r => r.categoria === "pagosFijos");
   const nonFijoRecords = registros.filter(r => r.categoria !== "pagosFijos");
+  // Activos = lo que requiere atención: no pagado, no futuro, no cancelado/no-aplica
+  const esActivo = (r) =>
+    r.estatus !== "pagado" &&
+    r.estatus !== "cancelado" &&
+    r.estatus !== "no_aplica" &&
+    !esMesFuturo(r.fecha_compromiso);
+
   const filtered = catActiva === "todas"
-    ? registros.filter(r => r.estatus !== "pagado")
+    ? registros.filter(esActivo)
     : catActiva === "pagosFijos"
       ? fijoRecords
-      : registros.filter(r => r.categoria === catActiva);
+      : registros.filter(r => r.categoria === catActiva && esActivo(r));
+
+  // Historial de pagos COMPLETADOS (estatus=pagado) agrupado por mes
+  // Filtrado por la categoría activa (o todos si catActiva='todas')
+  const pagadosDeCategoria = catActiva === "todas"
+    ? registros.filter(r => r.estatus === "pagado")
+    : registros.filter(r => r.categoria === catActiva && r.estatus === "pagado");
 
   const showFijosSection = clienteKey !== "pcel" && (catActiva === "todas" || catActiva === "pagosFijos");
   const showRegularTable = true;
@@ -1432,6 +1445,12 @@ export default function PagosCliente({ cliente, clienteKey }) {
             </div>
           )}
 
+          {/* Historial de pagos completados (colapsable, agrupado por mes) */}
+          <HistorialPagadosPorMes
+            pagados={pagadosDeCategoria}
+            catActiva={catActiva}
+            CATEGORIA_META={CATEGORIA_META}
+          />
 
           {/* Calculadora de Rebate Trimestral */}
           {clienteKey === "digitalife" && catActiva === "rebate" && (
@@ -1861,3 +1880,134 @@ function filterProductos(productos, yearFilter, marcaFilter, categoriaFilter, ro
 
 // ——— ESTRATEGIA DE PRODUCTO (Excel Upload + Data Display) ———
 
+
+// ═══════════════════════════════════════════════════════════════════════
+// HistorialPagadosPorMes — menú desplegable con pagos ya completados,
+// agrupados por mes (YYYY-MM desc). Aparece en todas las sub-pestañas
+// (promociones, marketing, pagos fijos, pagos variables, rebate, spiff, todas)
+// filtrando según la categoría activa.
+// ═══════════════════════════════════════════════════════════════════════
+function HistorialPagadosPorMes({ pagados, catActiva, CATEGORIA_META }) {
+  const [abierto, setAbierto] = React.useState(false);
+  const [mesesExpandidos, setMesesExpandidos] = React.useState({});
+
+  if (!pagados || pagados.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow-sm p-4 mb-6">
+        <div className="flex items-center gap-2 text-gray-400">
+          <span>✓</span>
+          <h3 className="text-sm font-semibold">Pagos completados</h3>
+          <span className="text-xs italic">— aún no hay pagos completados{catActiva !== "todas" ? " en esta categoría" : ""}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Agrupar por YYYY-MM (por fecha_pago_real si existe, si no fecha_compromiso)
+  const MESES_LARGOS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const getFechaMes = (r) => {
+    const f = r.fecha_pago_real || r.fecha_compromiso;
+    return f ? String(f).slice(0, 7) : "sin-fecha";
+  };
+  const grupos = {};
+  pagados.forEach((r) => {
+    const k = getFechaMes(r);
+    if (!grupos[k]) grupos[k] = [];
+    grupos[k].push(r);
+  });
+  const mesesOrdenados = Object.keys(grupos).sort((a, b) => b.localeCompare(a)); // desc
+  const totalPagados = pagados.reduce((s, r) => s + (Number(r.monto) || 0), 0);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm mb-6 overflow-hidden">
+      <button
+        onClick={() => setAbierto(!abierto)}
+        className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{abierto ? "▾" : "▸"}</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          <h3 className="text-sm font-semibold text-gray-700">Pagos completados</h3>
+          <span className="text-xs text-gray-400">
+            ({pagados.length} pago{pagados.length !== 1 ? "s" : ""} · {mesesOrdenados.length} mes{mesesOrdenados.length !== 1 ? "es" : ""})
+          </span>
+        </div>
+        <div className="text-right">
+          <p className="text-sm font-bold text-emerald-600">{formatMXN(totalPagados)}</p>
+          <p className="text-[10px] text-gray-400 uppercase tracking-wider">Total pagado</p>
+        </div>
+      </button>
+
+      {abierto && (
+        <div className="border-t border-gray-100 divide-y divide-gray-100">
+          {mesesOrdenados.map((mesKey) => {
+            const items = grupos[mesKey];
+            const totalMes = items.reduce((s, r) => s + (Number(r.monto) || 0), 0);
+            const [anio, mm] = mesKey.split("-");
+            const nombreMes = mm && !isNaN(Number(mm))
+              ? `${MESES_LARGOS[Number(mm) - 1]} ${anio}`
+              : "Sin fecha";
+            const expandido = !!mesesExpandidos[mesKey];
+            return (
+              <div key={mesKey}>
+                <button
+                  onClick={() => setMesesExpandidos((p) => ({ ...p, [mesKey]: !expandido }))}
+                  className="w-full flex items-center justify-between px-5 py-2.5 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">{expandido ? "▾" : "▸"}</span>
+                    <span className="text-sm font-medium text-gray-700">{nombreMes}</span>
+                    <span className="text-xs text-gray-400">
+                      · {items.length} pago{items.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700">{formatMXN(totalMes)}</span>
+                </button>
+                {expandido && (
+                  <div className="px-5 pb-3 bg-gray-50/40">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-gray-400 uppercase tracking-wider">
+                          <th className="text-left py-1.5 pr-3 font-semibold">Concepto</th>
+                          <th className="text-left py-1.5 pr-3 font-semibold">Categoría</th>
+                          <th className="text-right py-1.5 pr-3 font-semibold">Monto</th>
+                          <th className="text-left py-1.5 pr-3 font-semibold">F. Pago</th>
+                          <th className="text-left py-1.5 pr-3 font-semibold">Folio</th>
+                          <th className="text-left py-1.5 font-semibold">Responsable</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((r) => {
+                          const meta = CATEGORIA_META[r.categoria];
+                          return (
+                            <tr key={r.id} className="border-t border-gray-100">
+                              <td className="py-1.5 pr-3 text-gray-700">{r.concepto}</td>
+                              <td className="py-1.5 pr-3">
+                                {meta ? (
+                                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold text-white"
+                                        style={{ backgroundColor: meta.color }}>
+                                    {meta.label}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-[10px]">{r.categoria}</span>
+                                )}
+                              </td>
+                              <td className="py-1.5 pr-3 text-right font-semibold text-emerald-600">{formatMXN(r.monto)}</td>
+                              <td className="py-1.5 pr-3 text-gray-600">{r.fecha_pago_real ? formatFecha(r.fecha_pago_real) : <span className="italic text-gray-400">—</span>}</td>
+                              <td className="py-1.5 pr-3 font-mono text-[11px] text-gray-500">{r.folio || "—"}</td>
+                              <td className="py-1.5 text-gray-500">{r.responsable || "—"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

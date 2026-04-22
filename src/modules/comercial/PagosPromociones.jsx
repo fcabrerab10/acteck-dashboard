@@ -723,7 +723,7 @@ function SelloutCierreMes({ promo, clienteKey, canEdit, onChange }) {
 
       const { error } = await supabase.from("pagos").insert({
         cliente: clienteKey,
-        categoria: "promocion_sellout",
+        categoria: "promociones",
         concepto,
         monto,
         estatus: "pendiente",
@@ -769,7 +769,7 @@ function SelloutCierreMes({ promo, clienteKey, canEdit, onChange }) {
 
       const { error: eIns } = await supabase.from("pagos").insert({
         cliente: clienteKey,
-        categoria: "promocion_sellout",
+        categoria: "promociones",
         concepto: `Sellout ${promo.titulo} — Resto inventario ${piezasRestantes} pzs × ${formatMXN(promo.monto_por_pieza)}`,
         monto,
         estatus: "pendiente",
