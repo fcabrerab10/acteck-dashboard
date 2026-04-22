@@ -168,57 +168,60 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
   const [guardando, setGuardando] = useState(false);
 
   // Snapshot automático de inventario inicial (para Sellout)
-  // Lee la última semana disponible por SKU:
-  //   - PCEL: sellout_pcel (columna `inventario`, la semana más reciente por SKU)
-  //   - Resto (digitalife/ml): inventario_cliente.stock de la última semana
+  // Trae el inventario MÁS RECIENTE por SKU y los suma.
+  //   - PCEL: sellout_pcel (columna `inventario`)
+  //   - Resto (digitalife/ml): inventario_cliente.stock
+  // Nota: la BD tiene registros legacy con anio/semana NULL. Calculamos una
+  // "clave de recencia" = anio*100 + semana y nos quedamos con el MAX por SKU
+  // (ignora DB sort que pondría NULLs primero con ORDER BY DESC).
   async function snapshotInventario() {
     if (form.skus.length === 0) return toast.error("Agrega al menos un SKU primero");
     try {
-      let total = 0;
       const skusNormalizados = form.skus.map((s) => String(s).trim());
+      const esPcel = clienteKey === "pcel";
 
-      if (clienteKey === "pcel") {
-        // PCEL guarda el inventario semanal en sellout_pcel
+      let rows = [];
+      if (esPcel) {
         const { data, error } = await supabase
           .from("sellout_pcel")
           .select("sku, anio, semana, inventario")
-          .in("sku", skusNormalizados)
-          .order("anio", { ascending: false })
-          .order("semana", { ascending: false });
+          .in("sku", skusNormalizados);
         if (error) throw error;
-        // Tomar 1ra aparición por SKU (la semana más reciente gracias al order)
-        const vistos = new Set();
-        (data || []).forEach((r) => {
-          const k = String(r.sku);
-          if (vistos.has(k)) return;
-          vistos.add(k);
-          total += Number(r.inventario) || 0;
-        });
+        rows = (data || []).map(r => ({
+          sku: String(r.sku),
+          stock: Number(r.inventario) || 0,
+          aw: (Number(r.anio) || 0) * 100 + (Number(r.semana) || 0),
+        }));
       } else {
-        // Digitalife / ML: inventario_cliente (snapshot semanal, columna `stock`)
         const { data, error } = await supabase
           .from("inventario_cliente")
           .select("sku, stock, anio, semana")
           .eq("cliente", clienteKey)
-          .in("sku", skusNormalizados)
-          .order("anio", { ascending: false })
-          .order("semana", { ascending: false });
+          .in("sku", skusNormalizados);
         if (error) throw error;
-        const vistos = new Set();
-        (data || []).forEach((r) => {
-          const k = String(r.sku);
-          if (vistos.has(k)) return;
-          vistos.add(k);
-          total += Number(r.stock) || 0;
-        });
+        rows = (data || []).map(r => ({
+          sku: String(r.sku),
+          stock: Number(r.stock) || 0,
+          aw: (Number(r.anio) || 0) * 100 + (Number(r.semana) || 0),
+        }));
       }
 
+      // Quedarse con la fila de mayor `aw` (última semana real) por SKU
+      const latest = {};
+      rows.forEach(r => {
+        if (!latest[r.sku] || r.aw > latest[r.sku].aw) latest[r.sku] = r;
+      });
+
+      const skusConInv = Object.keys(latest).length;
+      const skusSinInv = form.skus.length - skusConInv;
+      const total = Object.values(latest).reduce((s, r) => s + r.stock, 0);
+
       setForm((f) => ({ ...f, inventario_inicial: total }));
-      if (total === 0) {
-        toast.info(`Snapshot: 0 piezas (revisa que los SKUs existan en inventario)`);
-      } else {
-        toast.success(`Snapshot: ${total.toLocaleString("es-MX")} piezas en los ${form.skus.length} SKU(s)`);
-      }
+
+      let msg = `Snapshot: ${total.toLocaleString("es-MX")} pzs`;
+      msg += ` · ${skusConInv}/${form.skus.length} SKUs encontrados`;
+      if (skusSinInv > 0) msg += ` (${skusSinInv} sin datos)`;
+      (total > 0 ? toast.success : toast.info)(msg);
     } catch (e) {
       toast.error("No se pudo traer el inventario: " + e.message);
     }
