@@ -615,8 +615,17 @@ export default function PagosCliente({ cliente, clienteKey }) {
     r.estatus !== "no_aplica" &&
     !esMesFuturo(r.fecha_compromiso);
 
+  // En "Todas": mostrar TODO lo que ya transcurrió (pendientes + pagados,
+  //   excluyendo sólo los pagos fijos futuros y los cancelados/no_aplica) para
+  //   que todas las categorías (SPIFF, Rebate, etc.) sean visibles a la vez.
+  // En cada categoría específica: solo los activos (pagados van al acordeón).
+  const visibleEnTodas = (r) =>
+    r.estatus !== "cancelado" &&
+    r.estatus !== "no_aplica" &&
+    !esMesFuturo(r.fecha_compromiso);
+
   const filtered = catActiva === "todas"
-    ? registros.filter(esActivo)
+    ? registros.filter(visibleEnTodas)
     : catActiva === "pagosFijos"
       ? fijoRecords
       : registros.filter(r => r.categoria === catActiva && esActivo(r));
