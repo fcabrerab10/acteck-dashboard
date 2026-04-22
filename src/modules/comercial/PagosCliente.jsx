@@ -58,7 +58,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   }, [mostrarFuturos]);
   const [expandedMonth, setExpandedMonth] = useState(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
-  const [exportMes, setExportMes] = useState(""); // "YYYY-MM"
+  const [exportMeses, setExportMeses] = useState([]); // ["YYYY-MM", ...] multi-select
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue]     = useState("");
   const [saving, setSaving]           = useState(false);
@@ -670,67 +670,121 @@ export default function PagosCliente({ cliente, clienteKey }) {
     return Object.values(months).sort((a, b) => a.mes.localeCompare(b.mes));
   };
 
-  // Export del mes seleccionado — "lo que se tiene que pagar"
-  // Incluye estatus: pendiente, en_proceso, vencido (cualquier cosa NO pagada
-  // ni cancelada/no_aplica). User view: crea el Excel → se lo manda al
-  // equipo de crédito y cobranza → ellos confirman y pagan → luego regresan
-  // folio y se marca como 'pagado'.
-  const exportarMes = async () => {
-    if (!exportMes) return alert("Elige un mes");
+  // Export multi-mes — "lo que se tiene que pagar"
+  // Una sola hoja con todos los meses seleccionados, con headers y subtotales
+  // por mes. Incluye estatus: pendiente, en_proceso, vencido (no pagado
+  // ni cancelado/no_aplica).
+  const MESES_LARGOS_ARR = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+  const nombreArchivoParaMeses = (mesesOrdenados) => {
+    // mesesOrdenados: ["YYYY-MM", ...] ya ordenados asc
+    const clienteLabel = (cliente?.nombre || clienteKey).split(" ")[0];
+    if (mesesOrdenados.length === 1) {
+      const [a, m] = mesesOrdenados[0].split("-");
+      return `Pagos ${clienteLabel} ${MESES_LARGOS_ARR[Number(m) - 1]} ${a}.xlsx`;
+    }
+    // Mismo año?
+    const anios = new Set(mesesOrdenados.map(k => k.split("-")[0]));
+    if (anios.size === 1) {
+      const anio = [...anios][0];
+      // Consecutivos?
+      const nums = mesesOrdenados.map(k => Number(k.split("-")[1])).sort((a, b) => a - b);
+      const esConsec = nums.every((n, i) => i === 0 || n === nums[i - 1] + 1);
+      if (esConsec) {
+        const abrev = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+        return `Pagos ${clienteLabel} ${abrev[nums[0] - 1]}-${abrev[nums[nums.length - 1] - 1]} ${anio}.xlsx`;
+      }
+      return `Pagos ${clienteLabel} ${mesesOrdenados.length} meses ${anio}.xlsx`;
+    }
+    return `Pagos ${clienteLabel} ${mesesOrdenados.length} meses.xlsx`;
+  };
+
+  const exportarMeses = async () => {
+    if (exportMeses.length === 0) return alert("Selecciona al menos un mes");
     const XLSX = await loadSheetJS();
     if (!XLSX) return alert("Error cargando librería Excel");
-    const [anioStr, mesStr] = exportMes.split("-");
-    const anio = Number(anioStr), mes = Number(mesStr);
-    const MESES_LARGOS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
-    // Filtrar: de ese mes, por pagar (pendiente/en_proceso/vencido)
-    const delMes = registros.filter(r => {
-      if (!r.fecha_compromiso) return false;
-      const k = String(r.fecha_compromiso).slice(0, 7);
-      if (k !== exportMes) return false;
-      return ["pendiente", "en_proceso", "vencido"].includes(r.estatus);
-    });
-
-    if (delMes.length === 0) {
-      return alert(`No hay pagos por pagar en ${MESES_LARGOS[mes-1]} ${anio}.`);
-    }
-
-    // Ordenar por categoría (para que queden agrupados visualmente)
+    const mesesOrden = [...exportMeses].sort(); // YYYY-MM ordena bien alfabéticamente
     const ordenCat = ["promociones","marketing","pagosFijos","pagosVariables","rebate","spiff"];
-    delMes.sort((a, b) => {
-      const ca = ordenCat.indexOf(a.categoria); const cb = ordenCat.indexOf(b.categoria);
-      return (ca === -1 ? 99 : ca) - (cb === -1 ? 99 : cb);
-    });
 
-    // Filas: Concepto, Categoría, Monto, Notas
-    const rows = delMes.map(r => ({
-      Concepto: r.concepto || "",
-      Categoría: CATEGORIA_META[r.categoria]?.label || r.categoria || "",
-      Monto: Number(r.monto) || 0,
-      Notas: r.notas || "",
-    }));
-    // Total al final
-    const total = delMes.reduce((s, r) => s + (Number(r.monto) || 0), 0);
-    rows.push({ Concepto: "", Categoría: "", Monto: null, Notas: "" });
-    rows.push({ Concepto: "TOTAL", Categoría: "", Monto: total, Notas: "" });
+    // AoA (array of arrays) — manual porque necesitamos headers de mes embebidos
+    const aoa = [["Concepto", "Categoría", "Monto", "Notas"]];
+    const moneyRows = []; // índices de filas con monto numérico
+    const headerRows = []; // índices de filas que son título de mes
+    const subtotalRows = []; // índices de filas de subtotal
+    let grandTotal = 0;
+    let totalPagos = 0;
 
-    const ws = XLSX.utils.json_to_sheet(rows);
-    // Formato de monto con $ y sin decimales
-    const range = XLSX.utils.decode_range(ws["!ref"]);
-    for (let R = 1; R <= range.e.r; ++R) {
-      const cell = ws[XLSX.utils.encode_cell({ r: R, c: 2 })]; // col 2 = Monto
-      if (cell && typeof cell.v === "number") cell.z = '"$"#,##0';
+    for (const mesKey of mesesOrden) {
+      const [a, m] = mesKey.split("-");
+      const mesLabel = `${MESES_LARGOS_ARR[Number(m) - 1]} ${a}`;
+
+      const delMes = registros.filter(r => {
+        if (!r.fecha_compromiso) return false;
+        if (String(r.fecha_compromiso).slice(0, 7) !== mesKey) return false;
+        return ["pendiente", "en_proceso", "vencido"].includes(r.estatus);
+      });
+      delMes.sort((a, b) => {
+        const ca = ordenCat.indexOf(a.categoria); const cb = ordenCat.indexOf(b.categoria);
+        return (ca === -1 ? 99 : ca) - (cb === -1 ? 99 : cb);
+      });
+
+      if (delMes.length === 0) {
+        headerRows.push(aoa.length);
+        aoa.push([`${mesLabel}  (sin pagos por pagar)`, "", "", ""]);
+        aoa.push(["", "", "", ""]);
+        continue;
+      }
+
+      headerRows.push(aoa.length);
+      aoa.push([mesLabel, "", "", ""]);
+      let subtotal = 0;
+      delMes.forEach(r => {
+        const monto = Number(r.monto) || 0;
+        moneyRows.push(aoa.length);
+        aoa.push([
+          r.concepto || "",
+          CATEGORIA_META[r.categoria]?.label || r.categoria || "",
+          monto,
+          r.notas || "",
+        ]);
+        subtotal += monto;
+      });
+      subtotalRows.push(aoa.length);
+      moneyRows.push(aoa.length);
+      aoa.push(["Subtotal " + mesLabel, "", subtotal, ""]);
+      aoa.push(["", "", "", ""]); // separador
+      grandTotal += subtotal;
+      totalPagos += delMes.length;
     }
-    // Anchos de columna
+
+    if (totalPagos === 0) {
+      return alert("No hay pagos por pagar en los meses seleccionados.");
+    }
+
+    // Gran total al final
+    subtotalRows.push(aoa.length);
+    moneyRows.push(aoa.length);
+    aoa.push(["TOTAL", "", grandTotal, ""]);
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    // Formato moneda para filas con monto
+    moneyRows.forEach(R => {
+      const cell = ws[XLSX.utils.encode_cell({ r: R, c: 2 })];
+      if (cell && typeof cell.v === "number") cell.z = '"$"#,##0';
+    });
+    // Merges para cabeceras de mes (col A-D)
+    ws["!merges"] = headerRows.map(R => ({ s: { r: R, c: 0 }, e: { r: R, c: 3 } }));
+    // Anchos
     ws["!cols"] = [{ wch: 50 }, { wch: 18 }, { wch: 14 }, { wch: 60 }];
+    // Freeze header row
+    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `${MESES_LARGOS[mes-1]} ${anio}`);
-
-    const clienteLabel = (cliente?.nombre || clienteKey).split(" ")[0]; // ej "Digitalife"
-    const nombreArchivo = `Pagos ${clienteLabel} ${MESES_LARGOS[mes-1]} ${anio}.xlsx`;
-    XLSX.writeFile(wb, nombreArchivo);
+    XLSX.utils.book_append_sheet(wb, ws, "Pagos por pagar");
+    XLSX.writeFile(wb, nombreArchivoParaMeses(mesesOrden));
     setExportModalOpen(false);
+    setExportMeses([]);
   };
 
   // ── Inline cell renderer ──
@@ -1041,11 +1095,11 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       const hoy = new Date();
                       const prev = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
                       const def = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
-                      setExportMes(mb.some(m => m.mes === def) ? def : (mb[mb.length - 1]?.mes || ""));
+                      setExportMeses(mb.some(m => m.mes === def) ? [def] : []);
                       setExportModalOpen(true);
                     }}
                     className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5"
-                    title="Exporta a Excel los pagos por pagar de un mes"
+                    title="Exporta a Excel los pagos por pagar de uno o varios meses"
                   >
                     📥 Exportar Excel
                   </button>
@@ -1124,54 +1178,82 @@ export default function PagosCliente({ cliente, clienteKey }) {
             );
           })()}
 
-          {/* Modal para exportar Excel por mes */}
+          {/* Modal para exportar Excel — selección múltiple de meses */}
           {exportModalOpen && (() => {
             const mbList = monthlyBreakdown();
-            const MESES_LARGOS_M = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
             const porPagarMes = (mesKey) => registros.filter(r =>
               r.fecha_compromiso && String(r.fecha_compromiso).slice(0, 7) === mesKey
               && ["pendiente","en_proceso","vencido"].includes(r.estatus)
             );
-            const selMes = exportMes ? (() => {
-              const [a, m] = exportMes.split("-");
-              return { anio: Number(a), mes: Number(m), count: porPagarMes(exportMes).length, total: porPagarMes(exportMes).reduce((s,r) => s + (Number(r.monto)||0), 0) };
-            })() : null;
+            const toggleMes = (k) => setExportMeses(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]);
+            const selectedSum = exportMeses.reduce((s, k) => s + porPagarMes(k).reduce((a, r) => a + (Number(r.monto) || 0), 0), 0);
+            const selectedCount = exportMeses.reduce((s, k) => s + porPagarMes(k).length, 0);
+            // Todos los meses con al menos 1 pago por pagar
+            const mesesConPendientes = mbList.filter(m => porPagarMes(m.mes).length > 0);
             return (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
                   <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                     <h3 className="font-bold text-gray-800">Exportar pagos por pagar</h3>
                     <button onClick={() => setExportModalOpen(false)} className="p-1 rounded hover:bg-gray-100 text-gray-500 text-lg">✕</button>
                   </div>
-                  <div className="p-5 space-y-4">
+                  <div className="p-5 space-y-4 overflow-y-auto">
                     <p className="text-xs text-gray-500">
-                      Genera un Excel con todos los pagos pendientes / en proceso / vencidos del mes elegido,
-                      agrupados por categoría. Útil para enviarle a Crédito y Cobranza.
+                      Selecciona uno o varios meses. El Excel incluirá los pagos <strong>pendientes / en proceso / vencidos</strong> de
+                      todos los meses elegidos, agrupados en una sola hoja con subtotales.
                     </p>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Mes a exportar</label>
-                      <select
-                        value={exportMes}
-                        onChange={e => setExportMes(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      >
-                        <option value="">— Elige un mes —</option>
-                        {mbList.map(m => {
-                          const [a, mm] = m.mes.split("-");
-                          const cnt = porPagarMes(m.mes).length;
-                          return (
-                            <option key={m.mes} value={m.mes}>
-                              {MESES_LARGOS_M[Number(mm) - 1]} {a} · {cnt} pago{cnt !== 1 ? "s" : ""} por pagar
-                            </option>
-                          );
-                        })}
-                      </select>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-gray-600 uppercase">Meses</label>
+                      <div className="flex gap-2">
+                        <button type="button"
+                                onClick={() => setExportMeses(mesesConPendientes.map(m => m.mes))}
+                                className="text-[11px] text-blue-600 hover:underline">
+                          Seleccionar todos
+                        </button>
+                        <button type="button"
+                                onClick={() => setExportMeses([])}
+                                className="text-[11px] text-gray-500 hover:underline">
+                          Limpiar
+                        </button>
+                      </div>
                     </div>
-                    {selMes && (
-                      <div className={`rounded-lg p-3 text-sm ${selMes.count > 0 ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
-                        {selMes.count > 0
-                          ? <>Se exportarán <strong>{selMes.count} pagos</strong> por un total de <strong>{formatMXN(selMes.total)}</strong>.</>
-                          : <>No hay pagos por pagar en {MESES_LARGOS_M[selMes.mes - 1]} {selMes.anio}.</>
+                    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                      {mbList.length === 0 && (
+                        <div className="px-3 py-6 text-center text-xs text-gray-400 italic">
+                          No hay meses con registros de pago
+                        </div>
+                      )}
+                      {mbList.map(m => {
+                        const [a, mm] = m.mes.split("-");
+                        const cnt = porPagarMes(m.mes).length;
+                        const checked = exportMeses.includes(m.mes);
+                        const disabled = cnt === 0;
+                        return (
+                          <label key={m.mes}
+                                 className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${disabled ? "opacity-50 cursor-not-allowed" : checked ? "bg-emerald-50" : "hover:bg-gray-50"}`}
+                                 title={disabled ? "Sin pagos por pagar en este mes" : ""}>
+                            <div className="flex items-center gap-2">
+                              <input type="checkbox"
+                                     checked={checked}
+                                     disabled={disabled}
+                                     onChange={() => !disabled && toggleMes(m.mes)}
+                                     className="rounded" />
+                              <span className="text-sm text-gray-700">
+                                {MESES_LARGOS_ARR[Number(mm) - 1]} {a}
+                              </span>
+                            </div>
+                            <span className={`text-xs ${cnt > 0 ? "text-gray-500" : "text-gray-300"}`}>
+                              {cnt} pago{cnt !== 1 ? "s" : ""}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {exportMeses.length > 0 && (
+                      <div className="rounded-lg p-3 text-sm bg-emerald-50 text-emerald-800">
+                        {selectedCount > 0
+                          ? <>Se exportarán <strong>{selectedCount} pagos</strong> de <strong>{exportMeses.length} mes{exportMeses.length !== 1 ? "es" : ""}</strong> por un total de <strong>{formatMXN(selectedSum)}</strong>.</>
+                          : <>Los meses seleccionados no tienen pagos por pagar.</>
                         }
                       </div>
                     )}
@@ -1182,8 +1264,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       Cancelar
                     </button>
                     <button
-                      onClick={exportarMes}
-                      disabled={!exportMes || (selMes && selMes.count === 0)}
+                      onClick={exportarMeses}
+                      disabled={exportMeses.length === 0 || selectedCount === 0}
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-semibold"
                     >
                       📥 Descargar Excel
