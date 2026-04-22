@@ -553,10 +553,15 @@ export function ListaPromociones({ clienteKey, refreshKey }) {
                 <PromoCard
                   key={p.id}
                   promo={p}
+                  clienteKey={clienteKey}
                   canEdit={canEdit}
                   onCambiarEstatus={cambiarEstatus}
                   onEditar={() => setModalEdit(p)}
                   onBorrar={() => borrar(p.id)}
+                  onRefresh={async () => {
+                    const { data } = await supabase.from("promociones").select("*").eq("cliente", clienteKey).order("fecha_fin", { ascending: false });
+                    setPromos(data || []);
+                  }}
                 />
               ))}
             </div>
@@ -597,7 +602,337 @@ export function ListaPromociones({ clienteKey, refreshKey }) {
   );
 }
 
-function PromoCard({ promo, canEdit, onCambiarEstatus, onEditar, onBorrar }) {
+const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+const MESES_LARGOS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+// ────────────────────────────────────────────────────────────────────
+//  SelloutCierreMes — pagos mensuales para promociones tipo "sellout"
+// ────────────────────────────────────────────────────────────────────
+// Cada mes, lo que vendió el cliente al consumidor final se paga al
+// cliente. Este componente:
+//   - muestra historial de cierres mensuales (tabla de pagos.promocion_id)
+//   - muestra progreso vs inventario inicial
+//   - permite cerrar un mes (calcula sellout real + crea pago)
+//   - permite "pagar el resto" del inventario
+//   - permite cerrar manual (sin pago)
+function SelloutCierreMes({ promo, clienteKey, canEdit, onChange }) {
+  const [historial, setHistorial] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [mesSel, setMesSel] = useState(""); // "YYYY-MM"
+  const [procesando, setProcesando] = useState(false);
+
+  const cargar = React.useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("pagos")
+      .select("id, concepto, monto, estatus, fecha_compromiso, fecha_pago_real, mes_sellout, anio_sellout, piezas_mes, folio, notas")
+      .eq("promocion_id", promo.id)
+      .order("anio_sellout", { ascending: true })
+      .order("mes_sellout", { ascending: true })
+      .order("created_at", { ascending: true });
+    setHistorial(data || []);
+    setLoading(false);
+  }, [promo.id]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const piezasInicial = Number(promo.inventario_inicial || 0);
+  const piezasPagadas = Number(promo.piezas_pagadas_acum || 0);
+  const piezasRestantes = Math.max(0, piezasInicial - piezasPagadas);
+  const pct = piezasInicial > 0 ? Math.min(100, (piezasPagadas / piezasInicial * 100)) : 0;
+
+  // Meses disponibles = desde fecha_inicio.mes hasta mes anterior al actual,
+  // restando los ya cerrados (con pago con mes/anio_sellout no nulos).
+  const mesesDisponibles = useMemo(() => {
+    if (!promo.fecha_inicio) return [];
+    const out = [];
+    const start = new Date(promo.fecha_inicio + "T00:00:00");
+    const hoy = new Date();
+    // último mes cerrado completo = mes anterior al actual
+    const limite = new Date(hoy.getFullYear(), hoy.getMonth(), 1); // 1er día del mes actual
+    if (promo.fecha_fin) {
+      const finProm = new Date(promo.fecha_fin + "T00:00:00");
+      const finMes1 = new Date(finProm.getFullYear(), finProm.getMonth() + 1, 1);
+      if (finMes1 < limite) limite.setTime(finMes1.getTime());
+    }
+    const cerradosSet = new Set(
+      historial
+        .filter(p => p.mes_sellout && p.anio_sellout)
+        .map(p => `${p.anio_sellout}-${String(p.mes_sellout).padStart(2,"0")}`)
+    );
+    let cur = new Date(start.getFullYear(), start.getMonth(), 1);
+    while (cur < limite) {
+      const a = cur.getFullYear();
+      const m = cur.getMonth() + 1;
+      const k = `${a}-${String(m).padStart(2,"0")}`;
+      if (!cerradosSet.has(k)) out.push({ anio: a, mes: m, key: k, label: `${MESES_LARGOS[m-1]} ${a}` });
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    return out;
+  }, [promo.fecha_inicio, promo.fecha_fin, historial]);
+
+  async function calcularPiezasVendidasMes(anio, mes) {
+    if (clienteKey === "pcel") {
+      const { data, error } = await supabase
+        .from("sellout_pcel_mensual")
+        .select("piezas, sku")
+        .eq("anio", anio).eq("mes", mes)
+        .in("sku", promo.skus);
+      if (error) throw error;
+      return (data || []).reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+    } else {
+      // digitalife / ml: sellout_detalle por rango de fechas
+      const pad = (n) => String(n).padStart(2, "0");
+      const finDia = new Date(anio, mes, 0).getDate(); // último día del mes
+      const inicio = `${anio}-${pad(mes)}-01`;
+      const fin = `${anio}-${pad(mes)}-${pad(finDia)}`;
+      const { data, error } = await supabase
+        .from("sellout_detalle")
+        .select("cantidad, no_parte")
+        .eq("cliente", clienteKey)
+        .gte("fecha", inicio).lte("fecha", fin)
+        .in("no_parte", promo.skus);
+      if (error) throw error;
+      return (data || []).reduce((s, r) => s + (Number(r.cantidad) || 0), 0);
+    }
+  }
+
+  async function cerrarMes() {
+    if (!canEdit) return;
+    if (!mesSel) return toast.error("Elige el mes a cerrar");
+    const [anioStr, mesStr] = mesSel.split("-");
+    const anio = Number(anioStr), mes = Number(mesStr);
+    setProcesando(true);
+    try {
+      const piezasReales = await calcularPiezasVendidasMes(anio, mes);
+      if (piezasReales <= 0) {
+        const seguir = confirm(`No se encontraron ventas en ${MESES_LARGOS[mes-1]} ${anio} para estos SKUs. ¿Crear el pago en $0 de todos modos?`);
+        if (!seguir) { setProcesando(false); return; }
+      }
+      // Topear al restante del inventario
+      const piezasPago = Math.min(piezasReales, piezasRestantes > 0 ? piezasRestantes : piezasReales);
+      if (piezasRestantes > 0 && piezasReales > piezasRestantes) {
+        toast.info(`Solo quedan ${piezasRestantes} pzs del inventario inicial. Se pagan ${piezasRestantes}, no las ${piezasReales} vendidas.`);
+      }
+      const monto = piezasPago * Number(promo.monto_por_pieza || 0);
+      const nextMes = mes === 12 ? 1 : mes + 1;
+      const nextAnio = mes === 12 ? anio + 1 : anio;
+      const pad = (n) => String(n).padStart(2, "0");
+      const fechaCompromiso = `${nextAnio}-${pad(nextMes)}-15`;
+      const concepto = `Sellout ${promo.titulo} — ${MESES_LARGOS[mes-1]} ${anio} — ${piezasPago} pzs × ${formatMXN(promo.monto_por_pieza)}`;
+
+      const { error } = await supabase.from("pagos").insert({
+        cliente: clienteKey,
+        categoria: "promocion_sellout",
+        concepto,
+        monto,
+        estatus: "pendiente",
+        fecha_compromiso: fechaCompromiso,
+        responsable: "Fernando Cabrera",
+        promocion_id: promo.id,
+        mes_sellout: mes,
+        anio_sellout: anio,
+        piezas_mes: piezasPago,
+      });
+      if (error) throw error;
+      toast.success(`Pago creado: ${formatMXN(monto)} compromiso ${formatFecha(fechaCompromiso)}`);
+      // Si con este pago se acabó el inventario inicial, auto-cerrar
+      const nuevoAcum = piezasPagadas + piezasPago;
+      if (piezasInicial > 0 && nuevoAcum >= piezasInicial) {
+        await supabase.from("promociones")
+          .update({ cerrada_por_inventario: true, cerrada_at: new Date().toISOString(), estatus: "pagada" })
+          .eq("id", promo.id);
+        toast.success("Inventario inicial alcanzado — promoción cerrada automáticamente");
+      }
+      setMesSel("");
+      await cargar();
+      onChange && onChange();
+    } catch (e) {
+      toast.error("Error al cerrar mes: " + (e?.message || e));
+    } finally {
+      setProcesando(false);
+    }
+  }
+
+  async function pagarInventarioRestante() {
+    if (!canEdit) return;
+    if (piezasRestantes <= 0) return toast.info("No quedan piezas por pagar");
+    if (!confirm(`Pagar el restante de ${piezasRestantes} pzs (${formatMXN(piezasRestantes * Number(promo.monto_por_pieza || 0))}) y cerrar la promoción?`)) return;
+    setProcesando(true);
+    try {
+      const monto = piezasRestantes * Number(promo.monto_por_pieza || 0);
+      const hoy = new Date();
+      const nextMes = hoy.getMonth() + 2 > 12 ? 1 : hoy.getMonth() + 2;
+      const nextAnio = hoy.getMonth() + 2 > 12 ? hoy.getFullYear() + 1 : hoy.getFullYear();
+      const pad = (n) => String(n).padStart(2, "0");
+      const fechaCompromiso = `${nextAnio}-${pad(nextMes)}-15`;
+
+      const { error: eIns } = await supabase.from("pagos").insert({
+        cliente: clienteKey,
+        categoria: "promocion_sellout",
+        concepto: `Sellout ${promo.titulo} — Resto inventario ${piezasRestantes} pzs × ${formatMXN(promo.monto_por_pieza)}`,
+        monto,
+        estatus: "pendiente",
+        fecha_compromiso: fechaCompromiso,
+        responsable: "Fernando Cabrera",
+        promocion_id: promo.id,
+        piezas_mes: piezasRestantes, // sin mes/anio_sellout → es "ajuste final"
+      });
+      if (eIns) throw eIns;
+      await supabase.from("promociones")
+        .update({ cerrada_manual: true, cerrada_at: new Date().toISOString(), estatus: "pagada" })
+        .eq("id", promo.id);
+      toast.success(`Pago final de ${formatMXN(monto)} creado. Promoción cerrada.`);
+      await cargar();
+      onChange && onChange();
+    } catch (e) {
+      toast.error("Error: " + (e?.message || e));
+    } finally {
+      setProcesando(false);
+    }
+  }
+
+  async function cerrarManual() {
+    if (!canEdit) return;
+    if (!confirm("Cerrar la promoción manualmente SIN generar pago del restante. ¿Continuar?")) return;
+    setProcesando(true);
+    try {
+      const { error } = await supabase.from("promociones")
+        .update({ cerrada_manual: true, cerrada_at: new Date().toISOString(), estatus: "cancelada" })
+        .eq("id", promo.id);
+      if (error) throw error;
+      toast.success("Promoción cerrada manualmente");
+      onChange && onChange();
+    } catch (e) {
+      toast.error("Error: " + (e?.message || e));
+    } finally {
+      setProcesando(false);
+    }
+  }
+
+  const estaCerrada = promo.cerrada_manual || promo.cerrada_por_inventario || ["pagada","cancelada"].includes(promo.estatus);
+
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-200 space-y-3">
+      {/* Progreso */}
+      <div>
+        <div className="flex justify-between items-baseline mb-1 text-xs">
+          <strong className="text-gray-700">Pagos mensuales de sellout</strong>
+          <span className="text-gray-500">
+            {piezasPagadas.toLocaleString("es-MX")} / {piezasInicial.toLocaleString("es-MX")} pzs pagadas
+            {piezasInicial > 0 && <span className="text-gray-400"> · {pct.toFixed(0)}%</span>}
+          </span>
+        </div>
+        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+        </div>
+        {piezasInicial > 0 && (
+          <div className="text-[11px] text-gray-500 mt-1">
+            Restan por pagar: <strong>{piezasRestantes.toLocaleString("es-MX")} pzs</strong>{" "}
+            ({formatMXN(piezasRestantes * Number(promo.monto_por_pieza || 0))})
+          </div>
+        )}
+      </div>
+
+      {/* Historial */}
+      {loading ? (
+        <p className="text-[11px] text-gray-400 italic">Cargando historial…</p>
+      ) : historial.length === 0 ? (
+        <p className="text-[11px] text-gray-400 italic">Aún no hay pagos mensuales generados.</p>
+      ) : (
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <table className="w-full text-[11px]">
+            <thead className="bg-gray-50 text-gray-600">
+              <tr>
+                <th className="px-2 py-1.5 text-left font-semibold">Periodo</th>
+                <th className="px-2 py-1.5 text-right font-semibold">Piezas</th>
+                <th className="px-2 py-1.5 text-right font-semibold">Monto</th>
+                <th className="px-2 py-1.5 text-left font-semibold">Compromiso</th>
+                <th className="px-2 py-1.5 text-left font-semibold">Estatus</th>
+              </tr>
+            </thead>
+            <tbody>
+              {historial.map(p => (
+                <tr key={p.id} className="border-t border-gray-100">
+                  <td className="px-2 py-1.5">
+                    {p.mes_sellout && p.anio_sellout
+                      ? `${MESES_LARGOS[p.mes_sellout-1]} ${p.anio_sellout}`
+                      : <span className="italic text-gray-500">Ajuste final</span>}
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono">{Number(p.piezas_mes || 0).toLocaleString("es-MX")}</td>
+                  <td className="px-2 py-1.5 text-right font-semibold">{formatMXN(p.monto)}</td>
+                  <td className="px-2 py-1.5">{p.fecha_compromiso ? formatFecha(p.fecha_compromiso) : "—"}</td>
+                  <td className="px-2 py-1.5">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                      p.estatus === "pagado" ? "bg-emerald-100 text-emerald-700"
+                      : p.estatus === "pendiente" ? "bg-amber-100 text-amber-700"
+                      : "bg-gray-100 text-gray-600"
+                    }`}>{p.estatus || "—"}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Acciones */}
+      {canEdit && !estaCerrada && (
+        <div className="flex items-end gap-2 flex-wrap">
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-[10px] font-semibold text-gray-600 uppercase mb-1">Cerrar mes</label>
+            <select
+              value={mesSel}
+              onChange={e => setMesSel(e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+              disabled={procesando}
+            >
+              <option value="">— Elige un mes —</option>
+              {mesesDisponibles.map(m => (
+                <option key={m.key} value={m.key}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={cerrarMes}
+            disabled={!mesSel || procesando}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white rounded text-xs font-semibold whitespace-nowrap"
+          >
+            {procesando ? "Procesando…" : "Cerrar mes"}
+          </button>
+          {piezasRestantes > 0 && (
+            <button
+              onClick={pagarInventarioRestante}
+              disabled={procesando}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded text-xs font-semibold"
+              title="Paga el resto del inventario como si se hubiera vendido y cierra la promo"
+            >
+              Pagar restante
+            </button>
+          )}
+          <button
+            onClick={cerrarManual}
+            disabled={procesando}
+            className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs font-semibold border border-gray-300"
+            title="Cierra la promoción sin pagar el resto"
+          >
+            Cerrar manual
+          </button>
+        </div>
+      )}
+
+      {estaCerrada && (
+        <div className="text-[11px] text-gray-500 italic">
+          {promo.cerrada_por_inventario && "Cerrada automáticamente al agotar inventario inicial."}
+          {promo.cerrada_manual && "Cerrada manualmente."}
+          {!promo.cerrada_por_inventario && !promo.cerrada_manual && `Estatus actual: ${promo.estatus}`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PromoCard({ promo, canEdit, clienteKey, onCambiarEstatus, onEditar, onBorrar, onRefresh }) {
   const [open, setOpen] = useState(false);
   const tipoInfo = TIPOS_PROMO.find((t) => t.id === promo.tipo);
   const TipoIcon = tipoInfo?.icon || Tag;
@@ -677,7 +1012,15 @@ function PromoCard({ promo, canEdit, onCambiarEstatus, onEditar, onBorrar }) {
           )}
 
           {promo.tipo === "sellout" && (
-            <p><strong>Monto/pieza:</strong> {formatMXN(promo.monto_por_pieza)} · <strong>Inv. inicial:</strong> {promo.inventario_inicial}</p>
+            <>
+              <p><strong>Monto/pieza:</strong> {formatMXN(promo.monto_por_pieza)} · <strong>Inv. inicial:</strong> {promo.inventario_inicial}</p>
+              <SelloutCierreMes
+                promo={promo}
+                clienteKey={clienteKey}
+                canEdit={canEdit}
+                onChange={onRefresh}
+              />
+            </>
           )}
           {promo.tipo === "sell_in" && (
             <p><strong>Monto/pieza comprada:</strong> {formatMXN(promo.monto_por_pieza)}</p>
