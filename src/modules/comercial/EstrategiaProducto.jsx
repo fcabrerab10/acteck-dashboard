@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED, fetchAllPagesREST } from '../../lib/supabase';
 import { formatMXN, loadSheetJS } from '../../lib/utils';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeEditar as puedeEditarFn } from '../../lib/permisos';
 
 export default function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
+  const perfil = usePerfil();
+  const canEdit = puedeEditarFn(perfil);
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [datos, setDatos] = React.useState(null);
@@ -44,6 +48,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
   // Guardar edit en Supabase (upsert por cliente+sku)
   const saveSugeridoOverride = async (sku, valor) => {
+    if (!canEdit) return; // viewer/cliente sin permiso de edición
     if (!DB_CONFIGURED) return;
     const v = Number(valor) || 0;
     setSugeridoSaveState(p => ({ ...p, [sku]: "saving" }));
@@ -83,6 +88,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   }, [clienteKey]);
 
   const savePrecioOverride = async (sku, valor) => {
+    if (!canEdit) return;
     if (!DB_CONFIGURED) return;
     const v = Number(valor) || 0;
     setPrecioSaveState(p => ({ ...p, [sku]: "saving" }));
@@ -138,6 +144,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
   // Cerrar propuesta (pasa de pendiente → cerrada, sus SKUs vuelven a aparecer en riesgo)
   const cerrarPropuesta = async (id) => {
+    if (!canEdit) return;
     if (!confirm("¿Marcar esta propuesta como cerrada? Los SKUs volverán a aparecer en riesgo de desabasto si aplica.")) return;
     const { error } = await supabase.from("propuestas_compra")
       .update({ estatus: "cerrada", cerrada_at: new Date().toISOString() })
@@ -146,6 +153,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     await cargarPropuestasCompra();
   };
   const reactivarPropuesta = async (id) => {
+    if (!canEdit) return;
     const { error } = await supabase.from("propuestas_compra")
       .update({ estatus: "pendiente", cerrada_at: null })
       .eq("id", id);
@@ -167,6 +175,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   };
 
   const borrarPropuestaHistorica = async (id) => {
+    if (!canEdit) return;
     if (!confirm("¿Eliminar esta propuesta del historial?")) return;
     const { error } = await supabase.from("propuestas_compra").delete().eq("id", id);
     if (error) { alert("Error al borrar: " + error.message); return; }
@@ -507,6 +516,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
   // Handle file uploads
   const handleUpload = async (e) => {
+    if (!canEdit) return;
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
@@ -1265,6 +1275,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       // Export específico para PCEL: columnas pensadas para la propuesta de
       // compra al cliente + equipo interno.
       const exportToExcelPcel = async () => {
+        if (!canEdit) return; // exporta Y persiste snapshot en BD → gate
         const XLSX = await loadSheetJS();
         if (!XLSX) { alert("Error cargando librería Excel"); return; }
 
@@ -1458,6 +1469,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       };
 
       const exportToExcel = async () => {
+    if (!canEdit) return;
     if (clienteKey === "pcel") return exportToExcelPcel();
     const XLSX = await loadSheetJS();
     if (!XLSX) { alert("Error cargando librería Excel"); return; }
@@ -1601,11 +1613,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
       React.createElement("div", { className: "flex justify-between items-start mb-4" },
         React.createElement("h2", { className: "text-2xl font-bold text-gray-800" }, "Estrategia de Producto"),
-        React.createElement("button", {
+        // Botón de actualizar datos sólo para usuarios con permiso de edición
+        canEdit && React.createElement("button", {
           className: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium",
           onClick: () => document.getElementById("file-input-update").click(),
         }, "📤 Actualizar datos"),
-        React.createElement("input", {
+        canEdit && React.createElement("input", {
           id: "file-input-update",
           type: "file",
           multiple: true,
@@ -2065,7 +2078,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 }),
                 "Solo activos"
               ),
-              React.createElement("button", {
+              // Exportar Excel guarda snapshot en propuestas_compra → requiere edición
+              canEdit && React.createElement("button", {
                 onClick: exportToExcel,
                 style: { padding: "8px 16px", background: "#10B981", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }
               }, "\uD83D\uDCE5 Exportar Excel"),
@@ -2175,7 +2189,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                         type: "number", min: 0,
                         value: valEff,
                         disabled: sinStock,
-                        title: sinStock ? "Sin inventario ni tránsito Acteck — no se puede sugerir" : undefined,
+                        readOnly: !canEdit,
+                        title: !canEdit ? "Solo lectura" : (sinStock ? "Sin inventario ni tránsito Acteck — no se puede sugerir" : undefined),
                         onChange: function(e) {
                           if (sinStock) return;
                           var nv = Number(e.target.value) || 0;
@@ -2219,10 +2234,13 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   },
                     React.createElement("input", {
                       type: "number", min: 0, step: "1",
+                      readOnly: !canEdit,
+                      title: !canEdit ? "Solo lectura" : undefined,
                       value: precioEdits[s.sku] !== undefined
                         ? Math.round(Number(precioEdits[s.sku]) || 0)
                         : Math.round(Number(s.precioAAAcd) || 0),
                       onChange: function(e) {
+                        if (!canEdit) return;
                         var nv = Math.round(Number(e.target.value) || 0);
                         setPrecioEdits(Object.assign({}, precioEdits, { [s.sku]: nv }));
                         debounceSavePrecio(s.sku, nv);
@@ -2393,7 +2411,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                               style: { padding: "3px 8px", fontSize: 11, background: "#3B82F6", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", marginRight: 6 },
                               title: "Re-descargar Excel"
                             }, "\uD83D\uDCE5"),
-                            esPend
+                            // Cerrar/Reactivar/Borrar sólo para usuarios con permiso de edición
+                            canEdit && (esPend
                               ? React.createElement("button", {
                                   onClick: () => cerrarPropuesta(p.id),
                                   style: { padding: "3px 8px", fontSize: 11, background: "#fff", color: "#059669", border: "1px solid #6EE7B7", borderRadius: 4, cursor: "pointer", marginRight: 6 },
@@ -2403,8 +2422,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                                   onClick: () => reactivarPropuesta(p.id),
                                   style: { padding: "3px 8px", fontSize: 11, background: "#fff", color: "#1E40AF", border: "1px solid #BFDBFE", borderRadius: 4, cursor: "pointer", marginRight: 6 },
                                   title: "Reactivar propuesta"
-                                }, "\u21bb Reactivar"),
-                            React.createElement("button", {
+                                }, "\u21bb Reactivar")),
+                            canEdit && React.createElement("button", {
                               onClick: () => borrarPropuestaHistorica(p.id),
                               style: { padding: "3px 8px", fontSize: 11, background: "#fff", color: "#EF4444", border: "1px solid #FCA5A5", borderRadius: 4, cursor: "pointer" },
                               title: "Eliminar"

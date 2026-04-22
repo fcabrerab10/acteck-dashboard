@@ -1,6 +1,8 @@
 import React from "react";
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { Megaphone, CalendarDays } from 'lucide-react';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeEditar as puedeEditarFn } from '../../lib/permisos';
 
 // ═══════════ CONFIG DE TIPOS DE ACTIVIDAD ═══════════════════════
 // Cada tipo tiene color, icono y lista de métricas específicas
@@ -81,6 +83,8 @@ const fmtMXN = (v) => "$" + Number(v || 0).toLocaleString("es-MX", { minimumFrac
 const fmtNum = (v) => Number(v || 0).toLocaleString("es-MX");
 
 export default function MarketingCliente({ cliente, clienteKey }) {
+  const perfil = usePerfil();
+  const canEdit = puedeEditarFn(perfil);
   const [actividades, setActividades] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [anio, setAnio] = React.useState(2026);
@@ -160,11 +164,13 @@ export default function MarketingCliente({ cliente, clienteKey }) {
 
   // ─── CRUD ────────────────────────────────────────────────────
   const openNew = () => {
+    if (!canEdit) return;
     setForm({ ...emptyForm(), fecha: new Date(anio, mesSel - 1, Math.min(new Date().getDate(), 28)).toISOString().slice(0, 10) });
     setEditId(null);
     setShowForm(true);
   };
   const openEdit = (a) => {
+    if (!canEdit) return;
     setForm({
       tipo: a.tipo || "mailing",
       marca: a.marca || "acteck",
@@ -184,6 +190,7 @@ export default function MarketingCliente({ cliente, clienteKey }) {
   };
   const closeForm = () => { setShowForm(false); setEditId(null); setForm(emptyForm()); };
   const save = async () => {
+    if (!canEdit) return;
     if (!form.nombre.trim()) { alert("Falta el nombre de la actividad"); return; }
     setSaving(true);
     // Parse YYYY-MM-DD SIN conversión de timezone (new Date() lo interpreta como UTC)
@@ -236,6 +243,7 @@ export default function MarketingCliente({ cliente, clienteKey }) {
     closeForm();
   };
   const deleteAct = async (id) => {
+    if (!canEdit) return;
     if (!window.confirm("¿Eliminar esta actividad?")) return;
     // Optimistic: remove from local state immediately
     setActividades(p => p.filter(a => a.id !== id));
@@ -248,6 +256,7 @@ export default function MarketingCliente({ cliente, clienteKey }) {
     }
   };
   const toggleCompletada = async (a) => {
+    if (!canEdit) return;
     const nuevoEstatus = (a.estatus === "completado" || a.estatus === "archivado") ? "activo" : "completado";
     // Optimistic
     setActividades(p => p.map(x => x.id === a.id ? { ...x, estatus: nuevoEstatus } : x));
@@ -274,6 +283,7 @@ export default function MarketingCliente({ cliente, clienteKey }) {
 
   // ─── Cerrar mes: consolida actividades sin pago en un solo pago ──
   const cerrarMes = async () => {
+    if (!canEdit) return;
     const actsACerrar = actividadesDelMes.filter(a => !a.pago_id);
     if (actsACerrar.length === 0) {
       alert("No hay actividades pendientes de cerrar en este mes.");
@@ -360,7 +370,7 @@ export default function MarketingCliente({ cliente, clienteKey }) {
           <select value={mesSel} onChange={e => { setMesSel(Number(e.target.value)); setDiaSeleccionado(null); }} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}>
             {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
-          {totales.sinPago > 0 && totales.inversionSinPago > 0 && (
+          {canEdit && totales.sinPago > 0 && totales.inversionSinPago > 0 && (
             <button
               onClick={cerrarMes}
               title={`Genera un pago consolidado de ${fmtMXN(totales.inversionSinPago)} por ${totales.sinPago} actividad(es)`}
@@ -369,7 +379,7 @@ export default function MarketingCliente({ cliente, clienteKey }) {
               🔒 Cerrar mes ({fmtMXN(totales.inversionSinPago)})
             </button>
           )}
-          <button onClick={openNew} style={{ padding: "8px 14px", background: "#3B82F6", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>+ Nueva actividad</button>
+          {canEdit && <button onClick={openNew} style={{ padding: "8px 14px", background: "#3B82F6", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>+ Nueva actividad</button>}
         </div>
       </div>
 
@@ -468,7 +478,7 @@ export default function MarketingCliente({ cliente, clienteKey }) {
       {/* Grid de tarjetas activas */}
       {activasFiltradas.length === 0 && completadasFiltradas.length === 0 ? (
         <div style={{ textAlign: "center", padding: 40, color: "#94A3B8", background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0" }}>
-          No hay actividades para estos filtros. <button onClick={openNew} style={{ marginLeft: 8, color: "#3B82F6", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Crear la primera</button>
+          No hay actividades para estos filtros.{canEdit && <button onClick={openNew} style={{ marginLeft: 8, color: "#3B82F6", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Crear la primera</button>}
         </div>
       ) : (
         <>

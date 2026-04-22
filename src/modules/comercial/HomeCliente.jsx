@@ -5,6 +5,8 @@ import { formatMXN, formatFecha, calcularSalud, loadSheetJS } from '../../lib/ut
 import { Semaforo, TarjetaPendientes } from '../../components';
 import { TrendingUp, Wallet, ClipboardList, Target, BarChart3, Package } from 'lucide-react';
 import { fetchSelloutSku, fetchInventarioCliente } from '../../lib/pcelAdapter';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeEditar as puedeEditarFn } from '../../lib/permisos';
 
 const iconStyle14 = { width: 14, height: 14, verticalAlign: "middle", marginRight: 4 };
 const iconStyle16 = { width: 16, height: 16, verticalAlign: "middle", marginRight: 6 };
@@ -18,6 +20,8 @@ function ActualizarDatosExcel({ cliente, anio, onComplete }) {
   const procesarArchivo = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    // Nota: este sub-componente no tiene contexto de perfil — el gate real está
+    // en el contenedor que lo renderiza (no lo incluye para viewer).
     setCargando(true);
     setResultado(null);
     try {
@@ -191,6 +195,8 @@ function TarjetaTendenciaML({ sellOutPorMesMarca }) {
 }
 
 export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
+  const perfil = usePerfil();
+  const canEdit = puedeEditarFn(perfil);
 
   // ML-specific view
   if (isML) {
@@ -890,6 +896,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   // ─── TAREAS CARD (lista de tareas con checkbox + timestamp) ──────────────
   function TareasCard() {
     const toggleTarea = async (tarea) => {
+      if (!canEdit) return;
       const esCompletada = tarea.estado === 'completado';
       const nuevoEstado = esCompletada ? 'pendiente' : 'completado';
       const updates = { estado: nuevoEstado, updated_at: new Date().toISOString() };
@@ -899,6 +906,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       }
     };
     const addTarea = async () => {
+      if (!canEdit) return;
       if (!nuevaTarea.descripcion.trim()) return;
       const payload = {
         cliente: clienteKey,
@@ -918,6 +926,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       }
     };
     const delTarea = async (id) => {
+      if (!canEdit) return;
       const { error } = await supabase.from("pendientes").update({ archivado: true }).eq("id", id);
       if (!error) setTareas(prev => prev.filter(t => t.id !== id));
     };
@@ -1071,6 +1080,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     const archivados = items.filter(p => p.archivado);
 
     const addPendiente = async () => {
+      if (!canEdit) return;
       if (!form.titulo.trim()) return;
       const row = { cliente: clienteKey, tipo, titulo: form.titulo, descripcion: form.descripcion, responsable: form.responsable, fecha_entrega: form.fecha_entrega || null, estado: "pendiente", archivado: false };
       const { data } = await supabase.from("pendientes").insert(row).select();
@@ -1080,11 +1090,13 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     };
 
     const updateEstado = async (id, estado) => {
+      if (!canEdit) return;
       await supabase.from("pendientes").update({ estado, updated_at: new Date().toISOString() }).eq("id", id);
       setItems(prev => prev.map(p => p.id === id ? { ...p, estado } : p));
     };
 
     const archivar = async (id) => {
+      if (!canEdit) return;
       await supabase.from("pendientes").update({ archivado: true, estado: "completado", updated_at: new Date().toISOString() }).eq("id", id);
       setItems(prev => prev.map(p => p.id === id ? { ...p, archivado: true, estado: "completado" } : p));
     };
@@ -1174,6 +1186,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     const [invForm, setInvForm] = React.useState({ mes: new Date().getMonth() + 1, monto: "", descripcion: "" });
 
     const addInversion = async () => {
+      if (!canEdit) return;
       if (!invForm.monto) return;
       const row = { cliente: clienteKey, mes: Number(invForm.mes), anio: 2026, monto: Number(invForm.monto), descripcion: invForm.descripcion };
       const { data } = await supabase.from("inversion_marketing").upsert(row, { onConflict: "cliente,mes,anio" }).select();
@@ -1190,7 +1203,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     return React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 12, padding: 20 } },
       React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
         React.createElement("h4", { style: { margin: 0, fontSize: 14, color: "#334155" } }, "M\u00e9tricas de Marketing"),
-        React.createElement("button", {
+        canEdit && React.createElement("button", {
           onClick: () => setShowAddInv(!showAddInv),
           style: { padding: "4px 10px", background: "#4472C4", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer" }
         }, showAddInv ? "Cancelar" : "+ Agregar inversi\u00f3n")
@@ -1243,6 +1256,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     const [expandedId, setExpandedId] = React.useState(null);
 
     const addMinuta = async () => {
+      if (!canEdit) return;
       if (!minForm.contenido.trim()) return;
       const row = { cliente: clienteKey, fecha_reunion: minForm.fecha, contenido: minForm.contenido, fuente: "plaud" };
       const { data } = await supabase.from("minutas").insert(row).select();
