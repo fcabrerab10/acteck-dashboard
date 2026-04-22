@@ -856,18 +856,26 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   // KPIs extendidos para tarjetas arriba
   const kpis = React.useMemo(() => {
     if (!datos || !aggs) return null;
-    // Eficiencia SI/SO
-    const efi = aggs.sellInTotal > 0 && aggs.sellOutTotal > 0 ? (aggs.sellOutTotal / aggs.sellInTotal * 100) : 0;
+    const esPcel = clienteKey === "pcel";
+    // Eficiencia SI/SO — PCEL lo maneja por piezas (no tiene monto de sellout);
+    // los demás por monto.
+    const efi = esPcel
+      ? (aggs.sellInPiezas > 0 && aggs.sellOutPiezas > 0 ? (aggs.sellOutPiezas / aggs.sellInPiezas * 100) : 0)
+      : (aggs.sellInTotal > 0 && aggs.sellOutTotal > 0 ? (aggs.sellOutTotal / aggs.sellInTotal * 100) : 0);
     // SKUs activos (con ventas YTD o inventario > 0)
     const skusConVenta = new Set();
     datos.sellIn.forEach(r => skusConVenta.add(r.sku));
     datos.sellOut.forEach(r => skusConVenta.add(r.sku));
     const skusActivos = skusConVenta.size;
     const skusConInv = datos.inventario.filter(r => (Number(r.stock) || 0) > 0).length;
-    // Días de cobertura
+    // Días de cobertura — PCEL: piezas inv cliente / piezas diarias SO.
+    // Resto: monto inventario / monto diario SO.
     const mesesConDatos = Math.max(1, new Set(datos.sellOut.map(r => Number(r.mes) || 0).filter(m => m > 0 && m < new Date().getMonth() + 1)).size);
-    const soDiario = mesesConDatos > 0 ? aggs.sellOutTotal / (mesesConDatos * 30) : 0;
-    const diasCob = soDiario > 0 ? Math.round(aggs.invTotal / soDiario) : null;
+    const soDiario = esPcel
+      ? (mesesConDatos > 0 ? aggs.sellOutPiezas / (mesesConDatos * 30) : 0)
+      : (mesesConDatos > 0 ? aggs.sellOutTotal / (mesesConDatos * 30) : 0);
+    const invRef = esPcel ? aggs.invPiezas : aggs.invTotal;
+    const diasCob = soDiario > 0 ? Math.round(invRef / soDiario) : null;
     // Inv Acteck disponible (piezas totales en los 9 almacenes)
     const invActeckPiezas = Object.values(datos.actStockBySku || {}).reduce((s, v) => s + (Number(v) || 0), 0);
     // Sugerido total $
@@ -1618,8 +1626,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       ),
       React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: "#8B5CF6" } },
         React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "Sell Out"),
-        React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, formatMXN(aggs.sellOutTotal)),
-        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } }, aggs.sellOutPiezas.toLocaleString("es-MX") + " pzs \u00b7 Mayor: " + (MESES_ABREV[aggs.maxSOMes] || "\u2014"))
+        // PCEL: sellout sólo en piezas (no tiene monto). Resto: monto.
+        clienteKey === "pcel"
+          ? React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, aggs.sellOutPiezas.toLocaleString("es-MX") + " pzs")
+          : React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, formatMXN(aggs.sellOutTotal)),
+        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } },
+          clienteKey === "pcel"
+            ? ("Mayor: " + (MESES_ABREV[aggs.maxSOMes] || "\u2014"))
+            : (aggs.sellOutPiezas.toLocaleString("es-MX") + " pzs \u00b7 Mayor: " + (MESES_ABREV[aggs.maxSOMes] || "\u2014")))
       ),
       React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: kpis.efi >= 90 && kpis.efi <= 110 ? "#10B981" : (kpis.efi >= 70 || kpis.efi > 110) ? "#F59E0B" : "#EF4444" } },
         React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "Eficiencia SI/SO"),
@@ -1652,67 +1666,86 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     aggs && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
       React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Comparativa por Marca"),
             // Visual bar chart for brand comparison
+            // Para PCEL: todo lo relacionado a Sell Out se muestra en piezas
+            // (no hay monto en sellout_pcel_mensual).
             React.createElement("div", { style: { display: "flex", gap: 20, marginBottom: 20, flexWrap: "wrap" } },
-              Object.entries(aggs.byMarca).map(function([marca, m]) {
-                var total = Object.values(aggs.byMarca).reduce(function(s, x) { return s + x.soMonto; }, 0);
-                var pct = total > 0 ? (m.soMonto / total * 100) : 0;
-                var color = MARCA_COLORES[marca] || "#64748B";
-                return React.createElement("div", { key: "viz_"+marca, style: { flex: 1, minWidth: 200, background: "#F8FAFC", borderRadius: 12, padding: 16, border: "1px solid #E2E8F0" } },
-                  React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
-                    React.createElement("span", { style: { fontWeight: 700, color: color, fontSize: 14 } }, marca),
-                    React.createElement("span", { style: { fontSize: 12, color: "#94A3B8", fontWeight: 600 } }, pct.toFixed(1) + "% del SO")
-                  ),
-                  React.createElement("div", { style: { height: 8, background: "#E2E8F0", borderRadius: 4, marginBottom: 12 } },
-                    React.createElement("div", { style: { height: "100%", width: pct + "%", background: color, borderRadius: 4 } })
-                  ),
-                  React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12 } },
-                    React.createElement("div", null,
-                      React.createElement("div", { style: { color: "#94A3B8" } }, "Sell In"),
-                      React.createElement("div", { style: { fontWeight: 700, color: "#1E293B" } }, formatMXN(m.siMonto))
+              (function() {
+                var esPcel = clienteKey === "pcel";
+                var totalMonto  = Object.values(aggs.byMarca).reduce(function(s, x) { return s + x.soMonto; }, 0);
+                var totalPiezas = Object.values(aggs.byMarca).reduce(function(s, x) { return s + x.soPiezas; }, 0);
+                return Object.entries(aggs.byMarca).map(function([marca, m]) {
+                  var pct = esPcel
+                    ? (totalPiezas > 0 ? (m.soPiezas / totalPiezas * 100) : 0)
+                    : (totalMonto  > 0 ? (m.soMonto  / totalMonto  * 100) : 0);
+                  var color = MARCA_COLORES[marca] || "#64748B";
+                  var soDisplay = esPcel
+                    ? (m.soPiezas.toLocaleString("es-MX") + " pzs")
+                    : formatMXN(m.soMonto);
+                  var efi = esPcel
+                    ? (m.siPiezas > 0 ? (m.soPiezas / m.siPiezas * 100) : 0)
+                    : (m.siMonto  > 0 ? (m.soMonto  / m.siMonto  * 100) : 0);
+                  var efiOk = esPcel ? m.siPiezas > 0 : m.siMonto > 0;
+                  return React.createElement("div", { key: "viz_"+marca, style: { flex: 1, minWidth: 200, background: "#F8FAFC", borderRadius: 12, padding: 16, border: "1px solid #E2E8F0" } },
+                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+                      React.createElement("span", { style: { fontWeight: 700, color: color, fontSize: 14 } }, marca),
+                      React.createElement("span", { style: { fontSize: 12, color: "#94A3B8", fontWeight: 600 } }, pct.toFixed(1) + "% del SO")
                     ),
-                    React.createElement("div", null,
-                      React.createElement("div", { style: { color: "#94A3B8" } }, "Sell Out"),
-                      React.createElement("div", { style: { fontWeight: 700, color: "#10B981" } }, formatMXN(m.soMonto))
+                    React.createElement("div", { style: { height: 8, background: "#E2E8F0", borderRadius: 4, marginBottom: 12 } },
+                      React.createElement("div", { style: { height: "100%", width: pct + "%", background: color, borderRadius: 4 } })
                     ),
-                    React.createElement("div", null,
-                      React.createElement("div", { style: { color: "#94A3B8" } }, "Inventario"),
-                      React.createElement("div", { style: { fontWeight: 700, color: "#8B5CF6" } }, formatMXN(m.invValor))
-                    ),
-                    React.createElement("div", null,
-                      React.createElement("div", { style: { color: "#94A3B8" } }, "Eficiencia"),
-                      React.createElement("div", { style: { fontWeight: 700, color: m.siMonto > 0 ? (m.soMonto/m.siMonto >= 0.8 ? "#10B981" : "#F59E0B") : "#94A3B8" } }, m.siMonto > 0 ? (m.soMonto/m.siMonto*100).toFixed(0) + "%" : "\u2014")
+                    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12 } },
+                      React.createElement("div", null,
+                        React.createElement("div", { style: { color: "#94A3B8" } }, "Sell In"),
+                        React.createElement("div", { style: { fontWeight: 700, color: "#1E293B" } }, formatMXN(m.siMonto))
+                      ),
+                      React.createElement("div", null,
+                        React.createElement("div", { style: { color: "#94A3B8" } }, esPcel ? "Sell Out (pzs)" : "Sell Out"),
+                        React.createElement("div", { style: { fontWeight: 700, color: "#10B981" } }, soDisplay)
+                      ),
+                      React.createElement("div", null,
+                        React.createElement("div", { style: { color: "#94A3B8" } }, "Inventario"),
+                        React.createElement("div", { style: { fontWeight: 700, color: "#8B5CF6" } }, formatMXN(m.invValor))
+                      ),
+                      React.createElement("div", null,
+                        React.createElement("div", { style: { color: "#94A3B8" } }, "Eficiencia"),
+                        React.createElement("div", { style: { fontWeight: 700, color: efiOk ? (efi >= 80 ? "#10B981" : "#F59E0B") : "#94A3B8" } }, efiOk ? efi.toFixed(0) + "%" : "\u2014")
+                      )
                     )
-                  )
-                );
-              })
+                  );
+                });
+              })()
             ),
       React.createElement("div", { className: "overflow-x-auto" },
-        React.createElement("table", { className: "w-full text-sm" },
-          React.createElement("thead", {},
-            React.createElement("tr", { className: "border-b border-gray-200" },
-              React.createElement("th", { className: "text-left py-2 px-3 font-semibold text-gray-700" }, "Marca"),
-              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI Piezas"),
-              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI $"),
-              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SO Piezas"),
-              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SO $"),
-              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Inv Piezas"),
-              React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Inv Valor"),
+        (function() {
+          var esPcel = clienteKey === "pcel";
+          return React.createElement("table", { className: "w-full text-sm" },
+            React.createElement("thead", {},
+              React.createElement("tr", { className: "border-b border-gray-200" },
+                React.createElement("th", { className: "text-left py-2 px-3 font-semibold text-gray-700" }, "Marca"),
+                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI Piezas"),
+                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI $"),
+                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SO Piezas"),
+                // PCEL: omitimos SO $ (no tiene monto de sellout)
+                !esPcel && React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SO $"),
+                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Inv Piezas"),
+                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Inv Valor"),
+              ),
             ),
-          ),
-          React.createElement("tbody", {},
-            Object.entries(aggs.byMarca).map(([marca, m]) =>
-              React.createElement("tr", { key: marca, className: "border-b border-gray-100 hover:bg-gray-50" },
-                React.createElement("td", { className: "py-3 px-3 text-gray-700 font-medium" }, marca),
-                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, m.siPiezas.toLocaleString("es-MX")),
-                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(m.siMonto)),
-                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, m.soPiezas.toLocaleString("es-MX")),
-                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(m.soMonto)),
-                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, m.invPiezas.toLocaleString("es-MX")),
-                React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(m.invValor)),
-              )
+            React.createElement("tbody", {},
+              Object.entries(aggs.byMarca).map(([marca, m]) =>
+                React.createElement("tr", { key: marca, className: "border-b border-gray-100 hover:bg-gray-50" },
+                  React.createElement("td", { className: "py-3 px-3 text-gray-700 font-medium" }, marca),
+                  React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, m.siPiezas.toLocaleString("es-MX")),
+                  React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(m.siMonto)),
+                  React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, m.soPiezas.toLocaleString("es-MX")),
+                  !esPcel && React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(m.soMonto)),
+                  React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, m.invPiezas.toLocaleString("es-MX")),
+                  React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(m.invValor)),
+                )
+              ),
             ),
-          ),
-        ),
+          );
+        })(),
       ),
     ),
 
@@ -1720,33 +1753,38 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     aggs && Object.keys(aggs.byCategoria).length > 0 && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
         React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Por Categor\u00eda (ambas marcas)"),
         React.createElement("div", { className: "overflow-x-auto" },
-          React.createElement("table", { className: "w-full text-sm" },
-            React.createElement("thead", {},
-              React.createElement("tr", { className: "border-b border-gray-200" },
-                React.createElement("th", { className: "text-left py-2 px-3 font-semibold text-gray-700" }, "Categor\u00eda"),
-                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Valor Inventario"),
-                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Sell Out $"),
-                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "% SO"),
-                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SKUs c/Inv"),
+          (function() {
+            var esPcel = clienteKey === "pcel";
+            return React.createElement("table", { className: "w-full text-sm" },
+              React.createElement("thead", {},
+                React.createElement("tr", { className: "border-b border-gray-200" },
+                  React.createElement("th", { className: "text-left py-2 px-3 font-semibold text-gray-700" }, "Categor\u00eda"),
+                  React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Valor Inventario"),
+                  React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, esPcel ? "Sell Out (pzs)" : "Sell Out $"),
+                  React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "% SO"),
+                  React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SKUs c/Inv"),
+                ),
               ),
-            ),
-            React.createElement("tbody", {},
-              (function() {
-                var totalSO = Object.values(aggs.byCategoria).reduce(function(s,c){return s+c.soMonto;},0);
-                return Object.entries(aggs.byCategoria).sort(function(a,b){return b[1].soMonto-a[1].soMonto;}).map(function(entry) {
-                  var cat = entry[0]; var c = entry[1];
-                  var pct = totalSO > 0 ? (c.soMonto/totalSO*100).toFixed(1) : "0.0";
-                  return React.createElement("tr", { key: cat, className: "border-b border-gray-100 hover:bg-gray-50" },
-                    React.createElement("td", { className: "py-3 px-3 text-gray-700 font-medium" }, cat),
-                    React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(c.invValor)),
-                    React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(c.soMonto)),
-                    React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, pct + "%"),
-                    React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, c.invPiezas > 0 ? c.invPiezas.toLocaleString("es-MX") : "0"),
-                  );
-                });
-              })(),
-            ),
-          ),
+              React.createElement("tbody", {},
+                (function() {
+                  var metric = function(c) { return esPcel ? c.soPiezas : c.soMonto; };
+                  var totalSO = Object.values(aggs.byCategoria).reduce(function(s,c){return s+metric(c);},0);
+                  return Object.entries(aggs.byCategoria).sort(function(a,b){return metric(b[1])-metric(a[1]);}).map(function(entry) {
+                    var cat = entry[0]; var c = entry[1];
+                    var pct = totalSO > 0 ? (metric(c)/totalSO*100).toFixed(1) : "0.0";
+                    var soDisplay = esPcel ? c.soPiezas.toLocaleString("es-MX") : formatMXN(c.soMonto);
+                    return React.createElement("tr", { key: cat, className: "border-b border-gray-100 hover:bg-gray-50" },
+                      React.createElement("td", { className: "py-3 px-3 text-gray-700 font-medium" }, cat),
+                      React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(c.invValor)),
+                      React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, soDisplay),
+                      React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, pct + "%"),
+                      React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, c.invPiezas > 0 ? c.invPiezas.toLocaleString("es-MX") : "0"),
+                    );
+                  });
+                })(),
+              ),
+            );
+          })(),
         ),
       ),
       // SKUs en riesgo de desabasto
