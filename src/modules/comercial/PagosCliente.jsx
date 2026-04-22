@@ -656,16 +656,28 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const totalAnio     = registros.reduce((s, r) => s + (r.monto || 0), 0);
 
   // Monthly breakdown
+  // Muestra los 12 meses del año actual siempre (aunque estén vacíos)
+  // + cualquier mes de años anteriores/futuros donde haya registros.
+  // Así no se "salta" meses y ves el calendario completo del año.
   const monthlyBreakdown = () => {
     const months = {};
+    const ensureMonth = (k) => {
+      if (!months[k]) months[k] = { mes: k, total: 0, promociones: 0, marketing: 0, pagosFijos: 0, pagosVariables: 0, rebate: 0, spiff: 0, records: [] };
+    };
+    // Pre-poblar los 12 meses del año en curso
+    const anioActual = new Date().getFullYear();
+    for (let m = 1; m <= 12; m++) {
+      ensureMonth(`${anioActual}-${String(m).padStart(2, "0")}`);
+    }
+    // Agregar registros (agrega meses fuera del año actual si aplican)
     registros.forEach(r => {
       const d = r.fecha_compromiso;
       if (!d) return;
-      const m = typeof d === "string" ? d.slice(0, 7) : new Date(d).toISOString().slice(0, 7);
-      if (!months[m]) months[m] = { mes: m, total: 0, promociones: 0, marketing: 0, pagosFijos: 0, pagosVariables: 0, rebate: 0, records: [] };
-      months[m].total += (r.monto || 0);
-      months[m].records.push(r);
-      if (CATEGORIA_META[r.categoria]) months[m][r.categoria] = (months[m][r.categoria] || 0) + (r.monto || 0);
+      const k = typeof d === "string" ? d.slice(0, 7) : new Date(d).toISOString().slice(0, 7);
+      ensureMonth(k);
+      months[k].total += (r.monto || 0);
+      months[k].records.push(r);
+      if (CATEGORIA_META[r.categoria]) months[k][r.categoria] = (months[k][r.categoria] || 0) + (r.monto || 0);
     });
     return Object.values(months).sort((a, b) => a.mes.localeCompare(b.mes));
   };
