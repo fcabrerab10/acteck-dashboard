@@ -59,6 +59,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [expandedMonth, setExpandedMonth] = useState(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportMeses, setExportMeses] = useState([]); // ["YYYY-MM", ...] multi-select
+  const [historialPago, setHistorialPago] = useState(null); // { pago, entries }
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue]     = useState("");
   const [saving, setSaving]           = useState(false);
@@ -515,11 +516,23 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (!editingCell) return;
     const { id, field } = editingCell;
     const value = field === "monto" ? (parseFloat(editValue) || 0) : (editValue || null);
-    setRegistros(prev => prev.map(r => r.id === id ? { ...r, [field]: value, ...(field === "fecha_pago_real" && value ? { estatus: "pagado" } : {}) } : r));
+
+    // Efectos cruzados:
+    //   - Si se marca fecha_pago_real → estatus='pagado'
+    //   - Si estatus pasa a 'pagado' y no hay fecha_pago_real aún → autocompletar con hoy
+    const hoyISO = new Date().toISOString().slice(0, 10);
+    const reg = registros.find(r => r.id === id);
+    const extra = {};
+    if (field === "fecha_pago_real" && value) extra.estatus = "pagado";
+    if (field === "estatus" && value === "pagado" && (!reg || !reg.fecha_pago_real)) {
+      extra.fecha_pago_real = hoyISO;
+    }
+
+    setRegistros(prev => prev.map(r => r.id === id ? { ...r, [field]: value, ...extra } : r));
     cancelEdit();
     setSaving(true);
     const { error } = await supabase.from("pagos")
-      .update({ [field]: value, updated_at: new Date().toISOString(), ...(field === "fecha_pago_real" && value ? { estatus: "pagado" } : {}) })
+      .update({ [field]: value, updated_at: new Date().toISOString(), ...extra })
       .eq("id", id);
     setSaving(false);
     if (error) { flash("Error al guardar ✗", "err"); fetchData(); }
@@ -603,6 +616,43 @@ export default function PagosCliente({ cliente, clienteKey }) {
     else flash("Eliminado ✓");
   };
 
+  // Duplicar un pago — crea uno nuevo con los mismos datos, fecha_compromiso
+  // avanzada un mes, estatus pendiente, folio vacío.
+  const handleDuplicate = async (row) => {
+    if (!canEdit) return;
+    const nextFecha = (() => {
+      if (!row.fecha_compromiso) return null;
+      const d = new Date(row.fecha_compromiso + "T00:00:00");
+      d.setMonth(d.getMonth() + 1);
+      return d.toISOString().slice(0, 10);
+    })();
+    const copia = {
+      cliente: row.cliente || clienteKey,
+      folio: "",
+      concepto: row.concepto,
+      categoria: row.categoria,
+      monto: row.monto,
+      estatus: "pendiente",
+      fecha_compromiso: nextFecha,
+      fecha_pago_real: null,
+      responsable: row.responsable,
+      notas: row.notas,
+    };
+    const { data, error } = await supabase.from("pagos").insert(copia).select().single();
+    if (error) { flash("Error al duplicar: " + error.message, "err"); return; }
+    setRegistros(prev => [...prev, data]);
+    flash("Duplicado ✓ — ajusta monto/fecha si hace falta");
+  };
+
+  // Ver historial de cambios (bitácora) de un pago
+  const verHistorial = async (row) => {
+    const { data, error } = await supabase.from("pagos_audit")
+      .select("*").eq("pago_id", row.id)
+      .order("changed_at", { ascending: false });
+    if (error) { alert("Error: " + error.message); return; }
+    setHistorialPago({ pago: row, entries: data || [] });
+  };
+
   // ── Delete all months of a fijo concept ──
   const handleDeleteFijo = async (conceptoKey, ids) => {
     if (!window.confirm(`¿Eliminar todos los meses de "${conceptoKey}"? Esta acción no se puede deshacer.`)) return;
@@ -662,7 +712,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
 
   // KPIs
   const totalPagado   = registros.filter(r => r.estatus === "pagado").reduce((s, r) => s + (r.monto || 0), 0);
-  const totalPorPagar = registros.filter(r => ["pendiente","en proceso"].includes(r.estatus)).reduce((s, r) => s + (r.monto || 0), 0);
+  const totalPorPagar = registros.filter(r => ["pendiente","en_proceso"].includes(r.estatus)).reduce((s, r) => s + (r.monto || 0), 0);
   const totalVencido  = registros.filter(r => r.estatus === "vencido").reduce((s, r) => s + (r.monto || 0), 0);
   const totalAnio     = registros.reduce((s, r) => s + (r.monto || 0), 0);
 
@@ -970,12 +1020,27 @@ export default function PagosCliente({ cliente, clienteKey }) {
                 <div>
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Por Pagar</p>
                   <p className="text-2xl font-bold text-yellow-600">{totalPorPagar > 0 ? formatMXN(totalPorPagar) : "$0"}</p>
-                  <p className="text-xs text-gray-400 mt-1">{registros.filter(r => ["pendiente","en proceso"].includes(r.estatus)).length} conceptos</p>
+                  <p className="text-xs text-gray-400 mt-1">{registros.filter(r => ["pendiente","en_proceso"].includes(r.estatus)).length} conceptos</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total 2026</p>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total {new Date().getFullYear()}</p>
                   <p className="text-2xl font-bold text-gray-800">{totalAnio > 0 ? formatMXN(totalAnio) : "$0"}</p>
                   <p className="text-xs text-gray-400 mt-1">{registros.length} conceptos registrados</p>
+                  {/* Desglose por categoría — mini lista horizontal */}
+                  {totalAnio > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                      {Object.entries(CATEGORIA_META)
+                        .map(([k, meta]) => ({ k, meta, total: registros.filter(r => r.categoria === k).reduce((s, r) => s + (r.monto || 0), 0) }))
+                        .filter(x => x.total > 0)
+                        .sort((a, b) => b.total - a.total)
+                        .map(({ k, meta, total }) => (
+                          <span key={k} className="text-[10px] text-gray-500 whitespace-nowrap">
+                            <span className="w-1.5 h-1.5 rounded-full inline-block mr-1 align-middle" style={{ backgroundColor: meta.color }} />
+                            <strong>{meta.label}:</strong> {formatMXN(total)}
+                          </span>
+                        ))}
+                    </div>
+                  )}
                 </div>
                 {clienteKey === "digitalife" && (
                   <div>
@@ -1738,8 +1803,16 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         <td className="py-2.5">{renderCell(row, "notas")}</td>
                         {DB_CONFIGURED && (
                           <td className="py-2.5 pl-1">
-                            <button onClick={() => handleDelete(row.id)}
-                              className="text-gray-300 hover:text-red-500 transition-colors text-base" title="Eliminar registro">🗑</button>
+                            <div className="flex items-center gap-0.5">
+                              <button onClick={() => verHistorial(row)}
+                                className="text-gray-300 hover:text-indigo-600 transition-colors text-xs p-1" title="Ver bitácora de cambios">📜</button>
+                              {canEdit && (
+                                <button onClick={() => handleDuplicate(row)}
+                                  className="text-gray-300 hover:text-blue-600 transition-colors text-xs p-1" title="Duplicar al siguiente mes">⎘</button>
+                              )}
+                              <button onClick={() => handleDelete(row.id)}
+                                className="text-gray-300 hover:text-red-500 transition-colors text-sm p-1" title="Eliminar registro">🗑</button>
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -2142,8 +2215,64 @@ export default function PagosCliente({ cliente, clienteKey }) {
             </div>
           )}
 
-          
+
         </>
+      )}
+
+      {/* Modal: bitácora de cambios de un pago */}
+      {historialPago && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="font-bold text-gray-800">Bitácora de cambios</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{historialPago.pago.concepto}</p>
+              </div>
+              <button onClick={() => setHistorialPago(null)} className="p-1 rounded hover:bg-gray-100 text-gray-500 text-lg">✕</button>
+            </div>
+            <div className="overflow-y-auto p-5">
+              {historialPago.entries.length === 0 ? (
+                <p className="text-sm text-gray-400 italic text-center py-6">Sin cambios registrados (este pago fue creado antes del audit, o no ha sido editado).</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left py-2 px-2 text-gray-500 font-semibold uppercase">Fecha</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-semibold uppercase">Usuario</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-semibold uppercase">Campo</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-semibold uppercase">De</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-semibold uppercase">A</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historialPago.entries.map((e) => (
+                      <tr key={e.id} className="border-t border-gray-100">
+                        <td className="py-1.5 px-2 text-gray-500 whitespace-nowrap">
+                          {new Date(e.changed_at).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </td>
+                        <td className="py-1.5 px-2 text-gray-700">{e.user_name || e.user_email || "—"}</td>
+                        <td className="py-1.5 px-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            e.accion === "insert" ? "bg-emerald-100 text-emerald-700"
+                            : e.accion === "delete" ? "bg-red-100 text-red-700"
+                            : "bg-blue-100 text-blue-700"
+                          }`}>
+                            {e.accion === "update" ? e.field_name : e.accion}
+                          </span>
+                        </td>
+                        <td className="py-1.5 px-2 text-gray-600">{e.accion === "update" ? (e.old_value || "∅") : ""}</td>
+                        <td className="py-1.5 px-2 text-gray-800 font-medium">{e.accion === "update" ? (e.new_value || "∅") : ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 text-right">
+              <button onClick={() => setHistorialPago(null)} className="px-4 py-1.5 bg-white hover:bg-gray-100 text-gray-700 rounded-lg text-xs font-semibold border border-gray-300">Cerrar</button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
@@ -2207,6 +2336,23 @@ function filterProductos(productos, yearFilter, marcaFilter, categoriaFilter, ro
 function HistorialPagadosPorMes({ pagados, catActiva, CATEGORIA_META }) {
   const [abierto, setAbierto] = React.useState(false);
   const [mesesExpandidos, setMesesExpandidos] = React.useState({});
+  const [rango, setRango] = React.useState("6m"); // '3m' | '6m' | 'anio' | 'todo'
+
+  // Filtrar por rango antes de cualquier otro procesamiento
+  const pagadosFiltrados = React.useMemo(() => {
+    if (!pagados || pagados.length === 0) return [];
+    if (rango === "todo") return pagados;
+    const hoy = new Date();
+    let desde;
+    if (rango === "3m") { desde = new Date(hoy); desde.setMonth(hoy.getMonth() - 3); }
+    else if (rango === "6m") { desde = new Date(hoy); desde.setMonth(hoy.getMonth() - 6); }
+    else if (rango === "anio") { desde = new Date(hoy.getFullYear(), 0, 1); }
+    const desdeISO = desde.toISOString().slice(0, 10);
+    return pagados.filter(r => {
+      const f = r.fecha_pago_real || r.fecha_compromiso;
+      return f && String(f).slice(0, 10) >= desdeISO;
+    });
+  }, [pagados, rango]);
 
   if (!pagados || pagados.length === 0) {
     return (
@@ -2227,13 +2373,13 @@ function HistorialPagadosPorMes({ pagados, catActiva, CATEGORIA_META }) {
     return f ? String(f).slice(0, 7) : "sin-fecha";
   };
   const grupos = {};
-  pagados.forEach((r) => {
+  pagadosFiltrados.forEach((r) => {
     const k = getFechaMes(r);
     if (!grupos[k]) grupos[k] = [];
     grupos[k].push(r);
   });
   const mesesOrdenados = Object.keys(grupos).sort((a, b) => b.localeCompare(a)); // desc
-  const totalPagados = pagados.reduce((s, r) => s + (Number(r.monto) || 0), 0);
+  const totalPagados = pagadosFiltrados.reduce((s, r) => s + (Number(r.monto) || 0), 0);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm mb-6 overflow-hidden">
@@ -2246,7 +2392,7 @@ function HistorialPagadosPorMes({ pagados, catActiva, CATEGORIA_META }) {
           <span className="w-2 h-2 rounded-full bg-emerald-500" />
           <h3 className="text-sm font-semibold text-gray-700">Pagos completados</h3>
           <span className="text-xs text-gray-400">
-            ({pagados.length} pago{pagados.length !== 1 ? "s" : ""} · {mesesOrdenados.length} mes{mesesOrdenados.length !== 1 ? "es" : ""})
+            ({pagadosFiltrados.length} pago{pagadosFiltrados.length !== 1 ? "s" : ""} · {mesesOrdenados.length} mes{mesesOrdenados.length !== 1 ? "es" : ""})
           </span>
         </div>
         <div className="text-right">
@@ -2257,6 +2403,25 @@ function HistorialPagadosPorMes({ pagados, catActiva, CATEGORIA_META }) {
 
       {abierto && (
         <div className="border-t border-gray-100 divide-y divide-gray-100">
+          <div className="px-5 py-2 bg-gray-50 flex items-center gap-2 text-xs">
+            <span className="text-gray-500">Mostrar:</span>
+            {[
+              { k: "3m", label: "Últimos 3 meses" },
+              { k: "6m", label: "Últimos 6 meses" },
+              { k: "anio", label: "Este año" },
+              { k: "todo", label: "Todo" },
+            ].map(o => (
+              <button
+                key={o.k}
+                onClick={() => setRango(o.k)}
+                className={`px-2.5 py-0.5 rounded-full font-semibold transition-colors ${
+                  rango === o.k ? "bg-emerald-600 text-white" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
           {mesesOrdenados.map((mesKey) => {
             const items = grupos[mesKey];
             const totalMes = items.reduce((s, r) => s + (Number(r.monto) || 0), 0);
