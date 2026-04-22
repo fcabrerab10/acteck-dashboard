@@ -787,13 +787,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
     const esPcel = clienteKey === "pcel";
     // Índices pre-agregados (evita O(N*M) re-filtrando en cada iter).
-    // Sell In para PCEL vive en `sell_in_sku` con sku = modelo Acteck (columna
-    // `articulo` de ventas_erp). Los productos de PCEL son catalogo_sku_pcel
-    // donde sku=numérico PCEL y modelo=modelo Acteck. Por eso en PCEL hay que
-    // indexar sellIn por modelo para que cuadre con p.modelo.
+    // Sell In vive en `sell_in_sku`. Para Digitalife viene con sku "AC-XXXXXX"
+    // (articulo de ventas_erp). Para PCEL también es articulo Acteck, pero
+    // catalogo_sku_pcel.modelo es "XXXXXX" (sin AC-). Por eso normalizamos
+    // ambos lados con normModelo() para que las claves cuadren.
     const siByKey = {}, siMontoByKey = {}, soByKey = {}, soMontoByKey = {};
     datos.sellIn.forEach(r => {
-      const k = r.sku; if (!k) return;
+      const k = esPcel ? normModelo(r.sku) : r.sku;
+      if (!k) return;
       siByKey[k]      = (siByKey[k] || 0)      + (Number(r.piezas) || 0);
       siMontoByKey[k] = (siMontoByKey[k] || 0) + (Number(r.monto_pesos) || 0);
     });
@@ -805,8 +806,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const invBySku = {};
     datos.inventario.forEach(r => { if (r.sku) invBySku[r.sku] = r; });
 
-    // Para PCEL, sellIn keyea por modelo Acteck; para los demás, por sku cliente.
-    const sellInKey = (p) => esPcel ? (p.modelo || "") : p.sku;
+    // Para PCEL, sellIn keyea por modelo Acteck normalizado (sin AC-);
+    // para los demás, por sku cliente tal cual.
+    const sellInKey = (p) => esPcel ? normModelo(p.modelo) : p.sku;
     // sellOut: para PCEL usa el sku numérico PCEL (que es lo que hay en
     // sellout_pcel_mensual). Para los demás, sku del cliente.
     const sellOutKey = (p) => p.sku;
