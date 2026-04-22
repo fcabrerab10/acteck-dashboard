@@ -1643,13 +1643,13 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                 <table className="w-full text-sm">
                                   <thead>
                                     <tr className="border-b border-gray-100">
-                                      {canEdit && <th className="text-center text-xs text-gray-400 uppercase pb-2 w-8" title="Marca como pagado con la fecha de hoy">✓</th>}
                                       <th className="text-left text-xs text-gray-400 uppercase pb-2 pr-3">Mes</th>
                                       <th className="text-right text-xs text-gray-400 uppercase pb-2 pr-3">Monto</th>
                                       <th className="text-center text-xs text-gray-400 uppercase pb-2 pr-3">Estatus</th>
                                       <th className="text-left text-xs text-gray-400 uppercase pb-2 pr-3">F. Compromiso</th>
                                       <th className="text-left text-xs text-gray-400 uppercase pb-2 pr-3">F. Pago Real</th>
-                                      <th className="text-left text-xs text-gray-400 uppercase pb-2">Folio</th>
+                                      <th className="text-left text-xs text-gray-400 uppercase pb-2 pr-3">Folio</th>
+                                      {canEdit && <th className="text-center text-xs text-gray-400 uppercase pb-2 w-10" title="Marca/desmarca como pagado con la fecha de hoy">Pagado</th>}
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -1683,7 +1683,6 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                       };
                                       return faltantes.map(m => (
                                         <tr key={`faltante-${m.key}`} className="border-b border-gray-50 bg-gray-50/50">
-                                          {canEdit && <td></td>}
                                           <td className="py-1.5 pr-3 text-gray-400 italic">{m.full}</td>
                                           <td className="py-1.5 pr-3 text-right text-gray-300 italic">{formatMXN(baseMontoExist)}</td>
                                           <td className="py-1.5 pr-3 text-center">
@@ -1697,6 +1696,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                               + Crear
                                             </button>
                                           </td>
+                                          {canEdit && <td></td>}
                                         </tr>
                                       ));
                                     })()}
@@ -1714,6 +1714,12 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                         const mi = MESES_ARR.find(m => m.key === mk);
                                         return (
                                           <tr key={r.id} className="border-b border-gray-50 hover:bg-amber-50/40">
+                                            <td className="py-2 pr-3 font-medium">{mi ? mi.full : mk}</td>
+                                            <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
+                                            <td className="py-2 pr-3 text-center">{renderCell(r, "estatus", "sel-estatus")}</td>
+                                            <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
+                                            <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
+                                            <td className="py-2">{renderCell(r, "folio")}</td>
                                             {canEdit && (
                                               <td className="py-2 text-center">
                                                 <input type="checkbox"
@@ -1723,12 +1729,6 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                                   title="Marcar como pagado con la fecha de hoy" />
                                               </td>
                                             )}
-                                            <td className="py-2 pr-3 font-medium">{mi ? mi.full : mk}</td>
-                                            <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
-                                            <td className="py-2 pr-3 text-center">{renderCell(r, "estatus", "sel-estatus")}</td>
-                                            <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
-                                            <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
-                                            <td className="py-2">{renderCell(r, "folio")}</td>
                                           </tr>
                                         );
                                       })
@@ -1751,20 +1751,20 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                           const mi = MESES_ARR.find(m => m.key === mk);
                                           return (
                                             <tr key={r.id} className="border-b border-gray-50 bg-emerald-50/20 text-gray-500">
-                                              {canEdit && (
-                                                <td className="text-center">
-                                                  <input type="checkbox" checked readOnly
-                                                    onClick={() => togglePagado(r)}
-                                                    className="w-4 h-4 rounded border-gray-300 text-emerald-600 cursor-pointer"
-                                                    title={`Pagado el ${r.fecha_pago_real || "—"}. Click para desmarcar.`} />
-                                                </td>
-                                              )}
                                               <td className="py-2 pr-3 pl-6 font-medium">{mi ? mi.full : mk}</td>
                                               <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
                                               <td className="py-2 pr-3 text-center">{renderCell(r, "estatus", "sel-estatus")}</td>
                                               <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
                                               <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
                                               <td className="py-2">{renderCell(r, "folio")}</td>
+                                              {canEdit && (
+                                                <td className="py-2 text-center">
+                                                  <input type="checkbox" checked
+                                                    onChange={() => togglePagado(r)}
+                                                    className="w-4 h-4 rounded border-gray-300 text-emerald-600 cursor-pointer"
+                                                    title={`Pagado el ${r.fecha_pago_real || "—"}. Click para desmarcar.`} />
+                                                </td>
+                                              )}
                                             </tr>
                                           );
                                         })}
@@ -1784,7 +1784,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                           const mk = r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??");
                                           const mi = MESES_ARR.find(m => m.key === mk);
                                           return (
-                                            <tr key={r.id} className="border-b border-gray-50 bg-gray-50/40 text-gray-400">{canEdit && <td></td>}
+                                            <tr key={r.id} className="border-b border-gray-50 bg-gray-50/40 text-gray-400">
                                               <td className="py-2 pr-3 pl-6 font-medium">{mi ? mi.full : mk}</td>
                                               <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
                                               <td className="py-2 pr-3 text-center">
@@ -1793,6 +1793,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                               <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
                                               <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
                                               <td className="py-2">{renderCell(r, "folio")}</td>
+                                              {canEdit && <td></td>}
                                             </tr>
                                           );
                                         })}
@@ -1812,13 +1813,14 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                           const mk = r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??");
                                           const mi = MESES_ARR.find(m => m.key === mk);
                                           return (
-                                            <tr key={r.id} className="border-b border-gray-50 bg-gray-50/40 text-gray-400">{canEdit && <td></td>}
+                                            <tr key={r.id} className="border-b border-gray-50 bg-gray-50/40 text-gray-400">
                                               <td className="py-2 pr-3 pl-6 font-medium line-through">{mi ? mi.full : mk}</td>
                                               <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
                                               <td className="py-2 pr-3 text-center">{renderCell(r, "estatus", "sel-estatus")}</td>
                                               <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
                                               <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
                                               <td className="py-2">{renderCell(r, "folio")}</td>
+                                              {canEdit && <td></td>}
                                             </tr>
                                           );
                                         })}
@@ -1841,7 +1843,6 @@ export default function PagosCliente({ cliente, clienteKey }) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      {canEdit && <th className="text-center text-xs text-gray-400 uppercase tracking-wide pb-3 w-8" title="Marca como pagado con la fecha de hoy">✓</th>}
                       <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 min-w-36">Concepto {DB_CONFIGURED && <span className="text-blue-300 normal-case font-normal">(click p/editar)</span>}</th>
                       <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Categoría</th>
                       <th className="text-right text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Monto</th>
@@ -1851,25 +1852,13 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Responsable</th>
                       <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Folio</th>
                       <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3">Notas</th>
+                      {canEdit && <th className="text-center text-xs text-gray-400 uppercase tracking-wide pb-3 w-10" title="Marca/desmarca como pagado con la fecha de hoy">Pagado</th>}
                       {DB_CONFIGURED && <th className="pb-3 w-8"></th>}
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.map((row, i) => (
                       <tr key={row.id} className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${i % 2 === 1 ? "bg-gray-50/30" : ""}`}>
-                        {canEdit && (
-                          <td className="py-2.5 pr-1 text-center">
-                            <input
-                              type="checkbox"
-                              checked={row.estatus === "pagado"}
-                              onChange={() => togglePagado(row)}
-                              className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                              title={row.estatus === "pagado"
-                                ? `Pagado el ${row.fecha_pago_real || "—"}. Click para desmarcar.`
-                                : "Marcar como pagado con la fecha de hoy"}
-                            />
-                          </td>
-                        )}
                         <td className="py-2.5 pr-3 min-w-36">{renderCell(row, "concepto")}</td>
                         <td className="py-2.5 pr-3">{renderCell(row, "categoria", "sel-cat")}</td>
                         <td className="py-2.5 pr-3 text-right">{renderCell(row, "monto", "number")}</td>
@@ -1883,6 +1872,19 @@ export default function PagosCliente({ cliente, clienteKey }) {
                           </span>
                         </td>
                         <td className="py-2.5">{renderCell(row, "notas")}</td>
+                        {canEdit && (
+                          <td className="py-2.5 text-center">
+                            <input
+                              type="checkbox"
+                              checked={row.estatus === "pagado"}
+                              onChange={() => togglePagado(row)}
+                              className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                              title={row.estatus === "pagado"
+                                ? `Pagado el ${row.fecha_pago_real || "—"}. Click para desmarcar.`
+                                : "Marcar como pagado con la fecha de hoy"}
+                            />
+                          </td>
+                        )}
                         {DB_CONFIGURED && (
                           <td className="py-2.5 pl-1">
                             <div className="flex items-center gap-0.5">
@@ -1922,6 +1924,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
             pagados={pagadosDeCategoria}
             catActiva={catActiva}
             CATEGORIA_META={CATEGORIA_META}
+            canEdit={canEdit}
+            onTogglePagado={togglePagado}
           />
 
           {/* Calculadora de Rebate Trimestral */}
@@ -2433,7 +2437,7 @@ function filterProductos(productos, yearFilter, marcaFilter, categoriaFilter, ro
 // (promociones, marketing, pagos fijos, pagos variables, rebate, spiff, todas)
 // filtrando según la categoría activa.
 // ═══════════════════════════════════════════════════════════════════════
-function HistorialPagadosPorMes({ pagados, catActiva, CATEGORIA_META }) {
+function HistorialPagadosPorMes({ pagados, catActiva, CATEGORIA_META, onTogglePagado, canEdit }) {
   const [abierto, setAbierto] = React.useState(false);
   const [mesesExpandidos, setMesesExpandidos] = React.useState({});
   const [rango, setRango] = React.useState("6m"); // '3m' | '6m' | 'anio' | 'todo'
@@ -2555,7 +2559,8 @@ function HistorialPagadosPorMes({ pagados, catActiva, CATEGORIA_META }) {
                           <th className="text-right py-1.5 pr-3 font-semibold">Monto</th>
                           <th className="text-left py-1.5 pr-3 font-semibold">F. Pago</th>
                           <th className="text-left py-1.5 pr-3 font-semibold">Folio</th>
-                          <th className="text-left py-1.5 font-semibold">Responsable</th>
+                          <th className="text-left py-1.5 pr-3 font-semibold">Responsable</th>
+                          {canEdit && onTogglePagado && <th className="text-center py-1.5 font-semibold" title="Click para desmarcar">Pagado</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -2577,7 +2582,15 @@ function HistorialPagadosPorMes({ pagados, catActiva, CATEGORIA_META }) {
                               <td className="py-1.5 pr-3 text-right font-semibold text-emerald-600">{formatMXN(r.monto)}</td>
                               <td className="py-1.5 pr-3 text-gray-600">{r.fecha_pago_real ? formatFecha(r.fecha_pago_real) : <span className="italic text-gray-400">—</span>}</td>
                               <td className="py-1.5 pr-3 font-mono text-[11px] text-gray-500">{r.folio || "—"}</td>
-                              <td className="py-1.5 text-gray-500">{r.responsable || "—"}</td>
+                              <td className="py-1.5 pr-3 text-gray-500">{r.responsable || "—"}</td>
+                              {canEdit && onTogglePagado && (
+                                <td className="py-1.5 text-center">
+                                  <input type="checkbox" checked
+                                    onChange={() => onTogglePagado(r)}
+                                    className="w-4 h-4 rounded border-gray-300 text-emerald-600 cursor-pointer"
+                                    title="Click para desmarcar y volver a pendiente" />
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
