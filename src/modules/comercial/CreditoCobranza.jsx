@@ -178,7 +178,8 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
   }, [detallePrev, estadoPrev]);
 
   // Usar el recalculado si hay detalle; caer al del Excel si no.
-  const dso = dsoReal != null ? dsoReal : (estado.dso != null ? Number(estado.dso) : null);
+  // Optional chaining en estado por si es null (antes del early return).
+  const dso = dsoReal != null ? dsoReal : (estado?.dso != null ? Number(estado.dso) : null);
 
   // ═══ Métricas de cartera vencida (solo facturas con dias_atraso > 0) ═══
   const vencidasList = useMemo(() =>
