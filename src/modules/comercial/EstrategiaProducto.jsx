@@ -1326,7 +1326,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
               ? Number(sugeridoEdits[r.sku])
               : Number(r.sugerido) || 0;
           }
-          if (sortCol === "precioAAAcd" && clienteKey === "pcel") {
+          if (sortCol === "precioAAAcd" && (clienteKey === "pcel" || clienteKey === "digitalife")) {
             return precioEdits[r.sku] !== undefined
               ? Number(precioEdits[r.sku])
               : Number(r.precioAAAcd) || 0;
@@ -2187,21 +2187,21 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 }, "Prom compra" + sortArrow("promCompra")),
                 thSort("Sugerido", "sugerido"),
                 // Columnas adicionales para PCEL: Precio AAA C/desc + Próx. arribo si falta
-                (clienteKey === "pcel") && React.createElement("th", {
+                (clienteKey === "pcel" || clienteKey === "digitalife") && React.createElement("th", {
                   key: "th-aaa", onClick: () => handleSort("precioAAAcd"),
                   style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "precioAAAcd" ? "#1D4ED8" : "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#F0F9FF" },
                   title: "Precio AAA con descuento aplicado"
                 }, "Precio" + sortArrow("precioAAAcd")),
-                (clienteKey === "pcel") && React.createElement("th", {
+                (clienteKey === "pcel" || clienteKey === "digitalife") && React.createElement("th", {
                   key: "th-arr",
                   style: { textAlign: "left", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#FEF3C7" },
                   title: "Fecha de próximo arribo si el sugerido no se completa con inv Acteck"
                 }, "Pr\u00f3x. arribo (falta)"),
                 // Para PCEL se oculta la columna "Precio" genérica (precio_venta de productos_cliente
                 // está casi siempre vacío para PCEL); el precio real es "Precio AAA c/desc" de arriba.
-                (clienteKey !== "pcel") && React.createElement("th", { key: "th-precio-gen", style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
+                (clienteKey !== "pcel" && clienteKey !== "digitalife") && React.createElement("th", { key: "th-precio-gen", style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 700, color: "#065F46", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#ECFDF5" } },
-                  React.createElement("div", { style: { fontSize: 10, color: "#10B981", fontWeight: 600 } }, "Σ " + formatMXN((skuDetail || []).reduce(function(acc, r){ var sug = sugeridoEdits[r.sku] !== undefined ? Number(sugeridoEdits[r.sku]) : Number(r.sugerido || 0); var precioBase = clienteKey === "pcel" ? (precioEdits[r.sku] !== undefined ? Number(precioEdits[r.sku]) : Number(r.precioAAAcd || 0)) : Number(r.precio || 0); return acc + sug * precioBase; }, 0))),
+                  React.createElement("div", { style: { fontSize: 10, color: "#10B981", fontWeight: 600 } }, "Σ " + formatMXN((skuDetail || []).reduce(function(acc, r){ var sug = sugeridoEdits[r.sku] !== undefined ? Number(sugeridoEdits[r.sku]) : Number(r.sugerido || 0); var precioBase = (clienteKey === "pcel" || clienteKey === "digitalife") ? (precioEdits[r.sku] !== undefined ? Number(precioEdits[r.sku]) : Number(r.precioAAAcd || 0)) : Number(r.precio || 0); return acc + sug * precioBase; }, 0))),
                   React.createElement("div", {}, "Total")
                 ),
               ),
@@ -2252,7 +2252,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   (function(){
                     // Gate: sin inventario ni tránsito → sugerido = 0 forzado
                     // (ignora override manual). Input disabled para que sea obvio.
-                    const sinStock = clienteKey === "pcel"
+                    const sinStock = (clienteKey === "pcel" || clienteKey === "digitalife")
                       && (Number(s.invActeck) || 0) === 0
                       && (Number(s.invTransito) || 0) === 0;
                     const valEff = sinStock ? 0
@@ -2300,8 +2300,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                     }, sugeridoSaveState[s.sku] === "saved" ? "\u2713" : sugeridoSaveState[s.sku] === "saving" ? "\u2026" : "!")
                   );
                   })(),
-                  // PCEL: Precio editable — parece texto plano, pero al hover/focus se reveal
-                  (clienteKey === "pcel") && React.createElement("td", {
+                  // Precio AAA c/desc editable (PCEL y Digitalife): parece texto plano, pero al hover/focus se reveal
+                  (clienteKey === "pcel" || clienteKey === "digitalife") && React.createElement("td", {
                     key: "td-aaa",
                     style: { textAlign: "right", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#F0F9FF", position: "relative" }
                   },
@@ -2378,9 +2378,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       title: precioSaveState[s.sku] === "saved" ? "Guardado" : precioSaveState[s.sku] === "saving" ? "Guardando..." : "Error"
                     }, precioSaveState[s.sku] === "saved" ? "\u2713" : precioSaveState[s.sku] === "saving" ? "\u2026" : "!")
                   ),
-                  // PCEL: Próx. arribo (si falta) — mostrar cuando sugerido > invActeck
+                  // Próx. arribo (si falta) — mostrar cuando sugerido > invActeck (PCEL y Digitalife)
                   // Si hay fecha → fecha en español. Si hay piezas pero sin fecha → "N pzas en tránsito".
-                  (clienteKey === "pcel") && (function() {
+                  (clienteKey === "pcel" || clienteKey === "digitalife") && (function() {
                     const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
                     const gap = Math.max(0, sug - (Number(s.invActeck) || 0));
                     const hayGap = gap > 0;
@@ -2407,11 +2407,11 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                     }, contenido);
                   })(),
                   // TD de "Precio" genérico — oculto para PCEL (su precio es el AAA c/desc de arriba)
-                  (clienteKey !== "pcel") && React.createElement("td", { key: "td-precio-gen", style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11, whiteSpace: "nowrap" } }, (s.precio && s.precio > 0) ? ("$" + Number(s.precio).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })) : "-"),
+                  (clienteKey !== "pcel" && clienteKey !== "digitalife") && React.createElement("td", { key: "td-precio-gen", style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11, whiteSpace: "nowrap" } }, (s.precio && s.precio > 0) ? ("$" + Number(s.precio).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })) : "-"),
                   (function(){
                     var sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
                     // Para PCEL: override o precio AAA con descuento. Otros: precio_venta.
-                    var precioBase = clienteKey === "pcel"
+                    var precioBase = (clienteKey === "pcel" || clienteKey === "digitalife")
                       ? (precioEdits[s.sku] !== undefined ? Number(precioEdits[s.sku]) : Number(s.precioAAAcd || 0))
                       : Number(s.precio || 0);
                     var tot = sug * precioBase;
