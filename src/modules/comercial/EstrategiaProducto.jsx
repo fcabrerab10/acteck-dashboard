@@ -1094,7 +1094,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   }, [datos]);
 
   // Filtered & sorted SKUs
-  const skuDetail = React.useMemo(() => {
+  const skuDetailUnsorted = React.useMemo(() => {
     if (!datos) return [];
     // Build roadmap lookups:
     //   roadmapBySku     → rdmp (estado RMI/RML/2026/D/NVS)
@@ -1352,35 +1352,67 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         // Filtro "Solo activos" para PCEL
         if (clienteKey === 'pcel' && soloActivosPcel && !r.isActivo) return false;
         return true;
-      })
-      .sort((a, b) => {
-        // Resolver valor efectivo — considerar overrides manuales del usuario.
-        // safeNum convierte cualquier entrada a número finito; NaN, null y
-        // undefined → 0. Evita que NaN se propague y rompa el orden del sort.
-        const safeNum = (v) => {
-          const n = Number(v);
-          return Number.isFinite(n) ? n : 0;
-        };
-        const resolver = (r) => {
-          if (sortCol === "sugerido") {
-            const ov = sugeridoEdits[r.sku];
-            return (ov !== undefined && ov !== null && ov !== "")
-              ? safeNum(ov)
-              : safeNum(r.sugerido);
-          }
-          if (sortCol === "precioAAAcd" && (clienteKey === "pcel" || clienteKey === "digitalife")) {
-            const ov = precioEdits[r.sku];
-            return (ov !== undefined && ov !== null && ov !== "")
-              ? safeNum(ov)
-              : safeNum(r.precioAAAcd);
-          }
-          return safeNum(r[sortCol]);
-        };
-        const valA = resolver(a);
-        const valB = resolver(b);
-        return sortDir === "asc" ? valA - valB : valB - valA;
       });
-    }, [datos, searchFilter, categoriaFilter, sortCol, sortDir, clienteKey, soloActivosPcel, sugeridoEdits, precioEdits]);
+    // IMPORTANTE: el sort NO se hace en este useMemo para que editar un
+    // sugerido/precio no reordene las filas (sería frustrante: el producto
+    // que estás editando se te mueve de lugar). El orden se aplica en otro
+    // useEffect de abajo que solo corre cuando cambian sort/filtros/datos,
+    // NO cuando cambian los edits manuales.
+    }, [datos, searchFilter, categoriaFilter, clienteKey, soloActivosPcel]);
+
+  // ═══ Orden congelado ═══
+  // Guardamos el orden (array de sku ids) y sólo se recalcula cuando cambia
+  // sortCol, sortDir, o los filtros base (no cuando editas sugerido/precio).
+  // Así editar una fila NO la mueve de lugar. El orden se refresca al
+  // clickear una cabecera de columna o cambiar filtros.
+  const [orderedSkus, setOrderedSkus] = React.useState([]);
+  // Refs para leer los edits más recientes en el useEffect de sort sin
+  // incluirlos como dep (evitaría resort en cada edit).
+  const sugeridoEditsRef = React.useRef(sugeridoEdits);
+  const precioEditsRef   = React.useRef(precioEdits);
+  React.useEffect(() => { sugeridoEditsRef.current = sugeridoEdits; }, [sugeridoEdits]);
+  React.useEffect(() => { precioEditsRef.current   = precioEdits;   }, [precioEdits]);
+
+  React.useEffect(() => {
+    if (!skuDetailUnsorted || skuDetailUnsorted.length === 0) {
+      setOrderedSkus([]);
+      return;
+    }
+    const safeNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+    const resolver = (r) => {
+      if (sortCol === "sugerido") {
+        const ov = sugeridoEditsRef.current[r.sku];
+        return (ov !== undefined && ov !== null && ov !== "") ? safeNum(ov) : safeNum(r.sugerido);
+      }
+      if (sortCol === "precioAAAcd" && (clienteKey === "pcel" || clienteKey === "digitalife")) {
+        const ov = precioEditsRef.current[r.sku];
+        return (ov !== undefined && ov !== null && ov !== "") ? safeNum(ov) : safeNum(r.precioAAAcd);
+      }
+      return safeNum(r[sortCol]);
+    };
+    const sorted = [...skuDetailUnsorted].sort((a, b) => {
+      const vA = resolver(a), vB = resolver(b);
+      return sortDir === "asc" ? vA - vB : vB - vA;
+    });
+    setOrderedSkus(sorted.map(s => s.sku));
+  }, [skuDetailUnsorted, sortCol, sortDir, clienteKey]);
+
+  // skuDetail final: reordena skuDetailUnsorted según el orden guardado.
+  // Cualquier SKU nuevo que no esté en orderedSkus va al final (fallback).
+  const skuDetail = React.useMemo(() => {
+    if (!orderedSkus || orderedSkus.length === 0) return skuDetailUnsorted;
+    const byKey = {};
+    skuDetailUnsorted.forEach(s => { byKey[s.sku] = s; });
+    const ordered = [];
+    const seen = new Set();
+    orderedSkus.forEach(sku => {
+      const item = byKey[sku];
+      if (item) { ordered.push(item); seen.add(sku); }
+    });
+    // SKUs que no estaban en el último sort (ej: nuevos por filtros) → al final
+    skuDetailUnsorted.forEach(s => { if (!seen.has(s.sku)) ordered.push(s); });
+    return ordered;
+  }, [orderedSkus, skuDetailUnsorted]);
 
   // Export to Excel
   const handleSort = (col) => { if (sortCol === col) { setSortDir(sortDir === "desc" ? "asc" : "desc"); } else { setSortCol(col); setSortDir("desc"); } };
