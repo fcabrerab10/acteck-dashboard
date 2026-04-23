@@ -1594,6 +1594,16 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const esDigi = clienteKey === "digitalife";
 
     // 1) Armar filas simplificadas para propuesta al cliente
+    const formatFechaESShort = (s) => {
+      if (!s) return "";
+      try {
+        const str = String(s).slice(0, 10);
+        const [y, m, d] = str.split("-").map(n => parseInt(n, 10));
+        if (!y || !m || !d) return s;
+        const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+        return `${d} ${meses[m-1]} ${y}`;
+      } catch { return s; }
+    };
     const allRows = skuDetail.map(function(s) {
       const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
       const precio = esDigi
@@ -1608,19 +1618,27 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         "Sugerido": sug,
         "Precio": precio,
         "Total": total,
+        // Metadatos para clasificar y armar la hoja de tránsito
         _sug: sug, _total: total, _cat: (s.categoria || "").trim().toLowerCase(),
+        _invActeck: Number(s.invActeck) || 0,
+        _arriboPiezas: Number(s.arriboPiezas) || 0,
+        _arriboFecha: s.arriboFecha || null,
       };
     }).filter(r => r._sug > 0 && r._total > 0);
 
-    // 2) Clasificar por categoría → 3 hojas: Monitores / Sillas / Accesorios
-    //    Match estricto contra el nombre canónico (no .includes). Accesorios
-    //    = catch-all (todas las categorías que no sean Monitores ni Sillas),
-    //    consistente con la lógica del Rebate (2% / 2% / 3%).
+    // 2) Separar en 4 hojas:
+    //    - "Requiere tránsito": productos SIN inv Acteck (el sugerido depende
+    //       100% del tránsito que viene en camino). Van todos juntos sin
+    //       importar categoría.
+    //    - Resto (con inv Acteck > 0): se clasifican en Monitores / Sillas /
+    //       Accesorios (match estricto, consistente con el Rebate).
+    const requiereTransito = allRows.filter(r => r._invActeck === 0);
+    const resto = allRows.filter(r => r._invActeck > 0);
     const isMonitor = (c) => c === "monitores";
     const isSilla = (c) => c === "sillas";
-    const monitores = allRows.filter(r => isMonitor(r._cat));
-    const sillas = allRows.filter(r => isSilla(r._cat));
-    const accesorios = allRows.filter(r => !isMonitor(r._cat) && !isSilla(r._cat));
+    const monitores = resto.filter(r => isMonitor(r._cat));
+    const sillas = resto.filter(r => isSilla(r._cat));
+    const accesorios = resto.filter(r => !isMonitor(r._cat) && !isSilla(r._cat));
 
     // Helper: aplica formato numérico (XLSX numFmt) a las columnas de la hoja
     // Formato: Dinero → "$#,##0.00" · Piezas (enteras) → "#,##0"
@@ -1651,6 +1669,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       const clean = rows.map(r => {
         const o = Object.assign({}, r);
         delete o._sug; delete o._total; delete o._cat;
+        delete o._invActeck; delete o._arriboPiezas; delete o._arriboFecha;
         return o;
       });
       if (clean.length > 0) {
@@ -1673,12 +1692,53 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       return ws;
     };
 
-    // 3) Hoja Resumen: totales por categoría
+    // Helper específico para hoja "Requiere tránsito" — columnas con piezas
+    // en tránsito y fecha de arribo (no aplican en las hojas de categoría).
+    const makeTransitoSheet = (rows) => {
+      if (rows.length === 0) {
+        const ws = XLSX.utils.json_to_sheet([{
+          SKU: "(Sin productos que dependan 100% del tránsito)",
+          "Descripción": "", "Sugerido": "", "Pzs tránsito": "", "Fecha arribo": "", "Precio": "", "Total": "",
+        }]);
+        return ws;
+      }
+      const clean = rows.map(r => ({
+        SKU: r.SKU,
+        "Descripción": r["Descripción"],
+        "Sugerido": r._sug,
+        "Pzs tránsito": r._arriboPiezas,
+        "Fecha arribo": r._arriboFecha ? formatFechaESShort(r._arriboFecha) : "(sin fecha)",
+        "Precio": r.Precio,
+        "Total": r._total,
+      }));
+      const sumSug = rows.reduce((a, r) => a + r._sug, 0);
+      const sumTot = rows.reduce((a, r) => a + r._total, 0);
+      clean.push({ SKU: "TOTAL", "Descripción": "", "Sugerido": sumSug, "Pzs tránsito": "", "Fecha arribo": "", "Precio": "", "Total": sumTot });
+      const ws = XLSX.utils.json_to_sheet(clean);
+      // Formato numérico específico de esta hoja
+      const moneyCols = new Set(["Precio", "Total"]);
+      const intCols   = new Set(["Sugerido", "Pzs tránsito"]);
+      const headers = Object.keys(clean[0]);
+      for (let r = 0; r < clean.length; r++) {
+        headers.forEach((h, cIdx) => {
+          const addr = XLSX.utils.encode_cell({ c: cIdx, r: r + 1 });
+          const cell = ws[addr];
+          if (!cell) return;
+          if (moneyCols.has(h) && typeof cell.v === "number") { cell.t = "n"; cell.z = '"$"#,##0.00'; }
+          else if (intCols.has(h) && typeof cell.v === "number") { cell.t = "n"; cell.z = '#,##0'; }
+        });
+      }
+      ws["!cols"] = [{ wch: 14 }, { wch: 55 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 16 }];
+      return ws;
+    };
+
+    // 3) Hoja Resumen: totales por categoría (+ Requiere tránsito)
     const sumBy = (arr, key) => arr.reduce((a, r) => a + (r[key] || 0), 0);
     const resumenRows = [
       { "Categoría": "Monitores", "# SKUs": monitores.length, "Piezas": sumBy(monitores, "_sug"), "Total $": sumBy(monitores, "_total") },
       { "Categoría": "Sillas", "# SKUs": sillas.length, "Piezas": sumBy(sillas, "_sug"), "Total $": sumBy(sillas, "_total") },
       { "Categoría": "Accesorios", "# SKUs": accesorios.length, "Piezas": sumBy(accesorios, "_sug"), "Total $": sumBy(accesorios, "_total") },
+      { "Categoría": "Requiere tránsito", "# SKUs": requiereTransito.length, "Piezas": sumBy(requiereTransito, "_sug"), "Total $": sumBy(requiereTransito, "_total") },
       { "Categoría": "GRAN TOTAL", "# SKUs": allRows.length, "Piezas": sumBy(allRows, "_sug"), "Total $": sumBy(allRows, "_total") },
     ];
 
@@ -1689,6 +1749,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     XLSX.utils.book_append_sheet(wb, makeSheet(monitores, "Monitores"), "Monitores");
     XLSX.utils.book_append_sheet(wb, makeSheet(sillas, "Sillas"), "Sillas");
     XLSX.utils.book_append_sheet(wb, makeSheet(accesorios, "Accesorios"), "Accesorios");
+    XLSX.utils.book_append_sheet(wb, makeTransitoSheet(requiereTransito), "Requiere tránsito");
 
     // Nombre del archivo: "Sugerido Digitalife Abril 2026.xlsx"
     const hoy = new Date();
@@ -1708,6 +1769,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const filasSnapshot = allRows.map(r => {
           const o = Object.assign({}, r);
           delete o._sug; delete o._total; delete o._cat;
+          delete o._invActeck; delete o._arriboPiezas; delete o._arriboFecha;
           return o;
         });
         const totSug = sumBy(allRows, "_sug");
@@ -2511,8 +2573,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             ),
           ),
         ),
-        // ═══ Historial de propuestas exportadas (solo PCEL) ═══
-        (clienteKey === "pcel") && React.createElement("div", {
+        // ═══ Historial de propuestas exportadas (PCEL y Digitalife) ═══
+        (clienteKey === "pcel" || clienteKey === "digitalife") && React.createElement("div", {
           style: { marginTop: 16, borderTop: "1px solid #E2E8F0", paddingTop: 12 }
         },
           React.createElement("button", {
