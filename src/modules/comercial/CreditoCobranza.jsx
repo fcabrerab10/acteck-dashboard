@@ -2,55 +2,83 @@ import React, { useState, useEffect, useMemo } from "react";
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { formatMXN, formatUSD, formatFecha } from '../../lib/utils';
 import { CardHeader } from '../../components';
-import { BarChart3, CalendarDays, TrendingUp, CreditCard } from 'lucide-react';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeEditar } from '../../lib/permisos';
+import { BarChart3, CalendarDays, TrendingUp, CreditCard, AlertTriangle, Pencil, Check, X as XIcon } from 'lucide-react';
 import { fetchSelloutSku } from '../../lib/pcelAdapter';
 
 const NOMBRES_MES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
 export default function CreditoCobranza({ cliente, clienteKey }) {
   const c = cliente;
+  const perfil = usePerfil();
+  const canEdit = puedeEditar(perfil);
   const [estado, setEstado]       = useState(null);
+  const [estadoPrev, setEstadoPrev] = useState(null);  // corte anterior para delta
   const [historico, setHistorico] = useState([]);
   const [sellIn, setSellIn]       = useState(0);
   const [sellInByMes, setSellInByMes] = useState({});
   const [sellOut, setSellOut]     = useState({});
   const [cuotas, setCuotas]       = useState([]);
+  const [detalle, setDetalle]     = useState([]);       // facturas del corte actual
+  const [detallePrev, setDetallePrev] = useState([]);   // facturas del corte anterior
+  const [config, setConfig]       = useState(null);     // línea + plazo
   const [loading, setLoading]     = useState(true);
 
-  useEffect(() => {
+  const cargarTodo = async () => {
     if (!DB_CONFIGURED) { setLoading(false); return; }
-    (async () => {
-      setLoading(true);
-      const anio = new Date().getFullYear();
-      const [ecRes, histRes, siRes, soRes, qRes] = await Promise.all([
-        supabase.from("estados_cuenta").select("*").eq("cliente", clienteKey)
-          .order("anio", { ascending: false }).order("semana", { ascending: false }).limit(1),
-        supabase.from("estados_cuenta").select("anio, semana, fecha_corte, saldo_actual, saldo_vencido, dso")
-          .eq("cliente", clienteKey).order("anio", { ascending: true }).order("semana", { ascending: true }).limit(20),
-        supabase.from("sell_in_sku").select("mes, monto_pesos").eq("cliente", clienteKey).eq("anio", anio),
-        fetchSelloutSku(clienteKey, anio),
-        supabase.from("cuotas_mensuales").select("mes, cuota_min").eq("cliente", clienteKey).eq("anio", anio).order("mes"),
-      ]);
-      setEstado((ecRes.data && ecRes.data[0]) || null);
-      setHistorico(histRes.data || []);
-      const siAll = siRes.data || [];
-      setSellIn(siAll.reduce((s, r) => s + (Number(r.monto_pesos) || 0), 0));
-      const siByMes = {};
-      siAll.forEach(r => {
-        const m = Number(r.mes); siByMes[m] = (siByMes[m] || 0) + (Number(r.monto_pesos) || 0);
-      });
-      setSellInByMes(siByMes);
-      const byMes = {};
-      // soRes puede ser array (adapter) u objeto {data, error} de supabase
-      const soArr = Array.isArray(soRes) ? soRes : (soRes.data || []);
-      soArr.forEach(r => {
-        const m = Number(r.mes); byMes[m] = (byMes[m] || 0) + (Number(r.monto_pesos) || 0);
-      });
-      setSellOut(byMes);
-      setCuotas(qRes.data || []);
-      setLoading(false);
-    })();
-  }, [clienteKey]);
+    setLoading(true);
+    const anio = new Date().getFullYear();
+    const [ecRes, histRes, siRes, soRes, qRes, cfgRes] = await Promise.all([
+      // Últimos 2 cortes (para delta semanal)
+      supabase.from("estados_cuenta").select("*").eq("cliente", clienteKey)
+        .order("anio", { ascending: false }).order("semana", { ascending: false }).limit(2),
+      supabase.from("estados_cuenta").select("anio, semana, fecha_corte, saldo_actual, saldo_vencido, dso")
+        .eq("cliente", clienteKey).order("anio", { ascending: true }).order("semana", { ascending: true }).limit(20),
+      supabase.from("sell_in_sku").select("mes, monto_pesos").eq("cliente", clienteKey).eq("anio", anio),
+      fetchSelloutSku(clienteKey, anio),
+      supabase.from("cuotas_mensuales").select("mes, cuota_min").eq("cliente", clienteKey).eq("anio", anio).order("mes"),
+      supabase.from("clientes_credito_config").select("*").eq("cliente", clienteKey).maybeSingle(),
+    ]);
+    const ecArr = ecRes.data || [];
+    const ecActual = ecArr[0] || null;
+    const ecPrev = ecArr[1] || null;
+    setEstado(ecActual);
+    setEstadoPrev(ecPrev);
+    setConfig(cfgRes.data || null);
+    setHistorico(histRes.data || []);
+
+    // Cargar detalle de ambos cortes (actual y previo) en paralelo
+    if (ecActual || ecPrev) {
+      const ids = [ecActual?.id, ecPrev?.id].filter(Boolean);
+      const { data: det } = await supabase
+        .from("estados_cuenta_detalle")
+        .select("*")
+        .in("estado_cuenta_id", ids);
+      const detAll = det || [];
+      setDetalle(detAll.filter(r => r.estado_cuenta_id === ecActual?.id));
+      setDetallePrev(detAll.filter(r => r.estado_cuenta_id === ecPrev?.id));
+    } else {
+      setDetalle([]); setDetallePrev([]);
+    }
+    const siAll = siRes.data || [];
+    setSellIn(siAll.reduce((s, r) => s + (Number(r.monto_pesos) || 0), 0));
+    const siByMes = {};
+    siAll.forEach(r => {
+      const m = Number(r.mes); siByMes[m] = (siByMes[m] || 0) + (Number(r.monto_pesos) || 0);
+    });
+    setSellInByMes(siByMes);
+    const byMes = {};
+    const soArr = Array.isArray(soRes) ? soRes : (soRes.data || []);
+    soArr.forEach(r => {
+      const m = Number(r.mes); byMes[m] = (byMes[m] || 0) + (Number(r.monto_pesos) || 0);
+    });
+    setSellOut(byMes);
+    setCuotas(qRes.data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { cargarTodo(); }, [clienteKey]);
 
   // Hooks antes de cualquier return
   const hoy = new Date();
@@ -86,21 +114,155 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
   const saldoVencido   = Number(estado.saldo_vencido) || 0;
   const saldoAVencer   = Number(estado.saldo_a_vencer) || 0;
   const notasCredito   = Math.abs(Number(estado.notas_credito) || 0);
-  const lineaUSD       = Number(estado.linea_credito_usd) || 0;
   const tipoCambio     = Number(estado.tipo_cambio) || 0;
-  const dso            = estado.dso != null ? Number(estado.dso) : null;
+
+  // Línea y plazo desde clientes_credito_config (manual, no del Excel)
+  const lineaUSD       = Number(config?.linea_credito_usd) || 0;
+  const PLAZO          = Number(config?.plazo_dias_credito) || 90;
   const lineaMXN       = lineaUSD * tipoCambio;
   const usoPct         = lineaMXN > 0 ? Math.min(Math.round((saldoActual / lineaMXN) * 100), 999) : null;
 
-  const aging = {
-    d0_30:  Number(estado.aging_d0_30)  || 0,
-    d31_60: Number(estado.aging_d31_60) || 0,
-    d61_90: Number(estado.aging_d61_90) || 0,
-    mas90:  Number(estado.aging_mas90)  || 0,
+  // ═══ Aging calculado desde estados_cuenta_detalle (en vez de los campos
+  //     agregados del corte que a veces vienen vacíos).
+  //     Usa fecha_vencimiento + días desde vencimiento para clasificar.
+  const hoyMs = hoy.getTime();
+  const diasAtraso = (f) => {
+    if (!f.vencimiento) return 0;
+    const v = new Date(f.vencimiento + "T00:00:00").getTime();
+    return Math.max(0, Math.floor((hoyMs - v) / (1000 * 60 * 60 * 24)));
   };
-  const agTotal  = aging.d0_30 + aging.d31_60 + aging.d61_90 + aging.mas90;
+  const facturasConSaldo = useMemo(() =>
+    (detalle || []).filter(f => Number(f.saldo_actual) > 0),
+  [detalle]);
+
+  const aging = useMemo(() => {
+    const buckets = { d0_30: 0, d31_60: 0, d61_90: 0, d91_180: 0, mas180: 0 };
+    facturasConSaldo.forEach(f => {
+      const d = diasAtraso(f);
+      if (d <= 0) return; // no vencida → no cuenta en aging
+      const saldo = Number(f.saldo_actual) || 0;
+      if (d <= 30) buckets.d0_30 += saldo;
+      else if (d <= 60) buckets.d31_60 += saldo;
+      else if (d <= 90) buckets.d61_90 += saldo;
+      else if (d <= 180) buckets.d91_180 += saldo;
+      else buckets.mas180 += saldo;
+    });
+    return buckets;
+  }, [facturasConSaldo]);
+  const agTotal  = aging.d0_30 + aging.d31_60 + aging.d61_90 + aging.d91_180 + aging.mas180;
   const hasAging = agTotal > 0;
   const agPct    = v => agTotal > 0 ? Math.round((v / agTotal) * 100) : 0;
+
+  // ═══ DSO recalculado — edad promedio ponderada por saldo.
+  //     "El tiempo real que tarda el dinero en regresar" — si plazo son
+  //     90 y el cliente paga a los 105, DSO será ~105.
+  //     Fórmula: Σ(saldo × días_desde_emisión) / Σ(saldo)
+  const dsoReal = useMemo(() => {
+    let num = 0, den = 0;
+    facturasConSaldo.forEach(f => {
+      if (!f.fecha_emision) return;
+      const saldo = Number(f.saldo_actual) || 0;
+      const dias = Math.floor((hoyMs - new Date(f.fecha_emision + "T00:00:00").getTime()) / (1000*60*60*24));
+      if (dias < 0) return;
+      num += saldo * dias;
+      den += saldo;
+    });
+    return den > 0 ? Math.round(num / den) : null;
+  }, [facturasConSaldo]);
+
+  // DSO del corte anterior (recalculado igual, para delta)
+  const dsoRealPrev = useMemo(() => {
+    if (!detallePrev || detallePrev.length === 0) return null;
+    const prev = detallePrev.filter(f => Number(f.saldo_actual) > 0);
+    // Usar fecha de corte previo como "hoy" para consistencia temporal
+    const refMs = estadoPrev?.fecha_corte ? new Date(estadoPrev.fecha_corte + "T00:00:00").getTime() : hoyMs;
+    let num = 0, den = 0;
+    prev.forEach(f => {
+      if (!f.fecha_emision) return;
+      const saldo = Number(f.saldo_actual) || 0;
+      const dias = Math.floor((refMs - new Date(f.fecha_emision + "T00:00:00").getTime()) / (1000*60*60*24));
+      if (dias < 0) return;
+      num += saldo * dias;
+      den += saldo;
+    });
+    return den > 0 ? Math.round(num / den) : null;
+  }, [detallePrev, estadoPrev]);
+
+  // Usar el recalculado si hay detalle; caer al del Excel si no.
+  const dso = dsoReal != null ? dsoReal : (estado.dso != null ? Number(estado.dso) : null);
+
+  // ═══ Métricas de cartera vencida (solo facturas con dias_atraso > 0) ═══
+  const vencidasList = useMemo(() =>
+    facturasConSaldo.filter(f => diasAtraso(f) > 0),
+  [facturasConSaldo]);
+  const diasPromAtraso = useMemo(() => {
+    if (vencidasList.length === 0) return 0;
+    let num = 0, den = 0;
+    vencidasList.forEach(f => {
+      const saldo = Number(f.saldo_actual) || 0;
+      num += saldo * diasAtraso(f);
+      den += saldo;
+    });
+    return den > 0 ? Math.round(num / den) : 0;
+  }, [vencidasList]);
+  const facturaMasAtrasada = useMemo(() => {
+    let worst = null;
+    vencidasList.forEach(f => {
+      const d = diasAtraso(f);
+      if (!worst || d > worst.dias) worst = { dias: d, factura: f };
+    });
+    return worst;
+  }, [vencidasList]);
+
+  // Notas de crédito individuales (del detalle)
+  const notasCreditoList = useMemo(() =>
+    (detalle || []).filter(f => Number(f.importe_factura) < 0),
+  [detalle]);
+
+  // ═══ Deltas vs corte anterior ═══
+  const fmtDelta = (actual, prev) => {
+    if (prev == null || prev === undefined) return null;
+    const d = actual - prev;
+    const pct = prev !== 0 ? Math.round((d / Math.abs(prev)) * 100) : null;
+    return { d, pct, subio: d > 0 };
+  };
+  const deltaSaldo    = estadoPrev ? fmtDelta(saldoActual, Number(estadoPrev.saldo_actual) || 0) : null;
+  const deltaVencido  = estadoPrev ? fmtDelta(saldoVencido, Number(estadoPrev.saldo_vencido) || 0) : null;
+  const deltaDso      = dsoRealPrev != null && dso != null ? fmtDelta(dso, dsoRealPrev) : null;
+
+  // ═══ Alertas ═══
+  const alertas = useMemo(() => {
+    const a = [];
+    const pct = v => saldoActual > 0 ? (v / saldoActual) * 100 : 0;
+    // 🔴 Graves
+    const vencidosMas120 = facturasConSaldo.filter(f => diasAtraso(f) > 30 + PLAZO).length;
+    if (vencidosMas120 > 0) {
+      const monto = facturasConSaldo.filter(f => diasAtraso(f) > 30 + PLAZO).reduce((s, f) => s + (Number(f.saldo_actual) || 0), 0);
+      a.push({ nivel: "grave", texto: `${vencidosMas120} factura${vencidosMas120 !== 1 ? "s" : ""} con más de ${30 + PLAZO}d de atraso · ${formatMXN(monto)}` });
+    }
+    if (pct(saldoVencido) > 15) {
+      a.push({ nivel: "grave", texto: `Cartera vencida ${pct(saldoVencido).toFixed(1)}% del saldo total (${formatMXN(saldoVencido)})` });
+    }
+    if (dso != null && dso > PLAZO + 30) {
+      a.push({ nivel: "grave", texto: `DSO ${dso}d — ${dso - PLAZO}d de retraso promedio vs plazo ${PLAZO}d` });
+    }
+    // 🟡 Malos
+    const vencidos90_120 = facturasConSaldo.filter(f => { const d = diasAtraso(f); return d > PLAZO && d <= PLAZO + 30; }).length;
+    if (vencidos90_120 > 0) {
+      const monto = facturasConSaldo.filter(f => { const d = diasAtraso(f); return d > PLAZO && d <= PLAZO + 30; }).reduce((s, f) => s + (Number(f.saldo_actual) || 0), 0);
+      a.push({ nivel: "malo", texto: `${vencidos90_120} factura${vencidos90_120 !== 1 ? "s" : ""} entre ${PLAZO+1}-${PLAZO+30}d de atraso · ${formatMXN(monto)}` });
+    }
+    if (dso != null && dso > PLAZO && dso <= PLAZO + 30) {
+      a.push({ nivel: "malo", texto: `DSO ${dso}d — ligeramente por encima del plazo ${PLAZO}d` });
+    }
+    if (pct(saldoVencido) > 5 && pct(saldoVencido) <= 15) {
+      a.push({ nivel: "malo", texto: `Cartera vencida ${pct(saldoVencido).toFixed(1)}% del saldo total` });
+    }
+    if (usoPct != null && usoPct > 85) {
+      a.push({ nivel: "malo", texto: `Uso de línea de crédito al ${usoPct}% (${formatMXN(saldoActual)} de ${formatMXN(lineaMXN)})` });
+    }
+    return a;
+  }, [facturasConSaldo, saldoVencido, saldoActual, dso, usoPct, lineaMXN, PLAZO]);
 
   // Línea de crédito semáforo (tono informativo, no alarmista)
   const lineaStatus = usoPct == null ? null
@@ -115,13 +277,16 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
   // Ratio Saldo / Sell In YTD
   const ratioSaldoSellIn = sellIn > 0 ? Math.round((saldoActual / sellIn) * 100) : null;
 
-  // DSO real vs plazo 90 días
-  const PLAZO = 90;
+  // DSO real vs plazo (PLAZO viene de clientes_credito_config, ya definido arriba).
+  // Semáforo según reglas del negocio:
+  //   - ≤ plazo        → verde (sano)
+  //   - plazo+1 a +30  → amarillo (malo: retraso leve)
+  //   - > plazo+30     → rojo (grave: retraso fuerte)
   const dsoDelta  = dso != null ? dso - PLAZO : null;
   const dsoStatus = dso == null ? null
     : dso <= PLAZO        ? { label: "Dentro del plazo", text: "text-green-700",  dot: "bg-green-500" }
-    : dso <= PLAZO + 15   ? { label: "Ligeramente alto", text: "text-yellow-700", dot: "bg-yellow-500" }
-    :                       { label: "Pago rezagado",    text: "text-red-700",    dot: "bg-red-500" };
+    : dso <= PLAZO + 30   ? { label: "Retraso leve",     text: "text-yellow-700", dot: "bg-yellow-500" }
+    :                       { label: "Pago muy rezagado", text: "text-red-700",    dot: "bg-red-500" };
 
   // Proyección Sell Out — Híbrido: max(cuota SO mes, promedio real)
   // Mes actual se anualiza (si solo llevamos parte del mes, se escala al mes completo)
