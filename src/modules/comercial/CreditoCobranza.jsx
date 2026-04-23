@@ -355,9 +355,51 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
   }));
 
   const fechaCorteStr = estado.fecha_corte ? formatFecha(estado.fecha_corte) : `Sem ${estado.semana}/${estado.anio}`;
+  const fechaCortePrevStr = estadoPrev?.fecha_corte ? formatFecha(estadoPrev.fecha_corte) : estadoPrev ? `Sem ${estadoPrev.semana}/${estadoPrev.anio}` : null;
+
+  // Mini componente para mostrar delta semanal en los KPIs
+  const DeltaBadge = ({ delta, invertido = false, sufijo = "" }) => {
+    if (!delta || delta.d === 0) return null;
+    // `invertido=true` para métricas donde subir es bueno (ej: saldo a cobrar no se invierte,
+    // pero un "por cobrar que baja" sería bueno → default es: subir = malo para cobranza)
+    const sube = delta.subio;
+    const esBueno = invertido ? sube : !sube;
+    const color = esBueno ? "text-green-600" : "text-red-600";
+    const icono = sube ? "↑" : "↓";
+    const signo = sube ? "+" : "−";
+    const absD = Math.abs(delta.d);
+    const montoStr = sufijo === "d" ? `${signo}${absD}d` : `${signo}${formatMXN(absD).replace("$","$")}`;
+    return (
+      <span className={`text-[11px] font-semibold ${color} ml-1 whitespace-nowrap`}>
+        {icono} {montoStr}{delta.pct != null ? ` (${delta.pct > 0 ? "+" : ""}${delta.pct}%)` : ""}
+      </span>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+
+      {/* BANNER DE ALERTAS — aparece solo si hay alertas graves o malas */}
+      {alertas.length > 0 && (
+        <div className="mb-6 space-y-2">
+          {alertas.map((a, i) => (
+            <div key={i}
+                 className={`rounded-xl border-l-4 p-3 flex items-start gap-3 ${
+                   a.nivel === "grave"
+                     ? "bg-red-50 border-red-500"
+                     : "bg-yellow-50 border-yellow-500"
+                 }`}>
+              <AlertTriangle className={`w-5 h-5 shrink-0 mt-0.5 ${a.nivel === "grave" ? "text-red-600" : "text-yellow-600"}`} />
+              <div className="flex-1 text-sm">
+                <span className={`font-semibold ${a.nivel === "grave" ? "text-red-800" : "text-yellow-800"}`}>
+                  {a.nivel === "grave" ? "🔴 Grave" : "🟡 Atención"}:
+                </span>{" "}
+                <span className="text-gray-700">{a.texto}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* HEADER */}
       <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
@@ -389,7 +431,15 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
       {/* NÚMERO ESTELAR — tono informativo */}
       <div className="bg-white rounded-2xl shadow-sm p-8 mb-6 text-center">
         <p className="text-xs text-gray-400 uppercase tracking-widest mb-2">Total por cobrar</p>
-        <p className="text-5xl font-bold text-gray-800 mb-2">{formatMXN(saldoActual)}</p>
+        <p className="text-5xl font-bold text-gray-800 mb-2">
+          {formatMXN(saldoActual)}
+          <DeltaBadge delta={deltaSaldo} />
+        </p>
+        {deltaSaldo && fechaCortePrevStr && (
+          <p className="text-[11px] text-gray-400 -mt-1 mb-1">
+            vs corte {fechaCortePrevStr}
+          </p>
+        )}
         {saldoVencido > 0 ? (
           <p className="text-sm text-gray-600">
             de los cuales <strong className="text-orange-600">{formatMXN(saldoVencido)}</strong> están vencidos
@@ -411,6 +461,9 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
           <p className="text-xs text-gray-400 mt-1">
             {saldoVencido > 0 && saldoActual > 0 ? `${Math.round((saldoVencido / saldoActual) * 100)}% del saldo` : "Sin vencidos"}
           </p>
+          {deltaVencido && deltaVencido.d !== 0 && (
+            <p className="text-[11px] mt-1"><DeltaBadge delta={deltaVencido} /></p>
+          )}
         </div>
         <div className="bg-white rounded-2xl shadow-sm p-4 border-t-4 border-yellow-400">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">A vencer 7 días</p>
@@ -426,11 +479,16 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">DSO real</p>
           {dso != null ? (
             <>
-              <p className={`text-2xl font-bold ${dsoStatus.text}`}>{dso} <span className="text-xs font-normal text-gray-400">días</span></p>
+              <p className={`text-2xl font-bold ${dsoStatus.text}`}>
+                {dso} <span className="text-xs font-normal text-gray-400">días</span>
+              </p>
               <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
                 <span className={`w-1.5 h-1.5 rounded-full ${dsoStatus.dot}`}></span>
                 {dsoStatus.label} (plazo {PLAZO}d)
               </p>
+              {deltaDso && deltaDso.d !== 0 && (
+                <p className="text-[11px] mt-1"><DeltaBadge delta={deltaDso} sufijo="d" /></p>
+              )}
             </>
           ) : (
             <>
@@ -505,19 +563,29 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
         </div>
       </div>
 
-      {/* LÍNEA DE CRÉDITO — card propia, tamaño medio */}
+      {/* LÍNEA DE CRÉDITO — card propia, tamaño medio, con edición inline */}
       <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-        <CardHeader titulo="Línea de crédito" icono="💼" />
+        <div className="flex items-center justify-between mb-2">
+          <CardHeader titulo="Línea de crédito" icono="💼" />
+          <EditableLineaPlazo
+            clienteKey={clienteKey}
+            config={config}
+            canEdit={canEdit}
+            onSaved={cargarTodo}
+          />
+        </div>
         {lineaStatus ? (
           <div className="mt-2">
             <div className="flex items-center justify-between flex-wrap gap-3 mb-2">
               <div>
                 <p className="text-2xl font-bold text-gray-800">
-                  {formatUSD(lineaUSD)} <span className="text-sm font-normal text-gray-400">= {formatMXN(lineaMXN)}</span>
+                  {formatUSD(lineaUSD)}
+                  {tipoCambio > 0 && <span className="text-sm font-normal text-gray-400"> = {formatMXN(lineaMXN)}</span>}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">
                   <span className={`inline-block w-2 h-2 rounded-full ${lineaStatus.dot} mr-1`}></span>
                   <strong className={lineaStatus.text}>{usoPct}% uso</strong> · {lineaStatus.label}
+                  <span className="text-gray-400"> · Plazo {PLAZO}d</span>
                 </p>
               </div>
               <div className="text-right">
@@ -532,9 +600,13 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
               <span>$0</span><span>70%</span><span>90%</span><span>{formatUSD(lineaUSD)}</span>
             </div>
           </div>
+        ) : lineaUSD > 0 && tipoCambio === 0 ? (
+          <p className="text-sm text-gray-400 mt-2 italic">
+            Línea configurada ({formatUSD(lineaUSD)}) pero el corte actual no trae tipo de cambio — no se puede calcular el uso %.
+          </p>
         ) : (
           <p className="text-sm text-gray-400 mt-2 italic">
-            Línea de crédito sin datos. Captura <strong>línea_credito_usd</strong> y <strong>tipo_cambio</strong> al subir el próximo corte.
+            Línea de crédito no configurada. Click en el lápiz ✏️ arriba para capturarla.
           </p>
         )}
       </div>
@@ -578,39 +650,17 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
         </div>
       )}
 
-      {/* AGING */}
+      {/* AGING — con menú desplegable de facturas y filtros */}
       {hasAging && (
-        <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-          <CardHeader titulo="Aging de la cartera vencida" icono="⏳" />
-          <div className="space-y-3 mt-1">
-            {[
-              { label: "1 – 30 días",  monto: aging.d0_30,  bg: "bg-green-500",  tag: "bg-green-100 text-green-700",  icono: "✓"  },
-              { label: "31 – 60 días", monto: aging.d31_60, bg: "bg-blue-400",   tag: "bg-blue-100 text-blue-700",    icono: "🔵" },
-              { label: "61 – 90 días", monto: aging.d61_90, bg: "bg-yellow-400", tag: "bg-yellow-100 text-yellow-700", icono: "⚠️" },
-              { label: "+ 90 días",    monto: aging.mas90,  bg: "bg-red-500",    tag: "bg-red-100 text-red-700",       icono: "🔴" },
-            ].map(({ label, monto, bg, tag, icono }) => (
-              <div key={label}>
-                <div className="flex justify-between items-center text-sm mb-1">
-                  <div className="flex items-center gap-1.5">
-                    <span>{icono}</span>
-                    <span className="text-gray-700 font-medium">{label}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-800">{formatMXN(monto)}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${tag}`}>{agPct(monto)}%</span>
-                  </div>
-                </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${bg}`} style={{ width: `${agPct(monto)}%` }}></div>
-                </div>
-              </div>
-            ))}
-            <div className="border-t pt-3 flex justify-between text-sm">
-              <span className="text-gray-500">Total vencido</span>
-              <span className="font-bold text-gray-800">{formatMXN(agTotal)}</span>
-            </div>
-          </div>
-        </div>
+        <AgingConFacturas
+          aging={aging}
+          agTotal={agTotal}
+          agPct={agPct}
+          facturas={vencidasList}
+          diasAtraso={diasAtraso}
+          diasPromAtraso={diasPromAtraso}
+          facturaMasAtrasada={facturaMasAtrasada}
+        />
       )}
 
       {/* FLUJO Facturación vs Cobranza 3m */}
@@ -777,6 +827,264 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
         )}
       </div>
 
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AgingConFacturas — tarjeta de aging con menú desplegable de facturas
+// y filtros. Muestra días promedio ponderado y factura más atrasada.
+// ═══════════════════════════════════════════════════════════════════════════
+function AgingConFacturas({ aging, agTotal, agPct, facturas, diasAtraso, diasPromAtraso, facturaMasAtrasada }) {
+  const [abierto, setAbierto] = useState(false);
+  const [filtroBucket, setFiltroBucket] = useState("todas");
+  const [busqueda, setBusqueda] = useState("");
+  const [sortBy, setSortBy] = useState("dias_desc");
+
+  const buckets = [
+    { key: "d0_30",   label: "1 – 30 días",   monto: aging.d0_30,    bg: "bg-green-500",  tag: "bg-green-100 text-green-700",  min: 1,   max: 30  },
+    { key: "d31_60",  label: "31 – 60 días",  monto: aging.d31_60,   bg: "bg-blue-400",   tag: "bg-blue-100 text-blue-700",    min: 31,  max: 60  },
+    { key: "d61_90",  label: "61 – 90 días",  monto: aging.d61_90,   bg: "bg-yellow-400", tag: "bg-yellow-100 text-yellow-700", min: 61,  max: 90  },
+    { key: "d91_180", label: "91 – 180 días", monto: aging.d91_180,  bg: "bg-orange-500", tag: "bg-orange-100 text-orange-700", min: 91,  max: 180 },
+    { key: "mas180",  label: "+ 180 días",    monto: aging.mas180,   bg: "bg-red-500",    tag: "bg-red-100 text-red-700",       min: 181, max: 99999 },
+  ];
+
+  const facturasFiltradas = useMemo(() => {
+    let list = [...facturas];
+    if (filtroBucket !== "todas") {
+      const b = buckets.find(x => x.key === filtroBucket);
+      if (b) list = list.filter(f => { const d = diasAtraso(f); return d >= b.min && d <= b.max; });
+    }
+    if (busqueda.trim()) {
+      const t = busqueda.trim().toLowerCase();
+      list = list.filter(f =>
+        (f.movimiento || "").toLowerCase().includes(t) ||
+        (f.referencia || "").toLowerCase().includes(t)
+      );
+    }
+    const sorters = {
+      dias_desc:   (a, b) => diasAtraso(b) - diasAtraso(a),
+      dias_asc:    (a, b) => diasAtraso(a) - diasAtraso(b),
+      monto_desc:  (a, b) => (Number(b.saldo_actual) || 0) - (Number(a.saldo_actual) || 0),
+      monto_asc:   (a, b) => (Number(a.saldo_actual) || 0) - (Number(b.saldo_actual) || 0),
+      fecha_asc:   (a, b) => (a.fecha_emision || "").localeCompare(b.fecha_emision || ""),
+    };
+    list.sort(sorters[sortBy] || sorters.dias_desc);
+    return list;
+  }, [facturas, filtroBucket, busqueda, sortBy, diasAtraso]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+      <CardHeader titulo="Aging de la cartera vencida" icono="⏳" />
+
+      {/* Resumen de métricas de atraso */}
+      <div className="grid grid-cols-2 gap-3 mt-2 mb-4">
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-[11px] text-gray-500 uppercase tracking-wide">Atraso promedio</p>
+          <p className="text-lg font-bold text-gray-800">{diasPromAtraso}<span className="text-xs font-normal text-gray-400"> días</span></p>
+          <p className="text-[10px] text-gray-400">promedio ponderado por saldo</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-[11px] text-gray-500 uppercase tracking-wide">Factura más atrasada</p>
+          {facturaMasAtrasada ? (
+            <>
+              <p className="text-lg font-bold text-red-700">{facturaMasAtrasada.dias}<span className="text-xs font-normal text-gray-400"> días</span></p>
+              <p className="text-[10px] text-gray-500 truncate" title={facturaMasAtrasada.factura.movimiento}>
+                {facturaMasAtrasada.factura.movimiento || "—"} · {formatMXN(Number(facturaMasAtrasada.factura.saldo_actual) || 0)}
+              </p>
+            </>
+          ) : (
+            <p className="text-lg font-bold text-gray-300">—</p>
+          )}
+        </div>
+      </div>
+
+      {/* Barras por bucket */}
+      <div className="space-y-3 mt-1">
+        {buckets.filter(b => b.monto > 0).map(({ key, label, monto, bg, tag }) => (
+          <div key={key}>
+            <div className="flex justify-between items-center text-sm mb-1">
+              <span className="text-gray-700 font-medium">{label}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-gray-800">{formatMXN(monto)}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${tag}`}>{agPct(monto)}%</span>
+              </div>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full ${bg}`} style={{ width: `${agPct(monto)}%` }}></div>
+            </div>
+          </div>
+        ))}
+        <div className="border-t pt-3 flex justify-between text-sm">
+          <span className="text-gray-500">Total vencido</span>
+          <span className="font-bold text-gray-800">{formatMXN(agTotal)}</span>
+        </div>
+      </div>
+
+      {/* Desplegable de facturas */}
+      <button
+        onClick={() => setAbierto(!abierto)}
+        className="mt-4 w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm font-semibold text-gray-700 transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          <span className="text-base">{abierto ? "▾" : "▸"}</span>
+          Ver facturas vencidas ({facturas.length})
+        </span>
+        <span className="text-xs text-gray-500">{formatMXN(facturas.reduce((s, f) => s + (Number(f.saldo_actual) || 0), 0))}</span>
+      </button>
+
+      {abierto && (
+        <div className="mt-3 border-t border-gray-100 pt-3 space-y-3">
+          {/* Filtros */}
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={filtroBucket} onChange={e => setFiltroBucket(e.target.value)}
+                    className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs">
+              <option value="todas">Todos los buckets</option>
+              {buckets.filter(b => b.monto > 0).map(b => (
+                <option key={b.key} value={b.key}>{b.label}</option>
+              ))}
+            </select>
+            <input type="text" placeholder="Buscar folio o referencia…"
+                   value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                   className="flex-1 min-w-40 px-2 py-1.5 border border-gray-200 rounded-lg text-xs" />
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+                    className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs">
+              <option value="dias_desc">Más atrasadas primero</option>
+              <option value="dias_asc">Menos atrasadas primero</option>
+              <option value="monto_desc">Mayor monto</option>
+              <option value="monto_asc">Menor monto</option>
+              <option value="fecha_asc">Fecha emisión ↑</option>
+            </select>
+            {(filtroBucket !== "todas" || busqueda) && (
+              <button onClick={() => { setFiltroBucket("todas"); setBusqueda(""); }}
+                      className="text-xs text-blue-600 hover:underline">Limpiar filtros</button>
+            )}
+          </div>
+
+          {/* Tabla */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                  <th className="text-left py-2 pr-3 font-semibold">Movimiento</th>
+                  <th className="text-left py-2 pr-3 font-semibold">Referencia</th>
+                  <th className="text-left py-2 pr-3 font-semibold">F. Emisión</th>
+                  <th className="text-left py-2 pr-3 font-semibold">Vencimiento</th>
+                  <th className="text-right py-2 pr-3 font-semibold">Días atraso</th>
+                  <th className="text-right py-2 pr-3 font-semibold">Importe</th>
+                  <th className="text-right py-2 font-semibold">Saldo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {facturasFiltradas.length === 0 ? (
+                  <tr><td colSpan={7} className="text-center py-6 text-gray-400 italic">
+                    No hay facturas con los filtros actuales
+                  </td></tr>
+                ) : facturasFiltradas.map(f => {
+                  const d = diasAtraso(f);
+                  const colorDias = d > 120 ? "text-red-700 font-bold"
+                                  : d > 90  ? "text-orange-600 font-semibold"
+                                  : d > 30  ? "text-yellow-700"
+                                  : "text-gray-700";
+                  return (
+                    <tr key={f.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                      <td className="py-2 pr-3 text-gray-800 font-medium">{f.movimiento || "—"}</td>
+                      <td className="py-2 pr-3 text-gray-500 font-mono text-[10px]">{f.referencia || "—"}</td>
+                      <td className="py-2 pr-3 text-gray-500 whitespace-nowrap">{f.fecha_emision ? formatFecha(f.fecha_emision) : "—"}</td>
+                      <td className="py-2 pr-3 text-gray-500 whitespace-nowrap">{f.vencimiento ? formatFecha(f.vencimiento) : "—"}</td>
+                      <td className={`py-2 pr-3 text-right ${colorDias}`}>{d}d</td>
+                      <td className="py-2 pr-3 text-right text-gray-600">{formatMXN(Number(f.importe_factura) || 0)}</td>
+                      <td className="py-2 text-right text-gray-800 font-semibold">{formatMXN(Number(f.saldo_actual) || 0)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {facturasFiltradas.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-gray-200 bg-gray-50">
+                    <td colSpan={6} className="py-2 pr-3 text-right font-semibold text-gray-700">Total mostrado</td>
+                    <td className="py-2 text-right font-bold text-gray-800">
+                      {formatMXN(facturasFiltradas.reduce((s, f) => s + (Number(f.saldo_actual) || 0), 0))}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EditableLineaPlazo — edición inline de línea de crédito (USD) + plazo (días)
+// ═══════════════════════════════════════════════════════════════════════════
+function EditableLineaPlazo({ clienteKey, config, canEdit, onSaved }) {
+  const [abierto, setAbierto] = useState(false);
+  const [lineaUSD, setLineaUSD] = useState(config?.linea_credito_usd ?? "");
+  const [plazo, setPlazo]       = useState(config?.plazo_dias_credito ?? 90);
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    if (abierto) {
+      setLineaUSD(config?.linea_credito_usd ?? "");
+      setPlazo(config?.plazo_dias_credito ?? 90);
+    }
+  }, [abierto, config]);
+
+  if (!canEdit) return null;
+
+  const guardar = async () => {
+    setGuardando(true);
+    const payload = {
+      cliente: clienteKey,
+      linea_credito_usd: lineaUSD === "" ? null : Number(lineaUSD),
+      plazo_dias_credito: Number(plazo) || 90,
+    };
+    const { error } = await supabase.from("clientes_credito_config").upsert(payload, { onConflict: "cliente" });
+    setGuardando(false);
+    if (error) { alert("Error al guardar: " + error.message); return; }
+    setAbierto(false);
+    if (onSaved) await onSaved();
+  };
+
+  if (!abierto) {
+    return (
+      <button onClick={() => setAbierto(true)}
+              className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+              title="Editar línea y plazo">
+        <Pencil className="w-3.5 h-3.5" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+      <div className="flex items-center gap-1">
+        <span className="text-[10px] text-gray-500 uppercase font-semibold">Línea USD</span>
+        <input type="number" value={lineaUSD}
+               onChange={e => setLineaUSD(e.target.value)}
+               placeholder="500000"
+               className="w-24 px-2 py-0.5 border border-gray-300 rounded text-xs" />
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="text-[10px] text-gray-500 uppercase font-semibold">Plazo</span>
+        <input type="number" value={plazo}
+               onChange={e => setPlazo(e.target.value)}
+               className="w-14 px-2 py-0.5 border border-gray-300 rounded text-xs" />
+        <span className="text-[10px] text-gray-500">días</span>
+      </div>
+      <button onClick={guardar} disabled={guardando}
+              className="p-1 rounded bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white"
+              title="Guardar">
+        <Check className="w-3.5 h-3.5" />
+      </button>
+      <button onClick={() => setAbierto(false)}
+              className="p-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700"
+              title="Cancelar">
+        <XIcon className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }
