@@ -1291,6 +1291,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
               sugerido = Math.min(ideal, disponibleActeck);
               if (disponibleActeck < promedio90d * UMBRAL_STOCK) sugerido = 0;
             }
+          } else if (esRoadmapNuevo && stock === 0) {
+            // Producto nuevo del año actual sin sellout todavía y sin stock
+            // en el cliente. Empujar con MIN_COMPRA para arrancar la venta.
+            sugerido = MIN_COMPRA;
           }
           if (sugerido > 0 && sugerido < MIN_COMPRA) sugerido = MIN_COMPRA;
         }
@@ -1350,20 +1354,27 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         return true;
       })
       .sort((a, b) => {
-        // Resolver valor efectivo — considerar overrides manuales del usuario
+        // Resolver valor efectivo — considerar overrides manuales del usuario.
+        // safeNum convierte cualquier entrada a número finito; NaN, null y
+        // undefined → 0. Evita que NaN se propague y rompa el orden del sort.
+        const safeNum = (v) => {
+          const n = Number(v);
+          return Number.isFinite(n) ? n : 0;
+        };
         const resolver = (r) => {
           if (sortCol === "sugerido") {
-            return sugeridoEdits[r.sku] !== undefined
-              ? Number(sugeridoEdits[r.sku])
-              : Number(r.sugerido) || 0;
+            const ov = sugeridoEdits[r.sku];
+            return (ov !== undefined && ov !== null && ov !== "")
+              ? safeNum(ov)
+              : safeNum(r.sugerido);
           }
           if (sortCol === "precioAAAcd" && (clienteKey === "pcel" || clienteKey === "digitalife")) {
-            return precioEdits[r.sku] !== undefined
-              ? Number(precioEdits[r.sku])
-              : Number(r.precioAAAcd) || 0;
+            const ov = precioEdits[r.sku];
+            return (ov !== undefined && ov !== null && ov !== "")
+              ? safeNum(ov)
+              : safeNum(r.precioAAAcd);
           }
-          const v = r[sortCol];
-          return typeof v === "number" ? v : (Number(v) || 0);
+          return safeNum(r[sortCol]);
         };
         const valA = resolver(a);
         const valB = resolver(b);
