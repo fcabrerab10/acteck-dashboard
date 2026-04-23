@@ -135,7 +135,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       if (p.estatus !== "pendiente") return;
       const filas = Array.isArray(p.filas) ? p.filas : [];
       filas.forEach(f => {
-        const sku = String(f["SKU Cliente"] || "").trim();
+        // PCEL guarda "SKU Cliente" (numérico). Digitalife/ML guardan "SKU".
+        // Acepto cualquiera de los dos para que el ciclo funcione en ambos.
+        const sku = String(f["SKU Cliente"] || f["SKU"] || "").trim();
         if (sku && sku !== "TOTAL") set.add(sku);
       });
     });
@@ -1576,11 +1578,16 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const XLSX = await loadSheetJS();
     if (!XLSX) { alert("Error cargando librería Excel"); return; }
 
+    // Para Digitalife: precio = AAA c/desc (con override si aplica).
+    // Para otros clientes: usa precio_venta como antes.
+    const esDigi = clienteKey === "digitalife";
+
     // 1) Armar filas simplificadas para propuesta al cliente
-    // Descripción larga (payload 'Descripcion 2') para Excel; fallback a la corta
     const allRows = skuDetail.map(function(s) {
       const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
-      const precio = Number(s.precio || 0);
+      const precio = esDigi
+        ? (precioEdits[s.sku] !== undefined ? Number(precioEdits[s.sku]) : Number(s.precioAAAcd || 0))
+        : Number(s.precio || 0);
       const total = sug * precio;
       return {
         SKU: s.sku,
@@ -1590,16 +1597,19 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         "Sugerido": sug,
         "Precio": precio,
         "Total": total,
-        _sug: sug, _total: total, _cat: (s.categoria || "").toLowerCase(),
+        _sug: sug, _total: total, _cat: (s.categoria || "").trim().toLowerCase(),
       };
     }).filter(r => r._sug > 0 && r._total > 0);
 
-    // 2) Clasificar por categoría → 3 hojas: Monitores / Sillas / Otros
-    const isMonitor = (c) => c.includes("monitor");
-    const isSilla = (c) => c.includes("silla");
+    // 2) Clasificar por categoría → 3 hojas: Monitores / Sillas / Accesorios
+    //    Match estricto contra el nombre canónico (no .includes). Accesorios
+    //    = catch-all (todas las categorías que no sean Monitores ni Sillas),
+    //    consistente con la lógica del Rebate (2% / 2% / 3%).
+    const isMonitor = (c) => c === "monitores";
+    const isSilla = (c) => c === "sillas";
     const monitores = allRows.filter(r => isMonitor(r._cat));
     const sillas = allRows.filter(r => isSilla(r._cat));
-    const otros = allRows.filter(r => !isMonitor(r._cat) && !isSilla(r._cat));
+    const accesorios = allRows.filter(r => !isMonitor(r._cat) && !isSilla(r._cat));
 
     // Helper: aplica formato numérico (XLSX numFmt) a las columnas de la hoja
     // Formato: Dinero → "$#,##0.00" · Piezas (enteras) → "#,##0"
@@ -1657,7 +1667,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const resumenRows = [
       { "Categoría": "Monitores", "# SKUs": monitores.length, "Piezas": sumBy(monitores, "_sug"), "Total $": sumBy(monitores, "_total") },
       { "Categoría": "Sillas", "# SKUs": sillas.length, "Piezas": sumBy(sillas, "_sug"), "Total $": sumBy(sillas, "_total") },
-      { "Categoría": "Otros", "# SKUs": otros.length, "Piezas": sumBy(otros, "_sug"), "Total $": sumBy(otros, "_total") },
+      { "Categoría": "Accesorios", "# SKUs": accesorios.length, "Piezas": sumBy(accesorios, "_sug"), "Total $": sumBy(accesorios, "_total") },
       { "Categoría": "GRAN TOTAL", "# SKUs": allRows.length, "Piezas": sumBy(allRows, "_sug"), "Total $": sumBy(allRows, "_total") },
     ];
 
@@ -1667,18 +1677,43 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     XLSX.utils.book_append_sheet(wb, resumenWs, "Resumen");
     XLSX.utils.book_append_sheet(wb, makeSheet(monitores, "Monitores"), "Monitores");
     XLSX.utils.book_append_sheet(wb, makeSheet(sillas, "Sillas"), "Sillas");
-    XLSX.utils.book_append_sheet(wb, makeSheet(otros, "Otros"), "Otros");
+    XLSX.utils.book_append_sheet(wb, makeSheet(accesorios, "Accesorios"), "Accesorios");
 
     // Nombre del archivo: "Sugerido Digitalife Abril 2026.xlsx"
     const hoy = new Date();
     const mesesCap = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
     const mesNombre = mesesCap[hoy.getMonth()];
     const anioActual = hoy.getFullYear();
-    // Nombre legible del cliente
     const nombreCliente = clienteKey === "digitalife" ? "Digitalife"
                         : clienteKey === "mercadolibre" ? "Mercado Libre"
                         : (cliente || clienteKey || "Cliente");
     XLSX.writeFile(wb, `Sugerido ${nombreCliente} ${mesNombre} ${anioActual}.xlsx`);
+
+    // 4) Guardar snapshot en propuestas_compra para el ciclo de propuesta
+    //    (igual que PCEL): exportar → pendiente → OC → cerrar. Los SKUs
+    //    pendientes se ocultan de "SKUs en riesgo de desabasto" mientras.
+    if (esDigi) {
+      try {
+        const filasSnapshot = allRows.map(r => {
+          const o = Object.assign({}, r);
+          delete o._sug; delete o._total; delete o._cat;
+          return o;
+        });
+        const totSug = sumBy(allRows, "_sug");
+        const totMonto = sumBy(allRows, "_total");
+        const payload = {
+          cliente: "digitalife",
+          filas: filasSnapshot,
+          skus_count: filasSnapshot.length,
+          piezas_total: totSug,
+          monto_total: Math.round(totMonto),
+          nota: null,
+        };
+        const { error } = await supabase.from("propuestas_compra").insert(payload);
+        if (error) console.error("guardar propuesta digitalife:", error);
+        else await cargarPropuestasCompra();
+      } catch (e) { console.error(e); }
+    }
   };
 
   // ———— RENDER ————
