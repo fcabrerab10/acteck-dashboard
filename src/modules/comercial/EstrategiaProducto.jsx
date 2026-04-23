@@ -930,13 +930,16 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const mesActual = new Date().getMonth() + 1;
     const transitoBySku = datos.transitoBySku || {};
     const actStockBySku = datos.actStockBySku || {};
+    // Roadmap lookup (para detección de producto nuevo en Digitalife)
+    const roadmapBySku = {};
+    (datos.roadmap || []).forEach(r => { if (r.sku) roadmapBySku[r.sku] = r.rdmp || ""; });
     const riesgo = [];
 
     // Iteramos sobre productos (catálogo), igual que skuDetail
     (datos.productos || []).forEach(p => {
       const skuExterno = (clienteKey === 'pcel' && p.modelo) ? p.modelo : p.sku;
       const soData = datos.sellOut.filter(r => r.sku === p.sku);
-      const soSinMes = soData.filter(r => Number(r.mes) < mesActual);
+      const soSinMes = soData.filter(r => Number(r.mes) < mesActual).sort((a, b) => Number(a.mes) - Number(b.mes));
       const ultimos3 = soSinMes.slice(-3);
       const prom = ultimos3.length > 0
         ? ultimos3.reduce((s, r) => s + (r.piezas || 0), 0) / ultimos3.length
@@ -950,23 +953,49 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
       const invActeck = actStockBySku[skuExterno] || actStockBySku[p.sku] || 0;
       const invTransito = transitoBySku[skuExterno] || transitoBySku[p.sku] || 0;
+      const disponibleActeck = invActeck + invTransito;
 
-      // Sugerido: mismo valor que en Detalle por SKU
-      // Buscamos en skuDetail (computado en el useMemo paralelo) para tomar
-      // el mismo número ya calculado con overrides. Como skuDetail se calcula
-      // después, usamos una fórmula equivalente inline pero respetando override.
-      const sinStock = clienteKey === "pcel" && invActeck === 0 && invTransito === 0;
+      // Gate "sin stock" — aplica tanto para PCEL como Digitalife
+      const esPcelOrDgl = clienteKey === "pcel" || clienteKey === "digitalife";
+      const sinStock = esPcelOrDgl && invActeck === 0 && invTransito === 0;
+
       let sugerido = 0;
+      const MIN = 20, UMBRAL = 0.5;
+
       if (!sinStock && clienteKey === "pcel") {
         // Fórmula PCEL simplificada: meta 3m cobertura, cap Acteck, mínimo 20
-        const disponibleActeck = invActeck + invTransito;
-        const META = 3, MIN = 20;
         if (disponibleActeck >= MIN && prom > 0) {
-          const base = META * prom;
-          const transPcel = 0; // Riesgo no carga transito PCEL aquí (lo tiene skuDetail)
-          const ideal = Math.max(0, Math.round(base - stock - transPcel));
+          const base = 3 * prom;
+          const ideal = Math.max(0, Math.round(base - stock));
           sugerido = Math.min(ideal, disponibleActeck);
           if (sugerido > 0 && sugerido < MIN) sugerido = MIN;
+        }
+      } else if (!sinStock && clienteKey === "digitalife") {
+        // Fórmula DIGITALIFE v4 — meta dinámica 90/120/150 días
+        if (disponibleActeck >= MIN && prom > 0) {
+          let crecimiento = 0;
+          if (soSinMes.length >= 6) {
+            const ant3 = soSinMes.slice(-6, -3);
+            const sumUlt = ultimos3.reduce((s, r) => s + (r.piezas || 0), 0);
+            const sumAnt = ant3.reduce((s, r) => s + (r.piezas || 0), 0);
+            if (sumAnt > 0) crecimiento = (sumUlt / sumAnt) - 1;
+          }
+          const anioActual = new Date().getFullYear();
+          const rdmpRaw = String(roadmapBySku[skuExterno] || roadmapBySku[p.sku] || "").trim();
+          const esNuevo = rdmpRaw === String(anioActual);
+          let metaMeses = 3;
+          if (esNuevo) metaMeses = Math.max(metaMeses, 4);
+          if (crecimiento >= 0.40) metaMeses = Math.max(metaMeses, 5);
+          else if (crecimiento >= 0.20) metaMeses = Math.max(metaMeses, 4);
+
+          const coberturaActual = stock / prom;
+          if (coberturaActual <= 4) {
+            const base = metaMeses * prom;
+            const ideal = Math.max(0, Math.round(base - stock));
+            sugerido = Math.min(ideal, disponibleActeck);
+            if (disponibleActeck < prom * UMBRAL) sugerido = 0;
+            if (sugerido > 0 && sugerido < MIN) sugerido = MIN;
+          }
         }
       }
       // Aplicar override manual si existe
