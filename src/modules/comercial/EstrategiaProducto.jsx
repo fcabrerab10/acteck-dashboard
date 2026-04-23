@@ -767,12 +767,19 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   const aggs = React.useMemo(() => {
     if (!datos) return null;
 
-    const sellInTotal = datos.sellIn.reduce((s, r) => s + (r.monto_pesos || 0), 0);
-    const sellInPiezas = datos.sellIn.reduce((s, r) => s + (r.piezas || 0), 0);
-    const sellOutTotal = datos.sellOut.reduce((s, r) => s + (r.monto_pesos || 0), 0);
-    const sellOutPiezas = datos.sellOut.reduce((s, r) => s + (r.piezas || 0), 0);
-    const invTotal = datos.inventario.reduce((s, r) => s + (r.valor || 0), 0);
-    const invPiezas = datos.inventario.reduce((s, r) => s + (r.stock || 0), 0);
+    // PostgREST devuelve `numeric` como string; hay que convertir con Number()
+    // antes de sumar para evitar concatenación accidental de strings.
+    const sellInTotal = datos.sellIn.reduce((s, r) => s + (Number(r.monto_pesos) || 0), 0);
+    const sellInPiezas = datos.sellIn.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+    const sellOutTotal = datos.sellOut.reduce((s, r) => s + (Number(r.monto_pesos) || 0), 0);
+    const sellOutPiezas = datos.sellOut.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+    // `valor` en inventario_cliente suele estar NULL. Fallback: stock × costo_convenio.
+    const invTotal = datos.inventario.reduce((s, r) => {
+      const v = Number(r.valor);
+      if (v > 0) return s + v;
+      return s + (Number(r.stock) || 0) * (Number(r.costo_convenio) || Number(r.costo_promedio) || 0);
+    }, 0);
+    const invPiezas = datos.inventario.reduce((s, r) => s + (Number(r.stock) || 0), 0);
 
     // Find max months
     const siByMes = {};
@@ -1108,8 +1115,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           }
         }
 
-        const stock = invData?.stock || 0;
-        const valorInv = invData?.valor || 0;
+        const stock = Number(invData?.stock) || 0;
+        // Fallback: cuando inventario_cliente.valor está NULL (caso común
+        // para Digitalife), calcular stock × costo.
+        const valorInv = (Number(invData?.valor) > 0)
+          ? Number(invData.valor)
+          : stock * (Number(invData?.costo_convenio) || Number(invData?.costo_promedio) || 0);
 
         // Acteck inventory (9 almacenes) + tránsito — usan skuExterno (modelo para PCEL)
         const invActeck = (datos.actStockBySku && datos.actStockBySku[skuExterno]) || 0;
@@ -1201,7 +1212,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           }
         }
 
-        const precioSku = Number(p.precio_venta) > 0 ? Number(p.precio_venta) : Number(invData && invData.precio_venta || 0);
+        // Precio: prioridad (1) productos_cliente.precio_venta → (2) inventario_cliente.precio_venta
+        //                  → (3) precios_sku.precio_descuento (del roadmap Acteck)
+        const precioInfoSku = (datos.preciosBySku && (datos.preciosBySku[skuExterno] || datos.preciosBySku[p.sku])) || {};
+        const precioSku = Number(p.precio_venta) > 0
+          ? Number(p.precio_venta)
+          : (Number(invData && invData.precio_venta) > 0
+              ? Number(invData.precio_venta)
+              : Number(precioInfoSku.precio_descuento) || 0);
         return {
           sku: p.sku,
           // Descripción corta (para UI): prioridad roadmap → productos_cliente
