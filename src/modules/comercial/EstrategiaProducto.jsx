@@ -2297,7 +2297,21 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                         pointerEvents: "none",
                       },
                       title: sugeridoSaveState[s.sku] === "saved" ? "Guardado" : sugeridoSaveState[s.sku] === "saving" ? "Guardando..." : "Error al guardar"
-                    }, sugeridoSaveState[s.sku] === "saved" ? "\u2713" : sugeridoSaveState[s.sku] === "saving" ? "\u2026" : "!")
+                    }, sugeridoSaveState[s.sku] === "saved" ? "\u2713" : sugeridoSaveState[s.sku] === "saving" ? "\u2026" : "!"),
+                    // Badge de meta dinámica (solo Digitalife). Si se elevó la
+                    // meta (120d ó 150d) por crecimiento o roadmap año actual,
+                    // se pinta una píldora pequeña a la izquierda del sugerido
+                    // para que sepas por qué es más alto.
+                    (clienteKey === "digitalife" && s.metaMeses && s.metaMeses > 3) && React.createElement("span", {
+                      style: {
+                        position: "absolute", left: -2, top: "50%", transform: "translateY(-50%)",
+                        fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3,
+                        background: s.metaMeses >= 5 ? "#FED7AA" : "#DBEAFE",
+                        color:      s.metaMeses >= 5 ? "#9A3412" : "#1E40AF",
+                        pointerEvents: "none",
+                      },
+                      title: (s.metaRazon ? s.metaRazon + " · " : "") + "Meta elevada a " + (s.metaMeses * 30) + " días"
+                    }, (s.metaMeses * 30) + "d")
                   );
                   })(),
                   // Precio AAA c/desc editable (PCEL y Digitalife): parece texto plano, pero al hover/focus se reveal
