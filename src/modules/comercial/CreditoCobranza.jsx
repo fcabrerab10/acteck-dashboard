@@ -80,7 +80,10 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
 
   useEffect(() => { cargarTodo(); }, [clienteKey]);
 
-  // Hooks antes de cualquier return
+  // ═══ TODOS los hooks ANTES de cualquier return condicional ═══
+  // (Rules of Hooks: el número y orden de hooks debe ser estable entre
+  //  renders. Si ponemos useMemo después de un early return, React crashea
+  //  cuando estado pasa de null → no-null → null.)
   const hoy = new Date();
   const mesesVenc = useMemo(() => {
     if (!estado) return [];
@@ -94,27 +97,13 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
     });
   }, [estado]);
 
-  // Estados tempranos
-  if (!DB_CONFIGURED) return <div className="p-6 text-gray-400 text-sm">Supabase no configurado.</div>;
-  if (loading)        return <div className="p-6 text-gray-400 text-sm">Cargando estado de cuenta…</div>;
-  if (!estado) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="bg-white rounded-2xl shadow-sm p-6 max-w-xl mx-auto text-center">
-          <p className="text-4xl mb-3">📭</p>
-          <h2 className="text-lg font-semibold text-gray-800 mb-1">Sin estado de cuenta cargado</h2>
-          <p className="text-sm text-gray-500">Sube el corte más reciente de <strong>{c.nombre}</strong> desde <a href="/uploads.html" className="text-blue-600 hover:underline">Actualizar datos</a>.</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Derivados
-  const saldoActual    = Number(estado.saldo_actual) || 0;
-  const saldoVencido   = Number(estado.saldo_vencido) || 0;
-  const saldoAVencer   = Number(estado.saldo_a_vencer) || 0;
-  const notasCredito   = Math.abs(Number(estado.notas_credito) || 0);
-  const tipoCambio     = Number(estado.tipo_cambio) || 0;
+  // Derivados (estos NO son hooks, pueden quedar después de los returns.
+  // Pero los pongo aquí para que los useMemo siguientes los puedan usar.)
+  const saldoActual    = Number(estado?.saldo_actual) || 0;
+  const saldoVencido   = Number(estado?.saldo_vencido) || 0;
+  const saldoAVencer   = Number(estado?.saldo_a_vencer) || 0;
+  const notasCredito   = Math.abs(Number(estado?.notas_credito) || 0);
+  const tipoCambio     = Number(estado?.tipo_cambio) || 0;
 
   // Línea y plazo desde clientes_credito_config (manual, no del Excel)
   const lineaUSD       = Number(config?.linea_credito_usd) || 0;
@@ -354,8 +343,11 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
     DSO:      h.dso != null ? Number(h.dso) : null,
   }));
 
-  const fechaCorteStr = estado.fecha_corte ? formatFecha(estado.fecha_corte) : `Sem ${estado.semana}/${estado.anio}`;
-  const fechaCortePrevStr = estadoPrev?.fecha_corte ? formatFecha(estadoPrev.fecha_corte) : estadoPrev ? `Sem ${estadoPrev.semana}/${estadoPrev.anio}` : null;
+  // Fallbacks con optional chaining por si estado es null (antes del early return)
+  const fechaCorteStr = estado?.fecha_corte ? formatFecha(estado.fecha_corte)
+                       : estado ? `Sem ${estado.semana}/${estado.anio}` : "";
+  const fechaCortePrevStr = estadoPrev?.fecha_corte ? formatFecha(estadoPrev.fecha_corte)
+                          : estadoPrev ? `Sem ${estadoPrev.semana}/${estadoPrev.anio}` : null;
 
   // Mini componente para mostrar delta semanal en los KPIs
   const DeltaBadge = ({ delta, invertido = false, sufijo = "" }) => {
@@ -375,6 +367,21 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
       </span>
     );
   };
+
+  // ═══ Early returns — ahora SÍ, después de todos los hooks ═══
+  if (!DB_CONFIGURED) return <div className="p-6 text-gray-400 text-sm">Supabase no configurado.</div>;
+  if (loading)        return <div className="p-6 text-gray-400 text-sm">Cargando estado de cuenta…</div>;
+  if (!estado) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="bg-white rounded-2xl shadow-sm p-6 max-w-xl mx-auto text-center">
+          <p className="text-4xl mb-3">📭</p>
+          <h2 className="text-lg font-semibold text-gray-800 mb-1">Sin estado de cuenta cargado</h2>
+          <p className="text-sm text-gray-500">Sube el corte más reciente de <strong>{c.nombre}</strong> desde <a href="/uploads.html" className="text-blue-600 hover:underline">Actualizar datos</a>.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
