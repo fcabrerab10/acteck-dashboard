@@ -1152,6 +1152,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
         // ═══ FÓRMULA DEL SUGERIDO ═══
         let sugerido = 0;
+        let metaMesesDigi = null;   // sólo para Digitalife (badge UI)
+        let metaRazonDigi = null;
         if (clienteKey === 'pcel') {
           // FÓRMULA PCEL v4 (basada en patrón de overrides manuales del usuario)
           //
@@ -1198,18 +1200,68 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             sugerido = MIN_COMPRA;
           }
         } else {
-          // FÓRMULA DIGITALIFE/ML v3 (original)
-          // Regla 1: si invActeck < 10, sugerido = 0 (no se puede reponer)
-          // Regla 2: tránsito NO cuenta (solo invActeck real)
-          // Regla 3: cobertura objetivo = 90 días × factor estacional
-          // Regla 4: mínimo 20 piezas cuando sugerido > 0
-          // Regla 5: cap al invActeck
-          if (invActeck >= 10 && promedio90d > 0) {
-            const necesidad = (promedio90d * 3 * factorEstacional) - stock;
-            sugerido = Math.max(0, Math.round(necesidad));
-            if (sugerido > 0 && sugerido < 20) sugerido = 20;
-            sugerido = Math.min(sugerido, invActeck);
+          // FÓRMULA DIGITALIFE v4 — alineada con PCEL pero con meta dinámica.
+          //
+          // Meta = 90 días de inventario en el cliente (3 meses).
+          //   - Sube a 120d si crecimiento ≥ 20% (últimos 3m vs 3m anteriores)
+          //   - Sube a 150d si crecimiento ≥ 40%
+          //   - Sube a 120d si roadmap = año actual (productos nuevos que
+          //     "nunca han tenido inventario" y queremos empujar venta)
+          //   - Gana la meta MÁS ALTA que aplique.
+          //
+          // Gates idénticos a PCEL:
+          //   - disponibleActeck (inv + tránsito) < MIN_COMPRA (20) → 0
+          //   - cobertura actual cliente > 4 meses → 0 (sobre-inventariado)
+          //   - disponibleActeck < ½ mes sellout → 0 (no comprometer stock
+          //     que apenas tenemos)
+          //
+          // Para Digitalife, NO contamos tránsito hacia cliente (no lo
+          // manejan) ni back order (se trabajará después).
+          const MIN_COMPRA   = 20;
+          const UMBRAL_STOCK = 0.5;
+
+          // Crecimiento (ratio últimos 3m / 3m anteriores)
+          let crecimiento = 0;
+          if (soSinMesActual.length >= 6) {
+            const sumUlt = ultimos3.reduce((s, r) => s + (r.piezas || 0), 0);
+            const anteriores3 = soSinMesActual.slice(-6, -3);
+            const sumAnt = anteriores3.reduce((s, r) => s + (r.piezas || 0), 0);
+            if (sumAnt > 0) crecimiento = (sumUlt / sumAnt) - 1;
           }
+
+          // ¿Roadmap = año actual? (productos nuevos que queremos empujar)
+          const anioActual = new Date().getFullYear();
+          const rdmpRaw = String(roadmapBySku[skuExterno] || roadmapBySku[p.sku] || "").trim();
+          const esRoadmapNuevo = rdmpRaw === String(anioActual);
+
+          // Meta dinámica (gana la mayor)
+          metaMesesDigi = 3;
+          if (esRoadmapNuevo) metaMesesDigi = Math.max(metaMesesDigi, 4);         // 120d
+          if (crecimiento >= 0.40) metaMesesDigi = Math.max(metaMesesDigi, 5);    // 150d
+          else if (crecimiento >= 0.20) metaMesesDigi = Math.max(metaMesesDigi, 4); // 120d
+
+          if (metaMesesDigi > 3) {
+            if (crecimiento >= 0.40) metaRazonDigi = "Crecimiento +" + Math.round(crecimiento * 100) + "%";
+            else if (crecimiento >= 0.20) metaRazonDigi = "Crecimiento +" + Math.round(crecimiento * 100) + "%";
+            else if (esRoadmapNuevo) metaRazonDigi = "Roadmap " + anioActual;
+          }
+
+          const disponibleActeck = invActeck + invTransito;
+
+          if (disponibleActeck < MIN_COMPRA) {
+            sugerido = 0;
+          } else if (promedio90d > 0) {
+            const coberturaActual = stock / promedio90d;
+            if (coberturaActual > 4) {
+              sugerido = 0;
+            } else {
+              const base = metaMesesDigi * promedio90d;
+              const ideal = Math.max(0, Math.round(base - stock));
+              sugerido = Math.min(ideal, disponibleActeck);
+              if (disponibleActeck < promedio90d * UMBRAL_STOCK) sugerido = 0;
+            }
+          }
+          if (sugerido > 0 && sugerido < MIN_COMPRA) sugerido = MIN_COMPRA;
         }
 
         // Precio: prioridad (1) productos_cliente.precio_venta → (2) inventario_cliente.precio_venta
@@ -1246,6 +1298,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           promCompra,
           facturasHist,
           isActivo,
+          // Meta dinámica de Digitalife (badge en UI)
+          metaMeses: metaMesesDigi,
+          metaRazon: metaRazonDigi,
           precioAAAcd:     (datos.preciosBySku && (datos.preciosBySku[skuExterno] || datos.preciosBySku[p.sku]) || {}).precio_descuento || 0,
           // Próximo arribo del SKU: lookup en transito_sku por modelo Acteck
           arriboFecha: (function() {
