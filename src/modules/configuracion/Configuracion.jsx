@@ -10,29 +10,29 @@ const ROLES = [
 ];
 
 const PESTANAS_OPT = [
-  { value: "home",       label: "Resumen" },
-  { value: "analisis",   label: "Análisis" },
-  { value: "estrategia", label: "Estrategia de Producto" },
-  { value: "marketing",  label: "Marketing" },
-  { value: "pagos",      label: "Pagos" },
-  { value: "cartera",    label: "Crédito y Cobranza" },
+  { value: "home",       label: "Resumen",                 desc: "Dashboard inicial con KPIs del cliente" },
+  { value: "analisis",   label: "Análisis",                desc: "Ventas, tendencias y gráficas" },
+  { value: "estrategia", label: "Estrategia de Producto",  desc: "Sugeridos de compra, SKUs en riesgo, Excel" },
+  { value: "marketing",  label: "Marketing",               desc: "Actividades de marketing del cliente" },
+  { value: "pagos",      label: "Pagos",                   desc: "Promociones, rebate, SPIFF, pagos fijos" },
+  { value: "cartera",    label: "Crédito y Cobranza",      desc: "Cartera vencida, aging, DSO" },
 ];
 
 const CLIENTES_OPT = [
-  { value: "digitalife", label: "Digitalife" },
-  { value: "pcel", label: "PCEL" },
-  { value: "mercadolibre", label: "Mercado Libre" },
+  { value: "digitalife",   label: "Digitalife",    desc: "Acteck / Balam Rush" },
+  { value: "pcel",         label: "PCEL",          desc: "PC Online" },
+  { value: "mercadolibre", label: "Mercado Libre", desc: "Publico General ML" },
 ];
 
 const MODULOS_OPT = [
-  { value: "comercial", label: "Área Comercial" },
-  { value: "marketing", label: "Marketing General" },
-  { value: "pnl", label: "Estado de Resultados" },
-  { value: "operaciones", label: "Operaciones" },
-  { value: "compras", label: "Compras" },
-  { value: "rrhh", label: "RRHH" },
-  { value: "finanzas", label: "Finanzas" },
-  { value: "kpis", label: "KPIs Ejecutivos" },
+  { value: "comercial",   label: "Área Comercial",        desc: "Acceso a clientes (resumen, pagos, cobranza, etc.)" },
+  { value: "marketing",   label: "Marketing General",     desc: "Estrategia de marketing corporativa (próximo)" },
+  { value: "pnl",         label: "Estado de Resultados",  desc: "P&L corporativo (próximo)" },
+  { value: "operaciones", label: "Operaciones",           desc: "Logística y almacenes (próximo)" },
+  { value: "compras",     label: "Compras",               desc: "Compras a proveedores (próximo)" },
+  { value: "rrhh",        label: "RRHH",                  desc: "Recursos humanos (próximo)" },
+  { value: "finanzas",    label: "Finanzas",              desc: "Tesorería y presupuesto (próximo)" },
+  { value: "kpis",        label: "KPIs Ejecutivos",       desc: "Dashboard para dirección (próximo)" },
 ];
 
 // Plantillas por rol — se aplican al CAMBIAR el rol en el form,
@@ -208,39 +208,55 @@ export default function Configuracion({ session }) {
               </p>
             </div>
           </div>
+          {/* ═══ Permisos — checklist con label izquierda + check derecha ═══ */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">Clientes asignados</label>
-              <div className="flex flex-wrap gap-2">
-                {CLIENTES_OPT.map(c => (
-                  <button key={c.value} onClick={() => setForm({...form, clientes: toggleArray(form.clientes, c.value)})} className={"px-3 py-1.5 rounded-lg text-xs font-medium transition " + (form.clientes.includes(c.value) ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}>{c.label}</button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">Módulos permitidos</label>
-              <div className="flex flex-wrap gap-2">
-                {MODULOS_OPT.map(m => (
-                  <button key={m.value} onClick={() => setForm({...form, modulos: toggleArray(form.modulos, m.value)})} className={"px-3 py-1.5 rounded-lg text-xs font-medium transition " + (form.modulos.includes(m.value) ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}>{m.label}</button>
-                ))}
-              </div>
-            </div>
+            <SeccionPermisos
+              titulo="Clientes asignados"
+              subtitulo="El usuario tendrá acceso a estos clientes"
+              opciones={CLIENTES_OPT}
+              seleccionados={form.clientes}
+              onToggle={(v) => setForm({ ...form, clientes: toggleArray(form.clientes, v) })}
+              onAll={() => setForm({ ...form, clientes: CLIENTES_OPT.map(o => o.value) })}
+              onNone={() => setForm({ ...form, clientes: [] })}
+              color="blue"
+            />
+            <SeccionPermisos
+              titulo="Módulos permitidos"
+              subtitulo="Áreas del dashboard a las que tiene acceso"
+              opciones={MODULOS_OPT}
+              seleccionados={form.modulos}
+              onToggle={(v) => setForm({ ...form, modulos: toggleArray(form.modulos, v) })}
+              onAll={() => setForm({ ...form, modulos: MODULOS_OPT.map(o => o.value) })}
+              onNone={() => setForm({ ...form, modulos: [] })}
+              color="indigo"
+            />
           </div>
+
           {form.rol === "cliente" && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pestañas visibles para este cliente</label>
-              <p className="text-xs text-gray-500 mb-2">El usuario solo verá las pestañas que marques del/los cliente(s) asignado(s).</p>
-              <div className="flex flex-wrap gap-2">
-                {PESTANAS_OPT.map(p => (
-                  <button key={p.value} onClick={() => setForm({...form, pestanas_cliente: toggleArray(form.pestanas_cliente, p.value)})} className={"px-3 py-1.5 rounded-lg text-xs font-medium transition " + (form.pestanas_cliente.includes(p.value) ? "bg-green-600 text-white" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50")}>{p.label}</button>
-                ))}
-              </div>
+            <div className="mb-4">
+              <SeccionPermisos
+                titulo="Pestañas visibles"
+                subtitulo="El usuario-cliente solo verá estas pestañas dentro de su cliente asignado"
+                opciones={PESTANAS_OPT}
+                seleccionados={form.pestanas_cliente}
+                onToggle={(v) => setForm({ ...form, pestanas_cliente: toggleArray(form.pestanas_cliente, v) })}
+                onAll={() => setForm({ ...form, pestanas_cliente: PESTANAS_OPT.map(o => o.value) })}
+                onNone={() => setForm({ ...form, pestanas_cliente: [] })}
+                color="green"
+              />
             </div>
           )}
+
           {(form.rol === "asistente" || form.rol === "admin") && (
-            <div className="flex items-center gap-2 mb-4">
-              <input type="checkbox" checked={form.puede_editar} onChange={e => setForm({...form, puede_editar: e.target.checked})} id="canEdit" className="rounded" />
-              <label htmlFor="canEdit" className="text-sm text-gray-600">Puede editar datos (si se desmarca, será solo lectura)</label>
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-800">Puede editar datos</p>
+                <p className="text-xs text-gray-500">Si está desactivado, será solo lectura (como un viewer)</p>
+              </div>
+              <input type="checkbox"
+                     checked={form.puede_editar}
+                     onChange={e => setForm({...form, puede_editar: e.target.checked})}
+                     className="w-5 h-5 rounded text-amber-600 focus:ring-amber-500 cursor-pointer" />
             </div>
           )}
           <div className="flex gap-2">
@@ -383,6 +399,74 @@ export default function Configuracion({ session }) {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SeccionPermisos — lista vertical de permisos con label a la izquierda y
+// checkbox a la derecha. Incluye encabezado con contador y botones rápidos.
+// ═══════════════════════════════════════════════════════════════════════════
+function SeccionPermisos({ titulo, subtitulo, opciones, seleccionados, onToggle, onAll, onNone, color = "blue" }) {
+  const totalSel = seleccionados.length;
+  const total    = opciones.length;
+  const todoMarcado = totalSel === total && total > 0;
+  const nadaMarcado = totalSel === 0;
+
+  const colorMap = {
+    blue:   { badge: "bg-blue-100 text-blue-700",     ring: "focus:ring-blue-500", accent: "text-blue-600" },
+    indigo: { badge: "bg-indigo-100 text-indigo-700", ring: "focus:ring-indigo-500", accent: "text-indigo-600" },
+    green:  { badge: "bg-green-100 text-green-700",   ring: "focus:ring-green-500", accent: "text-green-600" },
+  };
+  const c = colorMap[color] || colorMap.blue;
+
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+      {/* Encabezado */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+        <div>
+          <div className="flex items-center gap-2">
+            <h4 className="text-sm font-semibold text-gray-800">{titulo}</h4>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${c.badge}`}>
+              {totalSel} de {total}
+            </span>
+          </div>
+          {subtitulo && <p className="text-[11px] text-gray-500 mt-0.5">{subtitulo}</p>}
+        </div>
+        <div className="flex gap-1">
+          <button type="button" onClick={onAll} disabled={todoMarcado}
+                  className="text-[11px] text-gray-600 hover:text-blue-600 disabled:text-gray-300 disabled:hover:text-gray-300 font-medium">
+            Todos
+          </button>
+          <span className="text-gray-300">·</span>
+          <button type="button" onClick={onNone} disabled={nadaMarcado}
+                  className="text-[11px] text-gray-600 hover:text-red-600 disabled:text-gray-300 disabled:hover:text-gray-300 font-medium">
+            Ninguno
+          </button>
+        </div>
+      </div>
+
+      {/* Lista de opciones */}
+      <div className="divide-y divide-gray-100">
+        {opciones.map(op => {
+          const checked = seleccionados.includes(op.value);
+          return (
+            <label key={op.value}
+                   className={`flex items-center justify-between px-4 py-2.5 cursor-pointer transition-colors ${checked ? "bg-blue-50/40" : "hover:bg-gray-50"}`}>
+              <div className="flex-1 min-w-0 mr-3">
+                <p className="text-sm text-gray-800 font-medium truncate">{op.label}</p>
+                {op.desc && <p className="text-[11px] text-gray-500 truncate">{op.desc}</p>}
+              </div>
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => onToggle(op.value)}
+                className={`w-5 h-5 rounded border-gray-300 ${c.accent} ${c.ring} cursor-pointer shrink-0`}
+              />
+            </label>
+          );
+        })}
       </div>
     </div>
   );
