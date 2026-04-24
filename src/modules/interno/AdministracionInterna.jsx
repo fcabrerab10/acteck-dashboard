@@ -6,7 +6,7 @@ import { toast } from "../../lib/toast";
 import {
   Plus, Trash2, Check, Clock, Flame, PauseCircle, ChevronLeft, ChevronRight,
   CalendarDays, X, Edit3, ChevronDown, ChevronUp, AlertTriangle, Bell, BellOff,
-  Building2, Tag, StickyNote, Inbox, RotateCcw, Users, FileText,
+  Building2, Tag, StickyNote, Inbox, RotateCcw, Users, FileText, CalendarPlus,
 } from "lucide-react";
 import MinutasPanel from "./MinutasPanel";
 import RecurrentesPanel from "./RecurrentesPanel";
@@ -85,6 +85,17 @@ const mismaFecha = (a, b) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
 const hoyISO = () => toISO(new Date());
+// Siguiente día hábil: si sábado/domingo, salta al lunes
+const siguienteDiaHabil = (iso) => {
+  const base = iso ? parseISO(iso) : new Date();
+  if (!base) return hoyISO();
+  const d = new Date(base);
+  d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) {
+    d.setDate(d.getDate() + 1);
+  }
+  return toISO(d);
+};
 const diasEntre = (isoA, isoB) => {
   const a = parseISO(isoA), b = parseISO(isoB);
   if (!a || !b) return 0;
@@ -442,6 +453,28 @@ export default function AdministracionInterna() {
     }
   }
 
+  async function posponerUnDia(id) {
+    if (!canEdit) return;
+    const t = pendientes.find((p) => p.id === id);
+    if (!t) return;
+    const actual = t.fecha_limite ? t.fecha_limite.slice(0, 10) : hoyISO();
+    const nueva = siguienteDiaHabil(actual);
+    const arrastrado = t.arrastrado_desde || actual;
+    setPendientes((prev) => prev.map((p) =>
+      p.id === id ? { ...p, fecha_limite: nueva, arrastrado_desde: arrastrado } : p
+    ));
+    const { error } = await supabase.from("pendientes_equipo")
+      .update({ fecha_limite: nueva, arrastrado_desde: arrastrado }).eq("id", id);
+    if (error) {
+      console.error(error);
+      toast.error("No se pudo posponer");
+      cargarTodo();
+    } else {
+      const d = parseISO(nueva);
+      toast.success(`→ ${DIAS_SEMANA_LARGO[(d.getDay() + 6) % 7]} ${d.getDate()} de ${MESES_LARGO[d.getMonth()].toLowerCase()}`);
+    }
+  }
+
   async function borrarPendiente(id) {
     if (!canEdit) return;
     if (!confirm("¿Eliminar esta tarea?")) return;
@@ -795,6 +828,7 @@ export default function AdministracionInterna() {
               onCambiarEstatus={cambiarEstatus}
               onEditar={(t) => setModalTarea({ tarea: t })}
               onBorrar={borrarPendiente}
+              onPosponer={posponerUnDia}
               onAgregar={() => canEdit && setModalTarea({ fechaDefault: key })}
               hoyISO={hoy}
             />
@@ -869,7 +903,7 @@ export default function AdministracionInterna() {
 function ColumnaDia({
   fecha, esHoy, tareas, canEdit, nombrePorUserId, colorPorUserId,
   completadasOpen, toggleCompletadasOpen,
-  onToggleCheck, onToggleSubtarea, onCambiarEstatus, onEditar, onBorrar, onAgregar, hoyISO,
+  onToggleCheck, onToggleSubtarea, onCambiarEstatus, onEditar, onBorrar, onPosponer, onAgregar, hoyISO,
 }) {
   const abiertas    = tareas.filter((t) => t.estatus !== "listo");
   const completadas = tareas.filter((t) => t.estatus === "listo");
@@ -929,6 +963,7 @@ function ColumnaDia({
               onCambiarEstatus={onCambiarEstatus}
               onEditar={onEditar}
               onBorrar={onBorrar}
+              onPosponer={onPosponer}
               hoyISO={hoyISO}
             />
           ))
@@ -1020,7 +1055,7 @@ function SinFechaBloque({ tareas, canEdit, nombrePorUserId, colorPorUserId, onTo
 }
 
 // ────────── Tarjeta de tarea ──────────
-function TareaCard({ t, canEdit, nombrePorUserId, colorPorUserId, onToggleCheck, onToggleSubtarea, onCambiarEstatus, onEditar, onBorrar, compacta, hoyISO }) {
+function TareaCard({ t, canEdit, nombrePorUserId, colorPorUserId, onToggleCheck, onToggleSubtarea, onCambiarEstatus, onEditar, onBorrar, onPosponer, compacta, hoyISO }) {
   const cuenta = CUENTAS.find((c) => c.id === t.cuenta) || CUENTAS[3];
   const est = ESTATUS_MAP[t.estatus] || ESTATUS_MAP.pendiente;
   const pri = PRIORIDAD_MAP[t.prioridad] || PRIORIDAD_MAP.media;
@@ -1180,6 +1215,15 @@ function TareaCard({ t, canEdit, nombrePorUserId, colorPorUserId, onToggleCheck,
 
         {/* Acciones + Check (a la derecha) */}
         <div className="shrink-0 flex items-start gap-1.5">
+          {canEdit && !esListo && onPosponer && !compacta && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onPosponer(t.id); }}
+              className="p-1 rounded bg-white/80 hover:bg-blue-50 text-gray-400 hover:text-blue-600 border border-gray-200 hover:border-blue-300 opacity-0 group-hover:opacity-100 transition-all"
+              title="Pasar al siguiente día hábil"
+            >
+              <CalendarPlus className="w-3 h-3" />
+            </button>
+          )}
           {canEdit && (
             <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
               <button
