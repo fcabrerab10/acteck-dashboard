@@ -435,9 +435,10 @@ export default function App() {
           {paginaActiva === "resumenClientes" && <ResumenClientesTab />}
           {paginaActiva === "forecastClientes" && <ForecastClientesTab />}
           {paginaActiva === "adminInterna" && (
-            (perfil?.rol === "super_admin" || perfil?.rol === "asistente")
+            // Roles internos: super_admin, admin, asistente (equipo de Acteck)
+            (["super_admin", "admin", "asistente"].includes(perfil?.rol))
               ? <AdministracionInterna />
-              : <SinAcceso motivo="Solo el Super Admin y Asistentes pueden acceder a Administración Interna." />
+              : <SinAcceso motivo="Solo el equipo interno de Acteck (super admin, administradores y asistentes) puede acceder a Administración Interna." />
           )}
           <>
             <>

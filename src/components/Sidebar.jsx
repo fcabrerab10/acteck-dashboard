@@ -72,7 +72,8 @@ const MENU_CONFIG = [
     id: 'internaGrupo',
     label: 'Administración Interna',
     emoji: '🏢',
-    rolesPermitidos: ['super_admin', 'asistente'],
+    // Roles internos (equipo de Acteck) — excluye cliente y viewer (externos)
+    rolesPermitidos: ['super_admin', 'admin', 'asistente'],
     items: [
       { id: 'adminInterna', label: 'Pendientes & Calendario', icon: ClipboardList },
     ],
