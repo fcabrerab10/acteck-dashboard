@@ -7,11 +7,11 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/sync-master-embarques",
+      "path": "/api/cron?task=sync-master-embarques",
       "schedule": "0 12 * * *"
     },
     {
-      "path": "/api/cron/actualizar-fill-rates",
+      "path": "/api/cron?task=actualizar-fill-rates",
       "schedule": "30 12 * * *"
     }
   ]
