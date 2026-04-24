@@ -4,5 +4,15 @@
       "source": "/auth/mercadolibre",
       "destination": "/api/auth/mercadolibre"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/sync-master-embarques",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/actualizar-fill-rates",
+      "schedule": "30 12 * * *"
+    }
   ]
 }

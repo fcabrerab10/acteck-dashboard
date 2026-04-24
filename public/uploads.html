@@ -64,7 +64,7 @@ const SOURCES = [
   { id:'ec-pcel', title:'Estado de cuenta · PCEL', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
   { id:'ec-digitalife', title:'Estado de cuenta · Digitalife', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
   { id:'roadmap-precios', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
-  { id:'master-embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx (hoja "2026"). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques' },
+  { id:'master-embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx (hoja del año actual). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron/sync-master-embarques' },
 ];
 
 const CHUNK = 200;
@@ -577,6 +577,15 @@ function renderCards(){
       btn = el('button', {class:'btn', onclick: () => handleUpload(src)}, 'Subir');
       if (src.disabled) { btn.disabled = true; btn.textContent = 'Próximamente'; }
     }
+    // Botón extra: sync vía cron endpoint (para Master Embarques)
+    let cronBtn = null;
+    if (src.cronEndpoint) {
+      cronBtn = el('button', {
+        class:'btn',
+        style: 'background:#10B981;color:#fff;',
+        onclick: () => handleCronSync(src),
+      }, '⚡ Auto-sync ahora');
+    }
     // Last-updated badge
     const lastUp = getLastUpdated(src.id);
     const updBadge = el('div', {class:'last-updated', id:`updated-${src.id}`},
@@ -590,7 +599,7 @@ function renderCards(){
         : `📄 ${src.file} · 🎯 ${src.table}`),
       updBadge,
       status,
-      el('div', {class:'actions'}, file, btn),
+      el('div', {class:'actions'}, file, btn, cronBtn),
       log
     );
     grid.appendChild(card);
@@ -696,6 +705,33 @@ async function handleUpload(src){
 
 // Sync Master Embarques from Google Drive (browser-side fetch using user's Google session)
 const SHEET_XLSX_URL = 'https://docs.google.com/spreadsheets/d/1m2I_oTd4EYTQ1v5KQOAZGIPmt58K3jRUbHGk0ed0JoQ/export?format=xlsx';
+
+async function handleCronSync(src){
+  setStatus(src,'b-warn','Sincronizando desde Google Drive...');
+  appendLog(src, `Disparando ${src.cronEndpoint}...`);
+  try {
+    const r = await fetch(src.cronEndpoint, { method: 'GET' });
+    const text = await r.text();
+    let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+    if (!r.ok) {
+      appendLog(src, 'ERROR ' + r.status + ': ' + (data.error || text.slice(0,200)));
+      setStatus(src,'b-err','Error ' + r.status);
+      return;
+    }
+    const up = data.upserted || 0;
+    const parsed = data.rows_parsed || 0;
+    appendLog(src, `✓ Procesadas ${parsed} filas · Upserteadas ${up} · Sheet: ${data.sheet || '?'}`);
+    if (data.errors?.length) appendLog(src, 'Errores: ' + JSON.stringify(data.errors).slice(0, 400));
+    saveLastUpdated(src.id);
+    const badge = document.getElementById(`updated-${src.id}`);
+    badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
+    badge.style.display = '';
+    setStatus(src,'b-ok',`✓ ${up} filas sincronizadas`);
+  } catch (e) {
+    appendLog(src, 'ERROR de red: ' + e.message);
+    setStatus(src,'b-err','Error');
+  }
+}
 
 async function handleSync(src){
   setStatus(src,'b-warn','Descargando desde Google Drive...');
