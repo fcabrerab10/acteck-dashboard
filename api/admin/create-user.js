@@ -20,12 +20,16 @@ export default async function handler(req, res) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  // Check super_admin role using admin client to bypass RLS
-  const { data: callerProfile } = await supabaseAdmin.from('perfiles').select('rol').eq('user_id', user.id).single();
-  if (!callerProfile || callerProfile.rol !== 'super_admin') return res.status(403).json({ error: 'Solo Super Admin puede crear usuarios' });
+  // Check super_admin using es_super_admin (nuevo modelo). Compat con rol legacy.
+  const { data: callerProfile } = await supabaseAdmin.from('perfiles')
+    .select('rol, es_super_admin').eq('user_id', user.id).single();
+  const esSuper = callerProfile?.es_super_admin === true || callerProfile?.rol === 'super_admin';
+  if (!esSuper) return res.status(403).json({ error: 'Solo Super Admin puede crear usuarios' });
 
-  const { email, password, nombre, rol, clientes, modulos, pestanas_cliente, puede_editar } = req.body;
-  if (!email || !password || !nombre || !rol) return res.status(400).json({ error: 'Faltan campos requeridos' });
+  // Nuevo modelo: tipo, puesto, permisos. Compat: si se envían los campos
+  // viejos (rol, clientes, modulos, etc.) también se guardan.
+  const { email, password, nombre, tipo, puesto, permisos, rol, clientes, modulos, pestanas_cliente, puede_editar } = req.body;
+  if (!email || !password || !nombre) return res.status(400).json({ error: 'Faltan nombre, email o contraseña' });
 
   const { data: authData, error: createErr } = await supabaseAdmin.auth.admin.createUser({
     email,
@@ -38,7 +42,13 @@ export default async function handler(req, res) {
     user_id: authData.user.id,
     nombre,
     email,
-    rol: rol || 'viewer',
+    // Nuevo modelo
+    tipo: tipo || 'interno',
+    puesto: puesto || null,
+    permisos: permisos || null,
+    es_super_admin: false, // Nunca crear otros super admins vía UI
+    // Compat con modelo viejo
+    rol: rol || (tipo === 'externo' ? 'cliente' : 'asistente'),
     clientes: clientes || [],
     modulos: modulos || [],
     pestanas_cliente: pestanas_cliente || [],
