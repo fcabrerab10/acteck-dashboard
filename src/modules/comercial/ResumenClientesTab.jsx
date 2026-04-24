@@ -64,25 +64,28 @@ function gradeScore(s) {
 }
 
 // ────────── Hook: data loader ──────────
-// Usa las MISMAS fuentes que las pestañas per-cliente:
-//   - v_ventas_mensuales_agg: agrega sell_in_sku + sellout_sku por cliente/mes (= HomeCliente)
-//   - cuotas_mensuales: cuota_min y cuota_ideal por cliente/mes
-//   - inventario_cliente: snapshot semanal con campo valor (MXN)
-//   - estados_cuenta: último corte por cliente (DSO, saldo_vencido, aging)
+// Fuentes alineadas 1:1 con las pestañas per-cliente:
+//   - v_ventas_mensuales_agg: sell_in_sku + sellout_sku agregados por cliente/mes
+//   - cuotas_mensuales: cuota_min/cuota_ideal por cliente/mes
+//   - inventario_cliente: snapshot semanal con valor (MXN)
+//   - v_dso_real: DSO real calculado desde estados_cuenta_detalle
+//   - clientes_credito_config: plazo_dias_credito por cliente (default 90)
+//   - sellout_sku: para cobertura de inventario (últimos 3 meses de sell-out)
 function useResumenData() {
   const [state, setState] = useState({
     loading: true,
     ventasAgg: [],
     cuotasMensuales: [],
     inventarioCliente: [],
-    estadosCuenta: [],
+    dsoReal: [],
+    creditoConfig: [],
+    selloutSku: [],
     inversionMkt: [],
   });
 
   useEffect(() => {
     (async () => {
-      const [vaRes, cmRes, invRes, ecRes, mkRes] = await Promise.all([
-        // Últimos 2 años para trend y MoM
+      const [vaRes, cmRes, invRes, dsoRes, ccRes, soRes, mkRes] = await Promise.all([
         supabase.from('v_ventas_mensuales_agg')
           .select('cliente, anio, mes, sell_in, sell_out')
           .gte('anio', anioActual - 1),
@@ -94,9 +97,13 @@ function useResumenData() {
           .order('anio', { ascending: false })
           .order('semana', { ascending: false })
           .limit(10000),
-        supabase.from('estados_cuenta')
-          .select('cliente, anio, semana, fecha_corte, saldo_actual, saldo_vencido, dso, aging_mas90')
-          .order('fecha_corte', { ascending: false }),
+        supabase.from('v_dso_real')
+          .select('cliente, fecha_corte, saldo_actual_total, saldo_vencido, dso_real, dso_erp, aging_mas90, facturas_abiertas'),
+        supabase.from('clientes_credito_config')
+          .select('cliente, plazo_dias_credito, linea_credito_usd'),
+        supabase.from('sellout_sku')
+          .select('cliente, anio, mes, piezas, monto_pesos')
+          .eq('anio', anioActual),
         supabase.from('inversion_marketing')
           .select('cliente, anio, mes, monto')
           .eq('anio', anioActual),
@@ -107,7 +114,9 @@ function useResumenData() {
         ventasAgg:         vaRes.data  || [],
         cuotasMensuales:   cmRes.data  || [],
         inventarioCliente: invRes.data || [],
-        estadosCuenta:     ecRes.data  || [],
+        dsoReal:           dsoRes.data || [],
+        creditoConfig:     ccRes.data  || [],
+        selloutSku:        soRes.data  || [],
         inversionMkt:      mkRes.data  || [],
       });
     })();
@@ -127,13 +136,15 @@ function useResumenData() {
 //   - Inventario    = SUM(inventario_cliente.valor) del último snapshot (anio, semana máximos)
 //   - Cobertura sem = valor / (sell_out_mensual_promedio / 4.33)
 function calcularResumen(clienteKey, data) {
-  const va = data.ventasAgg.filter((r) => r.cliente === clienteKey);
-  const cm = data.cuotasMensuales.filter((r) => r.cliente === clienteKey);
+  const va  = data.ventasAgg.filter((r) => r.cliente === clienteKey);
+  const cm  = data.cuotasMensuales.filter((r) => r.cliente === clienteKey);
   const inv = data.inventarioCliente.filter((r) => r.cliente === clienteKey);
-  const ec = data.estadosCuenta.filter((r) => r.cliente === clienteKey);
-  const mk = data.inversionMkt.filter((r) => r.cliente === clienteKey);
+  const dsoRow = data.dsoReal.find((r) => r.cliente === clienteKey);
+  const ccRow  = data.creditoConfig.find((r) => r.cliente === clienteKey);
+  const so  = data.selloutSku.filter((r) => r.cliente === clienteKey);
+  const mk  = data.inversionMkt.filter((r) => r.cliente === clienteKey);
 
-  // ── Sell-In / Sell-Out YTD y mes actual ──
+  // ── Sell-In / Sell-Out YTD ──
   const vaAnio = va.filter((r) => r.anio === anioActual);
   const siYTD = vaAnio
     .filter((r) => Number(r.mes) <= mesActual)
@@ -142,85 +153,95 @@ function calcularResumen(clienteKey, data) {
     .filter((r) => Number(r.mes) <= mesActual)
     .reduce((a, r) => a + Number(r.sell_out || 0), 0);
 
+  // MoM del mes actual vs mismo mes año anterior (comparación año-sobre-año)
   const rowMesActual = vaAnio.find((r) => Number(r.mes) === mesActual);
-  const mesPrevNum   = mesActual === 1 ? 12 : mesActual - 1;
-  const anioPrev     = mesActual === 1 ? anioActual - 1 : anioActual;
-  const rowMesPrev   = va.find((r) => Number(r.mes) === mesPrevNum && r.anio === anioPrev);
-
+  const rowMesPrev   = va.find((r) => Number(r.mes) === mesActual && r.anio === anioActual - 1);
   const siMes     = Number(rowMesActual?.sell_in  || 0);
   const siMesPrev = Number(rowMesPrev?.sell_in    || 0);
   const soMes     = Number(rowMesActual?.sell_out || 0);
-  const siMoM = siMesPrev > 0 ? ((siMes - siMesPrev) / siMesPrev) * 100 : null;
+  const siYoY = siMesPrev > 0 ? ((siMes - siMesPrev) / siMesPrev) * 100 : null;
 
-  // ── Cuota YTD y anual ──
+  // ── Cuota YTD y anual (mismo período vs mismo período) ──
   const cuotaYTD = cm
     .filter((r) => Number(r.mes) <= mesActual)
     .reduce((a, r) => a + Number(r.cuota_min || 0), 0);
   const cuotaAnual = cm.reduce((a, r) => a + Number(r.cuota_min || 0), 0);
   const cuotaIdealAnual = cm.reduce((a, r) => a + Number(r.cuota_ideal || 0), 0);
-  const cuotaMesRow = cm.find((r) => Number(r.mes) === mesActual);
-  const cuotaMes = Number(cuotaMesRow?.cuota_min || 0);
 
-  const cumplimientoYTD = cuotaYTD > 0 ? (siYTD / cuotaYTD) * 100 : null;   // vs cuota acumulada
-  const avanceAnual     = cuotaAnual > 0 ? (siYTD / cuotaAnual) * 100 : null; // % del año
-  const cumplMesActual  = cuotaMes  > 0 ? (siMes / cuotaMes)  * 100 : null;
+  // IMPORTANTE: Comparar YTD vs YTD (mismo período), no YTD vs anual.
+  // El "avance anual" se confunde con cumplimiento → NO lo usamos en el score.
+  const cumplimientoYTD = cuotaYTD > 0 ? (siYTD / cuotaYTD) * 100 : null;
 
-  // ── Inventario del último snapshot (anio + semana más reciente) ──
+  // ── Inventario del último snapshot (valor MXN) ──
   let inventarioValor = 0;
   let inventarioPiezas = 0;
   let inventarioSemana = null;
   if (inv.length > 0) {
-    // inv ya viene ordenado DESC por anio, semana
     const latest = inv.find((r) => r.anio != null && r.semana != null);
     if (latest) {
-      const anioLatest = latest.anio;
-      const semLatest  = latest.semana;
-      const snap = inv.filter((r) => r.anio === anioLatest && r.semana === semLatest);
+      const snap = inv.filter((r) => r.anio === latest.anio && r.semana === latest.semana);
       inventarioValor  = snap.reduce((a, r) => a + Number(r.valor || 0), 0);
       inventarioPiezas = snap.reduce((a, r) => a + Number(r.stock || 0), 0);
-      inventarioSemana = `${anioLatest}-${String(semLatest).padStart(2,'0')}`;
+      inventarioSemana = `${latest.anio}-${String(latest.semana).padStart(2,'0')}`;
     }
   }
 
-  // Cobertura en semanas: valor / (sell_out_mensual_promedio_3m / 4.33)
-  // Si no hay sell_out (ej. ML) NO calculamos cobertura — score queda null
-  const soUlt3m = vaAnio
-    .filter((r) => Number(r.mes) >= Math.max(1, mesActual - 2) && Number(r.mes) <= mesActual)
-    .reduce((a, r) => a + Number(r.sell_out || 0), 0);
-  const soMensualProm = soUlt3m / 3;
-  const inventarioSemanas = (soMensualProm > 0 && inventarioValor > 0)
-    ? inventarioValor / (soMensualProm / 4.33)
-    : null;
+  // ── Cobertura en DÍAS (alineado con HomeCliente.jsx líneas 574-587) ──
+  // Últimos 3 meses de sellout_sku.monto_pesos / (días del período) = sell-out diario
+  const ultMes = so.length > 0 ? Math.max(...so.map((r) => Number(r.mes) || 0)) : 0;
+  let coberturaDias = null;
+  if (inventarioValor > 0 && ultMes > 0) {
+    const desde = Math.max(1, ultMes - 2);
+    const montoSO = so
+      .filter((r) => Number(r.mes) >= desde && Number(r.mes) <= ultMes)
+      .reduce((a, r) => a + Number(r.monto_pesos || 0), 0);
+    const dias = (ultMes - desde + 1) * 30;
+    const soDiario = dias > 0 ? montoSO / dias : 0;
+    coberturaDias = soDiario > 0 ? Math.round(inventarioValor / soDiario) : null;
+  }
 
-  // ── Estado de cuenta más reciente ──
-  const ecLatest = ec[0];
-  const saldoVencido = Number(ecLatest?.saldo_vencido || 0);
-  const saldoActual  = Number(ecLatest?.saldo_actual  || 0);
-  const dso          = Number(ecLatest?.dso           || 0);
-  const aging90      = Number(ecLatest?.aging_mas90   || 0);
+  // ── DSO real + plazo de crédito ──
+  const plazo = Number(ccRow?.plazo_dias_credito || 90);
+  const dsoReal = dsoRow?.dso_real != null ? Number(dsoRow.dso_real) : null;
+  const saldoVencido = Number(dsoRow?.saldo_vencido || 0);
+  const saldoActual  = Number(dsoRow?.saldo_actual_total || 0);
+  const aging90      = Number(dsoRow?.aging_mas90 || 0);
   const pctVencido   = saldoActual > 0 ? (saldoVencido / saldoActual) * 100 : 0;
 
   // ── Inversión marketing YTD y ROI ──
   const invMktYTD = mk.reduce((a, r) => a + Number(r.monto || 0), 0);
   const roiMkt = invMktYTD > 0 ? soYTD / invMktYTD : null;
 
-  // ───── Score por componente (0–100) ─────
-  // 1) Cumplimiento cuota YTD (lo más importante)
+  // ═════ Scores (0–100) — cada uno usa umbrales de las pestañas per-cliente ═════
+
+  // 1) Cumplimiento cuota YTD vs YTD — 100% = 100pts (satura), 50% = 50pts
   const scoreCuota = cuotaYTD > 0 ? clamp(cumplimientoYTD, 0, 100) : null;
 
-  // 2) Cobertura inventario: 8 semanas = 100, 2 = 0, lineal
-  const scoreInv = inventarioSemanas != null
-    ? clamp(((inventarioSemanas - 2) / 6) * 100, 0, 100)
-    : null;
+  // 2) Cobertura inventario — alineado con HomeCliente línea 890-891
+  //    ≤90d = verde (óptimo), 90-150d = amarillo, >150d = rojo (sobreinv)
+  //    Score: óptimo 60-90d = 100. Bajo 30d = 0 (riesgo stockout). Alto >180d = 0 (sobre)
+  let scoreInv = null;
+  if (coberturaDias != null) {
+    if (coberturaDias < 30)        scoreInv = clamp((coberturaDias / 30) * 60, 0, 60);   // 0–60 en rango stockout
+    else if (coberturaDias <= 90)  scoreInv = clamp(60 + ((coberturaDias - 30) / 60) * 40, 60, 100); // 60→100 en rango óptimo
+    else if (coberturaDias <= 150) scoreInv = clamp(100 - ((coberturaDias - 90) / 60) * 40, 60, 100);  // 100→60
+    else                           scoreInv = clamp(60 - ((coberturaDias - 150) / 60) * 60, 0, 60);    // 60→0 sobrestock
+  }
 
-  // 3) DSO: ≤30d = 100, 60d = 50, ≥90d = 0
-  const scoreDSO = dso > 0
-    ? clamp(((90 - dso) / 60) * 100, 0, 100)
-    : null;
+  // 3) DSO real vs plazo — alineado con CreditoCobranza.jsx líneas 277-280
+  //    DSO ≤ plazo = verde (100), plazo-plazo+30 = amarillo, >plazo+30 = rojo
+  //    Score: ≤plazo = 100, plazo+60 = 0, lineal
+  let scoreDSO = null;
+  if (dsoReal != null && dsoReal > 0) {
+    if (dsoReal <= plazo) scoreDSO = 100;
+    else scoreDSO = clamp(100 - ((dsoReal - plazo) / 60) * 100, 0, 100);
+  }
 
-  // 4) Pagos vencidos: 0% = 100, 10% = 0
+  // 4) Saldo vencido — alineado con CreditoCobranza líneas 234-251
+  //    >15% = rojo, 5-15% = amarillo, <5% = verde
+  //    Score: 0% = 100, 15% = 0, lineal
   const scoreVen = saldoActual > 0
-    ? clamp(((10 - pctVencido) / 10) * 100, 0, 100)
+    ? clamp(((15 - pctVencido) / 15) * 100, 0, 100)
     : null;
 
   // 5) ROI marketing: ≥10 = 100, ≤2 = 0
@@ -245,14 +266,12 @@ function calcularResumen(clienteKey, data) {
     healthScore,
     componentes,
     siYTD, soYTD,
-    siMes, siMesPrev, siMoM,
+    siMes, siMesPrev, siYoY,
     soMes,
-    cuotaMes, cumplMesActual,
     cuotaYTD, cumplimientoYTD,
-    cuotaAnual, cuotaIdealAnual, avanceAnual,
-    saldoVencido, saldoActual, dso, aging90, pctVencido,
-    inventarioValor, inventarioPiezas, inventarioSemana, inventarioSemanas,
-    soMensualProm,
+    cuotaAnual, cuotaIdealAnual,
+    saldoVencido, saldoActual, dsoReal, dsoPlazo: plazo, aging90, pctVencido,
+    inventarioValor, inventarioPiezas, inventarioSemana, coberturaDias,
     invMktYTD, roiMkt,
   };
 }
@@ -284,36 +303,48 @@ function calcularTrend(data) {
 function calcularAlertas(resumenes) {
   const alertas = [];
   resumenes.forEach(({ cliente, resumen }) => {
-    if (resumen.saldoVencido >= UMBRAL_VENCIDO_ALERTA) {
+    // Saldo vencido > 15% del saldo total (umbral crítico de CreditoCobranza)
+    if (resumen.pctVencido > 15) {
       alertas.push({
         tipo: 'vencido',
         cliente: cliente.nombre,
-        mensaje: `${formatMXN(resumen.saldoVencido)} vencidos`,
+        mensaje: `${formatMXN(resumen.saldoVencido)} vencidos (${resumen.pctVencido.toFixed(1)}% del saldo)`,
         severidad: 'alta',
       });
     }
-    if (resumen.dso >= UMBRAL_DSO_ALERTA) {
+    // DSO real > plazo + 30 días = crítico
+    if (resumen.dsoReal != null && resumen.dsoReal > (resumen.dsoPlazo + 30)) {
       alertas.push({
         tipo: 'dso',
         cliente: cliente.nombre,
-        mensaje: `DSO alto: ${resumen.dso} días`,
-        severidad: 'media',
+        mensaje: `DSO ${resumen.dsoReal}d (plazo ${resumen.dsoPlazo}d)`,
+        severidad: 'alta',
       });
     }
+    // Cumplimiento YTD < 70%
     if (resumen.cumplimientoYTD != null && resumen.cumplimientoYTD < 70) {
       alertas.push({
         tipo: 'cuota',
         cliente: cliente.nombre,
-        mensaje: `Cuota YTD al ${resumen.cumplimientoYTD.toFixed(0)}%`,
+        mensaje: `Cumplimiento YTD ${resumen.cumplimientoYTD.toFixed(0)}%`,
         severidad: 'alta',
       });
     }
-    if (resumen.inventarioSemanas != null && resumen.inventarioSemanas < 2) {
+    // Cobertura crítica (<30d = riesgo stockout) o excesiva (>150d = sobreinventario)
+    if (resumen.coberturaDias != null && resumen.coberturaDias < 30) {
       alertas.push({
         tipo: 'inventario',
         cliente: cliente.nombre,
-        mensaje: `Inventario crítico: ${resumen.inventarioSemanas.toFixed(1)} sem`,
+        mensaje: `Cobertura baja: ${resumen.coberturaDias}d (riesgo stockout)`,
         severidad: 'alta',
+      });
+    }
+    if (resumen.coberturaDias != null && resumen.coberturaDias > 150) {
+      alertas.push({
+        tipo: 'inventario',
+        cliente: cliente.nombre,
+        mensaje: `Sobreinventario: ${resumen.coberturaDias}d de cobertura`,
+        severidad: 'media',
       });
     }
   });
@@ -395,9 +426,6 @@ export default function ResumenClientesTab({ onDrillDown }) {
         ))}
       </div>
 
-      {/* Ranking comparativo */}
-      <RankingComparativo resumenes={resumenes} />
-
       {/* Trend consolidado */}
       <TrendConsolidado trend={trend} />
     </div>
@@ -460,46 +488,49 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
         ))}
       </div>
 
-      {/* KPIs: Sell-In YTD + cumplimiento */}
+      {/* Sell-In YTD + Cumplimiento YTD (mismo período vs mismo período) */}
       <div className="border-t border-gray-100 px-5 py-3 space-y-2">
         <div className="flex items-baseline justify-between">
           <div>
             <div className="text-[10px] uppercase text-gray-500 tracking-wide">Sell-In YTD</div>
             <div className="font-bold text-gray-800 text-base">{formatMXN(resumen.siYTD)}</div>
+            {resumen.cuotaYTD > 0 && (
+              <div className="text-[10px] text-gray-500">
+                vs cuota YTD {formatMXN(resumen.cuotaYTD)}
+              </div>
+            )}
           </div>
           {resumen.cumplimientoYTD != null && (
             <div className="text-right">
               <div className="text-[10px] uppercase text-gray-500 tracking-wide">Cumpl. YTD</div>
-              <div className="font-bold text-base" style={{ color: colorScore(resumen.cumplimientoYTD) }}>
+              <div className="font-bold text-lg" style={{ color: colorScore(resumen.cumplimientoYTD) }}>
                 {pct(resumen.cumplimientoYTD)}
               </div>
             </div>
           )}
         </div>
-        {resumen.siMoM != null && <MoMIndicator pct={resumen.siMoM} />}
+
+        {resumen.siYoY != null && (
+          <div className={[
+            'text-[10px] flex items-center gap-0.5',
+            resumen.siYoY >= 0 ? 'text-emerald-600' : 'text-red-600',
+          ].join(' ')}>
+            {resumen.siYoY >= 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+            {resumen.siYoY >= 0 ? '+' : ''}{resumen.siYoY.toFixed(1)}% vs mismo mes año anterior
+          </div>
+        )}
 
         {resumen.cuotaAnual > 0 && (
-          <div>
-            <div className="flex items-center justify-between text-[10px] text-gray-500">
-              <span>Avance vs cuota anual</span>
-              <span className="font-semibold" style={{ color: colorScore(resumen.avanceAnual) }}>
-                {pct(resumen.avanceAnual)}
-              </span>
-            </div>
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1">
-              <div className="h-full transition-all" style={{ width: `${Math.min(100, resumen.avanceAnual || 0)}%`, backgroundColor: colorScore(resumen.avanceAnual) }} />
-            </div>
-            <div className="text-[10px] text-gray-500 mt-1">
-              Meta anual: {formatMXN(resumen.cuotaAnual)}
-              {resumen.cuotaIdealAnual > resumen.cuotaAnual && (
-                <span className="text-gray-400"> · Ideal {formatMXN(resumen.cuotaIdealAnual)}</span>
-              )}
-            </div>
+          <div className="text-[10px] text-gray-400 pt-1 border-t border-gray-100">
+            Meta anual (referencia): {formatMXN(resumen.cuotaAnual)}
+            {resumen.cuotaIdealAnual > resumen.cuotaAnual && (
+              <> · Ideal {formatMXN(resumen.cuotaIdealAnual)}</>
+            )}
           </div>
         )}
       </div>
 
-      {/* KPIs secundarios: inventario, DSO, vencido, sell-out */}
+      {/* KPIs secundarios */}
       <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-3 grid grid-cols-2 gap-3 text-xs">
         <div>
           <div className="text-gray-500">Sell-Out YTD</div>
@@ -510,30 +541,58 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
           <div className="font-semibold text-gray-800">
             {resumen.inventarioValor > 0 ? formatMXN(resumen.inventarioValor) : '—'}
           </div>
-          {resumen.inventarioSemanas != null && (
-            <div className="text-[10px] text-gray-500">
-              ~{resumen.inventarioSemanas.toFixed(1)} sem cobertura
+          {resumen.coberturaDias != null && (
+            <div
+              className="text-[10px] font-medium"
+              style={{ color: colorCobertura(resumen.coberturaDias) }}
+            >
+              {resumen.coberturaDias}d cobertura {labelCobertura(resumen.coberturaDias)}
             </div>
           )}
         </div>
         <div>
-          <div className="text-gray-500">DSO</div>
-          <div className="font-semibold text-gray-800">
-            {resumen.dso > 0 ? `${resumen.dso}d` : '—'}
+          <div className="text-gray-500">DSO real</div>
+          <div className="font-semibold" style={{ color: colorDSO(resumen.dsoReal, resumen.dsoPlazo) }}>
+            {resumen.dsoReal != null ? `${resumen.dsoReal}d` : '—'}
           </div>
+          <div className="text-[10px] text-gray-500">plazo {resumen.dsoPlazo}d</div>
         </div>
         <div>
           <div className="text-gray-500">Vencido</div>
           <div className={[
             'font-semibold',
-            resumen.saldoVencido >= UMBRAL_VENCIDO_ALERTA ? 'text-red-600' : 'text-gray-800',
+            resumen.pctVencido > 15 ? 'text-red-600' :
+            resumen.pctVencido > 5  ? 'text-amber-600' : 'text-gray-800',
           ].join(' ')}>
             {formatMXN(resumen.saldoVencido)}
           </div>
+          {resumen.saldoActual > 0 && (
+            <div className="text-[10px] text-gray-500">{resumen.pctVencido.toFixed(1)}% del saldo</div>
+          )}
         </div>
       </div>
     </div>
   );
+}
+
+function colorDSO(dso, plazo) {
+  if (dso == null) return '#94A3B8';
+  if (dso <= plazo)           return '#10B981';  // verde
+  if (dso <= plazo + 30)      return '#F59E0B';  // amarillo
+  return '#EF4444';                              // rojo
+}
+function colorCobertura(dias) {
+  if (dias == null) return '#94A3B8';
+  if (dias < 30)              return '#EF4444';  // muy bajo = stockout
+  if (dias <= 90)             return '#10B981';  // óptimo
+  if (dias <= 150)            return '#F59E0B';  // atención
+  return '#EF4444';                              // sobrestock
+}
+function labelCobertura(dias) {
+  if (dias < 30)  return '(riesgo stockout)';
+  if (dias <= 90) return '(óptimo)';
+  if (dias <= 150) return '(alto)';
+  return '(sobreinventario)';
 }
 
 function ComponenteBar({ id, score, peso }) {
@@ -580,95 +639,6 @@ function MoMIndicator({ pct }) {
     ].join(' ')}>
       {up ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
       {up ? '+' : ''}{pct.toFixed(1)}% vs mes anterior
-    </div>
-  );
-}
-
-// ────────── Ranking comparativo ──────────
-function RankingComparativo({ resumenes }) {
-  const rows = [...resumenes].sort((a, b) => (b.resumen.healthScore || 0) - (a.resumen.healthScore || 0));
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-5 py-3 border-b border-gray-100">
-        <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-gray-600" />
-          Ranking comparativo
-        </h3>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50/50 text-xs text-gray-600 uppercase">
-            <tr>
-              <th className="text-left px-5 py-2">Cliente</th>
-              <th className="text-right px-3 py-2">Score</th>
-              <th className="text-right px-3 py-2">Sell-In YTD</th>
-              <th className="text-right px-3 py-2">Sell-Out YTD</th>
-              <th className="text-right px-3 py-2">Cuota YTD</th>
-              <th className="text-right px-3 py-2">Cumpl. YTD</th>
-              <th className="text-right px-3 py-2">Cuota anual</th>
-              <th className="text-right px-3 py-2">Avance anual</th>
-              <th className="text-right px-3 py-2">DSO</th>
-              <th className="text-right px-3 py-2">Vencido</th>
-              <th className="text-right px-5 py-2">MoM Sell-In</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(({ cliente, resumen }, i) => (
-              <tr key={cliente.key} className="border-t border-gray-100 hover:bg-gray-50/50">
-                <td className="px-5 py-2.5 font-medium text-gray-800">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold flex items-center justify-center">
-                      {i + 1}
-                    </span>
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cliente.color }} />
-                    {cliente.nombre}
-                  </div>
-                </td>
-                <td className="text-right px-3 py-2.5 font-bold" style={{ color: colorScore(resumen.healthScore) }}>
-                  {resumen.healthScore != null ? resumen.healthScore.toFixed(0) : '—'}
-                </td>
-                <td className="text-right px-3 py-2.5 text-gray-700">{formatMXN(resumen.siYTD)}</td>
-                <td className="text-right px-3 py-2.5 text-gray-700">{resumen.soYTD > 0 ? formatMXN(resumen.soYTD) : '—'}</td>
-                <td className="text-right px-3 py-2.5 text-gray-700 text-xs">
-                  {resumen.cuotaYTD > 0 ? formatMXN(resumen.cuotaYTD) : '—'}
-                </td>
-                <td className="text-right px-3 py-2.5 font-semibold">
-                  {resumen.cumplimientoYTD != null ? (
-                    <span style={{ color: colorScore(resumen.cumplimientoYTD) }}>
-                      {pct(resumen.cumplimientoYTD)}
-                    </span>
-                  ) : '—'}
-                </td>
-                <td className="text-right px-3 py-2.5 text-gray-700 text-xs">
-                  {resumen.cuotaAnual > 0 ? formatMXN(resumen.cuotaAnual) : '—'}
-                </td>
-                <td className="text-right px-3 py-2.5">
-                  {resumen.avanceAnual != null ? (
-                    <span style={{ color: colorScore(resumen.avanceAnual) }}>
-                      {pct(resumen.avanceAnual)}
-                    </span>
-                  ) : '—'}
-                </td>
-                <td className="text-right px-3 py-2.5 text-gray-700">
-                  {resumen.dso > 0 ? `${resumen.dso}d` : '—'}
-                </td>
-                <td className="text-right px-3 py-2.5">
-                  <span className={resumen.saldoVencido >= UMBRAL_VENCIDO_ALERTA ? 'text-red-600 font-semibold' : 'text-gray-700'}>
-                    {formatMXN(resumen.saldoVencido)}
-                  </span>
-                </td>
-                <td className="text-right px-5 py-2.5">
-                  {resumen.siMoM != null ? (
-                    <span className={resumen.siMoM >= 0 ? 'text-emerald-600' : 'text-red-600'}>
-                      {resumen.siMoM >= 0 ? '+' : ''}{resumen.siMoM.toFixed(1)}%
-                    </span>
-                  ) : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
