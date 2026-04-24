@@ -2,7 +2,7 @@ import React from "react";
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { Megaphone, CalendarDays } from 'lucide-react';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeEditar as puedeEditarFn } from '../../lib/permisos';
+import { puedeEditarPestanaCliente } from '../../lib/permisos';
 
 // ═══════════ CONFIG DE TIPOS DE ACTIVIDAD ═══════════════════════
 // Cada tipo tiene color, icono y lista de métricas específicas
@@ -84,7 +84,8 @@ const fmtNum = (v) => Number(v || 0).toLocaleString("es-MX");
 
 export default function MarketingCliente({ cliente, clienteKey }) {
   const perfil = usePerfil();
-  const canEdit = puedeEditarFn(perfil);
+  // Permiso granular por (clienteKey, 'marketing').
+  const canEdit = puedeEditarPestanaCliente(perfil, clienteKey || cliente, 'marketing');
   const [actividades, setActividades] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [anio, setAnio] = React.useState(2026);

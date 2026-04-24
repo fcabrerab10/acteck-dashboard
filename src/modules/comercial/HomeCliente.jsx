@@ -6,7 +6,7 @@ import { Semaforo, TarjetaPendientes } from '../../components';
 import { TrendingUp, Wallet, ClipboardList, Target, BarChart3, Package } from 'lucide-react';
 import { fetchSelloutSku, fetchInventarioCliente } from '../../lib/pcelAdapter';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeEditar as puedeEditarFn } from '../../lib/permisos';
+import { puedeEditarPestanaCliente } from '../../lib/permisos';
 
 const iconStyle14 = { width: 14, height: 14, verticalAlign: "middle", marginRight: 4 };
 const iconStyle16 = { width: 16, height: 16, verticalAlign: "middle", marginRight: 6 };
@@ -196,7 +196,8 @@ function TarjetaTendenciaML({ sellOutPorMesMarca }) {
 
 export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
   const perfil = usePerfil();
-  const canEdit = puedeEditarFn(perfil);
+  // Permiso granular: edita solo si su nivel para (clienteKey, 'home') es 'edit'.
+  const canEdit = puedeEditarPestanaCliente(perfil, clienteKey, 'home');
 
   // ML-specific view
   if (isML) {

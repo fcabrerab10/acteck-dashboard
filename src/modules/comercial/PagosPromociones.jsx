@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { usePerfil } from "../../lib/perfilContext";
-import { puedeEditar } from "../../lib/permisos";
+import { puedeEditarPestanaCliente } from "../../lib/permisos";
 import { toast } from "../../lib/toast";
 import { formatMXN, formatFecha } from "../../lib/utils";
 import {
@@ -68,7 +68,7 @@ export const ESTATUS_PROMO = {
 // ────────────────────────────────────────────────────────────
 export function NuevaPromocionButton({ clienteKey, onCreated }) {
   const perfil = usePerfil();
-  const canEdit = puedeEditar(perfil);
+  const canEdit = puedeEditarPestanaCliente(perfil, clienteKey, 'pagos');
   const [open, setOpen] = useState(false);
   const [tipoSeleccionado, setTipoSeleccionado] = useState(null);
 
@@ -480,7 +480,7 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
 // ────────────────────────────────────────────────────────────
 export function ListaPromociones({ clienteKey, refreshKey }) {
   const perfil = usePerfil();
-  const canEdit = puedeEditar(perfil);
+  const canEdit = puedeEditarPestanaCliente(perfil, clienteKey, 'pagos');
   const [promos, setPromos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalEdit, setModalEdit] = useState(null);

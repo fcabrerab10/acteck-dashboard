@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { usePerfil } from "../../lib/perfilContext";
-import { puedeEditar } from "../../lib/permisos";
+import { puedeEditarPestanaGlobal } from "../../lib/permisos";
 import { toast } from "../../lib/toast";
 import {
   Plus, Trash2, Check, Clock, Flame, PauseCircle, ChevronLeft, ChevronRight,
@@ -85,7 +85,8 @@ function usePersistedState(key, defaultValue, serialize = JSON.stringify, deseri
 // ────────── Componente principal ──────────
 export default function AdministracionInterna() {
   const perfil = usePerfil();
-  const canEdit = puedeEditar(perfil);
+  // Permiso granular global. Si tiene nivel 'ver' en admin_interna, canEdit=false.
+  const canEdit = puedeEditarPestanaGlobal(perfil, 'admin_interna');
   const yoId = perfil?.user_id;
 
   const [perfiles, setPerfiles] = useState([]);

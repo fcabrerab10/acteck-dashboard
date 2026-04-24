@@ -451,7 +451,9 @@ export default function App() {
             <>
         {clienteActivo && !puedeVerCliente(perfil, clienteActivo) ? (
           <SinAcceso motivo={`No tienes acceso al cliente ${clienteActivo}.`} />
-        ) : clienteActivo && ['home','analisis','estrategia','marketing','pagos','cartera'].includes(paginaActiva) && !puedeVerPestana(perfil, paginaActiva) ? (
+        ) : clienteActivo && ['home','analisis','estrategia','marketing','pagos','cartera'].includes(paginaActiva) && !puedeVerPestanaCliente(perfil, clienteActivo, paginaActiva) ? (
+          // Gate granular por (cliente, pestaña). Bloquea URL directa a una
+          // pestaña oculta para este cliente específico.
           <SinAcceso motivo={`No tienes acceso a esta pestaña de ${clienteActivo}.`} />
         ) : (
           <>

@@ -4,7 +4,7 @@ import { PCEL_REAL, PAGOS_DIGITALIFE_2026 } from '../../lib/constants';
 import { formatMXN, formatFecha, loadSheetJS } from '../../lib/utils';
 import { CardHeader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeEditar as puedeEditarFn } from '../../lib/permisos';
+import { puedeEditarPestanaCliente } from '../../lib/permisos';
 import { Wallet, CalendarDays, BarChart3, ClipboardList } from 'lucide-react';
 import { NuevaPromocionButton, ListaPromociones } from './PagosPromociones';
 
@@ -43,7 +43,8 @@ function esMesFuturo(fechaStr) {
 export default function PagosCliente({ cliente, clienteKey }) {
   const c = cliente;
   const perfil = usePerfil();
-  const canEdit = puedeEditarFn(perfil);
+  // Permiso granular por (clienteKey, 'pagos').
+  const canEdit = puedeEditarPestanaCliente(perfil, clienteKey, 'pagos');
 
   // ── State ──
   const [registros, setRegistros]     = useState([]);

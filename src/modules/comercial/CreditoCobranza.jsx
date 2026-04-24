@@ -3,7 +3,7 @@ import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { formatMXN, formatUSD, formatFecha } from '../../lib/utils';
 import { CardHeader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeEditar } from '../../lib/permisos';
+import { puedeEditarPestanaCliente } from '../../lib/permisos';
 import { BarChart3, CalendarDays, TrendingUp, CreditCard, AlertTriangle, Pencil, Check, X as XIcon } from 'lucide-react';
 import { fetchSelloutSku } from '../../lib/pcelAdapter';
 
@@ -12,7 +12,8 @@ const NOMBRES_MES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","A
 export default function CreditoCobranza({ cliente, clienteKey }) {
   const c = cliente;
   const perfil = usePerfil();
-  const canEdit = puedeEditar(perfil);
+  // Permiso granular por (clienteKey, 'cartera').
+  const canEdit = puedeEditarPestanaCliente(perfil, clienteKey, 'cartera');
   const [estado, setEstado]       = useState(null);
   const [estadoPrev, setEstadoPrev] = useState(null);  // corte anterior para delta
   const [historico, setHistorico] = useState([]);

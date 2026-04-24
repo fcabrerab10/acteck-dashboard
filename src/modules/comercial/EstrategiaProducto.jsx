@@ -2,11 +2,13 @@ import React, { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED, fetchAllPagesREST } from '../../lib/supabase';
 import { formatMXN, loadSheetJS } from '../../lib/utils';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeEditar as puedeEditarFn } from '../../lib/permisos';
+import { puedeEditarPestanaCliente } from '../../lib/permisos';
 
 export default function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
   const perfil = usePerfil();
-  const canEdit = puedeEditarFn(perfil);
+  // Permiso granular por (clienteKey, 'estrategia'). Si está en 'ver', canEdit=false
+  // y toda la UI queda solo-lectura (inputs bloqueados, botones ocultos).
+  const canEdit = puedeEditarPestanaCliente(perfil, clienteKey, 'estrategia');
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [datos, setDatos] = React.useState(null);
