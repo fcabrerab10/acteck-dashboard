@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   ChevronRight, ChevronDown, Lock, LogOut, Eye, Settings, RefreshCw,
   Home, TrendingUp, Package, Megaphone, Wallet, CreditCard,
-  BarChart3, Target, ClipboardList,
+  BarChart3, Target, ClipboardList, FileCheck,
 } from 'lucide-react';
 import {
   puedeConfigurar,
@@ -17,6 +17,7 @@ import {
 const MENU_A_PERMISO_GLOBAL = {
   resumenClientes:  'resumen_clientes',
   forecastClientes: 'forecast_clientes',
+  ordenesCompra:    'ordenes_compra',
   adminInterna:     'admin_interna',
   configuracion:    'configuracion',
 };
@@ -77,6 +78,7 @@ const MENU_CONFIG = [
     items: [
       { id: 'resumenClientes',  label: 'Resumen de Clientes', icon: BarChart3 },
       { id: 'forecastClientes', label: 'Forecast Clientes',   icon: Target },
+      { id: 'ordenesCompra',    label: 'Órdenes de Compra',   icon: FileCheck },
       { type: 'separator', label: 'Clientes' },
       { type: 'cliente', clienteId: 'digitalife' },
       { type: 'cliente', clienteId: 'pcel' },

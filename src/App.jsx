@@ -13,6 +13,7 @@ import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, Marketi
 import ReporteTab from './modules/comercial/ReporteTab';
 import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
 import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
+import OrdenesCompraTab from './modules/comercial/OrdenesCompraTab';
 import LoginPage from './modules/auth/LoginPage';
 import { Configuracion } from './modules/configuracion';
 import ActualizacionDatos from './modules/settings/ActualizacionDatos';
@@ -176,6 +177,7 @@ const PESTANAS_INFO = {
 const GLOBAL_PAGES_INFO = {
   resumenClientes:  { label: 'Resumen de Clientes',    icon: BarChart3 },
   forecastClientes: { label: 'Forecast de Clientes',   icon: Target },
+  ordenesCompra:    { label: 'Órdenes de Compra',      icon: Target },
   adminInterna:     { label: 'Administración Interna', icon: Building2 },
 };
 function Breadcrumb({ clienteActivo, paginaActiva, vistaActual }) {
@@ -301,14 +303,14 @@ export default function App() {
 
   
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
-    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','forecastClientes','adminInterna']), []);
+    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
       try { return localStorage.getItem('nav_pagina') || 'home'; } catch { return 'home'; }
     });
     const [clienteActivo, setClienteActivo] = useState(() => {
       try {
         const pag = localStorage.getItem('nav_pagina') || 'home';
-        const globals = new Set(['resumen','reporte','resumenClientes','forecastClientes','adminInterna']);
+        const globals = new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna']);
         if (globals.has(pag)) return null;
         return localStorage.getItem('nav_cliente') || 'digitalife';
       } catch { return 'digitalife'; }
@@ -445,6 +447,11 @@ export default function App() {
             />
           )}
           {paginaActiva === "forecastClientes" && <ForecastClientesTab />}
+          {paginaActiva === "ordenesCompra" && (
+            puedeVerPestanaGlobal(perfil, "ordenes_compra")
+              ? <OrdenesCompraTab />
+              : <SinAcceso motivo="No tienes acceso a Órdenes de Compra." />
+          )}
           {paginaActiva === "adminInterna" && (
             // Permiso granular: nivel 'ver' o 'edit' en permisos.globales.admin_interna
             puedeVerPestanaGlobal(perfil, "admin_interna")
