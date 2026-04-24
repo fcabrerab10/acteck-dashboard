@@ -173,12 +173,16 @@ export default function AdministracionInterna() {
   const [mostrarFinde, setMostrarFinde] = usePersistedState("interna_finde", false);
   const [completadasOpen, setCompletadasOpen] = usePersistedState("interna_completadas_open", {});
   const [filtroCuenta, setFiltroCuenta] = usePersistedState("interna_filtro_cuenta", "todas", String, (s) => s);
+  const [filtroPersona, setFiltroPersona] = useState("");
   const [mesVisibleISO, setMesVisibleISO] = usePersistedState(
     "interna_mes", toISO(new Date(new Date().getFullYear(), new Date().getMonth(), 1)), String, (s) => s
   );
   const mesVisible = useMemo(() => parseISO(mesVisibleISO) || new Date(), [mesVisibleISO]);
   const [calExpanded, setCalExpanded] = usePersistedState("interna_cal_open", true);
   const [notifEnabled, setNotifEnabled] = usePersistedState("interna_notif", true);
+  const [notifPermission, setNotifPermission] = useState(
+    typeof Notification !== "undefined" ? Notification.permission : "default"
+  );
   const [vista, setVista] = usePersistedState("interna_vista", "planeacion", String, (s) => s);
 
   // Modales
@@ -299,14 +303,29 @@ export default function AdministracionInterna() {
 
   // ────────── Filtrado ──────────
   const pendientesFiltrados = useMemo(() => {
+    const q = filtroPersona.trim().toLowerCase();
     return pendientes.filter((p) => {
       if (filtroCuenta !== "todas" && p.cuenta !== filtroCuenta) return false;
-      if (tabResp === "todos") return true;
-      if (tabResp === "mios") return pendienteDeUsuario(p, yoId);
-      // tabResp es un user_id
-      return pendienteDeUsuario(p, tabResp);
+
+      // Filtro por tab
+      if (tabResp === "mios" && !pendienteDeUsuario(p, yoId)) return false;
+      if (tabResp !== "mios" && tabResp !== "todos" && !pendienteDeUsuario(p, tabResp)) return false;
+
+      // Filtro por búsqueda libre (match contra usuarios y libres)
+      if (q) {
+        const libres = Array.isArray(p.responsables_libres) ? p.responsables_libres : [];
+        const nombresUsuarios = responsablesDe(p)
+          .map((uid) => (nombrePorUserId[uid] || "").toLowerCase());
+        const nombresLibres = libres.map((n) => (n || "").toLowerCase());
+        const todos = [...nombresUsuarios, ...nombresLibres];
+        const hay = todos.some((n) => n.includes(q)) ||
+                    (p.tarea || "").toLowerCase().includes(q);
+        if (!hay) return false;
+      }
+      return true;
     });
-  }, [pendientes, filtroCuenta, tabResp, yoId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendientes, filtroCuenta, tabResp, yoId, filtroPersona, nombrePorUserId]);
 
   const diasVisibles = useMemo(() => {
     const n = mostrarFinde ? 7 : 5;
@@ -395,13 +414,31 @@ export default function AdministracionInterna() {
     if (!tarea) return;
     const subtareas = Array.isArray(tarea.subtareas) ? tarea.subtareas : [];
     const nuevas = subtareas.map((s) => s.id === subId ? { ...s, hecho: !s.hecho } : s);
-    setPendientes((prev) => prev.map((p) => p.id === tareaId ? { ...p, subtareas: nuevas } : p));
+
+    // Auto-complete / auto-reopen según progreso de subtareas
+    let nuevoEstatus = tarea.estatus;
+    if (nuevas.length > 0) {
+      const todasHechas = nuevas.every((s) => s.hecho);
+      if (todasHechas && tarea.estatus !== "listo") {
+        nuevoEstatus = "listo";
+      } else if (!todasHechas && tarea.estatus === "listo") {
+        nuevoEstatus = "pendiente";
+      }
+    }
+
+    setPendientes((prev) => prev.map((p) =>
+      p.id === tareaId ? { ...p, subtareas: nuevas, estatus: nuevoEstatus } : p
+    ));
+    const payload = { subtareas: nuevas };
+    if (nuevoEstatus !== tarea.estatus) payload.estatus = nuevoEstatus;
     const { error } = await supabase.from("pendientes_equipo")
-      .update({ subtareas: nuevas }).eq("id", tareaId);
+      .update(payload).eq("id", tareaId);
     if (error) {
       console.error(error);
       toast.error("No se pudo actualizar la subtarea");
       cargarTodo();
+    } else if (nuevoEstatus === "listo" && tarea.estatus !== "listo") {
+      toast.success("✓ Tarea completada automáticamente");
     }
   }
 
@@ -425,10 +462,18 @@ export default function AdministracionInterna() {
 
   async function solicitarPermisoNotif() {
     if (!("Notification" in window)) { toast.error("Este navegador no soporta notificaciones"); return; }
-    if (Notification.permission === "granted") { setNotifEnabled(true); toast.success("Notificaciones activadas"); return; }
-    if (Notification.permission === "denied") { toast.error("Bloqueadas. Actívalas en la config del navegador."); return; }
+    if (Notification.permission === "granted") {
+      setNotifPermission("granted"); setNotifEnabled(true);
+      toast.success("Notificaciones activadas"); return;
+    }
+    if (Notification.permission === "denied") {
+      setNotifPermission("denied");
+      toast.error("Bloqueadas. Actívalas en la config del navegador."); return;
+    }
     const res = await Notification.requestPermission();
+    setNotifPermission(res);
     if (res === "granted") { setNotifEnabled(true); toast.success("Notificaciones activadas"); }
+    else if (res === "denied") toast.error("Permiso denegado");
   }
 
   if (loading) return <div className="p-8 text-gray-400">Cargando administración interna…</div>;
@@ -449,7 +494,7 @@ export default function AdministracionInterna() {
       count: pendientes.filter((p) => p.estatus !== "listo").length },
   ];
 
-  const notifState = typeof Notification !== "undefined" ? Notification.permission : "default";
+  const notifState = notifPermission;
 
   return (
     <div className="space-y-5">
@@ -641,6 +686,22 @@ export default function AdministracionInterna() {
             Fin de semana
           </label>
 
+          <input
+            value={filtroPersona}
+            onChange={(e) => setFiltroPersona(e.target.value)}
+            placeholder="Buscar por persona o tarea…"
+            className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white w-44"
+          />
+          {filtroPersona && (
+            <button
+              onClick={() => setFiltroPersona("")}
+              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+              title="Limpiar búsqueda"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           <div className="flex-1" />
 
           {/* Métricas */}
@@ -675,12 +736,6 @@ export default function AdministracionInterna() {
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setSemanaISO(toISO(lunesDeSemana(new Date())))}
-              className="text-xs px-2 py-1 hover:bg-gray-100 text-gray-700 font-medium"
-            >
-              Esta semana
-            </button>
-            <button
               onClick={() => { const d = new Date(semanaVisible); d.setDate(d.getDate() + 7); setSemanaISO(toISO(d)); }}
               className="p-1.5 hover:bg-gray-100 text-gray-600 rounded-r-lg"
               title="Semana siguiente"
@@ -690,11 +745,27 @@ export default function AdministracionInterna() {
           </div>
         </div>
 
-        <div className="text-xs text-gray-400 mt-2 text-center">
-          Semana del {semanaVisible.getDate()} de {MESES_LARGO[semanaVisible.getMonth()]} —{" "}
+        {/* Encabezado grande de la semana + botón "Ir a hoy" */}
+        <div className="mt-2 flex items-center justify-center gap-3">
+          <div className="text-base font-semibold text-gray-700">
+            Semana del {semanaVisible.getDate()} de {MESES_LARGO[semanaVisible.getMonth()]} al{" "}
+            {(() => {
+              const fin = new Date(semanaVisible); fin.setDate(fin.getDate() + (mostrarFinde ? 6 : 4));
+              return `${fin.getDate()} de ${MESES_LARGO[fin.getMonth()]}`;
+            })()}
+          </div>
           {(() => {
-            const fin = new Date(semanaVisible); fin.setDate(fin.getDate() + (mostrarFinde ? 6 : 4));
-            return `${fin.getDate()} de ${MESES_LARGO[fin.getMonth()]}`;
+            const hoyLunes = toISO(lunesDeSemana(new Date()));
+            const esSemanaActual = semanaISO === hoyLunes;
+            if (esSemanaActual) return null;
+            return (
+              <button
+                onClick={() => setSemanaISO(hoyLunes)}
+                className="text-xs px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium border border-blue-200"
+              >
+                Ir a hoy
+              </button>
+            );
           })()}
         </div>
       </div>
@@ -962,6 +1033,7 @@ function TareaCard({ t, canEdit, nombrePorUserId, colorPorUserId, onToggleCheck,
   const responsables = Array.isArray(t.responsables) && t.responsables.length > 0
     ? t.responsables
     : (t.responsable ? [t.responsable] : []);
+  const responsablesLibres = Array.isArray(t.responsables_libres) ? t.responsables_libres : [];
 
   // Subtareas
   const subs = Array.isArray(t.subtareas) ? t.subtareas : [];
@@ -983,19 +1055,6 @@ function TareaCard({ t, canEdit, nombrePorUserId, colorPorUserId, onToggleCheck,
       style={{ borderLeft: `3px solid ${cuenta.stripe}` }}
     >
       <div className="flex items-start gap-2">
-        <button
-          onClick={(e) => { e.stopPropagation(); onToggleCheck(t.id, t.estatus); }}
-          disabled={!canEdit}
-          className={[
-            "shrink-0 w-4 h-4 mt-0.5 rounded border-2 flex items-center justify-center transition",
-            esListo ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 bg-white hover:border-emerald-500",
-            canEdit ? "cursor-pointer" : "cursor-default",
-          ].join(" ")}
-          title={esListo ? "Marcar como pendiente" : "Marcar como completada"}
-        >
-          {esListo && <Check className="w-3 h-3" strokeWidth={3} />}
-        </button>
-
         <div className="flex-1 min-w-0">
           <div className={[
             "text-[13px] leading-snug break-words",
@@ -1061,6 +1120,17 @@ function TareaCard({ t, canEdit, nombrePorUserId, colorPorUserId, onToggleCheck,
                 </span>
               )}
 
+              {/* Responsables libres (etiquetas) */}
+              {responsablesLibres.map((nombre, idx) => (
+                <span
+                  key={`lib_${idx}`}
+                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium"
+                  title={`Responsable: ${nombre}`}
+                >
+                  {nombre}
+                </span>
+              ))}
+
               {/* Notas */}
               {t.notas && (
                 <span className="text-gray-400 italic truncate max-w-[140px] inline-flex items-center gap-0.5" title={t.notas}>
@@ -1090,16 +1160,16 @@ function TareaCard({ t, canEdit, nombrePorUserId, colorPorUserId, onToggleCheck,
                 <div className="mt-1 space-y-0.5 max-h-48 overflow-y-auto pr-1">
                   {subs.map((s) => (
                     <label key={s.id} className="flex items-start gap-1.5 text-[11px] cursor-pointer group/sub">
+                      <span className={`flex-1 ${s.hecho ? "line-through text-gray-400" : "text-gray-700"}`}>
+                        {s.texto}
+                      </span>
                       <input
                         type="checkbox"
                         checked={!!s.hecho}
                         disabled={!canEdit}
                         onChange={() => onToggleSubtarea && onToggleSubtarea(t.id, s.id)}
-                        className="mt-0.5 rounded border-gray-300"
+                        className="mt-0.5 rounded border-gray-300 shrink-0"
                       />
-                      <span className={s.hecho ? "line-through text-gray-400" : "text-gray-700"}>
-                        {s.texto}
-                      </span>
                     </label>
                   ))}
                 </div>
@@ -1108,50 +1178,65 @@ function TareaCard({ t, canEdit, nombrePorUserId, colorPorUserId, onToggleCheck,
           )}
         </div>
 
-        {canEdit && (
-          <div className="relative shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={(e) => { e.stopPropagation(); setMenu(!menu); }}
-              className="p-1 rounded hover:bg-white text-gray-400"
-              title="Más"
-            >
-              <Edit3 className="w-3 h-3" />
-            </button>
-            {menu && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setMenu(false)} />
-                <div className="absolute right-0 top-6 z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-44 text-xs">
-                  <button
-                    onClick={() => { onEditar(t); setMenu(false); }}
-                    className="w-full text-left px-3 py-1.5 hover:bg-gray-100 flex items-center gap-2"
-                  >
-                    <Edit3 className="w-3 h-3" /> Editar
-                  </button>
-                  <div className="border-t border-gray-100 my-1" />
-                  {Object.entries(ESTATUS_MAP).map(([id, cfg]) => (
-                    t.estatus !== id && (
-                      <button
-                        key={id}
-                        onClick={() => { onCambiarEstatus(t.id, id); setMenu(false); }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-gray-100 flex items-center gap-2"
-                      >
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cfg.dot }} />
-                        {cfg.label}
-                      </button>
-                    )
-                  ))}
-                  <div className="border-t border-gray-100 my-1" />
-                  <button
-                    onClick={() => { onBorrar(t.id); setMenu(false); }}
-                    className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 flex items-center gap-2"
-                  >
-                    <Trash2 className="w-3 h-3" /> Eliminar
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+        {/* Acciones + Check (a la derecha) */}
+        <div className="shrink-0 flex items-start gap-1.5">
+          {canEdit && (
+            <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={(e) => { e.stopPropagation(); setMenu(!menu); }}
+                className="p-1 rounded hover:bg-white text-gray-400"
+                title="Más"
+              >
+                <Edit3 className="w-3 h-3" />
+              </button>
+              {menu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMenu(false)} />
+                  <div className="absolute right-0 top-6 z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-44 text-xs">
+                    <button
+                      onClick={() => { onEditar(t); setMenu(false); }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <Edit3 className="w-3 h-3" /> Editar
+                    </button>
+                    <div className="border-t border-gray-100 my-1" />
+                    {Object.entries(ESTATUS_MAP).map(([id, cfg]) => (
+                      t.estatus !== id && (
+                        <button
+                          key={id}
+                          onClick={() => { onCambiarEstatus(t.id, id); setMenu(false); }}
+                          className="w-full text-left px-3 py-1.5 hover:bg-gray-100 flex items-center gap-2"
+                        >
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cfg.dot }} />
+                          {cfg.label}
+                        </button>
+                      )
+                    ))}
+                    <div className="border-t border-gray-100 my-1" />
+                    <button
+                      onClick={() => { onBorrar(t.id); setMenu(false); }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 flex items-center gap-2"
+                    >
+                      <Trash2 className="w-3 h-3" /> Eliminar
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleCheck(t.id, t.estatus); }}
+            disabled={!canEdit}
+            className={[
+              "shrink-0 w-4 h-4 mt-0.5 rounded border-2 flex items-center justify-center transition",
+              esListo ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 bg-white hover:border-emerald-500",
+              canEdit ? "cursor-pointer" : "cursor-default",
+            ].join(" ")}
+            title={esListo ? "Marcar como pendiente" : "Marcar como completada"}
+          >
+            {esListo && <Check className="w-3 h-3" strokeWidth={3} />}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1294,10 +1379,12 @@ function ModalTarea({ data, perfiles, internos, onClose, onGuardado }) {
     prioridad:     data.tarea?.prioridad || "media",
     notas:         data.tarea?.notas || "",
     responsables:  responsablesIniciales,
+    responsables_libres: Array.isArray(data.tarea?.responsables_libres) ? data.tarea.responsables_libres : [],
     subtareas:     Array.isArray(data.tarea?.subtareas) ? data.tarea.subtareas : [],
   }));
   const [guardando, setGuardando] = useState(false);
   const [nuevaSub, setNuevaSub] = useState("");
+  const [nuevoRespLibre, setNuevoRespLibre] = useState("");
 
   const toggleResp = (uid) => {
     setForm((f) => ({
@@ -1306,6 +1393,17 @@ function ModalTarea({ data, perfiles, internos, onClose, onGuardado }) {
         ? f.responsables.filter((u) => u !== uid)
         : [...f.responsables, uid],
     }));
+  };
+
+  const agregarRespLibre = () => {
+    const txt = nuevoRespLibre.trim();
+    if (!txt) return;
+    if (form.responsables_libres.includes(txt)) { setNuevoRespLibre(""); return; }
+    setForm((f) => ({ ...f, responsables_libres: [...f.responsables_libres, txt] }));
+    setNuevoRespLibre("");
+  };
+  const quitarRespLibre = (nombre) => {
+    setForm((f) => ({ ...f, responsables_libres: f.responsables_libres.filter((n) => n !== nombre) }));
   };
 
   const agregarSub = () => {
@@ -1334,6 +1432,7 @@ function ModalTarea({ data, perfiles, internos, onClose, onGuardado }) {
       prioridad: form.prioridad,
       notas: form.notas.trim() || null,
       responsables: form.responsables,
+      responsables_libres: form.responsables_libres,
       responsable: form.responsables[0] || null,   // compat legacy
       subtareas: form.subtareas,
     };
@@ -1427,9 +1526,41 @@ function ModalTarea({ data, perfiles, internos, onClose, onGuardado }) {
               );
             })}
           </div>
-          {form.responsables.length === 0 && (
+          {form.responsables.length === 0 && form.responsables_libres.length === 0 && (
             <p className="text-[11px] text-gray-400 mt-1">Sin asignar</p>
           )}
+
+          {/* Responsables libres (texto) */}
+          <div className="mt-2 space-y-1.5">
+            {form.responsables_libres.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {form.responsables_libres.map((nombre) => (
+                  <span key={nombre} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-xs">
+                    {nombre}
+                    <button onClick={() => quitarRespLibre(nombre)} className="hover:text-red-600">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                value={nuevoRespLibre}
+                onChange={(e) => setNuevoRespLibre(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); agregarRespLibre(); } }}
+                placeholder="+ Responsable externo (Nombre Apellido)"
+                className="flex-1 px-2 py-1 rounded border border-dashed border-gray-300 text-xs"
+              />
+              <button
+                type="button"
+                onClick={agregarRespLibre}
+                className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+              >
+                Añadir
+              </button>
+            </div>
+          </div>
         </Field>
 
         {/* Subtareas */}
@@ -1437,12 +1568,6 @@ function ModalTarea({ data, perfiles, internos, onClose, onGuardado }) {
           <div className="space-y-1.5">
             {form.subtareas.map((s) => (
               <div key={s.id} className="flex items-center gap-2 group">
-                <input
-                  type="checkbox"
-                  checked={!!s.hecho}
-                  onChange={() => toggleSub(s.id)}
-                  className="rounded border-gray-300"
-                />
                 <input
                   value={s.texto}
                   onChange={(e) => editarSubTexto(s.id, e.target.value)}
@@ -1455,6 +1580,12 @@ function ModalTarea({ data, perfiles, internos, onClose, onGuardado }) {
                   className="p-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100">
                   <X className="w-3.5 h-3.5" />
                 </button>
+                <input
+                  type="checkbox"
+                  checked={!!s.hecho}
+                  onChange={() => toggleSub(s.id)}
+                  className="rounded border-gray-300 shrink-0"
+                />
               </div>
             ))}
             <div className="flex items-center gap-2">
