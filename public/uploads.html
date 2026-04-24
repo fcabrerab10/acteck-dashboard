@@ -64,7 +64,7 @@ const SOURCES = [
   { id:'ec-pcel', title:'Estado de cuenta · PCEL', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
   { id:'ec-digitalife', title:'Estado de cuenta · Digitalife', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
   { id:'roadmap-precios', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
-  { id:'master-embarques', title:'Master Embarques (Google Drive)', desc:'Sincroniza desde tu Google Drive. Usa tu sesión de Google para descargar y parsear automáticamente.', file:'(Google Drive)', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', syncMode:true },
+  { id:'master-embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx (hoja "2026"). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques' },
 ];
 
 const CHUNK = 200;
@@ -451,13 +451,28 @@ const PARSERS = {
     };
   },
   masterEmbarques(wb){
-    const sh = wb.Sheets[wb.SheetNames[0]];
+    // La hoja principal se llama "2026" (o el año en curso). Fallback: primera hoja.
+    const year = new Date().getFullYear();
+    const sh = wb.Sheets[String(year)] || wb.Sheets['2026'] || wb.Sheets[wb.SheetNames[0]];
+    if (!sh) return [];
     const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
+
+    // Clasifica el campo CEDIS: si empieza con dígito, es almacén interno;
+    // si empieza con letra (ej. "DECME"), es entrega directa a cliente externo.
+    const classifyCedis = (raw) => {
+      const s = (raw == null ? '' : String(raw)).trim();
+      if (!s) return { cedis: null, entrega_directa_cliente: null };
+      if (/^\d/.test(s)) return { cedis: s, entrega_directa_cliente: null };
+      return { cedis: s, entrega_directa_cliente: s };
+    };
+
     return rows.map(r => {
       const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
       const po = toStr(obj.po);
       const codigo = toStr(obj.codigo);
-      if (!po && !codigo) return null;
+      // Filas basura: sin PO y sin código son separadores/totales
+      if (!po || !codigo) return null;
+      const { cedis, entrega_directa_cliente } = classifyCedis(obj.cedis);
       return {
         po,
         codigo,
@@ -488,7 +503,8 @@ const PARSERS = {
         agente_aduanal: toStr(obj.a_a ?? obj.aa),
         arribo_cedis: toISODate(obj.arribo_a_cedis),
         lt: toStr(obj.lt),
-        cedis: toStr(obj.cedis),
+        cedis,
+        entrega_directa_cliente,
         estatus: toStr(obj.estatus),
         comentarios_trafico: toStr(obj.comentarios_trafico),
         comentarios_diseno: toStr(obj.comentarios_diseno),

@@ -439,7 +439,11 @@ export default function App() {
         { /* Banner removed */ }
           {paginaActiva === "resumen" && <ResumenCuentas />}
           {paginaActiva === "reporte" && <ReporteTab />}
-          {paginaActiva === "resumenClientes" && <ResumenClientesTab />}
+          {paginaActiva === "resumenClientes" && (
+            <ResumenClientesTab
+              onDrillDown={(clienteKey) => { setClienteActivo(clienteKey); setPaginaActiva('home'); }}
+            />
+          )}
           {paginaActiva === "forecastClientes" && <ForecastClientesTab />}
           {paginaActiva === "adminInterna" && (
             // Permiso granular: nivel 'ver' o 'edit' en permisos.globales.admin_interna
