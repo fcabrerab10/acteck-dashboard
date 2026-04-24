@@ -7,6 +7,7 @@ import {
   Plus, Trash2, Check, Clock, Flame, PauseCircle, ChevronLeft, ChevronRight,
   CalendarDays, X, Edit3, ChevronDown, ChevronUp, AlertTriangle, Bell, BellOff,
   Building2, Tag, StickyNote, Inbox, RotateCcw, Users, FileText, CalendarPlus,
+  SlidersHorizontal,
 } from "lucide-react";
 import MinutasPanel from "./MinutasPanel";
 import RecurrentesPanel from "./RecurrentesPanel";
@@ -185,6 +186,10 @@ export default function AdministracionInterna() {
   const [completadasOpen, setCompletadasOpen] = usePersistedState("interna_completadas_open", {});
   const [filtroCuenta, setFiltroCuenta] = usePersistedState("interna_filtro_cuenta", "todas", String, (s) => s);
   const [filtroPersona, setFiltroPersona] = useState("");
+  const [filtroEstatus, setFiltroEstatus] = usePersistedState("interna_filtro_estatus", "todos", String, (s) => s);
+  const [filtroPrioridad, setFiltroPrioridad] = usePersistedState("interna_filtro_prioridad", "todas", String, (s) => s);
+  const [filtroAlerta, setFiltroAlerta] = usePersistedState("interna_filtro_alerta", "todas", String, (s) => s);
+  const [filtrosOpen, setFiltrosOpen] = useState(false);
   const [mesVisibleISO, setMesVisibleISO] = usePersistedState(
     "interna_mes", toISO(new Date(new Date().getFullYear(), new Date().getMonth(), 1)), String, (s) => s
   );
@@ -313,10 +318,34 @@ export default function AdministracionInterna() {
   }, [loading, pendientes, canEdit]);
 
   // ────────── Filtrado ──────────
+  const hoyFiltroISO = hoyISO();
+  const ahoraFiltro = new Date();
   const pendientesFiltrados = useMemo(() => {
     const q = filtroPersona.trim().toLowerCase();
     return pendientes.filter((p) => {
       if (filtroCuenta !== "todas" && p.cuenta !== filtroCuenta) return false;
+
+      // Filtro estatus
+      if (filtroEstatus === "sin_terminar") {
+        if (p.estatus === "listo") return false;
+      } else if (filtroEstatus !== "todos") {
+        if (p.estatus !== filtroEstatus) return false;
+      }
+
+      // Filtro prioridad
+      if (filtroPrioridad !== "todas" && p.prioridad !== filtroPrioridad) return false;
+
+      // Filtro alertas (vencidas / estancadas)
+      if (filtroAlerta === "vencidas") {
+        if (p.estatus === "listo") return false;
+        if (!p.fecha_limite || p.fecha_limite.slice(0, 10) >= hoyFiltroISO) return false;
+      } else if (filtroAlerta === "estancadas") {
+        if (p.estatus === "listo") return false;
+        if (p.fecha_limite && p.fecha_limite.slice(0, 10) < hoyFiltroISO) return false;
+        if (!p.ultima_actividad) return false;
+        const dias = Math.floor((ahoraFiltro - new Date(p.ultima_actividad)) / (1000 * 60 * 60 * 24));
+        if (dias < DIAS_ESTANCADA) return false;
+      }
 
       // Filtro por tab
       if (tabResp === "mios" && !pendienteDeUsuario(p, yoId)) return false;
@@ -336,7 +365,23 @@ export default function AdministracionInterna() {
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendientes, filtroCuenta, tabResp, yoId, filtroPersona, nombrePorUserId]);
+  }, [pendientes, filtroCuenta, filtroEstatus, filtroPrioridad, filtroAlerta, tabResp, yoId, filtroPersona, nombrePorUserId]);
+
+  const activosCount = useMemo(() => {
+    let n = 0;
+    if (filtroCuenta !== "todas") n++;
+    if (filtroEstatus !== "todos") n++;
+    if (filtroPrioridad !== "todas") n++;
+    if (filtroAlerta !== "todas") n++;
+    return n;
+  }, [filtroCuenta, filtroEstatus, filtroPrioridad, filtroAlerta]);
+
+  const limpiarFiltros = () => {
+    setFiltroCuenta("todas");
+    setFiltroEstatus("todos");
+    setFiltroPrioridad("todas");
+    setFiltroAlerta("todas");
+  };
 
   const diasVisibles = useMemo(() => {
     const n = mostrarFinde ? 7 : 5;
@@ -700,14 +745,136 @@ export default function AdministracionInterna() {
 
           <div className="w-px h-6 bg-gray-200 mx-1" />
 
-          <select
-            value={filtroCuenta}
-            onChange={(e) => setFiltroCuenta(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
-          >
-            <option value="todas">Todas las cuentas</option>
-            {CUENTAS.map((c) => <option key={c.id} value={c.id}>{c.full}</option>)}
-          </select>
+          {/* Mini-menú de filtros */}
+          <div className="relative">
+            <button
+              onClick={() => setFiltrosOpen(!filtrosOpen)}
+              className={[
+                "flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg border transition",
+                activosCount > 0
+                  ? "border-blue-400 bg-blue-50 text-blue-700"
+                  : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+              ].join(" ")}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Filtros
+              {activosCount > 0 && (
+                <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full font-bold">
+                  {activosCount}
+                </span>
+              )}
+            </button>
+            {filtrosOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setFiltrosOpen(false)} />
+                <div className="absolute left-0 top-full mt-1 z-40 bg-white rounded-xl shadow-xl border border-gray-200 w-80 p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Filtros</span>
+                    {activosCount > 0 && (
+                      <button onClick={limpiarFiltros} className="text-[11px] text-blue-600 hover:text-blue-800 font-medium">
+                        Limpiar ({activosCount})
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Cuenta */}
+                  <div>
+                    <div className="text-[11px] font-semibold text-gray-600 mb-1.5">Tipo / Cuenta</div>
+                    <div className="flex flex-wrap gap-1">
+                      {[{ id: "todas", full: "Todas", stripe: "#6B7280" }, ...CUENTAS].map((c) => (
+                        <button key={c.id}
+                          onClick={() => setFiltroCuenta(c.id)}
+                          className={[
+                            "px-2.5 py-1 rounded-full text-xs border transition flex items-center gap-1",
+                            filtroCuenta === c.id ? "border-transparent text-white" : "border-gray-200 text-gray-600 hover:bg-gray-50",
+                          ].join(" ")}
+                          style={filtroCuenta === c.id ? { backgroundColor: c.stripe } : {}}>
+                          {c.id !== "todas" && (
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: filtroCuenta === c.id ? "#fff" : c.stripe }} />
+                          )}
+                          {c.full || c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Estatus */}
+                  <div>
+                    <div className="text-[11px] font-semibold text-gray-600 mb-1.5">Estatus</div>
+                    <div className="flex flex-wrap gap-1">
+                      {[
+                        { id: "todos", label: "Todos" },
+                        { id: "sin_terminar", label: "Sin terminar" },
+                        { id: "urgente", label: "Urgentes" },
+                        { id: "en_proceso", label: "En proceso" },
+                        { id: "en_pausa", label: "En pausa" },
+                        { id: "listo", label: "Completadas" },
+                      ].map((e) => (
+                        <button key={e.id}
+                          onClick={() => setFiltroEstatus(e.id)}
+                          className={[
+                            "px-2.5 py-1 rounded-full text-xs border transition",
+                            filtroEstatus === e.id
+                              ? "bg-blue-600 border-blue-600 text-white"
+                              : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50",
+                          ].join(" ")}>
+                          {e.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Prioridad */}
+                  <div>
+                    <div className="text-[11px] font-semibold text-gray-600 mb-1.5">Prioridad</div>
+                    <div className="flex flex-wrap gap-1">
+                      {[
+                        { id: "todas", label: "Todas", dot: "#6B7280" },
+                        { id: "alta",  label: "Alta",  dot: "#DC2626" },
+                        { id: "media", label: "Media", dot: "#F59E0B" },
+                        { id: "baja",  label: "Baja",  dot: "#94A3B8" },
+                      ].map((p) => (
+                        <button key={p.id}
+                          onClick={() => setFiltroPrioridad(p.id)}
+                          className={[
+                            "px-2.5 py-1 rounded-full text-xs border transition inline-flex items-center gap-1",
+                            filtroPrioridad === p.id
+                              ? "bg-blue-600 border-blue-600 text-white"
+                              : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50",
+                          ].join(" ")}>
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: filtroPrioridad === p.id ? "#fff" : p.dot }} />
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Alertas */}
+                  <div>
+                    <div className="text-[11px] font-semibold text-gray-600 mb-1.5">Alertas</div>
+                    <div className="flex flex-wrap gap-1">
+                      {[
+                        { id: "todas",      label: "Todas" },
+                        { id: "vencidas",   label: "Vencidas" },
+                        { id: "estancadas", label: `Estancadas (+${DIAS_ESTANCADA}d)` },
+                      ].map((a) => (
+                        <button key={a.id}
+                          onClick={() => setFiltroAlerta(a.id)}
+                          className={[
+                            "px-2.5 py-1 rounded-full text-xs border transition",
+                            filtroAlerta === a.id
+                              ? "bg-red-600 border-red-600 text-white"
+                              : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50",
+                          ].join(" ")}>
+                          {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
 
           <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
             <input
@@ -1471,7 +1638,8 @@ function ModalTarea({ data, perfiles, internos, onClose, onGuardado }) {
       cuenta: form.cuenta,
       tarea: form.tarea.trim(),
       categoria: form.categoria.trim() || null,
-      fecha_limite: form.fecha_limite || null,
+      // Si no se especifica fecha, se usa hoy (día de creación)
+      fecha_limite: form.fecha_limite || hoyISO(),
       estatus: form.estatus,
       prioridad: form.prioridad,
       notas: form.notas.trim() || null,
