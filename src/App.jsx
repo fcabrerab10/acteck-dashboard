@@ -18,7 +18,14 @@ import { Configuracion } from './modules/configuracion';
 import ActualizacionDatos from './modules/settings/ActualizacionDatos';
 import { AdministracionInterna } from './modules/interno';
 import SinAcceso from './components/SinAcceso';
-import { puedeConfigurar, puedeActualizarDatos, puedeVerCliente, puedeVerPestana } from './lib/permisos';
+import {
+  puedeConfigurar,
+  puedeActualizarDatos,
+  puedeVerCliente,
+  puedeVerPestana,
+  puedeVerPestanaCliente,
+  puedeVerPestanaGlobal,
+} from './lib/permisos';
 import { PerfilContext } from './lib/perfilContext';
 
 
@@ -435,10 +442,10 @@ export default function App() {
           {paginaActiva === "resumenClientes" && <ResumenClientesTab />}
           {paginaActiva === "forecastClientes" && <ForecastClientesTab />}
           {paginaActiva === "adminInterna" && (
-            // Roles internos: super_admin, admin, asistente (equipo de Acteck)
-            (["super_admin", "admin", "asistente"].includes(perfil?.rol))
+            // Permiso granular: nivel 'ver' o 'edit' en permisos.globales.admin_interna
+            puedeVerPestanaGlobal(perfil, "admin_interna")
               ? <AdministracionInterna />
-              : <SinAcceso motivo="Solo el equipo interno de Acteck (super admin, administradores y asistentes) puede acceder a Administración Interna." />
+              : <SinAcceso motivo="No tienes acceso a esta pestaña. Pídele a Fernando que te habilite 'Pendientes & Calendario' desde Configuración." />
           )}
           <>
             <>

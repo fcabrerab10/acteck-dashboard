@@ -4,7 +4,22 @@ import {
   Home, TrendingUp, Package, Megaphone, Wallet, CreditCard,
   BarChart3, Target, ClipboardList,
 } from 'lucide-react';
-import { puedeConfigurar, puedeActualizarDatos, puedeVerCliente, puedeVerPestana } from '../lib/permisos';
+import {
+  puedeConfigurar,
+  puedeActualizarDatos,
+  puedeVerCliente,
+  puedeVerPestanaCliente,
+  puedeVerPestanaGlobal,
+} from '../lib/permisos';
+
+// Mapping entre ids del menú y ids del schema de permisos globales
+// (ej: 'resumenClientes' en la UI → 'resumen_clientes' en permisos JSON).
+const MENU_A_PERMISO_GLOBAL = {
+  resumenClientes:  'resumen_clientes',
+  forecastClientes: 'forecast_clientes',
+  adminInterna:     'admin_interna',
+  configuracion:    'configuracion',
+};
 
 /**
  * Sidebar — navegación del dashboard
@@ -72,8 +87,9 @@ const MENU_CONFIG = [
     id: 'internaGrupo',
     label: 'Administración Interna',
     emoji: '🏢',
-    // Roles internos (equipo de Acteck) — excluye cliente y viewer (externos)
-    rolesPermitidos: ['super_admin', 'admin', 'asistente'],
+    // Ya no usa rolesPermitidos. Cada item se filtra individualmente por
+    // puedeVerPestanaGlobal() — si no hay ninguno visible, el grupo entero
+    // se oculta (lógica en GrupoBloque).
     items: [
       { id: 'adminInterna', label: 'Pendientes & Calendario', icon: ClipboardList },
     ],
@@ -160,6 +176,8 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
       <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
         {MENU_CONFIG
           .filter((grupo) => {
+            // Compat: legacy rolesPermitidos. Nuevos grupos se filtran sus
+            // items individualmente en GrupoBloque via puedeVerPestanaGlobal.
             if (grupo.rolesPermitidos && grupo.rolesPermitidos.length > 0) {
               return perfilUsuario && grupo.rolesPermitidos.includes(perfilUsuario.rol);
             }
@@ -277,10 +295,19 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, onNavegar, isActi
       if (modoPresent && item.clienteId !== clienteActivo) return false;
       return puedeVerCliente(perfil, item.clienteId);
     }
+    // Ítem "global" (Resumen de Clientes, Forecast, Admin Interna, etc.)
+    // Filtro por puedeVerPestanaGlobal mapeando el id UI al id del schema.
+    const permisoId = MENU_A_PERMISO_GLOBAL[item.id];
+    if (permisoId) {
+      return puedeVerPestanaGlobal(perfil, permisoId);
+    }
+    // Si no tiene mapeo explícito, se muestra por default (fallback seguro)
     return true;
   });
 
-  if (itemsFiltrados.length === 0) return null;
+  // Si no quedan items visibles (aparte de separadores), ocultar grupo entero.
+  const hayNoSeparador = itemsFiltrados.some(i => i.type !== 'separator');
+  if (!hayNoSeparador) return null;
 
   return (
     <div>
@@ -361,7 +388,12 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
     );
   }
 
-  const pestanasPermitidas = (cfg.pestanas || []).filter((p) => puedeVerPestana(perfil, p.id));
+  // Cada pestaña se filtra por su permiso específico para este cliente.
+  // Si el nivel es 'oculto', no aparece. 'ver' y 'edit' sí aparecen (el
+  // enforcement de solo-lectura ocurre dentro del componente de la pestaña).
+  const pestanasPermitidas = (cfg.pestanas || []).filter((p) =>
+    puedeVerPestanaCliente(perfil, clienteId, p.id)
+  );
   if (pestanasPermitidas.length === 0) return null;
 
   return (
