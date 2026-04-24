@@ -35,6 +35,47 @@ const MODULOS_OPT = [
   { value: "kpis", label: "KPIs Ejecutivos" },
 ];
 
+// Plantillas por rol — se aplican al CAMBIAR el rol en el form,
+// reemplazando los checks con los defaults típicos de ese rol.
+// Fernando (super_admin) puede destildar después si hace falta.
+const PLANTILLAS_ROL = {
+  super_admin: {
+    clientes:         ["digitalife", "pcel", "mercadolibre"],
+    modulos:          ["comercial","marketing","pnl","operaciones","compras","rrhh","finanzas","kpis"],
+    pestanas_cliente: [],
+    puede_editar:     true,
+  },
+  admin: {
+    clientes:         ["digitalife", "pcel", "mercadolibre"],
+    modulos:          ["comercial","marketing","pnl","operaciones","compras","rrhh","finanzas","kpis"],
+    pestanas_cliente: [],
+    puede_editar:     true,
+  },
+  asistente: {
+    // Default operativo: área comercial + marketing, todos los clientes, con edición.
+    clientes:         ["digitalife", "pcel", "mercadolibre"],
+    modulos:          ["comercial","marketing"],
+    pestanas_cliente: [],
+    puede_editar:     true,
+  },
+  viewer: {
+    // Solo lectura pero con acceso al comercial por default. Fernando
+    // ajusta clientes específicos.
+    clientes:         [],
+    modulos:          ["comercial"],
+    pestanas_cliente: [],
+    puede_editar:     false,
+  },
+  cliente: {
+    // Empleado del cliente: ve SU cliente y solo pestañas seleccionadas.
+    // Fernando debe marcar cuál cliente y cuáles pestañas.
+    clientes:         [],
+    modulos:          ["comercial"],
+    pestanas_cliente: ["home", "analisis", "estrategia"],  // defaults usuales
+    puede_editar:     false,
+  },
+};
+
 export default function Configuracion({ session }) {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,8 +84,14 @@ export default function Configuracion({ session }) {
   const [form, setForm] = useState({ nombre: "", email: "", password: "", rol: "viewer", clientes: [], modulos: ["comercial"], pestanas_cliente: [], puede_editar: false });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [busqueda, setBusqueda] = useState("");
+  const [miUserId, setMiUserId] = useState(null);
 
-  useEffect(() => { fetchUsuarios(); }, []);
+  useEffect(() => {
+    fetchUsuarios();
+    // Identificar al usuario actual para destacar su fila en la tabla
+    supabase.auth.getUser().then(({ data }) => setMiUserId(data?.user?.id || null));
+  }, []);
 
   async function fetchUsuarios() {
     setLoading(true);
@@ -142,9 +189,23 @@ export default function Configuracion({ session }) {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">Rol</label>
-              <select value={form.rol} onChange={e => setForm({...form, rol: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm">
+              <select value={form.rol} onChange={e => {
+                const nuevoRol = e.target.value;
+                // Al cambiar de rol, aplicar la plantilla default (solo si estamos
+                // creando nuevo usuario o si el rol cambia respecto al guardado).
+                // Preserva nombre/email/password — solo reemplaza permisos.
+                const plantilla = PLANTILLAS_ROL[nuevoRol];
+                if (plantilla) {
+                  setForm({ ...form, rol: nuevoRol, ...plantilla });
+                } else {
+                  setForm({ ...form, rol: nuevoRol });
+                }
+              }} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm">
                 {ROLES.map(r => <option key={r.value} value={r.value}>{r.label} — {r.desc}</option>)}
               </select>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Al cambiar de rol se aplican permisos default. Puedes ajustar abajo.
+              </p>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -189,7 +250,29 @@ export default function Configuracion({ session }) {
         </div>
       )}
 
+      {/* Barra de búsqueda */}
+      <div className="mb-3 flex items-center gap-2">
+        <input
+          type="text"
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          placeholder="Buscar por nombre o correo…"
+          className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+        />
+        {busqueda && (
+          <button onClick={() => setBusqueda("")} className="text-xs text-gray-500 hover:underline">Limpiar</button>
+        )}
+        <span className="text-xs text-gray-400">
+          {usuarios.filter(u =>
+            !busqueda ||
+            (u.nombre || "").toLowerCase().includes(busqueda.toLowerCase()) ||
+            (u.email  || "").toLowerCase().includes(busqueda.toLowerCase())
+          ).length} / {usuarios.length} usuario(s)
+        </span>
+      </div>
+
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -197,38 +280,109 @@ export default function Configuracion({ session }) {
               <th className="text-left px-4 py-3 font-medium text-gray-500">Rol</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Clientes</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Módulos</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-500">Editar</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Pestañas visibles</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-500">Edita</th>
               <th className="text-center px-4 py-3 font-medium text-gray-500">Estado</th>
               <th className="text-center px-4 py-3 font-medium text-gray-500">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="text-center py-8 text-gray-400">Cargando usuarios...</td></tr>
+              <tr><td colSpan={8} className="text-center py-8 text-gray-400">Cargando usuarios...</td></tr>
             ) : usuarios.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-8 text-gray-400">No hay usuarios registrados</td></tr>
-            ) : usuarios.map(u => (
-              <tr key={u.id} className={"border-t " + (!u.activo ? "opacity-50" : "")}>
+              <tr><td colSpan={8} className="text-center py-8 text-gray-400">No hay usuarios registrados</td></tr>
+            ) : usuarios
+                .filter(u =>
+                  !busqueda ||
+                  (u.nombre || "").toLowerCase().includes(busqueda.toLowerCase()) ||
+                  (u.email  || "").toLowerCase().includes(busqueda.toLowerCase())
+                )
+                .map(u => {
+                  const soyYo = u.user_id && u.user_id === miUserId;
+                  // Validación visual: ¿este usuario puede ver algo?
+                  const esExterno   = u.rol === "cliente" || u.rol === "viewer";
+                  const esInterno   = ["super_admin","admin","asistente"].includes(u.rol);
+                  const sinClientes = (u.clientes || []).length === 0 && u.rol !== "super_admin" && u.rol !== "admin";
+                  const sinModulos  = (u.modulos  || []).length === 0 && u.rol !== "super_admin";
+                  const sinPestanas = u.rol === "cliente" && (u.pestanas_cliente || []).length === 0;
+                  const tieneWarn   = sinClientes || sinModulos || sinPestanas;
+                  const rolMeta     = ROLES.find(r => r.value === u.rol);
+                  const pestanasLabel = u.rol === "cliente"
+                    ? ((u.pestanas_cliente || []).length > 0
+                        ? (u.pestanas_cliente || []).map(p => PESTANAS_OPT.find(x => x.value === p)?.label || p).join(", ")
+                        : "— ninguna —")
+                    : "Todas las asignadas";
+                  return (
+              <tr key={u.id} className={
+                "border-t " +
+                (!u.activo ? "opacity-50 " : "") +
+                (soyYo ? "bg-blue-50/40 " : "")
+              }>
                 <td className="px-4 py-3">
-                  <p className="font-medium text-gray-800">{u.nombre}</p>
+                  <p className="font-medium text-gray-800 flex items-center gap-1.5">
+                    {u.nombre}
+                    {soyYo && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold">TÚ</span>}
+                    {tieneWarn && <span title={`${sinClientes ? "Sin clientes asignados. " : ""}${sinModulos ? "Sin módulos asignados — no podrá ver ninguna pestaña. " : ""}${sinPestanas ? "Cliente sin pestañas seleccionadas." : ""}`}
+                                       className="text-[11px] text-amber-600">⚠️</span>}
+                  </p>
                   <p className="text-xs text-gray-400">{u.email}</p>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={"px-2 py-1 rounded-lg text-xs font-medium " + (u.rol === "super_admin" ? "bg-purple-100 text-purple-700" : u.rol === "admin" ? "bg-indigo-100 text-indigo-700" : u.rol === "asistente" ? "bg-blue-100 text-blue-700" : u.rol === "cliente" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700")}>{ROLES.find(r => r.value === u.rol)?.label || u.rol}</span>
+                  <span className={"px-2 py-1 rounded-lg text-xs font-medium " + (u.rol === "super_admin" ? "bg-purple-100 text-purple-700" : u.rol === "admin" ? "bg-indigo-100 text-indigo-700" : u.rol === "asistente" ? "bg-blue-100 text-blue-700" : u.rol === "cliente" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700")}
+                        title={rolMeta?.desc || ""}>
+                    {rolMeta?.label || u.rol}
+                  </span>
                 </td>
-                <td className="px-4 py-3 text-xs text-gray-600">{(u.clientes || []).join(", ") || "Todos"}</td>
-                <td className="px-4 py-3 text-xs text-gray-600">{(u.modulos || []).join(", ") || "Todos"}</td>
-                <td className="px-4 py-3 text-center">{u.puede_editar ? <span className="text-green-600">Sí</span> : <span className="text-gray-400">No</span>}</td>
+                <td className="px-4 py-3 text-xs text-gray-600">
+                  {u.rol === "super_admin" ? <span className="italic text-gray-400">Todos</span>
+                   : (u.clientes || []).length > 0
+                      ? (u.clientes || []).map(c => CLIENTES_OPT.find(x => x.value === c)?.label || c).join(", ")
+                      : <span className="text-amber-600">— sin clientes —</span>}
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-600">
+                  {u.rol === "super_admin" ? <span className="italic text-gray-400">Todos</span>
+                   : (u.modulos || []).length > 0
+                      ? (u.modulos || []).map(m => MODULOS_OPT.find(x => x.value === m)?.label || m).join(", ")
+                      : <span className="text-amber-600">— sin módulos —</span>}
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-600">
+                  {pestanasLabel}
+                </td>
+                <td className="px-4 py-3 text-center">{u.puede_editar ? <span className="text-green-600 font-semibold">Sí</span> : <span className="text-gray-400">No</span>}</td>
                 <td className="px-4 py-3 text-center">
-                  <button onClick={() => toggleActivo(u)} className={"px-2 py-1 rounded-lg text-xs font-medium " + (u.activo ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>{u.activo ? "Activo" : "Inactivo"}</button>
+                  <button onClick={() => toggleActivo(u)}
+                          className={"px-2 py-1 rounded-lg text-xs font-medium " + (u.activo ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-red-100 text-red-700 hover:bg-red-200")}
+                          title={u.activo ? "Click para desactivar" : "Click para reactivar"}>
+                    {u.activo ? "Activo" : "Inactivo"}
+                  </button>
                 </td>
                 <td className="px-4 py-3 text-center">
                   <button onClick={() => startEdit(u)} className="text-blue-600 hover:text-blue-800 text-xs font-medium">Editar</button>
                 </td>
               </tr>
-            ))}
+                  );
+                })}
           </tbody>
         </table>
+        </div>
+      </div>
+
+      {/* Leyenda de roles — explica de un vistazo qué hace cada uno */}
+      <div className="mt-4 bg-white rounded-xl shadow-sm p-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Referencia rápida de roles</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+          {ROLES.map(r => (
+            <div key={r.value} className="flex items-start gap-2">
+              <span className={"px-2 py-0.5 rounded text-[10px] font-semibold shrink-0 " +
+                (r.value === "super_admin" ? "bg-purple-100 text-purple-700" :
+                 r.value === "admin" ? "bg-indigo-100 text-indigo-700" :
+                 r.value === "asistente" ? "bg-blue-100 text-blue-700" :
+                 r.value === "cliente" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700")
+              }>{r.label}</span>
+              <span className="text-gray-500 leading-tight">{r.desc}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
