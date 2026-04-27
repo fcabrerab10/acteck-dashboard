@@ -451,18 +451,19 @@ const PARSERS = {
     };
   },
   masterEmbarques(wb){
-    // Lee TODAS las hojas históricas: 2026 (año actual), 2025, 2024, 2022-2023.
+    // Lee TODAS las hojas históricas: 2026, 2025, 2024, "2022 - 2023".
     // Si una hoja no existe, se omite. La unique key es (po, codigo) así que
     // posibles duplicados entre hojas son resueltos por el upsert.
-    const HOJAS_HISTORICAS = ['2026', '2025', '2024', '2022-2023', '2023', '2022'];
+    // Soporta nombres alternos del histórico (con/sin espacios alrededor del guión).
+    const HOJAS_HISTORICAS = [
+      '2026', '2025', '2024',
+      '2022 - 2023', '2022-2023', '2023', '2022',
+    ];
     const sheetsLeer = HOJAS_HISTORICAS.filter(name => wb.Sheets[name]);
     if (sheetsLeer.length === 0) {
-      // Fallback: primera hoja del libro
       sheetsLeer.push(wb.SheetNames[0]);
     }
 
-    // Clasifica el campo CEDIS: si empieza con dígito, es almacén interno;
-    // si empieza con letra (ej. "DECME"), es entrega directa a cliente externo.
     const classifyCedis = (raw) => {
       const s = (raw == null ? '' : String(raw)).trim();
       if (!s) return { cedis: null, entrega_directa_cliente: null };
@@ -470,13 +471,76 @@ const PARSERS = {
       return { cedis: s, entrega_directa_cliente: s };
     };
 
+    // Detecta hoja "2024" corrupta por plugin de QR codes (headers basura
+    // en cols A-F: Description, Your link, Tracked link, Number of click,
+    // Created at, NEW! Get your QrCode). Si la primera columna se llama
+    // así, leemos por posición.
+    const isHoja2024Corrupta = (sh) => {
+      const arr = XLSX.utils.sheet_to_json(sh, { defval:null, header:1 });
+      if (!arr.length) return false;
+      const h0 = String(arr[0][0] || '').toLowerCase();
+      const h6 = String(arr[0][6] || '').toLowerCase();
+      return h0.includes('description') && h6 === 'codigo';
+    };
+
+    // Lee la hoja 2024 corrupta usando posición fija. Los headers reales son:
+    // [0] PO (header dice "Description") | [1-2] vacíos | [3] tipo_cont (header "Number of click")
+    // [4] F.A. (header "Created at")     | [5] %  (header "NEW! QrCode")
+    // [6] CODIGO  | [7] DESCRIPCIÓN | [8] PO QTY | [9] SHP QTY | [10] UNIT PRICE | [11] TOTAL
+    // [12] SUPPLIER | [13] FECHA EMISIÓN | [14] FECHA INICIO PROD | [15] FIN PROD
+    // [16] REF FF | [17] COSTO FLETE | [18] FORWARDER (~naviera) | [19] CONTENEDOR
+    // [20] ETD | [21] ETA PUERTO | [22] ARRIBO A CEDIS | [23] CEDIS | [24] ESTATUS
+    // [25] COMENTARIOS TRÁFICO | [26] COMENTARIOS DISEÑO
+    const leerHoja2024Corrupta = (sh) => {
+      const arr = XLSX.utils.sheet_to_json(sh, { defval:null, header:1 });
+      const out = [];
+      for (let i = 1; i < arr.length; i++) {
+        const r = arr[i];
+        if (!r || r.length === 0) continue;
+        out.push({
+          po:                         r[0],
+          tipo_de_cont:               r[3],
+          f_a:                        r[4],
+          '%':                        r[5],
+          codigo:                     r[6],
+          descripcion:                r[7],
+          po_qty:                     r[8],
+          shp_qty:                    r[9],
+          unit_price:                 r[10],
+          total_amount:               r[11],
+          supplier:                   r[12],
+          fecha_emision:              r[13],
+          fecha_inicio_de_produccion: r[14],
+          fin_de_produccion:          r[15],
+          ref_ff:                     r[16],
+          costo_flete:                r[17],
+          naviera:                    r[18],   // "FORWARDER" en el archivo
+          contenedor:                 r[19],
+          etd:                        r[20],
+          eta_puerto:                 r[21],
+          arribo_a_cedis:             r[22],
+          cedis:                      r[23],
+          estatus:                    r[24],
+          comentarios_trafico:        r[25],
+          comentarios_diseno:         r[26],
+        });
+      }
+      return out;
+    };
+
     // Procesa cada hoja y concatena
     const todasFilas = [];
     for (const sheetName of sheetsLeer) {
       const sh = wb.Sheets[sheetName];
       if (!sh) continue;
-      const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
-      console.log(`[masterEmbarques] Hoja "${sheetName}": ${rows.length} filas`);
+      let rows;
+      if (sheetName === '2024' && isHoja2024Corrupta(sh)) {
+        rows = leerHoja2024Corrupta(sh);
+        console.log(`[masterEmbarques] Hoja "${sheetName}": ${rows.length} filas (modo corrupta-2024)`);
+      } else {
+        rows = XLSX.utils.sheet_to_json(sh, { defval:null });
+        console.log(`[masterEmbarques] Hoja "${sheetName}": ${rows.length} filas`);
+      }
       todasFilas.push(...rows);
     }
 
@@ -490,8 +554,13 @@ const PARSERS = {
       return {
         po,
         codigo,
-        fecha_emision: toISODate(obj.fecha_emision),
-        grupo: toStr(obj.grupo),
+        // Sinónimos para compatibilidad con hojas históricas:
+        // - "FECHA EMISIÓN" (2025/2026) vs "FECHA DE EMISIÓN" (2022-2023, 2024)
+        // - "ARRIBO A CEDIS" (2025/2026) vs "ETA ALMACEN" (2022-2023, 2024)
+        // - "Grupo" (2025/2026) vs "RMDP" (2022-2023)
+        // - "REF FF" (2025/2026) vs "REF FFW" / "FF" (históricos)
+        fecha_emision: toISODate(obj.fecha_emision ?? obj.fecha_de_emision),
+        grupo: toStr(obj.grupo ?? obj.rmdp ?? obj.tipo),
         cbm: toNum(obj.cbm),
         fraccion_arancelaria: toStr(obj.f_a ?? obj.fa),
         porcentaje: toNum(obj['%'] ?? obj.porcentaje),
@@ -505,7 +574,7 @@ const PARSERS = {
         supplier: toStr(obj.supplier),
         fecha_inicio_produccion: toISODate(obj.fecha_inicio_de_produccion),
         fin_produccion: toISODate(obj.fin_de_produccion),
-        ref_ff: toStr(obj.ref_ff),
+        ref_ff: toStr(obj.ref_ff ?? obj.ref_ffw ?? obj.ff),
         naviera: toStr(obj.naviera),
         tipo_carga: toStr(obj.tipo_de_carga),
         tipo_contenedor: toStr(obj.tipo_de_cont),
@@ -515,13 +584,13 @@ const PARSERS = {
         etd: toISODate(obj.etd),
         eta_puerto: toISODate(obj.eta_puerto),
         agente_aduanal: toStr(obj.a_a ?? obj.aa),
-        arribo_cedis: toISODate(obj.arribo_a_cedis),
+        arribo_cedis: toISODate(obj.arribo_a_cedis ?? obj.eta_almacen),
         lt: toStr(obj.lt),
         cedis,
         entrega_directa_cliente,
         estatus: toStr(obj.estatus),
         comentarios_trafico: toStr(obj.comentarios_trafico),
-        comentarios_diseno: toStr(obj.comentarios_diseno),
+        comentarios_diseno: toStr(obj.comentarios_diseno ?? obj.comentarios_nuevo_desarrollo),
       };
     }).filter(Boolean);
   },

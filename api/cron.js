@@ -182,7 +182,7 @@ async function taskSyncMasterEmbarques() {
   if (!SHEET_ID) return { error: 'MASTER_EMBARQUES_SHEET_ID no configurada', status: 500 };
   // Itera todas las hojas históricas: 2026, 2025, 2024, 2022-2023.
   // Si una hoja no existe en el Google Sheet, la respuesta dará HTTP 400 y la saltamos.
-  const HOJAS = ['2026', '2025', '2024', '2022-2023', '2023', '2022'];
+  const HOJAS = ['2026', '2025', '2024', '2022 - 2023', '2022-2023', '2023', '2022'];
   const resultados = [];
   let totalParsed = 0, totalValid = 0, totalUpserted = 0, totalFail = 0;
   const allErrors = [];
