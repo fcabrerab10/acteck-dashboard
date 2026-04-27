@@ -135,23 +135,33 @@ export default function EvaluacionesPanel() {
   const personaInfo = useMemo(() => internos.find((p) => p.user_id === personaActiva), [internos, personaActiva]);
 
   // Score mensual = promedio de los 4 viernes del mes natural
+  // Resumen mensual: el bono se calcula como
+  //   score_mensual = (promedio_base_semanal × 0.8) + SUMA_bonus_del_mes
+  //   bono = mapping(score_mensual)
+  // Esto asegura que bonus extras (eventos, propuestas) NO se diluyan al promediar.
   const resumenMensual = useMemo(() => {
     const m = {};
     evaluaciones.forEach((e) => {
       const k = `${e.anio}-${String(e.mes).padStart(2, "0")}`;
-      if (!m[k]) m[k] = { anio: e.anio, mes: e.mes, evals: [], promedio: 0, bono: 0 };
+      if (!m[k]) m[k] = { anio: e.anio, mes: e.mes, evals: [], promedio: 0, bono: 0, sumaBonus: 0, promedioBase: 0 };
       m[k].evals.push(e);
     });
     Object.values(m).forEach((row) => {
       const cerradas = row.evals.filter((e) => e.estado === "cerrada");
       if (cerradas.length === 0) {
-        row.promedio = null; row.bono = 0; return;
+        row.promedio = null; row.bono = 0; row.sumaBonus = 0; row.promedioBase = null;
+        return;
       }
-      const sumScore = cerradas.reduce((a, e) => a + Number(e.score_final || 0), 0);
-      row.promedio = sumScore / cerradas.length;
-      row.bono = row.promedio < 80
-        ? Math.round(row.promedio * 37.5)
-        : Math.round(3000 + (row.promedio - 80) * 50);
+      const sumBase  = cerradas.reduce((a, e) => a + Number(e.score_base || 0), 0);
+      const sumBonus = cerradas.reduce((a, e) => a + Number(e.bonus_pts || 0), 0);
+      const promedioBase = sumBase / cerradas.length;
+      const scoreMensual = promedioBase * 0.8 + sumBonus;
+      row.promedio = scoreMensual;
+      row.promedioBase = promedioBase;
+      row.sumaBonus = sumBonus;
+      row.bono = scoreMensual < 80
+        ? Math.round(scoreMensual * 37.5)
+        : Math.round(3000 + (scoreMensual - 80) * 50);
     });
     return Object.values(m).sort((a, b) => `${b.anio}-${b.mes}`.localeCompare(`${a.anio}-${a.mes}`));
   }, [evaluaciones]);
@@ -405,10 +415,10 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
       {/* Resumen mensual */}
       {resumenMensual.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
             <TrendingUp className="w-4 h-4 text-gray-600" />
             <h3 className="font-semibold text-gray-800">Resumen mensual</h3>
-            <span className="text-xs text-gray-500">Promedio de los viernes cerrados</span>
+            <span className="text-xs text-gray-500">Score = (Base prom × 0.8) + Suma de bonus del mes</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -416,8 +426,10 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
                 <tr>
                   <th className="text-left px-4 py-2">Mes</th>
                   <th className="text-center px-3 py-2">Semanas</th>
-                  <th className="text-right px-3 py-2">Score promedio</th>
-                  <th className="text-right px-4 py-2">Bono mensual</th>
+                  <th className="text-right px-3 py-2">Base prom</th>
+                  <th className="text-right px-3 py-2">Suma bonus</th>
+                  <th className="text-right px-3 py-2">Score mensual</th>
+                  <th className="text-right px-4 py-2">Bono</th>
                 </tr>
               </thead>
               <tbody>
@@ -427,10 +439,16 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
                     <tr key={`${r.anio}-${r.mes}`} className="border-t border-gray-100">
                       <td className="px-4 py-2.5 font-medium text-gray-800">{meses[r.mes - 1]} {r.anio}</td>
                       <td className="text-center px-3 py-2.5 text-gray-600">{r.evals.length}</td>
-                      <td className="text-right px-3 py-2.5 font-bold tabular-nums" style={{ color: colorScore(r.promedio) }}>
-                        {r.promedio != null ? `${r.promedio.toFixed(1)}` : "—"}
+                      <td className="text-right px-3 py-2.5 text-gray-700 tabular-nums">
+                        {r.promedioBase != null ? r.promedioBase.toFixed(1) : "—"}
                       </td>
-                      <td className="text-right px-4 py-2.5 font-semibold text-emerald-700 tabular-nums">
+                      <td className="text-right px-3 py-2.5 text-amber-700 font-semibold tabular-nums">
+                        {r.promedioBase != null ? `+${r.sumaBonus.toFixed(1)}` : "—"}
+                      </td>
+                      <td className="text-right px-3 py-2.5 font-bold tabular-nums" style={{ color: colorScore(r.promedio) }}>
+                        {r.promedio != null ? r.promedio.toFixed(1) : "—"}
+                      </td>
+                      <td className="text-right px-4 py-2.5 font-bold text-emerald-700 tabular-nums">
                         {r.promedio != null ? formatMXN(r.bono) : "—"}
                       </td>
                     </tr>
@@ -474,7 +492,6 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
 
 function EvalRow({ eval_, canEdit, onAbrir, onBorrar }) {
   const score = Number(eval_.score_final || 0);
-  const bono = score < 80 ? Math.round(score * 37.5) : Math.round(3000 + (score - 80) * 50);
   return (
     <div className="px-5 py-3 flex items-center gap-4 hover:bg-gray-50 cursor-pointer" onClick={onAbrir}>
       <div className="w-2 h-12 rounded-full" style={{ backgroundColor: eval_.estado === "cerrada" ? "#10B981" : "#94A3B8" }} />
@@ -496,7 +513,7 @@ function EvalRow({ eval_, canEdit, onAbrir, onBorrar }) {
         <div className="text-lg font-bold tabular-nums" style={{ color: colorScore(score) }}>
           {score.toFixed(1)}
         </div>
-        <div className="text-xs text-emerald-700 font-semibold">{formatMXN(bono)}</div>
+        <div className="text-[10px] text-gray-500">score semanal</div>
       </div>
       {canEdit && (
         <div className="flex items-center gap-1">
@@ -750,7 +767,7 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <ScoreCircle score={score} bono={bono} />
+            <ScoreCircle score={score} />
             <button onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500">
               <X className="w-5 h-5" />
             </button>
@@ -821,9 +838,10 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white">
           <div className="text-sm text-gray-600">
-            <strong className="text-gray-800">Score:</strong> Base {Number(evalData.score_base).toFixed(1)} × 0.8 + Bonus {Number(evalData.bonus_pts).toFixed(1)} = <strong style={{ color: colorScore(score) }}>{score.toFixed(1)}</strong>
-            <span className="mx-2">·</span>
-            <strong className="text-emerald-700">Bono: {formatMXN(bono)}</strong>
+            <strong className="text-gray-800">Score semanal:</strong> Base {Number(evalData.score_base).toFixed(1)} × 0.8 + Bonus {Number(evalData.bonus_pts).toFixed(1)} = <strong style={{ color: colorScore(score) }}>{score.toFixed(1)}</strong>
+            <div className="text-[11px] text-gray-500 mt-0.5">
+              El bono se calcula al final del mes con la suma de todas las semanas
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {canEdit && (
@@ -856,7 +874,7 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
   );
 }
 
-function ScoreCircle({ score, bono }) {
+function ScoreCircle({ score }) {
   const color = colorScore(score);
   const pct = Math.min(100, score);
   return (
@@ -870,8 +888,8 @@ function ScoreCircle({ score, bono }) {
         </div>
       </div>
       <div className="text-right">
-        <div className="text-[10px] text-gray-500 uppercase">Bono</div>
-        <div className="text-sm font-bold text-emerald-700">{formatMXN(bono)}</div>
+        <div className="text-[10px] text-gray-500 uppercase">Score sem</div>
+        <div className="text-[10px] text-gray-500">contribuye al bono</div>
       </div>
     </div>
   );
@@ -1132,12 +1150,13 @@ function ModalEvento({ evalId, personaActiva, onClose, onSaved }) {
   });
   const [saving, setSaving] = useState(false);
 
-  // Bonus calculado: max 15 pts
+  // Bonus calculado: 4 niveles, máx +20
   const total = form.preparacion + form.cobertura + form.reporte + form.resultados;
   let bonus = 0;
-  if (total >= 18) bonus = 15;
-  else if (total >= 14) bonus = 10;
-  else if (total >= 10) bonus = 5;
+  if (total >= 18) bonus = 20;       // excelente
+  else if (total >= 14) bonus = 15;  // bueno
+  else if (total >= 10) bonus = 10;  // regular
+  else if (total >= 6)  bonus = 5;   // aceptable
 
   async function guardar() {
     if (!form.descripcion.trim()) { toast.error("Pon descripción"); return; }
@@ -1216,7 +1235,7 @@ function ModalEvento({ evalId, personaActiva, onClose, onSaved }) {
             ))}
             <div className="text-xs text-amber-900 pt-1 border-t border-amber-200">
               Total: {total}/20 → Bonus: <strong>+{bonus} pts</strong>
-              <span className="text-[10px] text-amber-700 ml-2">(≥18 = +15 · ≥14 = +10 · ≥10 = +5)</span>
+              <span className="text-[10px] text-amber-700 ml-2">(≥18 = +20 · ≥14 = +15 · ≥10 = +10 · ≥6 = +5)</span>
             </div>
           </div>
         </div>
@@ -1238,10 +1257,10 @@ function ModalBonus({ evalId, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
 
   const sugerencias = {
-    curso: 5,
-    reconocimiento: 5,
-    iniciativa: 3,
-    otro: 2,
+    curso: 7,
+    reconocimiento: 8,
+    iniciativa: 5,
+    otro: 3,
   };
 
   async function guardar() {
@@ -1269,10 +1288,10 @@ function ModalBonus({ evalId, onClose, onSaved }) {
           <Field label="Tipo">
             <div className="grid grid-cols-2 gap-2">
               {[
-                { id: "curso", label: "Curso/Cert", sugerido: 5 },
-                { id: "reconocimiento", label: "Reconocimiento cliente", sugerido: 5 },
-                { id: "iniciativa", label: "Iniciativa fuera scope", sugerido: 3 },
-                { id: "otro", label: "Otro", sugerido: 2 },
+                { id: "curso", label: "Curso/Cert", sugerido: 7 },
+                { id: "reconocimiento", label: "Reconocimiento cliente", sugerido: 8 },
+                { id: "iniciativa", label: "Iniciativa fuera scope", sugerido: 5 },
+                { id: "otro", label: "Otro", sugerido: 3 },
               ].map((t) => (
                 <button key={t.id} onClick={() => setForm({ ...form, tipo: t.id, puntos: sugerencias[t.id] })}
                   className={[
