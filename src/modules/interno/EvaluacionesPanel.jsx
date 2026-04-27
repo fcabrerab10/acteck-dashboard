@@ -679,9 +679,17 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
 
   async function calificar(lineaId, calificacion) {
     if (!canEdit) return;
-    setLineas((prev) => prev.map((l) => l.id === lineaId ? { ...l, calificacion } : l));
-    await supabase.from("evaluacion_lineas").update({ calificacion }).eq("id", lineaId);
-    // Refrescar score (trigger ya recalcula)
+    setLineas((prev) => prev.map((l) => l.id === lineaId ? { ...l, calificacion, no_aplica: false } : l));
+    await supabase.from("evaluacion_lineas").update({ calificacion, no_aplica: false }).eq("id", lineaId);
+    setTimeout(refreshScore, 300);
+  }
+
+  async function toggleNoAplica(lineaId, nuevoValor) {
+    if (!canEdit) return;
+    setLineas((prev) => prev.map((l) => l.id === lineaId ? { ...l, no_aplica: nuevoValor, calificacion: nuevoValor ? null : l.calificacion } : l));
+    await supabase.from("evaluacion_lineas")
+      .update({ no_aplica: nuevoValor, calificacion: nuevoValor ? null : undefined })
+      .eq("id", lineaId);
     setTimeout(refreshScore, 300);
   }
 
@@ -811,6 +819,7 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
                 propuestas={sec.id === "propuestas" ? propuestas : null}
                 editable={editable}
                 onCalificar={calificar}
+                onToggleNoAplica={toggleNoAplica}
                 onComentar={comentarLinea}
               />
             );
@@ -895,19 +904,29 @@ function ScoreCircle({ score }) {
   );
 }
 
-function SeccionKPIs({ seccion, kpis, lineas, ptsObtenidos, propuestas, editable, onCalificar, onComentar }) {
+function SeccionKPIs({ seccion, kpis, lineas, ptsObtenidos, propuestas, editable, onCalificar, onToggleNoAplica, onComentar }) {
   const [open, setOpen] = useState(true);
+  const aplicables = lineas.filter((l) => !l.no_aplica);
+  const naCount = lineas.length - aplicables.length;
+  const pesoAplicable = aplicables.reduce((a, l) => a + Number(l.peso_aplicado || 0), 0);
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden" style={{ borderLeft: `4px solid ${seccion.color}` }}>
       <button onClick={() => setOpen(!open)} className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50">
         <div className="flex-1 text-left">
           <div className="font-semibold text-gray-800">{seccion.label}</div>
-          <div className="text-xs text-gray-500">{kpis.length} KPI{kpis.length !== 1 ? "s" : ""} · máx {seccion.pts} pts {seccion.auto && "· Auto-calc disponible"}</div>
+          <div className="text-xs text-gray-500">
+            {kpis.length} KPI{kpis.length !== 1 ? "s" : ""} · máx {seccion.pts} pts {seccion.auto && "· Auto-calc disponible"}
+            {naCount > 0 && (
+              <span className="ml-2 text-amber-600 font-semibold">
+                · {naCount} N/A ({pesoAplicable} pts aplicables)
+              </span>
+            )}
+          </div>
         </div>
         <div className="text-right">
           <div className="text-sm font-bold tabular-nums" style={{ color: seccion.color }}>
-            {ptsObtenidos.toFixed(1)} / {seccion.pts}
+            {ptsObtenidos.toFixed(1)} / {pesoAplicable || seccion.pts}
           </div>
         </div>
         {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
@@ -936,7 +955,7 @@ function SeccionKPIs({ seccion, kpis, lineas, ptsObtenidos, propuestas, editable
               if (!linea) return null;
               return (
                 <KpiRow key={kpi.id} kpi={kpi} linea={linea} editable={editable}
-                  onCalificar={onCalificar} onComentar={onComentar} />
+                  onCalificar={onCalificar} onToggleNoAplica={onToggleNoAplica} onComentar={onComentar} />
               );
             })}
           </div>
@@ -946,33 +965,60 @@ function SeccionKPIs({ seccion, kpis, lineas, ptsObtenidos, propuestas, editable
   );
 }
 
-function KpiRow({ kpi, linea, editable, onCalificar, onComentar }) {
+function KpiRow({ kpi, linea, editable, onCalificar, onComentar, onToggleNoAplica }) {
   const [comments, setComments] = useState(linea.comentarios || "");
+  const isNA = !!linea.no_aplica;
   return (
-    <div className="px-4 py-3 hover:bg-gray-50/50">
+    <div className={["px-4 py-3 hover:bg-gray-50/50", isNA && "bg-gray-50/70 opacity-75"].filter(Boolean).join(" ")}>
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-gray-800">{kpi.descripcion}</div>
-          <div className="text-[10px] text-gray-500 mt-0.5">Peso: {kpi.peso} pts {kpi.auto_calc && "· Auto-calculable"}</div>
+          <div className={["text-sm font-medium", isNA ? "text-gray-500 line-through" : "text-gray-800"].join(" ")}>
+            {kpi.descripcion}
+          </div>
+          <div className="text-[10px] text-gray-500 mt-0.5">
+            Peso: {kpi.peso} pts {kpi.auto_calc && "· Auto-calculable"}
+            {isNA && <span className="ml-1 font-semibold text-amber-600">· N/A esta semana</span>}
+          </div>
         </div>
         <div className="flex items-center gap-1">
           {[1, 2, 3, 4, 5].map((n) => (
             <button key={n}
-              onClick={() => editable && onCalificar(linea.id, n)}
-              disabled={!editable}
+              onClick={() => editable && !isNA && onCalificar(linea.id, n)}
+              disabled={!editable || isNA}
               className={[
                 "w-7 h-7 rounded-full text-xs font-bold transition",
-                linea.calificacion === n
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 hover:bg-gray-200 text-gray-600",
-                !editable && "opacity-60 cursor-not-allowed",
+                isNA
+                  ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+                  : linea.calificacion === n
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-600",
+                !editable && !isNA && "opacity-60 cursor-not-allowed",
               ].join(" ")}
             >
               {n}
             </button>
           ))}
-          <div className="ml-2 text-sm font-bold tabular-nums w-12 text-right" style={{ color: linea.calificacion >= 4 ? "#10B981" : linea.calificacion >= 3 ? "#F59E0B" : linea.calificacion ? "#EF4444" : "#94A3B8" }}>
-            {Number(linea.puntaje || 0).toFixed(1)}
+          <button
+            onClick={() => editable && onToggleNoAplica(linea.id, !isNA)}
+            disabled={!editable}
+            title="No aplica esta semana — el peso se excluye y el resto se prorratea"
+            className={[
+              "ml-1 px-2 h-7 rounded-full text-[10px] font-bold transition border",
+              isNA
+                ? "bg-amber-500 text-white border-amber-500"
+                : "bg-white border-gray-200 text-gray-500 hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700",
+              !editable && "opacity-60 cursor-not-allowed",
+            ].join(" ")}
+          >
+            N/A
+          </button>
+          <div className="ml-2 text-sm font-bold tabular-nums w-12 text-right" style={{
+            color: isNA ? "#94A3B8" :
+                   linea.calificacion >= 4 ? "#10B981" :
+                   linea.calificacion >= 3 ? "#F59E0B" :
+                   linea.calificacion ? "#EF4444" : "#94A3B8",
+          }}>
+            {isNA ? "—" : Number(linea.puntaje || 0).toFixed(1)}
           </div>
         </div>
       </div>
