@@ -180,32 +180,64 @@ async function upsertChunks(rows) {
 // ═════════════════════ Tareas ═════════════════════
 async function taskSyncMasterEmbarques() {
   if (!SHEET_ID) return { error: 'MASTER_EMBARQUES_SHEET_ID no configurada', status: 500 };
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
-  const resp = await fetch(url, { redirect: 'follow' });
-  if (!resp.ok) {
-    return {
-      error: `No se pudo descargar el sheet (${resp.status}). Verifica que esté "anyone with link can view".`,
-      status: 502,
-    };
+  // Itera todas las hojas históricas: 2026, 2025, 2024, 2022-2023.
+  // Si una hoja no existe en el Google Sheet, la respuesta dará HTTP 400 y la saltamos.
+  const HOJAS = ['2026', '2025', '2024', '2022-2023', '2023', '2022'];
+  const resultados = [];
+  let totalParsed = 0, totalValid = 0, totalUpserted = 0, totalFail = 0;
+  const allErrors = [];
+
+  for (const sheet of HOJAS) {
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`;
+    try {
+      const resp = await fetch(url, { redirect: 'follow' });
+      if (!resp.ok) {
+        resultados.push({ sheet, status: 'skipped', http: resp.status });
+        continue;
+      }
+      const csvText = await resp.text();
+      // Google a veces regresa HTML de error con HTTP 200 cuando la hoja no existe
+      if (csvText.startsWith('<') || csvText.length < 50) {
+        resultados.push({ sheet, status: 'empty_or_missing' });
+        continue;
+      }
+      const rawRows = parseCSV(csvText);
+      if (rawRows.length < 2) {
+        resultados.push({ sheet, status: 'empty', rows: 0 });
+        continue;
+      }
+      const rows = transformEmbarques(rawRows);
+      if (rows.length === 0) {
+        resultados.push({ sheet, status: 'no_valid_rows', parsed: rawRows.length - 1 });
+        continue;
+      }
+      const result = await upsertChunks(rows);
+      totalParsed += rawRows.length - 1;
+      totalValid += rows.length;
+      totalUpserted += result.ok;
+      totalFail += result.fail;
+      if (result.errors.length) allErrors.push({ sheet, errors: result.errors.slice(0, 2) });
+      resultados.push({
+        sheet,
+        status: 'ok',
+        parsed: rawRows.length - 1,
+        valid: rows.length,
+        upserted: result.ok,
+        failed: result.fail,
+      });
+    } catch (e) {
+      resultados.push({ sheet, status: 'error', err: String(e?.message || e).slice(0, 200) });
+    }
   }
-  const csvText = await resp.text();
-  const rawRows = parseCSV(csvText);
-  if (rawRows.length < 2) {
-    return { ok: true, rows_parsed: 0, msg: 'Hoja vacía' };
-  }
-  const rows = transformEmbarques(rawRows);
-  if (rows.length === 0) {
-    return { ok: true, rows_parsed: rawRows.length - 1, rows_valid: 0, msg: 'Sin filas válidas' };
-  }
-  const result = await upsertChunks(rows);
+
   return {
-    ok: result.fail === 0,
-    rows_parsed: rawRows.length - 1,
-    rows_valid: rows.length,
-    upserted: result.ok,
-    failed: result.fail,
-    errors: result.errors.slice(0, 3),
-    sheet: SHEET_NAME,
+    ok: totalFail === 0,
+    rows_parsed: totalParsed,
+    rows_valid: totalValid,
+    upserted: totalUpserted,
+    failed: totalFail,
+    sheets: resultados,
+    errors: allErrors.slice(0, 3),
   };
 }
 

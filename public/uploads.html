@@ -64,7 +64,7 @@ const SOURCES = [
   { id:'ec-pcel', title:'Estado de cuenta · PCEL', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
   { id:'ec-digitalife', title:'Estado de cuenta · Digitalife', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
   { id:'roadmap-precios', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
-  { id:'master-embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx (hoja del año actual). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
+  { id:'master-embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
 ];
 
 const CHUNK = 200;
@@ -451,11 +451,15 @@ const PARSERS = {
     };
   },
   masterEmbarques(wb){
-    // La hoja principal se llama "2026" (o el año en curso). Fallback: primera hoja.
-    const year = new Date().getFullYear();
-    const sh = wb.Sheets[String(year)] || wb.Sheets['2026'] || wb.Sheets[wb.SheetNames[0]];
-    if (!sh) return [];
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
+    // Lee TODAS las hojas históricas: 2026 (año actual), 2025, 2024, 2022-2023.
+    // Si una hoja no existe, se omite. La unique key es (po, codigo) así que
+    // posibles duplicados entre hojas son resueltos por el upsert.
+    const HOJAS_HISTORICAS = ['2026', '2025', '2024', '2022-2023', '2023', '2022'];
+    const sheetsLeer = HOJAS_HISTORICAS.filter(name => wb.Sheets[name]);
+    if (sheetsLeer.length === 0) {
+      // Fallback: primera hoja del libro
+      sheetsLeer.push(wb.SheetNames[0]);
+    }
 
     // Clasifica el campo CEDIS: si empieza con dígito, es almacén interno;
     // si empieza con letra (ej. "DECME"), es entrega directa a cliente externo.
@@ -466,7 +470,17 @@ const PARSERS = {
       return { cedis: s, entrega_directa_cliente: s };
     };
 
-    return rows.map(r => {
+    // Procesa cada hoja y concatena
+    const todasFilas = [];
+    for (const sheetName of sheetsLeer) {
+      const sh = wb.Sheets[sheetName];
+      if (!sh) continue;
+      const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
+      console.log(`[masterEmbarques] Hoja "${sheetName}": ${rows.length} filas`);
+      todasFilas.push(...rows);
+    }
+
+    return todasFilas.map(r => {
       const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
       const po = toStr(obj.po);
       const codigo = toStr(obj.codigo);
