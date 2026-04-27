@@ -402,7 +402,7 @@ function ReporteRow({ r, verAlmacenes, canEdit, expanded, onToggleExpand, onEdit
       {expanded && (
         <tr className="border-t border-gray-100 bg-blue-50/30">
           <td colSpan={20} className="p-4">
-            <ExpandedDetail sku={r.sku} invTotal={r.invTotal} precioAaa={r.precio_aaa} />
+            <ExpandedDetail sku={r.sku} invTotal={r.invTotal} invDisp={r.invDisp} invApartado={r.invApartado} invPorAlmacen={r.inv} precioAaa={r.precio_aaa} />
           </td>
         </tr>
       )}
@@ -461,24 +461,26 @@ function PrecioCell({ valor, esManual, canEdit, tipo, onSave, placeholder }) {
 }
 
 // ────────── Detalle expandido ──────────
-function ExpandedDetail({ sku, invTotal, precioAaa }) {
+function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, precioAaa }) {
   const [data, setData] = useState({ loading: true });
 
   useEffect(() => {
     (async () => {
       const hoy = new Date();
       const anioCorte = new Date(hoy.getFullYear(), hoy.getMonth() - 6, 1).getFullYear();
-      const [demRes, traRes, ltRes] = await Promise.all([
+      const [demRes, traRes, ltRes, comRes] = await Promise.all([
         supabase.from('v_demanda_sku').select('cliente, anio, mes, piezas')
           .eq('sku', sku).gte('anio', anioCorte),
         supabase.from('v_transito_sku').select('*').eq('sku', sku).maybeSingle(),
         supabase.from('v_lead_time_sku').select('dias_promedio').eq('sku', sku).maybeSingle(),
+        supabase.from('v_sku_compras_historico').select('*').eq('sku', sku).maybeSingle(),
       ]);
       setData({
         loading: false,
         demanda: demRes.data || [],
         transito: traRes.data,
         leadTime: ltRes.data?.dias_promedio,
+        compras: comRes.data,
       });
     })();
   }, [sku]);
@@ -514,7 +516,17 @@ function ExpandedDetail({ sku, invTotal, precioAaa }) {
   // Sugerido compra: si demanda 3m > inv + tránsito → falta
   const brecha = Math.max(0, dem3m - invTotal - traCant);
   const buffer = demTotalMes; // 1 mes extra
-  const sugerido = brecha > 0 ? Math.round(brecha + buffer) : 0;
+  let sugerido = brecha > 0 ? Math.round(brecha + buffer) : 0;
+
+  // Ajuste por contenedor (si hay datos históricos y no es consolidado)
+  const com = data.compras;
+  const piezasContenedor = com?.piezas_por_contenedor || 0;
+  const esConsolidado = com?.es_consolidado === true;
+  let contenedoresSugeridos = 0;
+  if (sugerido > 0 && piezasContenedor > 0 && !esConsolidado) {
+    contenedoresSugeridos = Math.ceil(sugerido / piezasContenedor);
+    sugerido = contenedoresSugeridos * piezasContenedor;  // múltiplo del contenedor
+  }
 
   const CLIENTES = [
     { key: 'digitalife',   label: 'Digitalife',    color: '#3B82F6' },
@@ -522,89 +534,168 @@ function ExpandedDetail({ sku, invTotal, precioAaa }) {
     { key: 'mercadolibre', label: 'Mercado Libre', color: '#F59E0B' },
   ];
 
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-      {/* Demanda 3 clientes */}
-      <div className="bg-white rounded-lg border border-gray-200 p-3">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-2">
-          Demanda mensual promedio (3m)
-        </h4>
-        <div className="space-y-1.5">
-          {CLIENTES.map((c) => (
-            <div key={c.key} className="flex items-center gap-2 text-xs">
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
-              <span className="flex-1 text-gray-700">{c.label}</span>
-              <span className="font-semibold tabular-nums" style={{ color: demMes[c.key] > 0 ? c.color : '#CBD5E1' }}>
-                {FMT_N(demMes[c.key])} / mes
-              </span>
-            </div>
-          ))}
-          <div className="border-t border-gray-100 pt-1.5 flex items-center gap-2 text-xs">
-            <span className="flex-1 text-gray-500 font-medium">Total</span>
-            <span className="font-bold tabular-nums">{FMT_N(demTotalMes)} / mes · {FMT_N(dem3m)} / 3m</span>
-          </div>
-        </div>
-      </div>
+  // ── Reservas: desglose por almacén ──
+  const reservasPorAlmacen = ALMACENES
+    .map((a) => {
+      const cell = invPorAlmacen?.[a.id];
+      return { id: a.id, nombre: a.nombre, apartado: cell?.apartado || 0, total: cell?.inv || 0 };
+    })
+    .filter((x) => x.apartado > 0);
 
-      {/* Tránsito */}
-      <div className="bg-white rounded-lg border border-gray-200 p-3">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-2 flex items-center gap-1">
-          <Ship className="w-3.5 h-3.5" /> Tránsito
-        </h4>
-        {traCant > 0 ? (
-          <div className="space-y-1 text-xs">
-            <div className="flex justify-between"><span className="text-gray-600">Piezas:</span><span className="font-semibold tabular-nums">{FMT_N(traCant)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-600">Próxima ETA:</span><span className="font-semibold">{fmtFechaCorta(traEta)}</span></div>
-            {traEtaDias !== null && (
-              <div className="flex justify-between"><span className="text-gray-600">En:</span>
-                <span className={"font-semibold " + (traEtaDias < 30 ? "text-emerald-700" : traEtaDias < 60 ? "text-amber-700" : "text-gray-700")}>
-                  {traEtaDias < 0 ? `vencida (${-traEtaDias}d)` : `${traEtaDias} días`}
+  return (
+    <div className="space-y-3 text-sm">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Demanda 3 clientes */}
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-2">
+            Demanda mensual prom (3m)
+          </h4>
+          <div className="space-y-1.5">
+            {CLIENTES.map((c) => (
+              <div key={c.key} className="flex items-center gap-2 text-xs">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
+                <span className="flex-1 text-gray-700">{c.label}</span>
+                <span className="font-semibold tabular-nums" style={{ color: demMes[c.key] > 0 ? c.color : '#CBD5E1' }}>
+                  {FMT_N(demMes[c.key])}
                 </span>
               </div>
-            )}
-            {data.leadTime && (
-              <div className="flex justify-between text-gray-500"><span>Lead time prom:</span><span>{Math.round(data.leadTime)}d</span></div>
-            )}
+            ))}
+            <div className="border-t border-gray-100 pt-1.5 flex items-center gap-2 text-xs">
+              <span className="flex-1 text-gray-500 font-medium">Total mes</span>
+              <span className="font-bold tabular-nums">{FMT_N(demTotalMes)}</span>
+            </div>
+            <div className="text-[10px] text-gray-500 text-right">3m: {FMT_N(dem3m)} pzs</div>
           </div>
-        ) : (
-          <div className="text-xs text-gray-400 italic">Sin tránsito programado</div>
-        )}
-      </div>
+        </div>
 
-      {/* Sugerido de compra */}
-      <div className={[
-        "rounded-lg p-3 border",
-        sugerido > 0 ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200",
-      ].join(" ")}>
-        <h4 className="text-xs font-semibold uppercase tracking-wide mb-2 flex items-center gap-1"
-          style={{ color: sugerido > 0 ? '#B91C1C' : '#065F46' }}>
-          <ShoppingCart className="w-3.5 h-3.5" /> Sugerido de compra
-        </h4>
-        {sugerido > 0 ? (
-          <div className="space-y-1 text-xs">
-            <div className="flex justify-between"><span className="text-gray-600">Brecha 3m:</span><span className="font-semibold text-red-700 tabular-nums">{FMT_N(brecha)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-600">+ buffer 1m:</span><span className="font-semibold tabular-nums">{FMT_N(buffer)}</span></div>
-            <div className="border-t border-red-200 pt-1 mt-1 flex justify-between font-bold">
-              <span className="text-red-800">A comprar:</span>
-              <span className="text-red-700 tabular-nums">{FMT_N(sugerido)} pzs</span>
+        {/* Tránsito */}
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-2 flex items-center gap-1">
+            <Ship className="w-3.5 h-3.5" /> Tránsito
+          </h4>
+          {traCant > 0 ? (
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between"><span className="text-gray-600">Piezas:</span><span className="font-semibold tabular-nums">{FMT_N(traCant)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Próxima ETA:</span><span className="font-semibold">{fmtFechaCorta(traEta)}</span></div>
+              {traEtaDias !== null && (
+                <div className="flex justify-between"><span className="text-gray-600">En:</span>
+                  <span className={"font-semibold " + (traEtaDias < 30 ? "text-emerald-700" : traEtaDias < 60 ? "text-amber-700" : "text-gray-700")}>
+                    {traEtaDias < 0 ? `vencida (${-traEtaDias}d)` : `${traEtaDias} días`}
+                  </span>
+                </div>
+              )}
+              {data.leadTime && (
+                <div className="flex justify-between text-gray-500"><span>Lead time prom:</span><span>{Math.round(data.leadTime)}d</span></div>
+              )}
             </div>
-            {precioAaa && (
-              <div className="text-[10px] text-gray-600 mt-1">
-                ≈ {formatMXN(sugerido * precioAaa)} (a precio AAA)
+          ) : (
+            <div className="text-xs text-gray-400 italic">Sin tránsito programado</div>
+          )}
+        </div>
+
+        {/* Reservas / Apartado */}
+        <div className={[
+          "rounded-lg p-3 border",
+          invApartado > 0 ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-gray-200",
+        ].join(" ")}>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-2 flex items-center gap-1">
+            <Package className="w-3.5 h-3.5" /> Reservado / Apartado
+          </h4>
+          {invApartado > 0 ? (
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between"><span className="text-gray-600">Total apartado:</span><span className="font-semibold text-amber-700 tabular-nums">{FMT_N(invApartado)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Disponible real:</span><span className="font-semibold tabular-nums">{FMT_N(invDisp)}</span></div>
+              <div className="flex justify-between text-gray-500"><span>Inventario total:</span><span className="tabular-nums">{FMT_N(invTotal)}</span></div>
+              {reservasPorAlmacen.length > 0 && (
+                <div className="border-t border-amber-200 pt-1.5 mt-1.5">
+                  <div className="text-[10px] text-amber-800 font-semibold uppercase tracking-wide mb-1">Por almacén:</div>
+                  <div className="space-y-0.5 max-h-24 overflow-y-auto">
+                    {reservasPorAlmacen.map((x) => (
+                      <div key={x.id} className="flex justify-between text-[11px]">
+                        <span className="text-gray-600" title={x.nombre}>Almacén {x.id}</span>
+                        <span className="font-semibold text-amber-700 tabular-nums">{FMT_N(x.apartado)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="text-[10px] text-gray-500 italic mt-1">
+                Apartado = inv. total − disponible (no se sabe quién lo reservó hasta integrar el reporte del ERP)
               </div>
-            )}
-            <div className="text-[10px] text-gray-500 italic mt-1">
-              Ver detalle completo en pestaña <strong>Forecast Clientes</strong>
             </div>
-          </div>
-        ) : (
-          <div className="text-xs text-emerald-700">
-            ✓ Inventario + tránsito cubre demanda 3m
-            <div className="text-[10px] text-gray-500 mt-1">
-              Inv {FMT_N(invTotal)} + Tránsito {FMT_N(traCant)} ≥ Demanda {FMT_N(dem3m)}
+          ) : (
+            <div className="text-xs text-emerald-700">
+              ✓ Sin piezas apartadas
+              <div className="text-[10px] text-gray-500 mt-1">Todo el inventario ({FMT_N(invTotal)}) está disponible</div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Sugerido de compra mejorado */}
+        <div className={[
+          "rounded-lg p-3 border",
+          sugerido > 0 ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200",
+        ].join(" ")}>
+          <h4 className="text-xs font-semibold uppercase tracking-wide mb-2 flex items-center gap-1"
+            style={{ color: sugerido > 0 ? '#B91C1C' : '#065F46' }}>
+            <ShoppingCart className="w-3.5 h-3.5" /> Sugerido de compra
+          </h4>
+
+          {/* Histórico de compras */}
+          {com && (
+            <div className="bg-white/60 rounded p-2 mb-2 space-y-0.5 text-[11px] border border-gray-200">
+              <div className="flex justify-between"><span className="text-gray-600">Promedio histórico:</span><span className="font-semibold tabular-nums">{FMT_N(com.po_qty_promedio)} pzs ({com.num_compras} compras)</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Última compra:</span><span className="font-semibold tabular-nums">{FMT_N(com.ultima_po_qty)} ({com.ultima_po})</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Último arribo:</span><span className="font-semibold">{fmtFechaCorta(com.ultima_fecha_arribo)}</span></div>
+              {com.ultima_num_contenedores > 0 && piezasContenedor > 0 && (
+                <div className="flex justify-between"><span className="text-gray-600">Por contenedor:</span><span className="font-semibold tabular-nums">{FMT_N(piezasContenedor)} pzs</span></div>
+              )}
+              {esConsolidado && (
+                <div className="bg-purple-100 border border-purple-300 rounded px-1.5 py-1 mt-1 text-[10px] text-purple-800 font-semibold flex items-center gap-1">
+                  📦 CONSOLIDADO {com.cbm_promedio && `· CBM ${Number(com.cbm_promedio).toFixed(2)}`}
+                  <span className="text-purple-600 font-normal">(va con otros SKUs)</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {sugerido > 0 ? (
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between"><span className="text-gray-600">Brecha 3m:</span><span className="font-semibold text-red-700 tabular-nums">{FMT_N(brecha)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">+ buffer 1m:</span><span className="font-semibold tabular-nums">{FMT_N(buffer)}</span></div>
+              {!esConsolidado && contenedoresSugeridos > 0 && (
+                <div className="flex justify-between text-purple-700">
+                  <span>Ajuste a contenedor:</span>
+                  <span className="font-semibold">{contenedoresSugeridos} cont. × {FMT_N(piezasContenedor)}</span>
+                </div>
+              )}
+              <div className="border-t border-red-200 pt-1 mt-1 flex justify-between font-bold">
+                <span className="text-red-800">A comprar:</span>
+                <span className="text-red-700 tabular-nums">{FMT_N(sugerido)} pzs</span>
+              </div>
+              {esConsolidado && com && (
+                <div className="bg-purple-50 border border-purple-200 rounded px-1.5 py-1 text-[10px] text-purple-800 mt-1">
+                  Como va consolidado, considera la <strong>cantidad de la última compra: {FMT_N(com.ultima_po_qty)} pzs</strong>
+                </div>
+              )}
+              {precioAaa && (
+                <div className="text-[10px] text-gray-600 mt-1">
+                  ≈ {formatMXN(sugerido * precioAaa)} (a precio AAA)
+                </div>
+              )}
+              <div className="text-[10px] text-gray-500 italic mt-1">
+                Ver detalle completo en <strong>Forecast Clientes</strong>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-emerald-700">
+              ✓ Inventario + tránsito cubre demanda 3m
+              <div className="text-[10px] text-gray-500 mt-1">
+                Inv {FMT_N(invTotal)} + Tránsito {FMT_N(traCant)} ≥ Demanda {FMT_N(dem3m)}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

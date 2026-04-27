@@ -2498,7 +2498,6 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                     React.createElement("input", {
                       type: "number", min: 0, step: "1",
                       readOnly: !canEdit,
-                      title: !canEdit ? "Solo lectura" : undefined,
                       value: precioEdits[s.sku] !== undefined
                         ? Math.round(Number(precioEdits[s.sku]) || 0)
                         : Math.round(Number(s.precioAAAcd) || 0),
@@ -2541,9 +2540,11 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                         outline: "none",
                         MozAppearance: "textfield",
                       },
-                      title: precioEdits[s.sku] !== undefined
-                        ? "Precio modificado manualmente · Click para editar"
-                        : "Click para editar · Se guarda automáticamente"
+                      title: !canEdit
+                        ? "Solo lectura"
+                        : precioEdits[s.sku] !== undefined
+                          ? "Precio modificado manualmente · Click para editar"
+                          : "Click para editar · Se guarda automáticamente"
                     }),
                     // Mini marca: bullet morado cuando el precio está editado manualmente
                     (precioEdits[s.sku] !== undefined) && React.createElement("span", {
