@@ -1158,7 +1158,9 @@ function EventoCard({ evento, editable, onChanged }) {
       </div>
       <div className="text-[10px] text-gray-500 mt-0.5">
         {evento.cliente && <span>{evento.cliente} · </span>}
-        {fmtFechaCorta(evento.fecha)} · {total}/20 ptos detalle
+        {fmtFechaCorta(evento.fecha)} · {total}/20
+        {evento.dias_duracion > 1 && <span> · {evento.dias_duracion}d</span>}
+        {evento.fuera_ciudad && <span> · ✈ fuera</span>}
       </div>
     </div>
   );
@@ -1193,16 +1195,28 @@ function ModalEvento({ evalId, personaActiva, onClose, onSaved }) {
     lugar: "",
     descripcion: "",
     preparacion: 0, cobertura: 0, reporte: 0, resultados: 0,
+    dias_duracion: 1,
+    fuera_ciudad: false,
   });
   const [saving, setSaving] = useState(false);
 
-  // Bonus calculado: 4 niveles, máx +20
+  // ── Cálculo de bonus ──
+  // Base por calidad (4 niveles):
+  //   ≥18/20 = 20 · ≥14 = 15 · ≥10 = 10 · ≥6 = 5
+  // Multiplicador por días (más días = más tiempo libre):
+  //   1d = ×1.0 · 2d = ×1.3 · 3d = ×1.5 · 4d+ = ×1.7
+  // Extra fijo por fuera de ciudad: +5
   const total = form.preparacion + form.cobertura + form.reporte + form.resultados;
-  let bonus = 0;
-  if (total >= 18) bonus = 20;       // excelente
-  else if (total >= 14) bonus = 15;  // bueno
-  else if (total >= 10) bonus = 10;  // regular
-  else if (total >= 6)  bonus = 5;   // aceptable
+  let base = 0;
+  if (total >= 18) base = 20;
+  else if (total >= 14) base = 15;
+  else if (total >= 10) base = 10;
+  else if (total >= 6)  base = 5;
+
+  const dias = Math.max(1, Number(form.dias_duracion) || 1);
+  const multiplicador = dias === 1 ? 1.0 : dias === 2 ? 1.3 : dias === 3 ? 1.5 : 1.7;
+  const extraCiudad = form.fuera_ciudad ? 5 : 0;
+  const bonus = base > 0 ? Math.round((base * multiplicador + extraCiudad) * 10) / 10 : 0;
 
   async function guardar() {
     if (!form.descripcion.trim()) { toast.error("Pon descripción"); return; }
@@ -1217,6 +1231,8 @@ function ModalEvento({ evalId, personaActiva, onClose, onSaved }) {
       cobertura: form.cobertura || null,
       reporte: form.reporte || null,
       resultados: form.resultados || null,
+      dias_duracion: dias,
+      fuera_ciudad: form.fuera_ciudad,
       bonus_pts: bonus,
       evaluacion_id: evalId,
       creado_por: perfil?.user_id,
@@ -1256,8 +1272,40 @@ function ModalEvento({ evalId, personaActiva, onClose, onSaved }) {
           </Field>
           <Field label="Lugar">
             <input value={form.lugar} onChange={(e) => setForm({ ...form, lugar: e.target.value })}
+              placeholder="Ej. Centro de convenciones, Hotel X, etc."
               className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" />
           </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Días de duración">
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button key={n} type="button"
+                    onClick={() => setForm({ ...form, dias_duracion: n })}
+                    className={[
+                      "flex-1 h-9 rounded-lg text-xs font-bold transition border",
+                      form.dias_duracion === n
+                        ? "bg-amber-500 border-amber-500 text-white"
+                        : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50",
+                    ].join(" ")}
+                  >
+                    {n}{n === 5 ? "+" : ""}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <Field label="Ubicación">
+              <button type="button"
+                onClick={() => setForm({ ...form, fuera_ciudad: !form.fuera_ciudad })}
+                className={[
+                  "w-full h-9 rounded-lg text-xs font-medium transition border flex items-center justify-center gap-1.5",
+                  form.fuera_ciudad
+                    ? "bg-purple-100 border-purple-300 text-purple-800"
+                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50",
+                ].join(" ")}>
+                {form.fuera_ciudad ? "✈ Fuera de ciudad" : "🏠 Misma ciudad"}
+              </button>
+            </Field>
+          </div>
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
             <div className="text-xs font-semibold text-amber-900">Calificación del evento (1-5 cada criterio)</div>
             {[
@@ -1279,9 +1327,26 @@ function ModalEvento({ evalId, personaActiva, onClose, onSaved }) {
                 ))}
               </div>
             ))}
-            <div className="text-xs text-amber-900 pt-1 border-t border-amber-200">
-              Total: {total}/20 → Bonus: <strong>+{bonus} pts</strong>
-              <span className="text-[10px] text-amber-700 ml-2">(≥18 = +20 · ≥14 = +15 · ≥10 = +10 · ≥6 = +5)</span>
+            <div className="text-xs text-amber-900 pt-1 border-t border-amber-200 space-y-0.5">
+              <div>
+                Calidad {total}/20 → Base: <strong>+{base} pts</strong>
+                <span className="text-[10px] text-amber-700 ml-1">(≥18=+20 · ≥14=+15 · ≥10=+10 · ≥6=+5)</span>
+              </div>
+              <div>
+                {dias} día{dias !== 1 ? "s" : ""} · Multiplicador: <strong>×{multiplicador}</strong>
+                <span className="text-[10px] text-amber-700 ml-1">(1d=×1.0 · 2d=×1.3 · 3d=×1.5 · 4d+=×1.7)</span>
+              </div>
+              {form.fuera_ciudad && (
+                <div>Fuera de ciudad: <strong>+5 extra</strong></div>
+              )}
+              <div className="pt-0.5 border-t border-amber-200 mt-1">
+                <strong className="text-amber-900">Bonus total: +{bonus} pts</strong>
+                {base > 0 && (
+                  <span className="text-[10px] text-amber-700 ml-2">
+                    ({base} × {multiplicador}{form.fuera_ciudad ? " + 5" : ""} = {bonus})
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1720,6 +1785,8 @@ function EventosView({ personaActiva, canEdit }) {
                 <div className="font-medium text-gray-800 mt-0.5">{e.descripcion}</div>
                 <div className="text-xs text-gray-500 mt-0.5">
                   Prep {e.preparacion || "—"} · Cob {e.cobertura || "—"} · Rep {e.reporte || "—"} · Res {e.resultados || "—"} · Total {total}/20
+                  {e.dias_duracion > 1 && <span> · {e.dias_duracion} días</span>}
+                  {e.fuera_ciudad && <span className="ml-1 text-purple-700">· ✈ fuera de ciudad</span>}
                 </div>
               </div>
               <div className="text-right">
