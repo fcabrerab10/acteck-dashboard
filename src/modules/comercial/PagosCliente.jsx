@@ -61,6 +61,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportMeses, setExportMeses] = useState([]); // ["YYYY-MM", ...] multi-select
   const [historialPago, setHistorialPago] = useState(null); // { pago, entries }
+  const [expandedPagoId, setExpandedPagoId] = useState(null); // pago marketing expandido
+  const [actividadesPorPago, setActividadesPorPago] = useState({}); // cache pago_id → [actividades]
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue]     = useState("");
   const [saving, setSaving]           = useState(false);
@@ -646,8 +648,52 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (!window.confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")) return;
     setRegistros(prev => prev.filter(r => r.id !== id));
     const { error } = await supabase.from("pagos").delete().eq("id", id);
-    if (error) { flash("Error al eliminar ✗", "err"); fetchData(); }
+    if (error) { flash("Error al eliminar: " + error.message, "err"); fetchData(); }
     else flash("Eliminado ✓");
+  };
+
+  // ──────────── Desglose de pago de marketing ────────────
+  const togglePagoExpand = async (pagoId) => {
+    if (expandedPagoId === pagoId) {
+      setExpandedPagoId(null);
+      return;
+    }
+    setExpandedPagoId(pagoId);
+    if (actividadesPorPago[pagoId]) return; // ya cacheado
+    const { data } = await supabase.from("marketing_actividades")
+      .select("id, nombre, tipo, fecha, inversion, responsable, estatus, pago_id")
+      .eq("pago_id", pagoId)
+      .order("fecha");
+    setActividadesPorPago(prev => ({ ...prev, [pagoId]: data || [] }));
+  };
+
+  // Excluir actividad: la deslinea del pago y recalcula el monto
+  const excluirActividadDePago = async (pagoId, actividadId) => {
+    if (!canEdit) return;
+    if (!window.confirm("¿Excluir esta actividad del pago? Volverá a aparecer en Marketing como pendiente de pagar.")) return;
+    // Desligar
+    const { error: errAct } = await supabase.from("marketing_actividades")
+      .update({ pago_id: null }).eq("id", actividadId);
+    if (errAct) { flash("Error: " + errAct.message, "err"); return; }
+    // Recalcular monto del pago = suma de inversiones restantes
+    const { data: rest } = await supabase.from("marketing_actividades")
+      .select("inversion").eq("pago_id", pagoId);
+    const nuevoMonto = (rest || []).reduce((a, r) => a + (Number(r.inversion) || 0), 0);
+    if (nuevoMonto === 0) {
+      // No queda nada — preguntar si eliminar el pago
+      if (window.confirm("Era la última actividad del pago. ¿Eliminar el pago completo?")) {
+        await supabase.from("pagos").delete().eq("id", pagoId);
+        flash("Actividad excluida y pago eliminado ✓");
+        setExpandedPagoId(null);
+        fetchData();
+        return;
+      }
+    }
+    await supabase.from("pagos").update({ monto: nuevoMonto }).eq("id", pagoId);
+    // Refrescar local
+    setActividadesPorPago(prev => ({ ...prev, [pagoId]: (prev[pagoId] || []).filter(a => a.id !== actividadId) }));
+    setRegistros(prev => prev.map(r => r.id === pagoId ? { ...r, monto: nuevoMonto } : r));
+    flash("Actividad excluida del pago ✓");
   };
 
   // Duplicar un pago — crea uno nuevo con los mismos datos, fecha_compromiso
@@ -1858,9 +1904,25 @@ export default function PagosCliente({ cliente, clienteKey }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((row, i) => (
-                      <tr key={row.id} className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${i % 2 === 1 ? "bg-gray-50/30" : ""}`}>
-                        <td className="py-2.5 pr-3 min-w-36">{renderCell(row, "concepto")}</td>
+                    {filtered.map((row, i) => {
+                      const esMktConsolidado = row.categoria === "marketing";
+                      const expanded = expandedPagoId === row.id;
+                      const acts = actividadesPorPago[row.id] || [];
+                      return (
+                      <React.Fragment key={row.id}>
+                      <tr className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${i % 2 === 1 ? "bg-gray-50/30" : ""}`}>
+                        <td className="py-2.5 pr-3 min-w-36">
+                          {esMktConsolidado && (
+                            <button
+                              onClick={() => togglePagoExpand(row.id)}
+                              className="inline-flex items-center justify-center w-5 h-5 mr-1.5 rounded hover:bg-blue-100 text-gray-400 hover:text-blue-600 align-middle"
+                              title={expanded ? "Ocultar actividades" : "Ver actividades"}
+                            >
+                              <span className="text-xs">{expanded ? "▼" : "▶"}</span>
+                            </button>
+                          )}
+                          {renderCell(row, "concepto")}
+                        </td>
                         <td className="py-2.5 pr-3">{renderCell(row, "categoria", "sel-cat")}</td>
                         <td className="py-2.5 pr-3 text-right">{renderCell(row, "monto", "number")}</td>
                         <td className="py-2.5 pr-3 text-center">{renderCell(row, "estatus", "sel-estatus")}</td>
@@ -1901,7 +1963,72 @@ export default function PagosCliente({ cliente, clienteKey }) {
                           </td>
                         )}
                       </tr>
-                    ))}
+
+                      {/* Fila expandida con desglose de actividades de marketing */}
+                      {esMktConsolidado && expanded && (
+                        <tr className="bg-blue-50/40 border-b border-gray-100">
+                          <td colSpan={11} className="py-3 px-6">
+                            <div className="text-xs font-semibold text-gray-700 mb-2">
+                              📋 Actividades incluidas en este pago ({acts.length})
+                              {acts.length === 0 && <span className="text-gray-400 font-normal ml-2">— sin actividades</span>}
+                            </div>
+                            {acts.length > 0 && (
+                              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                                <table className="w-full text-xs">
+                                  <thead className="bg-gray-50 text-gray-500 uppercase">
+                                    <tr>
+                                      <th className="text-left px-3 py-1.5">Actividad</th>
+                                      <th className="text-left px-3 py-1.5">Tipo</th>
+                                      <th className="text-left px-3 py-1.5">Fecha</th>
+                                      <th className="text-left px-3 py-1.5">Responsable</th>
+                                      <th className="text-right px-3 py-1.5">Inversión</th>
+                                      {canEdit && <th className="text-center px-2 py-1.5 w-10"></th>}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {acts.map(a => (
+                                      <tr key={a.id} className="border-t border-gray-100">
+                                        <td className="px-3 py-2">{a.nombre || "—"}</td>
+                                        <td className="px-3 py-2 text-gray-600">{a.tipo || "—"}</td>
+                                        <td className="px-3 py-2 text-gray-600">{a.fecha || "—"}</td>
+                                        <td className="px-3 py-2 text-gray-600">{a.responsable || "—"}</td>
+                                        <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMXN(a.inversion || 0)}</td>
+                                        {canEdit && (
+                                          <td className="px-2 py-2 text-center">
+                                            <button
+                                              onClick={() => excluirActividadDePago(row.id, a.id)}
+                                              className="text-gray-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50"
+                                              title="Excluir esta actividad del pago (volverá a Marketing)"
+                                            >
+                                              ⊘
+                                            </button>
+                                          </td>
+                                        )}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                  <tfoot className="bg-gray-50">
+                                    <tr>
+                                      <td colSpan={4} className="px-3 py-1.5 text-right font-semibold text-gray-600">Total:</td>
+                                      <td className="px-3 py-1.5 text-right tabular-nums font-bold">
+                                        {formatMXN(acts.reduce((a, x) => a + (Number(x.inversion) || 0), 0))}
+                                      </td>
+                                      {canEdit && <td></td>}
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              </div>
+                            )}
+                            <div className="text-[11px] text-gray-500 mt-2 italic">
+                              Excluir una actividad la deja como "pendiente" en Marketing y resta su inversión del pago.
+                              Si excluyes la última, el pago se elimina y el botón "Cerrar mes" reaparece.
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
                 {filtered.length === 0 && (
