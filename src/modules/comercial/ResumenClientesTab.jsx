@@ -5,6 +5,7 @@ import {
   BarChart3, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2,
   DollarSign, Package, Clock, Target, ArrowRight,
 } from 'lucide-react';
+import ReporteSection from './ReporteSection';
 
 /**
  * Resumen Clientes v2 — Dashboard ejecutivo de salud comercial
@@ -436,6 +437,9 @@ export default function ResumenClientesTab({ onDrillDown }) {
 
       {/* Trend consolidado */}
       <TrendConsolidado trend={trend} />
+
+      {/* Reporte: lista maestra de SKUs (colapsable) */}
+      <ReporteSection />
     </div>
   );
 }
