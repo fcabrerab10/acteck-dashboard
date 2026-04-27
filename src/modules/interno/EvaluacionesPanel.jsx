@@ -489,7 +489,7 @@ function EvalRow({ eval_, canEdit, onAbrir, onBorrar }) {
         <div className="text-xs text-emerald-700 font-semibold">{formatMXN(bono)}</div>
       </div>
       {canEdit && (
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+        <div className="flex items-center gap-1">
           <button onClick={(e) => { e.stopPropagation(); onAbrir(); }}
             className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="Editar">
             <Edit3 className="w-3.5 h-3.5" />
@@ -659,6 +659,15 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
     toast.success("Evaluación reabierta");
   }
 
+  async function eliminarEvaluacion() {
+    if (!canEdit) return;
+    if (!confirm("¿Eliminar esta evaluación? Se borran todas sus calificaciones, bonus y eventos vinculados. No se puede deshacer.")) return;
+    const { error } = await supabase.from("evaluaciones").delete().eq("id", evalId);
+    if (error) { toast.error("Error: " + error.message); return; }
+    toast.success("Evaluación eliminada");
+    onClose();
+  }
+
   if (loading || !evalData) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -765,6 +774,13 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
             <strong className="text-emerald-700">Bono: {formatMXN(bono)}</strong>
           </div>
           <div className="flex items-center gap-2">
+            {canEdit && (
+              <button onClick={eliminarEvaluacion}
+                className="px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 flex items-center gap-1.5"
+                title="Eliminar evaluación">
+                <Trash2 className="w-4 h-4" /> Eliminar
+              </button>
+            )}
             <button onClick={onClose}
               className="px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100">
               Cerrar
