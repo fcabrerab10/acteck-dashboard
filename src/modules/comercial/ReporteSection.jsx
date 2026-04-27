@@ -468,22 +468,116 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
     (async () => {
       const hoy = new Date();
       const anioCorte = new Date(hoy.getFullYear(), hoy.getMonth() - 6, 1).getFullYear();
-      const [demRes, traRes, ltRes, comRes] = await Promise.all([
+      const hoyISO = hoy.toISOString().slice(0, 10);
+      const [demRes, traRes, ltRes, embRes] = await Promise.all([
         supabase.from('v_demanda_sku').select('cliente, anio, mes, piezas')
           .eq('sku', sku).gte('anio', anioCorte),
         supabase.from('v_transito_sku').select('*').eq('sku', sku).maybeSingle(),
         supabase.from('v_lead_time_sku').select('dias_promedio').eq('sku', sku).maybeSingle(),
-        supabase.from('v_sku_compras_historico').select('*').eq('sku', sku).maybeSingle(),
+        // Leemos directo embarques_compras y agregamos en el cliente.
+        // Antes usábamos la vista v_sku_compras_historico, pero al no poder
+        // aplicar SQL automáticamente, hacemos el cálculo aquí.
+        supabase.from('embarques_compras')
+          .select('po, fecha_emision, arribo_cedis, po_qty, cbm, contenedor, estatus')
+          .eq('codigo', sku),
       ]);
+
+      // Agregación tipo v_sku_compras_historico (todas las compras no canceladas)
+      const compras = calcularHistoricoCompras(embRes.data || [], hoyISO);
+
       setData({
         loading: false,
         demanda: demRes.data || [],
         transito: traRes.data,
         leadTime: ltRes.data?.dias_promedio,
-        compras: comRes.data,
+        compras,
       });
     })();
   }, [sku]);
+
+  // Calcula el resumen histórico de compras del SKU desde las filas de embarques_compras.
+  // Replica la lógica de la vista v_sku_compras_historico_v2 pero en el cliente.
+  function calcularHistoricoCompras(rows, hoyISO) {
+    if (!rows || rows.length === 0) return null;
+
+    // 1) Filtra canceladas/rechazadas
+    const validas = rows.filter((r) => {
+      const e = String(r.estatus || '').toLowerCase();
+      return !e.includes('rechazada') && !e.includes('cancel');
+    });
+    if (validas.length === 0) return null;
+
+    // 2) Agrupa por PO (una compra = un PO; un PO puede tener múltiples renglones)
+    const porPO = {};
+    for (const r of validas) {
+      const k = r.po || '_sinpo_';
+      if (!porPO[k]) porPO[k] = { po: r.po, fechas_emision: [], arribos: [], po_qty: 0, cbms: [], contenedores: new Set() };
+      if (r.fecha_emision) porPO[k].fechas_emision.push(r.fecha_emision);
+      if (r.arribo_cedis) porPO[k].arribos.push(r.arribo_cedis);
+      porPO[k].po_qty += Number(r.po_qty || 0);
+      if (r.cbm) porPO[k].cbms.push(Number(r.cbm));
+      if (r.contenedor) porPO[k].contenedores.add(String(r.contenedor));
+    }
+    const compras = Object.values(porPO).map((c) => ({
+      po: c.po,
+      fecha_emision: c.fechas_emision.sort().slice(-1)[0] || null,
+      arribo_cedis: c.arribos.sort().slice(-1)[0] || null,
+      po_qty: c.po_qty,
+      cbm_avg: c.cbms.length ? c.cbms.reduce((a, b) => a + b, 0) / c.cbms.length : null,
+      num_contenedores: c.contenedores.size,
+    }));
+
+    // 3) Promedios y rangos
+    const num_compras = compras.length;
+    const fechas = compras.map((c) => c.fecha_emision).filter(Boolean).sort();
+    const primera_fecha_emision = fechas[0] || null;
+    const po_qty_promedio = Math.round(compras.reduce((a, c) => a + c.po_qty, 0) / num_compras);
+    const cbms = compras.map((c) => c.cbm_avg).filter((v) => v != null && v > 0);
+    const cbm_promedio = cbms.length ? cbms.reduce((a, b) => a + b, 0) / cbms.length : null;
+    const conts = compras.map((c) => c.num_contenedores).filter((v) => v > 0);
+    const contenedores_promedio = conts.length ? Math.round((conts.reduce((a, b) => a + b, 0) / conts.length) * 10) / 10 : 0;
+    const piezasContPromedio = compras
+      .filter((c) => c.num_contenedores > 0)
+      .map((c) => c.po_qty / c.num_contenedores);
+    const piezas_por_contenedor = piezasContPromedio.length
+      ? Math.round(piezasContPromedio.reduce((a, b) => a + b, 0) / piezasContPromedio.length)
+      : 0;
+
+    // 4) Última compra (por fecha_emision desc)
+    const ordenadasPorEmision = [...compras].sort((a, b) =>
+      String(b.fecha_emision || '').localeCompare(String(a.fecha_emision || ''))
+    );
+    const ultima = ordenadasPorEmision[0] || {};
+
+    // 5) Último arribo real (arribo_cedis <= hoy, el más reciente)
+    const arribadas = compras
+      .filter((c) => c.arribo_cedis && c.arribo_cedis <= hoyISO)
+      .sort((a, b) => String(b.arribo_cedis).localeCompare(String(a.arribo_cedis)));
+    const ultimoArribo = arribadas[0];
+
+    // 6) Consolidación: comparte contenedor con ≥5 SKUs O cbm < 0.05
+    //    No tenemos el join inverso aquí (necesitaríamos consultar otros SKUs por contenedor),
+    //    así que sólo evaluamos por CBM. Suficiente para el flag visual.
+    const es_consolidado = cbm_promedio != null && cbm_promedio < 0.05;
+
+    return {
+      num_compras,
+      primera_fecha_emision,
+      po_qty_promedio,
+      cbm_promedio,
+      contenedores_promedio,
+      piezas_por_contenedor,
+      ultima_po: ultima.po,
+      ultima_fecha_emision: ultima.fecha_emision,
+      ultima_fecha_arribo: ultima.arribo_cedis,
+      ultima_po_qty: ultima.po_qty,
+      ultima_num_contenedores: ultima.num_contenedores,
+      ultimo_arribo_real: ultimoArribo?.arribo_cedis || null,
+      ultima_po_arribada: ultimoArribo?.po || null,
+      ultima_po_qty_arribada: ultimoArribo?.po_qty || null,
+      es_consolidado,
+    };
+  }
 
   // Helper: agrupa los embarques en tránsito por almacén destino (cedis)
   function agruparTransitoPorCedis(embarques) {
