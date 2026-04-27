@@ -485,6 +485,20 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
     })();
   }, [sku]);
 
+  // Helper: agrupa los embarques en tránsito por almacén destino (cedis)
+  function agruparTransitoPorCedis(embarques) {
+    if (!Array.isArray(embarques)) return [];
+    const map = {};
+    embarques.forEach((e) => {
+      const key = e.cedis || 'Sin asignar';
+      if (!map[key]) map[key] = { cedis: key, pzs: 0, pos: 0, etas: [] };
+      map[key].pzs += Number(e.cantidad || 0);
+      map[key].pos += 1;
+      if (e.eta) map[key].etas.push(e.eta);
+    });
+    return Object.values(map).sort((a, b) => b.pzs - a.pzs);
+  }
+
   if (data.loading) return <div className="text-xs text-gray-500">Cargando detalle…</div>;
 
   // Demanda mensual promedio últimos 3 meses por cliente
@@ -512,6 +526,9 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
   const traCant = Number(data.transito?.cantidad || 0);
   const traEta = data.transito?.eta_mas_cercana;
   const traEtaDias = traEta ? Math.round((new Date(traEta) - hoy) / 86400000) : null;
+  const traPOs = Number(data.transito?.embarques || 0);
+  const traSupplier = data.transito?.supplier;
+  const traPorCedis = agruparTransitoPorCedis(data.transito?.embarques_detalle);
 
   // Sugerido compra: si demanda 3m > inv + tránsito → falta
   const brecha = Math.max(0, dem3m - invTotal - traCant);
@@ -575,7 +592,8 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
           </h4>
           {traCant > 0 ? (
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between"><span className="text-gray-600">Piezas:</span><span className="font-semibold tabular-nums">{FMT_N(traCant)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Total piezas:</span><span className="font-semibold tabular-nums">{FMT_N(traCant)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">POs abiertas:</span><span className="font-semibold tabular-nums">{traPOs}</span></div>
               <div className="flex justify-between"><span className="text-gray-600">Próxima ETA:</span><span className="font-semibold">{fmtFechaCorta(traEta)}</span></div>
               {traEtaDias !== null && (
                 <div className="flex justify-between"><span className="text-gray-600">En:</span>
@@ -584,8 +602,24 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
                   </span>
                 </div>
               )}
+              {traSupplier && (
+                <div className="flex justify-between text-gray-500"><span>Proveedor:</span><span className="truncate ml-2 max-w-[140px]" title={traSupplier}>{traSupplier}</span></div>
+              )}
               {data.leadTime && (
                 <div className="flex justify-between text-gray-500"><span>Lead time prom:</span><span>{Math.round(data.leadTime)}d</span></div>
+              )}
+              {traPorCedis.length > 0 && (
+                <div className="border-t border-gray-100 pt-1.5 mt-1.5">
+                  <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide mb-1">Destino:</div>
+                  <div className="space-y-0.5 max-h-24 overflow-y-auto">
+                    {traPorCedis.map((c, i) => (
+                      <div key={i} className="flex justify-between text-[11px]">
+                        <span className="text-gray-600 truncate max-w-[130px]" title={c.cedis}>{c.cedis}</span>
+                        <span className="font-semibold tabular-nums">{FMT_N(c.pzs)} <span className="text-gray-400">({c.pos})</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           ) : (
@@ -644,9 +678,27 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
           {/* Histórico de compras */}
           {com && (
             <div className="bg-white/60 rounded p-2 mb-2 space-y-0.5 text-[11px] border border-gray-200">
-              <div className="flex justify-between"><span className="text-gray-600">Promedio histórico:</span><span className="font-semibold tabular-nums">{FMT_N(com.po_qty_promedio)} pzs ({com.num_compras} compras)</span></div>
-              <div className="flex justify-between"><span className="text-gray-600">Última compra:</span><span className="font-semibold tabular-nums">{FMT_N(com.ultima_po_qty)} ({com.ultima_po})</span></div>
-              <div className="flex justify-between"><span className="text-gray-600">Último arribo:</span><span className="font-semibold">{fmtFechaCorta(com.ultima_fecha_arribo)}</span></div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Promedio histórico:</span>
+                <span className="font-semibold tabular-nums" title={com.primera_fecha_emision ? `Histórico desde ${fmtFechaCorta(com.primera_fecha_emision)}` : ''}>
+                  {FMT_N(com.po_qty_promedio)} pzs
+                  <span className="text-gray-500 font-normal"> · {com.num_compras} compras</span>
+                </span>
+              </div>
+              {com.primera_fecha_emision && (
+                <div className="text-[10px] text-gray-500 text-right -mt-0.5">
+                  desde {fmtFechaCorta(com.primera_fecha_emision)}
+                </div>
+              )}
+              <div className="flex justify-between"><span className="text-gray-600">Última compra:</span><span className="font-semibold tabular-nums">{FMT_N(com.ultima_po_qty)} <span className="text-gray-500 font-normal">({com.ultima_po})</span></span></div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Último arribo real:</span>
+                <span className="font-semibold">
+                  {com.ultimo_arribo_real
+                    ? fmtFechaCorta(com.ultimo_arribo_real)
+                    : <span className="text-gray-400 italic">sin arribos pasados</span>}
+                </span>
+              </div>
               {com.ultima_num_contenedores > 0 && piezasContenedor > 0 && (
                 <div className="flex justify-between"><span className="text-gray-600">Por contenedor:</span><span className="font-semibold tabular-nums">{FMT_N(piezasContenedor)} pzs</span></div>
               )}
