@@ -187,7 +187,8 @@ function calcularResumen(clienteKey, data) {
   }
 
   // ── Cobertura en DÍAS (alineado con HomeCliente.jsx líneas 574-587) ──
-  // Últimos 3 meses de sellout_sku.monto_pesos / (días del período) = sell-out diario
+  // Últimos 3 meses de sellout_sku.monto_pesos / días reales del período = sell-out diario
+  // FIX: usar días reales por mes (no asumir 30) para evitar desviación del ±5%
   const ultMes = so.length > 0 ? Math.max(...so.map((r) => Number(r.mes) || 0)) : 0;
   let coberturaDias = null;
   if (inventarioValor > 0 && ultMes > 0) {
@@ -195,7 +196,11 @@ function calcularResumen(clienteKey, data) {
     const montoSO = so
       .filter((r) => Number(r.mes) >= desde && Number(r.mes) <= ultMes)
       .reduce((a, r) => a + Number(r.monto_pesos || 0), 0);
-    const dias = (ultMes - desde + 1) * 30;
+    // Calcular días reales de los meses del rango
+    let dias = 0;
+    for (let m = desde; m <= ultMes; m++) {
+      dias += new Date(anioActual, m, 0).getDate(); // último día del mes m
+    }
     const soDiario = dias > 0 ? montoSO / dias : 0;
     coberturaDias = soDiario > 0 ? Math.round(inventarioValor / soDiario) : null;
   }
@@ -206,7 +211,10 @@ function calcularResumen(clienteKey, data) {
   const saldoVencido = Number(dsoRow?.saldo_vencido || 0);
   const saldoActual  = Number(dsoRow?.saldo_actual_total || 0);
   const aging90      = Number(dsoRow?.aging_mas90 || 0);
-  const pctVencido   = saldoActual > 0 ? (saldoVencido / saldoActual) * 100 : 0;
+  // FIX: si hay vencido pero el saldo total es 0 (caso raro), reportar 100% para no ocultar
+  const pctVencido = saldoActual > 0
+    ? (saldoVencido / saldoActual) * 100
+    : (saldoVencido > 0 ? 100 : 0);
 
   // ── Inversión marketing YTD y ROI ──
   const invMktYTD = mk.reduce((a, r) => a + Number(r.monto || 0), 0);
@@ -307,6 +315,7 @@ function calcularAlertas(resumenes) {
     if (resumen.pctVencido > 15) {
       alertas.push({
         tipo: 'vencido',
+        clienteKey: cliente.key,
         cliente: cliente.nombre,
         mensaje: `${formatMXN(resumen.saldoVencido)} vencidos (${resumen.pctVencido.toFixed(1)}% del saldo)`,
         severidad: 'alta',
@@ -315,8 +324,7 @@ function calcularAlertas(resumenes) {
     // DSO real > plazo + 30 días = crítico
     if (resumen.dsoReal != null && resumen.dsoReal > (resumen.dsoPlazo + 30)) {
       alertas.push({
-        tipo: 'dso',
-        cliente: cliente.nombre,
+        tipo: 'dso', clienteKey: cliente.key, cliente: cliente.nombre,
         mensaje: `DSO ${resumen.dsoReal}d (plazo ${resumen.dsoPlazo}d)`,
         severidad: 'alta',
       });
@@ -324,25 +332,22 @@ function calcularAlertas(resumenes) {
     // Cumplimiento YTD < 70%
     if (resumen.cumplimientoYTD != null && resumen.cumplimientoYTD < 70) {
       alertas.push({
-        tipo: 'cuota',
-        cliente: cliente.nombre,
+        tipo: 'cuota', clienteKey: cliente.key, cliente: cliente.nombre,
         mensaje: `Cumplimiento YTD ${resumen.cumplimientoYTD.toFixed(0)}%`,
         severidad: 'alta',
       });
     }
-    // Cobertura crítica (<30d = riesgo stockout) o excesiva (>150d = sobreinventario)
+    // Cobertura crítica (<30d) o excesiva (>150d)
     if (resumen.coberturaDias != null && resumen.coberturaDias < 30) {
       alertas.push({
-        tipo: 'inventario',
-        cliente: cliente.nombre,
+        tipo: 'inventario', clienteKey: cliente.key, cliente: cliente.nombre,
         mensaje: `Cobertura baja: ${resumen.coberturaDias}d (riesgo stockout)`,
         severidad: 'alta',
       });
     }
     if (resumen.coberturaDias != null && resumen.coberturaDias > 150) {
       alertas.push({
-        tipo: 'inventario',
-        cliente: cliente.nombre,
+        tipo: 'inventario', clienteKey: cliente.key, cliente: cliente.nombre,
         mensaje: `Sobreinventario: ${resumen.coberturaDias}d de cobertura`,
         severidad: 'media',
       });
@@ -387,7 +392,7 @@ export default function ResumenClientesTab({ onDrillDown }) {
         </p>
       </div>
 
-      {/* Alertas cross-cliente */}
+      {/* Alertas cross-cliente — clickeables, atajo al cliente */}
       {alertas.length > 0 && (
         <div className="bg-gradient-to-r from-red-50 via-amber-50 to-red-50 border border-red-200 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -395,20 +400,23 @@ export default function ResumenClientesTab({ onDrillDown }) {
             <span className="font-semibold text-red-800">
               {alertas.length} alerta{alertas.length !== 1 ? 's' : ''} requieren tu atención
             </span>
+            <span className="text-xs text-red-600 ml-2 italic">(click para ir al cliente)</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {alertas.map((a, i) => (
-              <span
+              <button
                 key={i}
+                onClick={() => a.clienteKey && onDrillDown?.(a.clienteKey)}
                 className={[
-                  'text-xs px-2.5 py-1 rounded-full border font-medium',
+                  'text-xs px-2.5 py-1 rounded-full border font-medium transition cursor-pointer hover:shadow-sm',
                   a.severidad === 'alta'
-                    ? 'bg-red-100 border-red-300 text-red-800'
-                    : 'bg-amber-100 border-amber-300 text-amber-800',
+                    ? 'bg-red-100 border-red-300 text-red-800 hover:bg-red-200'
+                    : 'bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200',
                 ].join(' ')}
+                title={`Ir a ${a.cliente}`}
               >
                 <strong>{a.cliente}:</strong> {a.mensaje}
-              </span>
+              </button>
             ))}
           </div>
         </div>
@@ -439,9 +447,10 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
 
   return (
     <div
-      className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+      className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-blue-300 hover:-translate-y-0.5 transition-all cursor-pointer relative"
       style={{ borderTop: `4px solid ${cliente.color}` }}
       onClick={onDrillDown}
+      title={`Click para ir al detalle de ${cliente.nombre}`}
     >
       {/* Header */}
       <div className="px-5 pt-4 pb-3 flex items-start justify-between">
@@ -449,7 +458,7 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
           <h3 className="font-bold text-gray-800 text-lg">{cliente.nombre}</h3>
           <p className="text-xs text-gray-500">{cliente.marca}</p>
         </div>
-        <ArrowRight className="w-4 h-4 text-gray-400" />
+        <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
       </div>
 
       {/* Score grande */}
@@ -457,8 +466,11 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
         <div
           className="w-20 h-20 rounded-full flex items-center justify-center shrink-0 relative"
           style={{
-            background: `conic-gradient(${color} ${(s || 0) * 3.6}deg, #E5E7EB 0deg)`,
+            background: s != null
+              ? `conic-gradient(${color} ${s * 3.6}deg, #E5E7EB 0deg)`
+              : '#E5E7EB',  // Sin datos: ring vacío gris
           }}
+          title={s == null ? 'Sin datos suficientes para calcular el score' : `Score: ${s.toFixed(1)}`}
         >
           <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center">
             <div className="text-center">
@@ -545,8 +557,9 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
             <div
               className="text-[10px] font-medium"
               style={{ color: colorCobertura(resumen.coberturaDias) }}
+              title="Días de inventario actual al ritmo de sell-out promedio últimos 3 meses"
             >
-              {resumen.coberturaDias}d cobertura {labelCobertura(resumen.coberturaDias)}
+              {resumen.coberturaDias} días de venta {labelCobertura(resumen.coberturaDias)}
             </div>
           )}
         </div>
@@ -670,8 +683,12 @@ function TrendConsolidado({ trend }) {
       </div>
       <div className="p-4">
         {!hayDatos ? (
-          <div className="h-64 flex items-center justify-center text-sm text-gray-400">
-            Sin datos suficientes
+          <div className="h-64 flex flex-col items-center justify-center text-sm text-gray-400 gap-2">
+            <BarChart3 className="w-10 h-10 text-gray-300" />
+            <div className="text-center">
+              <div>Sin datos en los últimos 12 meses</div>
+              <div className="text-xs mt-1">Verifica que <code className="text-gray-500">sell_in_sku</code> y <code className="text-gray-500">sellout_sku</code> estén cargados</div>
+            </div>
           </div>
         ) : (
           <TrendSvg trend={trend} hoverIdx={hoverIdx} setHoverIdx={setHoverIdx} />
