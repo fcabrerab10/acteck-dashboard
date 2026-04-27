@@ -24,14 +24,24 @@ import {
  */
 
 const SECCIONES = [
-  { id: "mercadolibre", label: "Mercado Libre",      pts: 30, color: "#F59E0B" },
-  { id: "marketing",    label: "Plan de Marketing",  pts: 20, color: "#8B5CF6" },
-  { id: "recurrentes",  label: "Tareas recurrentes", pts: 10, color: "#10B981", auto: true },
-  { id: "digitalife",   label: "Digitalife",          pts: 8,  color: "#3B82F6" },
-  { id: "pcel",         label: "PCEL",                pts: 8,  color: "#EF4444" },
-  { id: "softskills",   label: "Soft skills",         pts: 9,  color: "#14B8A6" },
-  { id: "propuestas",   label: "Propuestas de mejora",pts: 15, color: "#EC4899" },
+  { id: "mercadolibre",    label: "Mercado Libre",            pts: 30, color: "#F59E0B" },
+  { id: "marketing_dgl",   label: "Plan de Marketing Digitalife", pts: 15, color: "#3B82F6", auto: true },
+  { id: "marketing_pcel",  label: "Plan de Marketing PCEL",   pts: 15, color: "#EF4444", auto: true },
+  { id: "recurrentes",     label: "Tareas recurrentes",       pts: 8,  color: "#10B981", auto: true },
+  { id: "tareas_dia",      label: "Tareas día a día",         pts: 7,  color: "#8B5CF6", auto: true },
+  { id: "softskills",      label: "Soft skills",              pts: 10, color: "#14B8A6" },
+  { id: "propuestas",      label: "Propuestas de mejora",     pts: 15, color: "#EC4899" },
 ];
+
+// Helper: convierte un % de cumplimiento a calificación 1-5
+function pctACalificacion(pct) {
+  if (pct == null) return null;
+  if (pct >= 95) return 5;
+  if (pct >= 80) return 4;
+  if (pct >= 60) return 3;
+  if (pct >= 40) return 2;
+  return 1;
+}
 
 const ESTATUS_PROP = {
   propuesta:     { label: "Propuesta",     bg: "bg-slate-100", text: "text-slate-700" },
@@ -543,7 +553,8 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
   const [propuestas, setPropuestas] = useState([]);
   const [eventos, setEventos] = useState([]);
   const [bonusExtras, setBonusExtras] = useState([]);
-  const [recurrentesPct, setRecurrentesPct] = useState(null);
+  // Datos auto-calc: { recurrentes: {pct, ...}, tareas_dia: {...}, marketing_dgl: {...}, marketing_pcel: {...} }
+  const [autoData, setAutoData] = useState({});
   const [loading, setLoading] = useState(true);
   const [savingComment, setSavingComment] = useState(false);
 
@@ -555,14 +566,13 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
       supabase.from("evaluaciones_kpis_template").select("*").eq("activo", true).order("orden"),
     ]);
     setEvalData(evRes.data);
-    setLineas(lnRes.data || []);
     setKpis(kpRes.data || []);
 
     if (evRes.data) {
       const inicio = evRes.data.semana_inicio;
       const fin    = evRes.data.semana_fin;
 
-      // Propuestas en el rango (todas las del usuario en ese rango)
+      // Propuestas en el rango
       const propRes = await supabase.from("propuestas_equipo")
         .select("*")
         .eq("persona_user_id", evRes.data.persona_user_id)
@@ -579,16 +589,72 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
         .select("*").eq("evaluacion_id", evalId);
       setBonusExtras(bnRes.data || []);
 
-      // Auto-calc recurrentes
-      const rcRes = await supabase.rpc("cumplimiento_recurrentes", {
-        p_user_id: evRes.data.persona_user_id, p_inicio: inicio, p_fin: fin,
-      });
-      const pct = rcRes.data?.[0]?.pct;
-      setRecurrentesPct({
-        pct: pct != null ? Number(pct) : null,
-        esperadas: rcRes.data?.[0]?.esperadas || 0,
-        cumplidas: rcRes.data?.[0]?.cumplidas || 0,
-      });
+      // ── Auto-calc para todas las secciones auto ──
+      const [rcRes, tdRes, mkDglRes, mkPcelRes] = await Promise.all([
+        supabase.rpc("cumplimiento_recurrentes", {
+          p_user_id: evRes.data.persona_user_id, p_inicio: inicio, p_fin: fin,
+        }),
+        supabase.rpc("cumplimiento_pendientes_regulares", {
+          p_user_id: evRes.data.persona_user_id, p_inicio: inicio, p_fin: fin,
+        }),
+        supabase.rpc("cumplimiento_marketing_cliente", {
+          p_cliente: "digitalife", p_inicio: inicio, p_fin: fin,
+        }),
+        supabase.rpc("cumplimiento_marketing_cliente", {
+          p_cliente: "pcel", p_inicio: inicio, p_fin: fin,
+        }),
+      ]);
+      const auto = {
+        recurrentes:    rcRes.data?.[0]    ? { pct: Number(rcRes.data[0].pct),    esperadas: rcRes.data[0].esperadas,    cumplidas: rcRes.data[0].cumplidas    } : null,
+        tareas_dia:     tdRes.data?.[0]    ? { pct: Number(tdRes.data[0].pct),    esperadas: tdRes.data[0].esperadas,    cumplidas: tdRes.data[0].cumplidas    } : null,
+        marketing_dgl:  mkDglRes.data?.[0] ? { pct: Number(mkDglRes.data[0].pct), totales:    mkDglRes.data[0].totales,  completadas: mkDglRes.data[0].completadas } : null,
+        marketing_pcel: mkPcelRes.data?.[0]? { pct: Number(mkPcelRes.data[0].pct),totales:    mkPcelRes.data[0].totales, completadas: mkPcelRes.data[0].completadas } : null,
+      };
+      setAutoData(auto);
+
+      // ── Aplicar automáticamente a las líneas auto que aún no tengan calificación ──
+      const cerrada = evRes.data.estado === "cerrada";
+      const kpisData = kpRes.data || [];
+      const lineasData = [...(lnRes.data || [])];
+      const sectionToAuto = {
+        recurrentes:    auto.recurrentes,
+        tareas_dia:     auto.tareas_dia,
+        marketing_dgl:  auto.marketing_dgl,
+        marketing_pcel: auto.marketing_pcel,
+      };
+      if (!cerrada) {
+        const updates = [];
+        for (const kpi of kpisData.filter((k) => k.auto_calc)) {
+          const linea = lineasData.find((l) => l.kpi_id === kpi.id);
+          if (!linea) continue;
+          const auto_d = sectionToAuto[kpi.seccion];
+          if (!auto_d || auto_d.pct == null) continue;
+          const calNueva = pctACalificacion(auto_d.pct);
+          // Solo aplica si la calificación actual está vacía (no pisa lo que el usuario haya cambiado)
+          if (linea.calificacion == null && calNueva != null) {
+            updates.push({ id: linea.id, cal: calNueva, sugerido: auto_d.pct });
+          } else if (calNueva != null && linea.auto_sugerido !== auto_d.pct) {
+            // Actualiza el sugerido aunque no pise calificacion
+            updates.push({ id: linea.id, sugerido: auto_d.pct, soloSugerido: true });
+          }
+        }
+        // Aplicar updates
+        for (const u of updates) {
+          if (u.soloSugerido) {
+            await supabase.from("evaluacion_lineas").update({ auto_sugerido: u.sugerido }).eq("id", u.id);
+            const idx = lineasData.findIndex((l) => l.id === u.id);
+            if (idx >= 0) lineasData[idx] = { ...lineasData[idx], auto_sugerido: u.sugerido };
+          } else {
+            await supabase.from("evaluacion_lineas").update({ calificacion: u.cal, auto_sugerido: u.sugerido }).eq("id", u.id);
+            const idx = lineasData.findIndex((l) => l.id === u.id);
+            if (idx >= 0) {
+              const peso = lineasData[idx].peso_aplicado;
+              lineasData[idx] = { ...lineasData[idx], calificacion: u.cal, auto_sugerido: u.sugerido, puntaje: (u.cal / 5) * peso };
+            }
+          }
+        }
+      }
+      setLineas(lineasData);
     }
     setLoading(false);
   };
@@ -612,24 +678,6 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
     setSavingComment(true);
     await supabase.from("evaluacion_lineas").update({ comentarios }).eq("id", lineaId);
     setSavingComment(false);
-  }
-
-  async function aplicarRecurrentesAuto() {
-    if (!canEdit || recurrentesPct?.pct == null) return;
-    const linea = lineas.find((l) => {
-      const k = kpis.find((k) => k.id === l.kpi_id);
-      return k?.kpi_codigo === "rec_cumplimiento";
-    });
-    if (!linea) return;
-    const pct = recurrentesPct.pct;
-    let cal;
-    if (pct >= 95) cal = 5;
-    else if (pct >= 80) cal = 4;
-    else if (pct >= 60) cal = 3;
-    else if (pct >= 40) cal = 2;
-    else cal = 1;
-    await calificar(linea.id, cal);
-    toast.success(`Cumplimiento ${pct}% → calificación ${cal}`);
   }
 
   async function guardarTexto(campo, valor) {
@@ -711,21 +759,25 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
 
         {/* Contenido */}
         <div className="p-6 space-y-5">
-          {/* Aviso recurrentes auto */}
-          {recurrentesPct?.pct != null && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center justify-between gap-3 flex-wrap">
-              <div className="text-sm">
-                <Sparkles className="w-4 h-4 inline text-emerald-600 mr-1" />
-                <strong>Cumplimiento de recurrentes detectado:</strong> {recurrentesPct.cumplidas}/{recurrentesPct.esperadas} ({recurrentesPct.pct}%)
-              </div>
-              {editable && (
-                <button onClick={aplicarRecurrentesAuto}
-                  className="text-xs px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1">
-                  <RefreshCw className="w-3 h-3" /> Aplicar al KPI
-                </button>
+          {/* Resumen auto-calc aplicado automáticamente */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
+            <Sparkles className="w-4 h-4 inline text-emerald-600 mr-1" />
+            <strong className="text-emerald-900">Auto-aplicado al cargar</strong> (puedes ajustar manualmente):
+            <ul className="mt-1 ml-5 text-xs text-emerald-800 space-y-0.5">
+              {autoData.recurrentes && (
+                <li>Recurrentes: <strong>{autoData.recurrentes.cumplidas}/{autoData.recurrentes.esperadas}</strong> ({autoData.recurrentes.pct ?? "—"}%)</li>
               )}
-            </div>
-          )}
+              {autoData.tareas_dia && (
+                <li>Tareas día a día: <strong>{autoData.tareas_dia.cumplidas}/{autoData.tareas_dia.esperadas}</strong> ({autoData.tareas_dia.pct ?? "—"}%)</li>
+              )}
+              {autoData.marketing_dgl && (
+                <li>Marketing Digitalife: <strong>{autoData.marketing_dgl.completadas}/{autoData.marketing_dgl.totales}</strong> ({autoData.marketing_dgl.pct ?? "—"}%)</li>
+              )}
+              {autoData.marketing_pcel && (
+                <li>Marketing PCEL: <strong>{autoData.marketing_pcel.completadas}/{autoData.marketing_pcel.totales}</strong> ({autoData.marketing_pcel.pct ?? "—"}%)</li>
+              )}
+            </ul>
+          </div>
 
           {/* Secciones de KPIs */}
           {SECCIONES.map((sec) => {
