@@ -3,6 +3,7 @@ import { supabase, DB_CONFIGURED, fetchAllPagesREST } from '../../lib/supabase';
 import { formatMXN, loadSheetJS } from '../../lib/utils';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaCliente } from '../../lib/permisos';
+import { roadmapStyle, roadmapInfo } from '../../lib/roadmapColors';
 
 export default function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
   const perfil = usePerfil();
@@ -2270,7 +2271,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       React.createElement("td", { style: { padding: "6px 10px", fontFamily: "ui-monospace,monospace", color: "#1E293B" } }, r.sku),
                       React.createElement("td", { style: { padding: "6px 10px", color: "#475569", maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: r.descripcion }, (r.descripcion || "").slice(0, 80)),
                       React.createElement("td", { style: { padding: "6px 10px", textAlign: "center" } },
-                        React.createElement("span", { style: { padding: "2px 8px", borderRadius: 6, background: ESTADO_COLORES[r.rdmp] || "#64748B", color: "#fff", fontSize: 10, fontWeight: 600 } }, r.rdmp || "-")
+                        (function() {
+                          var rmS = roadmapStyle(r.rdmp);
+                          var rmI = roadmapInfo(r.rdmp);
+                          return React.createElement("span", {
+                            style: { padding: "2px 8px", borderRadius: 6, background: rmS.bg, color: rmS.color, fontSize: 10, fontWeight: 700, cursor: rmI.descripcion ? "help" : "default" },
+                            title: rmI.descripcion || r.rdmp,
+                          }, r.rdmp || "-");
+                        })()
                       ),
                       React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: r.invActeck > 0 ? "#1E293B" : "#94A3B8", fontWeight: r.invActeck > 0 ? 600 : 400 } }, r.invActeck.toLocaleString("es-MX")),
                       React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#1E40AF", fontWeight: 600 } }, r.piezas.toLocaleString("es-MX")),
@@ -2387,16 +2395,13 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   React.createElement("td", { style: { padding: "6px", fontSize: 11, maxWidth: 100, whiteSpace: "nowrap" }, title: s.roadmap || "Sin roadmap" },
                     (function() {
                       var rm = s.roadmap || "";
-                      // Colores por tipo de roadmap
-                      var bg, color;
-                      if (rm === "D" || rm === "DISC") { bg = "#FEE2E2"; color = "#991B1B"; }           // Descontinuado
-                      else if (rm === "NVS" || rm === "NEW") { bg = "#FEF3C7"; color = "#92400E"; }    // Nuevo
-                      else if (rm === "RMI") { bg = "#DBEAFE"; color = "#1E40AF"; }                    // Roadmap Importar
-                      else if (rm === "RML" || rm === "RMS") { bg = "#EDE9FE"; color = "#5B21B6"; }    // Roadmap Local/Stock
-                      else if (rm === "2026" || rm === "2025") { bg = "#D1FAE5"; color = "#065F46"; }  // Activo año
-                      else if (rm && rm.length > 0) { bg = "#F1F5F9"; color = "#475569"; }
-                      else { bg = "#F8FAFC"; color = "#94A3B8"; }
-                      return React.createElement("span", { style: { padding: "2px 8px", borderRadius: 4, background: bg, color: color, fontSize: 10, fontWeight: 700 } }, rm || "—");
+                      // Colores oficiales del roadmap (src/lib/roadmapColors.js)
+                      var rmStyle = roadmapStyle(rm);
+                      var rmInfo  = roadmapInfo(rm);
+                      return React.createElement("span", {
+                        style: { padding: "2px 8px", borderRadius: 4, background: rmStyle.bg, color: rmStyle.color, fontSize: 10, fontWeight: 700, cursor: rmInfo.descripcion ? "help" : "default" },
+                        title: rmInfo.descripcion || rm,
+                      }, rm || "—");
                     })()
                   ),
                   React.createElement("td", { style: { padding: "6px", color: "#475569", fontSize: 11, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.descripcion }, s.descripcion),

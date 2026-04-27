@@ -8,6 +8,7 @@ import {
   Search, X, Plus, ChevronDown, ChevronUp, ChevronRight, Trash2,
   Edit3, Package, Filter, FileText, Ship, ShoppingCart, ArrowUp, ArrowDown,
 } from 'lucide-react';
+import { roadmapStyle, roadmapInfo } from '../../lib/roadmapColors';
 
 /**
  * ReporteSection — sección colapsable dentro de Resumen Clientes
@@ -29,18 +30,8 @@ const ALMACENES = [
   { id: 44, nombre: 'Empaque dañado'},
 ];
 
-// Colores estándar del roadmap (mismos que en EstrategiaProducto)
-function roadmapStyle(rm) {
-  if (!rm) return { bg: '#F8FAFC', color: '#94A3B8' };
-  const r = String(rm).toUpperCase();
-  if (r === 'D' || r === 'DISC')                  return { bg: '#FEE2E2', color: '#991B1B' };
-  if (r === 'NVS' || r === 'NEW')                 return { bg: '#FEF3C7', color: '#92400E' };
-  if (r === 'RMI')                                return { bg: '#DBEAFE', color: '#1E40AF' };
-  if (r === 'RML' || r === 'RMS')                 return { bg: '#EDE9FE', color: '#5B21B6' };
-  if (r === '2026' || r === '2025')               return { bg: '#D1FAE5', color: '#065F46' };
-  if (r === 'EXMAY')                              return { bg: '#FCE7F3', color: '#9D174D' };
-  return { bg: '#F1F5F9', color: '#475569' };
-}
+// Colores oficiales del roadmap → vienen de src/lib/roadmapColors.js
+// (fuente única de verdad, alineada con el Excel "Reporte 2026.xlsx")
 
 const FMT_N = (n) => Math.round(Number(n) || 0).toLocaleString('es-MX');
 
@@ -311,6 +302,7 @@ export default function ReporteSection() {
 // ────────── Fila de tabla con expand ──────────
 function ReporteRow({ r, verAlmacenes, canEdit, expanded, onToggleExpand, onEditar, onEliminar, onActualizarPrecio }) {
   const rmStyle = roadmapStyle(r.roadmap);
+  const rmInfo = roadmapInfo(r.roadmap);
   return (
     <>
       <tr className={["border-t border-gray-100 hover:bg-blue-50/30 cursor-pointer", expanded && "bg-blue-50/40"].filter(Boolean).join(" ")}
@@ -323,8 +315,9 @@ function ReporteRow({ r, verAlmacenes, canEdit, expanded, onToggleExpand, onEdit
         </td>
         <td className="px-3 py-2">
           {r.roadmap && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded"
-              style={{ backgroundColor: rmStyle.bg, color: rmStyle.color }}>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded cursor-help"
+              style={{ backgroundColor: rmStyle.bg, color: rmStyle.color }}
+              title={rmInfo.descripcion || r.roadmap}>
               {r.roadmap}
             </span>
           )}
