@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   ChevronRight, ChevronDown, Lock, LogOut, Eye, Settings, RefreshCw,
   Home, TrendingUp, Package, Megaphone, Wallet, CreditCard,
-  BarChart3, Target, ClipboardList, FileCheck,
+  BarChart3, Target, ClipboardList, FileCheck, Award,
 } from 'lucide-react';
 import {
   puedeConfigurar,
@@ -19,6 +19,7 @@ const MENU_A_PERMISO_GLOBAL = {
   forecastClientes: 'forecast_clientes',
   ordenesCompra:    'ordenes_compra',
   adminInterna:     'admin_interna',
+  evaluaciones:     'evaluaciones',
   configuracion:    'configuracion',
 };
 
@@ -94,6 +95,7 @@ const MENU_CONFIG = [
     // se oculta (lógica en GrupoBloque).
     items: [
       { id: 'adminInterna', label: 'Pendientes & Calendario', icon: ClipboardList },
+      { id: 'evaluaciones', label: 'Evaluaciones',             icon: Award },
     ],
   },
 ];
