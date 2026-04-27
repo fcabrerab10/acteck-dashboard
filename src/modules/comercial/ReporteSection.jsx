@@ -62,6 +62,8 @@ export default function ReporteSection() {
     setData((s) => ({ ...s, loading: true }));
     const [rsRes, invRes, metaRes, preRes, rmRes] = await Promise.all([
       supabase.from('reporte_skus').select('*').eq('activo', true).order('orden'),
+      // Inventario del ERP Acteck (Vw_TablaH_Inventario.xlsx, cargado vía /uploads.html)
+      // Mostramos `inventario` (total físico) y `disponible` (vendible) en tooltip.
       supabase.from('inventario_acteck')
         .select('articulo, no_almacen, disponible, inventario')
         .neq('articulo', '__TEST__'),
@@ -81,12 +83,19 @@ export default function ReporteSection() {
 
   const rows = useMemo(() => {
     if (data.loading) return [];
-    // Index inventario por sku → { almacen_id: disponible }
+    // Index inventario por sku → { almacen_id: { inv, disp, apartado } }
+    // Usamos `inventario` (total físico) como valor principal, `disponible` para tooltip.
     const invBySku = {};
     data.inventario.forEach((r) => {
       if (!r.articulo) return;
       if (!invBySku[r.articulo]) invBySku[r.articulo] = {};
-      invBySku[r.articulo][r.no_almacen] = (invBySku[r.articulo][r.no_almacen] || 0) + Number(r.disponible || 0);
+      const inv  = Number(r.inventario || 0);
+      const disp = Number(r.disponible || 0);
+      const cur  = invBySku[r.articulo][r.no_almacen] || { inv: 0, disp: 0, apartado: 0 };
+      cur.inv      += inv;
+      cur.disp     += disp;
+      cur.apartado += Math.max(0, inv - disp);
+      invBySku[r.articulo][r.no_almacen] = cur;
     });
     const metaBySku  = Object.fromEntries(data.metadata.map((r) => [r.sku, r]));
     const preBySku   = Object.fromEntries(data.precios.map((r) => [r.sku, r]));
@@ -94,7 +103,9 @@ export default function ReporteSection() {
 
     return data.skus.map((s) => {
       const inv = invBySku[s.sku] || {};
-      const total = ALMACENES.reduce((a, x) => a + (inv[x.id] || 0), 0);
+      const total      = ALMACENES.reduce((a, x) => a + (inv[x.id]?.inv      || 0), 0);
+      const totalDisp  = ALMACENES.reduce((a, x) => a + (inv[x.id]?.disp     || 0), 0);
+      const totalApart = ALMACENES.reduce((a, x) => a + (inv[x.id]?.apartado || 0), 0);
       const meta  = metaBySku[s.sku]  || {};
       const pre   = preBySku[s.sku]   || {};
       const rdmp  = rdmpBySku[s.sku]  || {};
@@ -114,7 +125,7 @@ export default function ReporteSection() {
         sku: s.sku,
         orden: s.orden,
         roadmap, descripcion: desc, marca,
-        inv, invTotal: total,
+        inv, invTotal: total, invDisp: totalDisp, invApartado: totalApart,
         precio_aaa: precioAaa,
         descuento: descuento,
         precio_descuento: precioDesc,
@@ -276,11 +287,18 @@ export default function ReporteSection() {
                   </tbody>
                 </table>
               </div>
-              {/* Footer: explica origen de precios */}
-              <div className="px-5 py-2 border-t border-gray-100 text-[11px] text-gray-500 italic">
-                <strong>Precios:</strong> de tabla <code className="text-gray-600">precios_sku</code> (cargada desde el Excel "Roadmap y Precios").
-                Si editas un valor aquí, se guarda como override en el reporte y prevalece sobre la fuente.
-                {canEdit && <span className="ml-2 text-blue-600">· Click en el precio o descuento para editarlo</span>}
+              {/* Footer: explica origen de datos */}
+              <div className="px-5 py-2 border-t border-gray-100 text-[11px] text-gray-500 italic space-y-0.5">
+                <div>
+                  <strong>Inventario:</strong> ERP Acteck (<code className="text-gray-600">inventario_acteck</code> · Vw_TablaH_Inventario.xlsx).
+                  Mostrado: <strong>inventario total físico</strong>. Hover para ver disponible y apartado.
+                  El asterisco amarillo (<span className="text-amber-600">*</span>) indica que hay piezas apartadas/comprometidas.
+                </div>
+                <div>
+                  <strong>Precios:</strong> de tabla <code className="text-gray-600">precios_sku</code> (cargada desde "Roadmap y Precios").
+                  Si editas aquí, override prevalece.
+                  {canEdit && <span className="ml-1 text-blue-600">Click en el precio o descuento para editar.</span>}
+                </div>
               </div>
             </>
           )}
@@ -324,14 +342,25 @@ function ReporteRow({ r, verAlmacenes, canEdit, expanded, onToggleExpand, onEdit
         </td>
         <td className="px-3 py-2 text-xs text-gray-700 truncate max-w-[280px]" title={r.descripcion}>{r.descripcion || '—'}</td>
         {verAlmacenes && ALMACENES.map((a) => {
-          const v = r.inv[a.id] || 0;
+          const cell = r.inv[a.id];
+          const v = cell?.inv || 0;
+          const disp = cell?.disp || 0;
+          const apart = cell?.apartado || 0;
+          const tooltip = v > 0
+            ? `Inventario total: ${FMT_N(v)}\nDisponible: ${FMT_N(disp)}${apart > 0 ? `\nApartado/comprometido: ${FMT_N(apart)}` : ''}`
+            : '';
           return (
-            <td key={a.id} className={"text-right px-2 py-2 text-xs tabular-nums bg-slate-50 " + (v > 0 ? "text-gray-800" : "text-gray-300")}>
+            <td key={a.id} className={"text-right px-2 py-2 text-xs tabular-nums bg-slate-50 " + (v > 0 ? "text-gray-800" : "text-gray-300")}
+              title={tooltip}>
               {v > 0 ? FMT_N(v) : '—'}
+              {apart > 0 && <span className="text-amber-600 text-[9px] ml-0.5" title={tooltip}>*</span>}
             </td>
           );
         })}
-        <td className="text-right px-2 py-2 tabular-nums font-bold bg-blue-50 text-blue-900">{FMT_N(r.invTotal)}</td>
+        <td className="text-right px-2 py-2 tabular-nums font-bold bg-blue-50 text-blue-900"
+          title={`Total: ${FMT_N(r.invTotal)}\nDisponible: ${FMT_N(r.invDisp)}${r.invApartado > 0 ? `\nApartado: ${FMT_N(r.invApartado)}` : ''}`}>
+          {FMT_N(r.invTotal)}
+        </td>
         <td className="text-right px-2 py-2 tabular-nums text-xs"
           onClick={(e) => e.stopPropagation()}>
           <PrecioCell
