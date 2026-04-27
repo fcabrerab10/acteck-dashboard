@@ -4,7 +4,7 @@ import { usePerfil } from "../../lib/perfilContext";
 import { toast } from "../../lib/toast";
 import {
   Plus, Trash2, X, Edit3, Repeat, Calendar, ChevronDown, ChevronUp,
-  Users, Power, PowerOff, RefreshCw,
+  Users, Power, PowerOff, RefreshCw, Check, History, CheckCircle2,
 } from "lucide-react";
 
 /**
@@ -36,24 +36,88 @@ const DIAS_LARGO = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 
 export default function RecurrentesPanel({ canEdit, perfiles, internos, nombrePorUserId, colorPorUserId, onChanged }) {
   const perfil = usePerfil();
+  const yoId = perfil?.user_id;
   const [recs, setRecs] = useState([]);
+  const [ejecucionesPorRec, setEjecucionesPorRec] = useState({});
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [regenerando, setRegenerando] = useState(false);
+  // Tab persona: 'mios' | 'todos' | <user_id>
+  const [tabResp, setTabResp] = useState('mios');
 
   useEffect(() => { cargar(); }, []);
 
   async function cargar() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("tareas_recurrentes")
-      .select("*")
-      .order("activa", { ascending: false })
-      .order("frecuencia")
-      .order("tarea");
-    if (error) { console.error(error); toast.error("Error cargando recurrentes"); }
-    setRecs(data || []);
+    const [recRes, ejecRes] = await Promise.all([
+      supabase.from("tareas_recurrentes").select("*")
+        .order("activa", { ascending: false })
+        .order("frecuencia")
+        .order("tarea"),
+      // Últimas 200 ejecuciones (pendientes con origen_recurrente_id, listos)
+      supabase.from("pendientes_equipo")
+        .select("id, origen_recurrente_id, fecha_generado, fecha_limite, estatus, completado_en, responsable, responsables, ultima_actividad")
+        .not("origen_recurrente_id", "is", null)
+        .order("fecha_generado", { ascending: false })
+        .limit(500),
+    ]);
+    if (recRes.error) { console.error(recRes.error); toast.error("Error cargando recurrentes"); }
+    setRecs(recRes.data || []);
+    // Indexar ejecuciones por origen_recurrente_id
+    const map = {};
+    (ejecRes.data || []).forEach((e) => {
+      if (!map[e.origen_recurrente_id]) map[e.origen_recurrente_id] = [];
+      map[e.origen_recurrente_id].push(e);
+    });
+    setEjecucionesPorRec(map);
     setLoading(false);
+  }
+
+  // Marca como ejecutada hoy: crea (si no existe) un pendiente del día
+  // con origen_recurrente_id y lo marca como 'listo'.
+  async function marcarEjecutadaHoy(r) {
+    if (!canEdit) return;
+    const hoy = new Date(); const hoyISO = hoy.toISOString().slice(0, 10);
+    // ¿Ya hay un pendiente generado hoy de esta plantilla?
+    const { data: existente } = await supabase.from("pendientes_equipo")
+      .select("id, estatus")
+      .eq("origen_recurrente_id", r.id)
+      .eq("fecha_generado", hoyISO)
+      .limit(1);
+
+    if (existente && existente.length > 0) {
+      // Marcar como listo si no lo está
+      if (existente[0].estatus !== "listo") {
+        await supabase.from("pendientes_equipo")
+          .update({ estatus: "listo" })
+          .eq("id", existente[0].id);
+        toast.success(`✓ "${r.tarea}" marcada como ejecutada`);
+      } else {
+        toast.success(`Ya estaba marcada como ejecutada hoy`);
+      }
+    } else {
+      // Crear pendiente nuevo del día y marcarlo listo
+      const payload = {
+        cuenta: r.cuenta,
+        tarea: r.tarea,
+        categoria: r.categoria || "Recurrente",
+        fecha_limite: hoyISO,
+        estatus: "listo",
+        prioridad: r.prioridad,
+        notas: r.notas,
+        responsable: r.responsable,
+        responsables: Array.isArray(r.responsables) && r.responsables.length > 0 ? r.responsables : (r.responsable ? [r.responsable] : []),
+        subtareas: Array.isArray(r.subtareas_plantilla) ? r.subtareas_plantilla.map((s) => ({ ...s, hecho: true })) : [],
+        origen_recurrente_id: r.id,
+        fecha_generado: hoyISO,
+        creado_por: perfil?.user_id || null,
+      };
+      const { error } = await supabase.from("pendientes_equipo").insert(payload);
+      if (error) { toast.error("Error: " + error.message); return; }
+      toast.success(`✓ "${r.tarea}" registrada como ejecutada`);
+    }
+    cargar();
+    if (onChanged) onChanged();
   }
 
   async function toggleActiva(r) {
@@ -86,13 +150,65 @@ export default function RecurrentesPanel({ canEdit, perfiles, internos, nombrePo
     cargar();
   }
 
-  const activas = useMemo(() => recs.filter((r) => r.activa), [recs]);
-  const pausadas = useMemo(() => recs.filter((r) => !r.activa), [recs]);
+  // Filtrar por tab de persona
+  const responsablesDe = (r) => {
+    if (Array.isArray(r.responsables) && r.responsables.length > 0) return r.responsables;
+    if (r.responsable) return [r.responsable];
+    return [];
+  };
+  const recsFiltradas = useMemo(() => {
+    if (tabResp === 'todos') return recs;
+    if (tabResp === 'mios') return recs.filter((r) => responsablesDe(r).includes(yoId));
+    return recs.filter((r) => responsablesDe(r).includes(tabResp));
+  }, [recs, tabResp, yoId]);
+
+  const activas = useMemo(() => recsFiltradas.filter((r) => r.activa), [recsFiltradas]);
+  const pausadas = useMemo(() => recsFiltradas.filter((r) => !r.activa), [recsFiltradas]);
+
+  // Tabs dinámicos por persona interna
+  const otrosInternos = (internos || []).filter((p) => p.user_id !== yoId);
+  const tabs = [
+    { id: 'mios', label: perfil?.nombre?.split(' ')[0] || 'Míos', userId: yoId,
+      count: recs.filter((r) => responsablesDe(r).includes(yoId) && r.activa).length },
+    ...otrosInternos.map((u) => ({
+      id: u.user_id,
+      label: (u.nombre || u.email || '—').split(' ')[0],
+      userId: u.user_id,
+      count: recs.filter((r) => responsablesDe(r).includes(u.user_id) && r.activa).length,
+    })),
+    { id: 'todos', label: 'Todos', userId: null,
+      count: recs.filter((r) => r.activa).length },
+  ];
 
   if (loading) return <div className="p-6 text-gray-400 text-sm">Cargando plantillas…</div>;
 
   return (
     <div className="space-y-4">
+      {/* Tabs por persona */}
+      <div className="bg-white rounded-xl border border-gray-100 px-3 py-2">
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto max-w-full w-fit">
+          {tabs.map((t) => (
+            <button key={t.id} onClick={() => setTabResp(t.id)}
+              className={[
+                "px-3 py-1.5 rounded-md text-sm font-medium transition whitespace-nowrap",
+                tabResp === t.id ? "bg-white text-blue-700 shadow-sm" : "text-gray-600 hover:text-gray-900",
+              ].join(" ")}>
+              <div className="flex items-center gap-1.5">
+                {t.userId && (
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: colorPorUserId?.[t.userId] || "#94A3B8" }} />
+                )}
+                <span>{t.label}</span>
+                {t.count > 0 && (
+                  <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-bold">
+                    {t.count}
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-center gap-3 flex-wrap">
         <Repeat className="w-5 h-5 text-blue-600" />
         <div className="flex-1 text-sm">
@@ -141,6 +257,8 @@ export default function RecurrentesPanel({ canEdit, perfiles, internos, nombrePo
                 <RecurrenteCard
                   key={r.id} r={r} canEdit={canEdit}
                   nombrePorUserId={nombrePorUserId} colorPorUserId={colorPorUserId}
+                  ejecuciones={ejecucionesPorRec[r.id] || []}
+                  onMarcarEjecutada={() => marcarEjecutadaHoy(r)}
                   onEditar={() => setModal({ rec: r })}
                   onToggle={() => toggleActiva(r)}
                   onBorrar={() => borrar(r)}
@@ -155,6 +273,8 @@ export default function RecurrentesPanel({ canEdit, perfiles, internos, nombrePo
                 <RecurrenteCard
                   key={r.id} r={r} canEdit={canEdit}
                   nombrePorUserId={nombrePorUserId} colorPorUserId={colorPorUserId}
+                  ejecuciones={ejecucionesPorRec[r.id] || []}
+                  onMarcarEjecutada={() => marcarEjecutadaHoy(r)}
                   onEditar={() => setModal({ rec: r })}
                   onToggle={() => toggleActiva(r)}
                   onBorrar={() => borrar(r)}
@@ -193,7 +313,8 @@ function describirFrecuencia(r) {
 }
 
 // ────────── Card ──────────
-function RecurrenteCard({ r, canEdit, nombrePorUserId, colorPorUserId, onEditar, onToggle, onBorrar }) {
+function RecurrenteCard({ r, canEdit, nombrePorUserId, colorPorUserId, ejecuciones = [], onMarcarEjecutada, onEditar, onToggle, onBorrar }) {
+  const [histOpen, setHistOpen] = useState(false);
   const cuenta = CUENTAS.find((c) => c.id === r.cuenta) || CUENTAS[3];
   const pri = PRIORIDADES.find((p) => p.id === r.prioridad) || PRIORIDADES[1];
   const responsables = Array.isArray(r.responsables) && r.responsables.length > 0
@@ -250,6 +371,27 @@ function RecurrenteCard({ r, canEdit, nombrePorUserId, colorPorUserId, onEditar,
           </div>
         </div>
 
+        {/* Botón marcar ejecutada (compacto, prominente) */}
+        {canEdit && r.activa && (() => {
+          const hoyISO = new Date().toISOString().slice(0, 10);
+          const yaHoy = ejecuciones.some((e) => e.fecha_generado?.slice(0, 10) === hoyISO && e.estatus === "listo");
+          return (
+            <button
+              onClick={onMarcarEjecutada}
+              className={[
+                "shrink-0 px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition",
+                yaHoy
+                  ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                  : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm",
+              ].join(" ")}
+              title={yaHoy ? "Ya marcada como ejecutada hoy" : "Marcar como ejecutada hoy"}
+            >
+              {yaHoy ? <CheckCircle2 className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+              {yaHoy ? "Hecha hoy" : "Marcar hecha"}
+            </button>
+          );
+        })()}
+
         {canEdit && (
           <div className="flex items-center gap-1 shrink-0">
             <button onClick={onToggle}
@@ -268,6 +410,59 @@ function RecurrenteCard({ r, canEdit, nombrePorUserId, colorPorUserId, onEditar,
           </div>
         )}
       </div>
+
+      {/* Histórico de ejecuciones (colapsable) */}
+      {ejecuciones.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-gray-100">
+          <button
+            onClick={() => setHistOpen(!histOpen)}
+            className="text-xs text-gray-500 hover:text-gray-800 flex items-center gap-1.5"
+          >
+            {histOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            <History className="w-3 h-3" />
+            <span className="font-medium">
+              {ejecuciones.filter((e) => e.estatus === "listo").length} ejecución{ejecuciones.filter((e) => e.estatus === "listo").length !== 1 ? "es" : ""} registrada{ejecuciones.filter((e) => e.estatus === "listo").length !== 1 ? "s" : ""}
+            </span>
+            {ejecuciones.filter((e) => e.estatus === "listo").length > 0 && (
+              <span className="text-gray-400">
+                · última: {ejecuciones.find((e) => e.estatus === "listo")?.fecha_generado?.slice(0, 10) || "—"}
+              </span>
+            )}
+          </button>
+
+          {histOpen && (
+            <div className="mt-2 max-h-40 overflow-y-auto space-y-1">
+              {ejecuciones.slice(0, 30).map((e) => {
+                const fecha = e.fecha_generado?.slice(0, 10) || "—";
+                const completada = e.completado_en
+                  ? new Date(e.completado_en).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })
+                  : null;
+                return (
+                  <div key={e.id} className="flex items-center gap-2 text-[11px]">
+                    <span className={[
+                      "w-2 h-2 rounded-full shrink-0",
+                      e.estatus === "listo" ? "bg-emerald-500" : "bg-gray-300",
+                    ].join(" ")} />
+                    <span className="text-gray-700 tabular-nums">{fecha}</span>
+                    <span className={[
+                      "text-[10px] px-1.5 py-0.5 rounded font-semibold",
+                      e.estatus === "listo" ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500",
+                    ].join(" ")}>
+                      {e.estatus === "listo" ? "Hecha" : e.estatus}
+                    </span>
+                    {completada && (
+                      <span className="text-gray-400 text-[10px]">{completada}</span>
+                    )}
+                  </div>
+                );
+              })}
+              {ejecuciones.length > 30 && (
+                <div className="text-[10px] text-gray-400 italic">+{ejecuciones.length - 30} más…</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

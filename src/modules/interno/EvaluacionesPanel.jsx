@@ -146,30 +146,29 @@ export default function EvaluacionesPanel() {
     return Object.values(m).sort((a, b) => `${b.anio}-${b.mes}`.localeCompare(`${a.anio}-${a.mes}`));
   }, [evaluaciones]);
 
-  async function nuevaEvaluacion() {
+  async function crearEvalEnFecha(fechaCualquiera) {
     if (!canEdit || !personaActiva) return;
-    const lunes = lunesDeSemana(new Date());
+    const lunes = lunesDeSemana(fechaCualquiera);
     const viernes = viernesDeSemana(lunes);
     const exists = evaluaciones.find((e) => e.semana_inicio?.slice(0, 10) === toISO(lunes));
     if (exists) {
+      toast.success("Ya existe una evaluación de esa semana, abriéndola");
       setModal({ evalId: exists.id });
       return;
     }
-    const fecha = new Date();
     const payload = {
       persona_user_id: personaActiva,
       semana_inicio: toISO(lunes),
       semana_fin: toISO(viernes),
-      anio: fecha.getFullYear(),
-      mes: fecha.getMonth() + 1,
-      semana_iso: semanaISO(fecha),
+      anio: lunes.getFullYear(),
+      mes: lunes.getMonth() + 1,
+      semana_iso: semanaISO(lunes),
       estado: "draft",
       creado_por: perfil?.user_id,
     };
     const { data, error } = await supabase.from("evaluaciones").insert(payload).select().single();
     if (error) { toast.error("Error: " + error.message); return; }
 
-    // Crear líneas para cada KPI activo
     const { data: kpis } = await supabase.from("evaluaciones_kpis_template")
       .select("id, peso").eq("activo", true);
     if (kpis?.length) {
@@ -180,6 +179,11 @@ export default function EvaluacionesPanel() {
     toast.success("Evaluación creada");
     cargarEvaluaciones(personaActiva);
     setModal({ evalId: data.id });
+  }
+
+  function abrirSelectorSemana() {
+    if (!canEdit || !personaActiva) return;
+    setModal({ tipo: "selectorSemana" });
   }
 
   async function borrarEval(id) {
@@ -232,10 +236,10 @@ export default function EvaluacionesPanel() {
             <div className="text-xs text-gray-600">{personaInfo.puesto || personaInfo.email}</div>
           </div>
           {canEdit && (
-            <button onClick={nuevaEvaluacion}
+            <button onClick={abrirSelectorSemana}
               className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium flex items-center gap-1.5"
             >
-              <Plus className="w-4 h-4" /> Eval semana actual
+              <Plus className="w-4 h-4" /> Nueva evaluación
             </button>
           )}
         </div>
@@ -290,6 +294,94 @@ export default function EvaluacionesPanel() {
           onClose={() => { setModal(null); cargarEvaluaciones(personaActiva); }}
         />
       )}
+
+      {/* MODAL SELECTOR DE SEMANA */}
+      {modal?.tipo === "selectorSemana" && (
+        <ModalSelectorSemana
+          evaluaciones={evaluaciones}
+          onClose={() => setModal(null)}
+          onElegir={(fecha) => { setModal(null); crearEvalEnFecha(fecha); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ────────── Modal: selector de semana ──────────
+function ModalSelectorSemana({ evaluaciones, onClose, onElegir }) {
+  const [fecha, setFecha] = useState(toISO(new Date()));
+  const lunes = lunesDeSemana(new Date(fecha + "T00:00:00"));
+  const viernes = viernesDeSemana(lunes);
+  const yaExiste = evaluaciones.some((e) => e.semana_inicio?.slice(0, 10) === toISO(lunes));
+
+  // Sugerencias rápidas: esta semana, semana pasada, hace 2 semanas
+  const sugerencias = [];
+  for (let i = 0; i < 4; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i * 7);
+    const l = lunesDeSemana(d);
+    sugerencias.push({
+      label: i === 0 ? "Esta semana" : i === 1 ? "Semana pasada" : `Hace ${i} semanas`,
+      iso: toISO(l),
+      lunes: l,
+      viernes: viernesDeSemana(l),
+      existe: evaluaciones.some((e) => e.semana_inicio?.slice(0, 10) === toISO(l)),
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="px-5 py-4 border-b flex items-center justify-between">
+          <h3 className="font-semibold flex items-center gap-2"><Calendar className="w-4 h-4" /> Elegir semana a evaluar</h3>
+          <button onClick={onClose}><X className="w-4 h-4 text-gray-500" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          {/* Sugerencias rápidas */}
+          <div>
+            <div className="text-xs font-medium text-gray-600 mb-2">Atajos:</div>
+            <div className="grid grid-cols-2 gap-2">
+              {sugerencias.map((s) => (
+                <button key={s.iso}
+                  onClick={() => onElegir(s.lunes)}
+                  disabled={s.existe}
+                  className={[
+                    "px-3 py-2 rounded-lg border text-left transition",
+                    s.existe ? "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
+                             : "bg-white border-gray-200 hover:bg-blue-50 hover:border-blue-300",
+                  ].join(" ")}>
+                  <div className="text-sm font-medium">{s.label}</div>
+                  <div className="text-[10px] text-gray-500">
+                    {fmtFechaCorta(toISO(s.lunes))} - {fmtFechaCorta(toISO(s.viernes))}
+                  </div>
+                  {s.existe && <div className="text-[10px] text-amber-600 mt-0.5">Ya existe</div>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <Field label="O elige cualquier fecha (toma el lunes de esa semana)">
+              <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+            </Field>
+            <div className="text-xs text-gray-600 mt-2">
+              Semana resultante: <strong>{fmtFechaCorta(toISO(lunes))}</strong> al <strong>{fmtFechaCorta(toISO(viernes))}</strong>
+            </div>
+            {yaExiste && (
+              <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                Ya existe una evaluación de esa semana. Al continuar se abrirá la existente.
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="px-5 py-3 border-t flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-2 rounded-lg text-sm hover:bg-gray-100">Cancelar</button>
+          <button onClick={() => onElegir(lunes)}
+            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium">
+            {yaExiste ? "Abrir existente" : "Crear evaluación"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
