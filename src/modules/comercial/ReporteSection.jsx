@@ -29,6 +29,19 @@ const ALMACENES = [
   { id: 44, nombre: 'Empaque dañado'},
 ];
 
+// Colores estándar del roadmap (mismos que en EstrategiaProducto)
+function roadmapStyle(rm) {
+  if (!rm) return { bg: '#F8FAFC', color: '#94A3B8' };
+  const r = String(rm).toUpperCase();
+  if (r === 'D' || r === 'DISC')                  return { bg: '#FEE2E2', color: '#991B1B' };
+  if (r === 'NVS' || r === 'NEW')                 return { bg: '#FEF3C7', color: '#92400E' };
+  if (r === 'RMI')                                return { bg: '#DBEAFE', color: '#1E40AF' };
+  if (r === 'RML' || r === 'RMS')                 return { bg: '#EDE9FE', color: '#5B21B6' };
+  if (r === '2026' || r === '2025')               return { bg: '#D1FAE5', color: '#065F46' };
+  if (r === 'EXMAY')                              return { bg: '#FCE7F3', color: '#9D174D' };
+  return { bg: '#F1F5F9', color: '#475569' };
+}
+
 const FMT_N = (n) => Math.round(Number(n) || 0).toLocaleString('es-MX');
 
 function fmtFechaCorta(iso) {
@@ -97,15 +110,25 @@ export default function ReporteSection() {
       const roadmap = s.roadmap_manual || rdmp.rdmp || '';
       const desc    = s.descripcion_manual || rdmp.descripcion || meta.descripcion || '';
       const marca   = s.sku.startsWith('BR') ? 'Balam Rush' : s.sku.startsWith('AC') ? 'Acteck' : (s.sku.startsWith('SW') ? 'Swann' : 'Otra');
+      // Precios: manual override > precios_sku > null
+      const precioAaaBase = Number(pre.precio_aaa || 0) || null;
+      const descuentoBase = Number(pre.descuento || 0) || null;
+      const precioAaa  = s.precio_aaa_manual != null ? Number(s.precio_aaa_manual) : precioAaaBase;
+      const descuento  = s.descuento_manual != null ? Number(s.descuento_manual) : descuentoBase;
+      const precioDesc = (precioAaa != null && descuento != null)
+        ? Math.round(precioAaa * (1 - descuento) * 100) / 100
+        : (pre.precio_descuento === 'Consultar' ? null : (Number(pre.precio_descuento || 0) || null));
       return {
         id: s.id,
         sku: s.sku,
         orden: s.orden,
         roadmap, descripcion: desc, marca,
         inv, invTotal: total,
-        precio_aaa: Number(pre.precio_aaa || 0) || null,
-        descuento: Number(pre.descuento || 0) || null,
-        precio_descuento: pre.precio_descuento === 'Consultar' ? null : (Number(pre.precio_descuento || 0) || null),
+        precio_aaa: precioAaa,
+        descuento: descuento,
+        precio_descuento: precioDesc,
+        precio_es_manual: s.precio_aaa_manual != null,
+        descuento_es_manual: s.descuento_manual != null,
         s_raw: s,
       };
     });
@@ -137,6 +160,21 @@ export default function ReporteSection() {
     await supabase.from('reporte_skus').delete().eq('id', id);
     toast.success('SKU removido del reporte');
     cargar();
+  }
+
+  // Guarda override de precio_aaa o descuento en reporte_skus
+  async function actualizarPrecio(id, campo, valor) {
+    if (!canEdit) return;
+    const v = valor === '' || valor == null ? null : Number(valor);
+    if (v != null && (isNaN(v) || v < 0)) { toast.error('Valor inválido'); return; }
+    const { error } = await supabase.from('reporte_skus').update({ [campo]: v }).eq('id', id);
+    if (error) { toast.error('Error: ' + error.message); return; }
+    toast.success('Precio guardado');
+    // Actualiza local sin re-fetchear todo
+    setData(s => ({
+      ...s,
+      skus: s.skus.map(x => x.id === id ? { ...x, [campo]: v } : x),
+    }));
   }
 
   return (
@@ -215,16 +253,13 @@ export default function ReporteSection() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr className="text-xs text-gray-600">
-                      <th className="text-left px-3 py-2 sticky left-0 bg-gray-50">#</th>
                       <th className="text-left px-3 py-2">SKU</th>
                       <th className="text-left px-3 py-2">Roadmap</th>
                       <th className="text-left px-3 py-2 min-w-[260px]">Descripción</th>
-                      {verAlmacenes ? (
-                        ALMACENES.map((a) => (
-                          <th key={a.id} className="text-right px-2 py-2 min-w-[60px]" title={a.nombre}>{a.id}</th>
-                        ))
-                      ) : null}
-                      <th className="text-right px-2 py-2">Total</th>
+                      {verAlmacenes && ALMACENES.map((a) => (
+                        <th key={a.id} className="text-right px-2 py-2 min-w-[55px] bg-slate-100" title={a.nombre}>{a.id}</th>
+                      ))}
+                      <th className="text-right px-2 py-2 bg-blue-100 text-blue-900">Total</th>
                       <th className="text-right px-2 py-2">AAA</th>
                       <th className="text-right px-2 py-2">Desc.</th>
                       <th className="text-right px-2 py-2">Precio C/Desc</th>
@@ -241,6 +276,7 @@ export default function ReporteSection() {
                         onToggleExpand={() => setExpandedSku(expandedSku === r.sku ? null : r.sku)}
                         onEditar={() => setModal({ tipo: 'editar', sku: r.s_raw })}
                         onEliminar={() => eliminarSku(r.id)}
+                        onActualizarPrecio={actualizarPrecio}
                       />
                     ))}
                     {filtrados.length === 0 && (
@@ -248,6 +284,12 @@ export default function ReporteSection() {
                     )}
                   </tbody>
                 </table>
+              </div>
+              {/* Footer: explica origen de precios */}
+              <div className="px-5 py-2 border-t border-gray-100 text-[11px] text-gray-500 italic">
+                <strong>Precios:</strong> de tabla <code className="text-gray-600">precios_sku</code> (cargada desde el Excel "Roadmap y Precios").
+                Si editas un valor aquí, se guarda como override en el reporte y prevalece sobre la fuente.
+                {canEdit && <span className="ml-2 text-blue-600">· Click en el precio o descuento para editarlo</span>}
               </div>
             </>
           )}
@@ -267,12 +309,12 @@ export default function ReporteSection() {
 }
 
 // ────────── Fila de tabla con expand ──────────
-function ReporteRow({ r, verAlmacenes, canEdit, expanded, onToggleExpand, onEditar, onEliminar }) {
+function ReporteRow({ r, verAlmacenes, canEdit, expanded, onToggleExpand, onEditar, onEliminar, onActualizarPrecio }) {
+  const rmStyle = roadmapStyle(r.roadmap);
   return (
     <>
       <tr className={["border-t border-gray-100 hover:bg-blue-50/30 cursor-pointer", expanded && "bg-blue-50/40"].filter(Boolean).join(" ")}
         onClick={onToggleExpand}>
-        <td className="px-3 py-2 text-gray-400 text-xs sticky left-0 bg-inherit">{r.orden}</td>
         <td className="px-3 py-2 font-mono text-xs font-semibold text-gray-800">
           <div className="flex items-center gap-1">
             {expanded ? <ChevronDown className="w-3 h-3 text-blue-600"/> : <ChevronRight className="w-3 h-3 text-gray-400"/>}
@@ -281,20 +323,47 @@ function ReporteRow({ r, verAlmacenes, canEdit, expanded, onToggleExpand, onEdit
         </td>
         <td className="px-3 py-2">
           {r.roadmap && (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">{r.roadmap}</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded"
+              style={{ backgroundColor: rmStyle.bg, color: rmStyle.color }}>
+              {r.roadmap}
+            </span>
           )}
         </td>
         <td className="px-3 py-2 text-xs text-gray-700 truncate max-w-[280px]" title={r.descripcion}>{r.descripcion || '—'}</td>
         {verAlmacenes && ALMACENES.map((a) => {
           const v = r.inv[a.id] || 0;
           return (
-            <td key={a.id} className={"text-right px-2 py-2 text-xs tabular-nums " + (v > 0 ? "text-gray-800" : "text-gray-300")}>{v > 0 ? FMT_N(v) : '—'}</td>
+            <td key={a.id} className={"text-right px-2 py-2 text-xs tabular-nums bg-slate-50 " + (v > 0 ? "text-gray-800" : "text-gray-300")}>
+              {v > 0 ? FMT_N(v) : '—'}
+            </td>
           );
         })}
-        <td className="text-right px-2 py-2 tabular-nums font-semibold">{FMT_N(r.invTotal)}</td>
-        <td className="text-right px-2 py-2 tabular-nums text-xs">{r.precio_aaa ? formatMXN(r.precio_aaa) : '—'}</td>
-        <td className="text-right px-2 py-2 tabular-nums text-xs text-amber-700">{r.descuento ? `${(r.descuento * 100).toFixed(0)}%` : '—'}</td>
-        <td className="text-right px-2 py-2 tabular-nums font-semibold text-blue-700">{r.precio_descuento ? formatMXN(r.precio_descuento) : '—'}</td>
+        <td className="text-right px-2 py-2 tabular-nums font-bold bg-blue-50 text-blue-900">{FMT_N(r.invTotal)}</td>
+        <td className="text-right px-2 py-2 tabular-nums text-xs"
+          onClick={(e) => e.stopPropagation()}>
+          <PrecioCell
+            valor={r.precio_aaa}
+            esManual={r.precio_es_manual}
+            canEdit={canEdit}
+            tipo="moneda"
+            onSave={(v) => onActualizarPrecio(r.id, 'precio_aaa_manual', v)}
+            placeholder="—"
+          />
+        </td>
+        <td className="text-right px-2 py-2 tabular-nums text-xs text-amber-700"
+          onClick={(e) => e.stopPropagation()}>
+          <PrecioCell
+            valor={r.descuento}
+            esManual={r.descuento_es_manual}
+            canEdit={canEdit}
+            tipo="porcentaje"
+            onSave={(v) => onActualizarPrecio(r.id, 'descuento_manual', v)}
+            placeholder="—"
+          />
+        </td>
+        <td className="text-right px-2 py-2 tabular-nums font-semibold text-blue-700">
+          {r.precio_descuento != null ? formatMXN(r.precio_descuento) : '—'}
+        </td>
         {canEdit && (
           <td className="px-2 py-2">
             <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
@@ -316,6 +385,56 @@ function ReporteRow({ r, verAlmacenes, canEdit, expanded, onToggleExpand, onEdit
         </tr>
       )}
     </>
+  );
+}
+
+// ────────── Celda editable inline para precio o descuento ──────────
+function PrecioCell({ valor, esManual, canEdit, tipo, onSave, placeholder }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState('');
+
+  const display = valor == null ? null
+    : tipo === 'porcentaje' ? `${Math.round(valor * 100)}%`
+    : formatMXN(valor);
+
+  const startEdit = () => {
+    if (!canEdit) return;
+    setVal(valor == null ? '' : tipo === 'porcentaje' ? Math.round(valor * 100) : valor);
+    setEditing(true);
+  };
+  const commit = () => {
+    if (val === '' || val == null) {
+      onSave(null);
+    } else {
+      const n = Number(val);
+      if (isNaN(n)) { setEditing(false); return; }
+      const final = tipo === 'porcentaje' ? n / 100 : n;
+      onSave(final);
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus type="number" step={tipo === 'porcentaje' ? '1' : '0.01'}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+        className="w-20 px-1 py-0.5 text-xs text-right border border-blue-400 rounded bg-white"
+      />
+    );
+  }
+  return (
+    <span
+      onClick={canEdit ? startEdit : undefined}
+      className={canEdit ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors" : ""}
+      title={esManual ? "Override manual (click para editar)" : canEdit ? "De precios_sku — click para sobreescribir" : ""}
+    >
+      {display || placeholder}
+      {esManual && <span className="ml-1 text-[8px] text-blue-600">●</span>}
+    </span>
   );
 }
 
