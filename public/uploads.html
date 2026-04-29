@@ -608,14 +608,15 @@ const PARSERS = {
     }
     const cuteDate = new Date(fecha_corte + 'T00:00:00');
 
-    // Semana ISO 8601 (lunes como inicio) desde fecha_corte
+    // Semana ISO 8601 (lunes como inicio) desde fecha_corte.
+    // Usa el algoritmo canónico: mover al jueves de la semana actual y
+    // calcular semanas desde el 1 de enero del año del jueves.
     const isoWeek = (d) => {
       const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-      const dayNum = (date.getUTCDay() + 6) % 7;
-      date.setUTCDate(date.getUTCDate() - dayNum + 3);
-      const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
-      const week = 1 + Math.round(((date - firstThursday) / 86400000 - 3) / 7);
-      return week;
+      // Jueves de la semana actual (getUTCDay: 0=domingo, 1=lunes, ..., 4=jueves)
+      date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+      const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+      return Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
     };
     const semana = isoWeek(cuteDate);
     const year = cuteDate.getFullYear();
