@@ -121,8 +121,11 @@ function useResumenData() {
         supabase.from('sellout_sku')
           .select('cliente, anio, mes, piezas, monto_pesos')
           .eq('anio', anioActual),
-        supabase.from('inversion_marketing')
-          .select('cliente, anio, mes, monto')
+        // Marketing: leemos de marketing_actividades (mismo lugar que la
+        // pestaña Pagos → apartado Marketing usa). El campo `inversion` es
+        // el monto MXN gastado por actividad.
+        supabase.from('marketing_actividades')
+          .select('cliente, anio, mes, inversion')
           .eq('anio', anioActual),
       ]);
 
@@ -261,7 +264,11 @@ function calcularResumen(clienteKey, data) {
     : (saldoVencido > 0 ? 100 : 0);
 
   // ── Inversión marketing YTD y ROI ──
-  const invMktYTD = mk.reduce((a, r) => a + Number(r.monto || 0), 0);
+  // Lee de marketing_actividades (campo `inversion`), igual que la pestaña
+  // Pagos → Marketing del cliente. mes puede venir como string (ej. "3").
+  const invMktYTD = mk
+    .filter((r) => Number(r.mes) <= mesActual)
+    .reduce((a, r) => a + Number(r.inversion || 0), 0);
   const roiMkt = invMktYTD > 0 ? soYTD / invMktYTD : null;
 
   // ═════ Scores (0–100) — cada uno usa umbrales de las pestañas per-cliente ═════
