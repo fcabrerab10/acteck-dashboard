@@ -16,19 +16,26 @@ import { roadmapStyle, roadmapInfo } from '../../lib/roadmapColors';
  * de demanda + tránsito + sugerido de compra.
  */
 
-// Almacenes comerciales (whitelist) en orden estable
+// Columnas de almacén que muestra el reporte (alineado con el reporte que
+// Fernando hacía en Excel). Las columnas individuales son los almacenes
+// principales; "Retail" agrupa los almacenes 16 y 17. El TOTAL excluye
+// "E.Dañado" (alm 44) y también excluye almacenes "internos" no listados
+// (4, 5, 9, 11, 13, 15, 19, 41, 42, 70, 97, 200, etc.).
 const ALMACENES = [
-  { id: 1,  nombre: 'Central GDL'   },
-  { id: 2,  nombre: 'Colotlán'      },
-  { id: 3,  nombre: 'Tultitlán'     },
-  { id: 25, nombre: 'Propio'        },
-  { id: 14, nombre: 'Retail 14'     },
-  { id: 16, nombre: 'Retail 16'     },
-  { id: 17, nombre: 'Retail 17'     },
-  { id: 19, nombre: 'Retail 19'     },
-  { id: 6,  nombre: 'Decme'         },
-  { id: 44, nombre: 'Empaque dañado'},
+  { key: '1',        ids: [1],   label: '1',         tooltip: 'Central GDL' },
+  { key: '2',        ids: [2],   label: '2',         tooltip: 'Colotlán GDL' },
+  { key: '3',        ids: [3],   label: '3',         tooltip: 'Tultitlán CDMX' },
+  { key: '25',       ids: [25],  label: '25',        tooltip: 'Almacén Propio' },
+  { key: '14',       ids: [14],  label: '14',        tooltip: 'Retail 14' },
+  { key: 'Retail',   ids: [16, 17], label: 'Retail', tooltip: 'Suma de Retail 16 y Retail 17' },
+  { key: 'DECME',    ids: [6],   label: 'DECME',     tooltip: 'Decme (alm 6)' },
+  { key: 'EDanado',  ids: [44],  label: 'E.Dañado',  tooltip: 'Empaque dañado (alm 44) — NO suma al Total' },
 ];
+// IDs que cuentan al Total
+const ALMACENES_EN_TOTAL_IDS = ALMACENES
+  .filter((a) => a.key !== 'EDanado')
+  .flatMap((a) => a.ids);
+const ALMACEN_EDANADO_ID = 44;
 
 // Colores oficiales del roadmap → vienen de src/lib/roadmapColors.js
 // (fuente única de verdad, alineada con el Excel "Reporte 2026.xlsx")
@@ -52,7 +59,6 @@ export default function ReporteSection() {
   const [filtroRoadmap, setFiltroRoadmap] = useState('todos');
   const [filtroMarca, setFiltroMarca] = useState('todas');
   const [soloConStock, setSoloConStock] = useState(false);
-  const [verAlmacenes, setVerAlmacenes] = useState(false);  // toggle: mostrar columnas o solo total
   const [expandedSku, setExpandedSku] = useState(null);
   const [modal, setModal] = useState(null);
 
@@ -103,24 +109,29 @@ export default function ReporteSection() {
 
     return data.skus.map((s) => {
       const inv = invBySku[s.sku] || {};
-      // TOTAL real: suma de TODOS los almacenes con stock (no solo la whitelist).
-      // Antes se sumaba sólo ALMACENES → quedaban fuera 12, 41, 42, 70, 200, etc.
+      // Total = suma de los almacenes "comerciales" (1+2+3+25+14+16+17+6).
+      // EXCLUYE alm 44 (E.Dañado) y EXCLUYE almacenes "internos/tránsito"
+      // como 4, 5, 9, 11, 13, 15, 19, 41, 42, 70, 97, 200, etc. — alineado
+      // con el reporte que Fernando llevaba en Excel.
       let total = 0, totalDisp = 0, totalApart = 0;
-      for (const k of Object.keys(inv)) {
-        total      += inv[k]?.inv      || 0;
-        totalDisp  += inv[k]?.disp     || 0;
-        totalApart += inv[k]?.apartado || 0;
+      for (const id of ALMACENES_EN_TOTAL_IDS) {
+        total      += inv[id]?.inv      || 0;
+        totalDisp  += inv[id]?.disp     || 0;
+        totalApart += inv[id]?.apartado || 0;
       }
-      // Suma para "Otros": almacenes con stock que NO están en la whitelist
-      const idsWhitelist = new Set(ALMACENES.map((a) => a.id));
-      let invOtros = 0, dispOtros = 0, apartadoOtros = 0;
-      for (const k of Object.keys(inv)) {
-        if (!idsWhitelist.has(Number(k))) {
-          invOtros      += inv[k]?.inv      || 0;
-          dispOtros     += inv[k]?.disp     || 0;
-          apartadoOtros += inv[k]?.apartado || 0;
+      // Por columna de la tabla — agregamos sumas para columnas que agrupan IDs (ej. Retail = 16+17)
+      const invPorColumna = {};
+      for (const a of ALMACENES) {
+        let invC = 0, dispC = 0, apartC = 0;
+        for (const id of a.ids) {
+          invC   += inv[id]?.inv      || 0;
+          dispC  += inv[id]?.disp     || 0;
+          apartC += inv[id]?.apartado || 0;
         }
+        invPorColumna[a.key] = { inv: invC, disp: dispC, apartado: apartC };
       }
+      // E.Dañado se muestra pero no suma al total
+      const invEDanado = inv[ALMACEN_EDANADO_ID]?.inv || 0;
       const meta  = metaBySku[s.sku]  || {};
       const pre   = preBySku[s.sku]   || {};
       const rdmp  = rdmpBySku[s.sku]  || {};
@@ -140,8 +151,10 @@ export default function ReporteSection() {
         sku: s.sku,
         orden: s.orden,
         roadmap, descripcion: desc, marca,
-        inv, invTotal: total, invDisp: totalDisp, invApartado: totalApart,
-        invOtros, dispOtros, apartadoOtros,
+        ean13: s.ean13 || null,
+        codigo_sat: s.codigo_sat || null,
+        inv, invPorColumna, invEDanado,
+        invTotal: total, invDisp: totalDisp, invApartado: totalApart,
         precio_aaa: precioAaa,
         descuento: descuento,
         precio_descuento: precioDesc,
@@ -180,15 +193,31 @@ export default function ReporteSection() {
     cargar();
   }
 
-  // Guarda override de precio_aaa o descuento en reporte_skus
+  // Guarda override en reporte_skus. Soporta tanto campos numéricos
+  // (precio_aaa_manual, descuento_manual) como texto (ean13, codigo_sat).
   async function actualizarPrecio(id, campo, valor) {
     if (!canEdit) return;
-    const v = valor === '' || valor == null ? null : Number(valor);
-    if (v != null && (isNaN(v) || v < 0)) { toast.error('Valor inválido'); return; }
+    const esTexto = campo === 'ean13' || campo === 'codigo_sat';
+    let v;
+    if (valor === '' || valor == null) {
+      v = null;
+    } else if (esTexto) {
+      v = String(valor).trim() || null;
+    } else {
+      v = Number(valor);
+      if (isNaN(v) || v < 0) { toast.error('Valor inválido'); return; }
+    }
     const { error } = await supabase.from('reporte_skus').update({ [campo]: v }).eq('id', id);
-    if (error) { toast.error('Error: ' + error.message); return; }
-    toast.success('Precio guardado');
-    // Actualiza local sin re-fetchear todo
+    if (error) {
+      // Mensaje específico si la columna no existe (falta aplicar migración)
+      if (/Could not find.*column|column.*does not exist/i.test(error.message)) {
+        toast.error('Falta aplicar la migración SQL para EAN13/Código SAT. Ver migrations/20260429_reporte_skus_ean_sat.sql');
+      } else {
+        toast.error('Error: ' + error.message);
+      }
+      return;
+    }
+    toast.success('Guardado');
     setData(s => ({
       ...s,
       skus: s.skus.map(x => x.id === id ? { ...x, [campo]: v } : x),
@@ -250,12 +279,6 @@ export default function ReporteSection() {
                   Solo con stock
                 </label>
 
-                <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
-                  <input type="checkbox" checked={verAlmacenes} onChange={(e) => setVerAlmacenes(e.target.checked)}
-                    className="rounded border-gray-300" />
-                  Ver detalle por almacén
-                </label>
-
                 <span className="text-xs text-gray-500 ml-auto">{filtrados.length} de {rows.length} SKUs</span>
 
                 {canEdit && (
@@ -274,15 +297,11 @@ export default function ReporteSection() {
                       <th className="text-left px-3 py-2">SKU</th>
                       <th className="text-left px-3 py-2">Roadmap</th>
                       <th className="text-left px-3 py-2 min-w-[260px]">Descripción</th>
-                      {verAlmacenes && ALMACENES.map((a) => (
-                        <th key={a.id} className="text-right px-2 py-2 min-w-[55px] bg-slate-100" title={a.nombre}>{a.id}</th>
+                      <th className="text-left px-2 py-2 min-w-[110px]" title="Código de barras EAN-13">EAN13</th>
+                      <th className="text-left px-2 py-2 min-w-[100px]" title="Código del SAT (clasificación fiscal)">Código SAT</th>
+                      {ALMACENES.map((a) => (
+                        <th key={a.key} className="text-right px-2 py-2 min-w-[55px] bg-slate-100" title={a.tooltip}>{a.label}</th>
                       ))}
-                      {verAlmacenes && (
-                        <th className="text-right px-2 py-2 min-w-[55px] bg-slate-200 text-slate-700"
-                          title="Suma de almacenes que no están en las columnas anteriores (12, 41, 42, 70, 97, 200, etc.)">
-                          Otros
-                        </th>
-                      )}
                       <th className="text-right px-2 py-2 bg-blue-100 text-blue-900">Total</th>
                       <th className="text-right px-2 py-2">AAA</th>
                       <th className="text-right px-2 py-2">Desc.</th>
@@ -294,7 +313,6 @@ export default function ReporteSection() {
                     {filtrados.map((r) => (
                       <ReporteRow
                         key={r.id} r={r}
-                        verAlmacenes={verAlmacenes}
                         canEdit={canEdit}
                         expanded={expandedSku === r.sku}
                         onToggleExpand={() => setExpandedSku(expandedSku === r.sku ? null : r.sku)}
@@ -312,11 +330,11 @@ export default function ReporteSection() {
               {/* Footer: explica origen de datos */}
               <div className="px-5 py-2 border-t border-gray-100 text-[11px] text-gray-500 italic space-y-0.5">
                 <div>
-                  <strong>Inventario:</strong> ERP Acteck (<code className="text-gray-600">inventario_acteck</code> · Vw_TablaH_Inventario.xlsx).
-                  Mostrado: <strong>inventario total físico</strong>. Hover para ver disponible y apartado.
-                  El asterisco amarillo (<span className="text-amber-600">*</span>) indica que hay piezas apartadas/comprometidas.
-                  La columna <strong>Total</strong> suma <strong>todos</strong> los almacenes con stock; la columna <strong>Otros</strong>
-                  agrupa almacenes no listados arriba (12, 41, 42, 70, 97, 200, etc.).
+                  <strong>Inventario:</strong> ERP Acteck (<code className="text-gray-600">inventario_acteck</code>). Hover una columna para ver detalle.
+                  Columnas <strong>1, 2, 3</strong> = CEDIS (GDL, Colotlán, Tultitlán) · <strong>25</strong> = Propio · <strong>14</strong> = Retail 14 ·{' '}
+                  <strong>Retail</strong> = alm 16 + 17 · <strong>DECME</strong> = alm 6 · <strong>E.Dañado</strong> = alm 44.
+                  El <strong>Total</strong> = 1+2+3+25+14+Retail+DECME (excluye E.Dañado y almacenes internos como 4, 5, 9, 11, 13, 19, 41, 70, 97, 200).
+                  El asterisco amarillo (<span className="text-amber-600">*</span>) indica piezas apartadas/comprometidas.
                 </div>
                 <div>
                   <strong>Precios:</strong> de tabla <code className="text-gray-600">precios_sku</code> (cargada desde "Roadmap y Precios").
@@ -342,7 +360,7 @@ export default function ReporteSection() {
 }
 
 // ────────── Fila de tabla con expand ──────────
-function ReporteRow({ r, verAlmacenes, canEdit, expanded, onToggleExpand, onEditar, onEliminar, onActualizarPrecio }) {
+function ReporteRow({ r, canEdit, expanded, onToggleExpand, onEditar, onEliminar, onActualizarPrecio }) {
   const rmStyle = roadmapStyle(r.roadmap);
   const rmInfo = roadmapInfo(r.roadmap);
   return (
@@ -365,30 +383,46 @@ function ReporteRow({ r, verAlmacenes, canEdit, expanded, onToggleExpand, onEdit
           )}
         </td>
         <td className="px-3 py-2 text-xs text-gray-700 truncate max-w-[280px]" title={r.descripcion}>{r.descripcion || '—'}</td>
-        {verAlmacenes && ALMACENES.map((a) => {
-          const cell = r.inv[a.id];
+        <td className="px-2 py-2 text-xs text-gray-600 font-mono" title={r.ean13 || 'Sin EAN13 — editable'}
+          onClick={(e) => e.stopPropagation()}>
+          <PrecioCell
+            valor={r.ean13}
+            esManual={r.ean13 != null}
+            canEdit={canEdit}
+            tipo="texto"
+            onSave={(v) => onActualizarPrecio(r.id, 'ean13', v)}
+            placeholder="—"
+          />
+        </td>
+        <td className="px-2 py-2 text-xs text-gray-600 font-mono" title={r.codigo_sat || 'Sin Código SAT — editable'}
+          onClick={(e) => e.stopPropagation()}>
+          <PrecioCell
+            valor={r.codigo_sat}
+            esManual={r.codigo_sat != null}
+            canEdit={canEdit}
+            tipo="texto"
+            onSave={(v) => onActualizarPrecio(r.id, 'codigo_sat', v)}
+            placeholder="—"
+          />
+        </td>
+        {ALMACENES.map((a) => {
+          const cell = r.invPorColumna[a.key];
           const v = cell?.inv || 0;
           const disp = cell?.disp || 0;
           const apart = cell?.apartado || 0;
+          const isEDanado = a.key === 'EDanado';
           const tooltip = v > 0
-            ? `Inventario total: ${FMT_N(v)}\nDisponible: ${FMT_N(disp)}${apart > 0 ? `\nApartado/comprometido: ${FMT_N(apart)}` : ''}`
-            : '';
+            ? `${a.tooltip}\nInventario: ${FMT_N(v)}\nDisponible: ${FMT_N(disp)}${apart > 0 ? `\nApartado: ${FMT_N(apart)}` : ''}${isEDanado ? '\n(NO suma al Total)' : ''}`
+            : a.tooltip;
           return (
-            <td key={a.id} className={"text-right px-2 py-2 text-xs tabular-nums bg-slate-50 " + (v > 0 ? "text-gray-800" : "text-gray-300")}
+            <td key={a.key}
+              className={"text-right px-2 py-2 text-xs tabular-nums " + (isEDanado ? "bg-amber-50 " : "bg-slate-50 ") + (v > 0 ? "text-gray-800" : "text-gray-300")}
               title={tooltip}>
               {v > 0 ? FMT_N(v) : '—'}
-              {apart > 0 && <span className="text-amber-600 text-[9px] ml-0.5" title={tooltip}>*</span>}
+              {apart > 0 && <span className="text-amber-600 text-[9px] ml-0.5">*</span>}
             </td>
           );
         })}
-        {verAlmacenes && (
-          <td className={"text-right px-2 py-2 text-xs tabular-nums bg-slate-100 " + ((r.invOtros || 0) > 0 ? "text-slate-800" : "text-slate-300")}
-            title={(r.invOtros || 0) > 0
-              ? `Suma de almacenes no listados (12, 41, 42, 70, 97, 200, etc.)\nTotal: ${FMT_N(r.invOtros)}\nDisponible: ${FMT_N(r.dispOtros)}${(r.apartadoOtros||0) > 0 ? `\nApartado: ${FMT_N(r.apartadoOtros)}` : ''}`
-              : ''}>
-            {(r.invOtros || 0) > 0 ? FMT_N(r.invOtros) : '—'}
-          </td>
-        )}
         <td className="text-right px-2 py-2 tabular-nums font-bold bg-blue-50 text-blue-900"
           title={`Total (todos los almacenes): ${FMT_N(r.invTotal)}\nDisponible: ${FMT_N(r.invDisp)}${r.invApartado > 0 ? `\nApartado: ${FMT_N(r.invApartado)}` : ''}`}>
           {FMT_N(r.invTotal)}
@@ -442,13 +476,14 @@ function ReporteRow({ r, verAlmacenes, canEdit, expanded, onToggleExpand, onEdit
   );
 }
 
-// ────────── Celda editable inline para precio o descuento ──────────
+// ────────── Celda editable inline para precio, descuento o texto ──────────
 function PrecioCell({ valor, esManual, canEdit, tipo, onSave, placeholder }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState('');
 
-  const display = valor == null ? null
+  const display = valor == null || valor === '' ? null
     : tipo === 'porcentaje' ? `${Math.round(valor * 100)}%`
+    : tipo === 'texto'      ? String(valor)
     : formatMXN(valor);
 
   const startEdit = () => {
@@ -459,6 +494,8 @@ function PrecioCell({ valor, esManual, canEdit, tipo, onSave, placeholder }) {
   const commit = () => {
     if (val === '' || val == null) {
       onSave(null);
+    } else if (tipo === 'texto') {
+      onSave(String(val).trim() || null);
     } else {
       const n = Number(val);
       if (isNaN(n)) { setEditing(false); return; }
@@ -471,12 +508,14 @@ function PrecioCell({ valor, esManual, canEdit, tipo, onSave, placeholder }) {
   if (editing) {
     return (
       <input
-        autoFocus type="number" step={tipo === 'porcentaje' ? '1' : '0.01'}
+        autoFocus
+        type={tipo === 'texto' ? 'text' : 'number'}
+        step={tipo === 'porcentaje' ? '1' : '0.01'}
         value={val}
         onChange={(e) => setVal(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
-        className="w-20 px-1 py-0.5 text-xs text-right border border-blue-400 rounded bg-white"
+        className={(tipo === 'texto' ? 'w-28 ' : 'w-20 text-right ') + 'px-1 py-0.5 text-xs border border-blue-400 rounded bg-white'}
       />
     );
   }
