@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
+import { PCEL_REAL } from '../../lib/constants';
 import {
   BarChart3, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2,
   DollarSign, Package, Clock, Target, ArrowRight,
@@ -26,14 +27,28 @@ const CLIENTES = [
 
 const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
-// Pesos del Health Score
-const PESOS = {
-  cuota:      30,
-  inventario: 25,
-  dso:        20,
-  vencidos:   15,
-  marketing:  10,
+// Pesos del Health Score por cliente. Refleja la priorización que Fernando
+// definió:
+//   1) Cumplimiento cuota sell-in
+//   2) Desplazamiento del inventario (cobertura calculada del sellout)
+//   3) Marketing
+//   4) Crédito y cobranza (DSO + Vencidos)
+//
+// Para Mercado Libre — no aplica nada del esquema clásico (no hay factura,
+// ni cuota mensual, ni almacén físico Acteck) → tarjeta especial sin score.
+const PESOS_POR_CLIENTE = {
+  digitalife: { cuota: 35, inventario: 25, marketing: 15, dso: 15, vencidos: 10 },
+  pcel:       { cuota: 40, inventario: 25, marketing:  0, dso: 20, vencidos: 15 }, // marketing N/A
+  mercadolibre: null, // tratamiento aparte: solo crecimiento sell-out
 };
+function aplicaComponente(cliente, comp) {
+  const p = PESOS_POR_CLIENTE[cliente];
+  return p != null && (p[comp] || 0) > 0;
+}
+function pesoComponente(cliente, comp) {
+  const p = PESOS_POR_CLIENTE[cliente];
+  return p ? (p[comp] || 0) : 0;
+}
 
 // Umbrales de alertas
 const UMBRAL_VENCIDO_ALERTA   = 100000;  // MXN
@@ -163,28 +178,40 @@ function calcularResumen(clienteKey, data) {
   const siYoY = siMesPrev > 0 ? ((siMes - siMesPrev) / siMesPrev) * 100 : null;
 
   // ── Cuota YTD y anual (mismo período vs mismo período) ──
-  const cuotaYTD = cm
+  // Fuente principal: tabla cuotas_mensuales (cliente, anio, mes, cuota_min, cuota_ideal).
+  // Fallback PCEL: constants.PCEL_REAL.cuota50M (objeto {mes:monto}).
+  let cuotaYTD = cm
     .filter((r) => Number(r.mes) <= mesActual)
     .reduce((a, r) => a + Number(r.cuota_min || 0), 0);
-  const cuotaAnual = cm.reduce((a, r) => a + Number(r.cuota_min || 0), 0);
-  const cuotaIdealAnual = cm.reduce((a, r) => a + Number(r.cuota_ideal || 0), 0);
+  let cuotaAnual = cm.reduce((a, r) => a + Number(r.cuota_min || 0), 0);
+  let cuotaIdealAnual = cm.reduce((a, r) => a + Number(r.cuota_ideal || 0), 0);
+  if (clienteKey === 'pcel' && cuotaAnual === 0 && PCEL_REAL?.cuota50M) {
+    const c = PCEL_REAL.cuota50M;
+    cuotaYTD   = Object.entries(c).filter(([m]) => Number(m) <= mesActual).reduce((a, [, v]) => a + Number(v || 0), 0);
+    cuotaAnual = Object.values(c).reduce((a, v) => a + Number(v || 0), 0);
+    cuotaIdealAnual = cuotaAnual; // no hay "ideal" para PCEL en constants → usar el min
+  }
 
   // IMPORTANTE: Comparar YTD vs YTD (mismo período), no YTD vs anual.
   // El "avance anual" se confunde con cumplimiento → NO lo usamos en el score.
   const cumplimientoYTD = cuotaYTD > 0 ? (siYTD / cuotaYTD) * 100 : null;
 
   // ── Inventario del último snapshot (valor MXN) ──
+  // Filtra filas con anio/semana null (basura del uploader cuando no hay header).
   let inventarioValor = 0;
   let inventarioPiezas = 0;
   let inventarioSemana = null;
-  if (inv.length > 0) {
-    const latest = inv.find((r) => r.anio != null && r.semana != null);
-    if (latest) {
-      const snap = inv.filter((r) => r.anio === latest.anio && r.semana === latest.semana);
-      inventarioValor  = snap.reduce((a, r) => a + Number(r.valor || 0), 0);
-      inventarioPiezas = snap.reduce((a, r) => a + Number(r.stock || 0), 0);
-      inventarioSemana = `${latest.anio}-${String(latest.semana).padStart(2,'0')}`;
-    }
+  const invValidas = inv.filter((r) => r.anio != null && r.semana != null);
+  if (invValidas.length > 0) {
+    // Toma la semana más reciente (mayor anio, luego mayor semana)
+    const semanaMax = invValidas.reduce((max, r) => {
+      const k = Number(r.anio) * 100 + Number(r.semana);
+      return k > max.k ? { k, anio: Number(r.anio), semana: Number(r.semana) } : max;
+    }, { k: -1, anio: 0, semana: 0 });
+    const snap = invValidas.filter((r) => Number(r.anio) === semanaMax.anio && Number(r.semana) === semanaMax.semana);
+    inventarioValor  = snap.reduce((a, r) => a + Number(r.valor || 0), 0);
+    inventarioPiezas = snap.reduce((a, r) => a + Number(r.stock || 0), 0);
+    inventarioSemana = `${semanaMax.anio}-${String(semanaMax.semana).padStart(2,'0')}`;
   }
 
   // ── Cobertura en DÍAS (alineado con HomeCliente.jsx líneas 574-587) ──
@@ -258,22 +285,36 @@ function calcularResumen(clienteKey, data) {
     ? clamp(((roiMkt - 2) / 8) * 100, 0, 100)
     : null;
 
-  const componentes = [
-    { id: 'cuota',      score: scoreCuota, peso: PESOS.cuota      },
-    { id: 'inventario', score: scoreInv,   peso: PESOS.inventario },
-    { id: 'dso',        score: scoreDSO,   peso: PESOS.dso        },
-    { id: 'vencidos',   score: scoreVen,   peso: PESOS.vencidos   },
-    { id: 'marketing',  score: scoreMkt,   peso: PESOS.marketing  },
-  ];
-  const activos = componentes.filter((c) => c.score != null);
-  const pesoTotal = activos.reduce((a, c) => a + c.peso, 0);
+  // ═════ Pesos por cliente + penalización por datos faltantes ═════
+  // Antes: si un componente no tenía datos, se EXCLUÍA del cálculo y el score
+  // se normalizaba al peso disponible. Eso inflaba el score (ej. PCEL 97/100
+  // con solo DSO+Vencidos activos).
+  //
+  // Ahora: si un componente APLICA al cliente pero no tiene datos, cuenta
+  // como score 0 (penalización honesta). Si NO aplica al cliente (peso=0),
+  // simplemente se omite.
+  const SCORES = { cuota: scoreCuota, inventario: scoreInv, dso: scoreDSO, vencidos: scoreVen, marketing: scoreMkt };
+  const componentes = ['cuota', 'inventario', 'marketing', 'dso', 'vencidos'].map((id) => {
+    const peso = pesoComponente(clienteKey, id);
+    const aplica = peso > 0;
+    const rawScore = SCORES[id];
+    let score, estado;
+    if (!aplica)              { score = null; estado = 'no_aplica'; }
+    else if (rawScore == null){ score = 0;    estado = 'sin_datos';  }
+    else                      { score = rawScore; estado = 'ok';    }
+    return { id, score, peso, aplica, estado };
+  });
+  const aplicables = componentes.filter((c) => c.aplica);
+  const pesoTotal = aplicables.reduce((a, c) => a + c.peso, 0);
   const healthScore = pesoTotal > 0
-    ? activos.reduce((a, c) => a + c.score * c.peso, 0) / pesoTotal
+    ? aplicables.reduce((a, c) => a + c.score * c.peso, 0) / pesoTotal
     : null;
+  const componentesSinDatos = aplicables.filter((c) => c.estado === 'sin_datos').length;
 
   return {
     healthScore,
     componentes,
+    componentesSinDatos,
     siYTD, soYTD,
     siMes, siMesPrev, siYoY,
     soMes,
@@ -282,6 +323,29 @@ function calcularResumen(clienteKey, data) {
     saldoVencido, saldoActual, dsoReal, dsoPlazo: plazo, aging90, pctVencido,
     inventarioValor, inventarioPiezas, inventarioSemana, coberturaDias,
     invMktYTD, roiMkt,
+  };
+}
+
+// ────────── Resumen especial Mercado Libre (sin score clásico) ──────────
+// ML no tiene factura, ni cuota, ni inventario físico Acteck → no encaja
+// con el esquema de salud comercial. Solo medimos crecimiento sell-out.
+function calcularResumenMercadoLibre(data) {
+  const va = data.ventasAgg.filter((r) => r.cliente === 'mercadolibre');
+  const vaAnio = va.filter((r) => r.anio === anioActual);
+  const soYTD = vaAnio.filter((r) => Number(r.mes) <= mesActual).reduce((a, r) => a + Number(r.sell_out || 0), 0);
+  const soYTDPrev = va.filter((r) => r.anio === anioActual - 1 && Number(r.mes) <= mesActual)
+    .reduce((a, r) => a + Number(r.sell_out || 0), 0);
+  const soMes     = Number(vaAnio.find((r) => Number(r.mes) === mesActual)?.sell_out || 0);
+  const soMesPrev = Number(va.find((r) => Number(r.mes) === mesActual && r.anio === anioActual - 1)?.sell_out || 0);
+  const crecimientoYTD = soYTDPrev > 0 ? ((soYTD - soYTDPrev) / soYTDPrev) * 100 : null;
+  const crecimientoMes = soMesPrev > 0 ? ((soMes - soMesPrev) / soMesPrev) * 100 : null;
+  return {
+    healthScore: null,         // sin score clásico
+    componentes: [],           // no aplica
+    componentesSinDatos: 0,
+    soYTD, soYTDPrev, soMes, soMesPrev,
+    crecimientoYTD, crecimientoMes,
+    esMercadoLibre: true,
   };
 }
 
@@ -365,7 +429,9 @@ export default function ResumenClientesTab({ onDrillDown }) {
     if (data.loading) return [];
     return CLIENTES.map((c) => ({
       cliente: c,
-      resumen: calcularResumen(c.key, data),
+      resumen: c.key === 'mercadolibre'
+        ? calcularResumenMercadoLibre(data)
+        : calcularResumen(c.key, data),
     }));
   }, [data]);
 
@@ -446,8 +512,15 @@ export default function ResumenClientesTab({ onDrillDown }) {
 
 // ────────── Card por cliente ──────────
 function ClienteCard({ cliente, resumen, onDrillDown }) {
+  // Caso especial: Mercado Libre no tiene score clásico → tarjeta de
+  // crecimiento sell-out vs año anterior.
+  if (resumen?.esMercadoLibre) {
+    return <ClienteCardML cliente={cliente} resumen={resumen} onDrillDown={onDrillDown} />;
+  }
+
   const s = resumen.healthScore;
   const color = colorScore(s);
+  const datosParciales = resumen.componentesSinDatos > 0;
 
   return (
     <div
@@ -494,13 +567,20 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
           <div className="text-[11px] text-gray-500 mt-0.5">
             Salud comercial general
           </div>
+          {datosParciales && (
+            <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded"
+              title={`${resumen.componentesSinDatos} componente(s) sin datos. El score los cuenta como 0.`}>
+              <AlertTriangle className="w-2.5 h-2.5" />
+              {resumen.componentesSinDatos} sin datos
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Breakdown de componentes */}
+      {/* Breakdown de componentes (solo los que aplican al cliente) */}
       <div className="px-5 pb-3 space-y-1.5">
-        {resumen.componentes.map((c) => (
-          <ComponenteBar key={c.id} id={c.id} score={c.score} peso={c.peso} />
+        {resumen.componentes.filter((c) => c.aplica).map((c) => (
+          <ComponenteBar key={c.id} id={c.id} score={c.score} peso={c.peso} estado={c.estado} />
         ))}
       </div>
 
@@ -612,27 +692,32 @@ function labelCobertura(dias) {
   return '(sobreinventario)';
 }
 
-function ComponenteBar({ id, score, peso }) {
+function ComponenteBar({ id, score, peso, estado }) {
   const labels = {
-    cuota:      'Cumplimiento cuota',
-    inventario: 'Cobertura inventario',
-    dso:        'Días cobro',
-    vencidos:   'Pagos vencidos',
+    cuota:      'Cumplimiento cuota (sell-in)',
+    inventario: 'Desplazamiento (sell-out)',
     marketing:  'ROI Marketing',
+    dso:        'Días cobro (DSO)',
+    vencidos:   'Pagos vencidos',
   };
   const icons = {
     cuota:      Target,
     inventario: Package,
+    marketing:  TrendingUp,
     dso:        Clock,
     vencidos:   DollarSign,
-    marketing:  TrendingUp,
   };
   const Icon = icons[id];
-  const color = colorScore(score);
+  const sinDatos = estado === 'sin_datos';
+  const color = sinDatos ? '#94A3B8' : colorScore(score);
   return (
-    <div className="flex items-center gap-2 text-[11px]">
+    <div className={"flex items-center gap-2 text-[11px] " + (sinDatos ? 'opacity-60' : '')}
+      title={sinDatos ? 'Sin datos cargados — cuenta como 0 en el score' : undefined}>
       <Icon className="w-3 h-3 text-gray-400 shrink-0" />
-      <div className="flex-1 min-w-0 truncate text-gray-600">{labels[id]}</div>
+      <div className="flex-1 min-w-0 truncate text-gray-600">
+        {labels[id]}
+        {sinDatos && <span className="ml-1 text-amber-600 text-[9px]">⚠ sin datos</span>}
+      </div>
       <div className="text-[10px] text-gray-400 tabular-nums shrink-0">{peso}%</div>
       <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden shrink-0">
         {score != null && (
@@ -640,7 +725,75 @@ function ComponenteBar({ id, score, peso }) {
         )}
       </div>
       <div className="w-8 text-right font-semibold tabular-nums shrink-0" style={{ color }}>
-        {score != null ? score.toFixed(0) : '—'}
+        {sinDatos ? '—' : (score != null ? score.toFixed(0) : '—')}
+      </div>
+    </div>
+  );
+}
+
+// ────────── Card especial Mercado Libre ──────────
+// Solo crecimiento sell-out: ML no encaja con el esquema de salud comercial
+// (sin facturación directa, sin cuota mensual, sin almacén físico).
+function ClienteCardML({ cliente, resumen, onDrillDown }) {
+  const cYTD = resumen.crecimientoYTD;
+  const cMes = resumen.crecimientoMes;
+  const colorC = (c) => c == null ? '#94A3B8' : c >= 20 ? '#10B981' : c >= 0 ? '#F59E0B' : '#EF4444';
+  return (
+    <div
+      className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-amber-300 hover:-translate-y-0.5 transition-all cursor-pointer relative"
+      style={{ borderTop: `4px solid ${cliente.color}` }}
+      onClick={onDrillDown}
+      title={`Click para ir al detalle de ${cliente.nombre}`}
+    >
+      <div className="px-5 pt-4 pb-3 flex items-start justify-between">
+        <div>
+          <h3 className="font-bold text-gray-800 text-lg">{cliente.nombre}</h3>
+          <p className="text-xs text-gray-500">{cliente.marca} · marketplace</p>
+        </div>
+        <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-amber-500 group-hover:translate-x-1 transition-all" />
+      </div>
+      <div className="px-5 pb-3 text-[11px] text-gray-500 italic">
+        Sin score clásico — ML no maneja factura, cuota mensual, ni almacén físico Acteck.
+      </div>
+      <div className="border-t border-gray-100 px-5 py-3 space-y-2">
+        <div className="flex items-baseline justify-between">
+          <div>
+            <div className="text-[10px] uppercase text-gray-500 tracking-wide">Sell-Out YTD</div>
+            <div className="font-bold text-gray-800 text-base">{resumen.soYTD > 0 ? formatMXN(resumen.soYTD) : '—'}</div>
+            {resumen.soYTDPrev > 0 && (
+              <div className="text-[10px] text-gray-500">
+                vs YTD {anioActual - 1}: {formatMXN(resumen.soYTDPrev)}
+              </div>
+            )}
+          </div>
+          {cYTD != null && (
+            <div className="text-right">
+              <div className="text-[10px] uppercase text-gray-500 tracking-wide">Crec. YTD</div>
+              <div className="font-bold text-lg" style={{ color: colorC(cYTD) }}>
+                {cYTD >= 0 ? '+' : ''}{cYTD.toFixed(1)}%
+              </div>
+            </div>
+          )}
+        </div>
+        {cMes != null && (
+          <div className={[
+            'text-[10px] flex items-center gap-0.5',
+            cMes >= 0 ? 'text-emerald-600' : 'text-red-600',
+          ].join(' ')}>
+            {cMes >= 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+            {cMes >= 0 ? '+' : ''}{cMes.toFixed(1)}% vs {MESES_CORTO[mesActual - 1]} {anioActual - 1}
+          </div>
+        )}
+      </div>
+      <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-3 grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <div className="text-gray-500">Sell-Out mes ({MESES_CORTO[mesActual - 1]})</div>
+          <div className="font-semibold text-gray-800">{resumen.soMes > 0 ? formatMXN(resumen.soMes) : '—'}</div>
+        </div>
+        <div>
+          <div className="text-gray-500">Mismo mes año pasado</div>
+          <div className="font-semibold text-gray-800">{resumen.soMesPrev > 0 ? formatMXN(resumen.soMesPrev) : '—'}</div>
+        </div>
       </div>
     </div>
   );
