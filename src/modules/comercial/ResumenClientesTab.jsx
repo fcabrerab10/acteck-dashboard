@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import { PCEL_REAL } from '../../lib/constants';
+import { fetchInventarioCliente, fetchSelloutSku } from '../../lib/pcelAdapter';
 import {
   BarChart3, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2,
   DollarSign, Package, Clock, Target, ArrowRight,
@@ -101,18 +102,18 @@ function useResumenData() {
 
   useEffect(() => {
     (async () => {
-      const [vaRes, cmRes, invRes, dsoRes, ccRes, soRes, mkRes] = await Promise.all([
+      // Inventario cliente: usamos el MISMO adapter que HomeCliente para que
+      // los números sean consistentes entre Resumen y la pestaña per-cliente.
+      // PCEL → lee de sellout_pcel; Digitalife → de inventario_cliente.
+      const [vaRes, cmRes, invDigi, invPcel, dsoRes, ccRes, soRes, mkRes] = await Promise.all([
         supabase.from('v_ventas_mensuales_agg')
           .select('cliente, anio, mes, sell_in, sell_out')
           .gte('anio', anioActual - 1),
         supabase.from('cuotas_mensuales')
           .select('cliente, mes, anio, cuota_min, cuota_ideal')
           .eq('anio', anioActual),
-        supabase.from('inventario_cliente')
-          .select('cliente, anio, semana, stock, valor')
-          .order('anio', { ascending: false })
-          .order('semana', { ascending: false })
-          .limit(10000),
+        fetchInventarioCliente('digitalife'),
+        fetchInventarioCliente('pcel'),
         supabase.from('v_dso_real')
           .select('cliente, fecha_corte, saldo_actual_total, saldo_vencido, dso_real, dso_erp, aging_mas90, facturas_abiertas'),
         supabase.from('clientes_credito_config')
@@ -125,11 +126,17 @@ function useResumenData() {
           .eq('anio', anioActual),
       ]);
 
+      // Combina inventario de los dos clientes en una sola lista
+      const invCombinado = [
+        ...(invDigi || []).map((r) => ({ ...r, cliente: 'digitalife' })),
+        ...(invPcel || []).map((r) => ({ ...r, cliente: 'pcel' })),
+      ];
+
       setState({
         loading: false,
         ventasAgg:         vaRes.data  || [],
         cuotasMensuales:   cmRes.data  || [],
-        inventarioCliente: invRes.data || [],
+        inventarioCliente: invCombinado,
         dsoReal:           dsoRes.data || [],
         creditoConfig:     ccRes.data  || [],
         selloutSku:        soRes.data  || [],
@@ -139,6 +146,14 @@ function useResumenData() {
   }, []);
 
   return state;
+}
+
+// Helper de valor de inventario (idéntico al de HomeCliente.jsx _invValor)
+// Cae a stock × costo_convenio cuando `valor` es null.
+function invValorRow(r) {
+  const v = Number(r.valor) || 0;
+  if (v > 0) return v;
+  return (Number(r.stock) || 0) * (Number(r.costo_convenio) || 0);
 }
 
 // ────────── Cálculo del Health Score por cliente ──────────
@@ -209,7 +224,8 @@ function calcularResumen(clienteKey, data) {
       return k > max.k ? { k, anio: Number(r.anio), semana: Number(r.semana) } : max;
     }, { k: -1, anio: 0, semana: 0 });
     const snap = invValidas.filter((r) => Number(r.anio) === semanaMax.anio && Number(r.semana) === semanaMax.semana);
-    inventarioValor  = snap.reduce((a, r) => a + Number(r.valor || 0), 0);
+    // Usa fórmula stock × costo_convenio cuando valor es null (igual a HomeCliente)
+    inventarioValor  = snap.reduce((a, r) => a + invValorRow(r), 0);
     inventarioPiezas = snap.reduce((a, r) => a + Number(r.stock || 0), 0);
     inventarioSemana = `${semanaMax.anio}-${String(semanaMax.semana).padStart(2,'0')}`;
   }
