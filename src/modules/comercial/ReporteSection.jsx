@@ -65,15 +65,32 @@ export default function ReporteSection({ standalone = false } = {}) {
 
   useEffect(() => { if (open) cargar(); /* eslint-disable-next-line */ }, [open]);
 
+  // Helper: pagina sobre Supabase (que limita a 1000 filas por defecto).
+  // inventario_acteck tiene 10k+ filas, así que necesitamos traerlo en chunks.
+  async function fetchAllRows(tableName, selectCols, filters = (q) => q) {
+    const PAGE = 1000;
+    let from = 0;
+    const out = [];
+    while (true) {
+      const q = filters(supabase.from(tableName).select(selectCols)).range(from, from + PAGE - 1);
+      const { data, error } = await q;
+      if (error) { console.error(`fetchAllRows ${tableName}:`, error); return out; }
+      if (!data || data.length === 0) break;
+      out.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+    return out;
+  }
+
   async function cargar() {
     setData((s) => ({ ...s, loading: true }));
-    const [rsRes, invRes, metaRes, preRes, rmRes] = await Promise.all([
+    const [rsRes, invAll, metaRes, preRes, rmRes] = await Promise.all([
       supabase.from('reporte_skus').select('*').eq('activo', true).order('orden'),
-      // Inventario del ERP Acteck (Vw_TablaH_Inventario.xlsx, cargado vía /uploads.html)
-      // Mostramos `inventario` (total físico) y `disponible` (vendible) en tooltip.
-      supabase.from('inventario_acteck')
-        .select('articulo, no_almacen, disponible, inventario')
-        .neq('articulo', '__TEST__'),
+      // Inventario del ERP Acteck — paginado (la tabla tiene >10k filas y
+      // Supabase limita a 1000 por request).
+      fetchAllRows('inventario_acteck', 'articulo, no_almacen, disponible, inventario',
+        (q) => q.neq('articulo', '__TEST__')),
       supabase.from('v_sku_metadata').select('*'),
       supabase.from('precios_sku').select('sku, precio_aaa, descuento, precio_descuento'),
       supabase.from('roadmap_sku').select('sku, rdmp, descripcion'),
@@ -81,7 +98,7 @@ export default function ReporteSection({ standalone = false } = {}) {
     setData({
       loading: false,
       skus: rsRes.data || [],
-      inventario: invRes.data || [],
+      inventario: invAll || [],
       metadata: metaRes.data || [],
       precios: preRes.data || [],
       roadmap: rmRes.data || [],
