@@ -103,9 +103,24 @@ export default function ReporteSection() {
 
     return data.skus.map((s) => {
       const inv = invBySku[s.sku] || {};
-      const total      = ALMACENES.reduce((a, x) => a + (inv[x.id]?.inv      || 0), 0);
-      const totalDisp  = ALMACENES.reduce((a, x) => a + (inv[x.id]?.disp     || 0), 0);
-      const totalApart = ALMACENES.reduce((a, x) => a + (inv[x.id]?.apartado || 0), 0);
+      // TOTAL real: suma de TODOS los almacenes con stock (no solo la whitelist).
+      // Antes se sumaba sólo ALMACENES → quedaban fuera 12, 41, 42, 70, 200, etc.
+      let total = 0, totalDisp = 0, totalApart = 0;
+      for (const k of Object.keys(inv)) {
+        total      += inv[k]?.inv      || 0;
+        totalDisp  += inv[k]?.disp     || 0;
+        totalApart += inv[k]?.apartado || 0;
+      }
+      // Suma para "Otros": almacenes con stock que NO están en la whitelist
+      const idsWhitelist = new Set(ALMACENES.map((a) => a.id));
+      let invOtros = 0, dispOtros = 0, apartadoOtros = 0;
+      for (const k of Object.keys(inv)) {
+        if (!idsWhitelist.has(Number(k))) {
+          invOtros      += inv[k]?.inv      || 0;
+          dispOtros     += inv[k]?.disp     || 0;
+          apartadoOtros += inv[k]?.apartado || 0;
+        }
+      }
       const meta  = metaBySku[s.sku]  || {};
       const pre   = preBySku[s.sku]   || {};
       const rdmp  = rdmpBySku[s.sku]  || {};
@@ -126,6 +141,7 @@ export default function ReporteSection() {
         orden: s.orden,
         roadmap, descripcion: desc, marca,
         inv, invTotal: total, invDisp: totalDisp, invApartado: totalApart,
+        invOtros, dispOtros, apartadoOtros,
         precio_aaa: precioAaa,
         descuento: descuento,
         precio_descuento: precioDesc,
@@ -261,6 +277,12 @@ export default function ReporteSection() {
                       {verAlmacenes && ALMACENES.map((a) => (
                         <th key={a.id} className="text-right px-2 py-2 min-w-[55px] bg-slate-100" title={a.nombre}>{a.id}</th>
                       ))}
+                      {verAlmacenes && (
+                        <th className="text-right px-2 py-2 min-w-[55px] bg-slate-200 text-slate-700"
+                          title="Suma de almacenes que no están en las columnas anteriores (12, 41, 42, 70, 97, 200, etc.)">
+                          Otros
+                        </th>
+                      )}
                       <th className="text-right px-2 py-2 bg-blue-100 text-blue-900">Total</th>
                       <th className="text-right px-2 py-2">AAA</th>
                       <th className="text-right px-2 py-2">Desc.</th>
@@ -293,6 +315,8 @@ export default function ReporteSection() {
                   <strong>Inventario:</strong> ERP Acteck (<code className="text-gray-600">inventario_acteck</code> · Vw_TablaH_Inventario.xlsx).
                   Mostrado: <strong>inventario total físico</strong>. Hover para ver disponible y apartado.
                   El asterisco amarillo (<span className="text-amber-600">*</span>) indica que hay piezas apartadas/comprometidas.
+                  La columna <strong>Total</strong> suma <strong>todos</strong> los almacenes con stock; la columna <strong>Otros</strong>
+                  agrupa almacenes no listados arriba (12, 41, 42, 70, 97, 200, etc.).
                 </div>
                 <div>
                   <strong>Precios:</strong> de tabla <code className="text-gray-600">precios_sku</code> (cargada desde "Roadmap y Precios").
@@ -357,8 +381,16 @@ function ReporteRow({ r, verAlmacenes, canEdit, expanded, onToggleExpand, onEdit
             </td>
           );
         })}
+        {verAlmacenes && (
+          <td className={"text-right px-2 py-2 text-xs tabular-nums bg-slate-100 " + ((r.invOtros || 0) > 0 ? "text-slate-800" : "text-slate-300")}
+            title={(r.invOtros || 0) > 0
+              ? `Suma de almacenes no listados (12, 41, 42, 70, 97, 200, etc.)\nTotal: ${FMT_N(r.invOtros)}\nDisponible: ${FMT_N(r.dispOtros)}${(r.apartadoOtros||0) > 0 ? `\nApartado: ${FMT_N(r.apartadoOtros)}` : ''}`
+              : ''}>
+            {(r.invOtros || 0) > 0 ? FMT_N(r.invOtros) : '—'}
+          </td>
+        )}
         <td className="text-right px-2 py-2 tabular-nums font-bold bg-blue-50 text-blue-900"
-          title={`Total: ${FMT_N(r.invTotal)}\nDisponible: ${FMT_N(r.invDisp)}${r.invApartado > 0 ? `\nApartado: ${FMT_N(r.invApartado)}` : ''}`}>
+          title={`Total (todos los almacenes): ${FMT_N(r.invTotal)}\nDisponible: ${FMT_N(r.invDisp)}${r.invApartado > 0 ? `\nApartado: ${FMT_N(r.invApartado)}` : ''}`}>
           {FMT_N(r.invTotal)}
         </td>
         <td className="text-right px-2 py-2 tabular-nums text-xs"
