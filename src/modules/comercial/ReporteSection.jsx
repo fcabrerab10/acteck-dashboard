@@ -364,7 +364,7 @@ export default function ReporteSection({ standalone = false } = {}) {
                   Columnas <strong>1, 2, 3</strong> = CEDIS (GDL, Colotlán, Tultitlán) · <strong>25</strong> = Propio · <strong>14</strong> = Retail 14 ·{' '}
                   <strong>Retail</strong> = alm 16 + 17 · <strong>DECME</strong> = alm 6 · <strong>E.Dañado</strong> = alm 44.
                   El <strong>Total</strong> = 1+2+3+25+14+Retail+DECME (excluye E.Dañado y almacenes internos como 4, 5, 9, 11, 13, 19, 41, 70, 97, 200).
-                  El asterisco amarillo (<span className="text-amber-600">*</span>) indica piezas apartadas/comprometidas.
+                  Para ver disponible y apartado, expande un SKU.
                 </div>
                 <div>
                   <strong>Precios:</strong> de tabla <code className="text-gray-600">precios_sku</code> (cargada desde "Roadmap y Precios").
@@ -449,7 +449,6 @@ function ReporteRow({ r, canEdit, expanded, onToggleExpand, onEditar, onEliminar
               className={"text-right px-2 py-2 text-xs tabular-nums " + (isEDanado ? "bg-amber-50 " : "bg-slate-50 ") + (v > 0 ? "text-gray-800" : "text-gray-300")}
               title={tooltip}>
               {v > 0 ? FMT_N(v) : '—'}
-              {apart > 0 && <span className="text-amber-600 text-[9px] ml-0.5">*</span>}
             </td>
           );
         })}
