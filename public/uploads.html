@@ -342,10 +342,21 @@ const PARSERS = {
     const sh = wb.Sheets[wb.SheetNames[0]];
     const cellVal = (ref) => { const c = sh[ref]; return c ? (c.v ?? null) : null; };
 
+    // ── Detección de formato ──
+    // Formato A (semanal "00473SemanaNN"): F6 contiene "Estado de cuenta de la Semana X..."
+    // Formato B ("Antigüedad de Saldos"): A1 contiene "Antigüedad de Saldos"
+    const a1 = String(cellVal('A1') || '').toLowerCase();
+    const f6 = String(cellVal('F6') || '');
+    const esFormatoAntiguedad = a1.includes('antig') && a1.includes('saldos');
+
+    if (esFormatoAntiguedad) {
+      return PARSERS.estadoCuentaAntiguedad(wb, cliente, filename);
+    }
+
+    // ── Formato A (original semanal) ──
     // Year + week + fecha_corte del header F6 ("Estado de cuenta de la Semana X Del DD/MM/YYYY al DD/MM/YYYY")
     let semana = null, fecha_corte = null, year = new Date().getFullYear();
-    const headerTxt = String(cellVal('F6') || '');
-    const mm = headerTxt.match(/Semana\s+(\d+)\s+Del\s+(\d{2}\/\d{2}\/\d{4})\s+al\s+(\d{2}\/\d{2}\/\d{4})/i);
+    const mm = f6.match(/Semana\s+(\d+)\s+Del\s+(\d{2}\/\d{2}\/\d{4})\s+al\s+(\d{2}\/\d{2}\/\d{4})/i);
     if (mm) {
       semana = parseInt(mm[1], 10);
       const parts = mm[3].split('/');
@@ -450,6 +461,215 @@ const PARSERS = {
       detalle
     };
   },
+
+  // Parser para el formato "Antigüedad de Saldos - Cuentas por Cobrar".
+  // Reportes sin estructura de "Semana N" — se calcula la semana ISO desde
+  // la fecha del footer ("martes, 28 de abril de 2026 (HH:MM)").
+  // Headers en row 1: Cliente, Movimiento, Referencia, Emisión, Vencimiento,
+  // Días, Al Corriente, de 1 a 30, de 31 a 60, de 61 a 90, de 91 a 180,
+  // de 181 a 360, de 361 a 999, más de 999 días.
+  estadoCuentaAntiguedad(wb, cliente, filename){
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    const arr = XLSX.utils.sheet_to_json(sh, {defval:null, header:1});
+
+    // Mapeo de meses en español (con/sin punto)
+    const MESES_ES = {
+      'ene':1,'enero':1,'feb':2,'febrero':2,'mar':3,'marzo':3,'abr':4,'abril':4,
+      'may':5,'mayo':5,'jun':6,'junio':6,'jul':7,'julio':7,'ago':8,'agosto':8,
+      'sep':9,'sept':9,'septiembre':9,'oct':10,'octubre':10,'nov':11,'noviembre':11,
+      'dic':12,'diciembre':12,
+    };
+    const parseFechaES = (raw) => {
+      if (raw == null || raw === '') return null;
+      // Si Excel ya lo dio como número serial
+      if (typeof raw === 'number') {
+        const d = new Date((raw - 25569) * 86400 * 1000);
+        return isNaN(d) ? null : d.toISOString().slice(0, 10);
+      }
+      const s = String(raw).trim().replace(/\./g, '');
+      // Formato "14/ene/2026" o "14/ene./2026"
+      const m = s.match(/^(\d{1,2})\/([a-záéíóú]+)\/(\d{4})/i);
+      if (m) {
+        const mes = MESES_ES[m[2].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')];
+        if (!mes) return null;
+        return `${m[3]}-${String(mes).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
+      }
+      // Fallback ISO o DD/MM/YYYY
+      return toISODate(raw);
+    };
+
+    // Detecta fila header (busca "Cliente" + "Movimiento" en la misma fila)
+    let headerRow = -1;
+    for (let i = 0; i < Math.min(arr.length, 10); i++) {
+      const r = arr[i] || [];
+      const txt = r.map(x => String(x||'').toLowerCase()).join('|');
+      if (txt.includes('movimiento') && (txt.includes('al corriente') || txt.includes('vencimiento'))) {
+        headerRow = i; break;
+      }
+    }
+    if (headerRow < 0) headerRow = 1;
+    const headers = (arr[headerRow] || []).map(h => String(h||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim());
+    const colIdx = (substr) => headers.findIndex(h => h.includes(substr));
+    const idx = {
+      cliente:    colIdx('cliente'),
+      movimiento: colIdx('movimiento'),
+      referencia: colIdx('referencia'),
+      emision:    colIdx('emision'),
+      vencimiento:colIdx('vencimiento'),
+      dias:       colIdx('dias'),
+      corriente:  colIdx('al corriente'),
+      d1_30:      headers.findIndex(h => /^de 1 a 30/.test(h) || /1 a 30/.test(h)),
+      d31_60:     headers.findIndex(h => /31 a 60/.test(h)),
+      d61_90:     headers.findIndex(h => /61 a 90/.test(h)),
+      d91_180:    headers.findIndex(h => /91 a 180/.test(h)),
+      d181_360:   headers.findIndex(h => /181 a 360/.test(h)),
+      d361_999:   headers.findIndex(h => /361 a 999/.test(h)),
+      d999plus:   headers.findIndex(h => /mas de 999/.test(h) || /999 dias/.test(h)),
+    };
+
+    // Razón social: a veces aparece en el row 0 col C (REVKO TECHNOLOGY)
+    // Para Acteck/Balam Rush nuestro cliente PCEL = "PC ONLINE", Digitalife = "API GLOBAL"
+    const razon_social = cliente === 'pcel' ? 'PC ONLINE' : 'API GLOBAL';
+
+    // Detalle: filas después del header, con movimiento no nulo y que no sean totales/footers
+    const detalle = [];
+    let total_corriente = 0, total_1_30 = 0, total_31_60 = 0, total_61_90 = 0;
+    let total_91_180 = 0, total_181_360 = 0, total_361_999 = 0, total_999plus = 0;
+    let notas_credito = 0;
+
+    for (let i = headerRow + 1; i < arr.length; i++) {
+      const r = arr[i] || [];
+      const movimiento = r[idx.movimiento];
+      // Skip filas vacías, totales, subtotales, footer con fecha
+      if (!movimiento) continue;
+      const movStr = String(movimiento).trim().toLowerCase();
+      if (movStr === '' || /^total/i.test(movStr) || /^subtotal/i.test(movStr)) continue;
+      // Skip footer que tiene fecha como movimiento (ej: "martes, 28 de abril...")
+      if (/^(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)/i.test(movStr)) continue;
+      // Skip filas de cliente identificador (00473 PC ONLINE)
+      if (r[idx.cliente] && /^\d{5,}$/.test(String(r[idx.cliente]).trim())) continue;
+
+      const ag_corr   = toNum(r[idx.corriente])  || 0;
+      const ag_1_30   = toNum(r[idx.d1_30])      || 0;
+      const ag_31_60  = toNum(r[idx.d31_60])     || 0;
+      const ag_61_90  = toNum(r[idx.d61_90])     || 0;
+      const ag_91_180 = toNum(r[idx.d91_180])    || 0;
+      const ag_181_360= toNum(r[idx.d181_360])   || 0;
+      const ag_361_999= toNum(r[idx.d361_999])   || 0;
+      const ag_999    = toNum(r[idx.d999plus])   || 0;
+      const importe   = ag_corr + ag_1_30 + ag_31_60 + ag_61_90 + ag_91_180 + ag_181_360 + ag_361_999 + ag_999;
+
+      // Notas de crédito tienen importe negativo
+      if (importe < 0) notas_credito += importe;
+
+      total_corriente += ag_corr;
+      total_1_30      += ag_1_30;
+      total_31_60     += ag_31_60;
+      total_61_90     += ag_61_90;
+      total_91_180    += ag_91_180;
+      total_181_360   += ag_181_360;
+      total_361_999   += ag_361_999;
+      total_999plus   += ag_999;
+
+      detalle.push({
+        movimiento: toStr(movimiento),
+        condicion: null,
+        referencia: toStr(r[idx.referencia]),
+        fecha_emision: parseFechaES(r[idx.emision]),
+        vencimiento: parseFechaES(r[idx.vencimiento]),
+        importe_factura: importe,
+        dias_moratorios: toInt(r[idx.dias]),
+        saldo_actual: importe,
+        aging_corriente: ag_corr,
+        aging_01_30: ag_1_30,
+        aging_31_60: ag_31_60,
+        aging_61_90: ag_61_90,
+        aging_91_180: ag_91_180,
+        // En la DB sólo tenemos aging_181_mas — lo unificamos
+        aging_181_mas: ag_181_360 + ag_361_999 + ag_999,
+      });
+    }
+
+    // Fecha de corte: buscar en el footer (última fila con día de la semana)
+    let fecha_corte = null;
+    for (let i = arr.length - 1; i >= Math.max(0, arr.length - 5); i--) {
+      const r = arr[i] || [];
+      const txt = String(r[0] || '').trim();
+      const m = txt.match(/(\d{1,2})\s+de\s+([a-záéíóú]+)\s+de\s+(\d{4})/i);
+      if (m) {
+        const mes = MESES_ES[m[2].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')];
+        if (mes) { fecha_corte = `${m[3]}-${String(mes).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`; break; }
+      }
+    }
+    // Fallback: fecha más reciente de las facturas, o hoy
+    if (!fecha_corte) {
+      const fechas = detalle.map(d => d.fecha_emision).filter(Boolean).sort();
+      fecha_corte = fechas.length ? fechas[fechas.length - 1] : new Date().toISOString().slice(0, 10);
+    }
+    const cuteDate = new Date(fecha_corte + 'T00:00:00');
+
+    // Semana ISO 8601 (lunes como inicio) desde fecha_corte
+    const isoWeek = (d) => {
+      const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const dayNum = (date.getUTCDay() + 6) % 7;
+      date.setUTCDate(date.getUTCDate() - dayNum + 3);
+      const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+      const week = 1 + Math.round(((date - firstThursday) / 86400000 - 3) / 7);
+      return week;
+    };
+    const semana = isoWeek(cuteDate);
+    const year = cuteDate.getFullYear();
+
+    // Resumen agregado
+    const saldo_a_vencer = total_corriente;
+    const saldo_vencido = total_1_30 + total_31_60 + total_61_90 + total_91_180 + total_181_360 + total_361_999 + total_999plus;
+    const saldo_actual = saldo_a_vencer + saldo_vencido;
+    const aging_d0_30  = total_1_30;
+    const aging_d31_60 = total_31_60;
+    const aging_d61_90 = total_61_90;
+    const aging_mas90  = total_91_180 + total_181_360 + total_361_999 + total_999plus;
+
+    // venc_mes_1/2/3 = mes 0/+1/+2 desde fecha_corte
+    const offsetKey = (off) => {
+      const d = new Date(cuteDate.getFullYear(), cuteDate.getMonth() + off, 1);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    };
+    const vencMap = {};
+    for (const d of detalle) {
+      if (d.vencimiento && d.saldo_actual > 0) {
+        const k = d.vencimiento.slice(0, 7);
+        vencMap[k] = (vencMap[k] || 0) + d.saldo_actual;
+      }
+    }
+    const venc_mes_1 = vencMap[offsetKey(0)] || 0;
+    const venc_mes_2 = vencMap[offsetKey(1)] || 0;
+    const venc_mes_3 = vencMap[offsetKey(2)] || 0;
+
+    // DSO ponderado
+    let sumDays = 0, sumSaldo = 0;
+    for (const d of detalle) {
+      if (d.saldo_actual > 0 && d.fecha_emision) {
+        const fe = new Date(d.fecha_emision + 'T00:00:00');
+        const days = Math.max(0, Math.floor((cuteDate - fe) / 86400000));
+        sumDays += days * d.saldo_actual;
+        sumSaldo += d.saldo_actual;
+      }
+    }
+    const dso = sumSaldo > 0 ? Math.round(sumDays / sumSaldo) : null;
+
+    return {
+      resumen: {
+        cliente, anio: year, semana, fecha_corte,
+        saldo_actual, saldo_vencido, notas_credito, saldo_a_vencer,
+        razon_social,
+        aging_d0_30, aging_d31_60, aging_d61_90, aging_mas90,
+        venc_mes_1, venc_mes_2, venc_mes_3,
+        dso,
+      },
+      detalle,
+    };
+  },
+
   masterEmbarques(wb){
     // Lee TODAS las hojas históricas: 2026, 2025, 2024, "2022 - 2023".
     // Si una hoja no existe, se omite. La unique key es (po, codigo) así que
