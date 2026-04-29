@@ -49,11 +49,12 @@ function fmtFechaCorta(iso) {
   return `${parseInt(d, 10)} ${meses[parseInt(m, 10) - 1]} ${String(y).slice(2)}`;
 }
 
-export default function ReporteSection() {
+export default function ReporteSection({ standalone = false } = {}) {
   const perfil = usePerfil();
   const canEdit = perfil?.es_super_admin === true || perfil?.rol === 'super_admin';
 
-  const [open, setOpen] = useState(false);
+  // En modo standalone (página dedicada "Reporte") no hay colapsable: siempre abierto.
+  const [open, setOpen] = useState(standalone);
   const [data, setData] = useState({ loading: true, skus: [], inventario: [], metadata: [], precios: [], roadmap: [] });
   const [busqueda, setBusqueda] = useState('');
   const [filtroRoadmap, setFiltroRoadmap] = useState('todos');
@@ -226,19 +227,31 @@ export default function ReporteSection() {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50"
-      >
-        <Package className="w-5 h-5 text-gray-600" />
-        <h3 className="font-semibold text-gray-800 flex-1 text-left">
-          Reporte
-          <span className="text-xs text-gray-500 font-normal ml-2">
-            · Lista maestra de SKUs en orden custom · Click en uno para ver demanda y tránsito
-          </span>
-        </h3>
-        {open ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-      </button>
+      {standalone ? (
+        <div className="w-full px-5 py-3 flex items-center gap-3 border-b border-gray-100">
+          <Package className="w-5 h-5 text-gray-600" />
+          <h3 className="font-semibold text-gray-800 flex-1">
+            Reporte
+            <span className="text-xs text-gray-500 font-normal ml-2">
+              · Lista maestra de SKUs · Click en uno para ver demanda y tránsito
+            </span>
+          </h3>
+        </div>
+      ) : (
+        <button
+          onClick={() => setOpen(!open)}
+          className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50"
+        >
+          <Package className="w-5 h-5 text-gray-600" />
+          <h3 className="font-semibold text-gray-800 flex-1 text-left">
+            Reporte
+            <span className="text-xs text-gray-500 font-normal ml-2">
+              · Lista maestra de SKUs en orden custom · Click en uno para ver demanda y tránsito
+            </span>
+          </h3>
+          {open ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
+        </button>
+      )}
 
       {open && (
         <div className="border-t border-gray-100">
