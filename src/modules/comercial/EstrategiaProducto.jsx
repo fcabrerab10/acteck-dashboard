@@ -4,6 +4,7 @@ import { formatMXN, loadSheetJS } from '../../lib/utils';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaCliente } from '../../lib/permisos';
 import { roadmapStyle, roadmapInfo } from '../../lib/roadmapColors';
+import { PCEL_REAL } from '../../lib/constants';
 
 export default function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
   const perfil = usePerfil();
@@ -631,7 +632,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       const esPcel = clienteKey === 'pcel';
 
       const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap, precios,
-             histPcel, snapshotPcel, dglCategoriasRaw] = await Promise.all([
+             histPcel, snapshotPcel, dglCategoriasRaw, cuotasMensualesRaw] = await Promise.all([
         fetchAllPagesREST(`productos_cliente?select=*&cliente=eq.${clienteKey}`),
         fetchAllPagesREST(`sell_in_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
         fetchSelloutSku(clienteKey, 2026),
@@ -646,7 +647,19 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         // Master de categorías = productos_cliente de Digitalife (sku = modelo Acteck).
         // Sólo se pide cuando estamos en PCEL, para el mapeo modelo→categoría.
         esPcel ? fetchAllPagesREST(`productos_cliente?select=sku,categoria&cliente=eq.digitalife`) : Promise.resolve([]),
+        // Cuotas mensuales para la tarjeta KPI #3 (cumplimiento de cuota).
+        // PCEL: si BD vacía, fallback a PCEL_REAL.cuota50M en kpis.
+        fetchAllPagesREST(`cuotas_mensuales?select=mes,cuota_min,cuota_ideal,monto&cliente=eq.${clienteKey}&anio=eq.2026`),
       ]);
+
+      // Para PCEL fallback: si la tabla cuotas_mensuales está vacía pero
+      // PCEL_REAL.cuota50M está disponible, sintetizamos los registros.
+      let cuotasMensuales = cuotasMensualesRaw || [];
+      if (esPcel && cuotasMensuales.length === 0 && PCEL_REAL && PCEL_REAL.cuota50M) {
+        cuotasMensuales = Object.entries(PCEL_REAL.cuota50M).map(([mes, monto]) => ({
+          mes: Number(mes), cuota_min: Number(monto) || 0, cuota_ideal: Number(monto) || 0,
+        }));
+      }
 
       // Map Digitalife (modelo normalizado) → categoría canónica, para asignar
       // categorías a los 906 SKUs de PCEL vía modelo. Fallback: subfamilia.
@@ -753,6 +766,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         transito,
         roadmap,
         preciosBySku,
+        cuotasMensuales,             // para tarjeta KPI #3 (cumplimiento cuota)
         // Extras específicos PCEL:
         histPcel,               // { [sku]: { piezas, facturas, promedio, primerFecha, ultimaFecha } }
         backOrderBySkuPcel,     // { [sku]: backOrder }
@@ -924,7 +938,39 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         sugSkus++;
       }
     });
-    return { efi, skusActivos, skusConInv, diasCob, invActeckPiezas, sugPiezas, sugMonto, sugSkus };
+    // ── Cumplimiento de cuota (para tarjeta KPI #3) ──
+    // Sell-In YTD (en monto) y cuota YTD (de cuotas_mensuales o constants para PCEL).
+    const anioActual = new Date().getFullYear();
+    const mesActualNum = new Date().getMonth() + 1;
+    let siYTD = 0;
+    datos.sellIn.forEach((r) => {
+      if (Number(r.anio) === anioActual && Number(r.mes) <= mesActualNum) {
+        siYTD += Number(r.monto) || 0;
+      }
+    });
+    let cuotaYTD = 0;
+    let cuotaMesActual = 0;
+    let siMesActual = 0;
+    if (datos.cuotasMensuales && datos.cuotasMensuales.length) {
+      datos.cuotasMensuales.forEach((c) => {
+        const mes = Number(c.mes);
+        const monto = Number(c.cuota_min || c.monto || 0);
+        if (mes <= mesActualNum) cuotaYTD += monto;
+        if (mes === mesActualNum) cuotaMesActual = monto;
+      });
+    }
+    // Sell-In del mes actual
+    datos.sellIn.forEach((r) => {
+      if (Number(r.anio) === anioActual && Number(r.mes) === mesActualNum) {
+        siMesActual += Number(r.monto) || 0;
+      }
+    });
+
+    return {
+      efi, skusActivos, skusConInv, diasCob, invActeckPiezas,
+      sugPiezas, sugMonto, sugSkus,
+      siYTD, cuotaYTD, cuotaMesActual, siMesActual,
+    };
   }, [datos, aggs, clienteKey]);
 
   // SKUs en riesgo de desabasto — reusa el sugerido del Detalle por SKU
@@ -1875,424 +1921,91 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       message && React.createElement("p", { className: `text-sm ${message.includes("Error") ? "text-red-600" : "text-green-600"}` }, message),
     ),
 
-    // Summary Cards — 7 KPIs
-    aggs && kpis && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 } },
-      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: "#3B82F6" } },
-        React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "Sell In"),
-        React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, formatMXN(aggs.sellInTotal)),
-        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } }, aggs.sellInPiezas.toLocaleString("es-MX") + " pzs \u00b7 Mayor: " + (MESES_ABREV[aggs.maxSIMes] || "\u2014"))
-      ),
-      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: "#8B5CF6" } },
-        React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "Sell Out"),
-        // PCEL: sellout sólo en piezas (no tiene monto). Resto: monto.
-        clienteKey === "pcel"
-          ? React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, aggs.sellOutPiezas.toLocaleString("es-MX") + " pzs")
-          : React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, formatMXN(aggs.sellOutTotal)),
-        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } },
-          clienteKey === "pcel"
-            ? ("Mayor: " + (MESES_ABREV[aggs.maxSOMes] || "\u2014"))
-            : (aggs.sellOutPiezas.toLocaleString("es-MX") + " pzs \u00b7 Mayor: " + (MESES_ABREV[aggs.maxSOMes] || "\u2014")))
-      ),
-      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: kpis.efi >= 90 && kpis.efi <= 110 ? "#10B981" : (kpis.efi >= 70 || kpis.efi > 110) ? "#F59E0B" : "#EF4444" } },
-        React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "Eficiencia SI/SO"),
-        React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: kpis.efi >= 90 && kpis.efi <= 110 ? "#10B981" : (kpis.efi >= 70 || kpis.efi > 110) ? "#F59E0B" : "#EF4444", marginBottom: 2 } }, kpis.efi.toFixed(1) + "%"),
-        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } }, kpis.efi >= 90 && kpis.efi <= 110 ? "\u2713 Balance ideal" : kpis.efi > 110 ? "Reduciendo stock" : "Acumulando stock")
-      ),
-      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: "#06B6D4" } },
-        React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "SKUs Activos"),
-        React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, kpis.skusActivos.toLocaleString("es-MX")),
-        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } }, kpis.skusConInv + " con inventario")
-      ),
-      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: kpis.diasCob === null ? "#94A3B8" : (kpis.diasCob >= 80 && kpis.diasCob <= 120) ? "#10B981" : (kpis.diasCob >= 60 && kpis.diasCob <= 140) ? "#F59E0B" : "#EF4444" } },
-        React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "D\u00edas Cobertura"),
-        React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, kpis.diasCob === null ? "\u2014" : (kpis.diasCob + "d")),
-        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } }, kpis.diasCob === null ? "Sin datos" : (kpis.diasCob >= 90 && kpis.diasCob <= 110) ? "\u2713 Ideal (90-110d)" : kpis.diasCob < 70 ? "\u26a0 Desabasto" : kpis.diasCob > 130 ? "\u26a0 Sobreinventario" : "Cercano al rango")
-      ),
-      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: "#F59E0B" } },
-        React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "Inventario"),
-        React.createElement("p", { style: { fontSize: 18, fontWeight: 700, color: "#1E293B", marginBottom: 2 } }, "Cliente: " + formatMXN(aggs.invTotal)),
-        React.createElement("p", { style: { fontSize: 11, color: "#64748B" } }, "Acteck disp: " + kpis.invActeckPiezas.toLocaleString("es-MX") + " pzs")
-      ),
-      React.createElement("div", { className: "bg-white rounded-xl shadow-sm p-4 border-t-4", style: { borderColor: kpis.sugMonto > 0 ? "#10B981" : "#94A3B8", background: kpis.sugMonto > 0 ? "#F0FDF4" : "#fff" } },
-        React.createElement("p", { style: { fontSize: 10, color: "#065F46", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 } }, "\ud83d\udca1 Sugerido Total"),
-        React.createElement("p", { style: { fontSize: 22, fontWeight: 700, color: kpis.sugMonto > 0 ? "#047857" : "#94A3B8", marginBottom: 2 } }, formatMXN(kpis.sugMonto)),
-        React.createElement("p", { style: { fontSize: 11, color: "#065F46" } }, kpis.sugSkus + " SKUs \u00b7 " + kpis.sugPiezas.toLocaleString("es-MX") + " pzs")
-      )
-    ),
+    // ── 4 KPIs que apoyan el sugerido ──
+    // 1) SKUs en riesgo · 2) Total a sugerir · 3) Cumplimiento cuota · 4) Último envío
+    aggs && kpis && (function(){
+      const cliCfg = clienteKey === 'pcel' ? { cadenciaDias: 14, label: 'PCEL (cada 2 sem)' } : { cadenciaDias: 7, label: 'Digitalife (sem)' };
+      // 1) SKUs en riesgo
+      const numRiesgo = skusRiesgo.length;
+      const piezasUrgentes = skusRiesgo.reduce((a, s) => a + (s.sugerido || 0), 0);
+      // 2) Total a sugerir (de kpis)
+      const sugMonto = kpis.sugMonto || 0;
+      const sugPiezas = kpis.sugPiezas || 0;
+      const sugSkus = kpis.sugSkus || 0;
+      // 3) Cumplimiento cuota: usamos sell-in YTD vs cuota YTD si existe
+      const cumplPct = (kpis.cuotaYTD && kpis.cuotaYTD > 0)
+        ? (kpis.siYTD / kpis.cuotaYTD) * 100
+        : null;
+      const cuotaMesFalta = (kpis.cuotaMesActual && kpis.siMesActual != null)
+        ? Math.max(0, kpis.cuotaMesActual - kpis.siMesActual)
+        : null;
+      // 4) Último envío: la propuesta más reciente
+      const ultPropuesta = (propuestasHist || []).slice().sort((a,b)=>{
+        const fa = new Date(a.fecha_propuesta || a.created_at).getTime();
+        const fb = new Date(b.fecha_propuesta || b.created_at).getTime();
+        return fb - fa;
+      })[0];
+      const diasSinEnviar = ultPropuesta
+        ? Math.floor((Date.now() - new Date(ultPropuesta.fecha_propuesta || ultPropuesta.created_at).getTime()) / 86400000)
+        : null;
+      const cadenciaVencida = diasSinEnviar != null && diasSinEnviar >= cliCfg.cadenciaDias;
 
-    // Marca Comparison
-    aggs && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
-      React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Comparativa por Marca"),
-            // Visual bar chart for brand comparison
-            // Para PCEL: todo lo relacionado a Sell Out se muestra en piezas
-            // (no hay monto en sellout_pcel_mensual).
-            React.createElement("div", { style: { display: "flex", gap: 20, marginBottom: 20, flexWrap: "wrap" } },
-              (function() {
-                var esPcel = clienteKey === "pcel";
-                var totalMonto  = Object.values(aggs.byMarca).reduce(function(s, x) { return s + x.soMonto; }, 0);
-                var totalPiezas = Object.values(aggs.byMarca).reduce(function(s, x) { return s + x.soPiezas; }, 0);
-                return Object.entries(aggs.byMarca).map(function([marca, m]) {
-                  var pct = esPcel
-                    ? (totalPiezas > 0 ? (m.soPiezas / totalPiezas * 100) : 0)
-                    : (totalMonto  > 0 ? (m.soMonto  / totalMonto  * 100) : 0);
-                  var color = MARCA_COLORES[marca] || "#64748B";
-                  var soDisplay = esPcel
-                    ? (m.soPiezas.toLocaleString("es-MX") + " pzs")
-                    : formatMXN(m.soMonto);
-                  var efi = esPcel
-                    ? (m.siPiezas > 0 ? (m.soPiezas / m.siPiezas * 100) : 0)
-                    : (m.siMonto  > 0 ? (m.soMonto  / m.siMonto  * 100) : 0);
-                  var efiOk = esPcel ? m.siPiezas > 0 : m.siMonto > 0;
-                  return React.createElement("div", { key: "viz_"+marca, style: { flex: 1, minWidth: 200, background: "#F8FAFC", borderRadius: 12, padding: 16, border: "1px solid #E2E8F0" } },
-                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
-                      React.createElement("span", { style: { fontWeight: 700, color: color, fontSize: 14 } }, marca),
-                      React.createElement("span", { style: { fontSize: 12, color: "#94A3B8", fontWeight: 600 } }, pct.toFixed(1) + "% del SO")
-                    ),
-                    React.createElement("div", { style: { height: 8, background: "#E2E8F0", borderRadius: 4, marginBottom: 12 } },
-                      React.createElement("div", { style: { height: "100%", width: pct + "%", background: color, borderRadius: 4 } })
-                    ),
-                    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12 } },
-                      React.createElement("div", null,
-                        React.createElement("div", { style: { color: "#94A3B8" } }, "Sell In"),
-                        React.createElement("div", { style: { fontWeight: 700, color: "#1E293B" } }, formatMXN(m.siMonto))
-                      ),
-                      React.createElement("div", null,
-                        React.createElement("div", { style: { color: "#94A3B8" } }, esPcel ? "Sell Out (pzs)" : "Sell Out"),
-                        React.createElement("div", { style: { fontWeight: 700, color: "#10B981" } }, soDisplay)
-                      ),
-                      React.createElement("div", null,
-                        React.createElement("div", { style: { color: "#94A3B8" } }, "Inventario"),
-                        React.createElement("div", { style: { fontWeight: 700, color: "#8B5CF6" } }, formatMXN(m.invValor))
-                      ),
-                      React.createElement("div", null,
-                        React.createElement("div", { style: { color: "#94A3B8" } }, "Eficiencia"),
-                        React.createElement("div", { style: { fontWeight: 700, color: efiOk ? (efi >= 80 ? "#10B981" : "#F59E0B") : "#94A3B8" } }, efiOk ? efi.toFixed(0) + "%" : "\u2014")
-                      )
-                    )
-                  );
-                });
-              })()
-            ),
-      React.createElement("div", { className: "overflow-x-auto" },
-        (function() {
-          var esPcel = clienteKey === "pcel";
-          return React.createElement("table", { className: "w-full text-sm" },
-            React.createElement("thead", {},
-              React.createElement("tr", { className: "border-b border-gray-200" },
-                React.createElement("th", { className: "text-left py-2 px-3 font-semibold text-gray-700" }, "Marca"),
-                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI Piezas"),
-                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SI $"),
-                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SO Piezas"),
-                // PCEL: omitimos SO $ (no tiene monto de sellout)
-                !esPcel && React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SO $"),
-                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Inv Piezas"),
-                React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Inv Valor"),
-              ),
-            ),
-            React.createElement("tbody", {},
-              Object.entries(aggs.byMarca).map(([marca, m]) =>
-                React.createElement("tr", { key: marca, className: "border-b border-gray-100 hover:bg-gray-50" },
-                  React.createElement("td", { className: "py-3 px-3 text-gray-700 font-medium" }, marca),
-                  React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, m.siPiezas.toLocaleString("es-MX")),
-                  React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(m.siMonto)),
-                  React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, m.soPiezas.toLocaleString("es-MX")),
-                  !esPcel && React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(m.soMonto)),
-                  React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, m.invPiezas.toLocaleString("es-MX")),
-                  React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(m.invValor)),
-                )
-              ),
-            ),
-          );
-        })(),
-      ),
-    ),
-
-    // By Categoria
-    aggs && Object.keys(aggs.byCategoria).length > 0 && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
-        React.createElement("h3", { className: "font-bold text-gray-800 mb-4" }, "Por Categor\u00eda (ambas marcas)"),
-        React.createElement("div", { className: "overflow-x-auto" },
-          (function() {
-            var esPcel = clienteKey === "pcel";
-            return React.createElement("table", { className: "w-full text-sm" },
-              React.createElement("thead", {},
-                React.createElement("tr", { className: "border-b border-gray-200" },
-                  React.createElement("th", { className: "text-left py-2 px-3 font-semibold text-gray-700" }, "Categor\u00eda"),
-                  React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "Valor Inventario"),
-                  React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, esPcel ? "Sell Out (pzs)" : "Sell Out $"),
-                  React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "% SO"),
-                  React.createElement("th", { className: "text-right py-2 px-3 font-semibold text-gray-700" }, "SKUs c/Inv"),
-                ),
-              ),
-              React.createElement("tbody", {},
-                (function() {
-                  var metric = function(c) { return esPcel ? c.soPiezas : c.soMonto; };
-                  var totalSO = Object.values(aggs.byCategoria).reduce(function(s,c){return s+metric(c);},0);
-                  return Object.entries(aggs.byCategoria).sort(function(a,b){return metric(b[1])-metric(a[1]);}).map(function(entry) {
-                    var cat = entry[0]; var c = entry[1];
-                    var pct = totalSO > 0 ? (metric(c)/totalSO*100).toFixed(1) : "0.0";
-                    var soDisplay = esPcel ? c.soPiezas.toLocaleString("es-MX") : formatMXN(c.soMonto);
-                    return React.createElement("tr", { key: cat, className: "border-b border-gray-100 hover:bg-gray-50" },
-                      React.createElement("td", { className: "py-3 px-3 text-gray-700 font-medium" }, cat),
-                      React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, formatMXN(c.invValor)),
-                      React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, soDisplay),
-                      React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, pct + "%"),
-                      React.createElement("td", { className: "text-right py-3 px-3 text-gray-600" }, c.invPiezas > 0 ? c.invPiezas.toLocaleString("es-MX") : "0"),
-                    );
-                  });
-                })(),
-              ),
-            );
-          })(),
+      return React.createElement('div', {
+        style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }
+      },
+        // 1) SKUs en riesgo
+        React.createElement('div', {
+          className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
+          style: { borderColor: numRiesgo > 0 ? '#EF4444' : '#10B981' }
+        },
+          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDD34 SKUs en riesgo'),
+          React.createElement('p', { style: { fontSize: 28, fontWeight: 700, color: numRiesgo > 0 ? '#B91C1C' : '#065F46', marginBottom: 2 } }, numRiesgo.toLocaleString('es-MX')),
+          React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
+            piezasUrgentes > 0
+              ? (piezasUrgentes.toLocaleString('es-MX') + ' pzs sugeridas urgentes')
+              : (numRiesgo === 0 ? '✓ Sin riesgo de desabasto' : 'Sin sugerido (revisar Acteck)'))
         ),
-      ),
-      // SKUs en riesgo de desabasto
-      skusRiesgo.length > 0 && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
-        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 } },
-          React.createElement("h3", { className: "font-bold text-gray-800" }, "\u26A0\uFE0F SKUs en riesgo de desabasto"),
-          React.createElement("div", { style: { fontSize: 12, color: "#64748B", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
-            React.createElement("span", null,
-              skusRiesgo.length + " SKUs se agotan en menos de 30 d\u00edas con la rotaci\u00f3n actual"
-            ),
-            skusOcultosEnPropuesta > 0 && React.createElement("span", {
-              style: { background: "#DBEAFE", color: "#1E40AF", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 600 },
-              title: "SKUs ocultos porque ya están en propuestas exportadas pendientes. Al cerrarlas (cuando llegue la OC del cliente) volverán a aparecer si siguen en riesgo."
-            }, "\u00b7 " + skusOcultosEnPropuesta + " en propuesta pendiente")
-          )
+        // 2) Total a sugerir
+        React.createElement('div', {
+          className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
+          style: { borderColor: '#10B981', background: sugMonto > 0 ? '#F0FDF4' : '#fff' }
+        },
+          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDCE6 Total a sugerir'),
+          React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: sugMonto > 0 ? '#047857' : '#94A3B8', marginBottom: 2 } }, formatMXN(sugMonto)),
+          React.createElement('p', { style: { fontSize: 11, color: '#64748B' } }, sugSkus + ' SKUs · ' + sugPiezas.toLocaleString('es-MX') + ' pzs')
         ),
-        React.createElement("div", { style: { overflowX: "auto", maxHeight: 400, overflowY: "auto" } },
-          React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
-            React.createElement("thead", null,
-              React.createElement("tr", { style: { background: "#FEF2F2", position: "sticky", top: 0 } },
-                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 20 } }, "⚠"),
-                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA" } }, "SKU"),
-                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA" } }, "Descripci\u00f3n"),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Inv Cliente"),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Prom 90d"),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "D\u00edas restantes"),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Inv Acteck"),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Tr\u00e1nsito"),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90, background: "#FEE2E2" } }, "Sugerido")
-              )
-            ),
-            React.createElement("tbody", null,
-              skusRiesgo.map(function(s, i) {
-                // Color de la FILA + indicador: se alinea con el estado del Sugerido
-                //   sinStock             → rojo  (no se puede surtir)
-                //   sugerido > 0         → verde (se puede proponer)
-                //   stock 1-19           → ámbar (insuficiente para mínimo 20)
-                //   sin stock ni sug     → gris neutro
-                var totalDisponible = (s.invActeck || 0) + (s.transito || 0);
-                var bg, dot, rowTitle;
-                if (s.sinStock) {
-                  bg = "#FEE2E2"; dot = "#B91C1C";
-                  rowTitle = "⚠ Crítico: sin inventario Acteck ni tránsito — no se puede surtir";
-                } else if (s.sugerido > 0) {
-                  bg = "#ECFDF5"; dot = "#10B981";
-                  rowTitle = "Podemos surtir " + s.sugerido + " piezas";
-                } else if (totalDisponible > 0 && totalDisponible < 20) {
-                  bg = "#FFFBEB"; dot = "#F59E0B";
-                  rowTitle = "Solo " + totalDisponible + " piezas disponibles (mínimo: 20) — no se propone";
-                } else {
-                  bg = "#F8FAFC"; dot = "#94A3B8";
-                  rowTitle = "Sin sugerido";
-                }
-                // Color de "Días restantes" — independiente, refleja urgencia temporal
-                var dotDias = s.urgencia === 3 ? "#EF4444"
-                            : s.urgencia === 2 ? "#F59E0B"
-                            : "#FBBF24";
-                return React.createElement("tr", {
-                  key: s.sku,
-                  style: { borderBottom: "1px solid #f1f5f9", background: bg },
-                  title: rowTitle,
-                },
-                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "center" } },
-                    React.createElement("span", {
-                      style: {
-                        display: "inline-block", width: 10, height: 10, borderRadius: 5,
-                        background: dot,
-                        boxShadow: s.sinStock ? "0 0 0 2px #FCA5A5" : "none",
-                      }
-                    })
-                  ),
-                  React.createElement("td", { style: { padding: "8px 10px", fontFamily: "ui-monospace,monospace", color: "#1E293B", fontWeight: 600 } }, s.sku),
-                  React.createElement("td", { style: { padding: "8px 10px", color: "#475569", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.titulo }, s.titulo.slice(0, 70)),
-                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E293B", fontWeight: 600 } }, s.stock.toLocaleString("es-MX")),
-                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#475569" } }, s.promMes.toLocaleString("es-MX")),
-                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: dotDias, fontWeight: 700 } }, s.diasRestantes + "d"),
-                  React.createElement("td", {
-                    style: {
-                      padding: "8px 10px", textAlign: "right",
-                      color: s.invActeck > 0 ? "#10B981" : "#B91C1C",
-                      fontWeight: s.invActeck > 0 ? 600 : 700,
-                    }
-                  }, s.invActeck > 0 ? s.invActeck.toLocaleString("es-MX") : "0"),
-                  React.createElement("td", {
-                    style: { padding: "8px 10px", textAlign: "right", color: s.transito > 0 ? "#7C3AED" : "#94A3B8" }
-                  }, s.transito > 0 ? s.transito.toLocaleString("es-MX") : "—"),
-                  (function() {
-                    // Tres casos visuales:
-                    //   sinStock (invAct=0 && trans=0) → rojo intenso "0 ⚠"
-                    //   sugerido = 0 con stock < 20    → ámbar "Insuficiente" (no se propone)
-                    //   sugerido > 0                   → verde con el número
-                    const totalDisponible = (s.invActeck || 0) + (s.transito || 0);
-                    let bgCell, colorCell, textoCell, titleCell, peso;
-                    if (s.sinStock) {
-                      bgCell = "#FEE2E2";
-                      colorCell = "#B91C1C";
-                      textoCell = "0 \u26A0";
-                      titleCell = "Sin inventario ni tr\u00e1nsito Acteck";
-                      peso = 700;
-                    } else if (s.sugerido === 0 && totalDisponible > 0 && totalDisponible < 20) {
-                      bgCell = "#FFFBEB";
-                      colorCell = "#92400E";
-                      textoCell = "Insuficiente";
-                      titleCell = `Solo ${totalDisponible} piezas disponibles en Acteck (m\u00ednimo: 20). No se propone.`;
-                      peso = 500;
-                    } else if (s.sugerido > 0) {
-                      bgCell = "#ECFDF5";
-                      colorCell = "#065F46";
-                      textoCell = s.sugerido.toLocaleString("es-MX");
-                      titleCell = sugeridoEdits[s.sku] !== undefined
-                        ? "Sugerido editado manualmente"
-                        : "Sugerido autom\u00e1tico";
-                      peso = 700;
-                    } else {
-                      bgCell = "#F8FAFC";
-                      colorCell = "#94A3B8";
-                      textoCell = "\u2014";
-                      titleCell = "Sin sugerido";
-                      peso = 400;
-                    }
-                    return React.createElement("td", {
-                      style: {
-                        padding: "8px 10px", textAlign: "right",
-                        background: bgCell, color: colorCell, fontWeight: peso,
-                      },
-                      title: titleCell,
-                    }, textoCell);
-                  })()
-                );
-              })
-            )
-          )
+        // 3) Cumplimiento cuota
+        React.createElement('div', {
+          className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
+          style: { borderColor: cumplPct == null ? '#94A3B8' : cumplPct >= 90 ? '#10B981' : cumplPct >= 70 ? '#F59E0B' : '#EF4444' }
+        },
+          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83C\uDFAF Cumplimiento cuota'),
+          React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: cumplPct == null ? '#94A3B8' : cumplPct >= 90 ? '#047857' : cumplPct >= 70 ? '#B45309' : '#B91C1C', marginBottom: 2 } },
+            cumplPct == null ? 'Sin cuota' : cumplPct.toFixed(0) + '%'),
+          React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
+            cuotaMesFalta != null && cuotaMesFalta > 0
+              ? ('Faltan ' + formatMXN(cuotaMesFalta) + ' del mes')
+              : (cumplPct != null ? 'YTD vs cuota YTD' : ''))
+        ),
+        // 4) Último envío
+        React.createElement('div', {
+          className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
+          style: { borderColor: cadenciaVencida ? '#EF4444' : '#06B6D4' }
+        },
+          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDCC5 Último envío'),
+          React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: cadenciaVencida ? '#B91C1C' : '#0E7490', marginBottom: 2 } },
+            ultPropuesta
+              ? (diasSinEnviar === 0 ? 'Hoy' : (diasSinEnviar + ' días'))
+              : 'Nunca'),
+          React.createElement('p', { style: { fontSize: 11, color: cadenciaVencida ? '#B91C1C' : '#64748B', fontWeight: cadenciaVencida ? 600 : 400 } },
+            ultPropuesta
+              ? (cadenciaVencida ? '⚠ Toca enviar (' + cliCfg.label + ')' : 'Cadencia: ' + cliCfg.label)
+              : 'Cadencia: ' + cliCfg.label)
         )
-      ),
+      );
+    })(),
 
-      // Roadmap + Tránsito — catálogo completo con productos nuevos detectados
-      roadmapCruce && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
-        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 } },
-          React.createElement("h3", { className: "font-bold text-gray-800" }, "\uD83D\uDCCB Roadmap + Tr\u00e1nsito"),
-          React.createElement("div", { style: { fontSize: 12, color: "#64748B" } },
-            "Roadmap: " + roadmapCruce.total + " SKUs \u00b7 En camino: " + roadmapCruce.enCamino.length + " \u00b7 ",
-            React.createElement("span", { style: { color: "#059669", fontWeight: 700 } }, "Nuevos: " + roadmapCruce.nuevos.length)
-          )
-        ),
-        // Productos NUEVOS (en tránsito sin roadmap, solo AC/BR) — al principio, destacados
-        roadmapCruce.nuevos.length > 0 && (function() {
-          var nuevosFiltrados = nuevosSearch
-            ? roadmapCruce.nuevos.filter(function(t) {
-                var q = nuevosSearch.toLowerCase();
-                return (t.sku || "").toLowerCase().includes(q) || (t.descripcion || "").toLowerCase().includes(q);
-              })
-            : roadmapCruce.nuevos;
-          return React.createElement("div", { style: { background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 10, padding: 14, marginBottom: 16 } },
-            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" } },
-              React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#065F46", display: "flex", alignItems: "center", gap: 6 } },
-                "\uD83C\uDD95 Productos NUEVOS detectados (en tr\u00e1nsito, no est\u00e1n en roadmap) \u2014 " + roadmapCruce.nuevos.length + " SKUs"
-              ),
-              React.createElement("input", {
-                type: "text", placeholder: "Buscar SKU o descripci\u00f3n...",
-                value: nuevosSearch,
-                onChange: function(e) { setNuevosSearch(e.target.value); },
-                style: { padding: "5px 10px", border: "1px solid #A7F3D0", borderRadius: 6, fontSize: 12, width: 220, background: "#fff" }
-              })
-            ),
-            React.createElement("div", { style: { overflowX: "auto", maxHeight: 400, overflowY: "auto" } },
-              React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
-                React.createElement("thead", null,
-                  React.createElement("tr", { style: { background: "#D1FAE5", borderBottom: "1px solid #A7F3D0", position: "sticky", top: 0 } },
-                    React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46" } }, "SKU"),
-                    React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46" } }, "Descripci\u00f3n"),
-                    React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 90 } }, "Piezas"),
-                    React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#065F46", width: 160 } }, "Arribo a CEDIS")
-                  )
-                ),
-                React.createElement("tbody", null,
-                  nuevosFiltrados.map(function(t) {
-                    var arriboTxt = t.arribo ? (t.cedis ? (t.arribo + " \u00b7 " + t.cedis) : t.arribo) : "Sin fecha";
-                    return React.createElement("tr", { key: t.sku, style: { borderBottom: "1px solid #D1FAE5" } },
-                      React.createElement("td", { style: { padding: "6px 10px", fontWeight: 600, color: "#065F46", fontFamily: "ui-monospace,monospace" } }, t.sku),
-                      React.createElement("td", { style: { padding: "6px 10px", color: "#1E293B", maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: t.descripcion }, t.descripcion),
-                      React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#047857", fontWeight: 700 } }, t.piezas.toLocaleString("es-MX")),
-                      React.createElement("td", { style: { padding: "6px 10px", color: "#065F46", fontSize: 11 } }, arriboTxt)
-                    );
-                  })
-                )
-              )
-            )
-          );
-        })(),
-        // En camino (roadmap + tránsito) — ahora con Inv Acteck actual
-        roadmapCruce.enCamino.length > 0 && (function() {
-          var enCaminoFiltrados = enCaminoSearch
-            ? roadmapCruce.enCamino.filter(function(r) {
-                var q = enCaminoSearch.toLowerCase();
-                return (r.sku || "").toLowerCase().includes(q) || (r.descripcion || "").toLowerCase().includes(q);
-              })
-            : roadmapCruce.enCamino;
-          return React.createElement("div", { style: { marginBottom: 16 } },
-            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" } },
-              React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#1E40AF", display: "flex", alignItems: "center", gap: 6 } },
-                "\uD83D\uDEA2 En camino (llegando seg\u00fan roadmap) \u2014 " + roadmapCruce.enCamino.length + " SKUs"
-              ),
-              React.createElement("input", {
-                type: "text", placeholder: "Buscar SKU o descripci\u00f3n...",
-                value: enCaminoSearch,
-                onChange: function(e) { setEnCaminoSearch(e.target.value); },
-                style: { padding: "5px 10px", border: "1px solid #BFDBFE", borderRadius: 6, fontSize: 12, width: 220, background: "#fff" }
-              })
-            ),
-            React.createElement("div", { style: { overflowX: "auto", maxHeight: 400, overflowY: "auto" } },
-              React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
-                React.createElement("thead", null,
-                  React.createElement("tr", { style: { background: "#DBEAFE", position: "sticky", top: 0 } },
-                    React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF" } }, "SKU"),
-                    React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF" } }, "Descripci\u00f3n"),
-                    React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 80 } }, "Roadmap"),
-                    React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 100 } }, "Inv Acteck"),
-                    React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 100 } }, "Piezas"),
-                    React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontWeight: 600, color: "#1E40AF", width: 180 } }, "Arribo a CEDIS")
-                  )
-                ),
-                React.createElement("tbody", null,
-                  enCaminoFiltrados.map(function(r, i) {
-                    var arriboTxt = r.arribo ? (r.cedis ? (r.arribo + " \u00b7 " + r.cedis) : r.arribo) : "\u2014";
-                    return React.createElement("tr", { key: r.sku, style: { borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#FAFBFC" } },
-                      React.createElement("td", { style: { padding: "6px 10px", fontFamily: "ui-monospace,monospace", color: "#1E293B" } }, r.sku),
-                      React.createElement("td", { style: { padding: "6px 10px", color: "#475569", maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: r.descripcion }, (r.descripcion || "").slice(0, 80)),
-                      React.createElement("td", { style: { padding: "6px 10px", textAlign: "center" } },
-                        (function() {
-                          var rmS = roadmapStyle(r.rdmp);
-                          var rmI = roadmapInfo(r.rdmp);
-                          return React.createElement("span", {
-                            style: { padding: "2px 8px", borderRadius: 6, background: rmS.bg, color: rmS.color, fontSize: 10, fontWeight: 700, cursor: rmI.descripcion ? "help" : "default" },
-                            title: rmI.descripcion || r.rdmp,
-                          }, r.rdmp || "-");
-                        })()
-                      ),
-                      React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: r.invActeck > 0 ? "#1E293B" : "#94A3B8", fontWeight: r.invActeck > 0 ? 600 : 400 } }, r.invActeck.toLocaleString("es-MX")),
-                      React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#1E40AF", fontWeight: 600 } }, r.piezas.toLocaleString("es-MX")),
-                      React.createElement("td", { style: { padding: "6px 10px", color: "#475569", fontSize: 11 } }, arriboTxt)
-                    );
-                  })
-                )
-              )
-            )
-          );
-        })()
-      ),
-
-      // SKU Detail - Full Table
+          // SKU Detail - Full Table
       (function() {
         // Guard: datos puede ser null en el render inicial (antes de cargar)
         if (!datos) return null;
@@ -2702,42 +2415,139 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         )
         );
       })(),
+
+      // SKUs en riesgo de desabasto
+      skusRiesgo.length > 0 && React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 } },
+          React.createElement("h3", { className: "font-bold text-gray-800" }, "\u26A0\uFE0F SKUs en riesgo de desabasto"),
+          React.createElement("div", { style: { fontSize: 12, color: "#64748B", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+            React.createElement("span", null,
+              skusRiesgo.length + " SKUs se agotan en menos de 30 d\u00edas con la rotaci\u00f3n actual"
+            ),
+            skusOcultosEnPropuesta > 0 && React.createElement("span", {
+              style: { background: "#DBEAFE", color: "#1E40AF", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 600 },
+              title: "SKUs ocultos porque ya están en propuestas exportadas pendientes. Al cerrarlas (cuando llegue la OC del cliente) volverán a aparecer si siguen en riesgo."
+            }, "\u00b7 " + skusOcultosEnPropuesta + " en propuesta pendiente")
+          )
+        ),
+        React.createElement("div", { style: { overflowX: "auto", maxHeight: 400, overflowY: "auto" } },
+          React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+            React.createElement("thead", null,
+              React.createElement("tr", { style: { background: "#FEF2F2", position: "sticky", top: 0 } },
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 20 } }, "⚠"),
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA" } }, "SKU"),
+                React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA" } }, "Descripci\u00f3n"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Inv Cliente"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Prom 90d"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "D\u00edas restantes"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Inv Acteck"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90 } }, "Tr\u00e1nsito"),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", fontWeight: 600, color: "#991B1B", borderBottom: "2px solid #FECACA", width: 90, background: "#FEE2E2" } }, "Sugerido")
+              )
+            ),
+            React.createElement("tbody", null,
+              skusRiesgo.map(function(s, i) {
+                // Color de la FILA + indicador: se alinea con el estado del Sugerido
+                //   sinStock             → rojo  (no se puede surtir)
+                //   sugerido > 0         → verde (se puede proponer)
+                //   stock 1-19           → ámbar (insuficiente para mínimo 20)
+                //   sin stock ni sug     → gris neutro
+                var totalDisponible = (s.invActeck || 0) + (s.transito || 0);
+                var bg, dot, rowTitle;
+                if (s.sinStock) {
+                  bg = "#FEE2E2"; dot = "#B91C1C";
+                  rowTitle = "⚠ Crítico: sin inventario Acteck ni tránsito — no se puede surtir";
+                } else if (s.sugerido > 0) {
+                  bg = "#ECFDF5"; dot = "#10B981";
+                  rowTitle = "Podemos surtir " + s.sugerido + " piezas";
+                } else if (totalDisponible > 0 && totalDisponible < 20) {
+                  bg = "#FFFBEB"; dot = "#F59E0B";
+                  rowTitle = "Solo " + totalDisponible + " piezas disponibles (mínimo: 20) — no se propone";
+                } else {
+                  bg = "#F8FAFC"; dot = "#94A3B8";
+                  rowTitle = "Sin sugerido";
+                }
+                // Color de "Días restantes" — independiente, refleja urgencia temporal
+                var dotDias = s.urgencia === 3 ? "#EF4444"
+                            : s.urgencia === 2 ? "#F59E0B"
+                            : "#FBBF24";
+                return React.createElement("tr", {
+                  key: s.sku,
+                  style: { borderBottom: "1px solid #f1f5f9", background: bg },
+                  title: rowTitle,
+                },
+                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "center" } },
+                    React.createElement("span", {
+                      style: {
+                        display: "inline-block", width: 10, height: 10, borderRadius: 5,
+                        background: dot,
+                        boxShadow: s.sinStock ? "0 0 0 2px #FCA5A5" : "none",
+                      }
+                    })
+                  ),
+                  React.createElement("td", { style: { padding: "8px 10px", fontFamily: "ui-monospace,monospace", color: "#1E293B", fontWeight: 600 } }, s.sku),
+                  React.createElement("td", { style: { padding: "8px 10px", color: "#475569", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.titulo }, s.titulo.slice(0, 70)),
+                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E293B", fontWeight: 600 } }, s.stock.toLocaleString("es-MX")),
+                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#475569" } }, s.promMes.toLocaleString("es-MX")),
+                  React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: dotDias, fontWeight: 700 } }, s.diasRestantes + "d"),
+                  React.createElement("td", {
+                    style: {
+                      padding: "8px 10px", textAlign: "right",
+                      color: s.invActeck > 0 ? "#10B981" : "#B91C1C",
+                      fontWeight: s.invActeck > 0 ? 600 : 700,
+                    }
+                  }, s.invActeck > 0 ? s.invActeck.toLocaleString("es-MX") : "0"),
+                  React.createElement("td", {
+                    style: { padding: "8px 10px", textAlign: "right", color: s.transito > 0 ? "#7C3AED" : "#94A3B8" }
+                  }, s.transito > 0 ? s.transito.toLocaleString("es-MX") : "—"),
+                  (function() {
+                    // Tres casos visuales:
+                    //   sinStock (invAct=0 && trans=0) → rojo intenso "0 ⚠"
+                    //   sugerido = 0 con stock < 20    → ámbar "Insuficiente" (no se propone)
+                    //   sugerido > 0                   → verde con el número
+                    const totalDisponible = (s.invActeck || 0) + (s.transito || 0);
+                    let bgCell, colorCell, textoCell, titleCell, peso;
+                    if (s.sinStock) {
+                      bgCell = "#FEE2E2";
+                      colorCell = "#B91C1C";
+                      textoCell = "0 \u26A0";
+                      titleCell = "Sin inventario ni tr\u00e1nsito Acteck";
+                      peso = 700;
+                    } else if (s.sugerido === 0 && totalDisponible > 0 && totalDisponible < 20) {
+                      bgCell = "#FFFBEB";
+                      colorCell = "#92400E";
+                      textoCell = "Insuficiente";
+                      titleCell = `Solo ${totalDisponible} piezas disponibles en Acteck (m\u00ednimo: 20). No se propone.`;
+                      peso = 500;
+                    } else if (s.sugerido > 0) {
+                      bgCell = "#ECFDF5";
+                      colorCell = "#065F46";
+                      textoCell = s.sugerido.toLocaleString("es-MX");
+                      titleCell = sugeridoEdits[s.sku] !== undefined
+                        ? "Sugerido editado manualmente"
+                        : "Sugerido autom\u00e1tico";
+                      peso = 700;
+                    } else {
+                      bgCell = "#F8FAFC";
+                      colorCell = "#94A3B8";
+                      textoCell = "\u2014";
+                      titleCell = "Sin sugerido";
+                      peso = 400;
+                    }
+                    return React.createElement("td", {
+                      style: {
+                        padding: "8px 10px", textAlign: "right",
+                        background: bgCell, color: colorCell, fontWeight: peso,
+                      },
+                      title: titleCell,
+                    }, textoCell);
+                  })()
+                );
+              })
+            )
+          )
+        )
+      ),
+
   );
 }
-
-
-
-// ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
-
-// ——— MARKETING (Supabase) ———
-const TIPO_ACTIVIDAD = {
-  banner:     { label: "Banner",      color: "#8b5cf6", icon: "🖼️", tipo: "digital" },
-  mailing:    { label: "Mailing",     color: "#3b82f6", icon: "📧", tipo: "digital" },
-  reel:       { label: "Reel",        color: "#ec4899", icon: "🎬", tipo: "digital" },
-  google_ads: { label: "Google Ads",  color: "#f59e0b", icon: "📢", tipo: "digital" },
-  meta_ads:   { label: "Meta Ads",    color: "#6366f1", icon: "📱", tipo: "digital" },
-  demo:       { label: "Demo Tienda", color: "#10b981", icon: "🏪", tipo: "presencial" },
-  pop:        { label: "Material POP",color: "#14b8a6", icon: "🪧", tipo: "presencial" },
-  taller:     { label: "Taller",      color: "#f97316", icon: "🔧", tipo: "presencial" },
-};
-
-const MKT_ESTATUS = [
-  { value: "planeado",   label: "Planeado" },
-  { value: "en_curso",   label: "En Curso" },
-  { value: "completado", label: "Completado" },
-  { value: "cancelado",  label: "Cancelado" },
-];
-
-const TEMPORALIDADES = {
-  semana_santa: { label: "Semana Santa", emoji: "🐣", color: "#ffeaa7" },
-  dia_nino:     { label: "Día del Niño", emoji: "🎈", color: "#fd79a8" },
-  dia_madres:   { label: "Día Madres",   emoji: "💐", color: "#fab1a0" },
-  dia_maestro:  { label: "Día Maestro",  emoji: "📚", color: "#74b9ff" },
-  hot_sale:     { label: "HOT SALE",     emoji: "🔥", color: "#ff7675" },
-  lluvias:      { label: "Temp. Lluvias",emoji: "🌧️", color: "#a29bfe" },
-  buen_fin:     { label: "Buen Fin",     emoji: "🛒", color: "#e17055" },
-  navidad:      { label: "Navidad",      emoji: "🎄", color: "#00b894" },
-  regreso_clases:{ label: "Regreso Clases",emoji: "📓", color: "#fdcb6e" },
-};
-
-// rebuild 1776356434

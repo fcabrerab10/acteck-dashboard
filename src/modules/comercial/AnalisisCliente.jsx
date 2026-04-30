@@ -82,6 +82,85 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   var fmtNum = function(v) { return Number(v||0).toLocaleString("es-MX"); };
 
   // —— Sell-through by month ——
+  // ── Comparativa por Marca / Categoría (movido desde Estrategia de Producto) ──
+  // Agregamos sell-in, sell-out e inventario por marca y por categoría.
+  // Spectrum se consolida en "Balam Rush" (es modelo, no marca).
+  var aggsByMarcaCat = React.useMemo(function() {
+    var esPcel = clienteKey === 'pcel';
+    var consolidaMarca = function(m) { return m === 'Balam Rush Spectrum' ? 'Balam Rush' : m; };
+    var normLabel = function(s) { return (s || '').toString().trim(); };
+
+    // Index por SKU (productos_cliente) para mapear marca+categoría
+    var prodBySku = {};
+    productos.forEach(function(p) {
+      var sku = (p.sku || '').toString();
+      if (!prodBySku[sku]) prodBySku[sku] = p;
+    });
+
+    // Sumas por SKU
+    var siMonto = {}, siPiezas = {}, soMonto = {}, soPiezas = {};
+    sellInSku.forEach(function(r) {
+      var k = (r.sku || '').toString();
+      siMonto[k] = (siMonto[k] || 0) + (Number(r.monto_pesos) || 0);
+      siPiezas[k] = (siPiezas[k] || 0) + (Number(r.piezas) || 0);
+    });
+    sellOutSku.forEach(function(r) {
+      var k = (r.sku || '').toString();
+      soMonto[k] = (soMonto[k] || 0) + (Number(r.monto_pesos) || 0);
+      soPiezas[k] = (soPiezas[k] || 0) + (Number(r.piezas) || 0);
+    });
+
+    // Inventario: tomar sólo el snapshot más reciente
+    var maxA = 0, maxS = 0;
+    inventario.forEach(function(r) {
+      var a = Number(r.anio) || 0, s = Number(r.semana) || 0;
+      if (a > maxA || (a === maxA && s > maxS)) { maxA = a; maxS = s; }
+    });
+    var invLatest = maxA > 0
+      ? inventario.filter(function(r) { return Number(r.anio) === maxA && Number(r.semana) === maxS; })
+      : inventario;
+    var invBySku = {};
+    invLatest.forEach(function(r) {
+      var k = (r.sku || '').toString();
+      var stock = Number(r.stock) || 0;
+      var valor = Number(r.valor) || 0;
+      if (valor === 0) valor = stock * (Number(r.costo_convenio || r.costo_promedio) || 0);
+      if (!invBySku[k]) invBySku[k] = { stock: 0, valor: 0 };
+      invBySku[k].stock += stock;
+      invBySku[k].valor += valor;
+    });
+
+    var byMarca = {}, byCategoria = {};
+    var skusAll = new Set();
+    [].concat(Object.keys(siMonto), Object.keys(siPiezas), Object.keys(soMonto), Object.keys(soPiezas), Object.keys(invBySku))
+      .forEach(function(s) { skusAll.add(s); });
+
+    skusAll.forEach(function(sku) {
+      var p = prodBySku[sku] || {};
+      var marca = consolidaMarca(normLabel(p.marca)) || 'Sin Marca';
+      var cat = normLabel(p.categoria) || 'Sin Categoría';
+      var inv = invBySku[sku] || { stock: 0, valor: 0 };
+
+      if (!byMarca[marca]) byMarca[marca] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0, invValor: 0 };
+      byMarca[marca].siPiezas += siPiezas[sku] || 0;
+      byMarca[marca].siMonto  += siMonto[sku]  || 0;
+      byMarca[marca].soPiezas += soPiezas[sku] || 0;
+      byMarca[marca].soMonto  += soMonto[sku]  || 0;
+      byMarca[marca].invPiezas += inv.stock;
+      byMarca[marca].invValor  += inv.valor;
+
+      if (!byCategoria[cat]) byCategoria[cat] = { siPiezas: 0, siMonto: 0, soPiezas: 0, soMonto: 0, invPiezas: 0, invValor: 0 };
+      byCategoria[cat].siPiezas += siPiezas[sku] || 0;
+      byCategoria[cat].siMonto  += siMonto[sku]  || 0;
+      byCategoria[cat].soPiezas += soPiezas[sku] || 0;
+      byCategoria[cat].soMonto  += soMonto[sku]  || 0;
+      byCategoria[cat].invPiezas += inv.stock;
+      byCategoria[cat].invValor  += inv.valor;
+    });
+
+    return { byMarca: byMarca, byCategoria: byCategoria, esPcel: esPcel };
+  }, [productos, sellInSku, sellOutSku, inventario, clienteKey]);
+
   var ventasPorMes = React.useMemo(function() {
     var result = [];
     var siMap = {};
@@ -865,11 +944,83 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
             );
           })
         )
+    ),
+
+    // ═══ Comparativa por Marca (movido desde Estrategia) ═══
+    aggsByMarcaCat && Object.keys(aggsByMarcaCat.byMarca).length > 0 && el("div", { style: { background:"#ffffff", borderRadius:12, padding:"16px 20px", marginTop:24, boxShadow:"0 1px 3px rgba(0,0,0,0.04)" } },
+      el("h3", { style: { margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#1e293b" } }, "Comparativa por Marca"),
+      el("div", { style: { overflowX: "auto" } },
+        (function() {
+          var esPcel = aggsByMarcaCat.esPcel;
+          return el("table", { style: { width: "100%", fontSize: 13, borderCollapse: "collapse" } },
+            el("thead", null,
+              el("tr", { style: { borderBottom: "1px solid #e2e8f0" } },
+                el("th", { style: { textAlign: "left", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Marca"),
+                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Sell-In pzs"),
+                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Sell-In $"),
+                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Sell-Out pzs"),
+                !esPcel && el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Sell-Out $"),
+                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Inv pzs"),
+                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Inv $")
+              )
+            ),
+            el("tbody", null,
+              Object.entries(aggsByMarcaCat.byMarca).sort(function(a,b){return b[1].soMonto-a[1].soMonto;}).map(function(entry) {
+                var marca = entry[0], m = entry[1];
+                return el("tr", { key: marca, style: { borderBottom: "1px solid #f1f5f9" } },
+                  el("td", { style: { padding: "10px 12px", color: "#1e293b", fontWeight: 600 } }, marca),
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, m.siPiezas.toLocaleString("es-MX")),
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, formatPesos(m.siMonto)),
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, m.soPiezas.toLocaleString("es-MX")),
+                  !esPcel && el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, formatPesos(m.soMonto)),
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, m.invPiezas.toLocaleString("es-MX")),
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, formatPesos(m.invValor))
+                );
+              })
+            )
+          );
+        })()
+      )
+    ),
+
+    // ═══ Por Categoría (movido desde Estrategia) ═══
+    aggsByMarcaCat && Object.keys(aggsByMarcaCat.byCategoria).length > 0 && el("div", { style: { background:"#ffffff", borderRadius:12, padding:"16px 20px", marginTop:24, boxShadow:"0 1px 3px rgba(0,0,0,0.04)" } },
+      el("h3", { style: { margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#1e293b" } }, "Por Categoría (ambas marcas)"),
+      el("div", { style: { overflowX: "auto" } },
+        (function() {
+          var esPcel = aggsByMarcaCat.esPcel;
+          var metric = function(c) { return esPcel ? c.soPiezas : c.soMonto; };
+          var totalSO = Object.values(aggsByMarcaCat.byCategoria).reduce(function(s,c){return s+metric(c);},0);
+          return el("table", { style: { width: "100%", fontSize: 13, borderCollapse: "collapse" } },
+            el("thead", null,
+              el("tr", { style: { borderBottom: "1px solid #e2e8f0" } },
+                el("th", { style: { textAlign: "left", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Categoría"),
+                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "Valor Inventario"),
+                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, esPcel ? "Sell-Out pzs" : "Sell-Out $"),
+                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "% SO"),
+                el("th", { style: { textAlign: "right", padding: "8px 12px", fontWeight: 600, color: "#475569" } }, "SKUs c/Inv")
+              )
+            ),
+            el("tbody", null,
+              Object.entries(aggsByMarcaCat.byCategoria).sort(function(a,b){return metric(b[1])-metric(a[1]);}).map(function(entry) {
+                var cat = entry[0], c = entry[1];
+                var pctTxt = totalSO > 0 ? (metric(c)/totalSO*100).toFixed(1) + "%" : "0.0%";
+                var soDisplay = esPcel ? c.soPiezas.toLocaleString("es-MX") : formatPesos(c.soMonto);
+                return el("tr", { key: cat, style: { borderBottom: "1px solid #f1f5f9" } },
+                  el("td", { style: { padding: "10px 12px", color: "#1e293b", fontWeight: 600 } }, cat),
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, formatPesos(c.invValor)),
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, soDisplay),
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, pctTxt),
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, c.invPiezas > 0 ? c.invPiezas.toLocaleString("es-MX") : "0")
+                );
+              })
+            )
+          );
+        })()
+      )
     )
   );
 }
-
-
 
 // ==================== FORECAST CLIENTE ====================
 
