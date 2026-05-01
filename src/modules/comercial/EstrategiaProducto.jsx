@@ -126,37 +126,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   // Modal Calculadora reversa de cuota (F)
   const [cuotaCalc, setCuotaCalc] = React.useState(null);
 
-  // ── N3a: useMemo con index simples (forEach) ──
-  const propuestasConTracking = React.useMemo(() => {
-    try {
-      if (!propuestasHist || propuestasHist.length === 0 || !datos) return [];
-      const esPcel = clienteKey === 'pcel';
-      const ventasDiarias = {};
-      if (!esPcel && Array.isArray(datos.selloutDiario)) {
-        datos.selloutDiario.forEach((r) => {
-          const sku = r.no_parte;
-          if (!sku || !r.fecha) return;
-          if (!ventasDiarias[sku]) ventasDiarias[sku] = [];
-          ventasDiarias[sku].push({ fecha: r.fecha, cantidad: Number(r.cantidad) || 0 });
-        });
-      }
-      const ventasSemanales = {};
-      if (esPcel && Array.isArray(datos.selloutPcelSemanal)) {
-        datos.selloutPcelSemanal.forEach((r) => {
-          const sku = r.sku;
-          if (!sku || r.anio == null || r.semana == null) return;
-          if (!ventasSemanales[sku]) ventasSemanales[sku] = {};
-          const k = Number(r.anio) + '-' + Number(r.semana);
-          ventasSemanales[sku][k] = (ventasSemanales[sku][k] || 0) + (Number(r.vta_semana) || 0);
-        });
-      }
-      // No usamos los index todavía. Solo retornamos propuestasHist sin tracking.
-      return propuestasHist;
-    } catch (err) {
-      console.error('propuestasConTracking N3a:', err);
-      return [];
-    }
-  }, [propuestasHist, datos, clienteKey]);
+  // ── Test mínimo N: solo declarar useMemo vacío ──
+  const propuestasConTracking = React.useMemo(() => [], []);
 
   // ── Recomendaciones del día (L) ──
   // SIN useEffect — solo lectura inicial de localStorage y escritura
