@@ -2648,102 +2648,6 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       );
     })(),
 
-      // ═══ SECCIÓN OPORTUNIDADES DE VENTA (B) ═══
-      datos && skusOportunidad && (skusOportunidad.nuevos.length > 0 || skusOportunidad.noVendidos.length > 0) &&
-      React.createElement("div", { className: "bg-white rounded-2xl shadow-sm" },
-        React.createElement("button", {
-          onClick: () => setOportunidadAbierta(!oportunidadAbierta),
-          style: { width: "100%", padding: "16px 20px", display: "flex", alignItems: "center", gap: 10, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontSize: 16, fontWeight: 700, color: "#1E293B" }
-        },
-          React.createElement("span", null, oportunidadAbierta ? "▾" : "▸"),
-          React.createElement("span", null, "🚀 Oportunidades de venta"),
-          React.createElement("span", { style: { marginLeft: "auto", fontSize: 12, color: "#64748B", fontWeight: 400 } },
-            skusOportunidad.nuevos.length + " nuevos · " + skusOportunidad.noVendidos.length + " sin venderle aún")
-        ),
-        oportunidadAbierta && React.createElement("div", { style: { padding: "0 20px 20px" } },
-          React.createElement("div", { style: { display: "flex", gap: 4, borderBottom: "1px solid #E2E8F0", marginBottom: 12 } },
-            React.createElement("button", {
-              onClick: () => setOportunidadTab('nuevos'),
-              style: {
-                padding: "8px 14px", border: "none", background: "transparent",
-                borderBottom: "2px solid " + (oportunidadTab === 'nuevos' ? "#1E40AF" : "transparent"),
-                color: oportunidadTab === 'nuevos' ? "#1E40AF" : "#64748B",
-                fontWeight: oportunidadTab === 'nuevos' ? 700 : 500, fontSize: 13, cursor: "pointer"
-              }
-            }, "🆕 Productos nuevos (" + skusOportunidad.nuevos.length + ")"),
-            React.createElement("button", {
-              onClick: () => setOportunidadTab('noVendidos'),
-              style: {
-                padding: "8px 14px", border: "none", background: "transparent",
-                borderBottom: "2px solid " + (oportunidadTab === 'noVendidos' ? "#1E40AF" : "transparent"),
-                color: oportunidadTab === 'noVendidos' ? "#1E40AF" : "#64748B",
-                fontWeight: oportunidadTab === 'noVendidos' ? 700 : 500, fontSize: 13, cursor: "pointer"
-              }
-            }, "🎯 Sin venderle aún (" + skusOportunidad.noVendidos.length + ")")
-          ),
-          React.createElement("p", { style: { fontSize: 12, color: "#64748B", marginBottom: 12, fontStyle: "italic" } },
-            oportunidadTab === 'nuevos'
-              ? "SKUs en tránsito que aún no llegan a Acteck y que el cliente nunca ha comprado. Tú decides la cantidad inicial a sugerir."
-              : "SKUs en stock Acteck que el cliente nunca ha comprado. Oportunidades para ampliar el catálogo del cliente."),
-          (function() {
-            const lista = oportunidadTab === 'nuevos' ? skusOportunidad.nuevos : skusOportunidad.noVendidos;
-            if (lista.length === 0) {
-              return React.createElement("div", { style: { padding: 24, textAlign: "center", color: "#94A3B8", fontSize: 13, background: "#F8FAFC", borderRadius: 8 } },
-                oportunidadTab === 'nuevos' ? "Sin productos nuevos en tránsito todavía." : "Le has vendido todos los SKUs disponibles 🎉");
-            }
-            return React.createElement("div", { style: { overflowX: "auto", maxHeight: 300, overflowY: "auto", border: "1px solid #E2E8F0", borderRadius: 8 } },
-              React.createElement("table", { style: { width: "100%", fontSize: 12, borderCollapse: "collapse" } },
-                React.createElement("thead", null,
-                  React.createElement("tr", { style: { background: "#F8FAFC", borderBottom: "1px solid #E2E8F0", position: "sticky", top: 0 } },
-                    React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "SKU"),
-                    React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Roadmap"),
-                    React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Descripción"),
-                    React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } },
-                      oportunidadTab === 'nuevos' ? "Tránsito" : "Inv Acteck"),
-                    React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Precio AAA"),
-                    React.createElement("th", { style: { width: 130 } })
-                  )
-                ),
-                React.createElement("tbody", null,
-                  lista.slice(0, 100).map((s, idx) => {
-                    const cantidad = oportunidadTab === 'nuevos' ? Number(s.invTransito) : Number(s.invActeck);
-                    const precio = Number(s.precioAAAcd) > 0 ? Number(s.precioAAAcd) : Number(s.precio) || 0;
-                    return React.createElement("tr", { key: s.sku, style: { borderBottom: "1px solid #F1F5F9", background: idx % 2 === 0 ? "#fff" : "#FAFBFC" } },
-                      React.createElement("td", { style: { padding: "8px 10px", fontFamily: "ui-monospace,monospace", fontWeight: 600, color: "#1E293B" } }, s.sku),
-                      React.createElement("td", { style: { padding: "8px 10px" } },
-                        s.roadmap && (function() {
-                          const rmS = roadmapStyle(s.roadmap);
-                          return React.createElement("span", {
-                            style: { padding: "2px 6px", borderRadius: 4, background: rmS.bg, color: rmS.color, fontSize: 10, fontWeight: 700 }
-                          }, s.roadmap);
-                        })()
-                      ),
-                      React.createElement("td", { style: { padding: "8px 10px", color: "#475569", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.descripcion },
-                        (s.descripcion || "").slice(0, 60)),
-                      React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E293B", fontWeight: 600 } }, cantidad.toLocaleString("es-MX")),
-                      React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E40AF" } }, precio > 0 ? formatMXN(precio) : "—"),
-                      React.createElement("td", { style: { padding: "6px 10px", textAlign: "right" } },
-                        canEdit && React.createElement("button", {
-                          onClick: () => {
-                            if (!propPersonalizada) {
-                              abrirPropPersonalizada();
-                              setTimeout(() => agregarSkuAPropPersonalizada(s), 50);
-                            } else {
-                              agregarSkuAPropPersonalizada(s);
-                            }
-                          },
-                          title: "Agregar a propuesta personalizada para sugerir cantidad",
-                          style: { padding: "4px 10px", background: "#7C3AED", color: "#fff", border: "none", borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: "pointer" }
-                        }, "+ Proponer")
-                      )
-                    );
-                  })
-                )
-              )
-            );
-          })()
-        )
-      ),
 
           // SKU Detail - Full Table
       (function() {
@@ -3402,6 +3306,103 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
               })
             )
           )
+        )
+      ),
+
+      // ═══ SECCIÓN OPORTUNIDADES DE VENTA (B) ═══
+      datos && skusOportunidad && (skusOportunidad.nuevos.length > 0 || skusOportunidad.noVendidos.length > 0) &&
+      React.createElement("div", { className: "bg-white rounded-2xl shadow-sm" },
+        React.createElement("button", {
+          onClick: () => setOportunidadAbierta(!oportunidadAbierta),
+          style: { width: "100%", padding: "16px 20px", display: "flex", alignItems: "center", gap: 10, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontSize: 16, fontWeight: 700, color: "#1E293B" }
+        },
+          React.createElement("span", null, oportunidadAbierta ? "▾" : "▸"),
+          React.createElement("span", null, "🚀 Oportunidades de venta"),
+          React.createElement("span", { style: { marginLeft: "auto", fontSize: 12, color: "#64748B", fontWeight: 400 } },
+            skusOportunidad.nuevos.length + " nuevos · " + skusOportunidad.noVendidos.length + " sin venderle aún")
+        ),
+        oportunidadAbierta && React.createElement("div", { style: { padding: "0 20px 20px" } },
+          React.createElement("div", { style: { display: "flex", gap: 4, borderBottom: "1px solid #E2E8F0", marginBottom: 12 } },
+            React.createElement("button", {
+              onClick: () => setOportunidadTab('nuevos'),
+              style: {
+                padding: "8px 14px", border: "none", background: "transparent",
+                borderBottom: "2px solid " + (oportunidadTab === 'nuevos' ? "#1E40AF" : "transparent"),
+                color: oportunidadTab === 'nuevos' ? "#1E40AF" : "#64748B",
+                fontWeight: oportunidadTab === 'nuevos' ? 700 : 500, fontSize: 13, cursor: "pointer"
+              }
+            }, "🆕 Productos nuevos (" + skusOportunidad.nuevos.length + ")"),
+            React.createElement("button", {
+              onClick: () => setOportunidadTab('noVendidos'),
+              style: {
+                padding: "8px 14px", border: "none", background: "transparent",
+                borderBottom: "2px solid " + (oportunidadTab === 'noVendidos' ? "#1E40AF" : "transparent"),
+                color: oportunidadTab === 'noVendidos' ? "#1E40AF" : "#64748B",
+                fontWeight: oportunidadTab === 'noVendidos' ? 700 : 500, fontSize: 13, cursor: "pointer"
+              }
+            }, "🎯 Sin venderle aún (" + skusOportunidad.noVendidos.length + ")")
+          ),
+          React.createElement("p", { style: { fontSize: 12, color: "#64748B", marginBottom: 12, fontStyle: "italic" } },
+            oportunidadTab === 'nuevos'
+              ? "SKUs en tránsito que aún no llegan a Acteck y que el cliente nunca ha comprado. Tú decides la cantidad inicial a sugerir."
+              : "SKUs en stock Acteck que el cliente nunca ha comprado. Oportunidades para ampliar el catálogo del cliente."),
+          (function() {
+            const lista = oportunidadTab === 'nuevos' ? skusOportunidad.nuevos : skusOportunidad.noVendidos;
+            if (lista.length === 0) {
+              return React.createElement("div", { style: { padding: 24, textAlign: "center", color: "#94A3B8", fontSize: 13, background: "#F8FAFC", borderRadius: 8 } },
+                oportunidadTab === 'nuevos' ? "Sin productos nuevos en tránsito todavía." : "Le has vendido todos los SKUs disponibles 🎉");
+            }
+            return React.createElement("div", { style: { overflowX: "auto", maxHeight: 300, overflowY: "auto", border: "1px solid #E2E8F0", borderRadius: 8 } },
+              React.createElement("table", { style: { width: "100%", fontSize: 12, borderCollapse: "collapse" } },
+                React.createElement("thead", null,
+                  React.createElement("tr", { style: { background: "#F8FAFC", borderBottom: "1px solid #E2E8F0", position: "sticky", top: 0 } },
+                    React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "SKU"),
+                    React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Roadmap"),
+                    React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Descripción"),
+                    React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } },
+                      oportunidadTab === 'nuevos' ? "Tránsito" : "Inv Acteck"),
+                    React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Precio AAA"),
+                    React.createElement("th", { style: { width: 130 } })
+                  )
+                ),
+                React.createElement("tbody", null,
+                  lista.slice(0, 100).map((s, idx) => {
+                    const cantidad = oportunidadTab === 'nuevos' ? Number(s.invTransito) : Number(s.invActeck);
+                    const precio = Number(s.precioAAAcd) > 0 ? Number(s.precioAAAcd) : Number(s.precio) || 0;
+                    return React.createElement("tr", { key: s.sku, style: { borderBottom: "1px solid #F1F5F9", background: idx % 2 === 0 ? "#fff" : "#FAFBFC" } },
+                      React.createElement("td", { style: { padding: "8px 10px", fontFamily: "ui-monospace,monospace", fontWeight: 600, color: "#1E293B" } }, s.sku),
+                      React.createElement("td", { style: { padding: "8px 10px" } },
+                        s.roadmap && (function() {
+                          const rmS = roadmapStyle(s.roadmap);
+                          return React.createElement("span", {
+                            style: { padding: "2px 6px", borderRadius: 4, background: rmS.bg, color: rmS.color, fontSize: 10, fontWeight: 700 }
+                          }, s.roadmap);
+                        })()
+                      ),
+                      React.createElement("td", { style: { padding: "8px 10px", color: "#475569", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.descripcion },
+                        (s.descripcion || "").slice(0, 60)),
+                      React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E293B", fontWeight: 600 } }, cantidad.toLocaleString("es-MX")),
+                      React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E40AF" } }, precio > 0 ? formatMXN(precio) : "—"),
+                      React.createElement("td", { style: { padding: "6px 10px", textAlign: "right" } },
+                        canEdit && React.createElement("button", {
+                          onClick: () => {
+                            if (!propPersonalizada) {
+                              abrirPropPersonalizada();
+                              setTimeout(() => agregarSkuAPropPersonalizada(s), 50);
+                            } else {
+                              agregarSkuAPropPersonalizada(s);
+                            }
+                          },
+                          title: "Agregar a propuesta personalizada para sugerir cantidad",
+                          style: { padding: "4px 10px", background: "#7C3AED", color: "#fff", border: "none", borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: "pointer" }
+                        }, "+ Proponer")
+                      )
+                    );
+                  })
+                )
+              )
+            );
+          })()
         )
       ),
 
