@@ -123,6 +123,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   const [excluidosSku, setExcluidosSku] = React.useState(new Set());
   // Modal de Vista Previa de bulk
   const [bulkPreview, setBulkPreview] = React.useState(null); // { modo, scope, cambios:[], totalAntes, totalDespues }
+  // Modal Calculadora reversa de cuota (F)
+  const [cuotaCalc, setCuotaCalc] = React.useState(null);
   // Modificadores del scope del bulk (toolbar)
   const [bulkSoloFiltrados, setBulkSoloFiltrados] = React.useState(false);
   const [bulkSoloSinStock, setBulkSoloSinStock] = React.useState(false);
@@ -1885,6 +1887,80 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     });
   }, [canEdit, skuDetail, bulkSoloFiltrados, bulkSoloSinStock, excluidosSku, sugeridoEdits, calcularSugeridoConMeta, searchFilter, categoriaFilter]);
 
+  // ── Calculadora reversa de cuota (F) ──
+  // Greedy: dado un faltante MXN (mes o Q), elige SKUs respetando el
+  // sugerido auto y, si no alcanza, sube hasta el agresivo (4 meses) por SKU.
+  // Prioriza por monto agresivo $ DESC + sell-in histórico DESC.
+  const calcularParaCuota = React.useCallback((meta) => {
+    if (!skuDetail || !kpis) return;
+    const faltaMonto = meta === 'mes'
+      ? Math.max(0, (kpis.cuotaMesActual || 0) - (kpis.siMesActual || 0))
+      : (kpis.qActualData ? Math.max(0, kpis.qActualData.cuota - kpis.qActualData.sellInAcumulado) : 0);
+    if (faltaMonto <= 0) {
+      setMessage('✓ Ya estás al día con la cuota — no falta dinero.');
+      setTimeout(() => setMessage(''), 4000);
+      return;
+    }
+    const candidatos = skuDetail
+      .filter((s) => !excluidosSku.has(s.sku))
+      .map((s) => {
+        const precio = Number(s.precioAAAcd) > 0 ? Number(s.precioAAAcd) : Number(s.precio) || 0;
+        const sugActual = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido) || 0;
+        const sugAgresivo = calcularSugeridoConMeta(s, 4);
+        return {
+          sku: s.sku, descripcion: s.descripcion, precio, sugActual, sugAgresivo,
+          montoActual: sugActual * precio,
+          montoAgresivo: sugAgresivo * precio,
+          siPiezasTotal: Number(s.siPiezasTotal) || 0,
+        };
+      })
+      .filter((c) => c.precio > 0 && c.sugAgresivo > 0)
+      .sort((a, b) => (b.montoAgresivo - a.montoAgresivo) || (b.siPiezasTotal - a.siPiezasTotal));
+
+    const totalActualPropuesta = candidatos.reduce((s, c) => s + c.montoActual, 0);
+    if (totalActualPropuesta >= faltaMonto) {
+      setCuotaCalc({
+        meta, faltaMonto, totalActualPropuesta,
+        cambios: {}, skusAfectados: 0, cubre: true,
+        nuevoTotal: totalActualPropuesta, skusUsados: [],
+      });
+      return;
+    }
+    const cambios = {};
+    const detalle = [];
+    let acumNuevoMonto = totalActualPropuesta;
+    candidatos.forEach((c) => {
+      if (acumNuevoMonto >= faltaMonto) return;
+      if (c.sugAgresivo <= c.sugActual) return;
+      const subir = c.sugAgresivo - c.sugActual;
+      const montoExtra = subir * c.precio;
+      cambios[c.sku] = c.sugAgresivo;
+      detalle.push({
+        sku: c.sku, descripcion: c.descripcion,
+        sugActual: c.sugActual, sugNuevo: c.sugAgresivo,
+        delta: subir, precio: c.precio, montoExtra,
+      });
+      acumNuevoMonto += montoExtra;
+    });
+    setCuotaCalc({
+      meta, faltaMonto, totalActualPropuesta, cambios,
+      skusAfectados: detalle.length,
+      cubre: acumNuevoMonto >= faltaMonto,
+      nuevoTotal: acumNuevoMonto,
+      sobrante: Math.max(0, acumNuevoMonto - faltaMonto),
+      skusUsados: detalle,
+    });
+  }, [skuDetail, kpis, excluidosSku, sugeridoEdits, calcularSugeridoConMeta]);
+
+  const aplicarCuotaCalc = React.useCallback(async () => {
+    if (!cuotaCalc || !cuotaCalc.cubre || Object.keys(cuotaCalc.cambios).length === 0) {
+      setCuotaCalc(null);
+      return;
+    }
+    await aplicarBulkSugerido(cuotaCalc.cambios, 'Para cuota ' + (cuotaCalc.meta === 'mes' ? 'mes' : 'Q'));
+    setCuotaCalc(null);
+  }, [cuotaCalc, aplicarBulkSugerido]);
+
   // Confirma el bulk preview y aplica los cambios
   const confirmarBulk = React.useCallback(async () => {
     if (!bulkPreview) return;
@@ -2554,6 +2630,21 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   kpis.qActualData.falta > 0 ? formatMXN(kpis.qActualData.falta) : (kpis.qActualData.pct != null ? kpis.qActualData.pct.toFixed(0) + '%' : ''))
               )
             )
+          ),
+          // Botones calculadora reversa (F)
+          canEdit && React.createElement('div', { style: { marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+            React.createElement('span', { style: { fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' } }, '🎯 Sugerencia para llegar a la meta:'),
+            faltaMes > 0 && React.createElement('button', {
+              onClick: () => calcularParaCuota('mes'),
+              title: 'Calcula qué SKUs subir al sugerido agresivo para cubrir el gap del mes',
+              style: { padding: '6px 12px', background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }
+            }, 'Para mes (' + formatMXN(faltaMes) + ')'),
+            kpis.qActualData && kpis.qActualData.falta > 0 && React.createElement('button', {
+              onClick: () => calcularParaCuota('q'),
+              title: 'Calcula qué SKUs subir al sugerido agresivo para cubrir el gap del Q',
+              style: { padding: '6px 12px', background: '#DBEAFE', color: '#1E40AF', border: '1px solid #BFDBFE', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }
+            }, 'Para Q (' + formatMXN(kpis.qActualData.falta) + ')'),
+            (faltaMes <= 0 && (!kpis.qActualData || kpis.qActualData.falta <= 0)) && React.createElement('span', { style: { fontSize: 11, color: '#065F46', fontStyle: 'italic' } }, '✓ Mes y Q al día — no falta nada')
           ),
           // Tabla pequeña con los 4 trimestres
           React.createElement('div', { style: { marginTop: 14 } },
@@ -3537,6 +3628,74 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 cursor: bulkPreview.cuentaCambios === 0 ? "not-allowed" : "pointer"
               }
             }, "Aplicar a " + bulkPreview.cuentaCambios + " SKUs")
+          )
+        )
+      ),
+
+      // ═══ MODAL: CALCULADORA REVERSA DE CUOTA (F) ═══
+      cuotaCalc && React.createElement("div", {
+        style: { position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
+        onClick: () => setCuotaCalc(null)
+      },
+        React.createElement("div", {
+          style: { background: "#fff", borderRadius: 14, padding: 24, maxWidth: 720, width: "100%", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 50px rgba(0,0,0,0.25)" },
+          onClick: (e) => e.stopPropagation()
+        },
+          React.createElement("h3", { style: { margin: 0, fontSize: 18, fontWeight: 700, color: "#1E293B", marginBottom: 4 } },
+            "🎯 Para cuota " + (cuotaCalc.meta === 'mes' ? 'del mes' : 'del Q')),
+          React.createElement("p", { style: { fontSize: 13, color: "#64748B", marginBottom: 16 } },
+            "Faltan " + formatMXN(cuotaCalc.faltaMonto) + " para alcanzar la meta. Calculé qué SKUs subir al sugerido agresivo (×4 = 120d) para cubrir ese monto."),
+          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 } },
+            React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: 12 } },
+              React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", marginBottom: 4 } }, "Propuesta actual"),
+              React.createElement("p", { style: { fontSize: 16, fontWeight: 700, color: "#475569" } }, formatMXN(cuotaCalc.totalActualPropuesta))
+            ),
+            React.createElement("div", { style: { background: cuotaCalc.cubre ? "#F0FDF4" : "#FEF2F2", borderRadius: 8, padding: 12 } },
+              React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", marginBottom: 4 } }, "Después de aplicar"),
+              React.createElement("p", { style: { fontSize: 16, fontWeight: 700, color: cuotaCalc.cubre ? "#047857" : "#B91C1C" }, title: cuotaCalc.nuevoTotal != null ? formatMXN(cuotaCalc.nuevoTotal) : "—" }, cuotaCalc.nuevoTotal != null ? formatMXN(cuotaCalc.nuevoTotal) : "—")
+            ),
+            React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 8, padding: 12 } },
+              React.createElement("p", { style: { fontSize: 10, color: "#92400E", textTransform: "uppercase", marginBottom: 4 } }, "Meta a cubrir"),
+              React.createElement("p", { style: { fontSize: 16, fontWeight: 700, color: "#92400E" } }, formatMXN(cuotaCalc.faltaMonto))
+            )
+          ),
+          !cuotaCalc.cubre && React.createElement("div", { style: { padding: 12, background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, marginBottom: 12, fontSize: 12, color: "#991B1B" } },
+            "⚠ Aún subiendo TODOS los SKUs al agresivo (120 días) no se cubre el gap. Considera negociar promociones extra."),
+          cuotaCalc.cubre && cuotaCalc.skusAfectados === 0 && React.createElement("div", { style: { padding: 12, background: "#F0FDF4", border: "1px solid #A7F3D0", borderRadius: 8, marginBottom: 12, fontSize: 12, color: "#065F46" } },
+            "✓ Si el cliente compra TODA la propuesta actual, la meta queda cubierta. No hace falta subir más SKUs."),
+          cuotaCalc.skusUsados.length > 0 && React.createElement("div", { style: { border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden", maxHeight: 280, overflowY: "auto" } },
+            React.createElement("table", { style: { width: "100%", fontSize: 12, borderCollapse: "collapse" } },
+              React.createElement("thead", null,
+                React.createElement("tr", { style: { background: "#F8FAFC", borderBottom: "1px solid #E2E8F0", position: "sticky", top: 0 } },
+                  React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "SKU"),
+                  React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Actual"),
+                  React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Nuevo"),
+                  React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Δ pzs"),
+                  React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Δ monto")
+                )
+              ),
+              React.createElement("tbody", null,
+                cuotaCalc.skusUsados.slice(0, 80).map((c) =>
+                  React.createElement("tr", { key: c.sku, style: { borderBottom: "1px solid #F1F5F9" } },
+                    React.createElement("td", { style: { padding: "6px 10px", fontFamily: "ui-monospace,monospace", fontWeight: 600, color: "#1E293B" } }, c.sku),
+                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#475569" } }, (c.sugActual || 0).toLocaleString("es-MX")),
+                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#047857", fontWeight: 600 } }, (c.sugNuevo || 0).toLocaleString("es-MX")),
+                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#7C3AED" } }, "+" + (c.delta || 0).toLocaleString("es-MX")),
+                    React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", color: "#065F46", fontWeight: 600 } }, "+" + formatMXN(c.montoExtra || 0))
+                  )
+                )
+              )
+            )
+          ),
+          React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 18, paddingTop: 16, borderTop: "1px solid #F1F5F9" } },
+            React.createElement("button", {
+              onClick: () => setCuotaCalc(null),
+              style: { padding: "8px 16px", background: "#fff", color: "#475569", border: "1px solid #CBD5E1", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }
+            }, "Cancelar"),
+            cuotaCalc.cubre && cuotaCalc.skusAfectados > 0 && React.createElement("button", {
+              onClick: aplicarCuotaCalc,
+              style: { padding: "8px 18px", background: "#1E40AF", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }
+            }, "Aplicar a " + cuotaCalc.skusAfectados + " SKUs")
           )
         )
       ),
