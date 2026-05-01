@@ -9,6 +9,7 @@ import {
   Edit3, Package, Filter, FileText, Ship, ShoppingCart, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { roadmapStyle, roadmapInfo } from '../../lib/roadmapColors';
+import { EAN_SAT_DATA } from '../../lib/eanSatData';
 
 /**
  * ReporteSection — sección colapsable dentro de Resumen Clientes
@@ -169,8 +170,12 @@ export default function ReporteSection({ standalone = false } = {}) {
         sku: s.sku,
         orden: s.orden,
         roadmap, descripcion: desc, marca,
-        ean13: s.ean13 || null,
-        codigo_sat: s.codigo_sat || null,
+        // EAN13 / Código SAT: prioridad BD (si la columna existe) → fallback al
+        // módulo estático cargado del Libro2.xlsx (Fernando comparte la lista
+        // maestra). Mientras la migración no se aplique, los datos del Excel
+        // se ven igual.
+        ean13: s.ean13 || (EAN_SAT_DATA[s.sku] && EAN_SAT_DATA[s.sku].ean13) || null,
+        codigo_sat: s.codigo_sat || (EAN_SAT_DATA[s.sku] && EAN_SAT_DATA[s.sku].codigo_sat) || null,
         inv, invPorColumna, invEDanado,
         invTotal: total, invDisp: totalDisp, invApartado: totalApart,
         precio_aaa: precioAaa,
