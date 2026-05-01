@@ -2935,6 +2935,24 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             );
           })()
         ),
+        // ── Mini banner: % acierto últimas propuestas (N) ──
+        aciertoPromedio && React.createElement('div', {
+          style: {
+            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px',
+            background: aciertoPromedio.pct >= 70 ? '#F0FDF4' : aciertoPromedio.pct >= 50 ? '#FFFBEB' : '#FEF2F2',
+            border: '1px solid ' + (aciertoPromedio.pct >= 70 ? '#A7F3D0' : aciertoPromedio.pct >= 50 ? '#FDE68A' : '#FECACA'),
+            borderRadius: 10, marginTop: 8
+          }
+        },
+          React.createElement('span', { style: { fontSize: 18 } }, aciertoPromedio.pct >= 70 ? '🎯' : aciertoPromedio.pct >= 50 ? '📊' : '⚠'),
+          React.createElement('div', { style: { flex: 1 } },
+            React.createElement('p', { style: { fontSize: 13, fontWeight: 700, color: aciertoPromedio.pct >= 70 ? '#065F46' : aciertoPromedio.pct >= 50 ? '#92400E' : '#991B1B', margin: 0 } },
+              'Acierto promedio: ' + aciertoPromedio.pct.toFixed(0) + '% (últimas ' + aciertoPromedio.n + ' propuestas)'),
+            React.createElement('p', { style: { fontSize: 11, color: '#64748B', margin: '2px 0 0' } },
+              'De lo que sugeriste, qué % efectivamente compró el cliente en los 14 días siguientes.')
+          )
+        ),
+
         // ── Strip mensual: 12 meses con cumplimiento de cuota ──
         kpis.cumplimientoMensual && kpis.cumplimientoMensual.some(m => m.cuota > 0) && React.createElement('div', {
           className: 'bg-white rounded-xl shadow-sm p-4 mt-3'
