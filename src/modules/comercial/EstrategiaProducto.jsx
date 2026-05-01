@@ -765,7 +765,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         esPcel ? fetchAllPagesREST(`productos_cliente?select=sku,categoria&cliente=eq.digitalife`) : Promise.resolve([]),
         // Cuotas mensuales para la tarjeta KPI #3 (cumplimiento de cuota).
         // PCEL: si BD vacía, fallback a PCEL_REAL.cuota50M en kpis.
-        fetchAllPagesREST(`cuotas_mensuales?select=mes,cuota_min,cuota_ideal,monto&cliente=eq.${clienteKey}&anio=eq.2026`),
+        // Cuotas mensuales: la columna real es `cuota_min`/`cuota_ideal`
+        // (NO `monto` — eso pertenece a otra tabla; pedirla causa 42703).
+        fetchAllPagesREST(`cuotas_mensuales?select=mes,cuota_min,cuota_ideal&cliente=eq.${clienteKey}&anio=eq.2026`),
       ]);
 
       // Para PCEL fallback: si la tabla cuotas_mensuales está vacía pero
@@ -1319,6 +1321,20 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
         const siPiezasTotal = siData.reduce((s, r) => s + (r.piezas || 0), 0);
         const soMontoTotal = soData.reduce((s, r) => s + (r.monto_pesos || 0), 0);
+
+        // ── Último precio facturado al cliente ──
+        // Toma la fila más reciente con piezas > 0 y calcula monto/piezas.
+        // Para Digitalife: sell_in_sku (lo que se le facturó). Para PCEL: igual.
+        const ultimaVenta = (siData || [])
+          .filter(r => Number(r.piezas) > 0 && Number(r.monto_pesos) > 0)
+          .sort((a, b) => {
+            const ka = Number(a.anio) * 100 + Number(a.mes);
+            const kb = Number(b.anio) * 100 + Number(b.mes);
+            return kb - ka;
+          })[0];
+        const ultimoPrecio = ultimaVenta
+          ? Math.round((Number(ultimaVenta.monto_pesos) / Number(ultimaVenta.piezas)) * 100) / 100
+          : 0;
         const mesActual = new Date().getMonth() + 1;
         const soSinMesActual = soData.filter(r => Number(r.mes) < mesActual).sort((a, b) => Number(a.mes) - Number(b.mes));
         // promedio90d = promedio mensual de piezas vendidas en últimos 3 meses completos
@@ -1355,7 +1371,26 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const transPcel    = (datos.transitoPcelBySku  && datos.transitoPcelBySku[p.sku])  || 0;
         // histPcel viene de ventas_erp por articulo (= modelo Acteck)
         const histPcelSku  = (datos.histPcel && (datos.histPcel[skuExterno] || datos.histPcel[p.sku])) || null;
-        const promCompra   = histPcelSku ? Math.round(histPcelSku.promedio) : 0;
+        // Prom Compra:
+        //   PCEL — promedio del histórico ERP (ya calculado en histPcelSku)
+        //   Digitalife — promedio de piezas/mes del sell_in_sku últimos 6 meses
+        let promCompra;
+        if (clienteKey === 'pcel') {
+          promCompra = histPcelSku ? Math.round(histPcelSku.promedio) : 0;
+        } else {
+          const siUlt6 = (siData || [])
+            .slice()
+            .sort((a, b) => {
+              const ka = Number(a.anio) * 100 + Number(a.mes);
+              const kb = Number(b.anio) * 100 + Number(b.mes);
+              return kb - ka;
+            })
+            .slice(0, 6)
+            .filter(r => Number(r.piezas) > 0);
+          promCompra = siUlt6.length > 0
+            ? Math.round(siUlt6.reduce((s, r) => s + (Number(r.piezas) || 0), 0) / siUlt6.length)
+            : 0;
+        }
         const facturasHist = histPcelSku ? histPcelSku.facturas : 0;
         // "Activo" para PCEL, 2 condiciones obligatorias:
         //   (A) Tiene actividad: lo han comprado (historial ERP) O tiene
@@ -1523,6 +1558,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           backOrder,
           transPcel,
           promCompra,
+          ultimoPrecio,
           facturasHist,
           isActivo,
           // Meta dinámica de Digitalife (badge en UI)
@@ -2482,16 +2518,25 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 thSort("Prom 90d", "promedio90d"),
                 thSort("Inv Acteck", "invActeck"),
                 thSort("Tr\u00e1nsito", "invTransito"),
-                // Columnas específicas PCEL
-                (clienteKey === "pcel") && React.createElement("th", {
+                // Columnas estandarizadas para PCEL y Digitalife (mismo orden y nombres)
+                React.createElement("th", {
                   key: "th-bo", onClick: () => handleSort("backOrder"),
-                  style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "backOrder" ? "#1D4ED8" : "#B91C1C", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#FEF2F2" }
+                  style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "backOrder" ? "#1D4ED8" : "#B91C1C", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#FEF2F2" },
+                  title: clienteKey === "pcel" ? "Back orders pendientes en sellout_pcel" : "Back order — no aplica para Digitalife"
                 }, "Back Order" + sortArrow("backOrder")),
-                (clienteKey === "pcel") && React.createElement("th", {
+                React.createElement("th", {
                   key: "th-pc", onClick: () => handleSort("promCompra"),
                   style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "promCompra" ? "#1D4ED8" : "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#FEF3C7" },
-                  title: "Promedio de piezas por compra (últimos 6 meses, ventas_erp)"
+                  title: clienteKey === "pcel"
+                    ? "Promedio de piezas por compra (últimos 6 meses, ventas_erp)"
+                    : "Promedio de piezas/mes que el cliente compró (últimos 6 meses de sell_in_sku)"
                 }, "Prom compra" + sortArrow("promCompra")),
+                // ── Último Precio facturado (NUEVA, mismo orden ambos clientes) ──
+                React.createElement("th", {
+                  key: "th-up", onClick: () => handleSort("ultimoPrecio"),
+                  style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "ultimoPrecio" ? "#1D4ED8" : "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#EFF6FF" },
+                  title: "Precio unitario de la última venta facturada al cliente (monto / piezas del último mes con datos)"
+                }, "Último precio" + sortArrow("ultimoPrecio")),
                 thSort("Sugerido", "sugerido"),
                 // Columnas adicionales para PCEL: Precio AAA C/desc + Próx. arribo si falta
                 (clienteKey === "pcel" || clienteKey === "digitalife") && React.createElement("th", {
@@ -2570,16 +2615,24 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11 } }, (s.promedio90d || 0).toLocaleString("es-MX")),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: s.invActeck > 0 ? "#1E293B" : "#CBD5E1", fontSize: 11, fontWeight: s.invActeck > 0 ? 500 : 400 } }, (s.invActeck || 0).toLocaleString("es-MX")),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: s.invTransito > 0 ? "#7C3AED" : "#CBD5E1", fontSize: 11 } }, s.invTransito > 0 ? s.invTransito.toLocaleString("es-MX") : "-"),
-                  // Columnas específicas PCEL
-                  (clienteKey === "pcel") && React.createElement("td", {
+                  // Columnas estandarizadas (ambos clientes, mismo orden)
+                  React.createElement("td", {
                     key: "td-bo",
                     style: { textAlign: "right", padding: "6px", fontSize: 11, background: s.backOrder > 0 ? "#FEE2E2" : "#FEF2F2", color: s.backOrder > 0 ? "#991B1B" : "#CBD5E1", fontWeight: s.backOrder > 0 ? 700 : 400 }
                   }, s.backOrder > 0 ? s.backOrder.toLocaleString("es-MX") : "-"),
-                  (clienteKey === "pcel") && React.createElement("td", {
+                  React.createElement("td", {
                     key: "td-pc",
                     style: { textAlign: "right", padding: "6px", fontSize: 11, background: "#FFFBEB", color: s.promCompra > 0 ? "#78350F" : "#CBD5E1", fontWeight: 500 },
-                    title: s.facturasHist > 0 ? (s.facturasHist + " compras hist\u00f3ricas") : "Sin hist\u00f3rico de compras"
+                    title: clienteKey === "pcel"
+                      ? (s.facturasHist > 0 ? (s.facturasHist + " compras históricas") : "Sin histórico de compras")
+                      : "Promedio sell-in últimos 6 meses"
                   }, s.promCompra > 0 ? s.promCompra.toLocaleString("es-MX") : "-"),
+                  // Último precio facturado (NUEVA, ambos clientes)
+                  React.createElement("td", {
+                    key: "td-up",
+                    style: { textAlign: "right", padding: "6px", fontSize: 11, background: "#EFF6FF", color: s.ultimoPrecio > 0 ? "#1E40AF" : "#CBD5E1", fontWeight: 500 },
+                    title: s.ultimoPrecio > 0 ? "Precio unitario de la última venta facturada" : "Sin venta registrada"
+                  }, s.ultimoPrecio > 0 ? formatMXN(s.ultimoPrecio) : "-"),
                   (function(){
                     // Gate: sin inventario ni tránsito → sugerido = 0 forzado
                     // (ignora override manual). Input disabled para que sea obvio.
