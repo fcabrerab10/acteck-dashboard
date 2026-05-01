@@ -1778,6 +1778,35 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
   const [oportunidadAbierta, setOportunidadAbierta] = React.useState(true);
   const [oportunidadTab, setOportunidadTab] = React.useState('nuevos');
+  // Multi-select para agregar varios SKUs a una sola propuesta
+  const [seleccionadosOpor, setSeleccionadosOpor] = React.useState(new Set());
+  const toggleSeleccionOpor = (sku) => {
+    setSeleccionadosOpor((prev) => {
+      const next = new Set(prev);
+      if (next.has(sku)) next.delete(sku); else next.add(sku);
+      return next;
+    });
+  };
+  const seleccionarTodosOpor = (lista) => {
+    setSeleccionadosOpor((prev) => {
+      const next = new Set(prev);
+      lista.forEach((s) => next.add(s.sku));
+      return next;
+    });
+  };
+  const limpiarSeleccionOpor = () => setSeleccionadosOpor(new Set());
+  // Agrega todos los SKUs seleccionados a la propuesta personalizada
+  const agregarSeleccionadosAPropuesta = (lista) => {
+    const seleccionados = lista.filter((s) => seleccionadosOpor.has(s.sku));
+    if (seleccionados.length === 0) return;
+    if (!propPersonalizada) {
+      abrirPropPersonalizada();
+      setTimeout(() => seleccionados.forEach((s) => agregarSkuAPropPersonalizada(s)), 50);
+    } else {
+      seleccionados.forEach((s) => agregarSkuAPropPersonalizada(s));
+    }
+    limpiarSeleccionOpor();
+  };
 
   // ── KPIs derivados del Detalle por SKU (fuente de verdad) ──
   // Antes `kpis.sugMonto/sugPiezas/sugSkus` se calculaban con una fórmula
@@ -3352,53 +3381,94 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
               return React.createElement("div", { style: { padding: 24, textAlign: "center", color: "#94A3B8", fontSize: 13, background: "#F8FAFC", borderRadius: 8 } },
                 oportunidadTab === 'nuevos' ? "Sin productos nuevos en tránsito todavía." : "Le has vendido todos los SKUs disponibles 🎉");
             }
-            return React.createElement("div", { style: { overflowX: "auto", maxHeight: 300, overflowY: "auto", border: "1px solid #E2E8F0", borderRadius: 8 } },
-              React.createElement("table", { style: { width: "100%", fontSize: 12, borderCollapse: "collapse" } },
-                React.createElement("thead", null,
-                  React.createElement("tr", { style: { background: "#F8FAFC", borderBottom: "1px solid #E2E8F0", position: "sticky", top: 0 } },
-                    React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "SKU"),
-                    React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Roadmap"),
-                    React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Descripción"),
-                    React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } },
-                      oportunidadTab === 'nuevos' ? "Tránsito" : "Inv Acteck"),
-                    React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Precio AAA"),
-                    React.createElement("th", { style: { width: 130 } })
-                  )
-                ),
-                React.createElement("tbody", null,
-                  lista.slice(0, 100).map((s, idx) => {
-                    const cantidad = oportunidadTab === 'nuevos' ? Number(s.invTransito) : Number(s.invActeck);
-                    const precio = Number(s.precioAAAcd) > 0 ? Number(s.precioAAAcd) : Number(s.precio) || 0;
-                    return React.createElement("tr", { key: s.sku, style: { borderBottom: "1px solid #F1F5F9", background: idx % 2 === 0 ? "#fff" : "#FAFBFC" } },
-                      React.createElement("td", { style: { padding: "8px 10px", fontFamily: "ui-monospace,monospace", fontWeight: 600, color: "#1E293B" } }, s.sku),
-                      React.createElement("td", { style: { padding: "8px 10px" } },
-                        s.roadmap && (function() {
-                          const rmS = roadmapStyle(s.roadmap);
-                          return React.createElement("span", {
-                            style: { padding: "2px 6px", borderRadius: 4, background: rmS.bg, color: rmS.color, fontSize: 10, fontWeight: 700 }
-                          }, s.roadmap);
-                        })()
+            // Cuántos seleccionados de ESTA lista (no contar de la otra tab)
+            const seleccionadosLista = lista.filter((s) => seleccionadosOpor.has(s.sku));
+            const allMarcados = lista.length > 0 && lista.every((s) => seleccionadosOpor.has(s.sku));
+            return React.createElement("div", null,
+              // Toolbar de selección múltiple
+              canEdit && React.createElement("div", {
+                style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", marginBottom: 8, fontSize: 12 }
+              },
+                React.createElement("button", {
+                  onClick: () => {
+                    if (allMarcados) limpiarSeleccionOpor();
+                    else seleccionarTodosOpor(lista);
+                  },
+                  style: { padding: "5px 10px", background: "#fff", color: "#475569", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }
+                }, allMarcados ? "Quitar selección" : "Seleccionar todos"),
+                seleccionadosLista.length > 0 && React.createElement("span", { style: { color: "#1E40AF", fontWeight: 600 } },
+                  seleccionadosLista.length + " seleccionados"),
+                seleccionadosLista.length > 0 && React.createElement("button", {
+                  onClick: () => agregarSeleccionadosAPropuesta(lista),
+                  style: { marginLeft: "auto", padding: "6px 14px", background: "#7C3AED", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }
+                }, "✨ Agregar " + seleccionadosLista.length + " a propuesta personalizada")
+              ),
+              React.createElement("div", { style: { overflowX: "auto", maxHeight: 300, overflowY: "auto", border: "1px solid #E2E8F0", borderRadius: 8 } },
+                React.createElement("table", { style: { width: "100%", fontSize: 12, borderCollapse: "collapse" } },
+                  React.createElement("thead", null,
+                    React.createElement("tr", { style: { background: "#F8FAFC", borderBottom: "1px solid #E2E8F0", position: "sticky", top: 0 } },
+                      canEdit && React.createElement("th", { style: { width: 32, textAlign: "center", padding: "8px 4px" } },
+                        React.createElement("input", {
+                          type: "checkbox", checked: allMarcados,
+                          onChange: () => allMarcados ? limpiarSeleccionOpor() : seleccionarTodosOpor(lista),
+                          title: "Seleccionar todos"
+                        })
                       ),
-                      React.createElement("td", { style: { padding: "8px 10px", color: "#475569", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.descripcion },
-                        (s.descripcion || "").slice(0, 60)),
-                      React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E293B", fontWeight: 600 } }, cantidad.toLocaleString("es-MX")),
-                      React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E40AF" } }, precio > 0 ? formatMXN(precio) : "—"),
-                      React.createElement("td", { style: { padding: "6px 10px", textAlign: "right" } },
-                        canEdit && React.createElement("button", {
-                          onClick: () => {
-                            if (!propPersonalizada) {
-                              abrirPropPersonalizada();
-                              setTimeout(() => agregarSkuAPropPersonalizada(s), 50);
-                            } else {
-                              agregarSkuAPropPersonalizada(s);
-                            }
-                          },
-                          title: "Agregar a propuesta personalizada para sugerir cantidad",
-                          style: { padding: "4px 10px", background: "#7C3AED", color: "#fff", border: "none", borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: "pointer" }
-                        }, "+ Proponer")
-                      )
-                    );
-                  })
+                      React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "SKU"),
+                      React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Roadmap"),
+                      React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Descripción"),
+                      React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } },
+                        oportunidadTab === 'nuevos' ? "Tránsito" : "Inv Acteck"),
+                      React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Precio AAA"),
+                      React.createElement("th", { style: { width: 130 } })
+                    )
+                  ),
+                  React.createElement("tbody", null,
+                    lista.slice(0, 100).map((s, idx) => {
+                      const cantidad = oportunidadTab === 'nuevos' ? Number(s.invTransito) : Number(s.invActeck);
+                      const precio = Number(s.precioAAAcd) > 0 ? Number(s.precioAAAcd) : Number(s.precio) || 0;
+                      const marcado = seleccionadosOpor.has(s.sku);
+                      return React.createElement("tr", {
+                        key: s.sku,
+                        style: { borderBottom: "1px solid #F1F5F9", background: marcado ? "#EEF2FF" : (idx % 2 === 0 ? "#fff" : "#FAFBFC") }
+                      },
+                        canEdit && React.createElement("td", { style: { textAlign: "center", padding: "6px 4px" } },
+                          React.createElement("input", {
+                            type: "checkbox", checked: marcado,
+                            onChange: () => toggleSeleccionOpor(s.sku),
+                            title: "Marcar para agregar en bulk"
+                          })
+                        ),
+                        React.createElement("td", { style: { padding: "8px 10px", fontFamily: "ui-monospace,monospace", fontWeight: 600, color: "#1E293B" } }, s.sku),
+                        React.createElement("td", { style: { padding: "8px 10px" } },
+                          s.roadmap && (function() {
+                            const rmS = roadmapStyle(s.roadmap);
+                            return React.createElement("span", {
+                              style: { padding: "2px 6px", borderRadius: 4, background: rmS.bg, color: rmS.color, fontSize: 10, fontWeight: 700 }
+                            }, s.roadmap);
+                          })()
+                        ),
+                        React.createElement("td", { style: { padding: "8px 10px", color: "#475569", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.descripcion },
+                          (s.descripcion || "").slice(0, 60)),
+                        React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E293B", fontWeight: 600 } }, cantidad.toLocaleString("es-MX")),
+                        React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E40AF" } }, precio > 0 ? formatMXN(precio) : "—"),
+                        React.createElement("td", { style: { padding: "6px 10px", textAlign: "right" } },
+                          canEdit && React.createElement("button", {
+                            onClick: () => {
+                              if (!propPersonalizada) {
+                                abrirPropPersonalizada();
+                                setTimeout(() => agregarSkuAPropPersonalizada(s), 50);
+                              } else {
+                                agregarSkuAPropPersonalizada(s);
+                              }
+                            },
+                            title: "Agregar este SKU directamente a propuesta personalizada",
+                            style: { padding: "4px 10px", background: "#7C3AED", color: "#fff", border: "none", borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: "pointer" }
+                          }, "+ Proponer")
+                        )
+                      );
+                    })
+                  )
                 )
               )
             );
