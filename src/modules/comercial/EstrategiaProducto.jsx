@@ -126,6 +126,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   // Modificadores del scope del bulk (toolbar)
   const [bulkSoloFiltrados, setBulkSoloFiltrados] = React.useState(false);
   const [bulkSoloSinStock, setBulkSoloSinStock] = React.useState(false);
+  // Tarjeta KPI desplegable abierta ('cuotaMes' | 'cumplYTD' | null)
+  const [kpiAbierto, setKpiAbierto] = React.useState(null);
 
   // Recalcula el sugerido aplicando una meta diferente. Replica los gates de
   // la fórmula original (MIN_COMPRA, cobertura > 4m, umbral) pero usando la
@@ -1110,11 +1112,38 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       });
     }
 
+    // ── Cuota por Q (trimestre) ──
+    // Q1: ene-mar · Q2: abr-jun · Q3: jul-sep · Q4: oct-dic
+    const trimestreActual = Math.ceil(mesActualNum / 3);
+    const mesesQ = (q) => [(q - 1) * 3 + 1, (q - 1) * 3 + 2, (q - 1) * 3 + 3];
+    const cuotasQ = [1, 2, 3, 4].map((q) => {
+      const meses = mesesQ(q);
+      const cuotaQ = meses.reduce((s, m) => s + (cuotaPorMes[m] || 0), 0);
+      const siQ = meses.reduce((s, m) => s + (siPorMes[m] || 0), 0);
+      // Solo incluye meses pasados completos (no el corriente futuro)
+      const sellInQAcumulado = meses
+        .filter((m) => m <= mesActualNum)
+        .reduce((s, m) => s + (siPorMes[m] || 0), 0);
+      return {
+        q,
+        meses,
+        cuota: cuotaQ,
+        sellIn: siQ,
+        sellInAcumulado: sellInQAcumulado,
+        pct: cuotaQ > 0 ? (sellInQAcumulado / cuotaQ) * 100 : null,
+        falta: Math.max(0, cuotaQ - sellInQAcumulado),
+        esActual: q === trimestreActual,
+        esPasado: q < trimestreActual,
+      };
+    });
+    const qActualData = cuotasQ.find((q) => q.q === trimestreActual);
+
     return {
       efi, skusActivos, skusConInv, diasCob, invActeckPiezas,
       sugPiezas, sugMonto, sugSkus,
       siYTD, cuotaYTD, cuotaMesActual, siMesActual,
       cumplimientoMensual,
+      trimestreActual, cuotasQ, qActualData,
     };
   }, [datos, aggs, clienteKey]);
 
@@ -2285,13 +2314,19 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: sugMonto > 0 ? '#047857' : '#94A3B8', marginBottom: 2 } }, formatMXN(sugMonto)),
             React.createElement('p', { style: { fontSize: 11, color: '#64748B' } }, sugSkus + ' SKUs · ' + sugPiezas.toLocaleString('es-MX') + ' pzs')
           ),
-          // 3) Cuota del mes
+          // 3) Cuota del mes (clickable → expande detalle Q)
           React.createElement('div', {
             className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
-            style: { borderColor: pctMes == null ? '#94A3B8' : pctMes >= 100 ? '#10B981' : pctMes >= 70 ? '#F59E0B' : '#EF4444' }
+            style: {
+              borderColor: pctMes == null ? '#94A3B8' : pctMes >= 100 ? '#10B981' : pctMes >= 70 ? '#F59E0B' : '#EF4444',
+              cursor: 'pointer',
+              outline: kpiAbierto === 'cuotaMes' ? '2px solid #1E40AF' : 'none',
+            },
+            onClick: () => setKpiAbierto(kpiAbierto === 'cuotaMes' ? null : 'cuotaMes'),
+            title: 'Click para ver detalle del mes y trimestre'
           },
             React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } },
-              '\uD83D\uDCC8 Cuota ' + MESES_LBL[mesParaTarjeta - 1] + (mesEsActualReal ? '' : ' (último con datos)')),
+              '\uD83D\uDCC8 Cuota ' + MESES_LBL[mesParaTarjeta - 1] + (mesEsActualReal ? '' : ' (último con datos)') + (kpiAbierto === 'cuotaMes' ? ' ▾' : ' ▸')),
             React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: pctMes == null ? '#94A3B8' : pctMes >= 100 ? '#047857' : pctMes >= 70 ? '#B45309' : '#B91C1C', marginBottom: 2 } },
               pctMes == null ? 'Sin cuota' : pctMes.toFixed(0) + '%'),
             React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
@@ -2299,12 +2334,18 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 ? ''
                 : (formatMXN(siMes) + ' / ' + formatMXN(cuotaMes)))
           ),
-          // 4) Cumplimiento YTD
+          // 4) Cumplimiento YTD (clickable → expande detalle YTD)
           React.createElement('div', {
             className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
-            style: { borderColor: cumplPct == null ? '#94A3B8' : cumplPct >= 90 ? '#10B981' : cumplPct >= 70 ? '#F59E0B' : '#EF4444' }
+            style: {
+              borderColor: cumplPct == null ? '#94A3B8' : cumplPct >= 90 ? '#10B981' : cumplPct >= 70 ? '#F59E0B' : '#EF4444',
+              cursor: 'pointer',
+              outline: kpiAbierto === 'cumplYTD' ? '2px solid #1E40AF' : 'none',
+            },
+            onClick: () => setKpiAbierto(kpiAbierto === 'cumplYTD' ? null : 'cumplYTD'),
+            title: 'Click para ver detalle YTD'
           },
-            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83C\uDFAF Cumplimiento YTD'),
+            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83C\uDFAF Cumplimiento YTD' + (kpiAbierto === 'cumplYTD' ? ' ▾' : ' ▸')),
             React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: cumplPct == null ? '#94A3B8' : cumplPct >= 90 ? '#047857' : cumplPct >= 70 ? '#B45309' : '#B91C1C', marginBottom: 2 } },
               cumplPct == null ? 'Sin cuota' : cumplPct.toFixed(0) + '%'),
             React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
@@ -2325,6 +2366,127 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 ? (cadenciaVencida ? '⚠ Toca enviar (' + cliCfg.label + ')' : 'Cadencia: ' + cliCfg.label)
                 : 'Cadencia: ' + cliCfg.label)
           )
+        ),
+        // ── Panel desplegable: detalle de Cuota mes (con info trimestre) ──
+        kpiAbierto === 'cuotaMes' && kpis.qActualData && React.createElement('div', {
+          className: 'bg-white rounded-xl shadow-sm p-4 mt-3',
+          style: { borderLeft: '4px solid #F59E0B' }
+        },
+          React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 } },
+            React.createElement('p', { style: { fontSize: 12, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' } },
+              'Detalle ' + MESES_LBL[mesParaTarjeta - 1] + ' + Q' + kpis.trimestreActual),
+            React.createElement('button', { onClick: () => setKpiAbierto(null), style: { background: 'transparent', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 16 }, title: 'Cerrar' }, '✕')
+          ),
+          // Grid de 2 columnas: mes vs trimestre
+          React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 } },
+            // ─── Columna MES ───
+            React.createElement('div', { style: { padding: 14, background: '#FFFBEB', borderRadius: 10, border: '1px solid #FDE68A' } },
+              React.createElement('p', { style: { fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 8 } }, '📅 ' + MESES_LBL[mesParaTarjeta - 1]),
+              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
+                React.createElement('span', { style: { color: '#475569' } }, 'Cuota mín.:'),
+                React.createElement('span', { style: { fontWeight: 600, color: '#1E293B' } }, formatMXN(cuotaMes))
+              ),
+              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
+                React.createElement('span', { style: { color: '#475569' } }, 'Sell-In real:'),
+                React.createElement('span', { style: { fontWeight: 600, color: '#1E40AF' } }, formatMXN(siMes))
+              ),
+              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 14, paddingTop: 6, borderTop: '1px solid #FDE68A', marginTop: 4 } },
+                React.createElement('span', { style: { fontWeight: 700, color: faltaMes > 0 ? '#B91C1C' : '#065F46' } }, faltaMes > 0 ? 'Falta:' : '✓ Cumplida'),
+                React.createElement('span', { style: { fontWeight: 800, color: faltaMes > 0 ? '#B91C1C' : '#065F46' } }, faltaMes > 0 ? formatMXN(faltaMes) : (pctMes ? pctMes.toFixed(0) + '%' : ''))
+              )
+            ),
+            // ─── Columna Q (trimestre) ───
+            React.createElement('div', { style: { padding: 14, background: '#EFF6FF', borderRadius: 10, border: '1px solid #BFDBFE' } },
+              React.createElement('p', { style: { fontSize: 11, fontWeight: 700, color: '#1E40AF', marginBottom: 8 } },
+                '📊 Q' + kpis.trimestreActual + ' (' + kpis.qActualData.meses.map(m => MESES_LBL[m-1]).join('-') + ')'),
+              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
+                React.createElement('span', { style: { color: '#475569' } }, 'Cuota Q total:'),
+                React.createElement('span', { style: { fontWeight: 600, color: '#1E293B' } }, formatMXN(kpis.qActualData.cuota))
+              ),
+              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
+                React.createElement('span', { style: { color: '#475569' } }, 'Vendido Q (acum.):'),
+                React.createElement('span', { style: { fontWeight: 600, color: '#1E40AF' } }, formatMXN(kpis.qActualData.sellInAcumulado))
+              ),
+              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 14, paddingTop: 6, borderTop: '1px solid #BFDBFE', marginTop: 4 } },
+                React.createElement('span', { style: { fontWeight: 700, color: kpis.qActualData.falta > 0 ? '#B91C1C' : '#065F46' } }, kpis.qActualData.falta > 0 ? 'Falta para Q:' : '✓ Q cumplido'),
+                React.createElement('span', { style: { fontWeight: 800, color: kpis.qActualData.falta > 0 ? '#B91C1C' : '#065F46' } },
+                  kpis.qActualData.falta > 0 ? formatMXN(kpis.qActualData.falta) : (kpis.qActualData.pct != null ? kpis.qActualData.pct.toFixed(0) + '%' : ''))
+              )
+            )
+          ),
+          // Tabla pequeña con los 4 trimestres
+          React.createElement('div', { style: { marginTop: 14 } },
+            React.createElement('p', { style: { fontSize: 11, color: '#475569', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 } }, 'Resumen por trimestre'),
+            React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 } },
+              kpis.cuotasQ.map((q) => {
+                const isAct = q.esActual;
+                const ok = q.pct != null && q.pct >= 100;
+                const bg = q.cuota === 0 ? '#F1F5F9'
+                  : ok ? '#D1FAE5'
+                  : (q.pct != null && q.pct >= 70) ? '#FEF3C7'
+                  : '#FEE2E2';
+                return React.createElement('div', {
+                  key: q.q,
+                  style: { padding: 10, background: bg, borderRadius: 8, border: isAct ? '2px solid #1E40AF' : '1px solid #E2E8F0', textAlign: 'center' }
+                },
+                  React.createElement('p', { style: { fontSize: 10, fontWeight: 600, color: '#475569', marginBottom: 4 } }, 'Q' + q.q),
+                  React.createElement('p', { style: { fontSize: 14, fontWeight: 700, color: '#1E293B' } },
+                    q.pct == null ? '—' : q.pct.toFixed(0) + '%'),
+                  React.createElement('p', { style: { fontSize: 9, color: '#64748B', marginTop: 2 } },
+                    formatMXN(q.cuota))
+                );
+              })
+            )
+          )
+        ),
+        // ── Panel desplegable: detalle Cumplimiento YTD ──
+        kpiAbierto === 'cumplYTD' && React.createElement('div', {
+          className: 'bg-white rounded-xl shadow-sm p-4 mt-3',
+          style: { borderLeft: '4px solid #1E40AF' }
+        },
+          React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 } },
+            React.createElement('p', { style: { fontSize: 12, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' } }, 'Detalle YTD ' + new Date().getFullYear()),
+            React.createElement('button', { onClick: () => setKpiAbierto(null), style: { background: 'transparent', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 16 }, title: 'Cerrar' }, '✕')
+          ),
+          (function(){
+            const cuotaTotal = (kpis.cuotasQ || []).reduce((s, q) => s + (q.cuota || 0), 0);
+            const faltaYTD = Math.max(0, (kpis.cuotaYTD || 0) - (kpis.siYTD || 0));
+            const faltaAnio = Math.max(0, cuotaTotal - (kpis.siYTD || 0));
+            return React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 } },
+              // YTD
+              React.createElement('div', { style: { padding: 14, background: '#EFF6FF', borderRadius: 10, border: '1px solid #BFDBFE' } },
+                React.createElement('p', { style: { fontSize: 11, fontWeight: 700, color: '#1E40AF', marginBottom: 8 } }, '📈 YTD (Ene-' + MESES_LBL[mesActualReal - 1] + ')'),
+                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
+                  React.createElement('span', { style: { color: '#475569' } }, 'Cuota YTD:'),
+                  React.createElement('span', { style: { fontWeight: 600, color: '#1E293B' } }, formatMXN(kpis.cuotaYTD || 0))
+                ),
+                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
+                  React.createElement('span', { style: { color: '#475569' } }, 'Sell-In YTD:'),
+                  React.createElement('span', { style: { fontWeight: 600, color: '#1E40AF' } }, formatMXN(kpis.siYTD || 0))
+                ),
+                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 14, paddingTop: 6, borderTop: '1px solid #BFDBFE', marginTop: 4 } },
+                  React.createElement('span', { style: { fontWeight: 700, color: faltaYTD > 0 ? '#B91C1C' : '#065F46' } }, faltaYTD > 0 ? 'Falta:' : '✓ Al día'),
+                  React.createElement('span', { style: { fontWeight: 800, color: faltaYTD > 0 ? '#B91C1C' : '#065F46' } }, faltaYTD > 0 ? formatMXN(faltaYTD) : '')
+                )
+              ),
+              // Anual
+              React.createElement('div', { style: { padding: 14, background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' } },
+                React.createElement('p', { style: { fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 8 } }, '🎯 Anual (12 meses)'),
+                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
+                  React.createElement('span', { style: { color: '#475569' } }, 'Cuota anual:'),
+                  React.createElement('span', { style: { fontWeight: 600, color: '#1E293B' } }, formatMXN(cuotaTotal))
+                ),
+                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
+                  React.createElement('span', { style: { color: '#475569' } }, 'Vendido (YTD):'),
+                  React.createElement('span', { style: { fontWeight: 600, color: '#1E40AF' } }, formatMXN(kpis.siYTD || 0))
+                ),
+                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 14, paddingTop: 6, borderTop: '1px solid #E2E8F0', marginTop: 4 } },
+                  React.createElement('span', { style: { fontWeight: 700, color: faltaAnio > 0 ? '#B91C1C' : '#065F46' } }, 'Falta para meta:'),
+                  React.createElement('span', { style: { fontWeight: 800, color: faltaAnio > 0 ? '#B91C1C' : '#065F46' } }, formatMXN(faltaAnio))
+                )
+              )
+            );
+          })()
         ),
         // ── Strip mensual: 12 meses con cumplimiento de cuota ──
         kpis.cumplimientoMensual && kpis.cumplimientoMensual.some(m => m.cuota > 0) && React.createElement('div', {
@@ -2572,26 +2734,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 },
                   // PCEL: primera columna es SKU Cliente (numérico, s.sku), segunda es SKU (modelo = s.modelo)
                   // Otros clientes: una sola columna SKU (= s.sku)
-                  (clienteKey === "pcel") && React.createElement("td", { key: "td-skuc", style: { padding: "6px", fontWeight: 500, color: "#475569", whiteSpace: "nowrap", fontSize: 11 } },
-                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } },
-                      canEdit && React.createElement("button", {
-                        onClick: (e) => { e.stopPropagation(); toggleExcluirSku(s.sku); },
-                        title: excluido ? "Incluir en el envío" : "Excluir este SKU del envío",
-                        style: { background: "transparent", border: "none", cursor: "pointer", padding: 0, fontSize: 12, lineHeight: 1, opacity: excluido ? 1 : 0.35 }
-                      }, excluido ? "✓" : "🚫"),
-                      React.createElement("span", null, s.sku)
-                    )
-                  ),
+                  (clienteKey === "pcel") && React.createElement("td", { key: "td-skuc", style: { padding: "6px", fontWeight: 500, color: "#475569", whiteSpace: "nowrap", fontSize: 11 } }, s.sku),
                   React.createElement("td", { style: { padding: "6px", fontWeight: 500, color: "#1E293B", whiteSpace: "nowrap", fontSize: 11 } },
-                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } },
-                      canEdit && clienteKey !== "pcel" && React.createElement("button", {
-                        onClick: (e) => { e.stopPropagation(); toggleExcluirSku(s.sku); },
-                        title: excluido ? "Incluir en el envío" : "Excluir este SKU del envío",
-                        style: { background: "transparent", border: "none", cursor: "pointer", padding: 0, fontSize: 12, lineHeight: 1, opacity: excluido ? 1 : 0.35 }
-                      }, excluido ? "✓" : "🚫"),
-                      React.createElement("span", null, clienteKey === "pcel" ? (s.modelo || "—") : s.sku)
-                    )
-                  ),
+                    clienteKey === "pcel" ? (s.modelo || "—") : s.sku),
                   React.createElement("td", { style: { padding: "6px", fontSize: 11, maxWidth: 100, whiteSpace: "nowrap" }, title: s.roadmap || "Sin roadmap" },
                     (function() {
                       var rm = s.roadmap || "";
