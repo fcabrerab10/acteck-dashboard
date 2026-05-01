@@ -53,8 +53,8 @@ export default function ReporteSection({ standalone = false } = {}) {
   const perfil = usePerfil();
   const canEdit = perfil?.es_super_admin === true || perfil?.rol === 'super_admin';
 
-  // En modo standalone (página dedicada "Reporte") no hay colapsable: siempre abierto.
-  const [open, setOpen] = useState(standalone);
+  // Siempre abierto por default — Fernando lo cierra manualmente si quiere.
+  const [open, setOpen] = useState(true);
   const [data, setData] = useState({ loading: true, skus: [], inventario: [], metadata: [], precios: [], roadmap: [] });
   const [busqueda, setBusqueda] = useState('');
   const [filtroRoadmap, setFiltroRoadmap] = useState('todos');
@@ -320,7 +320,7 @@ export default function ReporteSection({ standalone = false } = {}) {
               </div>
 
               {/* Tabla */}
-              <div className="overflow-x-auto max-h-[700px]">
+              <div className="overflow-x-auto max-h-[1100px]">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr className="text-xs text-gray-600">
