@@ -126,11 +126,6 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   // Modal Calculadora reversa de cuota (F)
   const [cuotaCalc, setCuotaCalc] = React.useState(null);
 
-  // ── Test N micro: useMemo con dep propuestasHist ──
-  const propuestasConTracking = React.useMemo(() => {
-    return propuestasHist || [];
-  }, [propuestasHist]);
-
   // ── Recomendaciones del día (L) ──
   // SIN useEffect — solo lectura inicial de localStorage y escritura
   // explícita en el callback, para evitar loops de re-render.
@@ -362,6 +357,116 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     setPropuestasHist(data || []);
   }, [clienteKey]);
   React.useEffect(() => { cargarPropuestasCompra(); }, [cargarPropuestasCompra]);
+
+  // ── Tracking N: Sugerí vs Compraron (ventana 14 días) ──
+  // Cruza propuesta.filas con sellout_detalle (Digi) / sellout_pcel (PCEL)
+  // dentro de los 14 días siguientes a la fecha de cada propuesta.
+  const propuestasConTracking = React.useMemo(() => {
+    try {
+      if (!propuestasHist || propuestasHist.length === 0 || !datos) return [];
+      const esPcel = clienteKey === 'pcel';
+
+      const ventasDiarias = {};
+      if (!esPcel && Array.isArray(datos.selloutDiario)) {
+        datos.selloutDiario.forEach((r) => {
+          const sku = r.no_parte;
+          if (!sku || !r.fecha) return;
+          if (!ventasDiarias[sku]) ventasDiarias[sku] = [];
+          ventasDiarias[sku].push({ fecha: r.fecha, cantidad: Number(r.cantidad) || 0 });
+        });
+      }
+      const ventasSemanales = {};
+      if (esPcel && Array.isArray(datos.selloutPcelSemanal)) {
+        datos.selloutPcelSemanal.forEach((r) => {
+          const sku = r.sku;
+          if (!sku || r.anio == null || r.semana == null) return;
+          if (!ventasSemanales[sku]) ventasSemanales[sku] = {};
+          const k = Number(r.anio) + '-' + Number(r.semana);
+          ventasSemanales[sku][k] = (ventasSemanales[sku][k] || 0) + (Number(r.vta_semana) || 0);
+        });
+      }
+      const isoWeek = (date) => {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return { anio: d.getUTCFullYear(), semana: Math.ceil((((d - yearStart) / 86400000) + 1) / 7) };
+      };
+      const semanasEnVentana = (fechaInicio, dias) => {
+        const out = {};
+        for (let i = 0; i < dias; i++) {
+          const cur = new Date(fechaInicio.getTime() + i * 86400000);
+          const { anio, semana } = isoWeek(cur);
+          const k = anio + '-' + semana;
+          out[k] = (out[k] || 0) + 1;
+        }
+        return out;
+      };
+
+      return propuestasHist.map((p) => {
+        const filas = Array.isArray(p.filas) ? p.filas : [];
+        if (filas.length === 0) return { ...p, tracking: { sinFilas: true } };
+        const skusSug = filas.map((f) => ({
+          sku: String(f.SKU || f['SKU Cliente'] || f.sku || ''),
+          sugerido: Number(f.Sugerido || f.sugerido || 0),
+        })).filter((s) => s.sku && s.sugerido > 0);
+        if (skusSug.length === 0) return { ...p, tracking: { sinFilas: true } };
+
+        const fp = new Date(p.fecha || p.created_at);
+        const fechaIni = new Date(fp.getFullYear(), fp.getMonth(), fp.getDate());
+        const fechaFin = new Date(fechaIni.getTime() + 14 * 86400000);
+        const fechaIniISO = fechaIni.toISOString().slice(0, 10);
+        const fechaFinISO = fechaFin.toISOString().slice(0, 10);
+        const semanasVent = esPcel ? semanasEnVentana(fechaIni, 14) : null;
+
+        let totalSug = 0, totalCompr = 0, skusComprados = 0;
+        const detalle = skusSug.map((s) => {
+          let compTotal = 0;
+          if (esPcel) {
+            const sem = ventasSemanales[s.sku] || {};
+            for (const k in semanasVent) {
+              const ventaSem = sem[k] || 0;
+              const factor = semanasVent[k] / 7;
+              compTotal += ventaSem * factor;
+            }
+            compTotal = Math.round(compTotal);
+          } else {
+            const arr = ventasDiarias[s.sku] || [];
+            for (const v of arr) {
+              if (v.fecha >= fechaIniISO && v.fecha < fechaFinISO) compTotal += v.cantidad;
+            }
+          }
+          totalSug += s.sugerido;
+          totalCompr += Math.min(compTotal, s.sugerido);
+          if (compTotal > 0) skusComprados += 1;
+          return { sku: s.sku, sugerido: s.sugerido, comprado: compTotal };
+        });
+        const pct = totalSug > 0 ? (totalCompr / totalSug) * 100 : null;
+        return {
+          ...p,
+          tracking: {
+            totalSug, totalCompr, pct,
+            skusTotales: skusSug.length, skusComprados,
+            detalle,
+            ventana: '14 días desde ' + fechaIniISO,
+            metodoMatch: esPcel ? 'sellout_pcel semanal prorrateado' : 'sellout_detalle diario exacto',
+          },
+        };
+      });
+    } catch (err) {
+      console.error('propuestasConTracking error:', err);
+      return (propuestasHist || []).map(p => ({ ...p, tracking: { error: true } }));
+    }
+  }, [propuestasHist, datos, clienteKey]);
+
+  // Banner: % acierto promedio últimas 5 propuestas con datos
+  const aciertoPromedio = React.useMemo(() => {
+    const conDatos = (propuestasConTracking || [])
+      .filter((p) => p.tracking && !p.tracking.sinFilas && !p.tracking.error && p.tracking.pct != null)
+      .slice(0, 5);
+    if (conDatos.length === 0) return null;
+    const avg = conDatos.reduce((s, p) => s + p.tracking.pct, 0) / conDatos.length;
+    return { pct: avg, n: conDatos.length };
+  }, [propuestasConTracking]);
 
   // SKUs que ya están en propuestas pendientes (aún no cruzadas con OC)
   // → se excluyen de "SKUs en riesgo de desabasto"
