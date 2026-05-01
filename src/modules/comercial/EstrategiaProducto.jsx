@@ -2328,11 +2328,15 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } },
               '\uD83D\uDCC8 Cuota ' + MESES_LBL[mesParaTarjeta - 1] + (mesEsActualReal ? '' : ' (último con datos)') + (kpiAbierto === 'cuotaMes' ? ' ▾' : ' ▸')),
             React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: pctMes == null ? '#94A3B8' : pctMes >= 100 ? '#047857' : pctMes >= 70 ? '#B45309' : '#B91C1C', marginBottom: 2 } },
-              pctMes == null ? 'Sin cuota' : pctMes.toFixed(0) + '%'),
+              pctMes == null
+                ? 'Sin cuota'
+                : faltaMes > 0
+                  ? ('Faltan ' + formatMXN(faltaMes))
+                  : '✓ Cumplida'),
             React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
               pctMes == null
                 ? ''
-                : (formatMXN(siMes) + ' / ' + formatMXN(cuotaMes)))
+                : (pctMes.toFixed(0) + '% · ' + formatMXN(siMes) + ' / ' + formatMXN(cuotaMes)))
           ),
           // 4) Cumplimiento YTD (clickable → expande detalle YTD)
           React.createElement('div', {
