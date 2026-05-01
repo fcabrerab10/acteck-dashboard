@@ -117,46 +117,100 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   };
 
   // ── Tracking de propuestas: Sugerí vs Compraron ──
-  // Para cada propuesta exportada, cruzamos sus filas (SKU + cantidad
-  // sugerida) con las ventas reales en el mes de la propuesta + 1 mes
-  // siguiente. Con eso calculamos un % de acierto.
-  // Limitación honesta: sell_in_sku es mensual (no diario), así que no
-  // podemos hacer ventana de "14 días exactos". Aproximamos a "ese mes y
-  // el siguiente" — suficiente para tener señal de tendencia.
+  // Ventana exacta de 14 días desde la fecha de la propuesta:
+  //   · Digitalife → sellout_detalle (fecha diaria exacta) — match preciso
+  //   · PCEL → sellout_pcel (semanal). Tomamos las semanas que tocan los 14d
+  //     (típicamente 2-3 semanas) y prorrateamos por días de cada semana
+  //     que caen en la ventana.
+  // Helper: ISO week (1-53) — semana ISO 8601 que usa Lunes como inicio
+  const isoWeek = (date) => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return { anio: d.getUTCFullYear(), semana: Math.ceil((((d - yearStart) / 86400000) + 1) / 7) };
+  };
+
   const propuestasConTracking = React.useMemo(() => {
-    if (!propuestasHist || propuestasHist.length === 0 || !datos || !datos.sellIn) return [];
-    // Index: cliente,sku,año,mes → piezas
-    const ventasIdx = {};
-    datos.sellIn.forEach((r) => {
-      const k = (r.sku || '') + '||' + Number(r.anio) + '||' + Number(r.mes);
-      ventasIdx[k] = (ventasIdx[k] || 0) + (Number(r.piezas) || 0);
-    });
+    if (!propuestasHist || propuestasHist.length === 0 || !datos) return [];
+    const esPcel = clienteKey === 'pcel';
+
+    // ── Index Digitalife: sku → [{fecha, cantidad}] ──
+    const ventasDiarias = {};
+    if (!esPcel && datos.selloutDiario) {
+      datos.selloutDiario.forEach((r) => {
+        const sku = r.no_parte;
+        if (!sku || !r.fecha) return;
+        if (!ventasDiarias[sku]) ventasDiarias[sku] = [];
+        ventasDiarias[sku].push({ fecha: r.fecha, cantidad: Number(r.cantidad) || 0 });
+      });
+    }
+
+    // ── Index PCEL: sku → {anio-semana → vta_semana} ──
+    const ventasSemanales = {};
+    if (esPcel && datos.selloutPcelSemanal) {
+      datos.selloutPcelSemanal.forEach((r) => {
+        const sku = r.sku;
+        if (!sku || r.anio == null || r.semana == null) return;
+        if (!ventasSemanales[sku]) ventasSemanales[sku] = {};
+        const k = Number(r.anio) + '-' + Number(r.semana);
+        ventasSemanales[sku][k] = (ventasSemanales[sku][k] || 0) + (Number(r.vta_semana) || 0);
+      });
+    }
+
+    // Para PCEL: cuántos días de la ventana caen dentro de cada semana
+    // (asume semanas Lun-Dom, ISO). Útil para prorratear.
+    const semanasEnVentana = (fechaInicio, dias) => {
+      const out = {};
+      const d = new Date(fechaInicio);
+      for (let i = 0; i < dias; i++) {
+        const cur = new Date(d.getTime() + i * 86400000);
+        const { anio, semana } = isoWeek(cur);
+        const k = anio + '-' + semana;
+        out[k] = (out[k] || 0) + 1;
+      }
+      return out;
+    };
+
     return propuestasHist.map((p) => {
       const filas = Array.isArray(p.filas) ? p.filas : [];
-      if (filas.length === 0) {
-        return { ...p, tracking: { sinFilas: true } };
-      }
-      // Extraer sku + sugerido de cada fila (el formato varía: PCEL usa
-      // 'SKU Cliente', Digitalife usa 'SKU').
+      if (filas.length === 0) return { ...p, tracking: { sinFilas: true } };
       const skusSug = filas.map((f) => ({
-        sku: f.SKU || f['SKU Cliente'] || f.sku || '',
+        sku: String(f.SKU || f['SKU Cliente'] || f.sku || ''),
         sugerido: Number(f.Sugerido || f.sugerido || 0),
       })).filter((s) => s.sku && s.sugerido > 0);
       if (skusSug.length === 0) return { ...p, tracking: { sinFilas: true } };
-      // Mes y año de la propuesta
-      const fp = new Date(p.fecha || p.created_at);
-      const anioP = fp.getFullYear();
-      const mesP = fp.getMonth() + 1;
-      // Mes siguiente (con wrap a enero del año siguiente)
-      const anioPS = mesP === 12 ? anioP + 1 : anioP;
-      const mesPS = mesP === 12 ? 1 : mesP + 1;
+
+      const fechaPropuesta = new Date(p.fecha || p.created_at);
+      const fechaIni = new Date(fechaPropuesta.getFullYear(), fechaPropuesta.getMonth(), fechaPropuesta.getDate());
+      const fechaFin = new Date(fechaIni.getTime() + 14 * 86400000);
+      const fechaIniISO = fechaIni.toISOString().slice(0, 10);
+      const fechaFinISO = fechaFin.toISOString().slice(0, 10);
+
+      const semanasVent = esPcel ? semanasEnVentana(fechaIni, 14) : null;
+
       let totalSug = 0, totalCompr = 0, skusComprados = 0;
       const detalle = skusSug.map((s) => {
-        const compMes  = ventasIdx[s.sku + '||' + anioP  + '||' + mesP]  || 0;
-        const compSig  = ventasIdx[s.sku + '||' + anioPS + '||' + mesPS] || 0;
-        const compTotal = compMes + compSig;
+        let compTotal = 0;
+        if (esPcel) {
+          // Sumar cada semana × (días que caen en ventana / 7)
+          const sem = ventasSemanales[s.sku] || {};
+          for (const k in semanasVent) {
+            const ventaSem = sem[k] || 0;
+            const factor = semanasVent[k] / 7;
+            compTotal += ventaSem * factor;
+          }
+          compTotal = Math.round(compTotal);
+        } else {
+          // Digitalife: sumar cantidades en la ventana exacta
+          const arr = ventasDiarias[s.sku] || [];
+          for (const v of arr) {
+            if (v.fecha >= fechaIniISO && v.fecha < fechaFinISO) {
+              compTotal += v.cantidad;
+            }
+          }
+        }
         totalSug += s.sugerido;
-        totalCompr += Math.min(compTotal, s.sugerido); // cap para no inflar el %
+        totalCompr += Math.min(compTotal, s.sugerido);
         if (compTotal > 0) skusComprados += 1;
         return { sku: s.sku, sugerido: s.sugerido, comprado: compTotal };
       });
@@ -168,10 +222,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           skusTotales: skusSug.length,
           skusComprados,
           detalle,
+          ventana: '14 días desde ' + fechaIniISO,
+          metodoMatch: esPcel ? 'sellout_pcel semanal prorrateado' : 'sellout_detalle diario exacto',
         },
       };
     });
-  }, [propuestasHist, datos]);
+  }, [propuestasHist, datos, clienteKey]);
 
   // Banner KPI: % acierto promedio últimas 5 propuestas con datos
   const aciertoPromedio = React.useMemo(() => {
@@ -947,8 +1003,15 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       const { fetchSelloutSku, fetchInventarioCliente, fetchHistoricoComprasPcel, fetchSnapshotPcel } = await import('../../lib/pcelAdapter');
       const esPcel = clienteKey === 'pcel';
 
+      // Tracking N (Sugerí vs Compraron) requiere data con fecha precisa:
+      //  · Digitalife → sellout_detalle (diario, fecha exacta)
+      //  · PCEL → sellout_pcel (semanal, anio+semana → ventana de 14d ≈ 2 semanas)
+      // Cargamos últimos 120 días para cubrir propuestas recientes.
+      const hace120dias = new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10);
+
       const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap, precios,
-             histPcel, snapshotPcel, dglCategoriasRaw, cuotasMensualesRaw] = await Promise.all([
+             histPcel, snapshotPcel, dglCategoriasRaw, cuotasMensualesRaw,
+             selloutDiario, selloutPcelSemanal] = await Promise.all([
         fetchAllPagesREST(`productos_cliente?select=*&cliente=eq.${clienteKey}`),
         fetchAllPagesREST(`sell_in_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
         fetchSelloutSku(clienteKey, 2026),
@@ -964,10 +1027,15 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         // Sólo se pide cuando estamos en PCEL, para el mapeo modelo→categoría.
         esPcel ? fetchAllPagesREST(`productos_cliente?select=sku,categoria&cliente=eq.digitalife`) : Promise.resolve([]),
         // Cuotas mensuales para la tarjeta KPI #3 (cumplimiento de cuota).
-        // PCEL: si BD vacía, fallback a PCEL_REAL.cuota50M en kpis.
-        // Cuotas mensuales: la columna real es `cuota_min`/`cuota_ideal`
-        // (NO `monto` — eso pertenece a otra tabla; pedirla causa 42703).
         fetchAllPagesREST(`cuotas_mensuales?select=mes,cuota_min,cuota_ideal&cliente=eq.${clienteKey}&anio=eq.2026`),
+        // Tracking N — Digitalife: sellout_detalle (fecha exacta, últimos 120d)
+        !esPcel
+          ? fetchAllPagesREST(`sellout_detalle?cliente=eq.digitalife&fecha=gte.${hace120dias}&select=fecha,no_parte,cantidad`)
+          : Promise.resolve([]),
+        // Tracking N — PCEL: sellout_pcel (anio,semana,sku,vta_semana)
+        esPcel
+          ? fetchAllPagesREST(`sellout_pcel?select=anio,semana,sku,vta_semana&order=anio.desc,semana.desc&limit=20000`)
+          : Promise.resolve([]),
       ]);
 
       // Para PCEL fallback: si la tabla cuotas_mensuales está vacía pero
@@ -1085,6 +1153,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         roadmap,
         preciosBySku,
         cuotasMensuales,             // para tarjeta KPI #3 (cumplimiento cuota)
+        selloutDiario,               // sellout_detalle Digitalife (fecha exacta) — tracking N
+        selloutPcelSemanal,          // sellout_pcel (anio,semana,vta_semana) — tracking N
         // Extras específicos PCEL:
         histPcel,               // { [sku]: { piezas, facturas, promedio, primerFecha, ultimaFecha } }
         backOrderBySkuPcel,     // { [sku]: backOrder }
@@ -3560,7 +3630,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "SKUs"),
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Piezas"),
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Monto"),
-                        React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#1E40AF", fontWeight: 600, background: "#EFF6FF" }, title: "% de piezas sugeridas que el cliente efectivamente compró (mes propuesta + mes siguiente)" }, "% Acierto"),
+                        React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#1E40AF", fontWeight: 600, background: "#EFF6FF" }, title: "% de piezas sugeridas que el cliente efectivamente compró en los 14 días siguientes a la propuesta" }, "% Acierto"),
                         React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Acciones"),
                       )
                     ),
@@ -3602,7 +3672,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                               const bg = t.pct >= 70 ? "#D1FAE5" : t.pct >= 50 ? "#FEF3C7" : "#FEE2E2";
                               return React.createElement("span", {
                                 style: { padding: "2px 8px", borderRadius: 10, background: bg, color: c, fontWeight: 700 },
-                                title: "Sugeriste " + t.totalSug.toLocaleString("es-MX") + " pzs · Compró " + t.totalCompr.toLocaleString("es-MX") + " (" + t.skusComprados + " de " + t.skusTotales + " SKUs)"
+                                title: "Sugeriste " + t.totalSug.toLocaleString("es-MX") + " pzs · Compró " + t.totalCompr.toLocaleString("es-MX") +
+                                  " (" + t.skusComprados + " de " + t.skusTotales + " SKUs)\n" +
+                                  "Ventana: " + (t.ventana || '14d') + "\nMétodo: " + (t.metodoMatch || '—')
                               }, t.pct.toFixed(0) + "%");
                             })()
                           ),
