@@ -131,7 +131,6 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   };
 
   const propuestasConTracking = React.useMemo(() => {
-    try {
     if (!propuestasHist || propuestasHist.length === 0 || !datos) return [];
     const esPcel = clienteKey === 'pcel';
 
@@ -228,10 +227,6 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         },
       };
     });
-    } catch (err) {
-      console.error('propuestasConTracking error:', err);
-      return (propuestasHist || []).map(p => ({ ...p, tracking: { error: true } }));
-    }
   }, [propuestasHist, datos, clienteKey]);
 
   // Banner KPI: % acierto promedio últimas 5 propuestas con datos
