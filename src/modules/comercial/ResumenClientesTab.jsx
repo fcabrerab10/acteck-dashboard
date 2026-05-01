@@ -373,24 +373,45 @@ function calcularResumenMercadoLibre(data) {
 }
 
 // ────────── Trend consolidado 12 meses ──────────
+// Trend consolidado: 12 meses del AÑO en curso (Ene-Dic), cuota vs sell-in
+// real, sumando los clientes que aplican.
+//   · Cuota: Digitalife (de cuotas_mensuales) + PCEL (de cuotas_mensuales o
+//     fallback a PCEL_REAL.cuota50M si BD vacía). ML no maneja cuota → no suma.
+//   · Sell-In: suma de los 3 clientes (v_ventas_mensuales_agg).
 function calcularTrend(data) {
-  const meses = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(anioActual, mesActual - 1 - i, 1);
-    meses.push({ anio: d.getFullYear(), mes: d.getMonth() + 1 });
-  }
-  return meses.map(({ anio, mes }) => {
-    let si = 0, so = 0;
+  // Cuota PCEL fallback (mismo patrón que pestañas per-cliente)
+  const cuotaPcelFallback = (() => {
+    const tienePcelEnBD = data.cuotasMensuales.some((r) => r.cliente === 'pcel');
+    if (tienePcelEnBD || !PCEL_REAL?.cuota50M) return null;
+    return PCEL_REAL.cuota50M; // { 1: ..., 2: ..., ..., 12: ... }
+  })();
+
+  return Array.from({ length: 12 }, (_, idx) => {
+    const mes = idx + 1;
+    let cuota = 0, si = 0;
+    // Cuota: suma cuota_min de Digitalife y PCEL del mes
+    data.cuotasMensuales.forEach((r) => {
+      if (Number(r.mes) !== mes) return;
+      if (r.cliente === 'mercadolibre') return;
+      cuota += Number(r.cuota_min || 0);
+    });
+    // Si PCEL no está en BD pero hay constants, sumar el fallback
+    if (cuotaPcelFallback && cuotaPcelFallback[mes] != null) {
+      cuota += Number(cuotaPcelFallback[mes] || 0);
+    }
+    // Sell-In real del mes (suma 3 clientes)
     data.ventasAgg.forEach((r) => {
-      if (r.anio !== anio) return;
+      if (Number(r.anio) !== anioActual) return;
       if (Number(r.mes) !== mes) return;
       si += Number(r.sell_in || 0);
-      so += Number(r.sell_out || 0);
     });
     return {
-      label: `${MESES_CORTO[mes - 1]} ${String(anio).slice(2)}`,
+      mes,
+      label: MESES_CORTO[idx],
+      cuota,
       sell_in: si,
-      sell_out: so,
+      esActual: mes === mesActual,
+      esFuturo: mes > mesActual,
     };
   });
 }
@@ -524,11 +545,11 @@ export default function ResumenClientesTab({ onDrillDown }) {
         ))}
       </div>
 
-      {/* Trend consolidado */}
-      <TrendConsolidado trend={trend} />
-
       {/* Reporte: lista maestra de SKUs (colapsable) */}
       <ReporteSection />
+
+      {/* Trend consolidado: Cuota vs Sell-In año en curso */}
+      <TrendConsolidado trend={trend} />
     </div>
   );
 }
@@ -838,26 +859,31 @@ function MoMIndicator({ pct }) {
 
 // ────────── Trend consolidado 12 meses (SVG puro) ──────────
 function TrendConsolidado({ trend }) {
-  const hayDatos = trend.some((r) => r.sell_in > 0 || r.sell_out > 0);
+  const hayDatos = trend.some((r) => r.cuota > 0 || r.sell_in > 0);
   const [hoverIdx, setHoverIdx] = useState(null);
+  // Totales para mostrar en el header
+  const totCuota = trend.reduce((a, r) => a + (r.cuota || 0), 0);
+  const totSI    = trend.reduce((a, r) => a + (r.sell_in || 0), 0);
+  const cumplPct = totCuota > 0 ? (totSI / totCuota) * 100 : null;
+  const fmt = (v) => '$' + Math.round(v).toLocaleString('es-MX');
 
   return (
     <div className="bg-white rounded-xl border border-gray-200">
       <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
         <h3 className="font-semibold text-gray-800 flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-gray-600" />
-          Trend consolidado · 12 meses
+          Cuota vs Sell-In · {anioActual}
         </h3>
-        <span className="text-xs text-gray-400">Suma de los 3 clientes</span>
+        <span className="text-xs text-gray-400">Digitalife + PCEL · YTD: {fmt(totSI)} / {fmt(totCuota)}{cumplPct != null && ` (${cumplPct.toFixed(0)}%)`}</span>
         <div className="flex-1" />
         <div className="flex items-center gap-3 text-xs">
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#3B82F6' }} />
-            <span className="text-gray-600">Sell-In</span>
+            <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#94A3B8' }} />
+            <span className="text-gray-600">Cuota</span>
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#10B981' }} />
-            <span className="text-gray-600">Sell-Out</span>
+            <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#3B82F6' }} />
+            <span className="text-gray-600">Sell-In</span>
           </span>
         </div>
       </div>
@@ -866,8 +892,8 @@ function TrendConsolidado({ trend }) {
           <div className="h-64 flex flex-col items-center justify-center text-sm text-gray-400 gap-2">
             <BarChart3 className="w-10 h-10 text-gray-300" />
             <div className="text-center">
-              <div>Sin datos en los últimos 12 meses</div>
-              <div className="text-xs mt-1">Verifica que <code className="text-gray-500">sell_in_sku</code> y <code className="text-gray-500">sellout_sku</code> estén cargados</div>
+              <div>Sin datos para {anioActual}</div>
+              <div className="text-xs mt-1">Verifica <code className="text-gray-500">cuotas_mensuales</code> y <code className="text-gray-500">sell_in_sku</code></div>
             </div>
           </div>
         ) : (
@@ -885,9 +911,12 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
 
-  const maxVal = Math.max(1, ...trend.flatMap((r) => [r.sell_in, r.sell_out]));
+  // Eje Y basado en el máximo entre cuota y sell-in
+  const maxVal = Math.max(1, ...trend.flatMap((r) => [r.cuota || 0, r.sell_in || 0]));
   const n = trend.length;
-  const barW = innerW / n * 0.55;
+  // Barras lado a lado (cuota gris claro + sell-in azul)
+  const barWPair = innerW / n * 0.7;     // ancho total del par
+  const barW = barWPair / 2 - 1;          // ancho de cada barra del par
   const slot = innerW / n;
 
   const yFor = (v) => padT + innerH - (v / maxVal) * innerH;
@@ -895,9 +924,6 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
 
   const ticks = 4;
   const yTicks = Array.from({ length: ticks + 1 }, (_, i) => (maxVal * i) / ticks);
-
-  // Línea sell_out
-  const path = trend.map((r, i) => `${i === 0 ? 'M' : 'L'}${xFor(i)},${yFor(r.sell_out)}`).join(' ');
 
   const fmtShort = (v) => {
     if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -918,51 +944,69 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
           </g>
         ))}
 
-        {/* Barras Sell-In */}
-        {trend.map((r, i) => (
-          <rect
-            key={i}
-            x={xFor(i) - barW / 2}
-            y={yFor(r.sell_in)}
-            width={barW}
-            height={Math.max(0, padT + innerH - yFor(r.sell_in))}
-            fill={hoverIdx === i ? '#2563EB' : '#3B82F6'}
-            rx={3}
-            onMouseEnter={() => setHoverIdx(i)}
-            onMouseLeave={() => setHoverIdx(null)}
-            style={{ cursor: 'pointer', transition: 'fill 120ms' }}
-          />
-        ))}
+        {/* Barras Cuota (gris claro a la izquierda del slot) */}
+        {trend.map((r, i) => {
+          const v = r.cuota || 0;
+          if (v <= 0) return null;
+          return (
+            <rect
+              key={'q' + i}
+              x={xFor(i) - barWPair / 2}
+              y={yFor(v)}
+              width={barW}
+              height={Math.max(0, padT + innerH - yFor(v))}
+              fill={hoverIdx === i ? '#64748B' : '#94A3B8'}
+              rx={3}
+              onMouseEnter={() => setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx(null)}
+              style={{ cursor: 'pointer', transition: 'fill 120ms' }}
+            />
+          );
+        })}
 
-        {/* Línea Sell-Out */}
-        <path d={path} fill="none" stroke="#10B981" strokeWidth="2" />
-
-        {/* Puntos Sell-Out */}
-        {trend.map((r, i) => (
-          <circle
-            key={i}
-            cx={xFor(i)}
-            cy={yFor(r.sell_out)}
-            r={hoverIdx === i ? 5 : 3}
-            fill="#fff"
-            stroke="#10B981"
-            strokeWidth="2"
-            onMouseEnter={() => setHoverIdx(i)}
-            onMouseLeave={() => setHoverIdx(null)}
-            style={{ cursor: 'pointer' }}
-          />
-        ))}
+        {/* Barras Sell-In (azul a la derecha del slot) */}
+        {trend.map((r, i) => {
+          const v = r.sell_in || 0;
+          if (v <= 0) return null;
+          // Color: si Sell-In >= Cuota → verde; si > 70% → ámbar; si <70% → azul; si futuro → gris claro
+          const cuota = r.cuota || 0;
+          const pct = cuota > 0 ? v / cuota : null;
+          const color = r.esFuturo
+            ? '#CBD5E1'
+            : pct == null
+              ? '#3B82F6'
+              : pct >= 1
+                ? '#10B981'
+                : pct >= 0.7
+                  ? '#F59E0B'
+                  : '#EF4444';
+          return (
+            <rect
+              key={'si' + i}
+              x={xFor(i) + 1}
+              y={yFor(v)}
+              width={barW}
+              height={Math.max(0, padT + innerH - yFor(v))}
+              fill={color}
+              opacity={hoverIdx === i ? 1 : 0.85}
+              rx={3}
+              onMouseEnter={() => setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx(null)}
+              style={{ cursor: 'pointer', transition: 'opacity 120ms' }}
+            />
+          );
+        })}
 
         {/* X axis labels */}
         {trend.map((r, i) => (
           <text
-            key={i}
+            key={'x' + i}
             x={xFor(i)}
             y={H - padB + 16}
             fontSize="10"
-            fill={hoverIdx === i ? '#1F2937' : '#6B7280'}
+            fill={hoverIdx === i ? '#1F2937' : (r.esActual ? '#1E40AF' : '#6B7280')}
             textAnchor="middle"
-            fontWeight={hoverIdx === i ? 600 : 400}
+            fontWeight={hoverIdx === i || r.esActual ? 600 : 400}
           >
             {r.label}
           </text>
@@ -970,26 +1014,44 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
       </svg>
 
       {/* Tooltip */}
-      {hoverIdx != null && (
-        <div
-          className="absolute pointer-events-none bg-gray-900 text-white rounded-lg px-3 py-2 text-xs shadow-lg"
-          style={{
-            left: `calc(${(xFor(hoverIdx) / W) * 100}% - 80px)`,
-            top: 8,
-            minWidth: 160,
-          }}
-        >
-          <div className="font-semibold mb-1">{trend[hoverIdx].label}</div>
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: '#3B82F6' }} />
-            Sell-In: <span className="font-semibold tabular-nums">{formatMXN(trend[hoverIdx].sell_in)}</span>
+      {hoverIdx != null && (() => {
+        const r = trend[hoverIdx];
+        const cuota = r.cuota || 0;
+        const si = r.sell_in || 0;
+        const pct = cuota > 0 ? (si / cuota) * 100 : null;
+        const falta = cuota > 0 ? Math.max(0, cuota - si) : 0;
+        return (
+          <div
+            className="absolute pointer-events-none bg-gray-900 text-white rounded-lg px-3 py-2 text-xs shadow-lg"
+            style={{
+              left: `calc(${(xFor(hoverIdx) / W) * 100}% - 90px)`,
+              top: 8,
+              minWidth: 180,
+            }}
+          >
+            <div className="font-semibold mb-1">
+              {r.label}
+              {r.esActual && <span className="ml-2 text-[10px] text-blue-300">· mes actual</span>}
+              {r.esFuturo && <span className="ml-2 text-[10px] text-gray-400">· futuro</span>}
+            </div>
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: '#94A3B8' }} />
+              Cuota: <span className="font-semibold tabular-nums ml-auto">{formatMXN(cuota)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: '#3B82F6' }} />
+              Sell-In: <span className="font-semibold tabular-nums ml-auto">{formatMXN(si)}</span>
+            </div>
+            {pct != null && !r.esFuturo && (
+              <div className="border-t border-gray-700 mt-1 pt-1 text-[11px]">
+                {pct >= 100
+                  ? <span className="text-emerald-300 font-semibold">✓ Cumplida ({pct.toFixed(0)}%)</span>
+                  : <span className="text-amber-300">Faltan <span className="font-semibold tabular-nums">{formatMXN(falta)}</span> ({pct.toFixed(0)}%)</span>}
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#10B981' }} />
-            Sell-Out: <span className="font-semibold tabular-nums">{formatMXN(trend[hoverIdx].sell_out)}</span>
-          </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
