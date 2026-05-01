@@ -861,44 +861,134 @@ function MoMIndicator({ pct }) {
 function TrendConsolidado({ trend }) {
   const hayDatos = trend.some((r) => r.cuota > 0 || r.sell_in > 0);
   const [hoverIdx, setHoverIdx] = useState(null);
-  // Totales para mostrar en el header
-  const totCuota = trend.reduce((a, r) => a + (r.cuota || 0), 0);
-  const totSI    = trend.reduce((a, r) => a + (r.sell_in || 0), 0);
-  const cumplPct = totCuota > 0 ? (totSI / totCuota) * 100 : null;
-  const fmt = (v) => '$' + Math.round(v).toLocaleString('es-MX');
+
+  // ── Cálculos para las tarjetas ──
+  const mesesPasados = trend.filter((r) => !r.esFuturo);
+  const mesesPasadosConVenta = mesesPasados.filter((r) => r.sell_in > 0);
+  const totCuotaAnual = trend.reduce((a, r) => a + (r.cuota || 0), 0);
+  const totCuotaYTD = mesesPasados.reduce((a, r) => a + (r.cuota || 0), 0);
+  const totSI    = mesesPasados.reduce((a, r) => a + (r.sell_in || 0), 0);
+  const cumplYTD = totCuotaYTD > 0 ? (totSI / totCuotaYTD) * 100 : null;
+
+  // 1) Mejor mes (sell-in más alto en meses pasados)
+  const mejorMes = mesesPasadosConVenta.length
+    ? mesesPasadosConVenta.reduce((mejor, r) => r.sell_in > mejor.sell_in ? r : mejor)
+    : null;
+
+  // 2) Tendencia 3m: últimos 3 meses con venta vs 3 anteriores
+  let tendencia3m = null;
+  if (mesesPasadosConVenta.length >= 4) {
+    const u3 = mesesPasadosConVenta.slice(-3);
+    const a3 = mesesPasadosConVenta.slice(-6, -3);
+    const sumU = u3.reduce((a, r) => a + r.sell_in, 0);
+    const sumA = a3.reduce((a, r) => a + r.sell_in, 0);
+    if (sumA > 0) {
+      tendencia3m = ((sumU - sumA) / sumA) * 100;
+    }
+  }
+
+  // 3) Proyección anual: ritmo mensual promedio (últimos 3 meses) × 12
+  let proyeccionAnual = null;
+  if (mesesPasadosConVenta.length >= 1) {
+    const u3 = mesesPasadosConVenta.slice(-3);
+    const promMes = u3.reduce((a, r) => a + r.sell_in, 0) / u3.length;
+    proyeccionAnual = totSI + promMes * (12 - mesesPasadosConVenta.length);
+  }
+  const proyVsAnual = (totCuotaAnual > 0 && proyeccionAnual != null)
+    ? (proyeccionAnual / totCuotaAnual) * 100
+    : null;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200">
-      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
-        <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-gray-600" />
-          Cuota vs Sell-In · {anioActual}
-        </h3>
-        <span className="text-xs text-gray-400">Digitalife + PCEL · YTD: {fmt(totSI)} / {fmt(totCuota)}{cumplPct != null && ` (${cumplPct.toFixed(0)}%)`}</span>
-        <div className="flex-1" />
-        <div className="flex items-center gap-3 text-xs">
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#94A3B8' }} />
-            <span className="text-gray-600">Cuota</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#3B82F6' }} />
-            <span className="text-gray-600">Sell-In</span>
-          </span>
-        </div>
-      </div>
-      <div className="p-4">
-        {!hayDatos ? (
-          <div className="h-64 flex flex-col items-center justify-center text-sm text-gray-400 gap-2">
-            <BarChart3 className="w-10 h-10 text-gray-300" />
-            <div className="text-center">
-              <div>Sin datos para {anioActual}</div>
-              <div className="text-xs mt-1">Verifica <code className="text-gray-500">cuotas_mensuales</code> y <code className="text-gray-500">sell_in_sku</code></div>
+    <div className="space-y-4">
+      {/* Tarjetas pequeñas con info del trend */}
+      {hayDatos && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* 1. Cumplimiento YTD */}
+          <div className="bg-white rounded-xl border border-gray-200 p-3">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Cumplimiento YTD</div>
+            <div className="text-2xl font-bold tabular-nums" style={{ color: cumplYTD == null ? '#94A3B8' : cumplYTD >= 100 ? '#047857' : cumplYTD >= 70 ? '#B45309' : '#B91C1C' }}>
+              {cumplYTD == null ? '—' : `${cumplYTD.toFixed(0)}%`}
+            </div>
+            <div className="text-[11px] text-gray-500 mt-1 leading-tight">
+              {formatMXN(totSI)} de {formatMXN(totCuotaYTD)}
             </div>
           </div>
-        ) : (
-          <TrendSvg trend={trend} hoverIdx={hoverIdx} setHoverIdx={setHoverIdx} />
-        )}
+
+          {/* 2. Mejor mes */}
+          <div className="bg-white rounded-xl border border-gray-200 p-3">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Mejor mes</div>
+            <div className="text-2xl font-bold tabular-nums text-emerald-700">
+              {mejorMes ? mejorMes.label : '—'}
+            </div>
+            <div className="text-[11px] text-gray-500 mt-1 leading-tight">
+              {mejorMes ? formatMXN(mejorMes.sell_in) : 'Sin datos aún'}
+            </div>
+          </div>
+
+          {/* 3. Tendencia últimos 3 meses */}
+          <div className="bg-white rounded-xl border border-gray-200 p-3">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Tendencia 3 meses</div>
+            <div className="text-2xl font-bold tabular-nums flex items-center gap-1" style={{ color: tendencia3m == null ? '#94A3B8' : tendencia3m >= 0 ? '#047857' : '#B91C1C' }}>
+              {tendencia3m == null ? '—' : (
+                <>
+                  {tendencia3m >= 0 ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
+                  {tendencia3m >= 0 ? '+' : ''}{tendencia3m.toFixed(0)}%
+                </>
+              )}
+            </div>
+            <div className="text-[11px] text-gray-500 mt-1 leading-tight">
+              vs 3 meses anteriores
+            </div>
+          </div>
+
+          {/* 4. Proyección anual */}
+          <div className="bg-white rounded-xl border border-gray-200 p-3">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Proyección anual</div>
+            <div className="text-2xl font-bold tabular-nums" style={{ color: proyVsAnual == null ? '#94A3B8' : proyVsAnual >= 100 ? '#047857' : proyVsAnual >= 70 ? '#B45309' : '#B91C1C' }}>
+              {proyeccionAnual == null ? '—' : formatMXN(proyeccionAnual)}
+            </div>
+            <div className="text-[11px] text-gray-500 mt-1 leading-tight">
+              {proyVsAnual == null
+                ? 'Al ritmo actual'
+                : `${proyVsAnual.toFixed(0)}% de la meta anual (${formatMXN(totCuotaAnual)})`}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gráfica de líneas */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+          <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-gray-600" />
+            Cuota vs Sell-In · {anioActual}
+          </h3>
+          <span className="text-xs text-gray-400">Digitalife + PCEL</span>
+          <div className="flex-1" />
+          <div className="flex items-center gap-3 text-xs">
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-0.5" style={{ backgroundColor: '#94A3B8', borderTop: '2px dashed #94A3B8', height: 0 }} />
+              <span className="text-gray-600">Cuota</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-0.5" style={{ backgroundColor: '#3B82F6' }} />
+              <span className="text-gray-600">Sell-In</span>
+            </span>
+          </div>
+        </div>
+        <div className="p-4">
+          {!hayDatos ? (
+            <div className="h-64 flex flex-col items-center justify-center text-sm text-gray-400 gap-2">
+              <BarChart3 className="w-10 h-10 text-gray-300" />
+              <div className="text-center">
+                <div>Sin datos para {anioActual}</div>
+                <div className="text-xs mt-1">Verifica <code className="text-gray-500">cuotas_mensuales</code> y <code className="text-gray-500">sell_in_sku</code></div>
+              </div>
+            </div>
+          ) : (
+            <TrendSvg trend={trend} hoverIdx={hoverIdx} setHoverIdx={setHoverIdx} />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -906,17 +996,13 @@ function TrendConsolidado({ trend }) {
 
 function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
   const W = 960;
-  const H = 280;
+  const H = 300;
   const padL = 56, padR = 16, padT = 20, padB = 34;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
 
-  // Eje Y basado en el máximo entre cuota y sell-in
   const maxVal = Math.max(1, ...trend.flatMap((r) => [r.cuota || 0, r.sell_in || 0]));
   const n = trend.length;
-  // Barras lado a lado (cuota gris claro + sell-in azul)
-  const barWPair = innerW / n * 0.7;     // ancho total del par
-  const barW = barWPair / 2 - 1;          // ancho de cada barra del par
   const slot = innerW / n;
 
   const yFor = (v) => padT + innerH - (v / maxVal) * innerH;
@@ -931,9 +1017,36 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
     return v.toFixed(0);
   };
 
+  // Línea de cuota (12 meses, dashed gris)
+  const pathCuota = trend
+    .map((r, i) => `${i === 0 ? 'M' : 'L'}${xFor(i)},${yFor(r.cuota || 0)}`)
+    .join(' ');
+
+  // Línea de sell-in: solo meses con datos (no futuros)
+  // Usamos una sola línea continua hasta el último mes con venta
+  const trendConVenta = trend.map((r, i) => ({ ...r, _i: i }))
+    .filter((r) => !r.esFuturo);
+  const pathSI = trendConVenta
+    .map((r, idx) => `${idx === 0 ? 'M' : 'L'}${xFor(r._i)},${yFor(r.sell_in || 0)}`)
+    .join(' ');
+
+  // Área bajo línea de Sell-In (gradiente sutil)
+  const areaSI = trendConVenta.length > 0
+    ? `M${xFor(trendConVenta[0]._i)},${yFor(0)} ` +
+      trendConVenta.map((r) => `L${xFor(r._i)},${yFor(r.sell_in || 0)}`).join(' ') +
+      ` L${xFor(trendConVenta[trendConVenta.length - 1]._i)},${yFor(0)} Z`
+    : '';
+
   return (
     <div className="relative">
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block' }}>
+        <defs>
+          <linearGradient id="siGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
         {/* Grid lines + Y axis */}
         {yTicks.map((v, i) => (
           <g key={i}>
@@ -944,58 +1057,68 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
           </g>
         ))}
 
-        {/* Barras Cuota (gris claro a la izquierda del slot) */}
+        {/* Línea vertical en mes actual */}
+        {trend.map((r, i) => r.esActual && (
+          <line key={'now' + i}
+            x1={xFor(i)} y1={padT}
+            x2={xFor(i)} y2={padT + innerH}
+            stroke="#1E40AF" strokeWidth="1" strokeDasharray="2 4" opacity="0.4"
+          />
+        ))}
+
+        {/* Área bajo Sell-In (decorativa) */}
+        {areaSI && <path d={areaSI} fill="url(#siGradient)" />}
+
+        {/* Línea Cuota — punteada gris */}
+        <path d={pathCuota} fill="none" stroke="#94A3B8" strokeWidth="2" strokeDasharray="6 4" />
+
+        {/* Línea Sell-In */}
+        <path d={pathSI} fill="none" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+        {/* Puntos en cada mes — Cuota */}
+        {trend.map((r, i) => (r.cuota > 0 ? (
+          <circle key={'qd' + i}
+            cx={xFor(i)} cy={yFor(r.cuota)}
+            r={hoverIdx === i ? 4 : 2.5}
+            fill="#fff" stroke="#94A3B8" strokeWidth="1.5"
+            onMouseEnter={() => setHoverIdx(i)}
+            onMouseLeave={() => setHoverIdx(null)}
+            style={{ cursor: 'pointer' }}
+          />
+        ) : null))}
+
+        {/* Puntos en cada mes — Sell-In (color por cumplimiento) */}
         {trend.map((r, i) => {
-          const v = r.cuota || 0;
-          if (v <= 0) return null;
+          if (r.esFuturo || (r.sell_in || 0) <= 0) return null;
+          const cuota = r.cuota || 0;
+          const pct = cuota > 0 ? r.sell_in / cuota : null;
+          const color = pct == null ? '#3B82F6'
+            : pct >= 1 ? '#10B981'
+            : pct >= 0.7 ? '#F59E0B'
+            : '#EF4444';
           return (
-            <rect
-              key={'q' + i}
-              x={xFor(i) - barWPair / 2}
-              y={yFor(v)}
-              width={barW}
-              height={Math.max(0, padT + innerH - yFor(v))}
-              fill={hoverIdx === i ? '#64748B' : '#94A3B8'}
-              rx={3}
+            <circle key={'sd' + i}
+              cx={xFor(i)} cy={yFor(r.sell_in)}
+              r={hoverIdx === i ? 6 : 4}
+              fill="#fff" stroke={color} strokeWidth="2.5"
               onMouseEnter={() => setHoverIdx(i)}
               onMouseLeave={() => setHoverIdx(null)}
-              style={{ cursor: 'pointer', transition: 'fill 120ms' }}
+              style={{ cursor: 'pointer', transition: 'r 120ms' }}
             />
           );
         })}
 
-        {/* Barras Sell-In (azul a la derecha del slot) */}
-        {trend.map((r, i) => {
-          const v = r.sell_in || 0;
-          if (v <= 0) return null;
-          // Color: si Sell-In >= Cuota → verde; si > 70% → ámbar; si <70% → azul; si futuro → gris claro
-          const cuota = r.cuota || 0;
-          const pct = cuota > 0 ? v / cuota : null;
-          const color = r.esFuturo
-            ? '#CBD5E1'
-            : pct == null
-              ? '#3B82F6'
-              : pct >= 1
-                ? '#10B981'
-                : pct >= 0.7
-                  ? '#F59E0B'
-                  : '#EF4444';
-          return (
-            <rect
-              key={'si' + i}
-              x={xFor(i) + 1}
-              y={yFor(v)}
-              width={barW}
-              height={Math.max(0, padT + innerH - yFor(v))}
-              fill={color}
-              opacity={hoverIdx === i ? 1 : 0.85}
-              rx={3}
-              onMouseEnter={() => setHoverIdx(i)}
-              onMouseLeave={() => setHoverIdx(null)}
-              style={{ cursor: 'pointer', transition: 'opacity 120ms' }}
-            />
-          );
-        })}
+        {/* Hot zone invisible para hover en cada mes */}
+        {trend.map((r, i) => (
+          <rect key={'hot' + i}
+            x={xFor(i) - slot / 2} y={padT}
+            width={slot} height={innerH}
+            fill="transparent"
+            onMouseEnter={() => setHoverIdx(i)}
+            onMouseLeave={() => setHoverIdx(null)}
+            style={{ cursor: 'pointer' }}
+          />
+        ))}
 
         {/* X axis labels */}
         {trend.map((r, i) => (
