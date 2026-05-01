@@ -3466,11 +3466,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "SKUs"),
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Piezas"),
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Monto"),
+                        React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#1E40AF", fontWeight: 600, background: "#EFF6FF" }, title: "% de piezas sugeridas que el cliente efectivamente compró en los 14 días siguientes" }, "% Acierto"),
                         React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Acciones"),
                       )
                     ),
                     React.createElement("tbody", null,
-                      propuestasHist.map(p => {
+                      (propuestasConTracking || propuestasHist).map(p => {
                         const esPend = (p.estatus || "pendiente") === "pendiente";
                         return React.createElement("tr", {
                           key: p.id,
@@ -3494,6 +3495,23 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                           React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11 } }, (Number(p.piezas_total) || 0).toLocaleString("es-MX")),
                           React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11, fontWeight: 600, color: "#065F46" } },
                             "$" + Math.round(Number(p.monto_total) || 0).toLocaleString("es-MX")
+                          ),
+                          // Celda % Acierto
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "center", fontSize: 11, background: "#F8FAFC" } },
+                            (function() {
+                              const t = p.tracking;
+                              if (!t || t.sinFilas || t.error) {
+                                return React.createElement("span", { style: { color: "#94A3B8", fontStyle: "italic" }, title: t && t.error ? "Error en cálculo" : "Sin detalle por SKU" }, "—");
+                              }
+                              if (t.pct == null) return React.createElement("span", { style: { color: "#94A3B8" } }, "—");
+                              const c = t.pct >= 70 ? "#065F46" : t.pct >= 50 ? "#92400E" : "#B91C1C";
+                              const bg = t.pct >= 70 ? "#D1FAE5" : t.pct >= 50 ? "#FEF3C7" : "#FEE2E2";
+                              return React.createElement("span", {
+                                style: { padding: "2px 8px", borderRadius: 10, background: bg, color: c, fontWeight: 700 },
+                                title: "Sugeriste " + t.totalSug.toLocaleString("es-MX") + " pzs · Compró " + t.totalCompr.toLocaleString("es-MX") +
+                                  " (" + t.skusComprados + " de " + t.skusTotales + " SKUs)\nVentana: " + (t.ventana || '14d') + "\nMétodo: " + (t.metodoMatch || '—')
+                              }, t.pct.toFixed(0) + "%");
+                            })()
                           ),
                           React.createElement("td", { style: { padding: "6px 10px", textAlign: "center", whiteSpace: "nowrap" } },
                             React.createElement("button", {
