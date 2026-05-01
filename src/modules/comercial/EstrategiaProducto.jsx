@@ -116,6 +116,122 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     }, 600);
   };
 
+  // ── Bulk operations: estados ──
+  // Snapshot del último estado para Deshacer (Undo)
+  const [undoSnapshot, setUndoSnapshot] = React.useState(null);
+  // SKUs excluidos del envío (sólo memoria; se recalculan al recargar)
+  const [excluidosSku, setExcluidosSku] = React.useState(new Set());
+  // Modal de Vista Previa de bulk
+  const [bulkPreview, setBulkPreview] = React.useState(null); // { modo, scope, cambios:[], totalAntes, totalDespues }
+  // Modificadores del scope del bulk (toolbar)
+  const [bulkSoloFiltrados, setBulkSoloFiltrados] = React.useState(false);
+  const [bulkSoloSinStock, setBulkSoloSinStock] = React.useState(false);
+
+  // Recalcula el sugerido aplicando una meta diferente. Replica los gates de
+  // la fórmula original (MIN_COMPRA, cobertura > 4m, umbral) pero usando la
+  // META que pasamos. Devuelve el nuevo sugerido (entero).
+  const calcularSugeridoConMeta = React.useCallback((s, metaMeses) => {
+    const MIN_COMPRA = 20, UMBRAL_STOCK = 0.5;
+    const stock = Number(s.stock) || 0;
+    const invActeck = Number(s.invActeck) || 0;
+    const invTransito = Number(s.invTransito) || 0;
+    const transPcel = Number(s.transPcel) || 0;
+    const backOrder = Number(s.backOrder) || 0;
+    const promedio90d = Number(s.promedio90d) || 0;
+    const promCompra = Number(s.promCompra) || 0;
+    const disponibleActeck = invActeck + invTransito;
+
+    const selloutMensual = clienteKey === 'pcel'
+      ? (promedio90d > 0 ? promedio90d : promCompra || 0)
+      : promedio90d;
+
+    if (disponibleActeck < MIN_COMPRA) return 0;
+    if (selloutMensual <= 0) {
+      // Sin sellout: para PCEL surte back order si hay; Digitalife solo si stock=0 y roadmap nuevo
+      if (clienteKey === 'pcel' && backOrder > 0) {
+        return Math.min(backOrder, disponibleActeck);
+      }
+      return 0;
+    }
+    // Cap: si ya tiene >4m de cobertura, no sugerir
+    const stockCliente = clienteKey === 'pcel' ? (stock + transPcel) : stock;
+    const coberturaActual = stockCliente / selloutMensual;
+    if (coberturaActual > 4) return 0;
+
+    const base = metaMeses * selloutMensual;
+    const ideal = clienteKey === 'pcel'
+      ? Math.max(0, Math.round(base - stock - transPcel)) + backOrder
+      : Math.max(0, Math.round(base - stock));
+    let sug = Math.min(ideal, disponibleActeck);
+    if (disponibleActeck < selloutMensual * UMBRAL_STOCK) sug = 0;
+    if (sug > 0 && sug < MIN_COMPRA) sug = MIN_COMPRA;
+    return sug;
+  }, [clienteKey]);
+
+  // Persiste un override de sugerido en BD (sin tocar el state local; eso lo
+  // hace el llamador para batchear).
+  const saveSugeridoOverrideSilent = React.useCallback(async (sku, valor) => {
+    if (!canEdit || !DB_CONFIGURED) return;
+    await supabase
+      .from('sugerido_overrides')
+      .upsert(
+        { cliente: clienteKey, sku, sugerido: Number(valor) || 0, updated_at: new Date().toISOString() },
+        { onConflict: 'cliente,sku' }
+      );
+  }, [canEdit, clienteKey]);
+
+  // Aplica un cambio en bulk a un set de cambios { sku → nuevoSugerido }
+  // Guarda snapshot para Undo y persiste en BD.
+  const aplicarBulkSugerido = React.useCallback(async (cambios, etiqueta) => {
+    if (!canEdit) return;
+    // Snapshot ANTES de aplicar (para Undo)
+    setUndoSnapshot({ edits: { ...sugeridoEdits }, etiqueta });
+    // Merge en state local (instantáneo)
+    setSugeridoEdits((prev) => ({ ...prev, ...cambios }));
+    // Persistir en BD (paralelo, sin bloquear la UI)
+    const promesas = Object.entries(cambios).map(([sku, val]) =>
+      saveSugeridoOverrideSilent(sku, val)
+    );
+    Promise.all(promesas).catch((err) => console.error('aplicarBulk error:', err));
+    setMessage(`✓ ${etiqueta} aplicado a ${Object.keys(cambios).length} SKUs`);
+    setTimeout(() => setMessage(''), 3500);
+  }, [canEdit, sugeridoEdits, saveSugeridoOverrideSilent]);
+
+  // Deshacer: restaura el snapshot
+  const deshacerBulk = React.useCallback(async () => {
+    if (!undoSnapshot || !canEdit) return;
+    const prevEdits = undoSnapshot.edits || {};
+    setSugeridoEdits(prevEdits);
+    // Persistir cambios revertidos
+    if (DB_CONFIGURED) {
+      const skusActuales = Object.keys(sugeridoEdits);
+      const skusPrev = Object.keys(prevEdits);
+      const todosLosSkus = new Set([...skusActuales, ...skusPrev]);
+      const promesas = [...todosLosSkus].map((sku) => {
+        const valorPrev = prevEdits[sku];
+        if (valorPrev === undefined) {
+          // Borrar override (volver a auto)
+          return supabase.from('sugerido_overrides').delete()
+            .match({ cliente: clienteKey, sku });
+        }
+        return saveSugeridoOverrideSilent(sku, valorPrev);
+      });
+      Promise.all(promesas).catch((err) => console.error('deshacer error:', err));
+    }
+    setMessage(`↶ Deshecho: ${undoSnapshot.etiqueta}`);
+    setTimeout(() => setMessage(''), 3500);
+    setUndoSnapshot(null);
+  }, [undoSnapshot, canEdit, sugeridoEdits, clienteKey, saveSugeridoOverrideSilent]);
+
+  // Toggle excluir SKU del envío
+  const toggleExcluirSku = React.useCallback((sku) => {
+    setExcluidosSku((prev) => {
+      const next = new Set(prev);
+      if (next.has(sku)) next.delete(sku); else next.add(sku);
+      return next;
+    });
+  }, []);
+
   // Historial de propuestas de compra exportadas
   const [propuestasHist, setPropuestasHist] = React.useState([]);
   const [histAbierto, setHistAbierto] = React.useState(false);
@@ -966,10 +1082,37 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       }
     });
 
+    // Cumplimiento mensual (12 meses) — para strip debajo de las tarjetas
+    const cuotaPorMes = {};
+    if (datos.cuotasMensuales) {
+      datos.cuotasMensuales.forEach((c) => {
+        cuotaPorMes[Number(c.mes)] = Number(c.cuota_min || c.monto || 0);
+      });
+    }
+    const siPorMes = {};
+    datos.sellIn.forEach((r) => {
+      if (Number(r.anio) === anioActual) {
+        const m = Number(r.mes);
+        siPorMes[m] = (siPorMes[m] || 0) + (Number(r.monto) || 0);
+      }
+    });
+    const cumplimientoMensual = [];
+    for (let m = 1; m <= 12; m++) {
+      const cuota = cuotaPorMes[m] || 0;
+      const si = siPorMes[m] || 0;
+      const pct = cuota > 0 ? (si / cuota) * 100 : null;
+      cumplimientoMensual.push({
+        mes: m, cuota, sellIn: si, pct,
+        esActual: m === mesActualNum,
+        esFuturo: m > mesActualNum,
+      });
+    }
+
     return {
       efi, skusActivos, skusConInv, diasCob, invActeckPiezas,
       sugPiezas, sugMonto, sugSkus,
       siYTD, cuotaYTD, cuotaMesActual, siMesActual,
+      cumplimientoMensual,
     };
   }, [datos, aggs, clienteKey]);
 
@@ -1463,6 +1606,91 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     return ordered;
   }, [orderedSkus, skuDetailUnsorted]);
 
+  // ── Vista Previa del bulk: calcula cambios y abre el modal ──
+  const previewBulk = React.useCallback((modo, metaMeses) => {
+    if (!canEdit || !skuDetail) return;
+    // Filtrar el universo según los toggles
+    let universo = skuDetail.slice();
+    if (bulkSoloFiltrados) {
+      // skuDetail YA está filtrado por searchFilter+categoriaFilter (se calcula con esos)
+      // así que no hay que re-filtrar; sólo confirmamos que NO se aplique a SKUs fuera del filtro.
+    }
+    if (bulkSoloSinStock) {
+      universo = universo.filter((s) => Number(s.stock) === 0);
+    }
+    // Excluir SKUs marcados como excluidos del envío
+    universo = universo.filter((s) => !excluidosSku.has(s.sku));
+
+    const cambios = {};
+    let cuentaCambios = 0;
+    let totalAntes = 0;
+    let totalDespues = 0;
+
+    universo.forEach((s) => {
+      const precio = Number(s.precioAAAcd) > 0 ? Number(s.precioAAAcd) : Number(s.precio) || 0;
+      const sugAnterior = sugeridoEdits[s.sku] !== undefined
+        ? Number(sugeridoEdits[s.sku])
+        : Number(s.sugerido) || 0;
+      let sugNuevo;
+      if (modo === 'reiniciar') {
+        sugNuevo = Number(s.sugerido) || 0;  // auto
+      } else {
+        sugNuevo = calcularSugeridoConMeta(s, metaMeses);
+      }
+      totalAntes += sugAnterior * precio;
+      totalDespues += sugNuevo * precio;
+      if (sugNuevo !== sugAnterior) {
+        cambios[s.sku] = sugNuevo;
+        cuentaCambios++;
+      }
+    });
+
+    setBulkPreview({
+      modo, metaMeses,
+      etiqueta: modo === 'reiniciar' ? 'Reiniciado' : ('Cobertura ' + metaMeses + ' meses (' + (metaMeses * 30) + 'd)'),
+      cambios, cuentaCambios,
+      universoSize: universo.length,
+      totalAntes, totalDespues,
+      diferencia: totalDespues - totalAntes,
+      modificadores: {
+        soloFiltrados: bulkSoloFiltrados && (searchFilter || categoriaFilter),
+        soloSinStock: bulkSoloSinStock,
+      },
+    });
+  }, [canEdit, skuDetail, bulkSoloFiltrados, bulkSoloSinStock, excluidosSku, sugeridoEdits, calcularSugeridoConMeta, searchFilter, categoriaFilter]);
+
+  // Confirma el bulk preview y aplica los cambios
+  const confirmarBulk = React.useCallback(async () => {
+    if (!bulkPreview) return;
+    if (bulkPreview.modo === 'reiniciar') {
+      // Borra TODOS los overrides (para los SKUs en el universo)
+      const cambiosVacios = {};
+      Object.keys(bulkPreview.cambios).forEach((sku) => { cambiosVacios[sku] = bulkPreview.cambios[sku]; });
+      // Snapshot
+      setUndoSnapshot({ edits: { ...sugeridoEdits }, etiqueta: 'Reiniciar' });
+      // Quitar overrides del state local (se mantienen los de SKUs no afectados)
+      setSugeridoEdits((prev) => {
+        const next = { ...prev };
+        Object.keys(bulkPreview.cambios).forEach((sku) => { delete next[sku]; });
+        return next;
+      });
+      // Borrar de BD
+      if (DB_CONFIGURED) {
+        const skus = Object.keys(bulkPreview.cambios);
+        for (let i = 0; i < skus.length; i += 50) {
+          const batch = skus.slice(i, i + 50);
+          await supabase.from('sugerido_overrides').delete()
+            .eq('cliente', clienteKey).in('sku', batch);
+        }
+      }
+      setMessage('↻ Reiniciado: ' + skus_count(bulkPreview.cuentaCambios) + ' volvieron a auto');
+    } else {
+      await aplicarBulkSugerido(bulkPreview.cambios, bulkPreview.etiqueta);
+    }
+    setBulkPreview(null);
+    function skus_count(n) { return n === 1 ? '1 SKU' : (n + ' SKUs'); }
+  }, [bulkPreview, aplicarBulkSugerido, sugeridoEdits, clienteKey]);
+
   // Export to Excel
   const handleSort = (col) => { if (sortCol === col) { setSortDir(sortDir === "desc" ? "asc" : "desc"); } else { setSortCol(col); setSortDir("desc"); } };
     const sortArrow = (col) => sortCol === col ? (sortDir === "desc" ? " \u25BC" : " \u25B2") : " \u25B7";
@@ -1493,6 +1721,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
         const baseRows = skuDetail
           .filter(s => {
+            // Excluidos del envío: nunca van al Excel
+            if (excluidosSku.has(s.sku)) return false;
             const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
             return sug > 0;
           })
@@ -1685,7 +1915,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         return `${d} ${meses[m-1]} ${y}`;
       } catch { return s; }
     };
-    const allRows = skuDetail.map(function(s) {
+    // Excluidos del envío: nunca van al Excel
+    const skuDetailFiltrado = skuDetail.filter(s => !excluidosSku.has(s.sku));
+    const allRows = skuDetailFiltrado.map(function(s) {
       const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
       const precio = esDigi
         ? (precioEdits[s.sku] !== undefined ? Number(precioEdits[s.sku]) : Number(s.precioAAAcd || 0))
@@ -1921,25 +2153,26 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       message && React.createElement("p", { className: `text-sm ${message.includes("Error") ? "text-red-600" : "text-green-600"}` }, message),
     ),
 
-    // ── 4 KPIs que apoyan el sugerido ──
-    // 1) SKUs en riesgo · 2) Total a sugerir · 3) Cumplimiento cuota · 4) Último envío
+    // ── 5 KPIs que apoyan el sugerido + strip mensual de cuotas ──
+    // 1) SKUs en riesgo · 2) Total a sugerir · 3) Cuota del mes · 4) Cumplimiento YTD · 5) Último envío
     aggs && kpis && (function(){
       const cliCfg = clienteKey === 'pcel' ? { cadenciaDias: 14, label: 'PCEL (cada 2 sem)' } : { cadenciaDias: 7, label: 'Digitalife (sem)' };
+      const MESES_LBL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
       // 1) SKUs en riesgo
       const numRiesgo = skusRiesgo.length;
       const piezasUrgentes = skusRiesgo.reduce((a, s) => a + (s.sugerido || 0), 0);
-      // 2) Total a sugerir (de kpis)
+      // 2) Total a sugerir
       const sugMonto = kpis.sugMonto || 0;
       const sugPiezas = kpis.sugPiezas || 0;
       const sugSkus = kpis.sugSkus || 0;
-      // 3) Cumplimiento cuota: usamos sell-in YTD vs cuota YTD si existe
-      const cumplPct = (kpis.cuotaYTD && kpis.cuotaYTD > 0)
-        ? (kpis.siYTD / kpis.cuotaYTD) * 100
-        : null;
-      const cuotaMesFalta = (kpis.cuotaMesActual && kpis.siMesActual != null)
-        ? Math.max(0, kpis.cuotaMesActual - kpis.siMesActual)
-        : null;
-      // 4) Último envío: la propuesta más reciente
+      // 3) Cuota del mes
+      const cuotaMes = kpis.cuotaMesActual || 0;
+      const siMes = kpis.siMesActual || 0;
+      const pctMes = cuotaMes > 0 ? (siMes / cuotaMes) * 100 : null;
+      const faltaMes = cuotaMes > 0 ? Math.max(0, cuotaMes - siMes) : 0;
+      // 4) Cumplimiento YTD
+      const cumplPct = (kpis.cuotaYTD && kpis.cuotaYTD > 0) ? (kpis.siYTD / kpis.cuotaYTD) * 100 : null;
+      // 5) Último envío
       const ultPropuesta = (propuestasHist || []).slice().sort((a,b)=>{
         const fa = new Date(a.fecha_propuesta || a.created_at).getTime();
         const fb = new Date(b.fecha_propuesta || b.created_at).getTime();
@@ -1950,57 +2183,118 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         : null;
       const cadenciaVencida = diasSinEnviar != null && diasSinEnviar >= cliCfg.cadenciaDias;
 
-      return React.createElement('div', {
-        style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }
-      },
-        // 1) SKUs en riesgo
+      return React.createElement('div', null,
+        // ── Grid de 5 tarjetas ──
         React.createElement('div', {
-          className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
-          style: { borderColor: numRiesgo > 0 ? '#EF4444' : '#10B981' }
+          style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }
         },
-          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDD34 SKUs en riesgo'),
-          React.createElement('p', { style: { fontSize: 28, fontWeight: 700, color: numRiesgo > 0 ? '#B91C1C' : '#065F46', marginBottom: 2 } }, numRiesgo.toLocaleString('es-MX')),
-          React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
-            piezasUrgentes > 0
-              ? (piezasUrgentes.toLocaleString('es-MX') + ' pzs sugeridas urgentes')
-              : (numRiesgo === 0 ? '✓ Sin riesgo de desabasto' : 'Sin sugerido (revisar Acteck)'))
+          // 1) SKUs en riesgo
+          React.createElement('div', {
+            className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
+            style: { borderColor: numRiesgo > 0 ? '#EF4444' : '#10B981' }
+          },
+            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDD34 SKUs en riesgo'),
+            React.createElement('p', { style: { fontSize: 28, fontWeight: 700, color: numRiesgo > 0 ? '#B91C1C' : '#065F46', marginBottom: 2 } }, numRiesgo.toLocaleString('es-MX')),
+            React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
+              piezasUrgentes > 0
+                ? (piezasUrgentes.toLocaleString('es-MX') + ' pzs sugeridas urgentes')
+                : (numRiesgo === 0 ? '✓ Sin riesgo de desabasto' : 'Sin sugerido (revisar Acteck)'))
+          ),
+          // 2) Total a sugerir
+          React.createElement('div', {
+            className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
+            style: { borderColor: '#10B981', background: sugMonto > 0 ? '#F0FDF4' : '#fff' }
+          },
+            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDCE6 Total a sugerir'),
+            React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: sugMonto > 0 ? '#047857' : '#94A3B8', marginBottom: 2 } }, formatMXN(sugMonto)),
+            React.createElement('p', { style: { fontSize: 11, color: '#64748B' } }, sugSkus + ' SKUs · ' + sugPiezas.toLocaleString('es-MX') + ' pzs')
+          ),
+          // 3) Cuota del mes (NUEVA)
+          React.createElement('div', {
+            className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
+            style: { borderColor: pctMes == null ? '#94A3B8' : pctMes >= 100 ? '#10B981' : pctMes >= 70 ? '#F59E0B' : '#EF4444' }
+          },
+            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDCC8 Cuota ' + MESES_LBL[new Date().getMonth()]),
+            React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: pctMes == null ? '#94A3B8' : pctMes >= 100 ? '#047857' : pctMes >= 70 ? '#B45309' : '#B91C1C', marginBottom: 2 } },
+              pctMes == null ? 'Sin cuota' : pctMes.toFixed(0) + '%'),
+            React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
+              pctMes == null
+                ? ''
+                : faltaMes > 0
+                  ? ('Faltan ' + formatMXN(faltaMes))
+                  : ('\u2713 Cuota cumplida'))
+          ),
+          // 4) Cumplimiento YTD
+          React.createElement('div', {
+            className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
+            style: { borderColor: cumplPct == null ? '#94A3B8' : cumplPct >= 90 ? '#10B981' : cumplPct >= 70 ? '#F59E0B' : '#EF4444' }
+          },
+            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83C\uDFAF Cumplimiento YTD'),
+            React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: cumplPct == null ? '#94A3B8' : cumplPct >= 90 ? '#047857' : cumplPct >= 70 ? '#B45309' : '#B91C1C', marginBottom: 2 } },
+              cumplPct == null ? 'Sin cuota' : cumplPct.toFixed(0) + '%'),
+            React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
+              kpis.cuotaYTD ? formatMXN(kpis.siYTD || 0) + ' / ' + formatMXN(kpis.cuotaYTD) : '')
+          ),
+          // 5) Último envío
+          React.createElement('div', {
+            className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
+            style: { borderColor: cadenciaVencida ? '#EF4444' : '#06B6D4' }
+          },
+            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDCC5 Último envío'),
+            React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: cadenciaVencida ? '#B91C1C' : '#0E7490', marginBottom: 2 } },
+              ultPropuesta
+                ? (diasSinEnviar === 0 ? 'Hoy' : (diasSinEnviar + ' días'))
+                : 'Nunca'),
+            React.createElement('p', { style: { fontSize: 11, color: cadenciaVencida ? '#B91C1C' : '#64748B', fontWeight: cadenciaVencida ? 600 : 400 } },
+              ultPropuesta
+                ? (cadenciaVencida ? '⚠ Toca enviar (' + cliCfg.label + ')' : 'Cadencia: ' + cliCfg.label)
+                : 'Cadencia: ' + cliCfg.label)
+          )
         ),
-        // 2) Total a sugerir
-        React.createElement('div', {
-          className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
-          style: { borderColor: '#10B981', background: sugMonto > 0 ? '#F0FDF4' : '#fff' }
+        // ── Strip mensual: 12 meses con cumplimiento de cuota ──
+        kpis.cumplimientoMensual && kpis.cumplimientoMensual.some(m => m.cuota > 0) && React.createElement('div', {
+          className: 'bg-white rounded-xl shadow-sm p-4 mt-3'
         },
-          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDCE6 Total a sugerir'),
-          React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: sugMonto > 0 ? '#047857' : '#94A3B8', marginBottom: 2 } }, formatMXN(sugMonto)),
-          React.createElement('p', { style: { fontSize: 11, color: '#64748B' } }, sugSkus + ' SKUs · ' + sugPiezas.toLocaleString('es-MX') + ' pzs')
-        ),
-        // 3) Cumplimiento cuota
-        React.createElement('div', {
-          className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
-          style: { borderColor: cumplPct == null ? '#94A3B8' : cumplPct >= 90 ? '#10B981' : cumplPct >= 70 ? '#F59E0B' : '#EF4444' }
-        },
-          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83C\uDFAF Cumplimiento cuota'),
-          React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: cumplPct == null ? '#94A3B8' : cumplPct >= 90 ? '#047857' : cumplPct >= 70 ? '#B45309' : '#B91C1C', marginBottom: 2 } },
-            cumplPct == null ? 'Sin cuota' : cumplPct.toFixed(0) + '%'),
-          React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
-            cuotaMesFalta != null && cuotaMesFalta > 0
-              ? ('Faltan ' + formatMXN(cuotaMesFalta) + ' del mes')
-              : (cumplPct != null ? 'YTD vs cuota YTD' : ''))
-        ),
-        // 4) Último envío
-        React.createElement('div', {
-          className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
-          style: { borderColor: cadenciaVencida ? '#EF4444' : '#06B6D4' }
-        },
-          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDCC5 Último envío'),
-          React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: cadenciaVencida ? '#B91C1C' : '#0E7490', marginBottom: 2 } },
-            ultPropuesta
-              ? (diasSinEnviar === 0 ? 'Hoy' : (diasSinEnviar + ' días'))
-              : 'Nunca'),
-          React.createElement('p', { style: { fontSize: 11, color: cadenciaVencida ? '#B91C1C' : '#64748B', fontWeight: cadenciaVencida ? 600 : 400 } },
-            ultPropuesta
-              ? (cadenciaVencida ? '⚠ Toca enviar (' + cliCfg.label + ')' : 'Cadencia: ' + cliCfg.label)
-              : 'Cadencia: ' + cliCfg.label)
+          React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 } },
+            React.createElement('p', { style: { fontSize: 11, color: '#475569', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' } }, 'Cumplimiento mensual'),
+            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8' } }, 'Cuota mín. vs Sell-In real · ' + new Date().getFullYear())
+          ),
+          React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 6 } },
+            kpis.cumplimientoMensual.map((m) => {
+              const isFut = m.esFuturo;
+              const isAct = m.esActual;
+              const isOk = m.pct != null && m.pct >= 100;
+              const isNear = m.pct != null && m.pct >= 70 && m.pct < 100;
+              const isLow = m.pct != null && m.pct < 70;
+              const bg = isFut ? '#F8FAFC'
+                : m.cuota === 0 ? '#F1F5F9'
+                : isOk ? '#D1FAE5'
+                : isNear ? '#FEF3C7'
+                : '#FEE2E2';
+              const txt = isFut ? '#94A3B8'
+                : m.cuota === 0 ? '#94A3B8'
+                : isOk ? '#065F46'
+                : isNear ? '#B45309'
+                : '#B91C1C';
+              return React.createElement('div', {
+                key: m.mes,
+                style: {
+                  background: bg,
+                  border: isAct ? '2px solid #1E40AF' : '1px solid #E2E8F0',
+                  borderRadius: 8,
+                  padding: '8px 4px',
+                  textAlign: 'center',
+                },
+                title: m.cuota === 0
+                  ? MESES_LBL[m.mes-1] + ': sin cuota'
+                  : MESES_LBL[m.mes-1] + ': ' + formatMXN(m.sellIn) + ' / ' + formatMXN(m.cuota) + ' (' + (m.pct != null ? m.pct.toFixed(0) + '%' : '—') + ')',
+              },
+                React.createElement('p', { style: { fontSize: 10, color: '#64748B', fontWeight: 600, marginBottom: 2 } }, MESES_LBL[m.mes-1]),
+                React.createElement('p', { style: { fontSize: 13, fontWeight: 700, color: txt, lineHeight: 1.1 } },
+                  isFut ? '—' : (m.cuota === 0 ? '—' : (isOk ? '✓' : (m.pct != null ? m.pct.toFixed(0) + '%' : '—'))))
+              );
+            })
+          )
         )
       );
     })(),
@@ -2050,6 +2344,88 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
               }, "\uD83D\uDCE5 Exportar Excel"),
             ),
           ),
+
+          // ═══ TOOLBAR DE SUGERIDO EN BULK ═══
+          // Botones para aplicar fórmula de cobertura: Mínimo (60d), Normal (90d), Agresivo (120d)
+          // Modificadores: Aplicar a filtrados, Solo SKUs sin stock
+          // Acciones: Reiniciar, Deshacer
+          canEdit && React.createElement("div", {
+            style: {
+              display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center",
+              padding: 10, marginBottom: 12, borderRadius: 8,
+              background: "#F8FAFC", border: "1px solid #E2E8F0"
+            }
+          },
+            React.createElement("span", { style: { fontSize: 11, fontWeight: 600, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginRight: 4 } }, "\uD83C\uDFC1 Sugerido en bulk:"),
+            // Mínimo (60d)
+            React.createElement("button", {
+              onClick: () => previewBulk('minimo', 2),
+              title: "Recalcula con cobertura objetivo de 2 meses (60 días). Lo justo.",
+              style: { padding: "6px 12px", background: "#fff", color: "#065F46", border: "1px solid #6EE7B7", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }
+            }, "\uD83D\uDFE2 Mínimo (60d)"),
+            // Normal (90d)
+            React.createElement("button", {
+              onClick: () => previewBulk('normal', 3),
+              title: "Cobertura objetivo de 3 meses (90 días). Recomendado.",
+              style: { padding: "6px 12px", background: "#fff", color: "#1E40AF", border: "1px solid #93C5FD", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }
+            }, "\uD83D\uDFE1 Normal (90d)"),
+            // Agresivo (120d)
+            React.createElement("button", {
+              onClick: () => previewBulk('agresivo', 4),
+              title: "Cobertura objetivo de 4 meses (120 días). Empuja stock al cliente.",
+              style: { padding: "6px 12px", background: "#fff", color: "#B91C1C", border: "1px solid #FCA5A5", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }
+            }, "\uD83D\uDD34 Agresivo (120d)"),
+            // Separador
+            React.createElement("span", { style: { width: 1, height: 22, background: "#E2E8F0" } }),
+            // Reiniciar
+            React.createElement("button", {
+              onClick: () => previewBulk('reiniciar', null),
+              title: "Borra todos los overrides manuales. Vuelve al sugerido auto-calculado.",
+              style: { padding: "6px 12px", background: "#fff", color: "#475569", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }
+            }, "↻ Reiniciar"),
+            // Deshacer (sólo si hay snapshot)
+            React.createElement("button", {
+              onClick: deshacerBulk,
+              disabled: !undoSnapshot,
+              title: undoSnapshot ? ("Deshacer: " + undoSnapshot.etiqueta) : "Nada que deshacer",
+              style: {
+                padding: "6px 12px",
+                background: undoSnapshot ? "#FFFBEB" : "#F1F5F9",
+                color: undoSnapshot ? "#92400E" : "#94A3B8",
+                border: "1px solid " + (undoSnapshot ? "#FDE68A" : "#E2E8F0"),
+                borderRadius: 6, fontSize: 12, fontWeight: 600,
+                cursor: undoSnapshot ? "pointer" : "not-allowed"
+              }
+            }, "↶ Deshacer"),
+            // Modificadores
+            React.createElement("span", { style: { width: 1, height: 22, background: "#E2E8F0" } }),
+            React.createElement("label", {
+              style: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#475569", cursor: "pointer", userSelect: "none", padding: "4px 8px", borderRadius: 6, background: bulkSoloFiltrados ? "#EEF2FF" : "transparent" }
+            },
+              React.createElement("input", {
+                type: "checkbox", checked: bulkSoloFiltrados,
+                onChange: (e) => setBulkSoloFiltrados(e.target.checked),
+                style: { cursor: "pointer" }
+              }),
+              "Sólo filtrados"
+            ),
+            React.createElement("label", {
+              style: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#475569", cursor: "pointer", userSelect: "none", padding: "4px 8px", borderRadius: 6, background: bulkSoloSinStock ? "#FEF2F2" : "transparent" }
+            },
+              React.createElement("input", {
+                type: "checkbox", checked: bulkSoloSinStock,
+                onChange: (e) => setBulkSoloSinStock(e.target.checked),
+                style: { cursor: "pointer" }
+              }),
+              "Sólo sin stock"
+            ),
+            // Excluidos del envío (info badge)
+            excluidosSku.size > 0 && React.createElement("span", {
+              style: { marginLeft: "auto", fontSize: 11, color: "#92400E", background: "#FEF3C7", padding: "4px 8px", borderRadius: 6, fontWeight: 600 },
+              title: "SKUs excluidos del envío: " + [...excluidosSku].join(", ")
+            }, "\uD83D\uDEAB " + excluidosSku.size + " excluidos")
+          ),
+
         React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflowY: "auto" } },
           React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
             React.createElement("thead", {},
@@ -2100,11 +2476,38 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             ),
             React.createElement("tbody", {},
               skuDetail.map(function(s, idx) {
-                return React.createElement("tr", { key: s.sku, style: { borderBottom: "1px solid #F1F5F9", background: idx % 2 === 0 ? "#fff" : "#FAFBFC" } },
+                const excluido = excluidosSku.has(s.sku);
+                const rowBg = excluido
+                  ? "#F1F5F9"
+                  : (idx % 2 === 0 ? "#fff" : "#FAFBFC");
+                const rowOpacity = excluido ? 0.55 : 1;
+                return React.createElement("tr", {
+                  key: s.sku,
+                  style: { borderBottom: "1px solid #F1F5F9", background: rowBg, opacity: rowOpacity },
+                  title: excluido ? "Excluido del envío. Click en 🚫 para incluir." : undefined,
+                },
                   // PCEL: primera columna es SKU Cliente (numérico, s.sku), segunda es SKU (modelo = s.modelo)
                   // Otros clientes: una sola columna SKU (= s.sku)
-                  (clienteKey === "pcel") && React.createElement("td", { key: "td-skuc", style: { padding: "6px", fontWeight: 500, color: "#475569", whiteSpace: "nowrap", fontSize: 11 } }, s.sku),
-                  React.createElement("td", { style: { padding: "6px", fontWeight: 500, color: "#1E293B", whiteSpace: "nowrap", fontSize: 11 } }, clienteKey === "pcel" ? (s.modelo || "—") : s.sku),
+                  (clienteKey === "pcel") && React.createElement("td", { key: "td-skuc", style: { padding: "6px", fontWeight: 500, color: "#475569", whiteSpace: "nowrap", fontSize: 11 } },
+                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } },
+                      canEdit && React.createElement("button", {
+                        onClick: (e) => { e.stopPropagation(); toggleExcluirSku(s.sku); },
+                        title: excluido ? "Incluir en el envío" : "Excluir este SKU del envío",
+                        style: { background: "transparent", border: "none", cursor: "pointer", padding: 0, fontSize: 12, lineHeight: 1, opacity: excluido ? 1 : 0.35 }
+                      }, excluido ? "✓" : "🚫"),
+                      React.createElement("span", null, s.sku)
+                    )
+                  ),
+                  React.createElement("td", { style: { padding: "6px", fontWeight: 500, color: "#1E293B", whiteSpace: "nowrap", fontSize: 11 } },
+                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } },
+                      canEdit && clienteKey !== "pcel" && React.createElement("button", {
+                        onClick: (e) => { e.stopPropagation(); toggleExcluirSku(s.sku); },
+                        title: excluido ? "Incluir en el envío" : "Excluir este SKU del envío",
+                        style: { background: "transparent", border: "none", cursor: "pointer", padding: 0, fontSize: 12, lineHeight: 1, opacity: excluido ? 1 : 0.35 }
+                      }, excluido ? "✓" : "🚫"),
+                      React.createElement("span", null, clienteKey === "pcel" ? (s.modelo || "—") : s.sku)
+                    )
+                  ),
                   React.createElement("td", { style: { padding: "6px", fontSize: 11, maxWidth: 100, whiteSpace: "nowrap" }, title: s.roadmap || "Sin roadmap" },
                     (function() {
                       var rm = s.roadmap || "";
@@ -2545,6 +2948,69 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 );
               })
             )
+          )
+        )
+      ),
+
+      // ═══ MODAL DE VISTA PREVIA DEL BULK ═══
+      bulkPreview && React.createElement("div", {
+        style: {
+          position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 100,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 20
+        },
+        onClick: () => setBulkPreview(null)
+      },
+        React.createElement("div", {
+          style: { background: "#fff", borderRadius: 14, padding: 24, maxWidth: 480, width: "100%", boxShadow: "0 20px 50px rgba(0,0,0,0.25)" },
+          onClick: (e) => e.stopPropagation()
+        },
+          React.createElement("h3", { style: { margin: 0, fontSize: 18, fontWeight: 700, color: "#1E293B", marginBottom: 8 } },
+            "Vista previa: " + bulkPreview.etiqueta),
+          React.createElement("p", { style: { fontSize: 13, color: "#64748B", marginBottom: 16 } },
+            bulkPreview.cuentaCambios === 0
+              ? "Ningún SKU cambia con esta operación."
+              : ("Esto cambiará " + bulkPreview.cuentaCambios + " SKUs (" + bulkPreview.universoSize + " evaluados)")
+          ),
+          // Modificadores activos
+          (bulkPreview.modificadores.soloFiltrados || bulkPreview.modificadores.soloSinStock) &&
+            React.createElement("div", {
+              style: { fontSize: 11, color: "#92400E", background: "#FEF3C7", padding: "6px 10px", borderRadius: 6, marginBottom: 12 }
+            },
+              "Filtros activos: ",
+              bulkPreview.modificadores.soloFiltrados && React.createElement("span", null, "sólo filtrados"),
+              bulkPreview.modificadores.soloFiltrados && bulkPreview.modificadores.soloSinStock && " · ",
+              bulkPreview.modificadores.soloSinStock && React.createElement("span", null, "sólo sin stock")
+            ),
+          // Resumen $
+          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 } },
+            React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: 12 } },
+              React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", marginBottom: 4 } }, "Total ANTES"),
+              React.createElement("p", { style: { fontSize: 18, fontWeight: 700, color: "#475569" } }, formatMXN(bulkPreview.totalAntes))
+            ),
+            React.createElement("div", { style: { background: bulkPreview.diferencia >= 0 ? "#F0FDF4" : "#FEF2F2", borderRadius: 8, padding: 12 } },
+              React.createElement("p", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", marginBottom: 4 } }, "Total DESPUÉS"),
+              React.createElement("p", { style: { fontSize: 18, fontWeight: 700, color: bulkPreview.diferencia >= 0 ? "#047857" : "#B91C1C" } }, formatMXN(bulkPreview.totalDespues))
+            )
+          ),
+          React.createElement("p", { style: { fontSize: 13, marginBottom: 18, color: bulkPreview.diferencia >= 0 ? "#047857" : "#B91C1C", fontWeight: 600 } },
+            (bulkPreview.diferencia >= 0 ? "+" : "") + formatMXN(bulkPreview.diferencia) + " de diferencia"
+          ),
+          React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end" } },
+            React.createElement("button", {
+              onClick: () => setBulkPreview(null),
+              style: { padding: "8px 16px", background: "#fff", color: "#475569", border: "1px solid #CBD5E1", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }
+            }, "Cancelar"),
+            React.createElement("button", {
+              onClick: confirmarBulk,
+              disabled: bulkPreview.cuentaCambios === 0,
+              style: {
+                padding: "8px 18px",
+                background: bulkPreview.cuentaCambios === 0 ? "#CBD5E1" : "#1E40AF",
+                color: "#fff", border: "none", borderRadius: 8,
+                fontSize: 13, fontWeight: 600,
+                cursor: bulkPreview.cuentaCambios === 0 ? "not-allowed" : "pointer"
+              }
+            }, "Aplicar a " + bulkPreview.cuentaCambios + " SKUs")
           )
         )
       ),
