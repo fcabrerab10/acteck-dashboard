@@ -126,6 +126,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   // Modal Calculadora reversa de cuota (F)
   const [cuotaCalc, setCuotaCalc] = React.useState(null);
 
+  // ── Test mínimo N: solo declarar useMemo vacío ──
+  const propuestasConTracking = React.useMemo(() => [], []);
+
   // ── Recomendaciones del día (L) ──
   // SIN useEffect — solo lectura inicial de localStorage y escritura
   // explícita en el callback, para evitar loops de re-render.
