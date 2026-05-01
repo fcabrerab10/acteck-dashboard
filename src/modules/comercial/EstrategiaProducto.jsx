@@ -125,6 +125,31 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   const [bulkPreview, setBulkPreview] = React.useState(null); // { modo, scope, cambios:[], totalAntes, totalDespues }
   // Modal Calculadora reversa de cuota (F)
   const [cuotaCalc, setCuotaCalc] = React.useState(null);
+
+  // ── Recomendaciones del día (L) ──
+  // SIN useEffect — solo lectura inicial de localStorage y escritura
+  // explícita en el callback, para evitar loops de re-render.
+  const recoStorageKey = 'recoDescartadas-' + clienteKey + '-' + new Date().toISOString().slice(0, 10);
+  const [recoDescartadas, setRecoDescartadas] = React.useState(() => {
+    try {
+      if (typeof localStorage === 'undefined') return new Set();
+      const raw = localStorage.getItem(recoStorageKey);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch { return new Set(); }
+  });
+  const descartarReco = (id) => {
+    setRecoDescartadas((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      // Persistir directo aquí (sin useEffect → sin loop)
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(recoStorageKey, JSON.stringify([...next]));
+        }
+      } catch {}
+      return next;
+    });
+  };
   // Modificadores del scope del bulk (toolbar)
   const [bulkSoloFiltrados, setBulkSoloFiltrados] = React.useState(false);
   const [bulkSoloSinStock, setBulkSoloSinStock] = React.useState(false);
@@ -2455,6 +2480,73 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       message && React.createElement("p", { className: `text-sm ${message.includes("Error") ? "text-red-600" : "text-green-600"}` }, message),
     ),
 
+    // ── Banner de recomendaciones (L) ──
+    // Triggers: stock=0 + sellout reciente · faltante de cuota mes · productos
+    // nuevos sin propuesta inicial. Click "✓ Entendido" descarta hasta mañana.
+    aggs && kpis && skuDetail && (function() {
+      const recos = [];
+      // Trigger 1: SKUs con stock 0 en cliente + sellout reciente
+      const skusUrgentes = (skuDetail || []).filter((s) =>
+        Number(s.stock) === 0 && Number(s.promedio90d) > 0 && (Number(s.invActeck) > 0 || Number(s.invTransito) > 0)
+      );
+      if (skusUrgentes.length > 0) {
+        recos.push({
+          id: 'urgentes', icon: '🚨',
+          color: '#B91C1C', bg: '#FEF2F2', border: '#FECACA',
+          titulo: skusUrgentes.length + ' SKUs sin stock con venta reciente',
+          desc: 'El cliente está vendiendo estos SKUs pero ya se quedó en cero. Puedes surtir desde Acteck.',
+        });
+      }
+      // Trigger 3: faltante de cuota del mes
+      const cuotaMesAct = kpis.cuotaMesActual || 0;
+      const siMesAct = kpis.siMesActual || 0;
+      const faltaMesAct = Math.max(0, cuotaMesAct - siMesAct);
+      if (cuotaMesAct > 0 && faltaMesAct > 0) {
+        recos.push({
+          id: 'cuota-mes', icon: '🎯',
+          color: '#92400E', bg: '#FFFBEB', border: '#FDE68A',
+          titulo: 'Faltan ' + formatMXN(faltaMesAct) + ' para la cuota del mes',
+          desc: 'Abre la tarjeta "Cuota del mes" y usa el botón "Para mes" para que el dashboard te sugiera qué SKUs subir.',
+        });
+      }
+      // Trigger 4: productos nuevos sin propuesta inicial
+      const nuevosSinProp = (skusOportunidad && skusOportunidad.nuevos)
+        ? skusOportunidad.nuevos.filter((s) => {
+            const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido) || 0;
+            return sug === 0;
+          })
+        : [];
+      if (nuevosSinProp.length > 0) {
+        recos.push({
+          id: 'nuevos', icon: '🆕',
+          color: '#065F46', bg: '#ECFDF5', border: '#A7F3D0',
+          titulo: nuevosSinProp.length + ' productos nuevos para empujar',
+          desc: 'Llegan en tránsito y el cliente nunca los ha comprado. Asígnales una cantidad inicial en "Oportunidades de venta".',
+        });
+      }
+      const visibles = recos.filter((r) => !recoDescartadas.has(r.id));
+      if (visibles.length === 0) return null;
+      return React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 4 } },
+        visibles.map((r) =>
+          React.createElement('div', {
+            key: r.id,
+            style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: r.bg, border: '1px solid ' + r.border, borderRadius: 10 }
+          },
+            React.createElement('span', { style: { fontSize: 22, lineHeight: 1 } }, r.icon),
+            React.createElement('div', { style: { flex: 1, minWidth: 0 } },
+              React.createElement('p', { style: { fontSize: 13, fontWeight: 700, color: r.color, margin: 0 } }, r.titulo),
+              React.createElement('p', { style: { fontSize: 11, color: r.color, opacity: 0.85, margin: '2px 0 0' } }, r.desc)
+            ),
+            React.createElement('button', {
+              onClick: () => descartarReco(r.id),
+              title: 'Descartar — vuelve a aparecer mañana',
+              style: { padding: '4px 10px', background: 'transparent', color: r.color, border: '1px solid ' + r.border, borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }
+            }, '✓ Entendido')
+          )
+        )
+      );
+    })(),
+
     // ── 5 KPIs que apoyan el sugerido + strip mensual de cuotas ──
     // 1) SKUs en riesgo · 2) Total a sugerir · 3) Cuota del mes · 4) Cumplimiento YTD · 5) Último envío
     aggs && kpis && (function(){
@@ -3503,9 +3595,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Descripción"),
                       React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } },
                         oportunidadTab === 'nuevos' ? "Tránsito" : "Inv Acteck"),
+                      React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Fecha arribo"),
                       React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Precio AAA"),
-                      React.createElement("th", { style: { width: 130 } }),
-                      // Checkbox al lado DERECHO (columna final)
+                      // Checkbox al lado DERECHO (única acción — quitamos "+ Proponer" duplicado)
                       canEdit && React.createElement("th", { style: { width: 36, textAlign: "center", padding: "8px 4px" } },
                         React.createElement("input", {
                           type: "checkbox", checked: allMarcados,
@@ -3520,6 +3612,16 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       const cantidad = oportunidadTab === 'nuevos' ? Number(s.invTransito) : Number(s.invActeck);
                       const precio = Number(s.precioAAAcd) > 0 ? Number(s.precioAAAcd) : Number(s.precio) || 0;
                       const marcado = seleccionadosOpor.has(s.sku);
+                      // Formato fecha corta
+                      const fechaArribo = s.arriboFecha
+                        ? (function() {
+                            try {
+                              const [y, m, d] = String(s.arriboFecha).slice(0, 10).split('-');
+                              const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+                              return parseInt(d, 10) + ' ' + meses[parseInt(m, 10) - 1] + ' ' + String(y).slice(2);
+                            } catch { return s.arriboFecha; }
+                          })()
+                        : '—';
                       return React.createElement("tr", {
                         key: s.sku,
                         style: { borderBottom: "1px solid #F1F5F9", background: marcado ? "#EEF2FF" : (idx % 2 === 0 ? "#fff" : "#FAFBFC") }
@@ -3536,27 +3638,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                         React.createElement("td", { style: { padding: "8px 10px", color: "#475569", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.descripcion },
                           (s.descripcion || "").slice(0, 60)),
                         React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E293B", fontWeight: 600 } }, cantidad.toLocaleString("es-MX")),
+                        React.createElement("td", { style: { padding: "8px 10px", color: s.arriboFecha ? "#475569" : "#CBD5E1", fontSize: 11 } }, fechaArribo),
                         React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#1E40AF" } }, precio > 0 ? formatMXN(precio) : "—"),
-                        React.createElement("td", { style: { padding: "6px 10px", textAlign: "right" } },
-                          canEdit && React.createElement("button", {
-                            onClick: () => {
-                              if (!propPersonalizada) {
-                                abrirPropPersonalizada();
-                                setTimeout(() => agregarSkuAPropPersonalizada(s), 50);
-                              } else {
-                                agregarSkuAPropPersonalizada(s);
-                              }
-                            },
-                            title: "Agregar este SKU directamente a propuesta personalizada",
-                            style: { padding: "4px 10px", background: "#7C3AED", color: "#fff", border: "none", borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: "pointer" }
-                          }, "+ Proponer")
-                        ),
                         // Checkbox al lado DERECHO
                         canEdit && React.createElement("td", { style: { textAlign: "center", padding: "6px 4px" } },
                           React.createElement("input", {
                             type: "checkbox", checked: marcado,
                             onChange: () => toggleSeleccionOpor(s.sku),
-                            title: "Marcar para agregar en bulk"
+                            title: "Marcar para agregar a propuesta personalizada"
                           })
                         )
                       );
