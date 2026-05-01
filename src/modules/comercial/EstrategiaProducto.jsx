@@ -1061,7 +1061,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     let siYTD = 0;
     datos.sellIn.forEach((r) => {
       if (Number(r.anio) === anioActual && Number(r.mes) <= mesActualNum) {
-        siYTD += Number(r.monto) || 0;
+        siYTD += Number(r.monto_pesos) || 0;
       }
     });
     let cuotaYTD = 0;
@@ -1078,7 +1078,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     // Sell-In del mes actual
     datos.sellIn.forEach((r) => {
       if (Number(r.anio) === anioActual && Number(r.mes) === mesActualNum) {
-        siMesActual += Number(r.monto) || 0;
+        siMesActual += Number(r.monto_pesos) || 0;
       }
     });
 
@@ -1093,7 +1093,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     datos.sellIn.forEach((r) => {
       if (Number(r.anio) === anioActual) {
         const m = Number(r.mes);
-        siPorMes[m] = (siPorMes[m] || 0) + (Number(r.monto) || 0);
+        siPorMes[m] = (siPorMes[m] || 0) + (Number(r.monto_pesos) || 0);
       }
     });
     const cumplimientoMensual = [];
@@ -1605,6 +1605,30 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     skuDetailUnsorted.forEach(s => { if (!seen.has(s.sku)) ordered.push(s); });
     return ordered;
   }, [orderedSkus, skuDetailUnsorted]);
+
+  // ── KPIs derivados del Detalle por SKU (fuente de verdad) ──
+  // Antes `kpis.sugMonto/sugPiezas/sugSkus` se calculaban con una fórmula
+  // simplificada distinta de la real del Detalle, así que nunca cuadraban.
+  // Estos sí cuadran porque iteran sobre el mismo skuDetail que se renderiza,
+  // respetando overrides manuales (sugeridoEdits) y SKUs excluidos.
+  const kpisSugerido = React.useMemo(() => {
+    if (!skuDetail || skuDetail.length === 0) return { sugMonto: 0, sugPiezas: 0, sugSkus: 0 };
+    let sugMonto = 0, sugPiezas = 0, sugSkus = 0;
+    skuDetail.forEach((s) => {
+      if (excluidosSku.has(s.sku)) return;
+      const sug = sugeridoEdits[s.sku] !== undefined
+        ? Number(sugeridoEdits[s.sku])
+        : Number(s.sugerido) || 0;
+      if (sug <= 0) return;
+      const precio = Number(s.precioAAAcd) > 0
+        ? (precioEdits[s.sku] !== undefined ? Number(precioEdits[s.sku]) : Number(s.precioAAAcd))
+        : Number(s.precio) || 0;
+      sugPiezas += sug;
+      sugMonto += sug * precio;
+      sugSkus += 1;
+    });
+    return { sugMonto, sugPiezas, sugSkus };
+  }, [skuDetail, sugeridoEdits, precioEdits, excluidosSku]);
 
   // ── Vista Previa del bulk: calcula cambios y abre el modal ──
   const previewBulk = React.useCallback((modo, metaMeses) => {
@@ -2161,13 +2185,29 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       // 1) SKUs en riesgo
       const numRiesgo = skusRiesgo.length;
       const piezasUrgentes = skusRiesgo.reduce((a, s) => a + (s.sugerido || 0), 0);
-      // 2) Total a sugerir
-      const sugMonto = kpis.sugMonto || 0;
-      const sugPiezas = kpis.sugPiezas || 0;
-      const sugSkus = kpis.sugSkus || 0;
-      // 3) Cuota del mes
-      const cuotaMes = kpis.cuotaMesActual || 0;
-      const siMes = kpis.siMesActual || 0;
+      // 2) Total a sugerir — derivado del Detalle por SKU (fuente de verdad)
+      const sugMonto = (kpisSugerido && kpisSugerido.sugMonto) || 0;
+      const sugPiezas = (kpisSugerido && kpisSugerido.sugPiezas) || 0;
+      const sugSkus = (kpisSugerido && kpisSugerido.sugSkus) || 0;
+      // 3) Cuota del mes — si el mes actual aún no tiene sell-in cargado,
+      // usamos el último mes con datos (avisamos al usuario en el subtítulo).
+      const mesActualReal = new Date().getMonth() + 1;
+      let mesParaTarjeta = mesActualReal;
+      let cuotaMes = kpis.cuotaMesActual || 0;
+      let siMes = kpis.siMesActual || 0;
+      let mesEsActualReal = true;
+      if (siMes === 0 && kpis.cumplimientoMensual) {
+        // Buscar el último mes con sell-in registrado
+        const ultimoConDatos = [...kpis.cumplimientoMensual]
+          .filter(m => m.sellIn > 0 && !m.esFuturo)
+          .sort((a, b) => b.mes - a.mes)[0];
+        if (ultimoConDatos) {
+          mesParaTarjeta = ultimoConDatos.mes;
+          mesEsActualReal = false;
+          siMes = ultimoConDatos.sellIn;
+          cuotaMes = ultimoConDatos.cuota;
+        }
+      }
       const pctMes = cuotaMes > 0 ? (siMes / cuotaMes) * 100 : null;
       const faltaMes = cuotaMes > 0 ? Math.max(0, cuotaMes - siMes) : 0;
       // 4) Cumplimiento YTD
@@ -2209,20 +2249,19 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: sugMonto > 0 ? '#047857' : '#94A3B8', marginBottom: 2 } }, formatMXN(sugMonto)),
             React.createElement('p', { style: { fontSize: 11, color: '#64748B' } }, sugSkus + ' SKUs · ' + sugPiezas.toLocaleString('es-MX') + ' pzs')
           ),
-          // 3) Cuota del mes (NUEVA)
+          // 3) Cuota del mes
           React.createElement('div', {
             className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
             style: { borderColor: pctMes == null ? '#94A3B8' : pctMes >= 100 ? '#10B981' : pctMes >= 70 ? '#F59E0B' : '#EF4444' }
           },
-            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDCC8 Cuota ' + MESES_LBL[new Date().getMonth()]),
+            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } },
+              '\uD83D\uDCC8 Cuota ' + MESES_LBL[mesParaTarjeta - 1] + (mesEsActualReal ? '' : ' (último con datos)')),
             React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: pctMes == null ? '#94A3B8' : pctMes >= 100 ? '#047857' : pctMes >= 70 ? '#B45309' : '#B91C1C', marginBottom: 2 } },
               pctMes == null ? 'Sin cuota' : pctMes.toFixed(0) + '%'),
             React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
               pctMes == null
                 ? ''
-                : faltaMes > 0
-                  ? ('Faltan ' + formatMXN(faltaMes))
-                  : ('\u2713 Cuota cumplida'))
+                : (formatMXN(siMes) + ' / ' + formatMXN(cuotaMes)))
           ),
           // 4) Cumplimiento YTD
           React.createElement('div', {
