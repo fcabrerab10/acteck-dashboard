@@ -3407,20 +3407,21 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 React.createElement("table", { style: { width: "100%", fontSize: 12, borderCollapse: "collapse" } },
                   React.createElement("thead", null,
                     React.createElement("tr", { style: { background: "#F8FAFC", borderBottom: "1px solid #E2E8F0", position: "sticky", top: 0 } },
-                      canEdit && React.createElement("th", { style: { width: 32, textAlign: "center", padding: "8px 4px" } },
-                        React.createElement("input", {
-                          type: "checkbox", checked: allMarcados,
-                          onChange: () => allMarcados ? limpiarSeleccionOpor() : seleccionarTodosOpor(lista),
-                          title: "Seleccionar todos"
-                        })
-                      ),
                       React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "SKU"),
                       React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Roadmap"),
                       React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Descripción"),
                       React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } },
                         oportunidadTab === 'nuevos' ? "Tránsito" : "Inv Acteck"),
                       React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Precio AAA"),
-                      React.createElement("th", { style: { width: 130 } })
+                      React.createElement("th", { style: { width: 130 } }),
+                      // Checkbox al lado DERECHO (columna final)
+                      canEdit && React.createElement("th", { style: { width: 36, textAlign: "center", padding: "8px 4px" } },
+                        React.createElement("input", {
+                          type: "checkbox", checked: allMarcados,
+                          onChange: () => allMarcados ? limpiarSeleccionOpor() : seleccionarTodosOpor(lista),
+                          title: "Seleccionar todos"
+                        })
+                      )
                     )
                   ),
                   React.createElement("tbody", null,
@@ -3432,13 +3433,6 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                         key: s.sku,
                         style: { borderBottom: "1px solid #F1F5F9", background: marcado ? "#EEF2FF" : (idx % 2 === 0 ? "#fff" : "#FAFBFC") }
                       },
-                        canEdit && React.createElement("td", { style: { textAlign: "center", padding: "6px 4px" } },
-                          React.createElement("input", {
-                            type: "checkbox", checked: marcado,
-                            onChange: () => toggleSeleccionOpor(s.sku),
-                            title: "Marcar para agregar en bulk"
-                          })
-                        ),
                         React.createElement("td", { style: { padding: "8px 10px", fontFamily: "ui-monospace,monospace", fontWeight: 600, color: "#1E293B" } }, s.sku),
                         React.createElement("td", { style: { padding: "8px 10px" } },
                           s.roadmap && (function() {
@@ -3465,6 +3459,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                             title: "Agregar este SKU directamente a propuesta personalizada",
                             style: { padding: "4px 10px", background: "#7C3AED", color: "#fff", border: "none", borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: "pointer" }
                           }, "+ Proponer")
+                        ),
+                        // Checkbox al lado DERECHO
+                        canEdit && React.createElement("td", { style: { textAlign: "center", padding: "6px 4px" } },
+                          React.createElement("input", {
+                            type: "checkbox", checked: marcado,
+                            onChange: () => toggleSeleccionOpor(s.sku),
+                            title: "Marcar para agregar en bulk"
+                          })
                         )
                       );
                     })
