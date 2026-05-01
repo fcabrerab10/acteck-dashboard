@@ -129,6 +129,88 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   // Tarjeta KPI desplegable abierta ('cuotaMes' | 'cumplYTD' | null)
   const [kpiAbierto, setKpiAbierto] = React.useState(null);
 
+  // ── Propuesta personalizada (A) ──
+  // Modal con search → agregar SKU → editar cantidad/precio → Generar Excel.
+  const [propPersonalizada, setPropPersonalizada] = React.useState(null);
+  const abrirPropPersonalizada = () => setPropPersonalizada({
+    nombre: '', notas: '', skus: [], busqueda: '',
+  });
+  const cerrarPropPersonalizada = () => setPropPersonalizada(null);
+  const agregarSkuAPropPersonalizada = (skuItem) => {
+    setPropPersonalizada((prev) => {
+      if (!prev) return prev;
+      if (prev.skus.find((s) => s.sku === skuItem.sku)) return prev;
+      const precio = Number(skuItem.precioAAAcd) > 0 ? Number(skuItem.precioAAAcd) : Number(skuItem.precio) || 0;
+      return {
+        ...prev,
+        skus: [...prev.skus, { sku: skuItem.sku, descripcion: skuItem.descripcion, cantidad: 0, precio }],
+        busqueda: '',
+      };
+    });
+  };
+  const quitarSkuDePropPersonalizada = (sku) => {
+    setPropPersonalizada((prev) => prev ? { ...prev, skus: prev.skus.filter((s) => s.sku !== sku) } : prev);
+  };
+  const actualizarSkuPropPersonalizada = (sku, campo, valor) => {
+    setPropPersonalizada((prev) => prev ? {
+      ...prev,
+      skus: prev.skus.map((s) => s.sku === sku ? { ...s, [campo]: valor } : s),
+    } : prev);
+  };
+  const exportarPropPersonalizada = async () => {
+    if (!propPersonalizada || propPersonalizada.skus.length === 0) return;
+    const skusValidos = propPersonalizada.skus.filter((s) => Number(s.cantidad) > 0);
+    if (skusValidos.length === 0) { alert('Asigna cantidades > 0 a al menos un SKU.'); return; }
+    const XLSX = await loadSheetJS();
+    if (!XLSX) { alert('Error cargando librería Excel'); return; }
+    const piezasTotal = skusValidos.reduce((a, s) => a + Number(s.cantidad), 0);
+    const montoTotal = skusValidos.reduce((a, s) => a + (Number(s.cantidad) * Number(s.precio)), 0);
+    const rows = skusValidos.map((s) => ({
+      SKU: s.sku, 'Descripción': s.descripcion || '', 'Piezas': Number(s.cantidad),
+      'Precio': Math.round(Number(s.precio)), 'Total': Math.round(Number(s.cantidad) * Number(s.precio)),
+    }));
+    rows.push({ SKU: 'TOTAL', 'Descripción': '', 'Piezas': piezasTotal, 'Precio': '', 'Total': Math.round(montoTotal) });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const headers = Object.keys(rows[0]);
+    const moneyCols = new Set(['Precio', 'Total']);
+    const intCols = new Set(['Piezas']);
+    for (let r = 0; r < rows.length; r++) {
+      headers.forEach((h, cIdx) => {
+        const addr = XLSX.utils.encode_cell({ c: cIdx, r: r + 1 });
+        const cell = ws[addr];
+        if (!cell) return;
+        if (moneyCols.has(h) && typeof cell.v === 'number') { cell.t = 'n'; cell.z = '"$"#,##0'; }
+        else if (intCols.has(h) && typeof cell.v === 'number') { cell.t = 'n'; cell.z = '#,##0'; }
+      });
+    }
+    ws['!cols'] = [{ wch: 14 }, { wch: 55 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Propuesta');
+    const fecha = new Date().toISOString().slice(0, 10);
+    const nombreLimpio = (propPersonalizada.nombre || 'personalizada').replace(/[^a-z0-9-_]/gi, '_').toLowerCase();
+    XLSX.writeFile(wb, `propuesta-${clienteKey}-${nombreLimpio}-${fecha}.xlsx`);
+    if (DB_CONFIGURED) {
+      const nota = '[Personalizada] ' + (propPersonalizada.nombre || 'sin nombre') +
+        (propPersonalizada.notas ? ' · ' + propPersonalizada.notas : '');
+      try {
+        await supabase.from('propuestas_compra').insert({
+          cliente: clienteKey,
+          fecha: new Date().toISOString(),
+          filas: skusValidos,
+          skus_count: skusValidos.length,
+          piezas_total: piezasTotal,
+          monto_total: Math.round(montoTotal),
+          nota,
+          estatus: 'pendiente',
+        });
+        cargarPropuestasCompra();
+      } catch (e) { console.error('guardar prop personalizada:', e); }
+    }
+    setMessage(`✓ Propuesta personalizada generada: ${skusValidos.length} SKUs · ${formatMXN(montoTotal)}`);
+    setTimeout(() => setMessage(''), 5000);
+    cerrarPropPersonalizada();
+  };
+
   // Recalcula el sugerido aplicando una meta diferente. Replica los gates de
   // la fórmula original (MIN_COMPRA, cobertura > 4m, umbral) pero usando la
   // META que pasamos. Devuelve el nuevo sugerido (entero).
@@ -2660,6 +2742,13 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
               }),
               "Sólo sin stock"
             ),
+            // Botón Propuesta personalizada (A)
+            React.createElement("span", { style: { width: 1, height: 22, background: "#E2E8F0" } }),
+            React.createElement("button", {
+              onClick: abrirPropPersonalizada,
+              title: "Genera una propuesta solo con SKUs específicos que tú elijas",
+              style: { padding: "6px 12px", background: "#7C3AED", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }
+            }, "✨ Propuesta personalizada"),
             // Excluidos del envío (info badge)
             excluidosSku.size > 0 && React.createElement("span", {
               style: { marginLeft: "auto", fontSize: 11, color: "#92400E", background: "#FEF3C7", padding: "4px 8px", borderRadius: 6, fontWeight: 600 },
@@ -3255,6 +3344,152 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           )
         )
       ),
+
+      // ═══ MODAL: PROPUESTA PERSONALIZADA (A) ═══
+      propPersonalizada && (function() {
+        const totalPiezas = propPersonalizada.skus.reduce((a, s) => a + (Number(s.cantidad) || 0), 0);
+        const totalMonto = propPersonalizada.skus.reduce((a, s) => a + (Number(s.cantidad) * Number(s.precio) || 0), 0);
+        const q = (propPersonalizada.busqueda || "").toLowerCase().trim();
+        const sugerencias = q.length >= 2 && skuDetail
+          ? skuDetail.filter((s) =>
+              ((s.sku || "").toLowerCase().includes(q) || (s.descripcion || "").toLowerCase().includes(q)) &&
+              !propPersonalizada.skus.find((x) => x.sku === s.sku)
+            ).slice(0, 8)
+          : [];
+        return React.createElement("div", {
+          style: { position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
+          onClick: cerrarPropPersonalizada
+        },
+          React.createElement("div", {
+            style: { background: "#fff", borderRadius: 14, padding: 24, maxWidth: 720, width: "100%", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 50px rgba(0,0,0,0.25)" },
+            onClick: (e) => e.stopPropagation()
+          },
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 } },
+              React.createElement("div", null,
+                React.createElement("h3", { style: { margin: 0, fontSize: 18, fontWeight: 700, color: "#1E293B" } }, "✨ Propuesta personalizada"),
+                React.createElement("p", { style: { fontSize: 12, color: "#64748B", marginTop: 4 } }, "Selecciona SKUs específicos y cantidades. Genera un Excel separado.")
+              ),
+              React.createElement("button", { onClick: cerrarPropPersonalizada, style: { background: "transparent", border: "none", cursor: "pointer", color: "#94A3B8", fontSize: 20 }, title: "Cerrar" }, "✕")
+            ),
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 2fr", gap: 12, marginBottom: 16 } },
+              React.createElement("div", null,
+                React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: "#475569", display: "block", marginBottom: 4 } }, "Nombre"),
+                React.createElement("input", {
+                  type: "text", placeholder: "Ej. Lanzamiento Q3",
+                  value: propPersonalizada.nombre,
+                  onChange: (e) => setPropPersonalizada({ ...propPersonalizada, nombre: e.target.value }),
+                  style: { width: "100%", padding: "8px 10px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13 }
+                })
+              ),
+              React.createElement("div", null,
+                React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: "#475569", display: "block", marginBottom: 4 } }, "Notas (opcional)"),
+                React.createElement("input", {
+                  type: "text", placeholder: "Ej. Negociación con descuento especial",
+                  value: propPersonalizada.notas,
+                  onChange: (e) => setPropPersonalizada({ ...propPersonalizada, notas: e.target.value }),
+                  style: { width: "100%", padding: "8px 10px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13 }
+                })
+              )
+            ),
+            React.createElement("div", { style: { marginBottom: 8, position: "relative" } },
+              React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: "#475569", display: "block", marginBottom: 4 } }, "Agregar SKU"),
+              React.createElement("input", {
+                type: "text", placeholder: "Buscar por SKU o descripción...",
+                value: propPersonalizada.busqueda,
+                onChange: (e) => setPropPersonalizada({ ...propPersonalizada, busqueda: e.target.value }),
+                style: { width: "100%", padding: "8px 10px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13 }
+              }),
+              sugerencias.length > 0 && React.createElement("div", {
+                style: { position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 8, marginTop: 4, maxHeight: 220, overflowY: "auto", zIndex: 1, boxShadow: "0 4px 14px rgba(0,0,0,0.08)" }
+              },
+                sugerencias.map((s) =>
+                  React.createElement("div", {
+                    key: s.sku,
+                    onClick: () => agregarSkuAPropPersonalizada(s),
+                    style: { padding: "8px 12px", fontSize: 12, cursor: "pointer", borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", gap: 8 }
+                  },
+                    React.createElement("span", { style: { fontWeight: 600, color: "#1E293B" } }, s.sku),
+                    React.createElement("span", { style: { color: "#64748B", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, s.descripcion || "")
+                  )
+                )
+              )
+            ),
+            propPersonalizada.skus.length === 0
+              ? React.createElement("div", { style: { padding: 24, textAlign: "center", color: "#94A3B8", fontSize: 13, background: "#F8FAFC", borderRadius: 8, marginTop: 16 } },
+                  "Sin SKUs agregados todavía. Busca arriba y haz click para agregar.")
+              : React.createElement("div", { style: { marginTop: 16, border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" } },
+                  React.createElement("table", { style: { width: "100%", fontSize: 12, borderCollapse: "collapse" } },
+                    React.createElement("thead", null,
+                      React.createElement("tr", { style: { background: "#F8FAFC", borderBottom: "1px solid #E2E8F0" } },
+                        React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "SKU"),
+                        React.createElement("th", { style: { textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: 600 } }, "Descripción"),
+                        React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600, width: 90 } }, "Cantidad"),
+                        React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600, width: 110 } }, "Precio"),
+                        React.createElement("th", { style: { textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: 600, width: 100 } }, "Total"),
+                        React.createElement("th", { style: { width: 40 } })
+                      )
+                    ),
+                    React.createElement("tbody", null,
+                      propPersonalizada.skus.map((s) =>
+                        React.createElement("tr", { key: s.sku, style: { borderBottom: "1px solid #F1F5F9" } },
+                          React.createElement("td", { style: { padding: "6px 10px", fontFamily: "ui-monospace,monospace", fontWeight: 600, color: "#1E293B" } }, s.sku),
+                          React.createElement("td", { style: { padding: "6px 10px", color: "#475569", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.descripcion }, (s.descripcion || "").slice(0, 40)),
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "right" } },
+                            React.createElement("input", {
+                              type: "number", min: 0, value: s.cantidad,
+                              onChange: (e) => actualizarSkuPropPersonalizada(s.sku, "cantidad", Number(e.target.value) || 0),
+                              style: { width: 70, padding: "4px 6px", border: "1px solid #CBD5E1", borderRadius: 4, textAlign: "right", fontSize: 12 }
+                            })
+                          ),
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "right" } },
+                            React.createElement("input", {
+                              type: "number", min: 0, step: "0.01", value: s.precio,
+                              onChange: (e) => actualizarSkuPropPersonalizada(s.sku, "precio", Number(e.target.value) || 0),
+                              style: { width: 90, padding: "4px 6px", border: "1px solid #CBD5E1", borderRadius: 4, textAlign: "right", fontSize: 12 }
+                            })
+                          ),
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "#065F46" } },
+                            formatMXN(Number(s.cantidad) * Number(s.precio))),
+                          React.createElement("td", { style: { textAlign: "center" } },
+                            React.createElement("button", {
+                              onClick: () => quitarSkuDePropPersonalizada(s.sku),
+                              title: "Quitar SKU",
+                              style: { background: "transparent", border: "none", cursor: "pointer", color: "#EF4444", fontSize: 14, padding: 0 }
+                            }, "✕")
+                          )
+                        )
+                      )
+                    ),
+                    React.createElement("tfoot", null,
+                      React.createElement("tr", { style: { background: "#F0FDF4", borderTop: "2px solid #10B981" } },
+                        React.createElement("td", { colSpan: 2, style: { padding: "8px 10px", fontWeight: 700, color: "#065F46" } }, "TOTAL"),
+                        React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", fontWeight: 700, color: "#065F46" } }, totalPiezas.toLocaleString("es-MX")),
+                        React.createElement("td", null),
+                        React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", fontWeight: 800, color: "#065F46" } }, formatMXN(totalMonto)),
+                        React.createElement("td", null)
+                      )
+                    )
+                  )
+                ),
+            React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 18, paddingTop: 16, borderTop: "1px solid #F1F5F9" } },
+              React.createElement("button", {
+                onClick: cerrarPropPersonalizada,
+                style: { padding: "8px 16px", background: "#fff", color: "#475569", border: "1px solid #CBD5E1", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }
+              }, "Cancelar"),
+              React.createElement("button", {
+                onClick: exportarPropPersonalizada,
+                disabled: propPersonalizada.skus.length === 0 || totalPiezas === 0,
+                style: {
+                  padding: "8px 18px",
+                  background: (propPersonalizada.skus.length === 0 || totalPiezas === 0) ? "#CBD5E1" : "#7C3AED",
+                  color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  cursor: (propPersonalizada.skus.length === 0 || totalPiezas === 0) ? "not-allowed" : "pointer"
+                }
+              }, "📥 Generar Excel")
+            )
+          )
+        );
+      })(),
 
   );
 }
