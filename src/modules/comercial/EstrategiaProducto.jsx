@@ -126,6 +126,118 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   // Modal Calculadora reversa de cuota (F)
   const [cuotaCalc, setCuotaCalc] = React.useState(null);
 
+  // ── Tracking N: Sugerí vs Compraron (ventana 14 días exactos) ──
+  const propuestasConTracking = React.useMemo(() => {
+    try {
+      if (!propuestasHist || propuestasHist.length === 0 || !datos) return [];
+      const esPcel = clienteKey === 'pcel';
+
+      // Index Digitalife: sku → [{fecha, cantidad}]
+      const ventasDiarias = {};
+      if (!esPcel && Array.isArray(datos.selloutDiario)) {
+        datos.selloutDiario.forEach((r) => {
+          const sku = r.no_parte;
+          if (!sku || !r.fecha) return;
+          if (!ventasDiarias[sku]) ventasDiarias[sku] = [];
+          ventasDiarias[sku].push({ fecha: r.fecha, cantidad: Number(r.cantidad) || 0 });
+        });
+      }
+      // Index PCEL: sku → {anio-semana → vta_semana}
+      const ventasSemanales = {};
+      if (esPcel && Array.isArray(datos.selloutPcelSemanal)) {
+        datos.selloutPcelSemanal.forEach((r) => {
+          const sku = r.sku;
+          if (!sku || r.anio == null || r.semana == null) return;
+          if (!ventasSemanales[sku]) ventasSemanales[sku] = {};
+          const k = Number(r.anio) + '-' + Number(r.semana);
+          ventasSemanales[sku][k] = (ventasSemanales[sku][k] || 0) + (Number(r.vta_semana) || 0);
+        });
+      }
+      // Helper ISO week (lunes-domingo)
+      const isoWeek = (date) => {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return { anio: d.getUTCFullYear(), semana: Math.ceil((((d - yearStart) / 86400000) + 1) / 7) };
+      };
+      // Para PCEL: cuántos días de la ventana caen en cada semana ISO
+      const semanasEnVentana = (fechaInicio, dias) => {
+        const out = {};
+        for (let i = 0; i < dias; i++) {
+          const cur = new Date(fechaInicio.getTime() + i * 86400000);
+          const { anio, semana } = isoWeek(cur);
+          const k = anio + '-' + semana;
+          out[k] = (out[k] || 0) + 1;
+        }
+        return out;
+      };
+
+      return propuestasHist.map((p) => {
+        const filas = Array.isArray(p.filas) ? p.filas : [];
+        if (filas.length === 0) return { ...p, tracking: { sinFilas: true } };
+        const skusSug = filas.map((f) => ({
+          sku: String(f.SKU || f['SKU Cliente'] || f.sku || ''),
+          sugerido: Number(f.Sugerido || f.sugerido || 0),
+        })).filter((s) => s.sku && s.sugerido > 0);
+        if (skusSug.length === 0) return { ...p, tracking: { sinFilas: true } };
+
+        const fp = new Date(p.fecha || p.created_at);
+        const fechaIni = new Date(fp.getFullYear(), fp.getMonth(), fp.getDate());
+        const fechaFin = new Date(fechaIni.getTime() + 14 * 86400000);
+        const fechaIniISO = fechaIni.toISOString().slice(0, 10);
+        const fechaFinISO = fechaFin.toISOString().slice(0, 10);
+        const semanasVent = esPcel ? semanasEnVentana(fechaIni, 14) : null;
+
+        let totalSug = 0, totalCompr = 0, skusComprados = 0;
+        const detalle = skusSug.map((s) => {
+          let compTotal = 0;
+          if (esPcel) {
+            const sem = ventasSemanales[s.sku] || {};
+            for (const k in semanasVent) {
+              const ventaSem = sem[k] || 0;
+              const factor = semanasVent[k] / 7;
+              compTotal += ventaSem * factor;
+            }
+            compTotal = Math.round(compTotal);
+          } else {
+            const arr = ventasDiarias[s.sku] || [];
+            for (const v of arr) {
+              if (v.fecha >= fechaIniISO && v.fecha < fechaFinISO) compTotal += v.cantidad;
+            }
+          }
+          totalSug += s.sugerido;
+          totalCompr += Math.min(compTotal, s.sugerido);
+          if (compTotal > 0) skusComprados += 1;
+          return { sku: s.sku, sugerido: s.sugerido, comprado: compTotal };
+        });
+        const pct = totalSug > 0 ? (totalCompr / totalSug) * 100 : null;
+        return {
+          ...p,
+          tracking: {
+            totalSug, totalCompr, pct,
+            skusTotales: skusSug.length, skusComprados,
+            detalle,
+            ventana: '14 días desde ' + fechaIniISO,
+            metodoMatch: esPcel ? 'sellout_pcel semanal prorrateado' : 'sellout_detalle diario exacto',
+          },
+        };
+      });
+    } catch (err) {
+      console.error('propuestasConTracking error:', err);
+      return (propuestasHist || []).map(p => ({ ...p, tracking: { error: true } }));
+    }
+  }, [propuestasHist, datos, clienteKey]);
+
+  // Banner: % acierto promedio últimas 5 propuestas con datos
+  const aciertoPromedio = React.useMemo(() => {
+    const conDatos = (propuestasConTracking || [])
+      .filter((p) => p.tracking && !p.tracking.sinFilas && !p.tracking.error && p.tracking.pct != null)
+      .slice(0, 5);
+    if (conDatos.length === 0) return null;
+    const avg = conDatos.reduce((s, p) => s + p.tracking.pct, 0) / conDatos.length;
+    return { pct: avg, n: conDatos.length };
+  }, [propuestasConTracking]);
+
   // ── Recomendaciones del día (L) ──
   // SIN useEffect — solo lectura inicial de localStorage y escritura
   // explícita en el callback, para evitar loops de re-render.
@@ -858,8 +970,15 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       const { fetchSelloutSku, fetchInventarioCliente, fetchHistoricoComprasPcel, fetchSnapshotPcel } = await import('../../lib/pcelAdapter');
       const esPcel = clienteKey === 'pcel';
 
+      // Tracking N: necesitamos sellout con FECHA precisa para hacer ventana
+      // de 14 días desde cada propuesta exportada.
+      //   Digitalife → sellout_detalle (fecha exacta diaria)
+      //   PCEL       → sellout_pcel (anio + semana + vta_semana)
+      const hace120dias = new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10);
+
       const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap, precios,
-             histPcel, snapshotPcel, dglCategoriasRaw, cuotasMensualesRaw] = await Promise.all([
+             histPcel, snapshotPcel, dglCategoriasRaw, cuotasMensualesRaw,
+             selloutDiarioRaw, selloutPcelSemanalRaw] = await Promise.all([
         fetchAllPagesREST(`productos_cliente?select=*&cliente=eq.${clienteKey}`),
         fetchAllPagesREST(`sell_in_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
         fetchSelloutSku(clienteKey, 2026),
@@ -875,11 +994,18 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         // Sólo se pide cuando estamos en PCEL, para el mapeo modelo→categoría.
         esPcel ? fetchAllPagesREST(`productos_cliente?select=sku,categoria&cliente=eq.digitalife`) : Promise.resolve([]),
         // Cuotas mensuales para la tarjeta KPI #3 (cumplimiento de cuota).
-        // PCEL: si BD vacía, fallback a PCEL_REAL.cuota50M en kpis.
-        // Cuotas mensuales: la columna real es `cuota_min`/`cuota_ideal`
-        // (NO `monto` — eso pertenece a otra tabla; pedirla causa 42703).
         fetchAllPagesREST(`cuotas_mensuales?select=mes,cuota_min,cuota_ideal&cliente=eq.${clienteKey}&anio=eq.2026`),
+        // Tracking N — Digitalife: sellout_detalle de últimos 120 días
+        !esPcel
+          ? fetchAllPagesREST(`sellout_detalle?cliente=eq.digitalife&fecha=gte.${hace120dias}&select=fecha,no_parte,cantidad`).catch(() => [])
+          : Promise.resolve([]),
+        // Tracking N — PCEL: sellout_pcel con anio,semana,sku,vta_semana
+        esPcel
+          ? fetchAllPagesREST(`sellout_pcel?select=anio,semana,sku,vta_semana&order=anio.desc,semana.desc&limit=20000`).catch(() => [])
+          : Promise.resolve([]),
       ]);
+      const selloutDiario = selloutDiarioRaw || [];
+      const selloutPcelSemanal = selloutPcelSemanalRaw || [];
 
       // Para PCEL fallback: si la tabla cuotas_mensuales está vacía pero
       // PCEL_REAL.cuota50M está disponible, sintetizamos los registros.
@@ -996,6 +1122,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         roadmap,
         preciosBySku,
         cuotasMensuales,             // para tarjeta KPI #3 (cumplimiento cuota)
+        selloutDiario,               // tracking N - Digitalife (fecha exacta)
+        selloutPcelSemanal,          // tracking N - PCEL (semanal)
         // Extras específicos PCEL:
         histPcel,               // { [sku]: { piezas, facturas, promedio, primerFecha, ultimaFecha } }
         backOrderBySkuPcel,     // { [sku]: backOrder }
@@ -2812,6 +2940,23 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             );
           })()
         ),
+        // ── Mini banner: % acierto últimas propuestas (N) ──
+        aciertoPromedio && React.createElement('div', {
+          style: {
+            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px',
+            background: aciertoPromedio.pct >= 70 ? '#F0FDF4' : aciertoPromedio.pct >= 50 ? '#FFFBEB' : '#FEF2F2',
+            border: '1px solid ' + (aciertoPromedio.pct >= 70 ? '#A7F3D0' : aciertoPromedio.pct >= 50 ? '#FDE68A' : '#FECACA'),
+            borderRadius: 10, marginTop: 8
+          }
+        },
+          React.createElement('span', { style: { fontSize: 18 } }, aciertoPromedio.pct >= 70 ? '🎯' : aciertoPromedio.pct >= 50 ? '📊' : '⚠'),
+          React.createElement('div', { style: { flex: 1 } },
+            React.createElement('p', { style: { fontSize: 13, fontWeight: 700, color: aciertoPromedio.pct >= 70 ? '#065F46' : aciertoPromedio.pct >= 50 ? '#92400E' : '#991B1B', margin: 0 } },
+              'Acierto promedio: ' + aciertoPromedio.pct.toFixed(0) + '% (últimas ' + aciertoPromedio.n + ' propuestas)'),
+            React.createElement('p', { style: { fontSize: 11, color: '#64748B', margin: '2px 0 0' } },
+              'De lo que sugeriste, qué % efectivamente compró el cliente en los 14 días siguientes. Detalle abajo en "Propuestas exportadas".')
+          )
+        ),
         // ── Strip mensual: 12 meses con cumplimiento de cuota ──
         kpis.cumplimientoMensual && kpis.cumplimientoMensual.some(m => m.cuota > 0) && React.createElement('div', {
           className: 'bg-white rounded-xl shadow-sm p-4 mt-3'
@@ -3325,11 +3470,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "SKUs"),
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Piezas"),
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Monto"),
+                        React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#1E40AF", fontWeight: 600, background: "#EFF6FF" }, title: "% de piezas sugeridas que el cliente efectivamente compró en los 14 días siguientes" }, "% Acierto"),
                         React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Acciones"),
                       )
                     ),
                     React.createElement("tbody", null,
-                      propuestasHist.map(p => {
+                      (propuestasConTracking || propuestasHist).map(p => {
                         const esPend = (p.estatus || "pendiente") === "pendiente";
                         return React.createElement("tr", {
                           key: p.id,
@@ -3353,6 +3499,23 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                           React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11 } }, (Number(p.piezas_total) || 0).toLocaleString("es-MX")),
                           React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11, fontWeight: 600, color: "#065F46" } },
                             "$" + Math.round(Number(p.monto_total) || 0).toLocaleString("es-MX")
+                          ),
+                          // % Acierto (Sugerí vs Compraron)
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "center", fontSize: 11, background: "#F8FAFC" } },
+                            (function() {
+                              const t = p.tracking;
+                              if (!t || t.sinFilas || t.error) {
+                                return React.createElement("span", { style: { color: "#94A3B8", fontStyle: "italic" }, title: t && t.error ? "Error en cálculo" : "Sin detalle por SKU" }, "—");
+                              }
+                              if (t.pct == null) return React.createElement("span", { style: { color: "#94A3B8" } }, "—");
+                              const c = t.pct >= 70 ? "#065F46" : t.pct >= 50 ? "#92400E" : "#B91C1C";
+                              const bg = t.pct >= 70 ? "#D1FAE5" : t.pct >= 50 ? "#FEF3C7" : "#FEE2E2";
+                              return React.createElement("span", {
+                                style: { padding: "2px 8px", borderRadius: 10, background: bg, color: c, fontWeight: 700 },
+                                title: "Sugeriste " + t.totalSug.toLocaleString("es-MX") + " pzs · Compró " + t.totalCompr.toLocaleString("es-MX") +
+                                  " (" + t.skusComprados + " de " + t.skusTotales + " SKUs)\nVentana: " + (t.ventana || '14d') + "\nMétodo: " + (t.metodoMatch || '—')
+                              }, t.pct.toFixed(0) + "%");
+                            })()
                           ),
                           React.createElement("td", { style: { padding: "6px 10px", textAlign: "center", whiteSpace: "nowrap" } },
                             React.createElement("button", {
