@@ -858,8 +858,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       const { fetchSelloutSku, fetchInventarioCliente, fetchHistoricoComprasPcel, fetchSnapshotPcel } = await import('../../lib/pcelAdapter');
       const esPcel = clienteKey === 'pcel';
 
+      // Tracking N — fechas precisas para ventana de 14d desde la propuesta
+      const hace120dias = new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10);
+
       const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap, precios,
-             histPcel, snapshotPcel, dglCategoriasRaw, cuotasMensualesRaw] = await Promise.all([
+             histPcel, snapshotPcel, dglCategoriasRaw, cuotasMensualesRaw,
+             selloutDiarioRaw, selloutPcelSemanalRaw] = await Promise.all([
         fetchAllPagesREST(`productos_cliente?select=*&cliente=eq.${clienteKey}`),
         fetchAllPagesREST(`sell_in_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
         fetchSelloutSku(clienteKey, 2026),
@@ -875,11 +879,18 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         // Sólo se pide cuando estamos en PCEL, para el mapeo modelo→categoría.
         esPcel ? fetchAllPagesREST(`productos_cliente?select=sku,categoria&cliente=eq.digitalife`) : Promise.resolve([]),
         // Cuotas mensuales para la tarjeta KPI #3 (cumplimiento de cuota).
-        // PCEL: si BD vacía, fallback a PCEL_REAL.cuota50M en kpis.
-        // Cuotas mensuales: la columna real es `cuota_min`/`cuota_ideal`
-        // (NO `monto` — eso pertenece a otra tabla; pedirla causa 42703).
         fetchAllPagesREST(`cuotas_mensuales?select=mes,cuota_min,cuota_ideal&cliente=eq.${clienteKey}&anio=eq.2026`),
+        // Tracking N — Digitalife: sellout_detalle (fecha exacta últimos 120d)
+        !esPcel
+          ? fetchAllPagesREST(`sellout_detalle?cliente=eq.digitalife&fecha=gte.${hace120dias}&select=fecha,no_parte,cantidad`).catch((e) => { console.error('selloutDiario:', e); return []; })
+          : Promise.resolve([]),
+        // Tracking N — PCEL: sellout_pcel (anio,semana,vta_semana)
+        esPcel
+          ? fetchAllPagesREST(`sellout_pcel?select=anio,semana,sku,vta_semana&order=anio.desc,semana.desc&limit=20000`).catch((e) => { console.error('selloutPcel:', e); return []; })
+          : Promise.resolve([]),
       ]);
+      const selloutDiario = selloutDiarioRaw || [];
+      const selloutPcelSemanal = selloutPcelSemanalRaw || [];
 
       // Para PCEL fallback: si la tabla cuotas_mensuales está vacía pero
       // PCEL_REAL.cuota50M está disponible, sintetizamos los registros.
@@ -996,6 +1007,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         roadmap,
         preciosBySku,
         cuotasMensuales,             // para tarjeta KPI #3 (cumplimiento cuota)
+        selloutDiario,               // tracking N - Digitalife (fecha exacta)
+        selloutPcelSemanal,          // tracking N - PCEL (semanal)
         // Extras específicos PCEL:
         histPcel,               // { [sku]: { piezas, facturas, promedio, primerFecha, ultimaFecha } }
         backOrderBySkuPcel,     // { [sku]: backOrder }
