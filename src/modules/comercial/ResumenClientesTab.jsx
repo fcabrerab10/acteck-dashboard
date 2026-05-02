@@ -471,16 +471,55 @@ export default function ResumenClientesTab({ onDrillDown }) {
 
   const resumenes = useMemo(() => {
     if (data.loading) return [];
-    return CLIENTES.map((c) => ({
+    const arr = CLIENTES.map((c) => ({
       cliente: c,
       resumen: c.key === 'mercadolibre'
         ? calcularResumenMercadoLibre(data)
         : calcularResumen(c.key, data),
     }));
+    // A4: ordenar por health score ASC (más bajo primero) — el cliente que
+    // necesita más atención se ve primero. Mercado Libre (sin score) al final.
+    arr.sort((a, b) => {
+      const sa = a.resumen.healthScore;
+      const sb = b.resumen.healthScore;
+      if (sa == null && sb == null) return 0;
+      if (sa == null) return 1;
+      if (sb == null) return -1;
+      return sa - sb;
+    });
+    return arr;
   }, [data]);
 
   const trend   = useMemo(() => data.loading ? [] : calcularTrend(data),   [data]);
-  const alertas = useMemo(() => calcularAlertas(resumenes), [resumenes]);
+  const alertasAll = useMemo(() => calcularAlertas(resumenes), [resumenes]);
+
+  // ── B3: Marcar alertas como atendidas — persistencia local por día ──
+  const alertasKey = 'alertasAtendidas-' + new Date().toISOString().slice(0, 10);
+  const [alertasAtendidas, setAlertasAtendidas] = useState(() => {
+    try {
+      if (typeof localStorage === 'undefined') return new Set();
+      const raw = localStorage.getItem(alertasKey);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch { return new Set(); }
+  });
+  const marcarAlertaAtendida = (id) => {
+    setAlertasAtendidas((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(alertasKey, JSON.stringify([...next]));
+        }
+      } catch {}
+      return next;
+    });
+  };
+  // ID estable por alerta: tipo + cliente + mensaje (hash simple)
+  const alertaId = (a) => `${a.tipo}|${a.clienteKey || ''}|${a.mensaje}`;
+  const alertas = useMemo(
+    () => alertasAll.filter((a) => !alertasAtendidas.has(alertaId(a))),
+    [alertasAll, alertasAtendidas]
+  );
 
   if (data.loading) {
     return (
@@ -514,21 +553,36 @@ export default function ResumenClientesTab({ onDrillDown }) {
             <span className="text-xs text-red-600 ml-2 italic">(click para ir al cliente)</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {alertas.map((a, i) => (
-              <button
-                key={i}
-                onClick={() => a.clienteKey && onDrillDown?.(a.clienteKey)}
-                className={[
-                  'text-xs px-2.5 py-1 rounded-full border font-medium transition cursor-pointer hover:shadow-sm',
-                  a.severidad === 'alta'
-                    ? 'bg-red-100 border-red-300 text-red-800 hover:bg-red-200'
-                    : 'bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200',
-                ].join(' ')}
-                title={`Ir a ${a.cliente}`}
-              >
-                <strong>{a.cliente}:</strong> {a.mensaje}
-              </button>
-            ))}
+            {alertas.map((a, i) => {
+              const id = alertaId(a);
+              const colorBase = a.severidad === 'alta'
+                ? 'bg-red-100 border-red-300 text-red-800 hover:bg-red-200'
+                : 'bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200';
+              return (
+                <div
+                  key={id || i}
+                  className={[
+                    'text-xs rounded-full border font-medium transition flex items-center overflow-hidden',
+                    colorBase,
+                  ].join(' ')}
+                >
+                  <button
+                    onClick={() => a.clienteKey && onDrillDown?.(a.clienteKey)}
+                    className="px-2.5 py-1 cursor-pointer hover:underline"
+                    title={`Ir a ${a.cliente}`}
+                  >
+                    <strong>{a.cliente}:</strong> {a.mensaje}
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); marcarAlertaAtendida(id); }}
+                    className="px-2 py-1 border-l border-black/10 hover:bg-black/5"
+                    title="Marcar como atendida (vuelve a aparecer mañana)"
+                  >
+                    ✓
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
