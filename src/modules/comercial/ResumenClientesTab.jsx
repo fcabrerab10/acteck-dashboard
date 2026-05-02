@@ -169,9 +169,22 @@ function invValorRow(r) {
 //   - Avance anual  = Sell-In YTD / Cuota anual × 100
 //   - Inventario    = SUM(inventario_cliente.valor) del último snapshot (anio, semana máximos)
 //   - Cobertura sem = valor / (sell_out_mensual_promedio / 4.33)
+// Helper: último mes con sell-in real registrado para este cliente en el
+// año actual. Si el mes corriente aún no tiene datos (caso típico al inicio
+// del mes), nos quedamos con el último mes que sí los tiene.
+function getMesEfectivo(va) {
+  const conDatos = va
+    .filter((r) => Number(r.anio) === anioActual && Number(r.sell_in || 0) > 0)
+    .map((r) => Number(r.mes) || 0);
+  if (conDatos.length === 0) return 0;
+  return Math.min(mesActual, Math.max(...conDatos));
+}
+
 function calcularResumen(clienteKey, data) {
   const va  = data.ventasAgg.filter((r) => r.cliente === clienteKey);
   const cm  = data.cuotasMensuales.filter((r) => r.cliente === clienteKey);
+  // Mes efectivo: el último mes con datos reales (ignora meses corrientes vacíos)
+  const mesEf = getMesEfectivo(va) || mesActual;
   const inv = data.inventarioCliente.filter((r) => r.cliente === clienteKey);
   const dsoRow = data.dsoReal.find((r) => r.cliente === clienteKey);
   const ccRow  = data.creditoConfig.find((r) => r.cliente === clienteKey);
@@ -179,35 +192,36 @@ function calcularResumen(clienteKey, data) {
   const mk  = data.inversionMkt.filter((r) => r.cliente === clienteKey);
 
   // ── Sell-In / Sell-Out YTD ──
+  // Usamos mesEf (último mes con datos reales) en lugar de mesActual para
+  // no incluir el mes corriente cuando aún no tiene ventas.
   const vaAnio = va.filter((r) => r.anio === anioActual);
   const siYTD = vaAnio
-    .filter((r) => Number(r.mes) <= mesActual)
+    .filter((r) => Number(r.mes) <= mesEf)
     .reduce((a, r) => a + Number(r.sell_in || 0), 0);
   const soYTD = vaAnio
-    .filter((r) => Number(r.mes) <= mesActual)
+    .filter((r) => Number(r.mes) <= mesEf)
     .reduce((a, r) => a + Number(r.sell_out || 0), 0);
 
-  // MoM del mes actual vs mismo mes año anterior (comparación año-sobre-año)
-  const rowMesActual = vaAnio.find((r) => Number(r.mes) === mesActual);
-  const rowMesPrev   = va.find((r) => Number(r.mes) === mesActual && r.anio === anioActual - 1);
+  // MoM: comparamos el último mes con datos vs el mismo mes año anterior.
+  const rowMesActual = vaAnio.find((r) => Number(r.mes) === mesEf);
+  const rowMesPrev   = va.find((r) => Number(r.mes) === mesEf && r.anio === anioActual - 1);
   const siMes     = Number(rowMesActual?.sell_in  || 0);
   const siMesPrev = Number(rowMesPrev?.sell_in    || 0);
   const soMes     = Number(rowMesActual?.sell_out || 0);
   const siYoY = siMesPrev > 0 ? ((siMes - siMesPrev) / siMesPrev) * 100 : null;
 
-  // ── Cuota YTD y anual (mismo período vs mismo período) ──
-  // Fuente principal: tabla cuotas_mensuales (cliente, anio, mes, cuota_min, cuota_ideal).
-  // Fallback PCEL: constants.PCEL_REAL.cuota50M (objeto {mes:monto}).
+  // ── Cuota YTD y anual ──
+  // Cuota YTD: hasta el mes efectivo (no el mes corriente sin ventas).
   let cuotaYTD = cm
-    .filter((r) => Number(r.mes) <= mesActual)
+    .filter((r) => Number(r.mes) <= mesEf)
     .reduce((a, r) => a + Number(r.cuota_min || 0), 0);
   let cuotaAnual = cm.reduce((a, r) => a + Number(r.cuota_min || 0), 0);
   let cuotaIdealAnual = cm.reduce((a, r) => a + Number(r.cuota_ideal || 0), 0);
   if (clienteKey === 'pcel' && cuotaAnual === 0 && PCEL_REAL?.cuota50M) {
     const c = PCEL_REAL.cuota50M;
-    cuotaYTD   = Object.entries(c).filter(([m]) => Number(m) <= mesActual).reduce((a, [, v]) => a + Number(v || 0), 0);
+    cuotaYTD   = Object.entries(c).filter(([m]) => Number(m) <= mesEf).reduce((a, [, v]) => a + Number(v || 0), 0);
     cuotaAnual = Object.values(c).reduce((a, v) => a + Number(v || 0), 0);
-    cuotaIdealAnual = cuotaAnual; // no hay "ideal" para PCEL en constants → usar el min
+    cuotaIdealAnual = cuotaAnual;
   }
 
   // IMPORTANTE: Comparar YTD vs YTD (mismo período), no YTD vs anual.
@@ -341,10 +355,12 @@ function calcularResumen(clienteKey, data) {
     siYTD, soYTD,
     siMes, siMesPrev, siYoY,
     sparkline: (function() {
-      // A1: últimos 6 meses con sell-in real y cuota de referencia
+      // A1: últimos 6 meses con sell-in real y cuota de referencia.
+      // Anclamos al último mes con datos reales (no al mes corriente vacío).
+      const mesAncla = mesEf > 0 ? mesEf : mesActual;
       const out = [];
       for (let i = 5; i >= 0; i--) {
-        const d = new Date(anioActual, mesActual - 1 - i, 1);
+        const d = new Date(anioActual, mesAncla - 1 - i, 1);
         const a = d.getFullYear();
         const m = d.getMonth() + 1;
         let si = 0;
@@ -380,11 +396,14 @@ function calcularResumen(clienteKey, data) {
 function calcularResumenMercadoLibre(data) {
   const va = data.ventasAgg.filter((r) => r.cliente === 'mercadolibre');
   const vaAnio = va.filter((r) => r.anio === anioActual);
-  const soYTD = vaAnio.filter((r) => Number(r.mes) <= mesActual).reduce((a, r) => a + Number(r.sell_out || 0), 0);
-  const soYTDPrev = va.filter((r) => r.anio === anioActual - 1 && Number(r.mes) <= mesActual)
+  // Mes efectivo: último mes con sell_out real (ML no tiene sell_in).
+  const mesesConSO = vaAnio.filter((r) => Number(r.sell_out || 0) > 0).map((r) => Number(r.mes) || 0);
+  const mesEfML = mesesConSO.length > 0 ? Math.min(mesActual, Math.max(...mesesConSO)) : mesActual;
+  const soYTD = vaAnio.filter((r) => Number(r.mes) <= mesEfML).reduce((a, r) => a + Number(r.sell_out || 0), 0);
+  const soYTDPrev = va.filter((r) => r.anio === anioActual - 1 && Number(r.mes) <= mesEfML)
     .reduce((a, r) => a + Number(r.sell_out || 0), 0);
-  const soMes     = Number(vaAnio.find((r) => Number(r.mes) === mesActual)?.sell_out || 0);
-  const soMesPrev = Number(va.find((r) => Number(r.mes) === mesActual && r.anio === anioActual - 1)?.sell_out || 0);
+  const soMes     = Number(vaAnio.find((r) => Number(r.mes) === mesEfML)?.sell_out || 0);
+  const soMesPrev = Number(va.find((r) => Number(r.mes) === mesEfML && r.anio === anioActual - 1)?.sell_out || 0);
   const crecimientoYTD = soYTDPrev > 0 ? ((soYTD - soYTDPrev) / soYTDPrev) * 100 : null;
   const crecimientoMes = soMesPrev > 0 ? ((soMes - soMesPrev) / soMesPrev) * 100 : null;
   return {
@@ -407,26 +426,33 @@ function calcularTrend(data, clienteFiltro = 'todos') {
     return PCEL_REAL.cuota50M;
   })();
   const aplicaCliente = (cli) => {
-    if (clienteFiltro === 'todos') return cli !== 'mercadolibre'; // ML no tiene cuota/sell-in real
+    if (clienteFiltro === 'todos') return cli !== 'mercadolibre';
     return cli === clienteFiltro;
   };
+
+  // Mes efectivo del trend: último mes con sell-in real para los clientes
+  // filtrados. Si el mes corriente está vacío, se considera futuro para
+  // que la línea no caiga a 0 y el mes actual no engañe al ojo.
+  const mesesConDatos = data.ventasAgg
+    .filter((r) => Number(r.anio) === anioActual && aplicaCliente(r.cliente) && Number(r.sell_in || 0) > 0)
+    .map((r) => Number(r.mes) || 0);
+  const mesEfTrend = mesesConDatos.length > 0
+    ? Math.min(mesActual, Math.max(...mesesConDatos))
+    : mesActual;
 
   return Array.from({ length: 12 }, (_, idx) => {
     const mes = idx + 1;
     let cuota = 0, si = 0, siPrev = 0;
-    // Cuota
     data.cuotasMensuales.forEach((r) => {
       if (Number(r.mes) !== mes) return;
       if (!aplicaCliente(r.cliente)) return;
       cuota += Number(r.cuota_min || 0);
     });
-    // PCEL fallback
     if (cuotaPcelFallback && cuotaPcelFallback[mes] != null) {
       const incluyePcel = clienteFiltro === 'todos' || clienteFiltro === 'pcel';
       const pcelEnBD = data.cuotasMensuales.some((r) => r.cliente === 'pcel');
       if (incluyePcel && !pcelEnBD) cuota += Number(cuotaPcelFallback[mes] || 0);
     }
-    // Sell-In año actual
     data.ventasAgg.forEach((r) => {
       if (Number(r.mes) !== mes) return;
       if (!aplicaCliente(r.cliente)) return;
@@ -438,9 +464,11 @@ function calcularTrend(data, clienteFiltro = 'todos') {
       label: MESES_CORTO[idx],
       cuota,
       sell_in: si,
-      sell_in_prev: siPrev,  // D5: sell-in mismo mes año anterior
-      esActual: mes === mesActual,
-      esFuturo: mes > mesActual,
+      sell_in_prev: siPrev,
+      esActual: mes === mesEfTrend,
+      // Considerar "futuro" cualquier mes posterior al último con datos
+      // reales (incluye el mes corriente si aún no hay ventas).
+      esFuturo: mes > mesEfTrend,
     };
   });
 }
@@ -530,11 +558,18 @@ export default function ResumenClientesTab({ onDrillDown }) {
   // E5: Embudo Sell-In → Sell-Out · % conversion del año
   const embudo = useMemo(() => {
     if (data.loading) return null;
+    // Usamos el mismo criterio: hasta el último mes con sell-in real
+    const mesesConDatosEmb = (data.ventasAgg || [])
+      .filter((r) => Number(r.anio) === anioActual && Number(r.sell_in || 0) > 0)
+      .map((r) => Number(r.mes) || 0);
+    const mesEfEmb = mesesConDatosEmb.length > 0
+      ? Math.min(mesActual, Math.max(...mesesConDatosEmb))
+      : mesActual;
     let siYTD = 0, soYTD = 0;
     const porCliente = {};
     (data.ventasAgg || []).forEach((r) => {
       if (Number(r.anio) !== anioActual) return;
-      if (Number(r.mes) > mesActual) return;
+      if (Number(r.mes) > mesEfEmb) return;
       const si = Number(r.sell_in || 0);
       const so = Number(r.sell_out || 0);
       siYTD += si;
