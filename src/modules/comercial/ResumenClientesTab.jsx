@@ -97,15 +97,32 @@ function useResumenData() {
     dsoReal: [],
     creditoConfig: [],
     selloutSku: [],
+    sellInSku: [],
     inversionMkt: [],
   });
 
   useEffect(() => {
+    // Paginador local: supabase corta a 1000 filas por defecto.
+    async function fetchAll(qFactory, pageSize = 1000) {
+      const all = [];
+      let from = 0;
+      // bucle hasta agotar la tabla
+      // (mantiene el mismo filtro/orden de qFactory en cada página)
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { data, error } = await qFactory().range(from, from + pageSize - 1);
+        if (error || !data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      return all;
+    }
     (async () => {
       // Inventario cliente: usamos el MISMO adapter que HomeCliente para que
       // los números sean consistentes entre Resumen y la pestaña per-cliente.
       // PCEL → lee de sellout_pcel; Digitalife → de inventario_cliente.
-      const [vaRes, cmRes, invDigi, invPcel, dsoRes, ccRes, soRes, mkRes] = await Promise.all([
+      const [vaRes, cmRes, invDigi, invPcel, dsoRes, ccRes, soRows, siRows, mkRes] = await Promise.all([
         supabase.from('v_ventas_mensuales_agg')
           .select('cliente, anio, mes, sell_in, sell_out')
           .gte('anio', anioActual - 1),
@@ -118,9 +135,14 @@ function useResumenData() {
           .select('cliente, fecha_corte, saldo_actual_total, saldo_vencido, dso_real, dso_erp, aging_mas90, facturas_abiertas'),
         supabase.from('clientes_credito_config')
           .select('cliente, plazo_dias_credito, linea_credito_usd'),
-        supabase.from('sellout_sku')
-          .select('cliente, anio, mes, piezas, monto_pesos')
-          .eq('anio', anioActual),
+        fetchAll(() => supabase.from('sellout_sku')
+          .select('cliente, anio, mes, sku, piezas, monto_pesos')
+          .eq('anio', anioActual)),
+        // sell_in_sku histórico (2 años) → cost_promedio por SKU para
+        // valuar inventario y sellout de PCEL/Digitalife de manera consistente.
+        fetchAll(() => supabase.from('sell_in_sku')
+          .select('cliente, sku, piezas, monto_pesos')
+          .gte('anio', anioActual - 1)),
         // Marketing: leemos de marketing_actividades (mismo lugar que la
         // pestaña Pagos → apartado Marketing usa). El campo `inversion` es
         // el monto MXN gastado por actividad.
@@ -142,7 +164,8 @@ function useResumenData() {
         inventarioCliente: invCombinado,
         dsoReal:           dsoRes.data || [],
         creditoConfig:     ccRes.data  || [],
-        selloutSku:        soRes.data  || [],
+        selloutSku:        soRows       || [],
+        sellInSku:         siRows       || [],
         inversionMkt:      mkRes.data  || [],
       });
     })();
@@ -189,7 +212,27 @@ function calcularResumen(clienteKey, data) {
   const dsoRow = data.dsoReal.find((r) => r.cliente === clienteKey);
   const ccRow  = data.creditoConfig.find((r) => r.cliente === clienteKey);
   const so  = data.selloutSku.filter((r) => r.cliente === clienteKey);
+  const si  = (data.sellInSku || []).filter((r) => r.cliente === clienteKey);
   const mk  = data.inversionMkt.filter((r) => r.cliente === clienteKey);
+
+  // ── Costo promedio por SKU (desde sell_in_sku histórico) ──
+  // Para cada SKU del cliente: sum(monto_pesos) / sum(piezas) en los últimos
+  // 2 años. Esto vale el inventario y el sellout (en piezas) en MXN de
+  // manera consistente entre Digitalife y PCEL — quita los efectos de
+  // costo_convenio inflado o costo_promedio del cliente reportado.
+  const _agg = new Map();
+  si.forEach((r) => {
+    const sku = (r.sku || '').toString();
+    if (!sku) return;
+    const cur = _agg.get(sku) || { piezas: 0, monto: 0 };
+    cur.piezas += Number(r.piezas || 0);
+    cur.monto  += Number(r.monto_pesos || 0);
+    _agg.set(sku, cur);
+  });
+  const costoPromedioSku = {};
+  _agg.forEach((v, k) => {
+    if (v.piezas > 0 && v.monto > 0) costoPromedioSku[k] = v.monto / v.piezas;
+  });
 
   // ── Sell-In / Sell-Out YTD ──
   // Usamos mesEf (último mes con datos reales) en lugar de mesActual para
@@ -248,26 +291,44 @@ function calcularResumen(clienteKey, data) {
       return k > max.k ? { k, anio: Number(r.anio), semana: Number(r.semana) } : max;
     }, { k: -1, anio: 0, semana: 0 });
     const snap = invValidas.filter((r) => Number(r.anio) === semanaMax.anio && Number(r.semana) === semanaMax.semana);
-    // Usa fórmula stock × costo_convenio cuando valor es null (igual a HomeCliente)
-    inventarioValor  = snap.reduce((a, r) => a + invValorRow(r), 0);
+    // Valuamos cada SKU del snapshot con el costo_promedio de sell_in_sku
+    // (mismo método para Digitalife y PCEL). Si un SKU no tiene historial de
+    // sell-in, caemos al método anterior (valor o stock×costo_convenio) para
+    // no perderlo.
+    inventarioValor = snap.reduce((a, r) => {
+      const sku = (r.sku || '').toString();
+      const stock = Number(r.stock || 0);
+      const cp = costoPromedioSku[sku];
+      if (cp != null) return a + stock * cp;
+      return a + invValorRow(r);
+    }, 0);
     inventarioPiezas = snap.reduce((a, r) => a + Number(r.stock || 0), 0);
     inventarioSemana = `${semanaMax.anio}-${String(semanaMax.semana).padStart(2,'0')}`;
   }
 
-  // ── Cobertura en DÍAS (alineado con HomeCliente.jsx líneas 574-587) ──
-  // Últimos 3 meses de sellout_sku.monto_pesos / días reales del período = sell-out diario
-  // FIX: usar días reales por mes (no asumir 30) para evitar desviación del ±5%
+  // ── Cobertura en DÍAS — mismo método para Digitalife y PCEL ──
+  // sellout_MXN = sum(piezas_sellout × costo_promedio_sku) en últimos 3 meses.
+  // Esto IGNORA monto_pesos del sellout_sku (Digitalife reporta a precio venta;
+  // PCEL no reporta monto). Así inventario y sellout están en la MISMA escala
+  // (costo) y la cobertura es comparable entre clientes.
   const ultMes = so.length > 0 ? Math.max(...so.map((r) => Number(r.mes) || 0)) : 0;
   let coberturaDias = null;
   if (inventarioValor > 0 && ultMes > 0) {
     const desde = Math.max(1, ultMes - 2);
     const montoSO = so
       .filter((r) => Number(r.mes) >= desde && Number(r.mes) <= ultMes)
-      .reduce((a, r) => a + Number(r.monto_pesos || 0), 0);
-    // Calcular días reales de los meses del rango
+      .reduce((a, r) => {
+        const sku = (r.sku || '').toString();
+        const piezas = Number(r.piezas || 0);
+        const cp = costoPromedioSku[sku];
+        if (cp != null) return a + piezas * cp;
+        // Fallback: si no hay costo_promedio para este SKU, usa monto_pesos
+        // reportado (puede ser 0 para PCEL — ese SKU queda sin contribución).
+        return a + Number(r.monto_pesos || 0);
+      }, 0);
     let dias = 0;
     for (let m = desde; m <= ultMes; m++) {
-      dias += new Date(anioActual, m, 0).getDate(); // último día del mes m
+      dias += new Date(anioActual, m, 0).getDate();
     }
     const soDiario = dias > 0 ? montoSO / dias : 0;
     coberturaDias = soDiario > 0 ? Math.round(inventarioValor / soDiario) : null;
