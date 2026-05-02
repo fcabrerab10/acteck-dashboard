@@ -424,8 +424,13 @@ function calcularResumen(clienteKey, data) {
     let num = 0, den = 0;
 
     facturas.forEach((f) => {
+      // Filtra notas de crédito / pagos / cancelaciones: solo facturas
+      // genuinas con importe positivo cuentan para el promedio.
+      if (!(Number(f.importe) > 0)) return;
+
       f.eventos.sort((a, b) => a.idx - b.idx);
-      const ultimo = f.eventos[f.eventos.length - 1];
+      const primero = f.eventos[0];
+      const ultimo  = f.eventos[f.eventos.length - 1];
       let dias = null;
 
       // 1) Pagada: existe transición saldo>0 → saldo=0
@@ -435,30 +440,29 @@ function calcularResumen(clienteKey, data) {
           pagoIdx = i; break;
         }
       }
-      // También: si el primer evento es saldo=0 pero la factura aparece, asumimos
-      // que ya estaba pagada en ese corte (límite inferior conservador).
-      if (pagoIdx < 0 && f.eventos.length === 1 && ultimo.saldo === 0) {
-        pagoIdx = 0;
-      }
 
       if (pagoIdx >= 0) {
         const fechaPago = f.eventos[pagoIdx].fecha_corte;
-        if (new Date(fechaPago) < cutoffPago) return; // muy vieja
+        if (new Date(fechaPago) < cutoffPago) return;
         dias = Math.round(
           (new Date(fechaPago) - new Date(f.fecha_emision)) / (1000 * 60 * 60 * 24)
         );
       } else if (ultimo.idx === lastIdx && ultimo.saldo > 0) {
-        // 2) Abierta en el último estado: días corriendo desde emisión hasta hoy
+        // 2) Sigue abierta en el último estado: el reloj corre hasta hoy.
+        //    Esto incluye los días de crédito que les diste (ej. plazo 90 +
+        //    20 de mora = 110 días corridos).
         dias = Math.round(
           (hoyMs - new Date(f.fecha_emision).getTime()) / (1000 * 60 * 60 * 24)
         );
       } else {
-        // Factura desapareció del último estado sin transición visible: skip
+        // Factura ya estaba pagada cuando empezamos a observar (saldo=0 en
+        // primer evento) o desapareció sin transición → no podemos medir
+        // el cobro real, la excluimos del promedio.
         return;
       }
 
       if (dias == null || dias < 0 || dias > 720) return;
-      const peso = Number(f.importe) || 1;
+      const peso = Number(f.importe);
       num += dias * peso;
       den += peso;
     });
