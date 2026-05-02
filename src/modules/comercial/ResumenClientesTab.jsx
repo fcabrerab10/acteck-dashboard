@@ -224,9 +224,16 @@ function calcularResumen(clienteKey, data) {
     cuotaIdealAnual = cuotaAnual;
   }
 
-  // IMPORTANTE: Comparar YTD vs YTD (mismo período), no YTD vs anual.
-  // El "avance anual" se confunde con cumplimiento → NO lo usamos en el score.
+  // ── Cumplimiento dual: YTD y mes (último mes con datos) ──
+  // Score de cuota: promedio de los dos cumplimientos.
   const cumplimientoYTD = cuotaYTD > 0 ? (siYTD / cuotaYTD) * 100 : null;
+  // Cuota del mes efectivo y sell-in del mismo mes
+  let cuotaMes = 0;
+  cm.forEach((r) => { if (Number(r.mes) === mesEf) cuotaMes += Number(r.cuota_min || 0); });
+  if (clienteKey === 'pcel' && cuotaMes === 0 && PCEL_REAL?.cuota50M) {
+    cuotaMes = Number(PCEL_REAL.cuota50M[mesEf] || 0);
+  }
+  const cumplimientoMes = cuotaMes > 0 ? (siMes / cuotaMes) * 100 : null;
 
   // ── Inventario del último snapshot (valor MXN) ──
   // Filtra filas con anio/semana null (basura del uploader cuando no hay header).
@@ -288,7 +295,15 @@ function calcularResumen(clienteKey, data) {
   // ═════ Scores (0–100) — cada uno usa umbrales de las pestañas per-cliente ═════
 
   // 1) Cumplimiento cuota YTD vs YTD — 100% = 100pts (satura), 50% = 50pts
-  const scoreCuota = cuotaYTD > 0 ? clamp(cumplimientoYTD, 0, 100) : null;
+  // Score de cuota: promedio del cumplimiento del mes y del YTD.
+  // Si solo uno está disponible, usar ese. Si ninguno, null.
+  const scoreCuota = (() => {
+    const partes = [];
+    if (cumplimientoYTD != null) partes.push(clamp(cumplimientoYTD, 0, 100));
+    if (cumplimientoMes != null) partes.push(clamp(cumplimientoMes, 0, 100));
+    if (partes.length === 0) return null;
+    return partes.reduce((a, x) => a + x, 0) / partes.length;
+  })();
 
   // 2) Cobertura inventario — alineado con HomeCliente línea 890-891
   //    ≤90d = verde (óptimo), 90-150d = amarillo, >150d = rojo (sobreinv)
@@ -383,6 +398,7 @@ function calcularResumen(clienteKey, data) {
     })(),
     soMes,
     cuotaYTD, cumplimientoYTD,
+    cuotaMes, cumplimientoMes, mesEf,
     cuotaAnual, cuotaIdealAnual,
     saldoVencido, saldoActual, dsoReal, dsoPlazo: plazo, aging90, pctVencido,
     inventarioValor, inventarioPiezas, inventarioSemana, coberturaDias,
@@ -839,26 +855,31 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
         ))}
       </div>
 
-      {/* Sell-In YTD + Cumplimiento YTD (mismo período vs mismo período) */}
+      {/* Cumplimiento Mes + YTD (los dos que componen el score de cuota) */}
       <div className="border-t border-gray-100 px-5 py-3 space-y-2">
-        <div className="flex items-baseline justify-between">
-          <div>
-            <div className="text-[10px] uppercase text-gray-500 tracking-wide">Sell-In YTD</div>
-            <div className="font-bold text-gray-800 text-base">{formatMXN(resumen.siYTD)}</div>
-            {resumen.cuotaYTD > 0 && (
-              <div className="text-[10px] text-gray-500">
-                vs cuota YTD {formatMXN(resumen.cuotaYTD)}
-              </div>
-            )}
-          </div>
-          {resumen.cumplimientoYTD != null && (
-            <div className="text-right">
-              <div className="text-[10px] uppercase text-gray-500 tracking-wide">Cumpl. YTD</div>
-              <div className="font-bold text-lg" style={{ color: colorScore(resumen.cumplimientoYTD) }}>
-                {pct(resumen.cumplimientoYTD)}
-              </div>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Mes */}
+          <div className="bg-gray-50 rounded-lg p-2">
+            <div className="text-[10px] uppercase text-gray-500 tracking-wide">
+              Mes {resumen.mesEf ? MESES_CORTO[resumen.mesEf - 1] : ''}
             </div>
-          )}
+            <div className="font-bold text-base" style={{ color: resumen.cumplimientoMes != null ? colorScore(resumen.cumplimientoMes) : '#94A3B8' }}>
+              {resumen.cumplimientoMes != null ? pct(resumen.cumplimientoMes) : '—'}
+            </div>
+            <div className="text-[10px] text-gray-500 leading-tight">
+              {formatMXN(resumen.siMes || 0)} / {formatMXN(resumen.cuotaMes || 0)}
+            </div>
+          </div>
+          {/* YTD */}
+          <div className="bg-gray-50 rounded-lg p-2">
+            <div className="text-[10px] uppercase text-gray-500 tracking-wide">YTD acum.</div>
+            <div className="font-bold text-base" style={{ color: resumen.cumplimientoYTD != null ? colorScore(resumen.cumplimientoYTD) : '#94A3B8' }}>
+              {resumen.cumplimientoYTD != null ? pct(resumen.cumplimientoYTD) : '—'}
+            </div>
+            <div className="text-[10px] text-gray-500 leading-tight">
+              {formatMXN(resumen.siYTD || 0)} / {formatMXN(resumen.cuotaYTD || 0)}
+            </div>
+          </div>
         </div>
 
         {resumen.siYoY != null && (
