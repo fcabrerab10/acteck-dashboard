@@ -66,17 +66,17 @@ function pct(n) { return Number.isFinite(n) ? `${n.toFixed(0)}%` : '—'; }
 
 function colorScore(s) {
   if (s == null) return '#94A3B8';
-  if (s >= 80) return '#10B981';
-  if (s >= 60) return '#F59E0B';
-  return '#EF4444';
+  if (s >= 90) return '#10B981';  // Excelente
+  if (s >= 80) return '#22C55E';  // Bien
+  if (s >= 60) return '#F59E0B';  // Medio
+  return '#EF4444';                // Crítico
 }
 
 function gradeScore(s) {
   if (s == null) return 'Sin datos';
-  if (s >= 85) return 'Excelente';
-  if (s >= 70) return 'Bueno';
-  if (s >= 55) return 'Regular';
-  if (s >= 40) return 'En riesgo';
+  if (s >= 90) return 'Excelente';
+  if (s >= 80) return 'Bien';
+  if (s >= 60) return 'Medio';
   return 'Crítico';
 }
 
@@ -317,9 +317,9 @@ function calcularResumen(clienteKey, data) {
     ? clamp(((15 - pctVencido) / 15) * 100, 0, 100)
     : null;
 
-  // 5) ROI marketing: ≥10 = 100, ≤2 = 0
+  // 5) ROI marketing: ≥20x = 100pts, ≤4x = 0pts (lineal entre rangos)
   const scoreMkt = roiMkt != null
-    ? clamp(((roiMkt - 2) / 8) * 100, 0, 100)
+    ? clamp(((roiMkt - 4) / 16) * 100, 0, 100)
     : null;
 
   // ═════ Pesos por cliente + penalización por datos faltantes ═════
@@ -824,9 +824,9 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
           </div>
           {datosParciales && (
             <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded"
-              title={`${resumen.componentesSinDatos} componente(s) sin datos. El score los cuenta como 0.`}>
+              title={`${resumen.componentesSinDatos} componente(s) pendiente(s) de cargar info. El score los cuenta como 0.`}>
               <AlertTriangle className="w-2.5 h-2.5" />
-              {resumen.componentesSinDatos} sin datos
+              {resumen.componentesSinDatos} pendiente{resumen.componentesSinDatos > 1 ? 's' : ''}
             </div>
           )}
         </div>
@@ -957,7 +957,7 @@ function ComponenteBar({ id, score, peso, estado }) {
     cuota:      'Cumplimiento cuota (sell-in)',
     inventario: 'Desplazamiento (sell-out)',
     marketing:  'ROI Marketing',
-    dso:        'Días cobro (DSO)',
+    dso:        'Días de cobro',
     vencidos:   'Pagos vencidos',
   };
   const icons = {
@@ -972,11 +972,11 @@ function ComponenteBar({ id, score, peso, estado }) {
   const color = sinDatos ? '#94A3B8' : colorScore(score);
   return (
     <div className={"flex items-center gap-2 text-[11px] " + (sinDatos ? 'opacity-60' : '')}
-      title={sinDatos ? 'Sin datos cargados — cuenta como 0 en el score' : undefined}>
+      title={sinDatos ? 'Pendiente cargar info — cuenta como 0 en el score' : undefined}>
       <Icon className="w-3 h-3 text-gray-400 shrink-0" />
       <div className="flex-1 min-w-0 truncate text-gray-600">
         {labels[id]}
-        {sinDatos && <span className="ml-1 text-amber-600 text-[9px]">⚠ sin datos</span>}
+        {sinDatos && <span className="ml-1 text-amber-600 text-[9px]">⚠ Pendiente cargar info</span>}
       </div>
       <div className="text-[10px] text-gray-400 tabular-nums shrink-0">{peso}%</div>
       <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden shrink-0">
