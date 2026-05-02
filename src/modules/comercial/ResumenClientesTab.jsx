@@ -340,6 +340,31 @@ function calcularResumen(clienteKey, data) {
     componentesSinDatos,
     siYTD, soYTD,
     siMes, siMesPrev, siYoY,
+    sparkline: (function() {
+      // A1: últimos 6 meses con sell-in real y cuota de referencia
+      const out = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(anioActual, mesActual - 1 - i, 1);
+        const a = d.getFullYear();
+        const m = d.getMonth() + 1;
+        let si = 0;
+        va.forEach((r) => {
+          if (r.anio === a && Number(r.mes) === m) si += Number(r.sell_in || 0);
+        });
+        // Cuota: solo del año actual
+        let cuota = 0;
+        if (a === anioActual) {
+          cm.forEach((r) => {
+            if (Number(r.mes) === m) cuota += Number(r.cuota_min || 0);
+          });
+          if (clienteKey === 'pcel' && cuota === 0 && PCEL_REAL?.cuota50M) {
+            cuota = Number(PCEL_REAL.cuota50M[m] || 0);
+          }
+        }
+        out.push({ mes: m, anio: a, sell_in: si, cuota });
+      }
+      return out;
+    })(),
     soMes,
     cuotaYTD, cumplimientoYTD,
     cuotaAnual, cuotaIdealAnual,
@@ -722,6 +747,11 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
             )}
           </div>
         )}
+
+        {/* A1: Sparkline 6m sell-in con cuota como referencia */}
+        {resumen.sparkline && resumen.sparkline.some((x) => x.sell_in > 0 || x.cuota > 0) && (
+          <SparklineMini data={resumen.sparkline} color={cliente.color} />
+        )}
       </div>
 
       {/* KPIs secundarios */}
@@ -832,6 +862,57 @@ function ComponenteBar({ id, score, peso, estado }) {
 // ────────── Card especial Mercado Libre ──────────
 // Solo crecimiento sell-out: ML no encaja con el esquema de salud comercial
 // (sin facturación directa, sin cuota mensual, sin almacén físico).
+// A1: Sparkline mini de Sell-In últimos 6 meses con cuota como referencia
+function SparklineMini({ data, color = '#3B82F6' }) {
+  const W = 220, H = 38;
+  const padX = 2, padY = 4;
+  const innerW = W - padX * 2;
+  const innerH = H - padY * 2;
+  const max = Math.max(1, ...data.flatMap((d) => [d.sell_in || 0, d.cuota || 0]));
+  const slot = innerW / data.length;
+  const xFor = (i) => padX + slot * (i + 0.5);
+  const yFor = (v) => padY + innerH - (v / max) * innerH;
+
+  // Línea sell-in (sólida)
+  const pathSI = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${xFor(i)},${yFor(d.sell_in || 0)}`).join(' ');
+  // Línea cuota (punteada)
+  const tieneCuota = data.some((d) => d.cuota > 0);
+  const pathCuota = tieneCuota
+    ? data.map((d, i) => `${i === 0 ? 'M' : 'L'}${xFor(i)},${yFor(d.cuota || 0)}`).join(' ')
+    : null;
+  // Etiquetas mes (sólo primer y último)
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const primer = data[0];
+  const ultimo = data[data.length - 1];
+
+  return (
+    <div className="pt-2 border-t border-gray-100">
+      <div className="flex items-center justify-between text-[9px] text-gray-400 mb-0.5 uppercase tracking-wide">
+        <span>Sell-In 6m</span>
+        {tieneCuota && (
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-3 h-px border-t border-dashed border-gray-400" />
+            <span>cuota</span>
+          </span>
+        )}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block' }}>
+        {pathCuota && (
+          <path d={pathCuota} fill="none" stroke="#94A3B8" strokeWidth="1" strokeDasharray="3 2" opacity="0.7" />
+        )}
+        <path d={pathSI} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        {data.map((d, i) => (
+          <circle key={i} cx={xFor(i)} cy={yFor(d.sell_in || 0)} r={1.5} fill={color} />
+        ))}
+      </svg>
+      <div className="flex items-center justify-between text-[9px] text-gray-400 mt-0.5">
+        <span>{meses[primer.mes - 1]} {String(primer.anio).slice(2)}</span>
+        <span>{meses[ultimo.mes - 1]} {String(ultimo.anio).slice(2)}</span>
+      </div>
+    </div>
+  );
+}
+
 function ClienteCardML({ cliente, resumen, onDrillDown }) {
   const cYTD = resumen.crecimientoYTD;
   const cMes = resumen.crecimientoMes;
