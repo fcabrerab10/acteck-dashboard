@@ -377,22 +377,30 @@ function calcularResumen(clienteKey, data) {
     : (saldoVencido > 0 ? 100 : 0);
 
   // ── Días de cobro (reemplaza DSO) ──
-  // Recorremos los estados_cuenta del cliente en orden cronológico y
-  // detectamos cuándo cada factura pasó de saldo>0 a saldo=0 (= pagada).
-  // dias_cobro_factura = fecha_corte_estado_pagado - fecha_emision
-  // Promedio ponderado por importe_factura, considerando solo facturas
-  // pagadas en los últimos 6 meses (recientes = más representativo del
-  // comportamiento actual).
+  // El usuario quiere ver los días REALES desde la emisión de la factura
+  // hasta que el dinero entra (incluyendo los días de crédito que les da).
+  // Ej: factura a 90 días, paga 10 días después de vencida → 100 días.
+  //
+  // Método combinado:
+  //   1. Facturas YA PAGADAS (transición saldo>0 → saldo=0 entre dos
+  //      estados_cuenta consecutivos): días = fecha_corte_pago - fecha_emision
+  //   2. Facturas TODAVÍA ABIERTAS en el último estado: días = hoy - fecha_emision
+  //      (el reloj corre — esto refleja cuánto llevan SIN pagar incluyendo
+  //      los días de crédito).
+  // Ambos casos se promedian ponderado por importe_factura.
+  // Esto SIEMPRE da resultado mientras haya al menos un estado de cuenta
+  // cargado, y "incluye los días de crédito" como pidió Fernando.
   const diasCobro = (() => {
     const ec = (data.estadosCuenta || [])
       .filter((r) => r.cliente === clienteKey && r.fecha_corte)
       .sort((a, b) => new Date(a.fecha_corte) - new Date(b.fecha_corte));
-    if (ec.length < 2) return null;
+    if (ec.length === 0) return null;
     const idToFechaCorte = new Map(ec.map((e) => [e.id, e.fecha_corte]));
     const idIndex = new Map(ec.map((e, i) => [e.id, i]));
+    const lastIdx = ec.length - 1;
     const det = (data.estadosCuentaDetalle || []).filter((r) => idToFechaCorte.has(r.estado_cuenta_id));
 
-    // Agrupar por factura (referencia + fecha_emision)
+    // Agrupar eventos por factura
     const facturas = new Map();
     det.forEach((r) => {
       const ref = (r.referencia || '').toString();
@@ -401,31 +409,55 @@ function calcularResumen(clienteKey, data) {
       const key = ref + '|' + fe;
       const idx = idIndex.get(r.estado_cuenta_id);
       if (idx == null) return;
-      const list = facturas.get(key) || { fecha_emision: fe, importe: Number(r.importe_factura || 0), eventos: [] };
-      list.importe = Math.max(list.importe, Number(r.importe_factura || 0));
-      list.eventos.push({ idx, fecha_corte: idToFechaCorte.get(r.estado_cuenta_id), saldo: Number(r.saldo_actual || 0) });
-      facturas.set(key, list);
+      const f = facturas.get(key) || { fecha_emision: fe, importe: 0, eventos: [] };
+      f.importe = Math.max(f.importe, Number(r.importe_factura || 0));
+      f.eventos.push({
+        idx,
+        fecha_corte: idToFechaCorte.get(r.estado_cuenta_id),
+        saldo: Number(r.saldo_actual || 0),
+      });
+      facturas.set(key, f);
     });
 
-    const cutoffPago = new Date(); cutoffPago.setMonth(cutoffPago.getMonth() - 6);
+    const hoyMs = Date.now();
+    const cutoffPago = new Date(); cutoffPago.setMonth(cutoffPago.getMonth() - 12);
     let num = 0, den = 0;
+
     facturas.forEach((f) => {
-      if (f.eventos.length < 2) return;
       f.eventos.sort((a, b) => a.idx - b.idx);
-      // Buscar transición saldo>0 → saldo=0
-      let pagoEnIdx = -1;
+      const ultimo = f.eventos[f.eventos.length - 1];
+      let dias = null;
+
+      // 1) Pagada: existe transición saldo>0 → saldo=0
+      let pagoIdx = -1;
       for (let i = 1; i < f.eventos.length; i++) {
         if (f.eventos[i - 1].saldo > 0 && f.eventos[i].saldo === 0) {
-          pagoEnIdx = i; break;
+          pagoIdx = i; break;
         }
       }
-      if (pagoEnIdx < 0) return;
-      const fechaPago = f.eventos[pagoEnIdx].fecha_corte;
-      if (new Date(fechaPago) < cutoffPago) return; // solo últimos 6 meses
-      const dias = Math.round(
-        (new Date(fechaPago) - new Date(f.fecha_emision)) / (1000 * 60 * 60 * 24)
-      );
-      if (dias < 0 || dias > 720) return; // sanidad
+      // También: si el primer evento es saldo=0 pero la factura aparece, asumimos
+      // que ya estaba pagada en ese corte (límite inferior conservador).
+      if (pagoIdx < 0 && f.eventos.length === 1 && ultimo.saldo === 0) {
+        pagoIdx = 0;
+      }
+
+      if (pagoIdx >= 0) {
+        const fechaPago = f.eventos[pagoIdx].fecha_corte;
+        if (new Date(fechaPago) < cutoffPago) return; // muy vieja
+        dias = Math.round(
+          (new Date(fechaPago) - new Date(f.fecha_emision)) / (1000 * 60 * 60 * 24)
+        );
+      } else if (ultimo.idx === lastIdx && ultimo.saldo > 0) {
+        // 2) Abierta en el último estado: días corriendo desde emisión hasta hoy
+        dias = Math.round(
+          (hoyMs - new Date(f.fecha_emision).getTime()) / (1000 * 60 * 60 * 24)
+        );
+      } else {
+        // Factura desapareció del último estado sin transición visible: skip
+        return;
+      }
+
+      if (dias == null || dias < 0 || dias > 720) return;
       const peso = Number(f.importe) || 1;
       num += dias * peso;
       den += peso;
@@ -727,8 +759,11 @@ export default function ResumenClientesTab({ onDrillDown }) {
   const embudo = useMemo(() => {
     if (data.loading) return null;
     // Usamos el mismo criterio: hasta el último mes con sell-in real
+    // ML no factura sell-in a Acteck → lo excluimos del embudo para no
+    // distorsionar el % conversión (ML solo tiene sell-out).
+    const filaCuenta = (r) => r.cliente !== 'mercadolibre';
     const mesesConDatosEmb = (data.ventasAgg || [])
-      .filter((r) => Number(r.anio) === anioActual && Number(r.sell_in || 0) > 0)
+      .filter((r) => Number(r.anio) === anioActual && filaCuenta(r) && Number(r.sell_in || 0) > 0)
       .map((r) => Number(r.mes) || 0);
     const mesEfEmb = mesesConDatosEmb.length > 0
       ? Math.min(mesActual, Math.max(...mesesConDatosEmb))
@@ -738,6 +773,7 @@ export default function ResumenClientesTab({ onDrillDown }) {
     (data.ventasAgg || []).forEach((r) => {
       if (Number(r.anio) !== anioActual) return;
       if (Number(r.mes) > mesEfEmb) return;
+      if (!filaCuenta(r)) return;
       const si = Number(r.sell_in || 0);
       const so = Number(r.sell_out || 0);
       siYTD += si;
