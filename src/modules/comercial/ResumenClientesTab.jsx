@@ -516,6 +516,63 @@ export default function ResumenClientesTab({ onDrillDown }) {
   }, [data]);
 
   const trend   = useMemo(() => data.loading ? [] : calcularTrend(data),   [data]);
+
+  // C4: SKUs con cobertura < 45 días en CUALQUIER cliente.
+  // Cobertura = stock cliente / (sellout últimos 90d / 90).
+  // Pasa al ReporteSection como prop para que haga highlight.
+  const skusEnRiesgoCobertura = useMemo(() => {
+    if (data.loading) return new Set();
+    const UMBRAL = 45;
+    // Mapa: sku → { digitalife: {stock, soDiario}, pcel: {stock, soDiario} }
+    const porSku = {};
+    // Inventario cliente — semana más reciente por cliente
+    const invValidos = (data.inventarioCliente || []).filter(
+      (r) => r.anio != null && r.semana != null
+    );
+    const ultimaSem = {};  // cliente → "anio-semana"
+    invValidos.forEach((r) => {
+      const k = r.cliente;
+      const w = Number(r.anio) * 100 + Number(r.semana);
+      if (!ultimaSem[k] || w > ultimaSem[k]) ultimaSem[k] = w;
+    });
+    invValidos.forEach((r) => {
+      const w = Number(r.anio) * 100 + Number(r.semana);
+      if (ultimaSem[r.cliente] !== w) return;
+      const sku = (r.sku || '').toString();
+      if (!sku) return;
+      if (!porSku[sku]) porSku[sku] = {};
+      if (!porSku[sku][r.cliente]) porSku[sku][r.cliente] = { stock: 0, soDiario: 0 };
+      porSku[sku][r.cliente].stock += Number(r.stock) || 0;
+    });
+    // Sellout últimos 90 días (3 meses): suma piezas / 90
+    const mesesUlt = [];
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(anioActual, mesActual - 1 - i, 1);
+      mesesUlt.push({ anio: d.getFullYear(), mes: d.getMonth() + 1 });
+    }
+    (data.selloutSku || []).forEach((r) => {
+      const inWin = mesesUlt.some((m) => m.anio === Number(r.anio) && m.mes === Number(r.mes));
+      if (!inWin) return;
+      const sku = (r.sku || '').toString();
+      if (!sku) return;
+      if (!porSku[sku]) porSku[sku] = {};
+      if (!porSku[sku][r.cliente]) porSku[sku][r.cliente] = { stock: 0, soDiario: 0 };
+      porSku[sku][r.cliente].soDiario += (Number(r.piezas) || 0) / 90;
+    });
+    // Determinar SKUs en riesgo
+    const set = new Set();
+    Object.entries(porSku).forEach(([sku, clientes]) => {
+      let minCov = Infinity;
+      Object.values(clientes).forEach((c) => {
+        if (c.soDiario > 0) {
+          const cov = c.stock / c.soDiario;
+          if (cov < minCov) minCov = cov;
+        }
+      });
+      if (minCov < UMBRAL) set.add(sku);
+    });
+    return set;
+  }, [data]);
   const alertasAll = useMemo(() => calcularAlertas(resumenes), [resumenes]);
 
   // ── B3: Marcar alertas como atendidas — persistencia local por día ──
@@ -625,7 +682,7 @@ export default function ResumenClientesTab({ onDrillDown }) {
       </div>
 
       {/* Reporte: lista maestra de SKUs (colapsable) */}
-      <ReporteSection />
+      <ReporteSection skusEnRiesgo={skusEnRiesgoCobertura} />
 
       {/* Trend consolidado: Cuota vs Sell-In año en curso */}
       <TrendConsolidado trend={trend} />

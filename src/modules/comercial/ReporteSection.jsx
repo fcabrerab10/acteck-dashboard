@@ -50,7 +50,7 @@ function fmtFechaCorta(iso) {
   return `${parseInt(d, 10)} ${meses[parseInt(m, 10) - 1]} ${String(y).slice(2)}`;
 }
 
-export default function ReporteSection({ standalone = false } = {}) {
+export default function ReporteSection({ standalone = false, skusEnRiesgo = null } = {}) {
   const perfil = usePerfil();
   const canEdit = perfil?.es_super_admin === true || perfil?.rol === 'super_admin';
 
@@ -61,6 +61,8 @@ export default function ReporteSection({ standalone = false } = {}) {
   const [filtroRoadmap, setFiltroRoadmap] = useState('todos');
   const [filtroMarca, setFiltroMarca] = useState('todas');
   const [soloConStock, setSoloConStock] = useState(false);
+  const [soloSinEanSat, setSoloSinEanSat] = useState(false);  // C2
+  const [soloEnRiesgo, setSoloEnRiesgo] = useState(false);    // C4 toggle
   const [expandedSku, setExpandedSku] = useState(null);
   const [modal, setModal] = useState(null);
 
@@ -204,9 +206,11 @@ export default function ReporteSection({ standalone = false } = {}) {
       if (filtroRoadmap !== 'todos' && r.roadmap !== filtroRoadmap) return false;
       if (filtroMarca !== 'todas' && r.marca !== filtroMarca) return false;
       if (soloConStock && r.invTotal === 0) return false;
+      if (soloSinEanSat && (r.ean13 || r.codigo_sat)) return false;
+      if (soloEnRiesgo && skusEnRiesgo && !skusEnRiesgo.has(r.sku)) return false;
       return true;
     });
-  }, [rows, busqueda, filtroRoadmap, filtroMarca, soloConStock]);
+  }, [rows, busqueda, filtroRoadmap, filtroMarca, soloConStock, soloSinEanSat, soloEnRiesgo, skusEnRiesgo]);
 
   async function eliminarSku(id) {
     if (!canEdit) return;
@@ -314,6 +318,22 @@ export default function ReporteSection({ standalone = false } = {}) {
                   Solo con stock
                 </label>
 
+                {/* C2: filtro SKUs sin EAN/SAT */}
+                <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer" title="Útil para detectar catálogo incompleto">
+                  <input type="checkbox" checked={soloSinEanSat} onChange={(e) => setSoloSinEanSat(e.target.checked)}
+                    className="rounded border-gray-300" />
+                  Sin EAN/SAT
+                </label>
+
+                {/* C4: filtro SKUs en riesgo (cobertura < 45 días en cualquier cliente) */}
+                {skusEnRiesgo && skusEnRiesgo.size > 0 && (
+                  <label className="flex items-center gap-1.5 text-xs cursor-pointer" title="SKUs con cobertura < 45 días en Digitalife o PCEL">
+                    <input type="checkbox" checked={soloEnRiesgo} onChange={(e) => setSoloEnRiesgo(e.target.checked)}
+                      className="rounded border-gray-300" />
+                    <span className="text-amber-700 font-medium">⚠ Solo en riesgo ({skusEnRiesgo.size})</span>
+                  </label>
+                )}
+
                 <span className="text-xs text-gray-500 ml-auto">{filtrados.length} de {rows.length} SKUs</span>
 
                 {canEdit && (
@@ -350,6 +370,7 @@ export default function ReporteSection({ standalone = false } = {}) {
                         key={r.id} r={r}
                         canEdit={canEdit}
                         expanded={expandedSku === r.sku}
+                        enRiesgo={skusEnRiesgo ? skusEnRiesgo.has(r.sku) : false}
                         onToggleExpand={() => setExpandedSku(expandedSku === r.sku ? null : r.sku)}
                         onEditar={() => setModal({ tipo: 'editar', sku: r.s_raw })}
                         onEliminar={() => eliminarSku(r.id)}
@@ -395,12 +416,13 @@ export default function ReporteSection({ standalone = false } = {}) {
 }
 
 // ────────── Fila de tabla con expand ──────────
-function ReporteRow({ r, canEdit, expanded, onToggleExpand, onEditar, onEliminar, onActualizarPrecio }) {
+function ReporteRow({ r, canEdit, expanded, enRiesgo = false, onToggleExpand, onEditar, onEliminar, onActualizarPrecio }) {
   const rmStyle = roadmapStyle(r.roadmap);
   const rmInfo = roadmapInfo(r.roadmap);
   return (
     <>
-      <tr className={["border-t border-gray-100 hover:bg-blue-50/30 cursor-pointer", expanded && "bg-blue-50/40"].filter(Boolean).join(" ")}
+      <tr className={["border-t border-gray-100 cursor-pointer", expanded ? "bg-blue-50/40" : enRiesgo ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-blue-50/30"].filter(Boolean).join(" ")}
+        title={enRiesgo ? "⚠ En riesgo: cobertura < 45 días en algún cliente" : undefined}
         onClick={onToggleExpand}>
         <td className="px-3 py-2 font-mono text-xs font-semibold text-gray-800">
           <div className="flex items-center gap-1">
