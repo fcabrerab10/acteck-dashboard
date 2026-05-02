@@ -398,43 +398,47 @@ function calcularResumenMercadoLibre(data) {
 }
 
 // ────────── Trend consolidado 12 meses ──────────
-// Trend consolidado: 12 meses del AÑO en curso (Ene-Dic), cuota vs sell-in
-// real, sumando los clientes que aplican.
-//   · Cuota: Digitalife (de cuotas_mensuales) + PCEL (de cuotas_mensuales o
-//     fallback a PCEL_REAL.cuota50M si BD vacía). ML no maneja cuota → no suma.
-//   · Sell-In: suma de los 3 clientes (v_ventas_mensuales_agg).
-function calcularTrend(data) {
-  // Cuota PCEL fallback (mismo patrón que pestañas per-cliente)
+// Trend: 12 meses del AÑO en curso. Cuota vs Sell-In real + sell-in año
+// pasado como referencia (D5). Filtrable por cliente (D1).
+function calcularTrend(data, clienteFiltro = 'todos') {
   const cuotaPcelFallback = (() => {
     const tienePcelEnBD = data.cuotasMensuales.some((r) => r.cliente === 'pcel');
     if (tienePcelEnBD || !PCEL_REAL?.cuota50M) return null;
-    return PCEL_REAL.cuota50M; // { 1: ..., 2: ..., ..., 12: ... }
+    return PCEL_REAL.cuota50M;
   })();
+  const aplicaCliente = (cli) => {
+    if (clienteFiltro === 'todos') return cli !== 'mercadolibre'; // ML no tiene cuota/sell-in real
+    return cli === clienteFiltro;
+  };
 
   return Array.from({ length: 12 }, (_, idx) => {
     const mes = idx + 1;
-    let cuota = 0, si = 0;
-    // Cuota: suma cuota_min de Digitalife y PCEL del mes
+    let cuota = 0, si = 0, siPrev = 0;
+    // Cuota
     data.cuotasMensuales.forEach((r) => {
       if (Number(r.mes) !== mes) return;
-      if (r.cliente === 'mercadolibre') return;
+      if (!aplicaCliente(r.cliente)) return;
       cuota += Number(r.cuota_min || 0);
     });
-    // Si PCEL no está en BD pero hay constants, sumar el fallback
+    // PCEL fallback
     if (cuotaPcelFallback && cuotaPcelFallback[mes] != null) {
-      cuota += Number(cuotaPcelFallback[mes] || 0);
+      const incluyePcel = clienteFiltro === 'todos' || clienteFiltro === 'pcel';
+      const pcelEnBD = data.cuotasMensuales.some((r) => r.cliente === 'pcel');
+      if (incluyePcel && !pcelEnBD) cuota += Number(cuotaPcelFallback[mes] || 0);
     }
-    // Sell-In real del mes (suma 3 clientes)
+    // Sell-In año actual
     data.ventasAgg.forEach((r) => {
-      if (Number(r.anio) !== anioActual) return;
       if (Number(r.mes) !== mes) return;
-      si += Number(r.sell_in || 0);
+      if (!aplicaCliente(r.cliente)) return;
+      if (Number(r.anio) === anioActual) si += Number(r.sell_in || 0);
+      else if (Number(r.anio) === anioActual - 1) siPrev += Number(r.sell_in || 0);
     });
     return {
       mes,
       label: MESES_CORTO[idx],
       cuota,
       sell_in: si,
+      sell_in_prev: siPrev,  // D5: sell-in mismo mes año anterior
       esActual: mes === mesActual,
       esFuturo: mes > mesActual,
     };
@@ -515,7 +519,13 @@ export default function ResumenClientesTab({ onDrillDown }) {
     return arr;
   }, [data]);
 
-  const trend   = useMemo(() => data.loading ? [] : calcularTrend(data),   [data]);
+  // Trend: filtros (D1 cliente, D3 modo)
+  const [trendCliente, setTrendCliente] = useState('todos');  // todos|digitalife|pcel
+  const [trendModo, setTrendModo] = useState('mensual');       // mensual|acumulado
+  const trend = useMemo(
+    () => data.loading ? [] : calcularTrend(data, trendCliente),
+    [data, trendCliente]
+  );
 
   // C4: SKUs con cobertura < 45 días en CUALQUIER cliente.
   // Cobertura = stock cliente / (sellout últimos 90d / 90).
@@ -685,7 +695,13 @@ export default function ResumenClientesTab({ onDrillDown }) {
       <ReporteSection skusEnRiesgo={skusEnRiesgoCobertura} />
 
       {/* Trend consolidado: Cuota vs Sell-In año en curso */}
-      <TrendConsolidado trend={trend} />
+      <TrendConsolidado
+        trend={trend}
+        trendCliente={trendCliente}
+        setTrendCliente={setTrendCliente}
+        trendModo={trendModo}
+        setTrendModo={setTrendModo}
+      />
     </div>
   );
 }
@@ -1050,7 +1066,7 @@ function MoMIndicator({ pct }) {
 }
 
 // ────────── Trend consolidado 12 meses (SVG puro) ──────────
-function TrendConsolidado({ trend }) {
+function TrendConsolidado({ trend, trendCliente = 'todos', setTrendCliente, trendModo = 'mensual', setTrendModo }) {
   const hayDatos = trend.some((r) => r.cuota > 0 || r.sell_in > 0);
   const [hoverIdx, setHoverIdx] = useState(null);
 
@@ -1150,21 +1166,65 @@ function TrendConsolidado({ trend }) {
 
       {/* Gráfica de líneas */}
       <div className="bg-white rounded-xl border border-gray-200">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+        <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3">
           <h3 className="font-semibold text-gray-800 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-gray-600" />
             Cuota vs Sell-In · {anioActual}
           </h3>
-          <span className="text-xs text-gray-400">Digitalife + PCEL</span>
+          {/* D1: toggle por cliente */}
+          {setTrendCliente && (
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              {[
+                { v: 'todos', label: 'Todos' },
+                { v: 'digitalife', label: 'Digitalife' },
+                { v: 'pcel', label: 'PCEL' },
+              ].map((opt) => (
+                <button
+                  key={opt.v}
+                  onClick={() => setTrendCliente(opt.v)}
+                  className={[
+                    'px-2.5 py-0.5 rounded-md text-xs font-medium transition',
+                    trendCliente === opt.v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+                  ].join(' ')}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* D3: toggle modo mensual/acumulado */}
+          {setTrendModo && (
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              {[
+                { v: 'mensual', label: 'Mensual' },
+                { v: 'acumulado', label: 'Acumulado YTD' },
+              ].map((opt) => (
+                <button
+                  key={opt.v}
+                  onClick={() => setTrendModo(opt.v)}
+                  className={[
+                    'px-2.5 py-0.5 rounded-md text-xs font-medium transition',
+                    trendModo === opt.v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+                  ].join(' ')}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex-1" />
           <div className="flex items-center gap-3 text-xs">
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-0.5" style={{ backgroundColor: '#94A3B8', borderTop: '2px dashed #94A3B8', height: 0 }} />
+              <span className="inline-block w-4 border-t-2 border-dashed border-gray-400" />
               <span className="text-gray-600">Cuota</span>
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-0.5" style={{ backgroundColor: '#3B82F6' }} />
+              <span className="inline-block w-4 h-0.5" style={{ backgroundColor: '#3B82F6' }} />
               <span className="text-gray-600">Sell-In</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-4 border-t border-dotted" style={{ borderColor: '#A78BFA' }} />
+              <span className="text-gray-600">Sell-In {anioActual - 1}</span>
             </span>
           </div>
         </div>
@@ -1178,7 +1238,7 @@ function TrendConsolidado({ trend }) {
               </div>
             </div>
           ) : (
-            <TrendSvg trend={trend} hoverIdx={hoverIdx} setHoverIdx={setHoverIdx} />
+            <TrendSvg trend={trend} modo={trendModo} hoverIdx={hoverIdx} setHoverIdx={setHoverIdx} />
           )}
         </div>
       </div>
@@ -1186,15 +1246,38 @@ function TrendConsolidado({ trend }) {
   );
 }
 
-function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
+function TrendSvg({ trend, hoverIdx, setHoverIdx, modo = 'mensual' }) {
+  // Modo acumulado: convertir cada mes en suma desde enero hasta ese mes.
+  // En meses futuros, no acumular el sell-in/sell-in-prev (los dejamos en 0
+  // tras el último mes con datos para que la línea no caiga).
+  const trendDisplay = (() => {
+    if (modo !== 'acumulado') return trend;
+    let cuAcum = 0, siAcum = 0, siPrevAcum = 0;
+    let lastSI = 0, lastSIP = 0;
+    return trend.map((r) => {
+      cuAcum += r.cuota || 0;
+      if (!r.esFuturo) {
+        siAcum += r.sell_in || 0;
+        siPrevAcum += r.sell_in_prev || 0;
+        lastSI = siAcum;
+        lastSIP = siPrevAcum;
+      }
+      return {
+        ...r,
+        cuota: cuAcum,
+        sell_in: r.esFuturo ? lastSI : siAcum,
+        sell_in_prev: r.esFuturo ? lastSIP : siPrevAcum,
+      };
+    });
+  })();
   const W = 960;
   const H = 300;
   const padL = 56, padR = 16, padT = 20, padB = 34;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
 
-  const maxVal = Math.max(1, ...trend.flatMap((r) => [r.cuota || 0, r.sell_in || 0]));
-  const n = trend.length;
+  const maxVal = Math.max(1, ...trendDisplay.flatMap((r) => [r.cuota || 0, r.sell_in || 0, r.sell_in_prev || 0]));
+  const n = trendDisplay.length;
   const slot = innerW / n;
 
   const yFor = (v) => padT + innerH - (v / maxVal) * innerH;
@@ -1210,17 +1293,24 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
   };
 
   // Línea de cuota (12 meses, dashed gris)
-  const pathCuota = trend
+  const pathCuota = trendDisplay
     .map((r, i) => `${i === 0 ? 'M' : 'L'}${xFor(i)},${yFor(r.cuota || 0)}`)
     .join(' ');
 
   // Línea de sell-in: solo meses con datos (no futuros)
-  // Usamos una sola línea continua hasta el último mes con venta
-  const trendConVenta = trend.map((r, i) => ({ ...r, _i: i }))
+  const trendConVenta = trendDisplay.map((r, i) => ({ ...r, _i: i }))
     .filter((r) => !r.esFuturo);
   const pathSI = trendConVenta
     .map((r, idx) => `${idx === 0 ? 'M' : 'L'}${xFor(r._i)},${yFor(r.sell_in || 0)}`)
     .join(' ');
+
+  // D5: línea fantasma sell-in año pasado (12 meses si hay datos)
+  const tieneSIprev = trendDisplay.some((r) => (r.sell_in_prev || 0) > 0);
+  const pathSIprev = tieneSIprev
+    ? trendDisplay
+        .map((r, i) => `${i === 0 ? 'M' : 'L'}${xFor(i)},${yFor(r.sell_in_prev || 0)}`)
+        .join(' ')
+    : null;
 
   // Área bajo línea de Sell-In (gradiente sutil)
   const areaSI = trendConVenta.length > 0
@@ -1250,7 +1340,7 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
         ))}
 
         {/* Línea vertical en mes actual */}
-        {trend.map((r, i) => r.esActual && (
+        {trendDisplay.map((r, i) => r.esActual && (
           <line key={'now' + i}
             x1={xFor(i)} y1={padT}
             x2={xFor(i)} y2={padT + innerH}
@@ -1261,6 +1351,11 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
         {/* Área bajo Sell-In (decorativa) */}
         {areaSI && <path d={areaSI} fill="url(#siGradient)" />}
 
+        {/* D5: Línea fantasma Sell-In año anterior */}
+        {pathSIprev && (
+          <path d={pathSIprev} fill="none" stroke="#A78BFA" strokeWidth="1.5" strokeDasharray="2 3" opacity="0.7" />
+        )}
+
         {/* Línea Cuota — punteada gris */}
         <path d={pathCuota} fill="none" stroke="#94A3B8" strokeWidth="2" strokeDasharray="6 4" />
 
@@ -1268,7 +1363,7 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
         <path d={pathSI} fill="none" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
         {/* Puntos en cada mes — Cuota */}
-        {trend.map((r, i) => (r.cuota > 0 ? (
+        {trendDisplay.map((r, i) => (r.cuota > 0 ? (
           <circle key={'qd' + i}
             cx={xFor(i)} cy={yFor(r.cuota)}
             r={hoverIdx === i ? 4 : 2.5}
@@ -1280,7 +1375,7 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
         ) : null))}
 
         {/* Puntos en cada mes — Sell-In (color por cumplimiento) */}
-        {trend.map((r, i) => {
+        {trendDisplay.map((r, i) => {
           if (r.esFuturo || (r.sell_in || 0) <= 0) return null;
           const cuota = r.cuota || 0;
           const pct = cuota > 0 ? r.sell_in / cuota : null;
@@ -1301,7 +1396,7 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
         })}
 
         {/* Hot zone invisible para hover en cada mes */}
-        {trend.map((r, i) => (
+        {trendDisplay.map((r, i) => (
           <rect key={'hot' + i}
             x={xFor(i) - slot / 2} y={padT}
             width={slot} height={innerH}
@@ -1313,7 +1408,7 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
         ))}
 
         {/* X axis labels */}
-        {trend.map((r, i) => (
+        {trendDisplay.map((r, i) => (
           <text
             key={'x' + i}
             x={xFor(i)}
@@ -1330,11 +1425,13 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
 
       {/* Tooltip */}
       {hoverIdx != null && (() => {
-        const r = trend[hoverIdx];
+        const r = trendDisplay[hoverIdx];
         const cuota = r.cuota || 0;
         const si = r.sell_in || 0;
+        const siPrev = r.sell_in_prev || 0;
         const pct = cuota > 0 ? (si / cuota) * 100 : null;
         const falta = cuota > 0 ? Math.max(0, cuota - si) : 0;
+        const yoy = siPrev > 0 ? ((si - siPrev) / siPrev) * 100 : null;
         return (
           <div
             className="absolute pointer-events-none bg-gray-900 text-white rounded-lg px-3 py-2 text-xs shadow-lg"
@@ -1357,6 +1454,17 @@ function TrendSvg({ trend, hoverIdx, setHoverIdx }) {
               <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: '#3B82F6' }} />
               Sell-In: <span className="font-semibold tabular-nums ml-auto">{formatMXN(si)}</span>
             </div>
+            {siPrev > 0 && (
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: '#A78BFA' }} />
+                Sell-In {anioActual - 1}: <span className="font-semibold tabular-nums ml-auto">{formatMXN(siPrev)}</span>
+              </div>
+            )}
+            {yoy != null && !r.esFuturo && (
+              <div className={"text-[11px] " + (yoy >= 0 ? 'text-emerald-300' : 'text-red-300')}>
+                {yoy >= 0 ? '+' : ''}{yoy.toFixed(0)}% vs año anterior
+              </div>
+            )}
             {pct != null && !r.esFuturo && (
               <div className="border-t border-gray-700 mt-1 pt-1 text-[11px]">
                 {pct >= 100
