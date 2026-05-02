@@ -98,6 +98,8 @@ function useResumenData() {
     creditoConfig: [],
     selloutSku: [],
     sellInSku: [],
+    estadosCuenta: [],
+    estadosCuentaDetalle: [],
     inversionMkt: [],
   });
 
@@ -122,7 +124,7 @@ function useResumenData() {
       // Inventario cliente: usamos el MISMO adapter que HomeCliente para que
       // los números sean consistentes entre Resumen y la pestaña per-cliente.
       // PCEL → lee de sellout_pcel; Digitalife → de inventario_cliente.
-      const [vaRes, cmRes, invDigi, invPcel, dsoRes, ccRes, soRows, siRows, mkRes] = await Promise.all([
+      const [vaRes, cmRes, invDigi, invPcel, dsoRes, ccRes, soRows, siRows, ecRows, mkRes] = await Promise.all([
         supabase.from('v_ventas_mensuales_agg')
           .select('cliente, anio, mes, sell_in, sell_out')
           .gte('anio', anioActual - 1),
@@ -143,6 +145,13 @@ function useResumenData() {
         fetchAll(() => supabase.from('sell_in_sku')
           .select('cliente, sku, piezas, monto_pesos')
           .gte('anio', anioActual - 1)),
+        // Estados de cuenta históricos (todos) → para reconstruir cuándo
+        // cada factura pasó de saldo>0 a saldo=0 y calcular días reales de
+        // cobro. Limitamos a los últimos 12 meses para evitar tablas
+        // gigantes.
+        fetchAll(() => supabase.from('estados_cuenta')
+          .select('id, cliente, fecha_corte, anio, semana')
+          .order('fecha_corte', { ascending: true })),
         // Marketing: leemos de marketing_actividades (mismo lugar que la
         // pestaña Pagos → apartado Marketing usa). El campo `inversion` es
         // el monto MXN gastado por actividad.
@@ -157,6 +166,28 @@ function useResumenData() {
         ...(invPcel || []).map((r) => ({ ...r, cliente: 'pcel' })),
       ];
 
+      // Detalle de estados_cuenta: lo necesitamos para reconstruir cuándo
+      // cada factura quedó saldada. Limitamos a los estados de los últimos
+      // 12 meses para no traer histórico gigante.
+      const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 12);
+      const ecRecientes = (ecRows || []).filter((r) => {
+        if (!r.fecha_corte) return false;
+        return new Date(r.fecha_corte) >= cutoff;
+      });
+      const ecIds = ecRecientes.map((r) => r.id);
+      let ecDetRows = [];
+      if (ecIds.length > 0) {
+        // Fragmentamos por chunks de 100 ids para no rebasar URL length.
+        const CHUNK = 100;
+        for (let i = 0; i < ecIds.length; i += CHUNK) {
+          const slice = ecIds.slice(i, i + CHUNK);
+          const det = await fetchAll(() => supabase.from('estados_cuenta_detalle')
+            .select('estado_cuenta_id, referencia, fecha_emision, importe_factura, saldo_actual')
+            .in('estado_cuenta_id', slice));
+          ecDetRows.push(...det);
+        }
+      }
+
       setState({
         loading: false,
         ventasAgg:         vaRes.data  || [],
@@ -166,6 +197,8 @@ function useResumenData() {
         creditoConfig:     ccRes.data  || [],
         selloutSku:        soRows       || [],
         sellInSku:         siRows       || [],
+        estadosCuenta:     ecRecientes  || [],
+        estadosCuentaDetalle: ecDetRows || [],
         inversionMkt:      mkRes.data  || [],
       });
     })();
@@ -334,16 +367,74 @@ function calcularResumen(clienteKey, data) {
     coberturaDias = soDiario > 0 ? Math.round(inventarioValor / soDiario) : null;
   }
 
-  // ── DSO real + plazo de crédito ──
+  // ── Plazo de crédito ──
   const plazo = Number(ccRow?.plazo_dias_credito || 90);
-  const dsoReal = dsoRow?.dso_real != null ? Number(dsoRow.dso_real) : null;
   const saldoVencido = Number(dsoRow?.saldo_vencido || 0);
   const saldoActual  = Number(dsoRow?.saldo_actual_total || 0);
   const aging90      = Number(dsoRow?.aging_mas90 || 0);
-  // FIX: si hay vencido pero el saldo total es 0 (caso raro), reportar 100% para no ocultar
   const pctVencido = saldoActual > 0
     ? (saldoVencido / saldoActual) * 100
     : (saldoVencido > 0 ? 100 : 0);
+
+  // ── Días de cobro (reemplaza DSO) ──
+  // Recorremos los estados_cuenta del cliente en orden cronológico y
+  // detectamos cuándo cada factura pasó de saldo>0 a saldo=0 (= pagada).
+  // dias_cobro_factura = fecha_corte_estado_pagado - fecha_emision
+  // Promedio ponderado por importe_factura, considerando solo facturas
+  // pagadas en los últimos 6 meses (recientes = más representativo del
+  // comportamiento actual).
+  const diasCobro = (() => {
+    const ec = (data.estadosCuenta || [])
+      .filter((r) => r.cliente === clienteKey && r.fecha_corte)
+      .sort((a, b) => new Date(a.fecha_corte) - new Date(b.fecha_corte));
+    if (ec.length < 2) return null;
+    const idToFechaCorte = new Map(ec.map((e) => [e.id, e.fecha_corte]));
+    const idIndex = new Map(ec.map((e, i) => [e.id, i]));
+    const det = (data.estadosCuentaDetalle || []).filter((r) => idToFechaCorte.has(r.estado_cuenta_id));
+
+    // Agrupar por factura (referencia + fecha_emision)
+    const facturas = new Map();
+    det.forEach((r) => {
+      const ref = (r.referencia || '').toString();
+      const fe = r.fecha_emision || '';
+      if (!ref || !fe) return;
+      const key = ref + '|' + fe;
+      const idx = idIndex.get(r.estado_cuenta_id);
+      if (idx == null) return;
+      const list = facturas.get(key) || { fecha_emision: fe, importe: Number(r.importe_factura || 0), eventos: [] };
+      list.importe = Math.max(list.importe, Number(r.importe_factura || 0));
+      list.eventos.push({ idx, fecha_corte: idToFechaCorte.get(r.estado_cuenta_id), saldo: Number(r.saldo_actual || 0) });
+      facturas.set(key, list);
+    });
+
+    const cutoffPago = new Date(); cutoffPago.setMonth(cutoffPago.getMonth() - 6);
+    let num = 0, den = 0;
+    facturas.forEach((f) => {
+      if (f.eventos.length < 2) return;
+      f.eventos.sort((a, b) => a.idx - b.idx);
+      // Buscar transición saldo>0 → saldo=0
+      let pagoEnIdx = -1;
+      for (let i = 1; i < f.eventos.length; i++) {
+        if (f.eventos[i - 1].saldo > 0 && f.eventos[i].saldo === 0) {
+          pagoEnIdx = i; break;
+        }
+      }
+      if (pagoEnIdx < 0) return;
+      const fechaPago = f.eventos[pagoEnIdx].fecha_corte;
+      if (new Date(fechaPago) < cutoffPago) return; // solo últimos 6 meses
+      const dias = Math.round(
+        (new Date(fechaPago) - new Date(f.fecha_emision)) / (1000 * 60 * 60 * 24)
+      );
+      if (dias < 0 || dias > 720) return; // sanidad
+      const peso = Number(f.importe) || 1;
+      num += dias * peso;
+      den += peso;
+    });
+    return den > 0 ? Math.round(num / den) : null;
+  })();
+  // Mantenemos `dsoReal` como alias para compatibilidad con el resto del
+  // código (alertas, render). Ahora apunta a "días de cobro" calculado.
+  const dsoReal = diasCobro;
 
   // ── Inversión marketing YTD y ROI ──
   // Lee de marketing_actividades (campo `inversion`), igual que la pestaña
@@ -568,7 +659,7 @@ function calcularAlertas(resumenes) {
     if (resumen.dsoReal != null && resumen.dsoReal > (resumen.dsoPlazo + 30)) {
       alertas.push({
         tipo: 'dso', clienteKey: cliente.key, cliente: cliente.nombre,
-        mensaje: `DSO ${resumen.dsoReal}d (plazo ${resumen.dsoPlazo}d)`,
+        mensaje: `Días de cobro ${resumen.dsoReal}d (plazo ${resumen.dsoPlazo}d)`,
         severidad: 'alta',
       });
     }
@@ -990,7 +1081,7 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
           )}
         </div>
         <div>
-          <div className="text-gray-500">DSO real</div>
+          <div className="text-gray-500">Días de cobro</div>
           <div className="font-semibold" style={{ color: colorDSO(resumen.dsoReal, resumen.dsoPlazo) }}>
             {resumen.dsoReal != null ? `${resumen.dsoReal}d` : '—'}
           </div>
