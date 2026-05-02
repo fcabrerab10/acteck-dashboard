@@ -527,6 +527,27 @@ export default function ResumenClientesTab({ onDrillDown }) {
     [data, trendCliente]
   );
 
+  // E5: Embudo Sell-In → Sell-Out · % conversion del año
+  const embudo = useMemo(() => {
+    if (data.loading) return null;
+    let siYTD = 0, soYTD = 0;
+    const porCliente = {};
+    (data.ventasAgg || []).forEach((r) => {
+      if (Number(r.anio) !== anioActual) return;
+      if (Number(r.mes) > mesActual) return;
+      const si = Number(r.sell_in || 0);
+      const so = Number(r.sell_out || 0);
+      siYTD += si;
+      soYTD += so;
+      const k = r.cliente;
+      if (!porCliente[k]) porCliente[k] = { si: 0, so: 0 };
+      porCliente[k].si += si;
+      porCliente[k].so += so;
+    });
+    const conv = siYTD > 0 ? (soYTD / siYTD) * 100 : null;
+    return { siYTD, soYTD, conv, porCliente };
+  }, [data]);
+
   // C4: SKUs con cobertura < 45 días en CUALQUIER cliente.
   // Cobertura = stock cliente / (sellout últimos 90d / 90).
   // Pasa al ReporteSection como prop para que haga highlight.
@@ -702,6 +723,9 @@ export default function ResumenClientesTab({ onDrillDown }) {
         trendModo={trendModo}
         setTrendModo={setTrendModo}
       />
+
+      {/* E5: Embudo Sell-In → Sell-Out (% conversión del año) */}
+      {embudo && (embudo.siYTD > 0 || embudo.soYTD > 0) && <EmbudoConversion embudo={embudo} />}
     </div>
   );
 }
@@ -981,6 +1005,113 @@ function SparklineMini({ data, color = '#3B82F6' }) {
       <div className="flex items-center justify-between text-[9px] text-gray-400 mt-0.5">
         <span>{meses[primer.mes - 1]} {String(primer.anio).slice(2)}</span>
         <span>{meses[ultimo.mes - 1]} {String(ultimo.anio).slice(2)}</span>
+      </div>
+    </div>
+  );
+}
+
+// E5: Embudo Sell-In → Sell-Out (% conversion del año)
+function EmbudoConversion({ embudo }) {
+  const { siYTD, soYTD, conv, porCliente } = embudo;
+  const max = Math.max(siYTD, soYTD, 1);
+  const wSI = (siYTD / max) * 100;
+  const wSO = (soYTD / max) * 100;
+  // Color por % conversion: > 90% verde · 70-90% ámbar · < 70% rojo
+  const colorConv = conv == null ? '#94A3B8'
+    : conv >= 90 ? '#10B981'
+    : conv >= 70 ? '#F59E0B'
+    : '#EF4444';
+  const labelConv = conv == null ? 'Sin datos'
+    : conv >= 90 ? 'Excelente — el cliente está moviendo lo que le mandas'
+    : conv >= 70 ? 'Aceptable — algo se está acumulando'
+    : 'Baja conversión — riesgo de sobreinventario en cliente';
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+        <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-gray-600" />
+          Embudo Sell-In → Sell-Out · YTD {anioActual}
+        </h3>
+        <span className="text-xs text-gray-400">Lo que mandas vs lo que el cliente desplaza</span>
+      </div>
+      <div className="p-5 space-y-4">
+        {/* Barras horizontales */}
+        <div className="space-y-3">
+          <div>
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-xs font-semibold text-gray-700">📤 Sell-In (lo que enviaste)</span>
+              <span className="text-sm font-bold tabular-nums text-blue-700">{formatMXN(siYTD)}</span>
+            </div>
+            <div className="h-6 bg-gray-100 rounded-md overflow-hidden">
+              <div className="h-full bg-blue-500 rounded-md transition-all" style={{ width: `${wSI}%` }} />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-xs font-semibold text-gray-700">📦 Sell-Out (lo que el cliente vendió)</span>
+              <span className="text-sm font-bold tabular-nums text-emerald-700">{formatMXN(soYTD)}</span>
+            </div>
+            <div className="h-6 bg-gray-100 rounded-md overflow-hidden">
+              <div className="h-full bg-emerald-500 rounded-md transition-all" style={{ width: `${wSO}%` }} />
+            </div>
+          </div>
+        </div>
+
+        {/* % conversion grande */}
+        <div className="flex items-center gap-4 pt-2 border-t border-gray-100">
+          <div>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide">Conversión</div>
+            <div className="text-3xl font-bold tabular-nums" style={{ color: colorConv }}>
+              {conv == null ? '—' : `${conv.toFixed(0)}%`}
+            </div>
+          </div>
+          <div className="flex-1 text-xs text-gray-600">
+            <div className="font-semibold" style={{ color: colorConv }}>{labelConv}</div>
+            <div className="text-gray-500 mt-1">
+              {conv != null && (
+                conv >= 100
+                  ? `El cliente está vendiendo más de lo que le envías — está rotando inventario viejo o creciendo.`
+                  : conv >= 90
+                    ? `Casi todo lo que le envías se está vendiendo. Saludable.`
+                    : conv >= 70
+                      ? `Acumulando ~${(100 - conv).toFixed(0)}% del inventario que le envías. Ojo.`
+                      : `Acumulando >${(100 - conv).toFixed(0)}% — revisar si el sugerido está calibrado.`
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Por cliente individual (si hay más de uno con datos) */}
+        {Object.keys(porCliente).filter(k => porCliente[k].si > 0).length > 1 && (
+          <div className="pt-3 border-t border-gray-100">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-2">Por cliente</div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {Object.entries(porCliente)
+                .filter(([, v]) => v.si > 0)
+                .map(([cli, v]) => {
+                  const pct = v.si > 0 ? (v.so / v.si) * 100 : null;
+                  const c = pct == null ? '#94A3B8'
+                    : pct >= 90 ? '#10B981'
+                    : pct >= 70 ? '#F59E0B'
+                    : '#EF4444';
+                  const nombre = cli === 'digitalife' ? 'Digitalife' : cli === 'pcel' ? 'PCEL' : 'Mercado Libre';
+                  return (
+                    <div key={cli} className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs font-semibold text-gray-700 mb-1">{nombre}</div>
+                      <div className="flex items-baseline justify-between text-[11px] text-gray-500">
+                        <span>SI {formatMXN(v.si)}</span>
+                        <span>SO {formatMXN(v.so)}</span>
+                      </div>
+                      <div className="text-xl font-bold mt-1" style={{ color: c }}>
+                        {pct == null ? '—' : `${pct.toFixed(0)}%`}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
