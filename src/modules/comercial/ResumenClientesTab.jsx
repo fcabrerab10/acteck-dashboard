@@ -274,7 +274,7 @@ function calcularResumen(clienteKey, data) {
   const siYTD = vaAnio
     .filter((r) => Number(r.mes) <= mesEf)
     .reduce((a, r) => a + Number(r.sell_in || 0), 0);
-  const soYTD = vaAnio
+  let soYTD = vaAnio
     .filter((r) => Number(r.mes) <= mesEf)
     .reduce((a, r) => a + Number(r.sell_out || 0), 0);
 
@@ -283,7 +283,26 @@ function calcularResumen(clienteKey, data) {
   const rowMesPrev   = va.find((r) => Number(r.mes) === mesEf && r.anio === anioActual - 1);
   const siMes     = Number(rowMesActual?.sell_in  || 0);
   const siMesPrev = Number(rowMesPrev?.sell_in    || 0);
-  const soMes     = Number(rowMesActual?.sell_out || 0);
+  let soMes       = Number(rowMesActual?.sell_out || 0);
+
+  // PCEL solo reporta sellout en piezas (no monto). Para tener Sell-Out
+  // YTD/Mes en MXN, valuamos las piezas con costo_promedio_sku.
+  if (clienteKey === 'pcel') {
+    let soYTD_pcel = 0, soMes_pcel = 0;
+    so.forEach((r) => {
+      const m = Number(r.mes) || 0;
+      if (m < 1 || m > mesEf) return;
+      const sku = (r.sku || '').toString();
+      const piezas = Number(r.piezas || 0);
+      const cp = costoPromedioSku[sku];
+      if (cp == null) return;
+      const monto = piezas * cp;
+      soYTD_pcel += monto;
+      if (m === mesEf) soMes_pcel += monto;
+    });
+    if (soYTD_pcel > 0) soYTD = soYTD_pcel;
+    if (soMes_pcel > 0) soMes = soMes_pcel;
+  }
   const siYoY = siMesPrev > 0 ? ((siMes - siMesPrev) / siMesPrev) * 100 : null;
 
   // ── Cuota YTD y anual ──
