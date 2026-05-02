@@ -274,21 +274,23 @@ function calcularResumen(clienteKey, data) {
   const siYTD = vaAnio
     .filter((r) => Number(r.mes) <= mesEf)
     .reduce((a, r) => a + Number(r.sell_in || 0), 0);
-  let soYTD = vaAnio
-    .filter((r) => Number(r.mes) <= mesEf)
-    .reduce((a, r) => a + Number(r.sell_out || 0), 0);
 
   // MoM: comparamos el último mes con datos vs el mismo mes año anterior.
   const rowMesActual = vaAnio.find((r) => Number(r.mes) === mesEf);
   const rowMesPrev   = va.find((r) => Number(r.mes) === mesEf && r.anio === anioActual - 1);
   const siMes     = Number(rowMesActual?.sell_in  || 0);
   const siMesPrev = Number(rowMesPrev?.sell_in    || 0);
-  let soMes       = Number(rowMesActual?.sell_out || 0);
 
-  // PCEL solo reporta sellout en piezas (no monto). Para tener Sell-Out
-  // YTD/Mes en MXN, valuamos las piezas con costo_promedio_sku.
+  // ── Sell-Out YTD / Mes ──
+  // Calculamos directo desde sellout_sku (mismo source que HomeCliente, no
+  // la vista v_ventas_mensuales_agg que estaba dando otros números).
+  //   · Digitalife → sum(monto_pesos)         [precio venta a consumidor]
+  //   · PCEL       → sum(piezas × costo_promedio_sku) [a costo Acteck]
+  // Marcamos `selloutACosto` para que la UI muestre la nota correspondiente.
+  let soYTD = 0, soMes = 0;
+  let selloutACosto = false;
   if (clienteKey === 'pcel') {
-    let soYTD_pcel = 0, soMes_pcel = 0;
+    selloutACosto = true;
     so.forEach((r) => {
       const m = Number(r.mes) || 0;
       if (m < 1 || m > mesEf) return;
@@ -297,11 +299,18 @@ function calcularResumen(clienteKey, data) {
       const cp = costoPromedioSku[sku];
       if (cp == null) return;
       const monto = piezas * cp;
-      soYTD_pcel += monto;
-      if (m === mesEf) soMes_pcel += monto;
+      soYTD += monto;
+      if (m === mesEf) soMes += monto;
     });
-    if (soYTD_pcel > 0) soYTD = soYTD_pcel;
-    if (soMes_pcel > 0) soMes = soMes_pcel;
+  } else {
+    // Digitalife (y cualquier otro cliente con monto en sellout_sku)
+    so.forEach((r) => {
+      const m = Number(r.mes) || 0;
+      if (m < 1 || m > mesEf) return;
+      const monto = Number(r.monto_pesos || 0);
+      soYTD += monto;
+      if (m === mesEf) soMes += monto;
+    });
   }
   const siYoY = siMesPrev > 0 ? ((siMes - siMesPrev) / siMesPrev) * 100 : null;
 
@@ -574,7 +583,7 @@ function calcularResumen(clienteKey, data) {
     healthScore,
     componentes,
     componentesSinDatos,
-    siYTD, soYTD,
+    siYTD, soYTD, selloutACosto,
     siMes, siMesPrev, siYoY,
     sparkline: (function() {
       // A1: últimos 6 meses con sell-in real y cuota de referencia.
@@ -1121,8 +1130,18 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
       {/* KPIs secundarios */}
       <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-3 grid grid-cols-2 gap-3 text-xs">
         <div>
-          <div className="text-gray-500">Sell-Out YTD</div>
+          <div className="text-gray-500">
+            Sell-Out YTD
+            {resumen.selloutACosto && (
+              <span className="ml-1 text-[10px] text-amber-600 font-medium">(a costo)</span>
+            )}
+          </div>
           <div className="font-semibold text-gray-800">{resumen.soYTD > 0 ? formatMXN(resumen.soYTD) : '—'}</div>
+          {resumen.selloutACosto && (
+            <div className="text-[10px] text-gray-400 mt-0.5">
+              piezas × costo promedio sell-in
+            </div>
+          )}
         </div>
         <div>
           <div className="text-gray-500">Inventario cliente</div>
