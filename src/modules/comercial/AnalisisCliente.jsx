@@ -970,11 +970,11 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
                 return el("tr", { key: marca, style: { borderBottom: "1px solid #f1f5f9" } },
                   el("td", { style: { padding: "10px 12px", color: "#1e293b", fontWeight: 600 } }, marca),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, m.siPiezas.toLocaleString("es-MX")),
-                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, formatPesos(m.siMonto)),
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(m.siMonto)),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, m.soPiezas.toLocaleString("es-MX")),
-                  !esPcel && el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, formatPesos(m.soMonto)),
+                  !esPcel && el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(m.soMonto)),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, m.invPiezas.toLocaleString("es-MX")),
-                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, formatPesos(m.invValor))
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(m.invValor))
                 );
               })
             )
@@ -1005,10 +1005,10 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
               Object.entries(aggsByMarcaCat.byCategoria).sort(function(a,b){return metric(b[1])-metric(a[1]);}).map(function(entry) {
                 var cat = entry[0], c = entry[1];
                 var pctTxt = totalSO > 0 ? (metric(c)/totalSO*100).toFixed(1) + "%" : "0.0%";
-                var soDisplay = esPcel ? c.soPiezas.toLocaleString("es-MX") : formatPesos(c.soMonto);
+                var soDisplay = esPcel ? c.soPiezas.toLocaleString("es-MX") : fmtMoney(c.soMonto);
                 return el("tr", { key: cat, style: { borderBottom: "1px solid #f1f5f9" } },
                   el("td", { style: { padding: "10px 12px", color: "#1e293b", fontWeight: 600 } }, cat),
-                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, formatPesos(c.invValor)),
+                  el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, fmtMoney(c.invValor)),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, soDisplay),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, pctTxt),
                   el("td", { style: { textAlign: "right", padding: "10px 12px", color: "#475569" } }, c.invPiezas > 0 ? c.invPiezas.toLocaleString("es-MX") : "0")
