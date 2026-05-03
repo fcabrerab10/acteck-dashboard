@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import { PCEL_REAL } from '../../lib/constants';
-import { fetchInventarioCliente, fetchSelloutSku } from '../../lib/pcelAdapter';
+import { fetchInventarioCliente, fetchSelloutSku, isoWeekToMonth } from '../../lib/pcelAdapter';
 import {
   BarChart3, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2,
   DollarSign, Package, Clock, Target, ArrowRight,
@@ -97,7 +97,7 @@ function useResumenData() {
     dsoReal: [],
     creditoConfig: [],
     selloutSku: [],
-    selloutDigiDetalle: [],
+    selloutPcelSemanal: [],
     sellInSku: [],
     estadosCuenta: [],
     estadosCuentaDetalle: [],
@@ -125,7 +125,7 @@ function useResumenData() {
       // Inventario cliente: usamos el MISMO adapter que HomeCliente para que
       // los números sean consistentes entre Resumen y la pestaña per-cliente.
       // PCEL → lee de sellout_pcel; Digitalife → de inventario_cliente.
-      const [vaRes, cmRes, invDigi, invPcel, dsoRes, ccRes, soRows, sdDigiRows, siRows, ecRows, mkRes] = await Promise.all([
+      const [vaRes, cmRes, invDigi, invPcel, dsoRes, ccRes, soRows, soPcelRows, siRows, ecRows, mkRes] = await Promise.all([
         supabase.from('v_ventas_mensuales_agg')
           .select('cliente, anio, mes, sell_in, sell_out')
           .gte('anio', anioActual - 1),
@@ -141,14 +141,12 @@ function useResumenData() {
         fetchAll(() => supabase.from('sellout_sku')
           .select('cliente, anio, mes, sku, piezas, monto_pesos')
           .eq('anio', anioActual)),
-        // Sell-Out Digitalife — fuente de verdad: sellout_detalle (uploads
-        // semanales). sellout_sku queda desincronizado si no corre el
-        // recalc, así que en Resumen sumamos directo del detalle.
-        fetchAll(() => supabase.from('sellout_detalle')
-          .select('fecha, cantidad, total')
-          .eq('cliente', 'digitalife')
-          .gte('fecha', `${anioActual}-01-01`)
-          .lte('fecha', `${anioActual}-12-31`)),
+        // Sell-Out PCEL — sellout_pcel semanal con piezas (vta_semana) y
+        // costo_promedio reportado por PCEL. Multiplicamos para obtener
+        // MXN a costo. Es lo que el cliente paga = nuestro costo de venta.
+        fetchAll(() => supabase.from('sellout_pcel')
+          .select('sku, anio, semana, vta_semana, costo_promedio')
+          .eq('anio', anioActual)),
         // sell_in_sku histórico (2 años) → cost_promedio por SKU para
         // valuar inventario y sellout de PCEL/Digitalife de manera consistente.
         fetchAll(() => supabase.from('sell_in_sku')
@@ -205,7 +203,7 @@ function useResumenData() {
         dsoReal:           dsoRes.data || [],
         creditoConfig:     ccRes.data  || [],
         selloutSku:        soRows       || [],
-        selloutDigiDetalle: sdDigiRows  || [],
+        selloutPcelSemanal: soPcelRows  || [],
         sellInSku:         siRows       || [],
         estadosCuenta:     ecRecientes  || [],
         estadosCuentaDetalle: ecDetRows || [],
@@ -291,41 +289,30 @@ function calcularResumen(clienteKey, data) {
   const siMes     = Number(rowMesActual?.sell_in  || 0);
   const siMesPrev = Number(rowMesPrev?.sell_in    || 0);
 
-  // ── Sell-Out YTD / Mes ──
-  // Calculamos directo desde sellout_sku (mismo source que HomeCliente, no
-  // la vista v_ventas_mensuales_agg que estaba dando otros números).
-  //   · Digitalife → sum(monto_pesos)         [precio venta a consumidor]
-  //   · PCEL       → sum(piezas × costo_promedio_sku) [a costo Acteck]
-  // Marcamos `selloutACosto` para que la UI muestre la nota correspondiente.
+  // ── Sell-Out YTD / Mes — alineado con HomeCliente (pestaña per-cliente) ──
+  //   · Digitalife → sum(sellout_sku.monto_pesos)  [precio venta a consumidor]
+  //   · PCEL       → sum(sellout_pcel.vta_semana × costo_promedio) [a costo]
+  //
+  // Para PCEL se usa el costo_promedio que PCEL mismo reporta cada semana
+  // (= lo que ellos pagan = nuestro costo de venta). Eso es "a costo" y
+  // no depende de matchear SKU contra sell_in_sku.
   let soYTD = 0, soMes = 0;
   let selloutACosto = false;
   if (clienteKey === 'pcel') {
     selloutACosto = true;
-    so.forEach((r) => {
-      const m = Number(r.mes) || 0;
-      if (m < 1 || m > mesEf) return;
-      const sku = (r.sku || '').toString();
-      const piezas = Number(r.piezas || 0);
-      const cp = costoPromedioSku[sku];
-      if (cp == null) return;
-      const monto = piezas * cp;
-      soYTD += monto;
-      if (m === mesEf) soMes += monto;
-    });
-  } else if (clienteKey === 'digitalife') {
-    // Digitalife — fuente de verdad: sellout_detalle (uploads semanales).
-    // Sumamos `total` (MXN) por mes, derivando el mes de la fecha.
-    (data.selloutDigiDetalle || []).forEach((r) => {
-      if (!r.fecha) return;
-      // 'YYYY-MM-DD' → mes
-      const m = parseInt(String(r.fecha).slice(5, 7), 10);
+    (data.selloutPcelSemanal || []).forEach((r) => {
+      const piezas = Number(r.vta_semana || 0);
+      const costo  = Number(r.costo_promedio || 0);
+      if (piezas <= 0 || costo <= 0) return;
+      const m = isoWeekToMonth(Number(r.anio) || anioActual, Number(r.semana) || 1);
       if (!m || m < 1 || m > mesEf) return;
-      const monto = Number(r.total || 0);
+      const monto = piezas * costo;
       soYTD += monto;
       if (m === mesEf) soMes += monto;
     });
   } else {
-    // Cualquier otro cliente con monto en sellout_sku
+    // Digitalife (y cualquier otro cliente con monto_pesos en sellout_sku).
+    // Mismo source que HomeCliente.
     so.forEach((r) => {
       const m = Number(r.mes) || 0;
       if (m < 1 || m > mesEf) return;
