@@ -86,7 +86,14 @@ const MENU_CONFIG = [
     items: [
       { id: 'adminInterna', label: 'Pendientes & Calendario', icon: ClipboardList },
       { id: 'evaluaciones', label: 'Evaluaciones',             icon: Award },
-      { id: 'axonMexico',   label: 'Axon de México',           icon: Building2 },
+    ],
+  },
+  {
+    id: 'axonGrupo',
+    label: 'Axon de México',
+    emoji: '🛒',
+    items: [
+      { id: 'axonMexico', label: 'Resumen', icon: Building2 },
     ],
   },
 ];
@@ -105,7 +112,7 @@ const loadExpanded = () => {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
-  return { direccionComercial: true, internaGrupo: true, cliente_digitalife: true };
+  return { direccionComercial: true, internaGrupo: true, axonGrupo: true, cliente_digitalife: true };
 };
 const saveExpanded = (obj) => {
   try { localStorage.setItem(LS_KEY, JSON.stringify(obj)); } catch {}
