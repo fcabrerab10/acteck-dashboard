@@ -97,6 +97,7 @@ function useResumenData() {
     dsoReal: [],
     creditoConfig: [],
     selloutSku: [],
+    selloutDigiDetalle: [],
     sellInSku: [],
     estadosCuenta: [],
     estadosCuentaDetalle: [],
@@ -124,7 +125,7 @@ function useResumenData() {
       // Inventario cliente: usamos el MISMO adapter que HomeCliente para que
       // los números sean consistentes entre Resumen y la pestaña per-cliente.
       // PCEL → lee de sellout_pcel; Digitalife → de inventario_cliente.
-      const [vaRes, cmRes, invDigi, invPcel, dsoRes, ccRes, soRows, siRows, ecRows, mkRes] = await Promise.all([
+      const [vaRes, cmRes, invDigi, invPcel, dsoRes, ccRes, soRows, sdDigiRows, siRows, ecRows, mkRes] = await Promise.all([
         supabase.from('v_ventas_mensuales_agg')
           .select('cliente, anio, mes, sell_in, sell_out')
           .gte('anio', anioActual - 1),
@@ -140,6 +141,14 @@ function useResumenData() {
         fetchAll(() => supabase.from('sellout_sku')
           .select('cliente, anio, mes, sku, piezas, monto_pesos')
           .eq('anio', anioActual)),
+        // Sell-Out Digitalife — fuente de verdad: sellout_detalle (uploads
+        // semanales). sellout_sku queda desincronizado si no corre el
+        // recalc, así que en Resumen sumamos directo del detalle.
+        fetchAll(() => supabase.from('sellout_detalle')
+          .select('fecha, cantidad, total')
+          .eq('cliente', 'digitalife')
+          .gte('fecha', `${anioActual}-01-01`)
+          .lte('fecha', `${anioActual}-12-31`)),
         // sell_in_sku histórico (2 años) → cost_promedio por SKU para
         // valuar inventario y sellout de PCEL/Digitalife de manera consistente.
         fetchAll(() => supabase.from('sell_in_sku')
@@ -196,6 +205,7 @@ function useResumenData() {
         dsoReal:           dsoRes.data || [],
         creditoConfig:     ccRes.data  || [],
         selloutSku:        soRows       || [],
+        selloutDigiDetalle: sdDigiRows  || [],
         sellInSku:         siRows       || [],
         estadosCuenta:     ecRecientes  || [],
         estadosCuentaDetalle: ecDetRows || [],
@@ -302,8 +312,20 @@ function calcularResumen(clienteKey, data) {
       soYTD += monto;
       if (m === mesEf) soMes += monto;
     });
+  } else if (clienteKey === 'digitalife') {
+    // Digitalife — fuente de verdad: sellout_detalle (uploads semanales).
+    // Sumamos `total` (MXN) por mes, derivando el mes de la fecha.
+    (data.selloutDigiDetalle || []).forEach((r) => {
+      if (!r.fecha) return;
+      // 'YYYY-MM-DD' → mes
+      const m = parseInt(String(r.fecha).slice(5, 7), 10);
+      if (!m || m < 1 || m > mesEf) return;
+      const monto = Number(r.total || 0);
+      soYTD += monto;
+      if (m === mesEf) soMes += monto;
+    });
   } else {
-    // Digitalife (y cualquier otro cliente con monto en sellout_sku)
+    // Cualquier otro cliente con monto en sellout_sku
     so.forEach((r) => {
       const m = Number(r.mes) || 0;
       if (m < 1 || m > mesEf) return;
@@ -943,8 +965,8 @@ export default function ResumenClientesTab({ onDrillDown }) {
         </div>
       )}
 
-      {/* 3 cards con Health Score */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Cards con Health Score (1 columna en móvil, 2 en desktop) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {resumenes.map(({ cliente, resumen }) => (
           <ClienteCard
             key={cliente.key}
