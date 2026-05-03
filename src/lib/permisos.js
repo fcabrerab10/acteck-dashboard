@@ -169,6 +169,7 @@ export const PESTANAS_GLOBALES = [
   { id: "ordenes_compra",     label: "Órdenes de Compra",     desc: "Gestión de OCs, fill rate y cruce con ERP" },
   { id: "admin_interna",      label: "Administración Interna", desc: "Pendientes & Calendario del equipo" },
   { id: "evaluaciones",       label: "Evaluaciones",          desc: "Evaluación de desempeño semanal y bono" },
+  { id: "axon_mexico",        label: "Axon de México",        desc: "Nueva empresa para gestión de e-commerce" },
   { id: "configuracion",      label: "Configuración",          desc: "Gestión de usuarios (⚠️ solo super admin)" },
 ];
 

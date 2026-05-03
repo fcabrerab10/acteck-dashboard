@@ -21,9 +21,10 @@ import ReporteSection from './ReporteSection';
  */
 
 const CLIENTES = [
-  { key: 'digitalife',   nombre: 'Digitalife',    marca: 'Acteck / Balam Rush', color: '#3B82F6' },
-  { key: 'pcel',         nombre: 'PCEL',          marca: 'Acteck',               color: '#EF4444' },
-  { key: 'mercadolibre', nombre: 'Mercado Libre', marca: 'Balam Rush',           color: '#F59E0B' },
+  { key: 'digitalife', nombre: 'Digitalife', marca: 'Acteck / Balam Rush', color: '#3B82F6' },
+  { key: 'pcel',       nombre: 'PCEL',       marca: 'Acteck',               color: '#EF4444' },
+  // Mercado Libre se gestiona ahora desde la nueva empresa "Axon de México"
+  // (módulo separado bajo Administración Interna). Ya no aparece aquí.
 ];
 
 const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -40,7 +41,6 @@ const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct'
 const PESOS_POR_CLIENTE = {
   digitalife: { cuota: 35, inventario: 25, marketing: 15, dso: 15, vencidos: 10 },
   pcel:       { cuota: 40, inventario: 25, marketing:  0, dso: 20, vencidos: 15 }, // marketing N/A
-  mercadolibre: null, // tratamiento aparte: solo crecimiento sell-out
 };
 function aplicaComponente(cliente, comp) {
   const p = PESOS_POR_CLIENTE[cliente];
@@ -622,32 +622,6 @@ function calcularResumen(clienteKey, data) {
   };
 }
 
-// ────────── Resumen especial Mercado Libre (sin score clásico) ──────────
-// ML no tiene factura, ni cuota, ni inventario físico Acteck → no encaja
-// con el esquema de salud comercial. Solo medimos crecimiento sell-out.
-function calcularResumenMercadoLibre(data) {
-  const va = data.ventasAgg.filter((r) => r.cliente === 'mercadolibre');
-  const vaAnio = va.filter((r) => r.anio === anioActual);
-  // Mes efectivo: último mes con sell_out real (ML no tiene sell_in).
-  const mesesConSO = vaAnio.filter((r) => Number(r.sell_out || 0) > 0).map((r) => Number(r.mes) || 0);
-  const mesEfML = mesesConSO.length > 0 ? Math.min(mesActual, Math.max(...mesesConSO)) : mesActual;
-  const soYTD = vaAnio.filter((r) => Number(r.mes) <= mesEfML).reduce((a, r) => a + Number(r.sell_out || 0), 0);
-  const soYTDPrev = va.filter((r) => r.anio === anioActual - 1 && Number(r.mes) <= mesEfML)
-    .reduce((a, r) => a + Number(r.sell_out || 0), 0);
-  const soMes     = Number(vaAnio.find((r) => Number(r.mes) === mesEfML)?.sell_out || 0);
-  const soMesPrev = Number(va.find((r) => Number(r.mes) === mesEfML && r.anio === anioActual - 1)?.sell_out || 0);
-  const crecimientoYTD = soYTDPrev > 0 ? ((soYTD - soYTDPrev) / soYTDPrev) * 100 : null;
-  const crecimientoMes = soMesPrev > 0 ? ((soMes - soMesPrev) / soMesPrev) * 100 : null;
-  return {
-    healthScore: null,         // sin score clásico
-    componentes: [],           // no aplica
-    componentesSinDatos: 0,
-    soYTD, soYTDPrev, soMes, soMesPrev,
-    crecimientoYTD, crecimientoMes,
-    esMercadoLibre: true,
-  };
-}
-
 // ────────── Trend consolidado 12 meses ──────────
 // Trend: 12 meses del AÑO en curso. Cuota vs Sell-In real + sell-in año
 // pasado como referencia (D5). Filtrable por cliente (D1).
@@ -658,7 +632,7 @@ function calcularTrend(data, clienteFiltro = 'todos') {
     return PCEL_REAL.cuota50M;
   })();
   const aplicaCliente = (cli) => {
-    if (clienteFiltro === 'todos') return cli !== 'mercadolibre';
+    if (clienteFiltro === 'todos') return cli === 'digitalife' || cli === 'pcel';
     return cli === clienteFiltro;
   };
 
@@ -762,12 +736,10 @@ export default function ResumenClientesTab({ onDrillDown }) {
     if (data.loading) return [];
     const arr = CLIENTES.map((c) => ({
       cliente: c,
-      resumen: c.key === 'mercadolibre'
-        ? calcularResumenMercadoLibre(data)
-        : calcularResumen(c.key, data),
+      resumen: calcularResumen(c.key, data),
     }));
     // A4: ordenar por health score ASC (más bajo primero) — el cliente que
-    // necesita más atención se ve primero. Mercado Libre (sin score) al final.
+    // necesita más atención se ve primero.
     arr.sort((a, b) => {
       const sa = a.resumen.healthScore;
       const sb = b.resumen.healthScore;
@@ -1003,12 +975,6 @@ export default function ResumenClientesTab({ onDrillDown }) {
 
 // ────────── Card por cliente ──────────
 function ClienteCard({ cliente, resumen, onDrillDown }) {
-  // Caso especial: Mercado Libre no tiene score clásico → tarjeta de
-  // crecimiento sell-out vs año anterior.
-  if (resumen?.esMercadoLibre) {
-    return <ClienteCardML cliente={cliente} resumen={resumen} onDrillDown={onDrillDown} />;
-  }
-
   const s = resumen.healthScore;
   const color = colorScore(s);
   const datosParciales = resumen.componentesSinDatos > 0;
@@ -1403,70 +1369,6 @@ function EmbudoConversion({ embudo }) {
   );
 }
 
-function ClienteCardML({ cliente, resumen, onDrillDown }) {
-  const cYTD = resumen.crecimientoYTD;
-  const cMes = resumen.crecimientoMes;
-  const colorC = (c) => c == null ? '#94A3B8' : c >= 20 ? '#10B981' : c >= 0 ? '#F59E0B' : '#EF4444';
-  return (
-    <div
-      className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-amber-300 hover:-translate-y-0.5 transition-all cursor-pointer relative"
-      style={{ borderTop: `4px solid ${cliente.color}` }}
-      onClick={onDrillDown}
-      title={`Click para ir al detalle de ${cliente.nombre}`}
-    >
-      <div className="px-5 pt-4 pb-3 flex items-start justify-between">
-        <div>
-          <h3 className="font-bold text-gray-800 text-lg">{cliente.nombre}</h3>
-          <p className="text-xs text-gray-500">{cliente.marca} · marketplace</p>
-        </div>
-        <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-amber-500 group-hover:translate-x-1 transition-all" />
-      </div>
-      <div className="px-5 pb-3 text-[11px] text-gray-500 italic">
-        Sin score clásico — ML no maneja factura, cuota mensual, ni almacén físico Acteck.
-      </div>
-      <div className="border-t border-gray-100 px-5 py-3 space-y-2">
-        <div className="flex items-baseline justify-between">
-          <div>
-            <div className="text-[10px] uppercase text-gray-500 tracking-wide">Sell-Out YTD</div>
-            <div className="font-bold text-gray-800 text-base">{resumen.soYTD > 0 ? formatMXN(resumen.soYTD) : '—'}</div>
-            {resumen.soYTDPrev > 0 && (
-              <div className="text-[10px] text-gray-500">
-                vs YTD {anioActual - 1}: {formatMXN(resumen.soYTDPrev)}
-              </div>
-            )}
-          </div>
-          {cYTD != null && (
-            <div className="text-right">
-              <div className="text-[10px] uppercase text-gray-500 tracking-wide">Crec. YTD</div>
-              <div className="font-bold text-lg" style={{ color: colorC(cYTD) }}>
-                {cYTD >= 0 ? '+' : ''}{cYTD.toFixed(1)}%
-              </div>
-            </div>
-          )}
-        </div>
-        {cMes != null && (
-          <div className={[
-            'text-[10px] flex items-center gap-0.5',
-            cMes >= 0 ? 'text-emerald-600' : 'text-red-600',
-          ].join(' ')}>
-            {cMes >= 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
-            {cMes >= 0 ? '+' : ''}{cMes.toFixed(1)}% vs {MESES_CORTO[mesActual - 1]} {anioActual - 1}
-          </div>
-        )}
-      </div>
-      <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-3 grid grid-cols-2 gap-3 text-xs">
-        <div>
-          <div className="text-gray-500">Sell-Out mes ({MESES_CORTO[mesActual - 1]})</div>
-          <div className="font-semibold text-gray-800">{resumen.soMes > 0 ? formatMXN(resumen.soMes) : '—'}</div>
-        </div>
-        <div>
-          <div className="text-gray-500">Mismo mes año pasado</div>
-          <div className="font-semibold text-gray-800">{resumen.soMesPrev > 0 ? formatMXN(resumen.soMesPrev) : '—'}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function MoMIndicator({ pct }) {
   if (pct == null) return null;

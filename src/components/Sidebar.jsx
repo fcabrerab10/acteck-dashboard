@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   ChevronRight, ChevronDown, Lock, LogOut, Eye, Settings, RefreshCw,
   Home, TrendingUp, Package, Megaphone, Wallet, CreditCard,
-  BarChart3, Target, ClipboardList, FileCheck, Award,
+  BarChart3, Target, ClipboardList, FileCheck, Award, Building2,
 } from 'lucide-react';
 import {
   puedeConfigurar,
@@ -20,6 +20,7 @@ const MENU_A_PERMISO_GLOBAL = {
   ordenesCompra:    'ordenes_compra',
   adminInterna:     'admin_interna',
   evaluaciones:     'evaluaciones',
+  axonMexico:       'axon_mexico',
   configuracion:    'configuracion',
 };
 
@@ -56,19 +57,9 @@ const CLIENTES = {
       { id: 'cartera',    label: 'Crédito y Cobranza',     icon: CreditCard },
     ],
   },
-  mercadolibre: {
-    label: 'Mercado Libre',
-    color: '#3B82F6',
-    activo: true,
-    pestanas: [
-      { id: 'home',       label: 'Resumen',                icon: Home },
-      { id: 'analisis',   label: 'Análisis',               icon: TrendingUp },
-      { id: 'estrategia', label: 'Estrategia de Producto', icon: Package },
-      { id: 'marketing',  label: 'Marketing',              icon: Megaphone },
-      { id: 'pagos',      label: 'Pagos',                  icon: Wallet },
-      { id: 'cartera',    label: 'Crédito y Cobranza',     icon: CreditCard },
-    ],
-  },
+  // Mercado Libre se migró a la nueva empresa "Axon de México"
+  // (Administración Interna → Axon de México). Se mantiene fuera de
+  // este map para que no aparezca como cliente de Acteck.
 };
 
 const MENU_CONFIG = [
@@ -83,7 +74,6 @@ const MENU_CONFIG = [
       { type: 'separator', label: 'Clientes' },
       { type: 'cliente', clienteId: 'digitalife' },
       { type: 'cliente', clienteId: 'pcel' },
-      { type: 'cliente', clienteId: 'mercadolibre' },
     ],
   },
   {
@@ -96,6 +86,7 @@ const MENU_CONFIG = [
     items: [
       { id: 'adminInterna', label: 'Pendientes & Calendario', icon: ClipboardList },
       { id: 'evaluaciones', label: 'Evaluaciones',             icon: Award },
+      { id: 'axonMexico',   label: 'Axon de México',           icon: Building2 },
     ],
   },
 ];

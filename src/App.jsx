@@ -15,6 +15,7 @@ import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
 import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
 import OrdenesCompraTab from './modules/comercial/OrdenesCompraTab';
 import EvaluacionesPanel from './modules/interno/EvaluacionesPanel';
+import AxonMexico from './modules/interno/AxonMexico';
 import LoginPage from './modules/auth/LoginPage';
 import { Configuracion } from './modules/configuracion';
 import ActualizacionDatos from './modules/settings/ActualizacionDatos';
@@ -181,6 +182,7 @@ const GLOBAL_PAGES_INFO = {
   ordenesCompra:    { label: 'Órdenes de Compra',      icon: Target },
   adminInterna:     { label: 'Administración Interna', icon: Building2 },
   evaluaciones:     { label: 'Evaluaciones',            icon: Building2 },
+  axonMexico:       { label: 'Axon de México',          icon: Building2 },
 };
 function Breadcrumb({ clienteActivo, paginaActiva, vistaActual }) {
   if (vistaActual === 'configuracion') {
@@ -305,14 +307,14 @@ export default function App() {
 
   
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
-    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','evaluaciones']), []);
+    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','evaluaciones','axonMexico']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
       try { return localStorage.getItem('nav_pagina') || 'home'; } catch { return 'home'; }
     });
     const [clienteActivo, setClienteActivo] = useState(() => {
       try {
         const pag = localStorage.getItem('nav_pagina') || 'home';
-        const globals = new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','evaluaciones']);
+        const globals = new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','evaluaciones','axonMexico']);
         if (globals.has(pag)) return null;
         return localStorage.getItem('nav_cliente') || 'digitalife';
       } catch { return 'digitalife'; }
@@ -464,6 +466,11 @@ export default function App() {
             puedeVerPestanaGlobal(perfil, "evaluaciones")
               ? <EvaluacionesPanel />
               : <SinAcceso motivo="No tienes acceso a Evaluaciones." />
+          )}
+          {paginaActiva === "axonMexico" && (
+            puedeVerPestanaGlobal(perfil, "axon_mexico")
+              ? <AxonMexico />
+              : <SinAcceso motivo="No tienes acceso a Axon de México." />
           )}
           <>
             <>
