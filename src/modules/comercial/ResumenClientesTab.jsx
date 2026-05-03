@@ -64,19 +64,21 @@ const mesActual = hoy.getMonth() + 1;
 function clamp(n, min = 0, max = 100) { return Math.max(min, Math.min(max, n)); }
 function pct(n) { return Number.isFinite(n) ? `${n.toFixed(0)}%` : '—'; }
 
+// Bandas más apretadas — antes eran muy permisivas (60-79 = "Medio" cubría
+// cuentas con problemas reales sin distinguirlas de las sanas).
 function colorScore(s) {
   if (s == null) return '#94A3B8';
-  if (s >= 90) return '#10B981';  // Excelente
-  if (s >= 80) return '#22C55E';  // Bien
-  if (s >= 60) return '#F59E0B';  // Medio
+  if (s >= 85) return '#10B981';  // Excelente
+  if (s >= 70) return '#22C55E';  // Bien
+  if (s >= 55) return '#F59E0B';  // Medio
   return '#EF4444';                // Crítico
 }
 
 function gradeScore(s) {
   if (s == null) return 'Sin datos';
-  if (s >= 90) return 'Excelente';
-  if (s >= 80) return 'Bien';
-  if (s >= 60) return 'Medio';
+  if (s >= 85) return 'Excelente';
+  if (s >= 70) return 'Bien';
+  if (s >= 55) return 'Medio';
   return 'Crítico';
 }
 
@@ -541,15 +543,19 @@ function calcularResumen(clienteKey, data) {
     return partes.reduce((a, x) => a + x, 0) / partes.length;
   })();
 
-  // 2) Cobertura inventario — alineado con HomeCliente línea 890-891
-  //    ≤90d = verde (óptimo), 90-150d = amarillo, >150d = rojo (sobreinv)
-  //    Score: óptimo 60-90d = 100. Bajo 30d = 0 (riesgo stockout). Alto >180d = 0 (sobre)
+  // 2) Cobertura inventario — el sobreinventario es un flag pero NO un
+  //    síntoma de mala salud comercial (el cliente paga e inventa bien;
+  //    el capital tied-up es problema nuestro, no de ellos). Por eso el
+  //    sobreinventario nunca tira el score abajo de 60.
+  //    Stockout sí es crítico (riesgo de no surtir).
   let scoreInv = null;
   if (coberturaDias != null) {
-    if (coberturaDias < 30)        scoreInv = clamp((coberturaDias / 30) * 60, 0, 60);   // 0–60 en rango stockout
-    else if (coberturaDias <= 90)  scoreInv = clamp(60 + ((coberturaDias - 30) / 60) * 40, 60, 100); // 60→100 en rango óptimo
-    else if (coberturaDias <= 150) scoreInv = clamp(100 - ((coberturaDias - 90) / 60) * 40, 60, 100);  // 100→60
-    else                           scoreInv = clamp(60 - ((coberturaDias - 150) / 60) * 60, 0, 60);    // 60→0 sobrestock
+    if (coberturaDias < 15)        scoreInv = clamp((coberturaDias / 15) * 40, 0, 40);    // 0-40 stockout severo
+    else if (coberturaDias < 30)   scoreInv = clamp(40 + ((coberturaDias - 15) / 15) * 30, 40, 70); // 40-70
+    else if (coberturaDias <= 90)  scoreInv = clamp(70 + ((coberturaDias - 30) / 60) * 30, 70, 100); // 70→100 óptimo
+    else if (coberturaDias <= 150) scoreInv = clamp(100 - ((coberturaDias - 90) / 60) * 15, 85, 100);  // 100→85
+    else if (coberturaDias <= 250) scoreInv = clamp(85 - ((coberturaDias - 150) / 100) * 15, 70, 85);  // 85→70
+    else                           scoreInv = clamp(70 - ((coberturaDias - 250) / 200) * 10, 60, 70);  // 70→60 (suelo)
   }
 
   // 3) DSO real vs plazo — alineado con CreditoCobranza.jsx líneas 277-280
@@ -588,7 +594,7 @@ function calcularResumen(clienteKey, data) {
     const rawScore = SCORES[id];
     let score, estado;
     if (!aplica)              { score = null; estado = 'no_aplica'; }
-    else if (rawScore == null){ score = 0;    estado = 'sin_datos';  }
+    else if (rawScore == null){ score = 50;   estado = 'sin_datos';  }  // neutral, no premia ni castiga fuerte
     else                      { score = rawScore; estado = 'ok';    }
     return { id, score, peso, aplica, estado };
   });
