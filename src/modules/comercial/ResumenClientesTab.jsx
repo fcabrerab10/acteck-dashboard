@@ -300,6 +300,8 @@ function calcularResumen(clienteKey, data) {
   let selloutACosto = false;
   if (clienteKey === 'pcel') {
     selloutACosto = true;
+    // Path 1: sellout_pcel semanal (vta_semana × costo_promedio)
+    let pcelTotal = 0;
     (data.selloutPcelSemanal || []).forEach((r) => {
       const piezas = Number(r.vta_semana || 0);
       const costo  = Number(r.costo_promedio || 0);
@@ -307,9 +309,26 @@ function calcularResumen(clienteKey, data) {
       const m = isoWeekToMonth(Number(r.anio) || anioActual, Number(r.semana) || 1);
       if (!m || m < 1 || m > mesEf) return;
       const monto = piezas * costo;
+      pcelTotal += monto;
       soYTD += monto;
       if (m === mesEf) soMes += monto;
     });
+    // Path 2: fallback — si sellout_pcel está vacío, agregamos desde
+    // sellout_sku (que el adapter llena desde sellout_pcel_mensual con
+    // monto=0) usando costo_promedio_sku de sell_in_sku.
+    if (pcelTotal === 0) {
+      so.forEach((r) => {
+        const m = Number(r.mes) || 0;
+        if (m < 1 || m > mesEf) return;
+        const sku = (r.sku || '').toString();
+        const piezas = Number(r.piezas || 0);
+        const cp = costoPromedioSku[sku];
+        if (cp == null || piezas <= 0) return;
+        const monto = piezas * cp;
+        soYTD += monto;
+        if (m === mesEf) soMes += monto;
+      });
+    }
   } else {
     // Digitalife (y cualquier otro cliente con monto_pesos en sellout_sku).
     // Mismo source que HomeCliente.
@@ -478,25 +497,17 @@ function calcularResumen(clienteKey, data) {
         }
       }
 
-      if (pagoIdx >= 0) {
-        const fechaPago = f.eventos[pagoIdx].fecha_corte;
-        if (new Date(fechaPago) < cutoffPago) return;
-        dias = Math.round(
-          (new Date(fechaPago) - new Date(f.fecha_emision)) / (1000 * 60 * 60 * 24)
-        );
-      } else if (ultimo.idx === lastIdx && ultimo.saldo > 0) {
-        // 2) Sigue abierta en el último estado: el reloj corre hasta hoy.
-        //    Esto incluye los días de crédito que les diste (ej. plazo 90 +
-        //    20 de mora = 110 días corridos).
-        dias = Math.round(
-          (hoyMs - new Date(f.fecha_emision).getTime()) / (1000 * 60 * 60 * 24)
-        );
-      } else {
-        // Factura ya estaba pagada cuando empezamos a observar (saldo=0 en
-        // primer evento) o desapareció sin transición → no podemos medir
-        // el cobro real, la excluimos del promedio.
-        return;
-      }
+      // Solo cuentan facturas REALMENTE pagadas (transición saldo>0→0).
+      // Las facturas abiertas (saldo>0 hoy) no cuentan: aún no sabemos
+      // cuánto van a tardar — incluirlas con today-emisión jala el
+      // promedio hacia abajo si fueron emitidas recientemente.
+      // Esto refleja el comportamiento histórico de pago real del cliente.
+      if (pagoIdx < 0) return;
+      const fechaPago = f.eventos[pagoIdx].fecha_corte;
+      if (new Date(fechaPago) < cutoffPago) return;
+      dias = Math.round(
+        (new Date(fechaPago) - new Date(f.fecha_emision)) / (1000 * 60 * 60 * 24)
+      );
 
       if (dias == null || dias < 0 || dias > 720) return;
       const peso = Number(f.importe);
