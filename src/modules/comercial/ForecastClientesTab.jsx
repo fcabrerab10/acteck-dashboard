@@ -8,6 +8,8 @@ import {
   ChevronDown, ChevronUp, Flame, X, Users,
   CheckCircle2, Clock, DollarSign,
 } from 'lucide-react';
+import TransitoTimeline from './forecast/TransitoTimeline';
+import NovedadesCard from './forecast/NovedadesCard';
 
 /**
  * Forecast Clientes v3 — Planeación de compras (Acteck)
@@ -48,30 +50,69 @@ function useForecastData() {
     metadata: [],
     demanda: [],
     sugeridosPendientes: [],
+    roadmap: [],
+    embarques: [],
+    solicitudes: [],
+    solicitudLineas: [],
   });
+
+  // Helper paginador (PostgREST corta a 1000)
+  async function fetchAll(qFactory, pageSize = 1000) {
+    const all = [];
+    let from = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data, error } = await qFactory().range(from, from + pageSize - 1);
+      if (error || !data || data.length === 0) break;
+      all.push(...data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+    return all;
+  }
 
   const reload = async () => {
     setState(s => ({ ...s, loading: true }));
     const hoy = new Date();
+    const anioActual = hoy.getFullYear();
     const anioCorte = new Date(hoy.getFullYear(), hoy.getMonth() - 6, 1).getFullYear();
 
-    const [invRes, traRes, ltRes, metaRes, demRes, sugRes] = await Promise.all([
+    const queries = await Promise.all([
       supabase.from('v_inventario_comercial').select('*'),
       supabase.from('v_transito_sku').select('*'),
       supabase.from('v_lead_time_sku').select('*'),
       supabase.from('v_sku_metadata').select('*'),
-      supabase.from('v_demanda_sku').select('*').gte('anio', anioCorte),
+      fetchAll(() => supabase.from('v_demanda_sku').select('*').gte('anio', anioCorte)),
       supabase.from('sugeridos_compra').select('*').in('estado', ['pendiente', 'exportado']).order('created_at', { ascending: false }),
+      // Roadmap por SKU (estado, fechas)
+      supabase.from('roadmap_sku').select('*'),
+      // Master de embarques completo (para timeline tránsito + histórico compras)
+      fetchAll(() => supabase.from('embarques_compras')
+        .select('po, codigo, fecha_emision, arribo_cedis, eta, po_qty, cbm, contenedor, estatus, supplier, marca, familia')),
+      // Solicitudes de compra del año actual (las tablas pueden no existir aún
+      // — capturamos error silenciosamente en ese caso)
+      supabase.from('solicitudes_compra').select('*').eq('anio', anioActual)
+        .order('fecha_creacion', { ascending: false })
+        .then(r => r, () => ({ data: [] })),
+      supabase.from('solicitudes_compra_lineas').select('*')
+        .order('orden', { ascending: true })
+        .then(r => r, () => ({ data: [] })),
     ]);
+
+    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes] = queries;
 
     setState({
       loading: false,
-      inventario:   invRes.data || [],
-      transito:     traRes.data || [],
-      leadTimes:    ltRes.data  || [],
-      metadata:     metaRes.data|| [],
-      demanda:      demRes.data || [],
+      inventario:    invRes.data  || [],
+      transito:      traRes.data  || [],
+      leadTimes:     ltRes.data   || [],
+      metadata:      metaRes.data || [],
+      demanda:       demData      || [],
       sugeridosPendientes: sugRes.data || [],
+      roadmap:       rmRes.data   || [],
+      embarques:     embData      || [],
+      solicitudes:   (solRes && solRes.data) || [],
+      solicitudLineas: (solLinRes && solLinRes.data) || [],
     });
   };
 
@@ -81,12 +122,41 @@ function useForecastData() {
 
 // ────────── Cálculo del forecast ──────────
 function calcularForecast(data, horizonteMeses) {
-  const { inventario, transito, leadTimes, metadata, demanda } = data;
+  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques } = data;
 
   const invBySku  = Object.fromEntries(inventario.map(r => [r.sku, r]));
   const traBySku  = Object.fromEntries(transito.map(r => [r.sku, r]));
   const ltBySku   = Object.fromEntries(leadTimes.map(r => [r.sku, r]));
   const metaBySku = Object.fromEntries(metadata.map(r => [r.sku, r]));
+  const rmBySku   = Object.fromEntries((roadmap || []).map(r => [r.sku, r]));
+
+  // Histórico de compras por SKU (todas las POs no canceladas, agregadas)
+  // → para piezas_por_contenedor y conteo de contenedores
+  const comprasBySku = {};
+  (embarques || []).forEach((e) => {
+    const sku = (e.codigo || '').trim();
+    if (!sku) return;
+    const est = (e.estatus || '').toLowerCase();
+    if (est.includes('cancel')) return;
+    if (!comprasBySku[sku]) comprasBySku[sku] = { pos: [], piezasPorContenedor: 0, contadorContenedores: 0 };
+    comprasBySku[sku].pos.push(e);
+  });
+  // Calcular piezas_por_contenedor promedio por SKU (po_qty / contenedor)
+  Object.entries(comprasBySku).forEach(([sku, info]) => {
+    let totalPiezas = 0, totalContenedores = 0;
+    info.pos.forEach((e) => {
+      const qty = Number(e.po_qty || 0);
+      const cnt = Number(e.contenedor || 0);
+      if (qty > 0 && cnt > 0) {
+        totalPiezas += qty;
+        totalContenedores += cnt;
+      }
+    });
+    if (totalContenedores > 0) {
+      info.piezasPorContenedor = Math.round(totalPiezas / totalContenedores);
+      info.contadorContenedores = totalContenedores;
+    }
+  });
 
   // Últimos 3 meses de referencia para promedio de demanda (excluyendo mes actual que puede estar incompleto)
   const hoy = new Date();
@@ -148,7 +218,20 @@ function calcularForecast(data, horizonteMeses) {
 
     // Sugerido = brecha + buffer (1 mes de demanda) − tránsito que llega después del horizonte
     const bufferUnidades = demandaMesTotal * BUFFER_MESES;
-    const sugerido = Math.max(0, brecha + bufferUnidades - traDespuesHor);
+    let sugerido = Math.max(0, brecha + bufferUnidades - traDespuesHor);
+
+    // Redondeo a múltiplo de contenedor (si el SKU tiene capacidad conocida)
+    const compraInfo = comprasBySku[sku] || {};
+    const piezasPorContenedor = compraInfo.piezasPorContenedor || 0;
+    let contenedoresSugeridos = 0;
+    let esConsolidado = false;
+    if (sugerido > 0 && piezasPorContenedor > 0) {
+      contenedoresSugeridos = Math.ceil(sugerido / piezasPorContenedor);
+      sugerido = contenedoresSugeridos * piezasPorContenedor;
+      // Si la cantidad por contenedor es muy chica vs el contenedor estándar
+      // (~1500-3000), probablemente comparte contenedor → flag consolidado
+      esConsolidado = piezasPorContenedor < 800;
+    }
 
     // Canibalización: PCEL y Digitalife ambos tienen demanda
     const canibalizacion = demMes.digitalife > 0 && demMes.pcel > 0;
@@ -179,20 +262,68 @@ function calcularForecast(data, horizonteMeses) {
     const meta = metaBySku[sku] || {};
     const lt = ltBySku[sku];
 
+    const rm = rmBySku[sku] || {};
+
+    // Demanda últimos 6 meses por cliente (para mini-gráfica del expandible)
+    const demanda6m = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(anioActual, mesActual - 1 - i, 1);
+      const a = d.getFullYear();
+      const m = d.getMonth() + 1;
+      let dDigi = 0, dPcel = 0;
+      demanda.forEach((row) => {
+        if (row.sku !== sku) return;
+        if (row.anio !== a || Number(row.mes) !== m) return;
+        const p = Number(row.piezas || 0);
+        if (row.cliente === 'digitalife') dDigi += p;
+        else if (row.cliente === 'pcel') dPcel += p;
+      });
+      demanda6m.push({ anio: a, mes: m, digi: dDigi, pcel: dPcel });
+    }
+
+    // Cobertura actual: inv / (demandaMesTotal/30) → días que cubre el stock
+    const demandaDiaria = demandaMesTotal / 30;
+    const coberturaDias = demandaDiaria > 0 ? Math.round(inv / demandaDiaria) : null;
+
+    // Compras históricas (top 6 más recientes)
+    const comprasHistAll = (compraInfo.pos || [])
+      .filter((e) => e.fecha_emision)
+      .sort((a, b) => String(b.fecha_emision).localeCompare(String(a.fecha_emision)));
+    const comprasHist = comprasHistAll.slice(0, 6).map((e) => ({
+      po: e.po,
+      fecha_emision: e.fecha_emision,
+      arribo_cedis: e.arribo_cedis,
+      eta: e.eta,
+      qty: Number(e.po_qty || 0),
+      contenedores: Number(e.contenedor || 0),
+      supplier: e.supplier,
+      estatus: e.estatus,
+    }));
+
     rows.push({
       sku,
       descripcion: meta.descripcion || '',
       supplier:    meta.supplier || lt?.supplier_principal || '',
       familia:     meta.familia || lt?.familia || '',
+      marca:       meta.marca || '',
+      roadmapEstado: rm.estado || rm.estatus || null,
       costoUnitMxn: Number(meta.costo_promedio_mxn || 0),
       costoUnitUsd: Number(meta.unit_price_usd_ultima || 0),
       demMes, demHor, demandaTotalHor, demandaMesTotal,
+      demanda6m,
+      coberturaDias,
+      comprasHist,
+      totalComprasHist: comprasHistAll.length,
       inv,
       inventarioData: invBySku[sku] || null,
       traCant, traEta, traDentroHor, traDespuesHor,
       embarques,
       brecha, sugerido,
       sugeridoValorUsd: sugerido * Number(meta.unit_price_usd_ultima || 0),
+      piezasPorContenedor,
+      contenedoresSugeridos,
+      esConsolidado,
+      tieneCompras: (compraInfo.pos || []).length > 0,
       canibalizacion, preventaDeficit, prorrateo,
       ltDias:     lt?.dias_promedio || null,
       ltMuestras: lt?.muestras || 0,
@@ -234,10 +365,23 @@ export default function ForecastClientesTab() {
   const [sortDir, setSortDir] = useState('desc');
   const [exportando, setExportando] = useState(false);
 
+  // Stub: la función real se agrega en Tanda 7 (sistema de solicitudes).
+  // Por ahora mostramos un toast informativo cuando se da clic en "+".
+  const onAgregarSolicitud = (row) => {
+    toast.info(
+      `Próximamente: agregar ${row.sku} (${FMT_N(row.sugerido)} pzs) a una solicitud de compra.`
+    );
+  };
+
   const rowsAll = useMemo(() => {
     if (data.loading) return [];
     return calcularForecast(data, horizonte);
   }, [data, horizonte]);
+
+  // Mapa de metadata por SKU para pasar a las tarjetas resumen
+  const metaBySku = useMemo(() =>
+    Object.fromEntries((data.metadata || []).map(r => [r.sku, r]))
+  , [data.metadata]);
 
   const rowsFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -428,6 +572,19 @@ export default function ForecastClientesTab() {
         />
       )}
 
+      {/* TARJETAS RESUMEN — Novedades + Tránsito timeline */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <NovedadesCard
+          roadmap={data.roadmap}
+          embarques={data.embarques}
+          metaBySku={metaBySku}
+        />
+        <TransitoTimeline
+          embarques={data.embarques}
+          metaBySku={metaBySku}
+        />
+      </div>
+
       {/* FILTROS */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
@@ -490,6 +647,7 @@ export default function ForecastClientesTab() {
           if (sortCol === c) setSortDir(sortDir === 'desc' ? 'asc' : 'desc');
           else { setSortCol(c); setSortDir('desc'); }
         }}
+        onAgregarSolicitud={onAgregarSolicitud}
       />
       {rowsOrdenados.length > 400 && (
         <div className="text-center text-xs text-gray-500">
@@ -515,8 +673,8 @@ function KpiCard({ icon: Icon, label, value, color, small }) {
   );
 }
 
-// ────────── Tabla ──────────
-function ForecastTable({ rows, expandedSku, setExpandedSku, sortCol, sortDir, onSort }) {
+// ────────── Tabla — orden alineado con Reporte de Resumen Clientes ──────────
+function ForecastTable({ rows, expandedSku, setExpandedSku, sortCol, sortDir, onSort, onAgregarSolicitud }) {
   const ArrowSort = ({ col }) => sortCol === col ? (
     <span className="text-blue-600">{sortDir === 'desc' ? '▼' : '▲'}</span>
   ) : <span className="text-gray-300">↕</span>;
@@ -530,32 +688,30 @@ function ForecastTable({ rows, expandedSku, setExpandedSku, sortCol, sortDir, on
             <th className="text-left px-3 py-2 cursor-pointer" onClick={() => onSort('sku')}>
               SKU <ArrowSort col="sku" />
             </th>
+            <th className="text-left px-2 py-2">Roadmap</th>
             <th className="text-left px-3 py-2 min-w-[200px]">Descripción</th>
-            <th className="text-left px-2 py-2">Proveedor</th>
-            <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('ltDias')}>LT <ArrowSort col="ltDias"/></th>
-            <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('demandaTotalHor')}>Demanda <ArrowSort col="demandaTotalHor"/></th>
-            <th className="text-center px-2 py-2" colSpan={3}>Breakdown</th>
+            <th className="text-left px-2 py-2">Familia</th>
             <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('inv')}>Inv <ArrowSort col="inv"/></th>
             <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('traCant')}>Tránsito <ArrowSort col="traCant"/></th>
+            <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('demandaTotalHor')}>Dem total <ArrowSort col="demandaTotalHor"/></th>
+            <th className="text-right px-1 py-2" style={{ color: '#3B82F6' }}>DGL</th>
+            <th className="text-right px-1 py-2" style={{ color: '#EF4444' }}>PCEL</th>
             <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('brecha')}>Brecha <ArrowSort col="brecha"/></th>
             <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('sugerido')}>Sugerido <ArrowSort col="sugerido"/></th>
+            <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('ltDias')}>LT <ArrowSort col="ltDias"/></th>
             <th className="text-left px-2 py-2">Banderas</th>
-          </tr>
-          <tr className="text-[10px] text-gray-400">
-            <th colSpan={6}></th>
-            <th className="text-right px-1" style={{ color: '#3B82F6' }}>DGL</th>
-            <th className="text-right px-1" style={{ color: '#EF4444' }}>PCEL</th>
-            <th colSpan={5}></th>
+            <th className="px-2 py-2 w-8"></th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr><td colSpan={13} className="text-center py-10 text-gray-400 text-sm">Sin resultados con los filtros actuales</td></tr>
+            <tr><td colSpan={15} className="text-center py-10 text-gray-400 text-sm">Sin resultados con los filtros actuales</td></tr>
           ) : rows.map(r => (
             <ForecastRow
               key={r.sku} r={r}
               expanded={expandedSku === r.sku}
               onToggle={() => setExpandedSku(expandedSku === r.sku ? null : r.sku)}
+              onAgregarSolicitud={onAgregarSolicitud}
             />
           ))}
         </tbody>
@@ -564,33 +720,50 @@ function ForecastTable({ rows, expandedSku, setExpandedSku, sortCol, sortDir, on
   );
 }
 
-function ForecastRow({ r, expanded, onToggle }) {
+function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud }) {
   const brechaColor = r.brecha > 0 ? 'text-red-600 font-semibold' : 'text-gray-400';
   const eta = r.traEta ? diasHasta(r.traEta) : null;
   const etaLabel = r.traEta ? `${fmtFechaCorta(r.traEta)}${eta != null ? ` (${eta}d)` : ''}` : '—';
+  const RoadmapBadge = ({ estado }) => {
+    if (!estado) return <span className="text-gray-300 text-[10px]">—</span>;
+    const e = String(estado).toLowerCase();
+    let cls = 'bg-gray-100 text-gray-700';
+    if (e.includes('vivo') || e.includes('activo') || e.includes('disponible')) cls = 'bg-emerald-100 text-emerald-700';
+    else if (e.includes('proxim') || e.includes('camino')) cls = 'bg-blue-100 text-blue-700';
+    else if (e.includes('descontin') || e.includes('eol') || e.includes('baja')) cls = 'bg-red-100 text-red-700';
+    return <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${cls}`}>{estado}</span>;
+  };
 
   return (
     <>
-      <tr className="border-t border-gray-100 hover:bg-blue-50/40 cursor-pointer" onClick={onToggle}>
-        <td className="pl-2">{expanded ? <ChevronUp className="w-3.5 h-3.5 text-gray-400"/> : <ChevronDown className="w-3.5 h-3.5 text-gray-400"/>}</td>
-        <td className="px-3 py-2 font-mono text-xs font-semibold text-gray-800">{r.sku}</td>
-        <td className="px-3 py-2 text-xs text-gray-600 truncate max-w-[280px]" title={r.descripcion}>{r.descripcion || '—'}</td>
-        <td className="px-2 py-2 text-xs text-gray-500 truncate max-w-[140px]" title={r.supplier}>{r.supplier ? r.supplier.slice(0, 20) : '—'}</td>
-        <td className="text-right px-2 py-2 text-xs">
-          {r.ltDias ? <span className="text-gray-700">{Math.round(r.ltDias)}d</span> : <span className="text-gray-300">?</span>}
-        </td>
-        <td className="text-right px-2 py-2 tabular-nums font-semibold text-gray-800">{FMT_N(r.demandaTotalHor)}</td>
-        <td className="text-right px-1 tabular-nums text-xs" style={{ color: r.demHor.digitalife > 0 ? '#3B82F6' : '#CBD5E1' }}>{FMT_N(r.demHor.digitalife)}</td>
-        <td className="text-right px-1 tabular-nums text-xs" style={{ color: r.demHor.pcel > 0 ? '#EF4444' : '#CBD5E1' }}>{FMT_N(r.demHor.pcel)}</td>
-        <td className="text-right px-2 py-2 tabular-nums text-gray-700">{FMT_N(r.inv)}</td>
-        <td className="text-right px-2 py-2 tabular-nums text-xs text-gray-600" title={etaLabel}>
+      <tr className="border-t border-gray-100 hover:bg-blue-50/40">
+        <td className="pl-2 cursor-pointer" onClick={onToggle}>{expanded ? <ChevronUp className="w-3.5 h-3.5 text-gray-400"/> : <ChevronDown className="w-3.5 h-3.5 text-gray-400"/>}</td>
+        <td className="px-3 py-2 font-mono text-xs font-semibold text-gray-800 cursor-pointer" onClick={onToggle}>{r.sku}</td>
+        <td className="px-2 py-2 cursor-pointer" onClick={onToggle}><RoadmapBadge estado={r.roadmapEstado}/></td>
+        <td className="px-3 py-2 text-xs text-gray-600 truncate max-w-[280px] cursor-pointer" title={r.descripcion} onClick={onToggle}>{r.descripcion || '—'}</td>
+        <td className="px-2 py-2 text-xs text-gray-500 truncate max-w-[110px] cursor-pointer" title={r.familia} onClick={onToggle}>{r.familia || '—'}</td>
+        <td className="text-right px-2 py-2 tabular-nums text-gray-700 cursor-pointer" onClick={onToggle}>{FMT_N(r.inv)}</td>
+        <td className="text-right px-2 py-2 tabular-nums text-xs text-gray-600 cursor-pointer" title={etaLabel} onClick={onToggle}>
           {r.traCant > 0 ? (<>
             {FMT_N(r.traCant)}<div className="text-[9px] text-gray-400">{etaLabel}</div>
           </>) : '—'}
         </td>
-        <td className={`text-right px-2 py-2 tabular-nums ${brechaColor}`}>{FMT_N(r.brecha)}</td>
-        <td className="text-right px-2 py-2 tabular-nums font-semibold text-emerald-700">{FMT_N(r.sugerido)}</td>
-        <td className="px-2 py-2">
+        <td className="text-right px-2 py-2 tabular-nums font-semibold text-gray-800 cursor-pointer" onClick={onToggle}>{FMT_N(r.demandaTotalHor)}</td>
+        <td className="text-right px-1 tabular-nums text-xs cursor-pointer" style={{ color: r.demHor.digitalife > 0 ? '#3B82F6' : '#CBD5E1' }} onClick={onToggle}>{FMT_N(r.demHor.digitalife)}</td>
+        <td className="text-right px-1 tabular-nums text-xs cursor-pointer" style={{ color: r.demHor.pcel > 0 ? '#EF4444' : '#CBD5E1' }} onClick={onToggle}>{FMT_N(r.demHor.pcel)}</td>
+        <td className={`text-right px-2 py-2 tabular-nums cursor-pointer ${brechaColor}`} onClick={onToggle}>{FMT_N(r.brecha)}</td>
+        <td className="text-right px-2 py-2 tabular-nums font-semibold text-emerald-700 cursor-pointer" onClick={onToggle}>
+          {FMT_N(r.sugerido)}
+          {r.contenedoresSugeridos > 0 && (
+            <div className="text-[9px] text-gray-400 font-normal">
+              {r.contenedoresSugeridos} cnt{r.esConsolidado ? ' (consol.)' : ''}
+            </div>
+          )}
+        </td>
+        <td className="text-right px-2 py-2 text-xs cursor-pointer" onClick={onToggle}>
+          {r.ltDias ? <span className="text-gray-700">{Math.round(r.ltDias)}d</span> : <span className="text-gray-300">?</span>}
+        </td>
+        <td className="px-2 py-2 cursor-pointer" onClick={onToggle}>
           <div className="flex gap-1 flex-wrap">
             {r.canibalizacion && (
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-semibold" title="PCEL y Digitalife compiten por este SKU">
@@ -609,10 +782,22 @@ function ForecastRow({ r, expanded, onToggle }) {
             )}
           </div>
         </td>
+        <td className="px-2 py-2 text-center">
+          {onAgregarSolicitud && r.sugerido > 0 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onAgregarSolicitud(r); }}
+              className="inline-flex items-center justify-center w-6 h-6 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-700 transition"
+              title={`Agregar a solicitud de compra (${FMT_N(r.sugerido)} pzs sugeridas)`}
+            >
+              +
+            </button>
+          )}
+        </td>
       </tr>
       {expanded && (
         <tr className="border-t border-gray-100 bg-gray-50/60">
-          <td colSpan={13} className="p-4">
+          <td colSpan={15} className="p-4">
             <ExpandedDetail r={r} />
           </td>
         </tr>
@@ -622,60 +807,52 @@ function ForecastRow({ r, expanded, onToggle }) {
 }
 
 function ExpandedDetail({ r }) {
+  // Cobertura color según rango (igual que Resumen Clientes)
+  const colorCob = r.coberturaDias == null ? '#94A3B8'
+    : r.coberturaDias < 30 ? '#EF4444'
+    : r.coberturaDias <= 90 ? '#10B981'
+    : r.coberturaDias <= 150 ? '#F59E0B'
+    : '#EF4444';
+  const labelCob = r.coberturaDias == null ? 'sin demanda'
+    : r.coberturaDias < 30 ? 'stockout en riesgo'
+    : r.coberturaDias <= 90 ? 'óptimo'
+    : r.coberturaDias <= 150 ? 'alto'
+    : 'sobreinventario';
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 text-sm">
-      {/* Demanda */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm">
+
+      {/* 1) DEMANDA POR CLIENTE — al inicio (mini-gráfica 6 meses) */}
       <div className="bg-white rounded-lg p-3 border border-gray-200">
-        <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2">Demanda mensual promedio</h4>
-        <div className="space-y-1.5">
-          {CLIENTES.map(c => (
-            <div key={c.key} className="flex items-center gap-2 text-xs">
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
-              <span className="flex-1 text-gray-700">{c.full}</span>
-              <span className="font-semibold tabular-nums" style={{ color: r.demMes[c.key] > 0 ? c.color : '#CBD5E1' }}>
-                {FMT_N(r.demMes[c.key])} / mes
-              </span>
-            </div>
-          ))}
-          <div className="border-t border-gray-100 pt-1.5 flex items-center gap-2 text-xs">
-            <span className="flex-1 text-gray-500 font-medium">Total mensual</span>
-            <span className="font-bold tabular-nums text-gray-800">{FMT_N(r.demandaMesTotal)}</span>
+        <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2">
+          Demanda 6 meses por cliente (piezas)
+        </h4>
+        <DemandaSparkline data={r.demanda6m} />
+        <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-blue-500" />
+            <span className="flex-1 text-gray-600">Digitalife</span>
+            <span className="font-semibold tabular-nums">{FMT_N(r.demMes.digitalife)}<span className="text-gray-400">/mes</span></span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-red-500" />
+            <span className="flex-1 text-gray-600">PCEL</span>
+            <span className="font-semibold tabular-nums">{FMT_N(r.demMes.pcel)}<span className="text-gray-400">/mes</span></span>
           </div>
         </div>
       </div>
 
-      {/* Inventario */}
-      <div className="bg-white rounded-lg p-3 border border-gray-200">
-        <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2">Inventario comercial</h4>
-        {r.inventarioData?.por_almacen && Object.keys(r.inventarioData.por_almacen).length > 0 ? (
-          <div className="space-y-1 text-xs">
-            {Object.entries(r.inventarioData.por_almacen).sort((a,b) => Number(b[1])-Number(a[1])).map(([alm, cant]) => (
-              <div key={alm} className="flex items-center justify-between">
-                <span className="text-gray-600">Almacén {alm}</span>
-                <span className="font-semibold tabular-nums">{FMT_N(cant)}</span>
-              </div>
-            ))}
-            <div className="border-t border-gray-100 pt-1 flex items-center justify-between font-bold">
-              <span className="text-gray-700">Total</span>
-              <span className="tabular-nums text-emerald-700">{FMT_N(r.inv)}</span>
-            </div>
-          </div>
-        ) : (
-          <div className="text-xs text-gray-400 italic">Sin stock comercial</div>
-        )}
-      </div>
-
-      {/* Tránsito */}
+      {/* 2) ARRIBOS EN TRÁNSITO — uno por uno */}
       <div className="bg-white rounded-lg p-3 border border-gray-200">
         <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2 flex items-center gap-1">
-          <Ship className="w-3.5 h-3.5" /> Tránsito próximos arribos
+          <Ship className="w-3.5 h-3.5" /> Arribos en tránsito
         </h4>
-        {r.embarques.length > 0 ? (
-          <div className="space-y-1.5 text-xs max-h-40 overflow-y-auto">
-            {r.embarques.slice(0, 10).map((e, i) => (
+        {(r.embarques || []).length > 0 ? (
+          <div className="space-y-1 text-xs max-h-40 overflow-y-auto">
+            {r.embarques.map((e, i) => (
               <div key={i} className="flex items-center gap-2">
                 <span className={[
-                  'text-[9px] font-semibold px-1 py-0.5 rounded',
+                  'text-[9px] font-semibold px-1 py-0.5 rounded shrink-0',
                   e.estatus === 'TRANSITO MARITIMO' ? 'bg-blue-100 text-blue-700' :
                   e.estatus === 'PROXIMO A ZARPAR'  ? 'bg-amber-100 text-amber-700' :
                   e.estatus === 'EN PRODUCCION'     ? 'bg-slate-100 text-slate-600' :
@@ -683,50 +860,176 @@ function ExpandedDetail({ r }) {
                 ].join(' ')}>
                   {(e.estatus || '').slice(0, 12)}
                 </span>
-                <span className="font-semibold tabular-nums">{FMT_N(e.cantidad)}</span>
-                <span className="text-gray-500 flex-1">→ {fmtFechaCorta(e.eta)}</span>
-                {e.directo_cliente && (
-                  <span className="text-[9px] text-purple-700" title={`Directo a ${e.directo_cliente}`}>→{e.directo_cliente}</span>
-                )}
+                <span className="font-semibold tabular-nums shrink-0">{FMT_N(e.cantidad)}</span>
+                <span className="text-gray-500 truncate flex-1" title={`PO ${e.po || ''}`}>{e.po ? `PO-${e.po}` : ''}</span>
+                <span className="text-gray-500 shrink-0">{fmtFechaCorta(e.eta)}</span>
               </div>
             ))}
-            {r.embarques.length > 10 && (
-              <div className="text-[10px] text-gray-400 italic">+{r.embarques.length - 10} embarques más</div>
-            )}
           </div>
         ) : (
           <div className="text-xs text-gray-400 italic">Sin tránsito programado</div>
         )}
       </div>
 
-      {/* Prorrateo */}
+      {/* 3) PROVEEDOR & COSTOS */}
+      <div className="bg-white rounded-lg p-3 border border-gray-200">
+        <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2">
+          Proveedor & costos
+        </h4>
+        <div className="space-y-1.5 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Proveedor</span>
+            <span className="font-semibold text-gray-800 truncate ml-2 max-w-[180px]" title={r.supplier}>{r.supplier || '—'}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Costo promedio (USD)</span>
+            <span className="font-semibold tabular-nums">{r.costoUnitUsd ? `$${r.costoUnitUsd.toFixed(2)}` : '—'}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Costo promedio (MXN)</span>
+            <span className="font-semibold tabular-nums">{r.costoUnitMxn ? formatMXN(r.costoUnitMxn) : '—'}</span>
+          </div>
+          <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
+            <span className="text-gray-500">Piezas / contenedor</span>
+            <span className="font-semibold tabular-nums">
+              {r.tieneCompras
+                ? (r.piezasPorContenedor > 0 ? FMT_N(r.piezasPorContenedor) : '—')
+                : <span className="text-amber-600 italic">Aún no se compra</span>}
+            </span>
+          </div>
+          {r.esConsolidado && r.tieneCompras && (
+            <div className="text-[10px] text-amber-700 italic">
+              Comparte contenedor con otros SKUs (consolidado)
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Lead time</span>
+            <span className="font-semibold tabular-nums">
+              {r.ltDias ? `${Math.round(r.ltDias)} días` : '—'}
+              {r.ltMuestras > 0 && <span className="text-gray-400 ml-1">({r.ltMuestras})</span>}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4) HISTÓRICO DE COMPRAS */}
+      <div className="bg-white rounded-lg p-3 border border-gray-200">
+        <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2">
+          Histórico de compras
+        </h4>
+        {(r.comprasHist || []).length === 0 ? (
+          <div className="text-xs text-gray-400 italic">Sin historial de compras</div>
+        ) : (
+          <div className="space-y-1 text-xs max-h-40 overflow-y-auto">
+            {r.comprasHist.map((c, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-500 tabular-nums shrink-0 w-16">
+                  {(c.fecha_emision || '').slice(0, 10)}
+                </span>
+                <span className="font-semibold tabular-nums shrink-0 w-16 text-right">
+                  {FMT_N(c.qty)} pz
+                </span>
+                <span className="text-gray-400 shrink-0 w-12 text-right text-[10px]">
+                  {c.contenedores > 0 ? `${c.contenedores} cnt` : ''}
+                </span>
+                <span className={[
+                  'text-[9px] font-semibold px-1 rounded shrink-0 ml-auto',
+                  c.arribo_cedis ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700',
+                ].join(' ')}>
+                  {c.arribo_cedis ? 'recibida' : 'tránsito'}
+                </span>
+              </div>
+            ))}
+            {r.totalComprasHist > r.comprasHist.length && (
+              <div className="text-[10px] text-gray-400 italic">
+                +{r.totalComprasHist - r.comprasHist.length} compras más
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 5) COBERTURA ACTUAL — barra horizontal */}
+      <div className="bg-white rounded-lg p-3 border border-gray-200 lg:col-span-2">
+        <div className="flex items-center justify-between mb-1.5">
+          <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide">Cobertura actual</h4>
+          <div className="text-xs">
+            {r.coberturaDias != null ? (
+              <>
+                <span className="font-bold tabular-nums" style={{ color: colorCob }}>
+                  {r.coberturaDias} días
+                </span>
+                <span className="text-gray-500 ml-1">de venta · {labelCob}</span>
+              </>
+            ) : (
+              <span className="text-gray-400 italic">sin demanda registrada</span>
+            )}
+          </div>
+        </div>
+        {r.coberturaDias != null && (
+          <div className="h-2 bg-gray-100 rounded overflow-hidden relative">
+            <div
+              className="h-full rounded"
+              style={{
+                width: `${Math.min(100, (r.coberturaDias / 180) * 100)}%`,
+                backgroundColor: colorCob,
+              }}
+            />
+            {/* Marca del horizonte óptimo (60-90d) */}
+            <div className="absolute top-0 bottom-0 border-r border-emerald-400/50" style={{ left: '33.33%' }} />
+            <div className="absolute top-0 bottom-0 border-r border-emerald-400/50" style={{ left: '50%' }} />
+          </div>
+        )}
+        <div className="text-[10px] text-gray-400 mt-1">
+          Inv: <span className="font-semibold text-gray-600">{FMT_N(r.inv)}</span> pzs ÷
+          <span className="font-semibold text-gray-600"> {FMT_N(r.demandaMesTotal / 30)}</span> pzs/día =
+          <span className="font-semibold text-gray-600"> {r.coberturaDias != null ? r.coberturaDias : '—'}d</span>
+        </div>
+      </div>
+
+      {/* Prorrateo (alerta cuando inv+tránsito < demanda) */}
       {r.prorrateo && (
-        <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 lg:col-span-3">
+        <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 lg:col-span-2">
           <h4 className="font-semibold text-amber-800 text-xs uppercase tracking-wide mb-1.5 flex items-center gap-1">
-            <AlertTriangle className="w-3.5 h-3.5" /> Prorrateo sugerido (inventario + tránsito &lt; demanda PCEL+DGL)
+            <AlertTriangle className="w-3.5 h-3.5" /> Inventario + tránsito insuficiente para la demanda
           </h4>
           <div className="text-xs text-amber-900 grid grid-cols-3 gap-3">
             <div><span className="text-amber-700">Digitalife: </span><span className="font-bold">{FMT_N(r.prorrateo.digitalife)}</span> <span className="text-[10px]">de {FMT_N(r.demHor.digitalife)} solicitadas</span></div>
             <div><span className="text-amber-700">PCEL: </span><span className="font-bold">{FMT_N(r.prorrateo.pcel)}</span> <span className="text-[10px]">de {FMT_N(r.demHor.pcel)} solicitadas</span></div>
             <div><span className="text-amber-700">Faltante: </span><span className="font-bold text-red-700">{FMT_N(r.prorrateo.faltante)}</span></div>
           </div>
-          <div className="text-[10px] text-amber-700 mt-1 italic">
-            Inventario insuficiente para cubrir la demanda total — considera adelantar la próxima compra.
-          </div>
         </div>
       )}
-
-      {/* Info SKU */}
-      <div className="bg-white rounded-lg p-3 border border-gray-200 lg:col-span-3">
-        <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2">Info del SKU</h4>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          <div><div className="text-gray-500">Familia</div><div className="font-semibold">{r.familia || '—'}</div></div>
-          <div><div className="text-gray-500">Costo unitario USD</div><div className="font-semibold">{r.costoUnitUsd ? `$${r.costoUnitUsd.toFixed(2)}` : '—'}</div></div>
-          <div><div className="text-gray-500">Costo unitario MXN</div><div className="font-semibold">{r.costoUnitMxn ? formatMXN(r.costoUnitMxn) : '—'}</div></div>
-          <div><div className="text-gray-500">Lead time (muestras)</div><div className="font-semibold">{r.ltDias ? `${Math.round(r.ltDias)} días (${r.ltMuestras})` : 'Sin historial'}</div></div>
-        </div>
-      </div>
     </div>
+  );
+}
+
+// Mini-gráfica de barras para demanda 6 meses Digi+PCEL stack
+function DemandaSparkline({ data }) {
+  if (!data || data.length === 0) return <div className="text-xs text-gray-400 italic">Sin datos</div>;
+  const MES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const max = Math.max(1, ...data.map(d => d.digi + d.pcel));
+  const W = 280, H = 50, gap = 4;
+  const barW = (W - (data.length - 1) * gap) / data.length;
+  return (
+    <svg viewBox={`0 0 ${W} ${H + 12}`} className="w-full">
+      {data.map((d, i) => {
+        const x = i * (barW + gap);
+        const total = d.digi + d.pcel;
+        const hTot = (total / max) * H;
+        const hDigi = (d.digi / max) * H;
+        const hPcel = hTot - hDigi;
+        return (
+          <g key={i}>
+            <rect x={x} y={H - hTot} width={barW} height={hPcel} fill="#EF4444" rx={1} />
+            <rect x={x} y={H - hDigi} width={barW} height={hDigi} fill="#3B82F6" rx={1} />
+            <text x={x + barW/2} y={H + 10} textAnchor="middle" fontSize={9} fill="#94A3B8">
+              {MES_CORTO[d.mes - 1]}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
