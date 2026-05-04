@@ -170,6 +170,7 @@ export const PESTANAS_GLOBALES = [
   { id: "admin_interna",      label: "Administración Interna", desc: "Pendientes & Calendario del equipo" },
   { id: "evaluaciones",       label: "Evaluaciones",          desc: "Evaluación de desempeño semanal y bono" },
   { id: "axon_mexico",        label: "Axon de México",        desc: "Nueva empresa para gestión de e-commerce" },
+  { id: "forecast_solicitudes", label: "Forecast — Solicitudes de Compra", desc: "Crear/editar solicitudes S&OP (⚠️ información delicada)" },
   { id: "configuracion",      label: "Configuración",          desc: "Gestión de usuarios (⚠️ solo super admin)" },
 ];
 
