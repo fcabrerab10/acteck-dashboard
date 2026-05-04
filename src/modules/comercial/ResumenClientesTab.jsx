@@ -344,39 +344,52 @@ function calcularResumen(clienteKey, data) {
     const costoPorSku = (sku) =>
       costoFromInvPcel[sku] || costoPromedioSku[sku] || 0;
 
-    // Path 1: sellout_pcel semanal (vta_semana × costo_promedio reportado)
-    let pcelTotal = 0;
+    // Para PCEL combinamos las DOS fuentes preferiendo la que tenga datos
+    // por mes:
+    //   · sellout_pcel_mensual: tiene piezas por mes (más completo)
+    //   · sellout_pcel semanal: tiene piezas por semana (a veces solo
+    //     últimas semanas)
+    // Calculamos piezas por (sku, mes) tomando el MÁXIMO entre ambas
+    // (evita doble conteo cuando el mismo mes está en ambas).
+
+    // 1) Piezas mensuales desde sellout_pcel_mensual
+    const pzsMensual = new Map(); // key = sku|mes
+    (data.selloutPcelMensual || []).forEach((r) => {
+      const m = Number(r.mes) || 0;
+      const sku = (r.sku || '').toString();
+      if (!sku || m < 1 || m > mesEf) return;
+      const k = sku + '|' + m;
+      pzsMensual.set(k, (pzsMensual.get(k) || 0) + (Number(r.piezas) || 0));
+    });
+
+    // 2) Piezas mensuales desde sellout_pcel semanal (agregando isoWeek→mes)
+    const pzsSemanalAgg = new Map();
     (data.selloutPcelSemanal || []).forEach((r) => {
       const piezas = Number(r.vta_semana || 0);
-      const costo  = Number(r.costo_promedio || 0);
-      if (piezas <= 0 || costo <= 0) return;
+      if (piezas <= 0) return;
       const m = isoWeekToMonth(Number(r.anio) || anioActual, Number(r.semana) || 1);
       if (!m || m < 1 || m > mesEf) return;
-      const monto = piezas * costo;
-      pcelTotal += monto;
+      const sku = (r.sku || '').toString();
+      if (!sku) return;
+      const k = sku + '|' + m;
+      pzsSemanalAgg.set(k, (pzsSemanalAgg.get(k) || 0) + piezas);
+    });
+
+    // 3) Combinar — para cada (sku, mes), tomar el MAX de las dos fuentes
+    const allKeys = new Set([...pzsMensual.keys(), ...pzsSemanalAgg.keys()]);
+    allKeys.forEach((k) => {
+      const piezas = Math.max(pzsMensual.get(k) || 0, pzsSemanalAgg.get(k) || 0);
+      if (piezas <= 0) return;
+      const [sku, mStr] = k.split('|');
+      const m = Number(mStr);
+      const cp = costoPorSku(sku);
+      if (cp <= 0) return;
+      const monto = piezas * cp;
       soYTD += monto;
       if (m === mesEf) soMes += monto;
     });
 
-    // Path 2: sellout_pcel_mensual × costo del inv snapshot.
-    // sellout_sku no se llena para PCEL (recalc lee sellout_detalle, que
-    // PCEL no usa). sellout_pcel_mensual sí tiene piezas mensuales.
-    if (pcelTotal === 0) {
-      (data.selloutPcelMensual || []).forEach((r) => {
-        const m = Number(r.mes) || 0;
-        if (m < 1 || m > mesEf) return;
-        const sku = (r.sku || '').toString();
-        const piezas = Number(r.piezas || 0);
-        const cp = costoPorSku(sku);
-        if (cp <= 0 || piezas <= 0) return;
-        const monto = piezas * cp;
-        soYTD += monto;
-        if (m === mesEf) soMes += monto;
-      });
-    }
-
-    // Path 3 (último recurso): si los dos anteriores fallaron, intenta
-    // con sellout_sku × costoPorSku (por si hay una migración a futuro).
+    // Fallback final: sellout_sku (por si alguien recalcula PCEL en el futuro)
     if (soYTD === 0) {
       so.forEach((r) => {
         const m = Number(r.mes) || 0;
