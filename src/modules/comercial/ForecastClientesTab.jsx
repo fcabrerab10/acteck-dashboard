@@ -14,6 +14,7 @@ import SolicitudesPanel from './forecast/SolicitudesPanel';
 import SolicitudesModal from './forecast/SolicitudesModal';
 import AlertasCard from './forecast/AlertasCard';
 import NecesidadCard from './forecast/NecesidadCard';
+import { roadmapStyle } from '../../lib/roadmapColors';
 import { useSolicitudes } from './forecast/useSolicitudes';
 import { puedeEditarPestanaGlobal, puedeVerPestanaGlobal } from '../../lib/permisos';
 
@@ -272,6 +273,12 @@ function calcularForecast(data, horizonteMeses) {
     const lt = ltBySku[sku];
 
     const rm = rmBySku[sku] || {};
+    // Descripción y roadmap igual que en el Reporte de Resumen Clientes:
+    //   1) descripción del roadmap_sku (la que se carga en el Excel del Reporte)
+    //   2) fallback a v_sku_metadata.descripcion
+    // El roadmap se lee de la columna `rdmp` (igual que Reporte).
+    const descripcion = rm.descripcion || meta.descripcion || '';
+    const roadmapEstado = rm.rdmp || rm.estado || rm.estatus || null;
 
     // Demanda últimos 6 meses por cliente (para mini-gráfica del expandible)
     const demanda6m = [];
@@ -311,11 +318,11 @@ function calcularForecast(data, horizonteMeses) {
 
     rows.push({
       sku,
-      descripcion: meta.descripcion || '',
+      descripcion,
       supplier:    meta.supplier || lt?.supplier_principal || '',
       familia:     meta.familia || lt?.familia || '',
       marca:       meta.marca || '',
-      roadmapEstado: rm.estado || rm.estatus || null,
+      roadmapEstado,
       costoUnitMxn: Number(meta.costo_promedio_mxn || 0),
       costoUnitUsd: Number(meta.unit_price_usd_ultima || 0),
       demMes, demHor, demandaTotalHor, demandaMesTotal,
@@ -814,23 +821,21 @@ function ForecastTable({ rows, expandedSku, setExpandedSku, sortCol, sortDir, on
               SKU <ArrowSort col="sku" />
             </th>
             <th className="text-left px-2 py-2">Roadmap</th>
-            <th className="text-left px-3 py-2 min-w-[200px]">Descripción</th>
-            <th className="text-left px-2 py-2">Familia</th>
+            <th className="text-left px-3 py-2 min-w-[260px]">Descripción</th>
             <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('inv')}>Inv <ArrowSort col="inv"/></th>
             <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('traCant')}>Tránsito <ArrowSort col="traCant"/></th>
-            <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('demandaTotalHor')}>Dem total <ArrowSort col="demandaTotalHor"/></th>
+            <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('demandaTotalHor')}>Dem Total <ArrowSort col="demandaTotalHor"/></th>
             <th className="text-right px-1 py-2" style={{ color: '#3B82F6' }}>DGL</th>
             <th className="text-right px-1 py-2" style={{ color: '#EF4444' }}>PCEL</th>
             <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('brecha')}>Brecha <ArrowSort col="brecha"/></th>
             <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('sugerido')}>Sugerido <ArrowSort col="sugerido"/></th>
             <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('ltDias')}>LT <ArrowSort col="ltDias"/></th>
-            <th className="text-left px-2 py-2">Banderas</th>
             <th className="px-2 py-2 w-8"></th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr><td colSpan={15} className="text-center py-10 text-gray-400 text-sm">Sin resultados con los filtros actuales</td></tr>
+            <tr><td colSpan={13} className="text-center py-10 text-gray-400 text-sm">Sin resultados con los filtros actuales</td></tr>
           ) : rows.map(r => (
             <ForecastRow
               key={r.sku} r={r}
@@ -849,14 +854,18 @@ function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud }) {
   const brechaColor = r.brecha > 0 ? 'text-red-600 font-semibold' : 'text-gray-400';
   const eta = r.traEta ? diasHasta(r.traEta) : null;
   const etaLabel = r.traEta ? `${fmtFechaCorta(r.traEta)}${eta != null ? ` (${eta}d)` : ''}` : '—';
+  // Badge oficial del roadmap — mismos colores que el Reporte de Resumen Clientes
   const RoadmapBadge = ({ estado }) => {
     if (!estado) return <span className="text-gray-300 text-[10px]">—</span>;
-    const e = String(estado).toLowerCase();
-    let cls = 'bg-gray-100 text-gray-700';
-    if (e.includes('vivo') || e.includes('activo') || e.includes('disponible')) cls = 'bg-emerald-100 text-emerald-700';
-    else if (e.includes('proxim') || e.includes('camino')) cls = 'bg-blue-100 text-blue-700';
-    else if (e.includes('descontin') || e.includes('eol') || e.includes('baja')) cls = 'bg-red-100 text-red-700';
-    return <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${cls}`}>{estado}</span>;
+    const s = roadmapStyle(estado);
+    return (
+      <span
+        className="px-1.5 py-0.5 rounded text-[10px] font-bold"
+        style={{ backgroundColor: s.bg, color: s.color }}
+      >
+        {estado}
+      </span>
+    );
   };
 
   return (
@@ -865,8 +874,7 @@ function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud }) {
         <td className="pl-2 cursor-pointer" onClick={onToggle}>{expanded ? <ChevronUp className="w-3.5 h-3.5 text-gray-400"/> : <ChevronDown className="w-3.5 h-3.5 text-gray-400"/>}</td>
         <td className="px-3 py-2 font-mono text-xs font-semibold text-gray-800 cursor-pointer" onClick={onToggle}>{r.sku}</td>
         <td className="px-2 py-2 cursor-pointer" onClick={onToggle}><RoadmapBadge estado={r.roadmapEstado}/></td>
-        <td className="px-3 py-2 text-xs text-gray-600 truncate max-w-[280px] cursor-pointer" title={r.descripcion} onClick={onToggle}>{r.descripcion || '—'}</td>
-        <td className="px-2 py-2 text-xs text-gray-500 truncate max-w-[110px] cursor-pointer" title={r.familia} onClick={onToggle}>{r.familia || '—'}</td>
+        <td className="px-3 py-2 text-xs text-gray-600 truncate max-w-[340px] cursor-pointer" title={r.descripcion} onClick={onToggle}>{r.descripcion || '—'}</td>
         <td className="text-right px-2 py-2 tabular-nums text-gray-700 cursor-pointer" onClick={onToggle}>{FMT_N(r.inv)}</td>
         <td className="text-right px-2 py-2 tabular-nums text-xs text-gray-600 cursor-pointer" title={etaLabel} onClick={onToggle}>
           {r.traCant > 0 ? (<>
@@ -888,25 +896,6 @@ function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud }) {
         <td className="text-right px-2 py-2 text-xs cursor-pointer" onClick={onToggle}>
           {r.ltDias ? <span className="text-gray-700">{Math.round(r.ltDias)}d</span> : <span className="text-gray-300">?</span>}
         </td>
-        <td className="px-2 py-2 cursor-pointer" onClick={onToggle}>
-          <div className="flex gap-1 flex-wrap">
-            {r.canibalizacion && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-semibold" title="PCEL y Digitalife compiten por este SKU">
-                <Users className="w-2.5 h-2.5"/>Canib
-              </span>
-            )}
-            {r.preventaDeficit > 0 && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-semibold" title={`Déficit ${FMT_N(r.preventaDeficit)} próximos 60d`}>
-                <Target className="w-2.5 h-2.5"/>Preventa
-              </span>
-            )}
-            {r.sugerido > 0 && r.ltDias && r.ltDias > 90 && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-semibold" title={`LT largo: ${Math.round(r.ltDias)} días`}>
-                <Flame className="w-2.5 h-2.5"/>Urge
-              </span>
-            )}
-          </div>
-        </td>
         <td className="px-2 py-2 text-center">
           {onAgregarSolicitud && r.sugerido > 0 && (
             <button
@@ -922,7 +911,7 @@ function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud }) {
       </tr>
       {expanded && (
         <tr className="border-t border-gray-100 bg-gray-50/60">
-          <td colSpan={15} className="p-4">
+          <td colSpan={13} className="p-4">
             <ExpandedDetail r={r} />
           </td>
         </tr>
