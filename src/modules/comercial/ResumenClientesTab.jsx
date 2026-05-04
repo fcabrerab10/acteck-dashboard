@@ -846,36 +846,23 @@ export default function ResumenClientesTab({ onDrillDown }) {
   );
 
   // E5: Embudo Sell-In → Sell-Out · % conversion del año
+  // Usa los siYTD/soYTD ya calculados por cliente en `resumenes` para
+  // garantizar coherencia con las tarjetas de arriba (Digi precio venta,
+  // PCEL a costo via sellout_pcel × costo_promedio).
   const embudo = useMemo(() => {
-    if (data.loading) return null;
-    // Usamos el mismo criterio: hasta el último mes con sell-in real
-    // ML no factura sell-in a Acteck → lo excluimos del embudo para no
-    // distorsionar el % conversión (ML solo tiene sell-out).
-    const filaCuenta = (r) => r.cliente !== 'mercadolibre';
-    const mesesConDatosEmb = (data.ventasAgg || [])
-      .filter((r) => Number(r.anio) === anioActual && filaCuenta(r) && Number(r.sell_in || 0) > 0)
-      .map((r) => Number(r.mes) || 0);
-    const mesEfEmb = mesesConDatosEmb.length > 0
-      ? Math.min(mesActual, Math.max(...mesesConDatosEmb))
-      : mesActual;
+    if (data.loading || resumenes.length === 0) return null;
     let siYTD = 0, soYTD = 0;
     const porCliente = {};
-    (data.ventasAgg || []).forEach((r) => {
-      if (Number(r.anio) !== anioActual) return;
-      if (Number(r.mes) > mesEfEmb) return;
-      if (!filaCuenta(r)) return;
-      const si = Number(r.sell_in || 0);
-      const so = Number(r.sell_out || 0);
+    resumenes.forEach(({ cliente, resumen }) => {
+      const si = Number(resumen.siYTD || 0);
+      const so = Number(resumen.soYTD || 0);
       siYTD += si;
       soYTD += so;
-      const k = r.cliente;
-      if (!porCliente[k]) porCliente[k] = { si: 0, so: 0 };
-      porCliente[k].si += si;
-      porCliente[k].so += so;
+      porCliente[cliente.key] = { si, so };
     });
     const conv = siYTD > 0 ? (soYTD / siYTD) * 100 : null;
     return { siYTD, soYTD, conv, porCliente };
-  }, [data]);
+  }, [data, resumenes]);
 
   // C4: SKUs con cobertura < 45 días en CUALQUIER cliente.
   // Cobertura = stock cliente / (sellout últimos 90d / 90).
@@ -1378,6 +1365,9 @@ function EmbudoConversion({ embudo }) {
           Embudo Sell-In → Sell-Out · YTD {anioActual}
         </h3>
         <span className="text-xs text-gray-400">Lo que mandas vs lo que el cliente desplaza</span>
+        <span className="text-[10px] text-amber-600 ml-2" title="PCEL se valora a costo (no reporta precio venta), Digitalife a precio venta">
+          ⓘ PCEL a costo
+        </span>
       </div>
       <div className="p-5 space-y-4">
         {/* Barras horizontales */}
