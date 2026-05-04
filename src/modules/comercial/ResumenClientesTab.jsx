@@ -118,6 +118,7 @@ function useResumenData() {
     creditoConfig: [],
     selloutSku: [],
     selloutPcelSemanal: [],
+    selloutPcelMensual: [],
     sellInSku: [],
     estadosCuenta: [],
     estadosCuentaDetalle: [],
@@ -145,7 +146,7 @@ function useResumenData() {
       // Inventario cliente: usamos el MISMO adapter que HomeCliente para que
       // los números sean consistentes entre Resumen y la pestaña per-cliente.
       // PCEL → lee de sellout_pcel; Digitalife → de inventario_cliente.
-      const [vaRes, cmRes, invDigi, invPcel, dsoRes, ccRes, soRows, soPcelRows, siRows, ecRows, mkRes] = await Promise.all([
+      const [vaRes, cmRes, invDigi, invPcel, dsoRes, ccRes, soRows, soPcelRows, soPcelMenRows, siRows, ecRows, mkRes] = await Promise.all([
         supabase.from('v_ventas_mensuales_agg')
           .select('cliente, anio, mes, sell_in, sell_out')
           .gte('anio', anioActual - 1),
@@ -166,6 +167,12 @@ function useResumenData() {
         // MXN a costo. Es lo que el cliente paga = nuestro costo de venta.
         fetchAll(() => supabase.from('sellout_pcel')
           .select('sku, anio, semana, vta_semana, costo_promedio')
+          .eq('anio', anioActual)),
+        // Sell-Out PCEL mensual (cuando PCEL reporta monto agregado por mes)
+        // sellout_sku no se llena para PCEL (recalc lee sellout_detalle, que
+        // PCEL no usa) — esta tabla es la fuente principal de piezas/mes.
+        fetchAll(() => supabase.from('sellout_pcel_mensual')
+          .select('sku, anio, mes, piezas')
           .eq('anio', anioActual)),
         // sell_in_sku histórico (2 años) → cost_promedio por SKU para
         // valuar inventario y sellout de PCEL/Digitalife de manera consistente.
@@ -224,6 +231,7 @@ function useResumenData() {
         creditoConfig:     ccRes.data  || [],
         selloutSku:        soRows       || [],
         selloutPcelSemanal: soPcelRows  || [],
+        selloutPcelMensual: soPcelMenRows || [],
         sellInSku:         siRows       || [],
         estadosCuenta:     ecRecientes  || [],
         estadosCuentaDetalle: ecDetRows || [],
@@ -350,10 +358,26 @@ function calcularResumen(clienteKey, data) {
       if (m === mesEf) soMes += monto;
     });
 
-    // Path 2: si Path 1 dio 0, usar sellout_sku.piezas × costo (del inv
-    // snapshot o sell_in fallback). Cubre el caso donde los datos están
-    // en sellout_pcel_mensual y sellout_pcel semanal viene vacío.
+    // Path 2: sellout_pcel_mensual × costo del inv snapshot.
+    // sellout_sku no se llena para PCEL (recalc lee sellout_detalle, que
+    // PCEL no usa). sellout_pcel_mensual sí tiene piezas mensuales.
     if (pcelTotal === 0) {
+      (data.selloutPcelMensual || []).forEach((r) => {
+        const m = Number(r.mes) || 0;
+        if (m < 1 || m > mesEf) return;
+        const sku = (r.sku || '').toString();
+        const piezas = Number(r.piezas || 0);
+        const cp = costoPorSku(sku);
+        if (cp <= 0 || piezas <= 0) return;
+        const monto = piezas * cp;
+        soYTD += monto;
+        if (m === mesEf) soMes += monto;
+      });
+    }
+
+    // Path 3 (último recurso): si los dos anteriores fallaron, intenta
+    // con sellout_sku × costoPorSku (por si hay una migración a futuro).
+    if (soYTD === 0) {
       so.forEach((r) => {
         const m = Number(r.mes) || 0;
         if (m < 1 || m > mesEf) return;
@@ -460,20 +484,30 @@ function calcularResumen(clienteKey, data) {
         });
         dias = (ultSem - desdeSem + 1) * 7;
       }
-      // Fallback: si sellout_pcel está vacío, usar so (sellout_sku) × costoPromedioSku
+      // Fallback: si sellout_pcel está vacío, usar sellout_pcel_mensual ×
+      // costo del snapshot de inventario PCEL (mismo método que el sell-out).
       if (montoSO === 0) {
-        const ultMes = so.length > 0 ? Math.max(...so.map((r) => Number(r.mes) || 0)) : 0;
-        if (ultMes > 0) {
-          const desde = Math.max(1, ultMes - 2);
-          so.filter((r) => Number(r.mes) >= desde && Number(r.mes) <= ultMes)
+        const costoFromInv = {};
+        inv.forEach((r) => {
+          const k = (r.sku || '').toString();
+          const c = Number(r.costo_convenio || 0);
+          if (k && c > 0 && !costoFromInv[k]) costoFromInv[k] = c;
+        });
+        const ultMesM = (data.selloutPcelMensual || [])
+          .map((r) => Number(r.mes) || 0)
+          .reduce((a, b) => Math.max(a, b), 0);
+        if (ultMesM > 0) {
+          const desde = Math.max(1, ultMesM - 2);
+          (data.selloutPcelMensual || [])
+            .filter((r) => Number(r.mes) >= desde && Number(r.mes) <= ultMesM)
             .forEach((r) => {
               const sku = (r.sku || '').toString();
               const piezas = Number(r.piezas || 0);
-              const cp = costoPromedioSku[sku];
-              if (cp == null || piezas <= 0) return;
+              const cp = costoFromInv[sku] || costoPromedioSku[sku] || 0;
+              if (cp <= 0 || piezas <= 0) return;
               montoSO += piezas * cp;
             });
-          for (let m = desde; m <= ultMes; m++) dias += new Date(anioActual, m, 0).getDate();
+          for (let m = desde; m <= ultMesM; m++) dias += new Date(anioActual, m, 0).getDate();
         }
       }
     } else {
