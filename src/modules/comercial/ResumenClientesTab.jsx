@@ -397,29 +397,60 @@ function calcularResumen(clienteKey, data) {
     inventarioSemana = `${semanaMax.anio}-${String(semanaMax.semana).padStart(2,'0')}`;
   }
 
-  // ── Cobertura en DÍAS — mismo método para Digitalife y PCEL ──
-  // sellout_MXN = sum(piezas_sellout × costo_promedio_sku) en últimos 3 meses.
-  // Esto IGNORA monto_pesos del sellout_sku (Digitalife reporta a precio venta;
-  // PCEL no reporta monto). Así inventario y sellout están en la MISMA escala
-  // (costo) y la cobertura es comparable entre clientes.
-  const ultMes = so.length > 0 ? Math.max(...so.map((r) => Number(r.mes) || 0)) : 0;
+  // ── Cobertura en DÍAS ──
+  // Para Digitalife: sellout_sku.monto_pesos (precio venta) últimos 3 meses.
+  // Para PCEL: sellout_pcel semanal × costo_promedio (a costo) últimos 3
+  // meses. Ambas comparan contra inventarioValor que ya está calculado en
+  // costo (snapshot de inventario_cliente o sellout_pcel).
   let coberturaDias = null;
-  if (inventarioValor > 0 && ultMes > 0) {
-    const desde = Math.max(1, ultMes - 2);
-    const montoSO = so
-      .filter((r) => Number(r.mes) >= desde && Number(r.mes) <= ultMes)
-      .reduce((a, r) => {
-        const sku = (r.sku || '').toString();
-        const piezas = Number(r.piezas || 0);
-        const cp = costoPromedioSku[sku];
-        if (cp != null) return a + piezas * cp;
-        // Fallback: si no hay costo_promedio para este SKU, usa monto_pesos
-        // reportado (puede ser 0 para PCEL — ese SKU queda sin contribución).
-        return a + Number(r.monto_pesos || 0);
-      }, 0);
+  if (inventarioValor > 0) {
+    let montoSO = 0;
     let dias = 0;
-    for (let m = desde; m <= ultMes; m++) {
-      dias += new Date(anioActual, m, 0).getDate();
+    if (clienteKey === 'pcel') {
+      // Semanas del año actual con vta_semana > 0 → sumar piezas × costo
+      // Tomamos las últimas 13 semanas (~3 meses)
+      const semanasConDatos = (data.selloutPcelSemanal || [])
+        .filter((r) => Number(r.anio) === anioActual && Number(r.vta_semana || 0) > 0)
+        .sort((a, b) => Number(b.semana) - Number(a.semana));
+      const ultSem = semanasConDatos[0]?.semana ? Number(semanasConDatos[0].semana) : 0;
+      if (ultSem > 0) {
+        const desdeSem = Math.max(1, ultSem - 12);
+        (data.selloutPcelSemanal || []).forEach((r) => {
+          const s = Number(r.semana) || 0;
+          if (s < desdeSem || s > ultSem) return;
+          const piezas = Number(r.vta_semana || 0);
+          const costo  = Number(r.costo_promedio || 0);
+          if (piezas <= 0 || costo <= 0) return;
+          montoSO += piezas * costo;
+        });
+        dias = (ultSem - desdeSem + 1) * 7;
+      }
+      // Fallback: si sellout_pcel está vacío, usar so (sellout_sku) × costoPromedioSku
+      if (montoSO === 0) {
+        const ultMes = so.length > 0 ? Math.max(...so.map((r) => Number(r.mes) || 0)) : 0;
+        if (ultMes > 0) {
+          const desde = Math.max(1, ultMes - 2);
+          so.filter((r) => Number(r.mes) >= desde && Number(r.mes) <= ultMes)
+            .forEach((r) => {
+              const sku = (r.sku || '').toString();
+              const piezas = Number(r.piezas || 0);
+              const cp = costoPromedioSku[sku];
+              if (cp == null || piezas <= 0) return;
+              montoSO += piezas * cp;
+            });
+          for (let m = desde; m <= ultMes; m++) dias += new Date(anioActual, m, 0).getDate();
+        }
+      }
+    } else {
+      // Digitalife — usa sellout_sku.monto_pesos directo (precio venta).
+      const ultMes = so.length > 0 ? Math.max(...so.map((r) => Number(r.mes) || 0)) : 0;
+      if (ultMes > 0) {
+        const desde = Math.max(1, ultMes - 2);
+        montoSO = so
+          .filter((r) => Number(r.mes) >= desde && Number(r.mes) <= ultMes)
+          .reduce((a, r) => a + Number(r.monto_pesos || 0), 0);
+        for (let m = desde; m <= ultMes; m++) dias += new Date(anioActual, m, 0).getDate();
+      }
     }
     const soDiario = dias > 0 ? montoSO / dias : 0;
     coberturaDias = soDiario > 0 ? Math.round(inventarioValor / soDiario) : null;
@@ -499,17 +530,28 @@ function calcularResumen(clienteKey, data) {
         }
       }
 
-      // Solo cuentan facturas REALMENTE pagadas (transición saldo>0→0).
-      // Las facturas abiertas (saldo>0 hoy) no cuentan: aún no sabemos
-      // cuánto van a tardar — incluirlas con today-emisión jala el
-      // promedio hacia abajo si fueron emitidas recientemente.
-      // Esto refleja el comportamiento histórico de pago real del cliente.
-      if (pagoIdx < 0) return;
-      const fechaPago = f.eventos[pagoIdx].fecha_corte;
-      if (new Date(fechaPago) < cutoffPago) return;
-      dias = Math.round(
-        (new Date(fechaPago) - new Date(f.fecha_emision)) / (1000 * 60 * 60 * 24)
-      );
+      // Preferimos facturas REALMENTE pagadas (transición saldo>0→0) porque
+      // miden el comportamiento histórico de cobro. Si el cliente no tiene
+      // facturas pagadas en ventana (caso PCEL al inicio del histórico),
+      // usamos las facturas abiertas y antiguas (>30 días desde emisión)
+      // como fallback — refleja el "tiempo que llevan sin pagar".
+      if (pagoIdx >= 0) {
+        const fechaPago = f.eventos[pagoIdx].fecha_corte;
+        if (new Date(fechaPago) < cutoffPago) return;
+        dias = Math.round(
+          (new Date(fechaPago) - new Date(f.fecha_emision)) / (1000 * 60 * 60 * 24)
+        );
+      } else if (ultimo.idx === lastIdx && ultimo.saldo > 0) {
+        const diasAbierta = Math.round(
+          (hoyMs - new Date(f.fecha_emision).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        // Solo facturas con más de 30 días de antigüedad (las de 5-20 días
+        // recién emitidas no son representativas del comportamiento de pago).
+        if (diasAbierta < 30) return;
+        dias = diasAbierta;
+      } else {
+        return;
+      }
 
       if (dias == null || dias < 0 || dias > 720) return;
       const peso = Number(f.importe);
