@@ -596,21 +596,35 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
       const hoy = new Date();
       const anioCorte = new Date(hoy.getFullYear(), hoy.getMonth() - 6, 1).getFullYear();
       const hoyISO = hoy.toISOString().slice(0, 10);
-      const [demRes, traRes, ltRes, embRes] = await Promise.all([
-        supabase.from('v_demanda_sku').select('cliente, anio, mes, piezas')
+      const [demRes, traRes, ltRes, embRes, siRes, soPcelRes] = await Promise.all([
+        // Demanda con piezas + monto. Misma vista que ya combina sellout/sell_in
+        supabase.from('v_demanda_sku').select('cliente, anio, mes, piezas, monto_pesos')
           .eq('sku', sku).gte('anio', anioCorte),
         supabase.from('v_transito_sku').select('*').eq('sku', sku).maybeSingle(),
         supabase.from('v_lead_time_sku').select('dias_promedio').eq('sku', sku).maybeSingle(),
         // Leemos directo embarques_compras y agregamos en el cliente.
-        // Antes usábamos la vista v_sku_compras_historico, pero al no poder
-        // aplicar SQL automáticamente, hacemos el cálculo aquí.
         supabase.from('embarques_compras')
           .select('po, fecha_emision, arribo_cedis, po_qty, cbm, contenedor, estatus')
           .eq('codigo', sku),
+        // sell_in_sku histórico de este SKU → costo promedio (para valuar PCEL)
+        supabase.from('sell_in_sku').select('cliente, piezas, monto_pesos').eq('sku', sku),
+        // sellout_pcel para este SKU últimos 3 meses → MXN a costo coherente
+        // con la tarjeta de PCEL en Resumen Clientes.
+        supabase.from('sellout_pcel').select('anio, semana, vta_semana, costo_promedio')
+          .eq('sku', sku),
       ]);
 
-      // Agregación tipo v_sku_compras_historico (todas las compras no canceladas)
       const compras = calcularHistoricoCompras(embRes.data || [], hoyISO);
+
+      // Costo promedio del SKU (todos los clientes de Acteck, histórico).
+      // Lo usamos para valuar piezas a costo cuando no hay monto_pesos.
+      let cpAcum = 0, cpN = 0;
+      (siRes.data || []).forEach((r) => {
+        const p = Number(r.piezas || 0);
+        const m = Number(r.monto_pesos || 0);
+        if (p > 0 && m > 0) { cpAcum += m; cpN += p; }
+      });
+      const costoPromedioSku = cpN > 0 ? cpAcum / cpN : 0;
 
       setData({
         loading: false,
@@ -618,6 +632,8 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
         transito: traRes.data,
         leadTime: ltRes.data?.dias_promedio,
         compras,
+        costoPromedioSku,
+        selloutPcel: soPcelRes.data || [],
       });
     })();
   }, [sku]);
@@ -731,16 +747,50 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
   }
   // ML se gestiona ahora desde Axon de México (empresa aparte) — fuera de
   // la demanda Acteck. Solo Digitalife + PCEL.
-  const dem = { digitalife: [], pcel: [] };
+  // Coherencia con tarjetas de Resumen Clientes:
+  //   · Digitalife → piezas y monto_pesos directos de v_demanda_sku
+  //     (que ya combina sellout_sku + sell_in_sku).
+  //   · PCEL → piezas (mismas) pero MXN a costo, ya sea desde sellout_pcel
+  //     (vta_semana × costo_promedio) o piezas × costoPromedioSku como
+  //     fallback. Idéntico método que la tarjeta del cliente.
+  const dem = { digitalife: { piezas: [], monto: 0 }, pcel: { piezas: [], monto: 0 } };
   data.demanda.forEach((d) => {
-    if (mesesRef.some((m) => m.anio === d.anio && m.mes === Number(d.mes))) {
-      if (dem[d.cliente]) dem[d.cliente].push(Number(d.piezas || 0));
+    if (!mesesRef.some((m) => m.anio === d.anio && m.mes === Number(d.mes))) return;
+    const k = d.cliente;
+    if (!dem[k]) return;
+    const p = Number(d.piezas || 0);
+    dem[k].piezas.push(p);
+    if (k === 'digitalife') {
+      dem.digitalife.monto += Number(d.monto_pesos || 0);
     }
   });
+  // PCEL MXN — vía sellout_pcel semanal últimos 3 meses (semana actual − 12)
+  const ultSemPcel = (data.selloutPcel || [])
+    .map((r) => Number(r.semana) || 0)
+    .reduce((a, b) => Math.max(a, b), 0);
+  if (ultSemPcel > 0) {
+    const desdeSem = Math.max(1, ultSemPcel - 12);
+    (data.selloutPcel || []).forEach((r) => {
+      const s = Number(r.semana) || 0;
+      if (s < desdeSem || s > ultSemPcel) return;
+      const p = Number(r.vta_semana || 0);
+      const c = Number(r.costo_promedio || 0);
+      if (p > 0 && c > 0) dem.pcel.monto += p * c;
+    });
+  }
+  // Fallback PCEL: si sellout_pcel no dio monto, usar piezas × costoPromedioSku
+  if (dem.pcel.monto === 0 && data.costoPromedioSku > 0) {
+    const piezasPcel3m = dem.pcel.piezas.reduce((a, b) => a + b, 0);
+    dem.pcel.monto = piezasPcel3m * data.costoPromedioSku;
+  }
   const promMes = (a) => a.length > 0 ? a.reduce((x, y) => x + y, 0) / 3 : 0;
   const demMes = {
-    digitalife: promMes(dem.digitalife),
-    pcel: promMes(dem.pcel),
+    digitalife: promMes(dem.digitalife.piezas),
+    pcel: promMes(dem.pcel.piezas),
+  };
+  const demMontoMes = {
+    digitalife: dem.digitalife.monto / 3,
+    pcel: dem.pcel.monto / 3,
   };
   const demTotalMes = demMes.digitalife + demMes.pcel;
   const dem3m = demTotalMes * 3;
@@ -783,24 +833,41 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
   return (
     <div className="space-y-3 text-sm">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Demanda 3 clientes */}
+        {/* Demanda 3 clientes — piezas + MXN coherente con Resumen Clientes */}
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-2">
             Demanda mensual prom (3m)
           </h4>
           <div className="space-y-1.5">
-            {CLIENTES.map((c) => (
-              <div key={c.key} className="flex items-center gap-2 text-xs">
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
-                <span className="flex-1 text-gray-700">{c.label}</span>
-                <span className="font-semibold tabular-nums" style={{ color: demMes[c.key] > 0 ? c.color : '#CBD5E1' }}>
-                  {FMT_N(demMes[c.key])}
-                </span>
-              </div>
-            ))}
+            {CLIENTES.map((c) => {
+              const pzs = demMes[c.key];
+              const mxn = demMontoMes[c.key];
+              const aCosto = c.key === 'pcel';
+              return (
+                <div key={c.key} className="text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
+                    <span className="flex-1 text-gray-700">
+                      {c.label}
+                      {aCosto && pzs > 0 && (
+                        <span className="ml-1 text-[9px] text-amber-600 font-medium">(a costo)</span>
+                      )}
+                    </span>
+                    <span className="font-semibold tabular-nums" style={{ color: pzs > 0 ? c.color : '#CBD5E1' }}>
+                      {FMT_N(pzs)} pzs
+                    </span>
+                  </div>
+                  {mxn > 0 && (
+                    <div className="ml-4 text-[10px] text-gray-500 tabular-nums">
+                      ${Math.round(mxn).toLocaleString('es-MX')} MXN
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             <div className="border-t border-gray-100 pt-1.5 flex items-center gap-2 text-xs">
               <span className="flex-1 text-gray-500 font-medium">Total mes</span>
-              <span className="font-bold tabular-nums">{FMT_N(demTotalMes)}</span>
+              <span className="font-bold tabular-nums">{FMT_N(demTotalMes)} pzs</span>
             </div>
             <div className="text-[10px] text-gray-500 text-right">3m: {FMT_N(dem3m)} pzs</div>
           </div>
