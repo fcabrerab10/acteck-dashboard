@@ -792,9 +792,9 @@ export default function ForecastClientesTab() {
         </span>
       </div>
 
-      {/* TABLA */}
+      {/* TABLA — los 818 SKUs del Reporte con scroll interno */}
       <ForecastTable
-        rows={rowsOrdenados.slice(0, 400)}
+        rows={rowsOrdenados}
         expandedSku={expandedSku}
         setExpandedSku={setExpandedSku}
         sortCol={sortCol} sortDir={sortDir}
@@ -804,11 +804,6 @@ export default function ForecastClientesTab() {
         }}
         onAgregarSolicitud={onAgregarSolicitud}
       />
-      {rowsOrdenados.length > 400 && (
-        <div className="text-center text-xs text-gray-500">
-          Mostrando 400 de {rowsOrdenados.length}. Usa filtros o búsqueda para refinar.
-        </div>
-      )}
     </div>
   );
 }
@@ -835,9 +830,12 @@ function ForecastTable({ rows, expandedSku, setExpandedSku, sortCol, sortDir, on
   ) : <span className="text-gray-300">↕</span>;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50/80 text-xs text-gray-600">
+    <div className="bg-white rounded-xl border border-gray-200">
+      {/* Scroll interno — el header se mantiene fijo arriba y la tabla
+          scroll-ea adentro (igual que el Reporte de Resumen Clientes) */}
+      <div className="overflow-x-auto overflow-y-auto max-h-[78vh]">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-xs text-gray-600 sticky top-0 z-10">
           <tr>
             <th className="w-4"></th>
             <th className="text-left px-3 py-2 cursor-pointer" onClick={() => onSort('sku')}>
@@ -869,6 +867,7 @@ function ForecastTable({ rows, expandedSku, setExpandedSku, sortCol, sortDir, on
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
