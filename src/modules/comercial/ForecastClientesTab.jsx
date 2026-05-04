@@ -61,6 +61,9 @@ function useForecastData() {
     embarques: [],
     solicitudes: [],
     solicitudLineas: [],
+    // Whitelist activa de SKUs del Reporte de Resumen Clientes — los únicos
+    // SKUs que aparecen en la tabla del Forecast (en el mismo orden).
+    reporteSkus: [],
   });
 
   // Helper paginador (PostgREST corta a 1000)
@@ -107,9 +110,12 @@ function useForecastData() {
       supabase.from('solicitudes_compra_lineas').select('*')
         .order('orden', { ascending: true })
         .then(r => r, () => ({ data: [] })),
+      // Whitelist del Reporte: SOLO estos SKUs y en este orden aparecen
+      // en el Forecast. Mismo source de verdad que la tabla del Reporte.
+      supabase.from('reporte_skus').select('sku, orden').eq('activo', true).order('orden'),
     ]);
 
-    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes] = queries;
+    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes] = queries;
 
     setState({
       loading: false,
@@ -123,6 +129,7 @@ function useForecastData() {
       embarques:     embData      || [],
       solicitudes:   (solRes && solRes.data) || [],
       solicitudLineas: (solLinRes && solLinRes.data) || [],
+      reporteSkus:   rsRes.data   || [],
     });
   };
 
@@ -132,7 +139,7 @@ function useForecastData() {
 
 // ────────── Cálculo del forecast ──────────
 function calcularForecast(data, horizonteMeses) {
-  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques } = data;
+  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques, reporteSkus } = data;
 
   const invBySku  = Object.fromEntries(inventario.map(r => [r.sku, r]));
   const traBySku  = Object.fromEntries(transito.map(r => [r.sku, r]));
@@ -187,14 +194,23 @@ function calcularForecast(data, horizonteMeses) {
     demandaBySku[d.sku].porCliente[d.cliente].push(Number(d.piezas || 0));
   });
 
-  const skusUniverso = new Set([
-    ...Object.keys(invBySku),
-    ...Object.keys(traBySku),
-    ...Object.keys(demandaBySku),
-  ]);
+  // Universo = whitelist activa del Reporte de Resumen Clientes (mismos
+  // SKUs y mismo orden). Si la whitelist está vacía caemos al universo
+  // anterior (defensivo, no debería pasar).
+  const whitelist = (reporteSkus || []).filter((r) => r.sku);
+  let universoOrdenado;
+  if (whitelist.length > 0) {
+    universoOrdenado = whitelist.map((r) => r.sku);
+  } else {
+    universoOrdenado = Array.from(new Set([
+      ...Object.keys(invBySku),
+      ...Object.keys(traBySku),
+      ...Object.keys(demandaBySku),
+    ]));
+  }
 
   const rows = [];
-  for (const sku of skusUniverso) {
+  for (const sku of universoOrdenado) {
     const acc = demandaBySku[sku]?.porCliente || { digitalife: [], pcel: [] };
     const promedioMes = (arr) => (arr || []).reduce((a, b) => a + b, 0) / 3;
     const demMes = {
@@ -346,6 +362,10 @@ function calcularForecast(data, horizonteMeses) {
     });
   }
 
+  // Si vienen del whitelist del Reporte, devolvemos TODOS (mismo orden y
+  // SKUs que la tabla de Reporte). Si no hay whitelist, filtramos los
+  // SKUs sin actividad para no llenar de basura.
+  if (whitelist.length > 0) return rows;
   return rows.filter(r => r.demandaTotalHor > 0 || r.inv > 0 || r.traCant > 0);
 }
 
@@ -377,8 +397,9 @@ export default function ForecastClientesTab() {
   const [filtroFlag, setFiltroFlag] = useState('todos');
   const [expandedSku, setExpandedSku] = useState(null);
   const [sugeridosOpen, setSugeridosOpen] = useState(false);
-  // Mismo orden default que el Reporte de Resumen Clientes: SKU ascendente
-  const [sortCol, setSortCol] = useState('sku');
+  // Por defecto sin sort explícito → respeta el orden del Reporte
+  // (campo `orden` de reporte_skus). Click en una columna activa sort.
+  const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [exportando, setExportando] = useState(false);
   const [borradorActivoId, setBorradorActivoId] = useState(null);
@@ -474,6 +495,8 @@ export default function ForecastClientesTab() {
   }, [rowsAll, busqueda, filtroSupplier, filtroFamilia, filtroCliente, filtroFlag]);
 
   const rowsOrdenados = useMemo(() => {
+    // Si no hay sort explícito, conservar el orden del Reporte (whitelist).
+    if (!sortCol) return rowsFiltrados;
     const arr = [...rowsFiltrados];
     const dir = sortDir === 'desc' ? -1 : 1;
     arr.sort((a, b) => {
