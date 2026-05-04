@@ -1182,9 +1182,15 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
           <div className="font-semibold text-gray-800">
             {resumen.inventarioValor > 0 ? formatMXN(resumen.inventarioValor) : '—'}
           </div>
+          {resumen.inventarioPiezas > 0 && (
+            <div className="text-[10px] text-gray-500">
+              {resumen.inventarioPiezas.toLocaleString('es-MX')} piezas
+              {resumen.inventarioSemana && ` · sem ${resumen.inventarioSemana}`}
+            </div>
+          )}
           {resumen.coberturaDias != null && (
             <div
-              className="text-[10px] font-medium"
+              className="text-[10px] font-medium mt-0.5"
               style={{ color: colorCobertura(resumen.coberturaDias) }}
               title="Días de inventario actual al ritmo de sell-out promedio últimos 3 meses"
             >
