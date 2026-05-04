@@ -54,14 +54,28 @@ async function fetchAll(path) {
   return rows;
 }
 
+// Helpers para leer ambas variantes de columna en ventas_erp
+// (snake_case original vs sin underscores que mete el upload nuevo).
+function getCliente(row)        { return String(row.cliente_nombre || row.clientenombre || '').trim(); }
+function getPiezas(row)         { return Number(row.piezas || row.cantidad) || 0; }
+function getPrecioUnidad(row)   { return Number(row.precio_unidad_pesos ?? row.precioporunidadpesos) || 0; }
+function getMovimiento(row)     { return String(row.movimiento_venta || row.movimientoventa || '').trim(); }
+function montoFacturado(row) {
+  // Fuente canónica de venta = precio_unidad × piezas, SOLO Factura.
+  // Esto excluye notas crédito, devoluciones, traspasos, etc.
+  if (getMovimiento(row).toLowerCase() !== 'factura') return 0;
+  return getPiezas(row) * getPrecioUnidad(row);
+}
+
 // Recalc ventas_mensuales from ventas_erp
 async function recalcVentasMensuales() {
-  const rows = await fetchAll('ventas_erp?select=cliente_nombre,anio,mes,monto_venta_pesos&cliente_nombre=not.is.null');
+  const rows = await fetchAll('ventas_erp?select=cliente_nombre,clientenombre,anio,mes,piezas,cantidad,precio_unidad_pesos,precioporunidadpesos,movimiento_venta,movimientoventa');
 
   // Aggregate by (cliente, anio, mes)
   const agg = {};
   for (const row of rows) {
-    const clienteNombre = String(row.cliente_nombre || '').trim();
+    const clienteNombre = getCliente(row);
+    if (!clienteNombre) continue;
     const cliente = CLIENT_MAP[clienteNombre];
     if (!cliente) continue;
 
@@ -71,7 +85,7 @@ async function recalcVentasMensuales() {
 
     const key = `${cliente}|${anio}|${mes}`;
     if (!agg[key]) agg[key] = { cliente, anio, mes, sell_in: 0 };
-    agg[key].sell_in += Number(row.monto_venta_pesos) || 0;
+    agg[key].sell_in += montoFacturado(row);
   }
 
   const upsertRows = Object.values(agg);
@@ -108,11 +122,12 @@ async function recalcVentasMensuales() {
 
 // Recalc sell_in_sku from ventas_erp
 async function recalcSellInSku() {
-  const rows = await fetchAll('ventas_erp?select=cliente_nombre,anio,mes,articulo,piezas,monto_venta_pesos&cliente_nombre=not.is.null');
+  const rows = await fetchAll('ventas_erp?select=cliente_nombre,clientenombre,anio,mes,articulo,piezas,cantidad,precio_unidad_pesos,precioporunidadpesos,movimiento_venta,movimientoventa');
 
   const agg = {};
   for (const row of rows) {
-    const clienteNombre = String(row.cliente_nombre || '').trim();
+    const clienteNombre = getCliente(row);
+    if (!clienteNombre) continue;
     const cliente = CLIENT_MAP[clienteNombre];
     if (!cliente) continue;
 
@@ -123,10 +138,13 @@ async function recalcSellInSku() {
     const sku = String(row.articulo || '').trim();
     if (!sku) continue;
 
+    const monto = montoFacturado(row);
+    if (monto === 0) continue; // saltar no-Factura
+
     const key = `${cliente}|${sku}|${anio}|${mes}`;
     if (!agg[key]) agg[key] = { cliente, sku, anio, mes, monto_pesos: 0, piezas: 0 };
-    agg[key].monto_pesos += Number(row.monto_venta_pesos) || 0;
-    agg[key].piezas += Number(row.piezas) || 0;
+    agg[key].monto_pesos += monto;
+    agg[key].piezas += getPiezas(row);
   }
 
   const upsertRows = Object.values(agg);
