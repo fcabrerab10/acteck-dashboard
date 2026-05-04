@@ -320,7 +320,23 @@ function calcularResumen(clienteKey, data) {
   let selloutACosto = false;
   if (clienteKey === 'pcel') {
     selloutACosto = true;
-    // Path 1: sellout_pcel semanal (vta_semana × costo_promedio)
+
+    // Mapa de costos por SKU desde el snapshot de inventario PCEL
+    // (que es lo que ya funciona para mostrar el inventario en MXN).
+    // Es el path MÁS confiable: si la tarjeta muestra inventario, este
+    // mapa tiene datos.
+    const costoFromInvPcel = {};
+    inv.forEach((r) => {
+      const k = (r.sku || '').toString();
+      const c = Number(r.costo_convenio || 0); // adapter pone costo_promedio aquí
+      if (k && c > 0 && !costoFromInvPcel[k]) costoFromInvPcel[k] = c;
+    });
+
+    // Helper: encontrar costo para un SKU, en orden de preferencia
+    const costoPorSku = (sku) =>
+      costoFromInvPcel[sku] || costoPromedioSku[sku] || 0;
+
+    // Path 1: sellout_pcel semanal (vta_semana × costo_promedio reportado)
     let pcelTotal = 0;
     (data.selloutPcelSemanal || []).forEach((r) => {
       const piezas = Number(r.vta_semana || 0);
@@ -333,17 +349,18 @@ function calcularResumen(clienteKey, data) {
       soYTD += monto;
       if (m === mesEf) soMes += monto;
     });
-    // Path 2: fallback — si sellout_pcel está vacío, agregamos desde
-    // sellout_sku (que el adapter llena desde sellout_pcel_mensual con
-    // monto=0) usando costo_promedio_sku de sell_in_sku.
+
+    // Path 2: si Path 1 dio 0, usar sellout_sku.piezas × costo (del inv
+    // snapshot o sell_in fallback). Cubre el caso donde los datos están
+    // en sellout_pcel_mensual y sellout_pcel semanal viene vacío.
     if (pcelTotal === 0) {
       so.forEach((r) => {
         const m = Number(r.mes) || 0;
         if (m < 1 || m > mesEf) return;
         const sku = (r.sku || '').toString();
         const piezas = Number(r.piezas || 0);
-        const cp = costoPromedioSku[sku];
-        if (cp == null || piezas <= 0) return;
+        const cp = costoPorSku(sku);
+        if (cp <= 0 || piezas <= 0) return;
         const monto = piezas * cp;
         soYTD += monto;
         if (m === mesEf) soMes += monto;
