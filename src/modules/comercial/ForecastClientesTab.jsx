@@ -10,22 +10,23 @@ import {
 } from 'lucide-react';
 
 /**
- * Forecast Clientes v2 — Planeación de compras cross-cliente
+ * Forecast Clientes v3 — Planeación de compras (Acteck)
  * ─────────────────────────────────────────────────────────────
- * - Demanda agregada de los 3 clientes por SKU (DGL, PCEL, ML)
- * - Cruce con inventario comercial (whitelist) y tránsito (master embarques)
- * - Brecha vs horizonte (default 3 meses)
- * - Detección de canibalización (PCEL y DGL compiten por el SKU)
- * - Preventa recomendada (déficit próximos 60 días)
- * - Sugeridos con lead time real del SKU
- * - Export Excel para junta de compras
- * - Sugeridos pendientes: desaparecen cuando aparecen en Master Embarques
+ * Solo Digitalife + PCEL. Mercado Libre se gestiona desde Axon de México.
+ *
+ * - Demanda agregada por SKU (Digi + PCEL)
+ * - Cruce con inventario comercial y tránsito (master embarques)
+ * - Brecha vs horizonte configurable
+ * - Sugeridos redondeados al múltiplo de contenedor del SKU
+ * - Tarjeta de tránsito timeline (qué llega cada mes)
+ * - Tarjeta de novedades (roadmap próximamente + tránsito 30d)
+ * - Sistema de solicitudes de compra (S&OP Ferru) con borradores múltiples
+ *   exportables a Excel
  */
 
 const CLIENTES = [
-  { key: 'digitalife',   label: 'DGL',   full: 'Digitalife',    color: '#3B82F6' },
-  { key: 'pcel',         label: 'PCEL',  full: 'PCEL',          color: '#EF4444' },
-  { key: 'mercadolibre', label: 'ML',    full: 'Mercado Libre', color: '#F59E0B' },
+  { key: 'digitalife', label: 'DGL',  full: 'Digitalife', color: '#3B82F6' },
+  { key: 'pcel',       label: 'PCEL', full: 'PCEL',       color: '#EF4444' },
 ];
 
 const HORIZONTES = [
@@ -101,8 +102,8 @@ function calcularForecast(data, horizonteMeses) {
   const demandaBySku = {};
   demanda.forEach(d => {
     if (!mesesRef.some(m => m.anio === d.anio && m.mes === d.mes)) return;
-    if (!demandaBySku[d.sku]) demandaBySku[d.sku] = { porCliente: { digitalife: [], pcel: [], mercadolibre: [] } };
-    if (!demandaBySku[d.sku].porCliente[d.cliente]) demandaBySku[d.sku].porCliente[d.cliente] = [];
+    if (d.cliente !== 'digitalife' && d.cliente !== 'pcel') return; // ML excluido
+    if (!demandaBySku[d.sku]) demandaBySku[d.sku] = { porCliente: { digitalife: [], pcel: [] } };
     demandaBySku[d.sku].porCliente[d.cliente].push(Number(d.piezas || 0));
   });
 
@@ -114,21 +115,18 @@ function calcularForecast(data, horizonteMeses) {
 
   const rows = [];
   for (const sku of skusUniverso) {
-    const acc = demandaBySku[sku]?.porCliente || { digitalife: [], pcel: [], mercadolibre: [] };
-    // Normalizo dividiendo siempre entre 3 (aunque haya meses con 0, es un promedio más conservador)
+    const acc = demandaBySku[sku]?.porCliente || { digitalife: [], pcel: [] };
     const promedioMes = (arr) => (arr || []).reduce((a, b) => a + b, 0) / 3;
     const demMes = {
-      digitalife:   promedioMes(acc.digitalife),
-      pcel:         promedioMes(acc.pcel),
-      mercadolibre: promedioMes(acc.mercadolibre),
+      digitalife: promedioMes(acc.digitalife),
+      pcel:       promedioMes(acc.pcel),
     };
     const demHor = {
-      digitalife:   demMes.digitalife   * horizonteMeses,
-      pcel:         demMes.pcel         * horizonteMeses,
-      mercadolibre: demMes.mercadolibre * horizonteMeses,
+      digitalife: demMes.digitalife * horizonteMeses,
+      pcel:       demMes.pcel       * horizonteMeses,
     };
-    const demandaTotalHor = demHor.digitalife + demHor.pcel + demHor.mercadolibre;
-    const demandaMesTotal = demMes.digitalife + demMes.pcel + demMes.mercadolibre;
+    const demandaTotalHor = demHor.digitalife + demHor.pcel;
+    const demandaMesTotal = demMes.digitalife + demMes.pcel;
 
     const inv = Number(invBySku[sku]?.disponible || 0);
     const tra = traBySku[sku];
@@ -334,7 +332,6 @@ export default function ForecastClientesTab() {
         'LT días': r.ltDias || '',
         'Demanda DGL': Math.round(r.demHor.digitalife),
         'Demanda PCEL': Math.round(r.demHor.pcel),
-        'Demanda ML': Math.round(r.demHor.mercadolibre),
         'Demanda total': Math.round(r.demandaTotalHor),
         'Inv Comercial': Math.round(r.inv),
         'Tránsito horizonte': Math.round(r.traDentroHor),
@@ -387,7 +384,7 @@ export default function ForecastClientesTab() {
             Forecast Clientes
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Planeación de compras agregada · Digitalife + PCEL + Mercado Libre
+            Planeación de compras agregada · Digitalife + PCEL
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -548,7 +545,6 @@ function ForecastTable({ rows, expandedSku, setExpandedSku, sortCol, sortDir, on
             <th colSpan={6}></th>
             <th className="text-right px-1" style={{ color: '#3B82F6' }}>DGL</th>
             <th className="text-right px-1" style={{ color: '#EF4444' }}>PCEL</th>
-            <th className="text-right px-1" style={{ color: '#F59E0B' }}>ML</th>
             <th colSpan={5}></th>
           </tr>
         </thead>
@@ -586,7 +582,6 @@ function ForecastRow({ r, expanded, onToggle }) {
         <td className="text-right px-2 py-2 tabular-nums font-semibold text-gray-800">{FMT_N(r.demandaTotalHor)}</td>
         <td className="text-right px-1 tabular-nums text-xs" style={{ color: r.demHor.digitalife > 0 ? '#3B82F6' : '#CBD5E1' }}>{FMT_N(r.demHor.digitalife)}</td>
         <td className="text-right px-1 tabular-nums text-xs" style={{ color: r.demHor.pcel > 0 ? '#EF4444' : '#CBD5E1' }}>{FMT_N(r.demHor.pcel)}</td>
-        <td className="text-right px-1 tabular-nums text-xs" style={{ color: r.demHor.mercadolibre > 0 ? '#F59E0B' : '#CBD5E1' }}>{FMT_N(r.demHor.mercadolibre)}</td>
         <td className="text-right px-2 py-2 tabular-nums text-gray-700">{FMT_N(r.inv)}</td>
         <td className="text-right px-2 py-2 tabular-nums text-xs text-gray-600" title={etaLabel}>
           {r.traCant > 0 ? (<>
@@ -716,7 +711,7 @@ function ExpandedDetail({ r }) {
             <div><span className="text-amber-700">Faltante: </span><span className="font-bold text-red-700">{FMT_N(r.prorrateo.faltante)}</span></div>
           </div>
           <div className="text-[10px] text-amber-700 mt-1 italic">
-            Mercado Libre se sirve solo con sobrante (prioridad baja). Considera negociar inventario con compañeros.
+            Inventario insuficiente para cubrir la demanda total — considera adelantar la próxima compra.
           </div>
         </div>
       )}
