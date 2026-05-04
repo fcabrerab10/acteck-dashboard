@@ -216,7 +216,7 @@ function useResumenData() {
         for (let i = 0; i < ecIds.length; i += CHUNK) {
           const slice = ecIds.slice(i, i + CHUNK);
           const det = await fetchAll(() => supabase.from('estados_cuenta_detalle')
-            .select('estado_cuenta_id, referencia, fecha_emision, importe_factura, saldo_actual')
+            .select('estado_cuenta_id, referencia, fecha_emision, importe_factura, saldo_actual, dias_moratorios')
             .in('estado_cuenta_id', slice));
           ecDetRows.push(...det);
         }
@@ -534,100 +534,46 @@ function calcularResumen(clienteKey, data) {
     ? (saldoVencido / saldoActual) * 100
     : (saldoVencido > 0 ? 100 : 0);
 
-  // ── Días de cobro (reemplaza DSO) ──
-  // El usuario quiere ver los días REALES desde la emisión de la factura
-  // hasta que el dinero entra (incluyendo los días de crédito que les da).
-  // Ej: factura a 90 días, paga 10 días después de vencida → 100 días.
+  // ── Días de cobro = plazo + mora promedio ponderada ──
+  // Fórmula que pidió Fernando: "factura vence a 90, paga 10 después → 100".
+  // Para CADA factura abierta:
+  //   · Si está dentro del plazo (mora=0) → contribuye con `plazo` días
+  //   · Si está vencida (mora>0)         → contribuye con `plazo + mora`
+  // Promedio ponderado por importe_factura.
   //
-  // Método combinado:
-  //   1. Facturas YA PAGADAS (transición saldo>0 → saldo=0 entre dos
-  //      estados_cuenta consecutivos): días = fecha_corte_pago - fecha_emision
-  //   2. Facturas TODAVÍA ABIERTAS en el último estado: días = hoy - fecha_emision
-  //      (el reloj corre — esto refleja cuánto llevan SIN pagar incluyendo
-  //      los días de crédito).
-  // Ambos casos se promedian ponderado por importe_factura.
-  // Esto SIEMPRE da resultado mientras haya al menos un estado de cuenta
-  // cargado, y "incluye los días de crédito" como pidió Fernando.
+  // Si TODAS pagan al corriente → resultado = plazo (90d).
+  // Si en promedio pagan con 10d de mora → resultado = 100d.
+  // Si pagan con 30d de mora → 120d.
+  //
+  // Para detectar pagos REALES (transición saldo>0→0) hace falta historial
+  // largo de estados de cuenta. Con pocos cortes este método aproxima
+  // razonablemente el comportamiento del cliente vs el plazo otorgado.
   const diasCobro = (() => {
     const ec = (data.estadosCuenta || [])
       .filter((r) => r.cliente === clienteKey && r.fecha_corte)
       .sort((a, b) => new Date(a.fecha_corte) - new Date(b.fecha_corte));
     if (ec.length === 0) return null;
-    const idToFechaCorte = new Map(ec.map((e) => [e.id, e.fecha_corte]));
-    const idIndex = new Map(ec.map((e, i) => [e.id, i]));
-    const lastIdx = ec.length - 1;
-    const det = (data.estadosCuentaDetalle || []).filter((r) => idToFechaCorte.has(r.estado_cuenta_id));
 
-    // Agrupar eventos por factura
-    const facturas = new Map();
-    det.forEach((r) => {
-      const ref = (r.referencia || '').toString();
-      const fe = r.fecha_emision || '';
-      if (!ref || !fe) return;
-      const key = ref + '|' + fe;
-      const idx = idIndex.get(r.estado_cuenta_id);
-      if (idx == null) return;
-      const f = facturas.get(key) || { fecha_emision: fe, importe: 0, eventos: [] };
-      f.importe = Math.max(f.importe, Number(r.importe_factura || 0));
-      f.eventos.push({
-        idx,
-        fecha_corte: idToFechaCorte.get(r.estado_cuenta_id),
-        saldo: Number(r.saldo_actual || 0),
-      });
-      facturas.set(key, f);
-    });
+    // Tomar SOLO el último corte (snapshot actual del saldo).
+    const ultimoEC = ec[ec.length - 1];
+    const det = (data.estadosCuentaDetalle || [])
+      .filter((r) => r.estado_cuenta_id === ultimoEC.id);
 
-    const hoyMs = Date.now();
-    const cutoffPago = new Date(); cutoffPago.setMonth(cutoffPago.getMonth() - 12);
     let num = 0, den = 0;
-
-    facturas.forEach((f) => {
-      // Filtra notas de crédito / pagos / cancelaciones: solo facturas
-      // genuinas con importe positivo cuentan para el promedio.
-      if (!(Number(f.importe) > 0)) return;
-
-      f.eventos.sort((a, b) => a.idx - b.idx);
-      const primero = f.eventos[0];
-      const ultimo  = f.eventos[f.eventos.length - 1];
-      let dias = null;
-
-      // 1) Pagada: existe transición saldo>0 → saldo=0
-      let pagoIdx = -1;
-      for (let i = 1; i < f.eventos.length; i++) {
-        if (f.eventos[i - 1].saldo > 0 && f.eventos[i].saldo === 0) {
-          pagoIdx = i; break;
-        }
-      }
-
-      // Preferimos facturas REALMENTE pagadas (transición saldo>0→0) porque
-      // miden el comportamiento histórico de cobro. Si el cliente no tiene
-      // facturas pagadas en ventana (caso PCEL al inicio del histórico),
-      // usamos las facturas abiertas y antiguas (>30 días desde emisión)
-      // como fallback — refleja el "tiempo que llevan sin pagar".
-      if (pagoIdx >= 0) {
-        const fechaPago = f.eventos[pagoIdx].fecha_corte;
-        if (new Date(fechaPago) < cutoffPago) return;
-        dias = Math.round(
-          (new Date(fechaPago) - new Date(f.fecha_emision)) / (1000 * 60 * 60 * 24)
-        );
-      } else if (ultimo.idx === lastIdx && ultimo.saldo > 0) {
-        const diasAbierta = Math.round(
-          (hoyMs - new Date(f.fecha_emision).getTime()) / (1000 * 60 * 60 * 24)
-        );
-        // Solo facturas con más de 30 días de antigüedad (las de 5-20 días
-        // recién emitidas no son representativas del comportamiento de pago).
-        if (diasAbierta < 30) return;
-        dias = diasAbierta;
-      } else {
-        return;
-      }
-
-      if (dias == null || dias < 0 || dias > 720) return;
-      const peso = Number(f.importe);
-      num += dias * peso;
-      den += peso;
+    det.forEach((r) => {
+      const importe = Number(r.importe_factura || 0);
+      const saldo   = Number(r.saldo_actual || 0);
+      // Solo facturas reales con saldo abierto.
+      // Notas crédito (importe<=0) y facturas pagadas (saldo=0) no aplican.
+      if (importe <= 0 || saldo <= 0) return;
+      const mora = Math.max(0, Number(r.dias_moratorios || 0));
+      const dias = plazo + mora;
+      num += dias * importe;
+      den += importe;
     });
-    return den > 0 ? Math.round(num / den) : null;
+
+    if (den === 0) return null;
+    return Math.round(num / den);
   })();
   // Mantenemos `dsoReal` como alias para compatibilidad con el resto del
   // código (alertas, render). Ahora apunta a "días de cobro" calculado.
