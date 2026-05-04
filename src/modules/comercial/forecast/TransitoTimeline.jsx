@@ -29,8 +29,10 @@ export default function TransitoTimeline({ embarques, metaBySku }) {
 
     (embarques || []).forEach((e) => {
       const est = String(e.estatus || '').toLowerCase();
-      if (est.includes('cancel')) return;
-      if (e.arribo_cedis) return; // ya recibido, no cuenta como tránsito
+      // CONCLUIDO en la operación significa que ya se recibió en CEDIS
+      // (aunque arribo_cedis quede null). No es tránsito activo.
+      if (est.includes('cancel') || est.includes('concluido') || est.includes('rechazada') || est.includes('perdida')) return;
+      if (e.arribo_cedis) return;
       // ETA real: arribo_almacen > eta_puerto (en orden de preferencia)
       const etaStr = e.arribo_almacen || e.eta_puerto || e.eta;
       if (!etaStr) return;
@@ -77,7 +79,8 @@ export default function TransitoTimeline({ embarques, metaBySku }) {
     let proxEta = null;
     (embarques || []).forEach((e) => {
       const est = String(e.estatus || '').toLowerCase();
-      if (est.includes('cancel') || e.arribo_cedis) return;
+      if (est.includes('cancel') || est.includes('concluido') || est.includes('rechazada') || est.includes('perdida')) return;
+      if (e.arribo_cedis) return;
       const etaStr = e.arribo_almacen || e.eta_puerto || e.eta;
       if (!etaStr) return;
       const eta = new Date(etaStr);

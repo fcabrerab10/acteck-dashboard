@@ -20,28 +20,32 @@ function formatEta(d) {
 
 export default function NovedadesCard({ roadmap, embarques, metaBySku }) {
   const proximamente = useMemo(() => {
+    // La columna del roadmap se llama "rdmp" con códigos estilo
+    // "2026", "2025", "RMI", "RML", "NVS", "DECME". Para "próximamente"
+    // tomamos rdmp = año del calendario igual o posterior al actual
+    // (lanzamientos por venir).
+    const anioActual = new Date().getFullYear();
     return (roadmap || [])
       .filter((r) => {
-        const e = String(r.estado || r.estatus || '').toLowerCase();
-        return e.includes('proxim') || e.includes('camino');
+        const code = String(r.rdmp || r.estado || '').trim();
+        if (!code) return false;
+        const m = code.match(/^(\d{4})$/);
+        if (m && Number(m[1]) >= anioActual) return true;
+        const lower = code.toLowerCase();
+        return lower.includes('proxim') || lower.includes('camino');
       })
       .map((r) => {
         const meta = metaBySku ? metaBySku[r.sku] : null;
         return {
           sku: r.sku,
-          descripcion: meta?.descripcion || r.descripcion || '',
-          familia: meta?.familia || r.familia || '',
-          marca: meta?.marca || r.marca || '',
-          fechaLanzamiento: r.fecha_lanzamiento || r.fecha_estimada || null,
+          descripcion: r.descripcion || meta?.descripcion || '',
+          familia: meta?.familia || '',
+          marca: meta?.marca || '',
+          rdmp: r.rdmp || '',
         };
       })
-      .sort((a, b) => {
-        if (a.fechaLanzamiento && b.fechaLanzamiento) {
-          return a.fechaLanzamiento.localeCompare(b.fechaLanzamiento);
-        }
-        return 0;
-      })
-      .slice(0, 8);
+      .sort((a, b) => (a.rdmp || '').localeCompare(b.rdmp || ''))
+      .slice(0, 12);
   }, [roadmap, metaBySku]);
 
   const llegandoPronto = useMemo(() => {
@@ -50,7 +54,8 @@ export default function NovedadesCard({ roadmap, embarques, metaBySku }) {
     const items = [];
     (embarques || []).forEach((e) => {
       const est = String(e.estatus || '').toLowerCase();
-      if (est.includes('cancel') || e.arribo_cedis) return;
+      if (est.includes('cancel') || est.includes('concluido') || est.includes('rechazada') || est.includes('perdida')) return;
+      if (e.arribo_cedis) return;
       const etaStr = e.arribo_almacen || e.eta_puerto || e.eta;
       if (!etaStr) return;
       const eta = new Date(etaStr);
@@ -92,15 +97,13 @@ export default function NovedadesCard({ roadmap, embarques, metaBySku }) {
             <ul className="space-y-1.5">
               {proximamente.map((r) => (
                 <li key={r.sku} className="text-xs flex items-baseline gap-2">
+                  <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[9px] font-bold shrink-0">
+                    {r.rdmp}
+                  </span>
                   <span className="font-mono font-semibold text-gray-800 shrink-0">{r.sku}</span>
                   <span className="text-gray-600 truncate flex-1" title={r.descripcion}>
                     {r.descripcion || '—'}
                   </span>
-                  {r.fechaLanzamiento && (
-                    <span className="text-[10px] text-gray-500 shrink-0">
-                      {r.fechaLanzamiento.slice(0, 10)}
-                    </span>
-                  )}
                 </li>
               ))}
             </ul>
