@@ -6,10 +6,15 @@ import { formatMXN } from '../../lib/utils';
 import {
   Activity, AlertTriangle, Search, Download, Package, Ship, Target,
   ChevronDown, ChevronUp, Flame, X, Users,
-  CheckCircle2, Clock, DollarSign,
+  CheckCircle2, Clock, DollarSign, FileText,
 } from 'lucide-react';
 import TransitoTimeline from './forecast/TransitoTimeline';
 import NovedadesCard from './forecast/NovedadesCard';
+import SolicitudesPanel from './forecast/SolicitudesPanel';
+import SolicitudesModal from './forecast/SolicitudesModal';
+import AlertasCard from './forecast/AlertasCard';
+import { useSolicitudes } from './forecast/useSolicitudes';
+import { puedeEditarPestanaGlobal, puedeVerPestanaGlobal } from '../../lib/permisos';
 
 /**
  * Forecast Clientes v3 — Planeación de compras (Acteck)
@@ -364,13 +369,72 @@ export default function ForecastClientesTab() {
   const [sortCol, setSortCol] = useState('brecha');
   const [sortDir, setSortDir] = useState('desc');
   const [exportando, setExportando] = useState(false);
+  const [borradorActivoId, setBorradorActivoId] = useState(null);
+  const [misSolicitudesAbierto, setMisSolicitudesAbierto] = useState(false);
 
-  // Stub: la función real se agrega en Tanda 7 (sistema de solicitudes).
-  // Por ahora mostramos un toast informativo cuando se da clic en "+".
-  const onAgregarSolicitud = (row) => {
-    toast.info(
-      `Próximamente: agregar ${row.sku} (${FMT_N(row.sugerido)} pzs) a una solicitud de compra.`
-    );
+  // Permisos:
+  //   · puedeEditarSol  → crear/editar/cerrar solicitudes (Fernando)
+  //   · puedeVerSol     → ver el listado de solicitudes (Karolina + Fernando)
+  const puedeEditarSol = puedeEditarPestanaGlobal(perfil, 'forecast_solicitudes');
+  const puedeVerSol    = puedeVerPestanaGlobal(perfil, 'forecast_solicitudes');
+
+  const sol = useSolicitudes(perfil);
+
+  // Cuando aparece un borrador nuevo, lo seleccionamos como activo.
+  React.useEffect(() => {
+    if (!borradorActivoId && sol.borradores.length > 0) {
+      setBorradorActivoId(sol.borradores[0].id);
+    }
+    if (borradorActivoId && !sol.borradores.find((b) => b.id === borradorActivoId)) {
+      setBorradorActivoId(sol.borradores[0]?.id || null);
+    }
+  }, [sol.borradores, borradorActivoId]);
+
+  // Agregar SKU a la solicitud — desde el "+" de la tabla
+  const onAgregarSolicitud = async (row) => {
+    if (!puedeEditarSol) {
+      toast.error('No tienes permiso para crear solicitudes de compra.');
+      return;
+    }
+    try {
+      // Si no hay borrador activo, crear uno
+      let solicitudId = borradorActivoId;
+      if (!solicitudId) {
+        const nuevo = await sol.crearBorrador();
+        solicitudId = nuevo.id;
+        setBorradorActivoId(solicitudId);
+      }
+      // Calcular fecha estimada = hoy + lead_time
+      let fechaEstimada = null;
+      if (row.ltDias && row.ltDias > 0) {
+        const d = new Date(); d.setDate(d.getDate() + Math.round(row.ltDias));
+        fechaEstimada = d.toISOString().slice(0, 10);
+      }
+      await sol.agregarLinea(solicitudId, {
+        sku: row.sku,
+        descripcion: row.descripcion,
+        cantidad: row.sugerido,
+        proveedor: row.supplier || '',
+        fecha_estimada: fechaEstimada,
+        ultimo_costo_usd: row.costoUnitUsd || null,
+        piezas_por_contenedor: row.piezasPorContenedor || null,
+        contenedores: row.contenedoresSugeridos || null,
+        es_consolidado: row.esConsolidado,
+      });
+      toast.success(`${row.sku} agregado al borrador #${solicitudId}`);
+    } catch (err) {
+      toast.error(`Error: ${err.message || err}`);
+    }
+  };
+
+  const onCrearNuevoBorrador = async () => {
+    if (!puedeEditarSol) return;
+    try {
+      const nuevo = await sol.crearBorrador();
+      setBorradorActivoId(nuevo.id);
+    } catch (err) {
+      toast.error(`Error creando borrador: ${err.message || err}`);
+    }
   };
 
   const rowsAll = useMemo(() => {
@@ -543,14 +607,35 @@ export default function ForecastClientesTab() {
               </button>
             ))}
           </div>
-          <button
-            onClick={exportarAJunta} disabled={exportando}
-            className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium flex items-center gap-1.5 disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" /> {exportando ? 'Exportando…' : 'Exportar a junta'}
-          </button>
+          {puedeVerSol && (
+            <button
+              onClick={() => setMisSolicitudesAbierto(true)}
+              className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium flex items-center gap-1.5"
+              title="Ver solicitudes cerradas (S&OP Ferru)"
+            >
+              <FileText className="w-4 h-4" /> Mis solicitudes
+              {sol.cerradas.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-blue-800/30 text-[10px] font-bold">
+                  {sol.cerradas.length}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* MODAL MIS SOLICITUDES */}
+      <SolicitudesModal
+        abierto={misSolicitudesAbierto}
+        onCerrar={() => setMisSolicitudesAbierto(false)}
+        cerradas={sol.cerradas}
+        lineasDe={sol.lineasDe}
+        puedeEditar={puedeEditarSol}
+        onCambiarEstado={sol.cambiarEstado}
+        onEditarLinea={sol.editarLinea}
+        onEliminarLinea={sol.eliminarLinea}
+        onEliminarSolicitud={sol.eliminarSolicitud}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -572,8 +657,11 @@ export default function ForecastClientesTab() {
         />
       )}
 
-      {/* TARJETAS RESUMEN — Novedades + Tránsito timeline */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      {/* TARJETAS RESUMEN — Novedades + Tránsito + (panel solicitudes si tiene permiso) */}
+      <div className={[
+        'grid grid-cols-1 gap-4',
+        puedeVerSol ? 'xl:grid-cols-3' : 'xl:grid-cols-2'
+      ].join(' ')}>
         <NovedadesCard
           roadmap={data.roadmap}
           embarques={data.embarques}
@@ -583,7 +671,34 @@ export default function ForecastClientesTab() {
           embarques={data.embarques}
           metaBySku={metaBySku}
         />
+        {puedeVerSol && (
+          <SolicitudesPanel
+            borradores={sol.borradores}
+            lineasDe={sol.lineasDe}
+            activoId={borradorActivoId}
+            setActivoId={setBorradorActivoId}
+            onCrearNuevo={puedeEditarSol ? onCrearNuevoBorrador : null}
+            onEditarLinea={puedeEditarSol ? sol.editarLinea : null}
+            onEliminarLinea={puedeEditarSol ? sol.eliminarLinea : null}
+            onCerrar={puedeEditarSol ? sol.cerrarBorrador : null}
+            onEliminarSolicitud={puedeEditarSol ? sol.eliminarSolicitud : null}
+          />
+        )}
       </div>
+      {!sol.tablaExiste && puedeVerSol && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-xs text-amber-800">
+          ⚠ Las tablas <code>solicitudes_compra</code> aún no existen en la BD.
+          Aplica la migración <code>supabase/migrations/20260504_solicitudes_compra.sql</code>
+          desde el SQL Editor de Supabase para activar el sistema de solicitudes.
+        </div>
+      )}
+
+      {/* TARJETA DE ALERTAS */}
+      <AlertasCard
+        rows={rowsAll}
+        roadmap={data.roadmap}
+        embarques={data.embarques}
+      />
 
       {/* FILTROS */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-2 flex-wrap">
