@@ -729,7 +729,9 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
     const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
     mesesRef.push({ anio: d.getFullYear(), mes: d.getMonth() + 1 });
   }
-  const dem = { digitalife: [], pcel: [], mercadolibre: [] };
+  // ML se gestiona ahora desde Axon de México (empresa aparte) — fuera de
+  // la demanda Acteck. Solo Digitalife + PCEL.
+  const dem = { digitalife: [], pcel: [] };
   data.demanda.forEach((d) => {
     if (mesesRef.some((m) => m.anio === d.anio && m.mes === Number(d.mes))) {
       if (dem[d.cliente]) dem[d.cliente].push(Number(d.piezas || 0));
@@ -739,9 +741,8 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
   const demMes = {
     digitalife: promMes(dem.digitalife),
     pcel: promMes(dem.pcel),
-    mercadolibre: promMes(dem.mercadolibre),
   };
-  const demTotalMes = demMes.digitalife + demMes.pcel + demMes.mercadolibre;
+  const demTotalMes = demMes.digitalife + demMes.pcel;
   const dem3m = demTotalMes * 3;
 
   const traCant = Number(data.transito?.cantidad || 0);
@@ -767,9 +768,8 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
   }
 
   const CLIENTES = [
-    { key: 'digitalife',   label: 'Digitalife',    color: '#3B82F6' },
-    { key: 'pcel',         label: 'PCEL',          color: '#EF4444' },
-    { key: 'mercadolibre', label: 'Mercado Libre', color: '#F59E0B' },
+    { key: 'digitalife', label: 'Digitalife', color: '#3B82F6' },
+    { key: 'pcel',       label: 'PCEL',       color: '#EF4444' },
   ];
 
   // ── Reservas: desglose por almacén ──
