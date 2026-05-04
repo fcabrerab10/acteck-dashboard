@@ -64,6 +64,24 @@ const mesActual = hoy.getMonth() + 1;
 function clamp(n, min = 0, max = 100) { return Math.max(min, Math.min(max, n)); }
 function pct(n) { return Number.isFinite(n) ? `${n.toFixed(0)}%` : '—'; }
 
+// Convierte 'YYYY-WW' (semana ISO) → 'DD MMM YYYY' (lunes de esa semana).
+// Útil para mostrar la fecha real del snapshot de inventario.
+const MES_CORTO_LOWER = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function formatSemanaFecha(s) {
+  if (!s) return '';
+  const [aStr, wStr] = s.split('-');
+  const anio = Number(aStr), semana = Number(wStr);
+  if (!anio || !semana) return s;
+  // Lunes de la ISO week N: 4-Jan + (N-1)*7 ajustado al lunes anterior
+  const jan4 = new Date(anio, 0, 4);
+  const janDay = jan4.getDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setDate(jan4.getDate() - (janDay - 1));
+  const monday = new Date(week1Monday);
+  monday.setDate(week1Monday.getDate() + (semana - 1) * 7);
+  return `${monday.getDate()} ${MES_CORTO_LOWER[monday.getMonth()]} ${monday.getFullYear()}`;
+}
+
 // Bandas más apretadas — antes eran muy permisivas (60-79 = "Medio" cubría
 // cuentas con problemas reales sin distinguirlas de las sanas).
 function colorScore(s) {
@@ -1185,7 +1203,7 @@ function ClienteCard({ cliente, resumen, onDrillDown }) {
           {resumen.inventarioPiezas > 0 && (
             <div className="text-[10px] text-gray-500">
               {resumen.inventarioPiezas.toLocaleString('es-MX')} piezas
-              {resumen.inventarioSemana && ` · sem ${resumen.inventarioSemana}`}
+              {resumen.inventarioSemana && ` · ${formatSemanaFecha(resumen.inventarioSemana)}`}
             </div>
           )}
           {resumen.coberturaDias != null && (
