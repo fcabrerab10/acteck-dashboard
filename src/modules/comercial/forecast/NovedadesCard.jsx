@@ -50,22 +50,26 @@ export default function NovedadesCard({ roadmap, embarques, metaBySku }) {
     const items = [];
     (embarques || []).forEach((e) => {
       const est = String(e.estatus || '').toLowerCase();
-      if (est.includes('cancel') || e.arribo_cedis || !e.eta) return;
-      const eta = new Date(e.eta);
+      if (est.includes('cancel') || e.arribo_cedis) return;
+      const etaStr = e.arribo_almacen || e.eta_puerto || e.eta;
+      if (!etaStr) return;
+      const eta = new Date(etaStr);
       if (isNaN(eta) || eta < hoy || eta > limite30) return;
+      const sku = (e.codigo || '').trim();
+      const meta = metaBySku ? metaBySku[sku] : null;
       items.push({
         po: e.po,
-        sku: e.codigo,
+        sku,
         eta,
         piezas: Number(e.po_qty || 0),
-        marca: e.marca,
-        familia: e.familia,
+        marca: meta?.marca || null,
+        familia: e.familia || meta?.familia || null,
         supplier: e.supplier,
       });
     });
     items.sort((a, b) => a.eta - b.eta);
     return items.slice(0, 10);
-  }, [embarques]);
+  }, [embarques, metaBySku]);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200">

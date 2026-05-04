@@ -31,7 +31,8 @@ export default function TransitoTimeline({ embarques, metaBySku }) {
       const est = String(e.estatus || '').toLowerCase();
       if (est.includes('cancel')) return;
       if (e.arribo_cedis) return; // ya recibido, no cuenta como tránsito
-      const etaStr = e.eta;
+      // ETA real: arribo_almacen > eta_puerto (en orden de preferencia)
+      const etaStr = e.arribo_almacen || e.eta_puerto || e.eta;
       if (!etaStr) return;
       const eta = new Date(etaStr);
       if (isNaN(eta)) return;
@@ -39,7 +40,8 @@ export default function TransitoTimeline({ embarques, metaBySku }) {
 
       const sku = (e.codigo || '').trim();
       const meta = metaBySku ? metaBySku[sku] : null;
-      const costoUsd = Number(meta?.unit_price_usd_ultima || 0);
+      // unit_price viene de embarques_compras (precio que pagamos al proveedor)
+      const costoUsd = Number(e.unit_price || meta?.unit_price_usd_ultima || 0);
       const piezas = Number(e.po_qty || 0);
       const valorUsd = piezas * costoUsd;
 
@@ -59,7 +61,9 @@ export default function TransitoTimeline({ embarques, metaBySku }) {
       m.piezas += piezas;
       m.usd += valorUsd;
       if (e.po) m.pos.add(e.po);
-      m.embarques.push({ ...e, valorUsd });
+      // Derivar marca desde metadata por SKU (la tabla embarques no la trae)
+      const marca = meta?.marca || '(sin marca)';
+      m.embarques.push({ ...e, valorUsd, marca });
 
       totalPiezas += piezas;
       totalUsd += valorUsd;
@@ -73,8 +77,10 @@ export default function TransitoTimeline({ embarques, metaBySku }) {
     let proxEta = null;
     (embarques || []).forEach((e) => {
       const est = String(e.estatus || '').toLowerCase();
-      if (est.includes('cancel') || e.arribo_cedis || !e.eta) return;
-      const eta = new Date(e.eta);
+      if (est.includes('cancel') || e.arribo_cedis) return;
+      const etaStr = e.arribo_almacen || e.eta_puerto || e.eta;
+      if (!etaStr) return;
+      const eta = new Date(etaStr);
       if (isNaN(eta) || eta < limiteAtras) return;
       if (!proxEta || eta < proxEta) proxEta = eta;
     });

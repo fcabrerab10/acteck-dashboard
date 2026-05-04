@@ -13,6 +13,7 @@ import NovedadesCard from './forecast/NovedadesCard';
 import SolicitudesPanel from './forecast/SolicitudesPanel';
 import SolicitudesModal from './forecast/SolicitudesModal';
 import AlertasCard from './forecast/AlertasCard';
+import NecesidadCard from './forecast/NecesidadCard';
 import { useSolicitudes } from './forecast/useSolicitudes';
 import { puedeEditarPestanaGlobal, puedeVerPestanaGlobal } from '../../lib/permisos';
 
@@ -92,8 +93,11 @@ function useForecastData() {
       // Roadmap por SKU (estado, fechas)
       supabase.from('roadmap_sku').select('*'),
       // Master de embarques completo (para timeline tránsito + histórico compras)
+      // Nota: la tabla NO tiene `eta` ni `marca`; usamos `eta_puerto` (o
+      // `arribo_almacen`) como ETA del embarque, y la marca la cruzamos
+      // contra v_sku_metadata por SKU.
       fetchAll(() => supabase.from('embarques_compras')
-        .select('po, codigo, fecha_emision, arribo_cedis, eta, po_qty, cbm, contenedor, estatus, supplier, marca, familia')),
+        .select('po, codigo, fecha_emision, arribo_cedis, arribo_almacen, eta_puerto, etd, po_qty, cbm, contenedor, estatus, supplier, familia, descripcion, unit_price')),
       // Solicitudes de compra del año actual (las tablas pueden no existir aún
       // — capturamos error silenciosamente en ese caso)
       supabase.from('solicitudes_compra').select('*').eq('anio', anioActual)
@@ -298,7 +302,7 @@ function calcularForecast(data, horizonteMeses) {
       po: e.po,
       fecha_emision: e.fecha_emision,
       arribo_cedis: e.arribo_cedis,
-      eta: e.eta,
+      eta: e.arribo_almacen || e.eta_puerto || e.eta || null,
       qty: Number(e.po_qty || 0),
       contenedores: Number(e.contenedor || 0),
       supplier: e.supplier,
@@ -657,17 +661,22 @@ export default function ForecastClientesTab() {
         />
       )}
 
-      {/* TARJETAS RESUMEN — Novedades + Tránsito + (panel solicitudes si tiene permiso) */}
-      <div className={[
-        'grid grid-cols-1 gap-4',
-        puedeVerSol ? 'xl:grid-cols-3' : 'xl:grid-cols-2'
-      ].join(' ')}>
-        <NovedadesCard
-          roadmap={data.roadmap}
+      {/* TARJETAS RESUMEN — fila 1: Necesidad + Tránsito */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <NecesidadCard rows={rowsAll} />
+        <TransitoTimeline
           embarques={data.embarques}
           metaBySku={metaBySku}
         />
-        <TransitoTimeline
+      </div>
+
+      {/* TARJETAS RESUMEN — fila 2: Novedades + (panel solicitudes si tiene permiso) */}
+      <div className={[
+        'grid grid-cols-1 gap-4',
+        puedeVerSol ? 'xl:grid-cols-2' : ''
+      ].join(' ')}>
+        <NovedadesCard
+          roadmap={data.roadmap}
           embarques={data.embarques}
           metaBySku={metaBySku}
         />
