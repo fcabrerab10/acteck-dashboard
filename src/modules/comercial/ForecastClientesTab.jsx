@@ -370,8 +370,9 @@ export default function ForecastClientesTab() {
   const [filtroFlag, setFiltroFlag] = useState('todos');
   const [expandedSku, setExpandedSku] = useState(null);
   const [sugeridosOpen, setSugeridosOpen] = useState(false);
-  const [sortCol, setSortCol] = useState('brecha');
-  const [sortDir, setSortDir] = useState('desc');
+  // Mismo orden default que el Reporte de Resumen Clientes: SKU ascendente
+  const [sortCol, setSortCol] = useState('sku');
+  const [sortDir, setSortDir] = useState('asc');
   const [exportando, setExportando] = useState(false);
   const [borradorActivoId, setBorradorActivoId] = useState(null);
   const [misSolicitudesAbierto, setMisSolicitudesAbierto] = useState(false);

@@ -55,11 +55,12 @@ export default function NovedadesCard({ roadmap, embarques, metaBySku }) {
     (embarques || []).forEach((e) => {
       const est = String(e.estatus || '').toLowerCase();
       if (est.includes('cancel') || est.includes('concluido') || est.includes('rechazada') || est.includes('perdida')) return;
-      if (e.arribo_cedis) return;
-      const etaStr = e.arribo_almacen || e.eta_puerto || e.eta;
+      const etaStr = e.arribo_cedis || e.arribo_almacen || e.eta_puerto || e.eta;
       if (!etaStr) return;
       const eta = new Date(etaStr);
       if (isNaN(eta) || eta < hoy || eta > limite30) return;
+      const yr = eta.getFullYear();
+      if (yr < 2020 || yr > 2030) return;
       const sku = (e.codigo || '').trim();
       const meta = metaBySku ? metaBySku[sku] : null;
       items.push({

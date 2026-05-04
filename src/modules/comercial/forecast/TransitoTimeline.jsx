@@ -27,17 +27,21 @@ export default function TransitoTimeline({ embarques, metaBySku }) {
     let totalUsd = 0;
     let totalPOs = new Set();
 
+    const ahora = new Date();
     (embarques || []).forEach((e) => {
       const est = String(e.estatus || '').toLowerCase();
-      // CONCLUIDO en la operación significa que ya se recibió en CEDIS
-      // (aunque arribo_cedis quede null). No es tránsito activo.
+      // Estatus que significan "ya no está en tránsito"
       if (est.includes('cancel') || est.includes('concluido') || est.includes('rechazada') || est.includes('perdida')) return;
-      if (e.arribo_cedis) return;
-      // ETA real: arribo_almacen > eta_puerto (en orden de preferencia)
-      const etaStr = e.arribo_almacen || e.eta_puerto || e.eta;
+      // ETA real: priorizamos arribo_cedis (fecha estimada de arribo a
+      // CEDIS) > arribo_almacen > eta_puerto > eta. arribo_cedis NO es
+      // "ya llegó" — es la fecha programada de arribo final.
+      const etaStr = e.arribo_cedis || e.arribo_almacen || e.eta_puerto || e.eta;
       if (!etaStr) return;
       const eta = new Date(etaStr);
       if (isNaN(eta)) return;
+      // Filtrar fechas absurdas (años fuera de 2020-2030 son bugs del importador)
+      const yr = eta.getFullYear();
+      if (yr < 2020 || yr > 2030) return;
       if (eta < limiteAtras || eta > limiteAdelante) return;
 
       const sku = (e.codigo || '').trim();
@@ -80,11 +84,13 @@ export default function TransitoTimeline({ embarques, metaBySku }) {
     (embarques || []).forEach((e) => {
       const est = String(e.estatus || '').toLowerCase();
       if (est.includes('cancel') || est.includes('concluido') || est.includes('rechazada') || est.includes('perdida')) return;
-      if (e.arribo_cedis) return;
-      const etaStr = e.arribo_almacen || e.eta_puerto || e.eta;
+      const etaStr = e.arribo_cedis || e.arribo_almacen || e.eta_puerto || e.eta;
       if (!etaStr) return;
       const eta = new Date(etaStr);
-      if (isNaN(eta) || eta < limiteAtras) return;
+      if (isNaN(eta)) return;
+      const yr = eta.getFullYear();
+      if (yr < 2020 || yr > 2030) return;
+      if (eta < limiteAtras) return;
       if (!proxEta || eta < proxEta) proxEta = eta;
     });
 
