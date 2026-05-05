@@ -321,20 +321,36 @@ function calcularForecast(data, horizonteMeses) {
     const demandaDiaria = demandaMesTotal / 30;
     const coberturaDias = demandaDiaria > 0 ? Math.round(inv / demandaDiaria) : null;
 
-    // Compras históricas (top 6 más recientes)
+    // Compras históricas — todas, ordenadas más recientes primero
     const comprasHistAll = (compraInfo.pos || [])
       .filter((e) => e.fecha_emision)
       .sort((a, b) => String(b.fecha_emision).localeCompare(String(a.fecha_emision)));
-    const comprasHist = comprasHistAll.slice(0, 6).map((e) => ({
+    const comprasHist = comprasHistAll.slice(0, 8).map((e) => ({
       po: e.po,
       fecha_emision: e.fecha_emision,
       arribo_cedis: e.arribo_cedis,
       eta: e.arribo_almacen || e.eta_puerto || e.eta || null,
       qty: Number(e.po_qty || 0),
       contenedores: Number(e.contenedor || 0),
+      unitPriceUsd: Number(e.unit_price || 0),
       supplier: e.supplier,
       estatus: e.estatus,
     }));
+
+    // Costo promedio USD del SKU (ponderado por piezas) desde el histórico
+    let costoPromUsdNum = 0, costoPromUsdDen = 0;
+    comprasHistAll.forEach((e) => {
+      const p = Number(e.po_qty || 0);
+      const u = Number(e.unit_price || 0);
+      if (p > 0 && u > 0) {
+        costoPromUsdNum += p * u;
+        costoPromUsdDen += p;
+      }
+    });
+    const costoPromedioUsd = costoPromUsdDen > 0 ? costoPromUsdNum / costoPromUsdDen : 0;
+    // Último costo USD = el de la PO más reciente con precio
+    const ultimoCostoUsd = comprasHistAll.find((e) => Number(e.unit_price) > 0)?.unit_price
+      || meta.unit_price_usd_ultima || 0;
 
     rows.push({
       sku,
@@ -345,6 +361,8 @@ function calcularForecast(data, horizonteMeses) {
       roadmapEstado,
       costoUnitMxn: Number(meta.costo_promedio_mxn || 0),
       costoUnitUsd: Number(meta.unit_price_usd_ultima || 0),
+      costoPromedioUsd,
+      ultimoCostoUsd,
       demMes, demHor, demandaTotalHor, demandaMesTotal,
       demanda6m,
       coberturaDias,
@@ -945,42 +963,61 @@ function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud }) {
 }
 
 function ExpandedDetail({ r }) {
-  // Cobertura color según rango (igual que Resumen Clientes)
-  const colorCob = r.coberturaDias == null ? '#94A3B8'
-    : r.coberturaDias < 30 ? '#EF4444'
-    : r.coberturaDias <= 90 ? '#10B981'
-    : r.coberturaDias <= 150 ? '#F59E0B'
-    : '#EF4444';
-  const labelCob = r.coberturaDias == null ? 'sin demanda'
-    : r.coberturaDias < 30 ? 'stockout en riesgo'
-    : r.coberturaDias <= 90 ? 'óptimo'
-    : r.coberturaDias <= 150 ? 'alto'
-    : 'sobreinventario';
+  const MES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const fmtFechaC = (iso) => {
+    if (!iso) return '—';
+    const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+    return `${d} ${MES_CORTO[m - 1]} ${String(y).slice(2)}`;
+  };
+
+  // Brecha por cliente (lo que cada uno realmente necesita 90d vs disponible)
+  const totalDisponible = (r.inv || 0) + (r.traDentroHor || 0);
+  const ratioDigi = r.demandaMesTotal > 0 ? r.demMes.digitalife / r.demandaMesTotal : 0;
+  const ratioPcel = r.demandaMesTotal > 0 ? r.demMes.pcel       / r.demandaMesTotal : 0;
+  const necesidadDigi = r.demMes.digitalife * 3;
+  const necesidadPcel = r.demMes.pcel       * 3;
+  const stockDigi  = totalDisponible * ratioDigi;
+  const stockPcel  = totalDisponible * ratioPcel;
+  const brechaDigi = Math.max(0, necesidadDigi - stockDigi);
+  const brechaPcel = Math.max(0, necesidadPcel - stockPcel);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm">
 
-      {/* 1) DEMANDA POR CLIENTE — al inicio (mini-gráfica 6 meses) */}
+      {/* 1) DEMANDA 6 MESES POR CLIENTE — TABLA */}
       <div className="bg-white rounded-lg p-3 border border-gray-200">
         <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2">
           Demanda 6 meses por cliente (piezas)
         </h4>
-        <DemandaSparkline data={r.demanda6m} />
-        <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-blue-500" />
-            <span className="flex-1 text-gray-600">Digitalife</span>
-            <span className="font-semibold tabular-nums">{FMT_N(r.demMes.digitalife)}<span className="text-gray-400">/mes</span></span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-red-500" />
-            <span className="flex-1 text-gray-600">PCEL</span>
-            <span className="font-semibold tabular-nums">{FMT_N(r.demMes.pcel)}<span className="text-gray-400">/mes</span></span>
-          </div>
-        </div>
+        <table className="w-full text-xs">
+          <thead className="text-[10px] text-gray-500 uppercase tracking-wide">
+            <tr className="border-b border-gray-100">
+              <th className="text-left py-1.5">Mes</th>
+              <th className="text-right py-1.5" style={{ color: '#3B82F6' }}>Digitalife</th>
+              <th className="text-right py-1.5" style={{ color: '#EF4444' }}>PCEL</th>
+              <th className="text-right py-1.5">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(r.demanda6m || []).map((d, i) => (
+              <tr key={i} className="border-b border-gray-50 last:border-0">
+                <td className="py-1 text-gray-600">{MES_CORTO[d.mes - 1]} {String(d.anio).slice(2)}</td>
+                <td className="py-1 text-right tabular-nums" style={{ color: d.digi > 0 ? '#3B82F6' : '#CBD5E1' }}>
+                  {FMT_N(d.digi)}
+                </td>
+                <td className="py-1 text-right tabular-nums" style={{ color: d.pcel > 0 ? '#EF4444' : '#CBD5E1' }}>
+                  {FMT_N(d.pcel)}
+                </td>
+                <td className="py-1 text-right tabular-nums font-semibold text-gray-700">
+                  {FMT_N(d.digi + d.pcel)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      {/* 2) ARRIBOS EN TRÁNSITO — uno por uno */}
+      {/* 2) ARRIBOS EN TRÁNSITO */}
       <div className="bg-white rounded-lg p-3 border border-gray-200">
         <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2 flex items-center gap-1">
           <Ship className="w-3.5 h-3.5" /> Arribos en tránsito
@@ -1000,7 +1037,7 @@ function ExpandedDetail({ r }) {
                 </span>
                 <span className="font-semibold tabular-nums shrink-0">{FMT_N(e.cantidad)}</span>
                 <span className="text-gray-500 truncate flex-1" title={`PO ${e.po || ''}`}>{e.po ? `PO-${e.po}` : ''}</span>
-                <span className="text-gray-500 shrink-0">{fmtFechaCorta(e.eta)}</span>
+                <span className="text-gray-500 shrink-0">{fmtFechaC(e.eta)}</span>
               </div>
             ))}
           </div>
@@ -1017,21 +1054,29 @@ function ExpandedDetail({ r }) {
         <div className="space-y-1.5 text-xs">
           <div className="flex items-center justify-between">
             <span className="text-gray-500">Proveedor</span>
-            <span className="font-semibold text-gray-800 truncate ml-2 max-w-[180px]" title={r.supplier}>{r.supplier || '—'}</span>
+            <span className="font-semibold text-gray-800 truncate ml-2 max-w-[200px]" title={r.supplier}>{r.supplier || '—'}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-gray-500">Costo promedio (USD)</span>
-            <span className="font-semibold tabular-nums">{r.costoUnitUsd ? `$${r.costoUnitUsd.toFixed(2)}` : '—'}</span>
+            <span className="font-semibold tabular-nums">
+              {r.costoPromedioUsd > 0 ? `$${r.costoPromedioUsd.toFixed(2)}` : '—'}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Último costo (USD)</span>
+            <span className="font-semibold tabular-nums" style={{ color: '#0d9488' }}>
+              {r.ultimoCostoUsd > 0 ? `$${Number(r.ultimoCostoUsd).toFixed(2)}` : '—'}
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-gray-500">Costo promedio (MXN)</span>
             <span className="font-semibold tabular-nums">{r.costoUnitMxn ? formatMXN(r.costoUnitMxn) : '—'}</span>
           </div>
           <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
-            <span className="text-gray-500">Piezas / contenedor</span>
+            <span className="text-gray-500">Piezas por contenedor</span>
             <span className="font-semibold tabular-nums">
               {r.tieneCompras
-                ? (r.piezasPorContenedor > 0 ? FMT_N(r.piezasPorContenedor) : '—')
+                ? (r.piezasPorContenedor > 0 ? `${FMT_N(r.piezasPorContenedor)} pzs` : '—')
                 : <span className="text-amber-600 italic">Aún no se compra</span>}
             </span>
           </div>
@@ -1050,7 +1095,7 @@ function ExpandedDetail({ r }) {
         </div>
       </div>
 
-      {/* 4) HISTÓRICO DE COMPRAS */}
+      {/* 4) HISTÓRICO DE COMPRAS — fecha legible + costo USD/u */}
       <div className="bg-white rounded-lg p-3 border border-gray-200">
         <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2">
           Histórico de compras
@@ -1058,28 +1103,40 @@ function ExpandedDetail({ r }) {
         {(r.comprasHist || []).length === 0 ? (
           <div className="text-xs text-gray-400 italic">Sin historial de compras</div>
         ) : (
-          <div className="space-y-1 text-xs max-h-40 overflow-y-auto">
-            {r.comprasHist.map((c, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="text-[10px] text-gray-500 tabular-nums shrink-0 w-16">
-                  {(c.fecha_emision || '').slice(0, 10)}
-                </span>
-                <span className="font-semibold tabular-nums shrink-0 w-16 text-right">
-                  {FMT_N(c.qty)} pz
-                </span>
-                <span className="text-gray-400 shrink-0 w-12 text-right text-[10px]">
-                  {c.contenedores > 0 ? `${c.contenedores} cnt` : ''}
-                </span>
-                <span className={[
-                  'text-[9px] font-semibold px-1 rounded shrink-0 ml-auto',
-                  c.arribo_cedis ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700',
-                ].join(' ')}>
-                  {c.arribo_cedis ? 'recibida' : 'tránsito'}
-                </span>
-              </div>
-            ))}
+          <div className="text-xs">
+            <table className="w-full">
+              <thead className="text-[10px] text-gray-500 uppercase tracking-wide">
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-1">Fecha</th>
+                  <th className="text-right py-1">Piezas</th>
+                  <th className="text-right py-1">Cnt</th>
+                  <th className="text-right py-1">$/pza</th>
+                  <th className="text-center py-1">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {r.comprasHist.map((c, i) => (
+                  <tr key={i} className="border-b border-gray-50 last:border-0">
+                    <td className="py-1 text-gray-600">{fmtFechaC(c.fecha_emision)}</td>
+                    <td className="py-1 text-right tabular-nums">{FMT_N(c.qty)}</td>
+                    <td className="py-1 text-right tabular-nums text-gray-400">{c.contenedores > 0 ? c.contenedores : '—'}</td>
+                    <td className="py-1 text-right tabular-nums">
+                      {c.unitPriceUsd > 0 ? `$${c.unitPriceUsd.toFixed(2)}` : '—'}
+                    </td>
+                    <td className="py-1 text-center">
+                      <span className={[
+                        'text-[9px] font-semibold px-1 rounded',
+                        c.arribo_cedis ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700',
+                      ].join(' ')}>
+                        {c.arribo_cedis ? 'recibida' : 'tránsito'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             {r.totalComprasHist > r.comprasHist.length && (
-              <div className="text-[10px] text-gray-400 italic">
+              <div className="text-[10px] text-gray-400 italic mt-1">
                 +{r.totalComprasHist - r.comprasHist.length} compras más
               </div>
             )}
@@ -1087,87 +1144,55 @@ function ExpandedDetail({ r }) {
         )}
       </div>
 
-      {/* 5) COBERTURA ACTUAL — barra horizontal */}
-      <div className="bg-white rounded-lg p-3 border border-gray-200 lg:col-span-2">
-        <div className="flex items-center justify-between mb-1.5">
-          <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide">Cobertura actual</h4>
-          <div className="text-xs">
-            {r.coberturaDias != null ? (
-              <>
-                <span className="font-bold tabular-nums" style={{ color: colorCob }}>
-                  {r.coberturaDias} días
-                </span>
-                <span className="text-gray-500 ml-1">de venta · {labelCob}</span>
-              </>
-            ) : (
-              <span className="text-gray-400 italic">sin demanda registrada</span>
+      {/* 5) RESUMEN DEL SUGERIDO — contenedor lleno + necesidad por cliente */}
+      <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200 lg:col-span-2">
+        <h4 className="font-semibold text-emerald-800 text-xs uppercase tracking-wide mb-2">
+          Resumen del sugerido
+        </h4>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div>
+            <div className="text-[10px] uppercase text-emerald-700 tracking-wide">Sugerido total</div>
+            <div className="font-bold text-emerald-800 tabular-nums text-lg">{FMT_N(r.sugerido)} pzs</div>
+            {r.contenedoresSugeridos > 0 && (
+              <div className="text-[10px] text-emerald-700">
+                {r.contenedoresSugeridos} contenedor{r.contenedoresSugeridos > 1 ? 'es' : ''} completo{r.contenedoresSugeridos > 1 ? 's' : ''}
+                {r.esConsolidado ? ' (consolidado)' : ''}
+              </div>
             )}
           </div>
+          <div>
+            <div className="text-[10px] uppercase text-blue-700 tracking-wide">Necesita Digitalife (90d)</div>
+            <div className="font-bold tabular-nums" style={{ color: '#3B82F6' }}>
+              {FMT_N(necesidadDigi)} pzs
+            </div>
+            {brechaDigi > 0 && (
+              <div className="text-[10px] text-red-600">brecha: {FMT_N(brechaDigi)}</div>
+            )}
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-red-700 tracking-wide">Necesita PCEL (90d)</div>
+            <div className="font-bold tabular-nums" style={{ color: '#EF4444' }}>
+              {FMT_N(necesidadPcel)} pzs
+            </div>
+            {brechaPcel > 0 && (
+              <div className="text-[10px] text-red-600">brecha: {FMT_N(brechaPcel)}</div>
+            )}
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-gray-500 tracking-wide">Inventario disponible</div>
+            <div className="font-bold tabular-nums text-gray-700">{FMT_N(totalDisponible)} pzs</div>
+            <div className="text-[10px] text-gray-500">
+              {FMT_N(r.inv)} stock + {FMT_N(r.traDentroHor)} tránsito
+            </div>
+          </div>
         </div>
-        {r.coberturaDias != null && (
-          <div className="h-2 bg-gray-100 rounded overflow-hidden relative">
-            <div
-              className="h-full rounded"
-              style={{
-                width: `${Math.min(100, (r.coberturaDias / 180) * 100)}%`,
-                backgroundColor: colorCob,
-              }}
-            />
-            {/* Marca del horizonte óptimo (60-90d) */}
-            <div className="absolute top-0 bottom-0 border-r border-emerald-400/50" style={{ left: '33.33%' }} />
-            <div className="absolute top-0 bottom-0 border-r border-emerald-400/50" style={{ left: '50%' }} />
+        {r.sugerido > 0 && (necesidadDigi + necesidadPcel) > 0 && r.sugerido > (necesidadDigi + necesidadPcel - totalDisponible) && (
+          <div className="mt-2 text-[10px] text-emerald-700 italic">
+            El sugerido completa el contenedor — el sobrante quedará como buffer para próximos meses.
           </div>
         )}
-        <div className="text-[10px] text-gray-400 mt-1">
-          Inv: <span className="font-semibold text-gray-600">{FMT_N(r.inv)}</span> pzs ÷
-          <span className="font-semibold text-gray-600"> {FMT_N(r.demandaMesTotal / 30)}</span> pzs/día =
-          <span className="font-semibold text-gray-600"> {r.coberturaDias != null ? r.coberturaDias : '—'}d</span>
-        </div>
       </div>
-
-      {/* Prorrateo (alerta cuando inv+tránsito < demanda) */}
-      {r.prorrateo && (
-        <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 lg:col-span-2">
-          <h4 className="font-semibold text-amber-800 text-xs uppercase tracking-wide mb-1.5 flex items-center gap-1">
-            <AlertTriangle className="w-3.5 h-3.5" /> Inventario + tránsito insuficiente para la demanda
-          </h4>
-          <div className="text-xs text-amber-900 grid grid-cols-3 gap-3">
-            <div><span className="text-amber-700">Digitalife: </span><span className="font-bold">{FMT_N(r.prorrateo.digitalife)}</span> <span className="text-[10px]">de {FMT_N(r.demHor.digitalife)} solicitadas</span></div>
-            <div><span className="text-amber-700">PCEL: </span><span className="font-bold">{FMT_N(r.prorrateo.pcel)}</span> <span className="text-[10px]">de {FMT_N(r.demHor.pcel)} solicitadas</span></div>
-            <div><span className="text-amber-700">Faltante: </span><span className="font-bold text-red-700">{FMT_N(r.prorrateo.faltante)}</span></div>
-          </div>
-        </div>
-      )}
     </div>
-  );
-}
-
-// Mini-gráfica de barras para demanda 6 meses Digi+PCEL stack
-function DemandaSparkline({ data }) {
-  if (!data || data.length === 0) return <div className="text-xs text-gray-400 italic">Sin datos</div>;
-  const MES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-  const max = Math.max(1, ...data.map(d => d.digi + d.pcel));
-  const W = 280, H = 50, gap = 4;
-  const barW = (W - (data.length - 1) * gap) / data.length;
-  return (
-    <svg viewBox={`0 0 ${W} ${H + 12}`} className="w-full">
-      {data.map((d, i) => {
-        const x = i * (barW + gap);
-        const total = d.digi + d.pcel;
-        const hTot = (total / max) * H;
-        const hDigi = (d.digi / max) * H;
-        const hPcel = hTot - hDigi;
-        return (
-          <g key={i}>
-            <rect x={x} y={H - hTot} width={barW} height={hPcel} fill="#EF4444" rx={1} />
-            <rect x={x} y={H - hDigi} width={barW} height={hDigi} fill="#3B82F6" rx={1} />
-            <text x={x + barW/2} y={H + 10} textAnchor="middle" fontSize={9} fill="#94A3B8">
-              {MES_CORTO[d.mes - 1]}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
   );
 }
 
