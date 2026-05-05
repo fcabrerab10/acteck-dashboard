@@ -1,151 +1,215 @@
-// NecesidadCard — qué necesitarás comprar para cubrir la demanda por cliente.
+// NecesidadCard — qué inventario necesitas comprar (en MXN) frente a la
+// cuota de cada cliente, para los próximos 3 meses (90 días).
 //
-// Dos vistas:
-//   1. PRÓXIMOS 90 DÍAS (urgencia — comprar ya o pronto)
-//   2. ADICIONAL 90-180 DÍAS (planeación, no es urgente)
-//
-// Siempre en piezas. Brecha por cliente = max(0, demanda_cliente − inv_compartido_proporcional − tránsito_compartido)
-// Aquí lo simplifico: brecha por cliente = max(0, demanda_cliente − (inv + tránsito) × ratio_cliente).
-//
-// El total al final ya está redondeado a múltiplos de contenedor.
+// Vista colapsada: una fila por cliente con cuota total · sell-in proyectado ·
+//   brecha en MXN.
+// Vista expandida (click en el cliente): top SKUs que más faltan ordenados
+//   por VALOR descendente (precio × piezas faltantes).
 
-import React, { useMemo } from 'react';
-import { Target } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Target, ChevronDown, ChevronUp } from 'lucide-react';
+import { PCEL_REAL } from '../../../lib/constants';
 
-const FMT_N = (n) => Math.round(n || 0).toLocaleString('es-MX');
+const FMT_N    = (n) => Math.round(n || 0).toLocaleString('es-MX');
+const FMT_MXN  = (n) => `$${Math.round(n || 0).toLocaleString('es-MX')}`;
 
-export default function NecesidadCard({ rows, demandaSrc }) {
-  // rows ya viene calculado para el horizonte actual (3 meses default).
-  // Pero queremos calcular AMBOS horizontes (90d y 180d) → derivamos de demMes.
+const CLIENTES = [
+  { key: 'digitalife', label: 'Digitalife', color: '#3B82F6' },
+  { key: 'pcel',       label: 'PCEL',       color: '#EF4444' },
+];
+
+export default function NecesidadCard({ rows, cuotas, metaBySku }) {
+  const [clienteAbierto, setClienteAbierto] = useState(null);
+
   const calc = useMemo(() => {
-    let dem90 = { digi: 0, pcel: 0 };
-    let dem180Extra = { digi: 0, pcel: 0 };
-    let brecha90 = { digi: 0, pcel: 0 };
-    let brecha180Extra = { digi: 0, pcel: 0 };
-    let sugeridoPiezas = 0;
-    let sugeridoContenedores = 0;
-    let skusEnRiesgo90 = 0;
+    const hoy = new Date();
+    const mesActual = hoy.getMonth() + 1;
+    const anioActual = hoy.getFullYear();
 
-    (rows || []).forEach((r) => {
-      const d3 = r.demMes.digitalife * 3;
-      const p3 = r.demMes.pcel * 3;
-      const d6 = r.demMes.digitalife * 6;
-      const p6 = r.demMes.pcel * 6;
+    // Cuota 3 meses (mes actual + 2 siguientes) por cliente, en MXN
+    const cuotaPorCliente = { digitalife: 0, pcel: 0 };
+    const meses3 = [];
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(anioActual, mesActual - 1 + i, 1);
+      meses3.push({ a: d.getFullYear(), m: d.getMonth() + 1 });
+    }
+    (cuotas || []).forEach((c) => {
+      const k = c.cliente;
+      if (!cuotaPorCliente.hasOwnProperty(k)) return;
+      if (!meses3.some((mm) => mm.a === Number(c.anio) && mm.m === Number(c.mes))) return;
+      cuotaPorCliente[k] += Number(c.cuota_min || 0);
+    });
+    // Fallback PCEL: si no hay cuota cargada, usa PCEL_REAL.cuota50M
+    if (cuotaPorCliente.pcel === 0 && PCEL_REAL?.cuota50M) {
+      meses3.forEach((mm) => {
+        if (mm.a === anioActual) {
+          cuotaPorCliente.pcel += Number(PCEL_REAL.cuota50M[mm.m] || 0);
+        }
+      });
+    }
 
-      dem90.digi += d3;
-      dem90.pcel += p3;
-      dem180Extra.digi += (d6 - d3);
-      dem180Extra.pcel += (p6 - p3);
-
-      // Stock disponible total (inv + tránsito que llega en horizonte)
-      const totalDisponible = (r.inv || 0) + (r.traDentroHor || 0);
-      const totalDemanda3 = d3 + p3;
-
-      // Brecha 90d por cliente, prorrateando inventario disponible
-      let bDigi = d3, bPcel = p3;
-      if (totalDemanda3 > 0) {
-        const ratioDigi = d3 / totalDemanda3;
-        const ratioPcel = p3 / totalDemanda3;
-        const inv90Digi = totalDisponible * ratioDigi;
-        const inv90Pcel = totalDisponible * ratioPcel;
-        bDigi = Math.max(0, d3 - inv90Digi);
-        bPcel = Math.max(0, p3 - inv90Pcel);
-      }
-      brecha90.digi += bDigi;
-      brecha90.pcel += bPcel;
-
-      // Brecha extra (90-180): adicional de los siguientes 3 meses
-      brecha180Extra.digi += (d6 - d3);
-      brecha180Extra.pcel += (p6 - p3);
-
-      // Resumen del sugerido
-      if (r.sugerido > 0) {
-        sugeridoPiezas += r.sugerido;
-        sugeridoContenedores += (r.contenedoresSugeridos || 0);
-      }
-      // SKUs con cobertura crítica (<30d)
-      if (r.coberturaDias != null && r.coberturaDias < 30 && r.demandaMesTotal > 0) {
-        skusEnRiesgo90 += 1;
-      }
+    // Por cliente: sumar el sell-in proyectado en MXN (demHor × costo_promedio_mxn)
+    // y los SKUs que faltan ordenados por valor.
+    const porCliente = {};
+    CLIENTES.forEach((c) => {
+      porCliente[c.key] = {
+        cuota: cuotaPorCliente[c.key] || 0,
+        sellInProyectadoMxn: 0,
+        brechaMxn: 0,
+        skusFaltantes: [],
+      };
     });
 
-    return {
-      dem90, dem180Extra, brecha90, brecha180Extra,
-      sugeridoPiezas, sugeridoContenedores, skusEnRiesgo90,
-    };
-  }, [rows]);
+    (rows || []).forEach((r) => {
+      const meta = metaBySku ? metaBySku[r.sku] : null;
+      const costoMxn = Number(r.costoUnitMxn || meta?.costo_promedio_mxn || 0);
+      const precioVentaMxn = Number(meta?.precio_venta_mxn || meta?.precio_lista_mxn || costoMxn);
+      // Para "valor del SKU" usamos costo_promedio_mxn (lo que TÚ pagas como
+      // input de inventario) — es lo más relevante para la decisión de compra.
+      const valorUnitario = costoMxn;
+
+      CLIENTES.forEach((c) => {
+        const piezas3m = (r.demMes?.[c.key] || 0) * 3;
+        const valor3m = piezas3m * valorUnitario;
+        porCliente[c.key].sellInProyectadoMxn += valor3m;
+
+        // Calcular brecha de piezas por cliente (prorrateando inv compartido)
+        if (r.demandaMesTotal > 0) {
+          const ratio = (r.demMes[c.key] || 0) / r.demandaMesTotal;
+          const totalDisponible = (r.inv || 0) + (r.traDentroHor || 0);
+          const stockProporcionalCliente = totalDisponible * ratio;
+          const brechaPiezasCliente = Math.max(0, piezas3m - stockProporcionalCliente);
+          if (brechaPiezasCliente > 0 && valorUnitario > 0) {
+            porCliente[c.key].brechaMxn += brechaPiezasCliente * valorUnitario;
+            porCliente[c.key].skusFaltantes.push({
+              sku: r.sku,
+              descripcion: r.descripcion,
+              piezas: Math.round(brechaPiezasCliente),
+              valorUnitario,
+              valorTotal: brechaPiezasCliente * valorUnitario,
+            });
+          }
+        }
+      });
+    });
+
+    // Ordenar SKUs faltantes por VALOR UNITARIO descendente (los más caros
+    // primero — porque son los que más impactan).
+    Object.values(porCliente).forEach((p) => {
+      p.skusFaltantes.sort((a, b) => b.valorUnitario - a.valorUnitario);
+    });
+
+    return { porCliente, cuotaPorCliente };
+  }, [rows, cuotas, metaBySku]);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
         <Target className="w-4 h-4 text-emerald-600" />
-        <h3 className="font-semibold text-gray-800 text-sm">Necesidad por cliente</h3>
+        <h3 className="font-semibold text-gray-800 text-sm">Necesidad por cliente · próximos 90 días</h3>
+        <span className="ml-auto text-[10px] text-gray-400">vs cuota mínima · valuado a costo</span>
       </div>
 
-      <div className="p-4 space-y-4">
-        {/* PRÓXIMOS 90 DÍAS */}
-        <div>
-          <div className="flex items-baseline justify-between mb-2">
-            <h4 className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">
-              Próximos 90 días
-            </h4>
-            <span className="text-[10px] text-gray-400">brecha = demanda − (inv + tránsito)</span>
-          </div>
-          <NecesidadFila label="Digitalife" demanda={calc.dem90.digi} brecha={calc.brecha90.digi} color="#3B82F6" />
-          <NecesidadFila label="PCEL" demanda={calc.dem90.pcel} brecha={calc.brecha90.pcel} color="#EF4444" />
-          <div className="border-t border-gray-100 mt-2 pt-1.5 flex items-center justify-between text-xs">
-            <span className="text-gray-500 font-medium">Total a comprar (90d)</span>
-            <span className="font-bold text-emerald-700 tabular-nums">
-              {FMT_N(calc.brecha90.digi + calc.brecha90.pcel)} pzs
-            </span>
-          </div>
-        </div>
+      <div className="divide-y divide-gray-100">
+        {CLIENTES.map((c) => {
+          const p = calc.porCliente[c.key];
+          const abierto = clienteAbierto === c.key;
+          const cumplimiento = p.cuota > 0 ? (p.sellInProyectadoMxn / p.cuota) * 100 : null;
+          return (
+            <div key={c.key}>
+              <button
+                type="button"
+                onClick={() => setClienteAbierto(abierto ? null : c.key)}
+                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition text-left"
+              >
+                {abierto
+                  ? <ChevronUp className="w-4 h-4 text-gray-400" />
+                  : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.color }} />
+                <span className="font-semibold text-gray-800 text-sm w-28">{c.label}</span>
+                <div className="flex-1 grid grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <div className="text-[10px] uppercase text-gray-500 tracking-wide">Cuota 3m</div>
+                    <div className="font-semibold tabular-nums">{FMT_MXN(p.cuota)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase text-gray-500 tracking-wide">Proyectado</div>
+                    <div className="font-semibold tabular-nums" style={{ color: c.color }}>
+                      {FMT_MXN(p.sellInProyectadoMxn)}
+                    </div>
+                    {cumplimiento != null && (
+                      <div className="text-[10px] text-gray-500">{cumplimiento.toFixed(0)}% cuota</div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase text-gray-500 tracking-wide">Brecha a comprar</div>
+                    <div className="font-bold tabular-nums" style={{ color: p.brechaMxn > 0 ? '#dc2626' : '#10B981' }}>
+                      {p.brechaMxn > 0 ? FMT_MXN(p.brechaMxn) : '✓ cubierto'}
+                    </div>
+                    {p.skusFaltantes.length > 0 && (
+                      <div className="text-[10px] text-gray-500">
+                        {p.skusFaltantes.length} SKU{p.skusFaltantes.length !== 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </button>
 
-        {/* ADICIONAL 90-180 DÍAS */}
-        <div className="pt-3 border-t border-gray-100">
-          <h4 className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-2">
-            Adicional 90-180 días (planeación)
-          </h4>
-          <NecesidadFila label="Digitalife" demanda={calc.dem180Extra.digi} brecha={calc.brecha180Extra.digi} color="#3B82F6" muted />
-          <NecesidadFila label="PCEL" demanda={calc.dem180Extra.pcel} brecha={calc.brecha180Extra.pcel} color="#EF4444" muted />
-        </div>
-
-        {/* Footer: sugerido total redondeado a contenedores */}
-        <div className="pt-3 border-t border-gray-100">
-          <div className="flex items-baseline justify-between text-xs">
-            <span className="text-gray-500">Sugerido (redondeado a contenedor):</span>
-            <span className="font-bold text-emerald-700 tabular-nums">
-              {FMT_N(calc.sugeridoPiezas)} pzs
-              {calc.sugeridoContenedores > 0 && (
-                <span className="text-gray-400 font-normal ml-1">· {calc.sugeridoContenedores} cnt</span>
+              {abierto && (
+                <SkusFaltantes cliente={c} skus={p.skusFaltantes} />
               )}
-            </span>
-          </div>
-          {calc.skusEnRiesgo90 > 0 && (
-            <div className="mt-1 text-[10px] text-red-600">
-              ⚠ {calc.skusEnRiesgo90} SKU{calc.skusEnRiesgo90 > 1 ? 's' : ''} con cobertura &lt; 30 días
             </div>
-          )}
-        </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function NecesidadFila({ label, demanda, brecha, color, muted = false }) {
+function SkusFaltantes({ cliente, skus }) {
+  if (skus.length === 0) {
+    return (
+      <div className="px-4 pb-4 pt-1 text-xs text-emerald-700 italic">
+        ✓ Inventario suficiente para cubrir la cuota de {cliente.label} próximos 90 días
+      </div>
+    );
+  }
+  // Mostrar todos pero con scroll interno
   return (
-    <div className="flex items-center gap-2 text-xs py-0.5">
-      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-      <span className="flex-1 text-gray-700">{label}</span>
-      <span className="text-gray-400 tabular-nums w-20 text-right">
-        Dem: {FMT_N(demanda)}
-      </span>
-      <span
-        className={muted ? 'tabular-nums w-24 text-right text-gray-500' : 'font-semibold tabular-nums w-24 text-right'}
-        style={muted ? null : { color: brecha > 0 ? '#dc2626' : '#10B981' }}
-      >
-        {brecha > 0 ? `Brecha: ${FMT_N(brecha)}` : '✓ cubierto'}
-      </span>
+    <div className="px-4 pb-4 pt-1 bg-gray-50/40">
+      <div className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-2">
+        SKUs que más hacen falta · ordenados por valor unitario (mayor → menor)
+      </div>
+      <div className="overflow-y-auto max-h-72 rounded border border-gray-200 bg-white">
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-[10px] text-gray-500 sticky top-0">
+            <tr>
+              <th className="text-left px-2 py-1.5">SKU</th>
+              <th className="text-left px-2 py-1.5">Descripción</th>
+              <th className="text-right px-2 py-1.5">Faltan</th>
+              <th className="text-right px-2 py-1.5">$ / pza</th>
+              <th className="text-right px-2 py-1.5">Total MXN</th>
+            </tr>
+          </thead>
+          <tbody>
+            {skus.map((s) => (
+              <tr key={s.sku} className="border-t border-gray-100 hover:bg-blue-50/30">
+                <td className="px-2 py-1 font-mono font-semibold text-gray-800">{s.sku}</td>
+                <td className="px-2 py-1 text-gray-600 truncate max-w-[280px]" title={s.descripcion}>
+                  {s.descripcion || '—'}
+                </td>
+                <td className="px-2 py-1 text-right tabular-nums">{FMT_N(s.piezas)}</td>
+                <td className="px-2 py-1 text-right tabular-nums font-semibold" style={{ color: cliente.color }}>
+                  {FMT_MXN(s.valorUnitario)}
+                </td>
+                <td className="px-2 py-1 text-right tabular-nums font-bold text-emerald-700">
+                  {FMT_MXN(s.valorTotal)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

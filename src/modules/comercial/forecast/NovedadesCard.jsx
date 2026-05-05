@@ -1,143 +1,199 @@
-// NovedadesCard — qué es nuevo / qué se está moviendo
+// NovedadesCard — productos nuevos del roadmap (lanzamientos próximos
+// y futuros) con info de tránsito asociado.
 //
-// Sección con dos columnas:
-//   1. Roadmap próximamente: SKUs cuyo estado roadmap = "próximamente" o
-//      "en camino" (productos por lanzar)
-//   2. Llegando pronto: tránsito con ETA en los próximos 30 días
+// Muestra TODOS los SKUs cuyo rdmp = año actual o futuro (NVS, 2025, 2026,
+// 2027...) — independiente de si ya están en tránsito o no. Esto permite
+// preventer y volver a comprar para evitar rupturas de inventario.
 //
-// Sirve como "lo nuevo que viene" — visión rápida de lo que está al venir.
+// Por SKU: descripción + (piezas en tránsito · ETA · proveedor) o "pendiente
+// de comprar" si no hay tránsito.
 
-import React, { useMemo } from 'react';
-import { Sparkles, Truck } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Sparkles, Search } from 'lucide-react';
+import { roadmapStyle } from '../../../lib/roadmapColors';
 
-const MES_NOMBRE = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const FMT_N = (n) => Math.round(n || 0).toLocaleString('es-MX');
+const MES_NOMBRE = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 
 function formatEta(d) {
   if (!d) return '—';
-  return `${d.getDate()} ${MES_NOMBRE[d.getMonth()]}`;
+  return `${d.getDate()} ${MES_NOMBRE[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
 }
 
 export default function NovedadesCard({ roadmap, embarques, metaBySku }) {
-  const proximamente = useMemo(() => {
-    // La columna del roadmap se llama "rdmp" con códigos estilo
-    // "2026", "2025", "RMI", "RML", "NVS", "DECME". Para "próximamente"
-    // tomamos rdmp = año del calendario igual o posterior al actual
-    // (lanzamientos por venir).
+  const [busqueda, setBusqueda] = useState('');
+
+  // SKUs nuevos del roadmap (lanzamientos): cualquier rdmp que sea un año
+  // ≥ actual, más los códigos de "lanzamiento" en español (proxim/camino).
+  // Excluye RMI/RML (resurtidos) que NO son novedad.
+  const skusNuevos = useMemo(() => {
     const anioActual = new Date().getFullYear();
     return (roadmap || [])
       .filter((r) => {
-        const code = String(r.rdmp || r.estado || '').trim();
+        const code = String(r.rdmp || '').trim();
         if (!code) return false;
         const m = code.match(/^(\d{4})$/);
-        if (m && Number(m[1]) >= anioActual) return true;
+        if (m && Number(m[1]) >= anioActual - 1) return true; // 2025, 2026, ...
         const lower = code.toLowerCase();
+        if (lower === 'nvs') return true; // último bloque de lanzamiento
         return lower.includes('proxim') || lower.includes('camino');
       })
-      .map((r) => {
-        const meta = metaBySku ? metaBySku[r.sku] : null;
-        return {
-          sku: r.sku,
-          descripcion: r.descripcion || meta?.descripcion || '',
-          familia: meta?.familia || '',
-          marca: meta?.marca || '',
-          rdmp: r.rdmp || '',
-        };
-      })
-      .sort((a, b) => (a.rdmp || '').localeCompare(b.rdmp || ''))
-      .slice(0, 12);
-  }, [roadmap, metaBySku]);
+      .map((r) => ({ sku: r.sku, rdmp: r.rdmp, descripcion: r.descripcion || '' }));
+  }, [roadmap]);
 
-  const llegandoPronto = useMemo(() => {
-    const hoy = new Date();
-    const limite30 = new Date(hoy); limite30.setDate(limite30.getDate() + 30);
-    const items = [];
+  // Tránsito agregado por SKU (todos los embarques activos, sin filtro de fecha)
+  const transitoPorSku = useMemo(() => {
+    const map = new Map();
     (embarques || []).forEach((e) => {
       const est = String(e.estatus || '').toLowerCase();
       if (est.includes('cancel') || est.includes('concluido') || est.includes('rechazada') || est.includes('perdida')) return;
-      const etaStr = e.arribo_cedis || e.arribo_almacen || e.eta_puerto || e.eta;
-      if (!etaStr) return;
-      const eta = new Date(etaStr);
-      if (isNaN(eta) || eta < hoy || eta > limite30) return;
-      const yr = eta.getFullYear();
-      if (yr < 2020 || yr > 2030) return;
       const sku = (e.codigo || '').trim();
-      const meta = metaBySku ? metaBySku[sku] : null;
-      items.push({
+      if (!sku) return;
+      const piezas = Number(e.po_qty || 0);
+      const etaStr = e.arribo_cedis || e.arribo_almacen || e.eta_puerto || e.eta;
+      const eta = etaStr ? new Date(etaStr) : null;
+      const yr = eta?.getFullYear();
+      const etaValida = eta && !isNaN(eta) && yr >= 2020 && yr <= 2030 ? eta : null;
+
+      if (!map.has(sku)) {
+        map.set(sku, {
+          totalPiezas: 0,
+          arribos: [],
+        });
+      }
+      const m = map.get(sku);
+      m.totalPiezas += piezas;
+      m.arribos.push({
         po: e.po,
-        sku,
-        eta,
-        piezas: Number(e.po_qty || 0),
-        marca: meta?.marca || null,
-        familia: e.familia || meta?.familia || null,
+        piezas,
+        eta: etaValida,
         supplier: e.supplier,
+        estatus: e.estatus,
       });
     });
-    items.sort((a, b) => a.eta - b.eta);
-    return items.slice(0, 10);
-  }, [embarques, metaBySku]);
+    // Ordenar arribos por ETA ascendente
+    map.forEach((v) => v.arribos.sort((a, b) => {
+      if (!a.eta && !b.eta) return 0;
+      if (!a.eta) return 1;
+      if (!b.eta) return -1;
+      return a.eta - b.eta;
+    }));
+    return map;
+  }, [embarques]);
+
+  // Combinar y filtrar por búsqueda
+  const filtrados = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    return skusNuevos
+      .filter((r) => {
+        if (!q) return true;
+        return (r.sku.toLowerCase().includes(q) ||
+          r.descripcion.toLowerCase().includes(q) ||
+          (r.rdmp || '').toLowerCase().includes(q));
+      })
+      .map((r) => ({
+        ...r,
+        transito: transitoPorSku.get(r.sku) || { totalPiezas: 0, arribos: [] },
+      }))
+      // Ordenar: primero los que TIENEN tránsito (con info para planear),
+      // luego los pendientes de compra (oportunidad de prevender).
+      .sort((a, b) => {
+        if ((a.transito.totalPiezas > 0) !== (b.transito.totalPiezas > 0)) {
+          return a.transito.totalPiezas > 0 ? -1 : 1;
+        }
+        return (a.rdmp || '').localeCompare(b.rdmp || '');
+      });
+  }, [skusNuevos, transitoPorSku, busqueda]);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200">
-      <div className="px-4 py-3 border-b border-gray-100">
-        <h3 className="font-semibold text-gray-800 text-sm flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-amber-500" />
-          Lo nuevo que viene
-        </h3>
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+        <Sparkles className="w-4 h-4 text-amber-500" />
+        <h3 className="font-semibold text-gray-800 text-sm">Lo nuevo que viene</h3>
+        <span className="text-[10px] text-gray-400 ml-auto">
+          {filtrados.length} SKU{filtrados.length !== 1 ? 's' : ''}
+          {filtrados.length !== skusNuevos.length && ` de ${skusNuevos.length}`}
+        </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100">
-        {/* Próximos lanzamientos */}
-        <div className="p-4">
-          <div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-2 flex items-center gap-1">
-            <Sparkles className="w-3 h-3" /> Próximos lanzamientos
-          </div>
-          {proximamente.length === 0 ? (
-            <div className="text-xs text-gray-400 italic">Sin SKUs en roadmap próximamente</div>
-          ) : (
-            <ul className="space-y-1.5">
-              {proximamente.map((r) => (
-                <li key={r.sku} className="text-xs flex items-baseline gap-2">
-                  <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[9px] font-bold shrink-0">
-                    {r.rdmp}
-                  </span>
-                  <span className="font-mono font-semibold text-gray-800 shrink-0">{r.sku}</span>
-                  <span className="text-gray-600 truncate flex-1" title={r.descripcion}>
-                    {r.descripcion || '—'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+      {/* Búsqueda */}
+      <div className="px-3 py-2 border-b border-gray-100 bg-gray-50/40">
+        <div className="relative">
+          <Search className="absolute left-2 top-2 w-3 h-3 text-gray-400" />
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar SKU, descripción o roadmap..."
+            className="w-full pl-7 pr-2 py-1 text-xs border border-gray-200 rounded bg-white"
+          />
         </div>
+      </div>
 
-        {/* Llegando próximos 30 días */}
-        <div className="p-4">
-          <div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-2 flex items-center gap-1">
-            <Truck className="w-3 h-3" /> Llegando próximos 30 días
+      <div className="overflow-y-auto max-h-[60vh]">
+        {filtrados.length === 0 ? (
+          <div className="px-4 py-8 text-center text-xs text-gray-400 italic">
+            Sin productos nuevos en roadmap
           </div>
-          {llegandoPronto.length === 0 ? (
-            <div className="text-xs text-gray-400 italic">Nada llega en los próximos 30 días</div>
-          ) : (
-            <ul className="space-y-1.5">
-              {llegandoPronto.map((p, i) => (
-                <li key={`${p.po}-${p.sku}-${i}`} className="text-xs flex items-baseline gap-2">
-                  <span className="text-blue-700 font-semibold tabular-nums shrink-0 w-10 text-right">
-                    {formatEta(p.eta)}
-                  </span>
-                  <span className="font-mono text-gray-800 shrink-0">{p.sku}</span>
-                  <span className="tabular-nums text-gray-700 shrink-0 w-16 text-right">
-                    {FMT_N(p.piezas)} pz
-                  </span>
-                  <span className="text-gray-500 truncate flex-1 text-right" title={p.supplier}>
-                    {p.supplier || ''}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {filtrados.map((r) => (
+              <SkuNovedadRow key={r.sku} item={r} />
+            ))}
+          </ul>
+        )}
       </div>
     </div>
+  );
+}
+
+function SkuNovedadRow({ item }) {
+  const s = roadmapStyle(item.rdmp);
+  const tieneTransito = item.transito.totalPiezas > 0;
+  const proxArribo = item.transito.arribos.find((a) => a.eta && a.eta >= new Date());
+  return (
+    <li className="px-4 py-2.5 hover:bg-gray-50/60 transition">
+      <div className="flex items-baseline gap-2">
+        <span
+          className="px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0"
+          style={{ backgroundColor: s.bg, color: s.color }}
+        >
+          {item.rdmp}
+        </span>
+        <span className="font-mono font-semibold text-gray-800 text-xs shrink-0">{item.sku}</span>
+        <span className="flex-1 text-xs text-gray-700 truncate" title={item.descripcion}>
+          {item.descripcion || <span className="italic text-gray-400">sin descripción</span>}
+        </span>
+        {tieneTransito ? (
+          <span className="text-[10px] font-bold text-blue-700 tabular-nums shrink-0">
+            {FMT_N(item.transito.totalPiezas)} pzs
+          </span>
+        ) : (
+          <span className="text-[10px] text-amber-600 italic shrink-0">
+            pendiente de comprar
+          </span>
+        )}
+      </div>
+      {/* Detalle de arribos */}
+      {tieneTransito && (
+        <div className="ml-6 mt-1 flex flex-wrap gap-1.5 text-[10px]">
+          {item.transito.arribos.slice(0, 4).map((a, i) => (
+            <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
+              <span className="font-mono">PO-{a.po}</span>
+              <span className="tabular-nums">{FMT_N(a.piezas)}</span>
+              <span className="text-blue-500">→ {formatEta(a.eta)}</span>
+            </span>
+          ))}
+          {item.transito.arribos.length > 4 && (
+            <span className="text-gray-400">+{item.transito.arribos.length - 4} más</span>
+          )}
+          {proxArribo && (
+            <span className="text-emerald-700 font-semibold ml-auto">
+              próximo: {formatEta(proxArribo.eta)}
+            </span>
+          )}
+        </div>
+      )}
+    </li>
   );
 }

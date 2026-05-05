@@ -12,7 +12,6 @@ import TransitoTimeline from './forecast/TransitoTimeline';
 import NovedadesCard from './forecast/NovedadesCard';
 import SolicitudesPanel from './forecast/SolicitudesPanel';
 import SolicitudesModal from './forecast/SolicitudesModal';
-import AlertasCard from './forecast/AlertasCard';
 import NecesidadCard from './forecast/NecesidadCard';
 import { roadmapStyle } from '../../lib/roadmapColors';
 import { useSolicitudes } from './forecast/useSolicitudes';
@@ -64,6 +63,7 @@ function useForecastData() {
     // Whitelist activa de SKUs del Reporte de Resumen Clientes — los únicos
     // SKUs que aparecen en la tabla del Forecast (en el mismo orden).
     reporteSkus: [],
+    cuotas: [],
   });
 
   // Helper paginador (PostgREST corta a 1000)
@@ -113,9 +113,12 @@ function useForecastData() {
       // Whitelist del Reporte: SOLO estos SKUs y en este orden aparecen
       // en el Forecast. Mismo source de verdad que la tabla del Reporte.
       supabase.from('reporte_skus').select('sku, orden').eq('activo', true).order('orden'),
+      // Cuotas mensuales para calcular la necesidad vs cuota en MXN
+      supabase.from('cuotas_mensuales').select('cliente, anio, mes, cuota_min, cuota_ideal')
+        .gte('anio', anioActual - 1),
     ]);
 
-    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes] = queries;
+    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes] = queries;
 
     setState({
       loading: false,
@@ -130,6 +133,7 @@ function useForecastData() {
       solicitudes:   (solRes && solRes.data) || [],
       solicitudLineas: (solLinRes && solLinRes.data) || [],
       reporteSkus:   rsRes.data   || [],
+      cuotas:        cmRes.data   || [],
     });
   };
 
@@ -694,7 +698,11 @@ export default function ForecastClientesTab() {
 
       {/* TARJETAS RESUMEN — fila 1: Necesidad + Tránsito */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <NecesidadCard rows={rowsAll} />
+        <NecesidadCard
+          rows={rowsAll}
+          cuotas={data.cuotas}
+          metaBySku={metaBySku}
+        />
         <TransitoTimeline
           embarques={data.embarques}
           metaBySku={metaBySku}
@@ -733,12 +741,6 @@ export default function ForecastClientesTab() {
         </div>
       )}
 
-      {/* TARJETA DE ALERTAS */}
-      <AlertasCard
-        rows={rowsAll}
-        roadmap={data.roadmap}
-        embarques={data.embarques}
-      />
 
       {/* FILTROS */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-2 flex-wrap">
