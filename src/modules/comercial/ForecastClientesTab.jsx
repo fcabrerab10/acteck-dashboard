@@ -389,17 +389,26 @@ function calcularForecast(data, horizonteMeses) {
     const comprasHistAll = (compraInfo.pos || [])
       .filter((e) => e.fecha_emision)
       .sort((a, b) => String(b.fecha_emision).localeCompare(String(a.fecha_emision)));
-    const comprasHist = comprasHistAll.slice(0, 8).map((e) => ({
-      po: e.po,
-      fecha_emision: e.fecha_emision,
-      arribo_cedis: e.arribo_cedis,
-      eta: e.arribo_almacen || e.eta_puerto || e.eta || null,
-      qty: Number(e.po_qty || 0),
-      contenedores: Number(e.contenedor || 0),
-      unitPriceUsd: Number(e.unit_price || 0),
-      supplier: e.supplier,
-      estatus: e.estatus,
-    }));
+    const comprasHist = comprasHistAll.slice(0, 8).map((e) => {
+      const cntId = (e.contenedor || '').toString().trim();
+      const skusEnCnt = cntId ? (skusPorContenedor.get(cntId)?.size || 1) : 0;
+      const otrosSkusEnCnt = cntId
+        ? Array.from(skusPorContenedor.get(cntId) || []).filter((s) => s !== sku)
+        : [];
+      return {
+        po: e.po,
+        fecha_emision: e.fecha_emision,
+        arribo_cedis: e.arribo_cedis,
+        eta: e.arribo_almacen || e.eta_puerto || e.eta || null,
+        qty: Number(e.po_qty || 0),
+        contenedorId: cntId || null,
+        skusEnCnt,                 // 1 = contenedor lleno solo · >1 = consolidado
+        otrosSkusEnCnt,            // SKUs hermanos que comparten el contenedor
+        unitPriceUsd: Number(e.unit_price || 0),
+        supplier: e.supplier,
+        estatus: e.estatus,
+      };
+    });
 
     // Costo promedio USD del SKU (ponderado por piezas) desde el histórico
     let costoPromUsdNum = 0, costoPromUsdDen = 0;
@@ -1264,7 +1273,7 @@ function ExpandedDetail({ r }) {
         </div>
       </div>
 
-      {/* 4) HISTÓRICO DE COMPRAS — fecha legible + costo USD/u */}
+      {/* 4) HISTÓRICO DE COMPRAS — con detalle de contenedor por compra */}
       <div className="bg-white rounded-lg p-3 border border-gray-200">
         <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2">
           Histórico de compras
@@ -1272,40 +1281,62 @@ function ExpandedDetail({ r }) {
         {(r.comprasHist || []).length === 0 ? (
           <div className="text-xs text-gray-400 italic">Sin historial de compras</div>
         ) : (
-          <div className="text-xs">
-            <table className="w-full">
-              <thead className="text-[10px] text-gray-500 uppercase tracking-wide">
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-1">Fecha</th>
-                  <th className="text-right py-1">Piezas</th>
-                  <th className="text-right py-1">Cnt</th>
-                  <th className="text-right py-1">$/pza</th>
-                  <th className="text-center py-1">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {r.comprasHist.map((c, i) => (
-                  <tr key={i} className="border-b border-gray-50 last:border-0">
-                    <td className="py-1 text-gray-600">{fmtFechaC(c.fecha_emision)}</td>
-                    <td className="py-1 text-right tabular-nums">{FMT_N(c.qty)}</td>
-                    <td className="py-1 text-right tabular-nums text-gray-400">{c.contenedores > 0 ? c.contenedores : '—'}</td>
-                    <td className="py-1 text-right tabular-nums">
-                      {c.unitPriceUsd > 0 ? `$${c.unitPriceUsd.toFixed(2)}` : '—'}
-                    </td>
-                    <td className="py-1 text-center">
+          <div className="text-xs space-y-1.5">
+            {r.comprasHist.map((c, i) => {
+              const consol = c.skusEnCnt > 1;
+              return (
+                <div key={i} className="border border-gray-100 rounded p-2 hover:bg-gray-50/50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-500 tabular-nums shrink-0 w-16">
+                      {fmtFechaC(c.fecha_emision)}
+                    </span>
+                    <span className="font-mono text-[10px] text-gray-400 shrink-0">
+                      PO-{c.po}
+                    </span>
+                    <span className="font-bold tabular-nums shrink-0">
+                      {FMT_N(c.qty)} pzs
+                    </span>
+                    <span className="ml-auto shrink-0 flex items-center gap-1.5">
+                      {c.unitPriceUsd > 0 && (
+                        <span className="tabular-nums text-gray-700">
+                          ${c.unitPriceUsd.toFixed(2)}/u
+                        </span>
+                      )}
                       <span className={[
                         'text-[9px] font-semibold px-1 rounded',
                         c.arribo_cedis ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700',
                       ].join(' ')}>
                         {c.arribo_cedis ? 'recibida' : 'tránsito'}
                       </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </span>
+                  </div>
+                  {/* Detalle de contenedor */}
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
+                    {c.contenedorId ? (
+                      consol ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                          🔗 Consolidado · {c.skusEnCnt} SKUs en contenedor {c.contenedorId}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          📦 1 contenedor lleno · {c.contenedorId}
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-gray-400 italic">sin contenedor asignado</span>
+                    )}
+                    {consol && c.otrosSkusEnCnt.length > 0 && (
+                      <span className="text-gray-500" title={c.otrosSkusEnCnt.join(', ')}>
+                        + {c.otrosSkusEnCnt.slice(0, 3).join(' · ')}
+                        {c.otrosSkusEnCnt.length > 3 && ` +${c.otrosSkusEnCnt.length - 3}`}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
             {r.totalComprasHist > r.comprasHist.length && (
-              <div className="text-[10px] text-gray-400 italic mt-1">
+              <div className="text-[10px] text-gray-400 italic">
                 +{r.totalComprasHist - r.comprasHist.length} compras más
               </div>
             )}
