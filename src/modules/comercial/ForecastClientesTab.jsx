@@ -221,16 +221,26 @@ function calcularForecast(data, horizonteMeses) {
         po: ult.po,
       };
     }
-    // ¿El SKU se considera consolidado? Si alguna de sus POs usa contenedor
-    // compartido, marcar como consolidado.
-    info.esConsolidado = ordenadas.some((e) =>
-      contenedorEsConsolidado((e.contenedor || '').toString().trim()));
-    // Piezas por contenedor: tomar la última PO NO consolidada (representa
-    // un contenedor lleno del SKU). Si todas son consolidadas, queda null.
-    const ultNoConsol = ordenadas.find((e) =>
-      !contenedorEsConsolidado((e.contenedor || '').toString().trim()) && Number(e.po_qty) > 0);
-    if (ultNoConsol) {
-      info.piezasPorContenedor = Math.round(Number(ultNoConsol.po_qty) || 0);
+    // ¿El SKU es consolidado HOY? Lo decide la ÚLTIMA compra, no el
+    // histórico. Si su PO más reciente fue 1 SKU = 1 contenedor solo,
+    // tratamos al SKU como NO consolidado (aunque en algún momento del
+    // pasado lo hayamos consolidado por necesidad).
+    info.esConsolidado = ult ? contenedorEsConsolidado(
+      (ult.contenedor || '').toString().trim()
+    ) : false;
+
+    // Piezas por contenedor: si la última fue NO consolidada, esa es la
+    // referencia (la cantidad que cabe en 1 contenedor lleno). Si fue
+    // consolidada, buscamos hacia atrás la última NO consolidada para tener
+    // una referencia razonable.
+    if (ult && !info.esConsolidado && Number(ult.po_qty) > 0) {
+      info.piezasPorContenedor = Math.round(Number(ult.po_qty) || 0);
+    } else {
+      const ultNoConsol = ordenadas.find((e) =>
+        !contenedorEsConsolidado((e.contenedor || '').toString().trim()) && Number(e.po_qty) > 0);
+      if (ultNoConsol) {
+        info.piezasPorContenedor = Math.round(Number(ultNoConsol.po_qty) || 0);
+      }
     }
   });
 
