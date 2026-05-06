@@ -679,6 +679,31 @@ export default function ForecastClientesTab() {
     }
   };
 
+  // Agregar SKU al roadmap (para tarjeta "Lo nuevo que viene")
+  const onAgregarRoadmap = async (sku, rdmp, descripcion) => {
+    if (!perfil?.es_super_admin) {
+      toast.error('Solo el super admin puede agregar al roadmap');
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('roadmap_sku')
+        .upsert({
+          sku,
+          rdmp,
+          descripcion: descripcion || null,
+        }, { onConflict: 'sku' });
+      if (error) throw error;
+      toast.success(`✓ ${sku} agregado al roadmap como ${rdmp}`);
+      // Recargar para que el SKU desaparezca de "Lo nuevo"
+      await data.reload();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[Forecast] error agregando al roadmap', err);
+      toast.error(`No se pudo agregar al roadmap: ${err?.message || err}`);
+    }
+  };
+
   const rowsAll = useMemo(() => {
     if (data.loading) return [];
     return calcularForecast(data, horizonte);
@@ -931,7 +956,8 @@ export default function ForecastClientesTab() {
         <NovedadesCard
           roadmap={data.roadmap}
           embarques={data.embarques}
-          metaBySku={metaBySku}
+          puedeEditar={!!perfil?.es_super_admin}
+          onAgregarRoadmap={onAgregarRoadmap}
         />
         {puedeVerSol && (
           <SolicitudesPanel
