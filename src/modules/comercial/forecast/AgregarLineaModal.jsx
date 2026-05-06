@@ -1,39 +1,49 @@
 // AgregarLineaModal — al hacer "+" en un SKU de la tabla, abre un modal
 // que pregunta cuánto agregar al borrador.
 //
-// Opciones:
-//   · Por contenedores (1, 2, 3, ...) — multiplica piezas_por_contenedor
+// Muestra info de la última compra real (fecha, piezas, contenedor,
+// consolidado, último costo USD) y permite elegir:
+//   · Por contenedores (1, 2, 3, ...) — usa piezas_por_contenedor del SKU
 //   · Cantidad personalizada (input directo)
 //
-// Si el SKU NO tiene piezas_por_contenedor (no se ha comprado antes),
-// solo permite cantidad personalizada con un mensaje de aviso.
+// Si el SKU es consolidado o no tiene historial, solo permite cantidad
+// personalizada con la información disponible mostrada.
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { X, Package } from 'lucide-react';
 
 const FMT_N = (n) => Math.round(n || 0).toLocaleString('es-MX');
 const FMT_USD = (n) => `$${Math.round(n || 0).toLocaleString('es-MX')}`;
+const MES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+function fmtFechaC(iso) {
+  if (!iso) return '—';
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  if (!y) return iso;
+  return `${d} ${MES_CORTO[m - 1]} ${String(y).slice(2)}`;
+}
 
 export default function AgregarLineaModal({ row, onConfirm, onClose }) {
   const piezasPorCnt = Number(row?.piezasPorContenedor || 0);
   const sugeridoCnt  = Number(row?.contenedoresSugeridos || 0);
   const sugeridoPzs  = Number(row?.sugerido || 0);
-  const tieneCnt = piezasPorCnt > 0;
+  const ultUsd       = Number(row?.ultimoCostoUsd || row?.costoUnitUsd || 0);
+  const ultima       = row?.ultimaCompra || null;
+  // Solo permitimos modo "contenedor" si tenemos pzs/contenedor Y el
+  // SKU NO es consolidado (consolidado = comparte contenedor con otros)
+  const tieneCnt = piezasPorCnt > 0 && !row?.esConsolidado;
 
-  // Modo: 'contenedor' = N contenedores · 'custom' = cantidad libre
   const [modo, setModo] = useState(tieneCnt ? 'contenedor' : 'custom');
   const [contenedores, setContenedores] = useState(Math.max(1, sugeridoCnt));
   const [piezasCustom, setPiezasCustom] = useState(sugeridoPzs > 0 ? sugeridoPzs : '');
   const [enviando, setEnviando] = useState(false);
 
-  // Reset cuando cambia el SKU
   useEffect(() => {
     setModo(tieneCnt ? 'contenedor' : 'custom');
     setContenedores(Math.max(1, sugeridoCnt));
     setPiezasCustom(sugeridoPzs > 0 ? sugeridoPzs : '');
   }, [row?.sku, tieneCnt, sugeridoCnt, sugeridoPzs]);
 
-  // Cantidad final a agregar
   const cantidadFinal = useMemo(() => {
     if (modo === 'contenedor' && tieneCnt) {
       return Math.max(0, Math.round(contenedores)) * piezasPorCnt;
@@ -41,7 +51,7 @@ export default function AgregarLineaModal({ row, onConfirm, onClose }) {
     return Math.max(0, Math.round(Number(piezasCustom) || 0));
   }, [modo, contenedores, piezasCustom, piezasPorCnt, tieneCnt]);
 
-  const valorEstUsd = cantidadFinal * Number(row?.ultimoCostoUsd || row?.costoUnitUsd || 0);
+  const valorEstUsd = cantidadFinal * ultUsd;
 
   if (!row) return null;
 
@@ -81,15 +91,64 @@ export default function AgregarLineaModal({ row, onConfirm, onClose }) {
               {row.descripcion || ''}
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-2 mt-2 text-[11px]">
+
+          {/* Última compra — fecha, piezas, contenedor, consolidado, último costo */}
+          {ultima ? (
+            <div className="mt-2 p-2 bg-white rounded border border-gray-200 text-[11px] space-y-0.5">
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">
+                Última compra
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                <div>
+                  <span className="text-gray-500">Fecha: </span>
+                  <span className="font-semibold tabular-nums">{fmtFechaC(ultima.fecha)}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Piezas: </span>
+                  <span className="font-semibold tabular-nums">{FMT_N(ultima.piezas)}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Contenedor: </span>
+                  {ultima.esConsolidado
+                    ? <span className="font-semibold text-amber-700">consolidado</span>
+                    : <span className="font-semibold text-emerald-700">1 completo</span>}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {ultima.po && (
+                  <div>
+                    <span className="text-gray-500">PO: </span>
+                    <span className="font-mono">{ultima.po}</span>
+                  </div>
+                )}
+                <div>
+                  <span className="text-gray-500">Último costo: </span>
+                  <span className="font-semibold tabular-nums" style={{ color: '#0d9488' }}>
+                    {ultima.costoUsd > 0 ? `$${ultima.costoUsd.toFixed(2)} USD` : (ultUsd > 0 ? `$${ultUsd.toFixed(2)} USD` : '—')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 text-[11px] text-amber-700 italic">
+              ⓘ Sin historial de compras de este SKU
+            </div>
+          )}
+
+          {/* Resumen contenedor del SKU */}
+          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
             <div>
               <div className="text-gray-500">Pzs/contenedor</div>
               <div className="font-semibold tabular-nums">
-                {tieneCnt ? FMT_N(piezasPorCnt) : <span className="text-amber-600 italic">no se ha comprado</span>}
+                {tieneCnt
+                  ? FMT_N(piezasPorCnt)
+                  : (row?.esConsolidado
+                      ? <span className="text-amber-600 italic">consolidado</span>
+                      : <span className="text-amber-600 italic">no se ha llenado contenedor</span>)}
               </div>
             </div>
             <div>
-              <div className="text-gray-500">Sugerido</div>
+              <div className="text-gray-500">Sugerido sistema</div>
               <div className="font-semibold tabular-nums">
                 {sugeridoPzs > 0 ? `${FMT_N(sugeridoPzs)} pzs` : '—'}
                 {sugeridoCnt > 0 && (
@@ -97,50 +156,37 @@ export default function AgregarLineaModal({ row, onConfirm, onClose }) {
                 )}
               </div>
             </div>
-            <div>
-              <div className="text-gray-500">Último costo USD</div>
-              <div className="font-semibold tabular-nums">
-                {row.ultimoCostoUsd > 0 ? `$${Number(row.ultimoCostoUsd).toFixed(2)}` : '—'}
-              </div>
-            </div>
           </div>
-          {row.esConsolidado && (
-            <div className="mt-1.5 text-[10px] text-amber-700 italic">
-              ⓘ Este SKU es consolidado (comparte contenedor con otros SKUs)
-            </div>
-          )}
         </div>
 
         {/* Selector de modo */}
         <div className="p-5 space-y-4">
           {tieneCnt && (
-            <div>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <button
-                  type="button"
-                  onClick={() => setModo('contenedor')}
-                  className={[
-                    'px-3 py-2 rounded-md text-sm font-medium border transition',
-                    modo === 'contenedor'
-                      ? 'bg-emerald-600 border-emerald-600 text-white'
-                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50',
-                  ].join(' ')}
-                >
-                  Por contenedor
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setModo('custom')}
-                  className={[
-                    'px-3 py-2 rounded-md text-sm font-medium border transition',
-                    modo === 'custom'
-                      ? 'bg-blue-600 border-blue-600 text-white'
-                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50',
-                  ].join(' ')}
-                >
-                  Piezas personalizadas
-                </button>
-              </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setModo('contenedor')}
+                className={[
+                  'px-3 py-2 rounded-md text-sm font-medium border transition',
+                  modo === 'contenedor'
+                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50',
+                ].join(' ')}
+              >
+                Por contenedor
+              </button>
+              <button
+                type="button"
+                onClick={() => setModo('custom')}
+                className={[
+                  'px-3 py-2 rounded-md text-sm font-medium border transition',
+                  modo === 'custom'
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50',
+                ].join(' ')}
+              >
+                Piezas personalizadas
+              </button>
             </div>
           )}
 
@@ -201,9 +247,14 @@ export default function AgregarLineaModal({ row, onConfirm, onClose }) {
                   )}
                 </div>
               )}
-              {!tieneCnt && (
+              {row?.esConsolidado && (
                 <div className="text-[10px] text-amber-700 italic mt-1">
-                  Este SKU no tiene historial de compra — no podemos calcular el contenedor automáticamente.
+                  ⓘ Este SKU se manda consolidado (comparte contenedor con otros). Define las piezas que necesitas.
+                </div>
+              )}
+              {!tieneCnt && !row?.esConsolidado && !ultima && (
+                <div className="text-[10px] text-amber-700 italic mt-1">
+                  Sin historial de contenedor lleno — define cantidad manual.
                 </div>
               )}
             </div>

@@ -152,31 +152,85 @@ function calcularForecast(data, horizonteMeses) {
   const metaBySku = Object.fromEntries(metadata.map(r => [r.sku, r]));
   const rmBySku   = Object.fromEntries((roadmap || []).map(r => [r.sku, r]));
 
-  // Histórico de compras por SKU (todas las POs no canceladas, agregadas)
-  // → para piezas_por_contenedor y conteo de contenedores
+  // ── Histórico de compras por SKU + detección de consolidado ──
+  // Modelo de embarques_compras:
+  //   · Cada row = (PO, SKU) único. po_qty = piezas del SKU en esa PO.
+  //   · La columna `contenedor` es el NÚMERO/identificador del contenedor
+  //     (ej. "TXGU6521663"), no la cantidad. Si dos rows con SKUs distintos
+  //     tienen el mismo `contenedor`, ese contenedor es compartido →
+  //     consolidado.
+  //
+  // Para cada SKU calculamos:
+  //   · pos: lista de POs del SKU (no canceladas)
+  //   · piezasPorContenedor: po_qty del último embarque NO consolidado
+  //     (si todas sus POs fueron consolidadas, queda null — no podemos
+  //     definir "1 contenedor lleno del SKU").
+  //   · esConsolidado: true si en alguna PO el contenedor del SKU lleva
+  //     otros SKUs.
+
+  // 1) Mapa contenedor → set(SKUs) para detectar consolidados
+  const skusPorContenedor = new Map();
+  (embarques || []).forEach((e) => {
+    const cnt = (e.contenedor || '').toString().trim();
+    if (!cnt || cnt.toUpperCase() === 'PENDIENTE') return;
+    const sku = (e.codigo || '').trim();
+    if (!sku) return;
+    if (!skusPorContenedor.has(cnt)) skusPorContenedor.set(cnt, new Set());
+    skusPorContenedor.get(cnt).add(sku);
+  });
+  const contenedorEsConsolidado = (cnt) => {
+    if (!cnt) return false;
+    const set = skusPorContenedor.get((cnt || '').toString().trim());
+    return set && set.size > 1;
+  };
+
+  // 2) Agrupar compras por SKU (excluye canceladas/rechazadas)
   const comprasBySku = {};
   (embarques || []).forEach((e) => {
     const sku = (e.codigo || '').trim();
     if (!sku) return;
     const est = (e.estatus || '').toLowerCase();
-    if (est.includes('cancel')) return;
-    if (!comprasBySku[sku]) comprasBySku[sku] = { pos: [], piezasPorContenedor: 0, contadorContenedores: 0 };
+    if (est.includes('cancel') || est.includes('rechaz') || est.includes('perdid')) return;
+    if (!comprasBySku[sku]) {
+      comprasBySku[sku] = {
+        pos: [],
+        piezasPorContenedor: 0,
+        esConsolidado: false,
+        ultimaCompra: null,
+      };
+    }
     comprasBySku[sku].pos.push(e);
   });
-  // Calcular piezas_por_contenedor promedio por SKU (po_qty / contenedor)
+
+  // 3) Calcular piezas_por_contenedor desde la última PO NO consolidada,
+  //    detectar si el SKU es consolidado en general, y guardar última compra
   Object.entries(comprasBySku).forEach(([sku, info]) => {
-    let totalPiezas = 0, totalContenedores = 0;
-    info.pos.forEach((e) => {
-      const qty = Number(e.po_qty || 0);
-      const cnt = Number(e.contenedor || 0);
-      if (qty > 0 && cnt > 0) {
-        totalPiezas += qty;
-        totalContenedores += cnt;
-      }
-    });
-    if (totalContenedores > 0) {
-      info.piezasPorContenedor = Math.round(totalPiezas / totalContenedores);
-      info.contadorContenedores = totalContenedores;
+    const ordenadas = info.pos.slice().sort((a, b) =>
+      String(b.fecha_emision || '').localeCompare(String(a.fecha_emision || '')));
+    // Última PO (cualquiera) — para mostrar info en el modal
+    const ult = ordenadas[0];
+    if (ult) {
+      const cntId = (ult.contenedor || '').toString().trim();
+      const consol = contenedorEsConsolidado(cntId);
+      info.ultimaCompra = {
+        fecha: ult.fecha_emision || null,
+        piezas: Number(ult.po_qty || 0),
+        contenedor: cntId || null,
+        esConsolidado: consol,
+        costoUsd: Number(ult.unit_price || 0),
+        po: ult.po,
+      };
+    }
+    // ¿El SKU se considera consolidado? Si alguna de sus POs usa contenedor
+    // compartido, marcar como consolidado.
+    info.esConsolidado = ordenadas.some((e) =>
+      contenedorEsConsolidado((e.contenedor || '').toString().trim()));
+    // Piezas por contenedor: tomar la última PO NO consolidada (representa
+    // un contenedor lleno del SKU). Si todas son consolidadas, queda null.
+    const ultNoConsol = ordenadas.find((e) =>
+      !contenedorEsConsolidado((e.contenedor || '').toString().trim()) && Number(e.po_qty) > 0);
+    if (ultNoConsol) {
+      info.piezasPorContenedor = Math.round(Number(ultNoConsol.po_qty) || 0);
     }
   });
 
@@ -251,17 +305,16 @@ function calcularForecast(data, horizonteMeses) {
     const bufferUnidades = demandaMesTotal * BUFFER_MESES;
     let sugerido = Math.max(0, brecha + bufferUnidades - traDespuesHor);
 
-    // Redondeo a múltiplo de contenedor (si el SKU tiene capacidad conocida)
+    // Redondeo a múltiplo de contenedor (si el SKU tiene capacidad conocida
+    // y no es consolidado — si es consolidado no se puede definir
+    // "1 contenedor lleno" del SKU, así que dejamos la cantidad como brecha).
     const compraInfo = comprasBySku[sku] || {};
     const piezasPorContenedor = compraInfo.piezasPorContenedor || 0;
+    const esConsolidado = !!compraInfo.esConsolidado;
     let contenedoresSugeridos = 0;
-    let esConsolidado = false;
-    if (sugerido > 0 && piezasPorContenedor > 0) {
+    if (sugerido > 0 && piezasPorContenedor > 0 && !esConsolidado) {
       contenedoresSugeridos = Math.ceil(sugerido / piezasPorContenedor);
       sugerido = contenedoresSugeridos * piezasPorContenedor;
-      // Si la cantidad por contenedor es muy chica vs el contenedor estándar
-      // (~1500-3000), probablemente comparte contenedor → flag consolidado
-      esConsolidado = piezasPorContenedor < 800;
     }
 
     // Canibalización: PCEL y Digitalife ambos tienen demanda
@@ -379,6 +432,7 @@ function calcularForecast(data, horizonteMeses) {
       contenedoresSugeridos,
       esConsolidado,
       tieneCompras: (compraInfo.pos || []).length > 0,
+      ultimaCompra: compraInfo.ultimaCompra || null,
       canibalizacion, preventaDeficit, prorrateo,
       ltDias:     lt?.dias_promedio || null,
       ltMuestras: lt?.muestras || 0,
