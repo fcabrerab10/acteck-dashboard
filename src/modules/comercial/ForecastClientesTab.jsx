@@ -168,9 +168,14 @@ function calcularForecast(data, horizonteMeses) {
   //   · esConsolidado: true si en alguna PO el contenedor del SKU lleva
   //     otros SKUs.
 
-  // 1) Mapa contenedor → set(SKUs) para detectar consolidados
+  // 1) Mapa contenedor → set(SKUs) para detectar consolidados.
+  //    Excluye:
+  //      · Canceladas / rechazadas / perdidas (no son embarques reales).
+  //      · contenedor null o "PENDIENTE" (todavía no se sabe el contenedor).
   const skusPorContenedor = new Map();
   (embarques || []).forEach((e) => {
+    const est = String(e.estatus || '').toLowerCase();
+    if (est.includes('cancel') || est.includes('rechaz') || est.includes('perdid')) return;
     const cnt = (e.contenedor || '').toString().trim();
     if (!cnt || cnt.toUpperCase() === 'PENDIENTE') return;
     const sku = (e.codigo || '').trim();
@@ -178,9 +183,14 @@ function calcularForecast(data, horizonteMeses) {
     if (!skusPorContenedor.has(cnt)) skusPorContenedor.set(cnt, new Set());
     skusPorContenedor.get(cnt).add(sku);
   });
-  const contenedorEsConsolidado = (cnt) => {
+  const contenedorConfirmado = (cnt) => {
     if (!cnt) return false;
-    const set = skusPorContenedor.get((cnt || '').toString().trim());
+    const t = cnt.toString().trim();
+    return t && t.toUpperCase() !== 'PENDIENTE';
+  };
+  const contenedorEsConsolidado = (cnt) => {
+    if (!contenedorConfirmado(cnt)) return false;
+    const set = skusPorContenedor.get(cnt.toString().trim());
     return set && set.size > 1;
   };
 
@@ -207,40 +217,50 @@ function calcularForecast(data, horizonteMeses) {
   Object.entries(comprasBySku).forEach(([sku, info]) => {
     const ordenadas = info.pos.slice().sort((a, b) =>
       String(b.fecha_emision || '').localeCompare(String(a.fecha_emision || '')));
-    // Última PO (cualquiera) — para mostrar info en el modal
+
+    // Última PO (cualquiera, aunque su contenedor esté pendiente) — info
+    // visual del modal.
     const ult = ordenadas[0];
     if (ult) {
       const cntId = (ult.contenedor || '').toString().trim();
-      const consol = contenedorEsConsolidado(cntId);
+      const cntConf = contenedorConfirmado(cntId);
       info.ultimaCompra = {
         fecha: ult.fecha_emision || null,
         piezas: Number(ult.po_qty || 0),
-        contenedor: cntId || null,
-        esConsolidado: consol,
+        contenedor: cntConf ? cntId : null,
+        contenedorPendiente: !cntConf,
+        esConsolidado: cntConf && contenedorEsConsolidado(cntId),
         costoUsd: Number(ult.unit_price || 0),
         po: ult.po,
       };
     }
-    // ¿El SKU es consolidado HOY? Lo decide la ÚLTIMA compra, no el
-    // histórico. Si su PO más reciente fue 1 SKU = 1 contenedor solo,
-    // tratamos al SKU como NO consolidado (aunque en algún momento del
-    // pasado lo hayamos consolidado por necesidad).
-    info.esConsolidado = ult ? contenedorEsConsolidado(
-      (ult.contenedor || '').toString().trim()
-    ) : false;
 
-    // Piezas por contenedor: si la última fue NO consolidada, esa es la
-    // referencia (la cantidad que cabe en 1 contenedor lleno). Si fue
-    // consolidada, buscamos hacia atrás la última NO consolidada para tener
-    // una referencia razonable.
-    if (ult && !info.esConsolidado && Number(ult.po_qty) > 0) {
-      info.piezasPorContenedor = Math.round(Number(ult.po_qty) || 0);
-    } else {
-      const ultNoConsol = ordenadas.find((e) =>
-        !contenedorEsConsolidado((e.contenedor || '').toString().trim()) && Number(e.po_qty) > 0);
-      if (ultNoConsol) {
-        info.piezasPorContenedor = Math.round(Number(ultNoConsol.po_qty) || 0);
+    // Para definir el PATRÓN del SKU (consolidado / pzs por contenedor)
+    // usamos solo POs con contenedor CONFIRMADO. POs en producción cuyo
+    // contenedor aún no se asigna no nos dicen nada del patrón.
+    const ultConf = ordenadas.find((e) =>
+      contenedorConfirmado((e.contenedor || '').toString().trim()));
+    if (ultConf) {
+      const cntId = (ultConf.contenedor || '').toString().trim();
+      info.esConsolidado = contenedorEsConsolidado(cntId);
+      // pzs/contenedor:
+      //   - Si la última confirmada fue NO consolidada → po_qty es 1 contenedor lleno
+      //   - Si fue consolidada → buscar hacia atrás la última NO consolidada
+      if (!info.esConsolidado && Number(ultConf.po_qty) > 0) {
+        info.piezasPorContenedor = Math.round(Number(ultConf.po_qty) || 0);
+      } else {
+        const ultNoConsol = ordenadas.find((e) => {
+          const c = (e.contenedor || '').toString().trim();
+          return contenedorConfirmado(c) && !contenedorEsConsolidado(c) && Number(e.po_qty) > 0;
+        });
+        if (ultNoConsol) {
+          info.piezasPorContenedor = Math.round(Number(ultNoConsol.po_qty) || 0);
+        }
       }
+    } else {
+      // Ningún PO con contenedor confirmado — no podemos inferir el patrón.
+      info.esConsolidado = false;
+      info.piezasPorContenedor = 0;
     }
   });
 
@@ -390,7 +410,9 @@ function calcularForecast(data, horizonteMeses) {
       .filter((e) => e.fecha_emision)
       .sort((a, b) => String(b.fecha_emision).localeCompare(String(a.fecha_emision)));
     const comprasHist = comprasHistAll.slice(0, 8).map((e) => {
-      const cntId = (e.contenedor || '').toString().trim();
+      const cntRaw = (e.contenedor || '').toString().trim();
+      const cntConf = contenedorConfirmado(cntRaw);
+      const cntId = cntConf ? cntRaw : null;
       const skusEnCnt = cntId ? (skusPorContenedor.get(cntId)?.size || 1) : 0;
       const otrosSkusEnCnt = cntId
         ? Array.from(skusPorContenedor.get(cntId) || []).filter((s) => s !== sku)
@@ -401,9 +423,10 @@ function calcularForecast(data, horizonteMeses) {
         arribo_cedis: e.arribo_cedis,
         eta: e.arribo_almacen || e.eta_puerto || e.eta || null,
         qty: Number(e.po_qty || 0),
-        contenedorId: cntId || null,
-        skusEnCnt,                 // 1 = contenedor lleno solo · >1 = consolidado
-        otrosSkusEnCnt,            // SKUs hermanos que comparten el contenedor
+        contenedorId: cntId,           // null si pendiente o sin asignar
+        contenedorPendiente: !cntConf, // explícito para la UI
+        skusEnCnt,                      // 1 = solo · >1 = consolidado · 0 = sin asignar
+        otrosSkusEnCnt,
         unitPriceUsd: Number(e.unit_price || 0),
         supplier: e.supplier,
         estatus: e.estatus,
@@ -1312,7 +1335,11 @@ function ExpandedDetail({ r }) {
                   </div>
                   {/* Detalle de contenedor */}
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
-                    {c.contenedorId ? (
+                    {c.contenedorPendiente ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200 italic">
+                        ⏳ Contenedor pendiente de asignar
+                      </span>
+                    ) : c.contenedorId ? (
                       consol ? (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
                           🔗 Consolidado · {c.skusEnCnt} SKUs en contenedor {c.contenedorId}
