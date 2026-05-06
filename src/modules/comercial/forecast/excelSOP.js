@@ -44,8 +44,11 @@ function parseFecha(iso) {
 }
 
 export async function exportarSolicitudExcel(solicitud, lineas) {
-  // Cargar SheetJS con estilos (community fork compatible con la API de xlsx)
-  const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/+esm');
+  // Cargar SheetJS con estilos (community fork compatible con la API de xlsx).
+  // El bundle ESM exporta como default, así que tomamos esa propiedad
+  // (con fallback al módulo entero por si la API cambia).
+  const mod = await import('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/+esm');
+  const XLSX = mod.default || mod;
 
   // Construir filas: una por línea, o N por línea si tiene envíos
   const filas = [];
