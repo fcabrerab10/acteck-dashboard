@@ -12,6 +12,7 @@ import TransitoTimeline from './forecast/TransitoTimeline';
 import NovedadesCard from './forecast/NovedadesCard';
 import SolicitudesPanel from './forecast/SolicitudesPanel';
 import SolicitudesModal from './forecast/SolicitudesModal';
+import AgregarLineaModal from './forecast/AgregarLineaModal';
 import NecesidadCard from './forecast/NecesidadCard';
 import { roadmapStyle } from '../../lib/roadmapColors';
 import { useSolicitudes } from './forecast/useSolicitudes';
@@ -426,6 +427,8 @@ export default function ForecastClientesTab() {
   const [exportando, setExportando] = useState(false);
   const [borradorActivoId, setBorradorActivoId] = useState(null);
   const [misSolicitudesAbierto, setMisSolicitudesAbierto] = useState(false);
+  // SKU pendiente de agregar — abre el modal de "agregar a solicitud"
+  const [skuParaAgregar, setSkuParaAgregar] = useState(null);
 
   // Permisos:
   //   · puedeEditarSol  → crear/editar/cerrar solicitudes (Fernando)
@@ -445,21 +448,22 @@ export default function ForecastClientesTab() {
     }
   }, [sol.borradores, borradorActivoId]);
 
-  // Agregar SKU a la solicitud — desde el "+" de la tabla
-  const onAgregarSolicitud = async (row) => {
+  // Click en "+" de la tabla → abre el modal de "agregar a solicitud"
+  // donde el usuario elige cuántos contenedores o piezas quiere pedir.
+  const onAgregarSolicitud = (row) => {
     if (!puedeEditarSol) {
       toast.error('No tienes permiso para crear solicitudes de compra.');
       return;
     }
-    if (!row.sugerido || row.sugerido <= 0) {
-      toast.error(`${row.sku} no tiene cantidad sugerida (sugerido = 0)`);
-      return;
-    }
+    setSkuParaAgregar(row);
+  };
+
+  // Confirmación del modal — recibe la cantidad final que el usuario eligió
+  const confirmarAgregarLinea = async (cantidadFinal) => {
+    const row = skuParaAgregar;
+    if (!row || cantidadFinal <= 0) return;
     try {
-      // Decisión del borrador a usar (en orden de preferencia):
-      //   1. El borrador activo seleccionado por el usuario.
-      //   2. El borrador más reciente (sin tener que crear uno nuevo).
-      //   3. Si no hay ninguno, crear uno nuevo.
+      // Borrador a usar (preferencia: activo > más reciente > crear nuevo)
       let solicitudId = borradorActivoId;
       if (!solicitudId && sol.borradores.length > 0) {
         solicitudId = sol.borradores[0].id;
@@ -481,25 +485,30 @@ export default function ForecastClientesTab() {
         const d = new Date(); d.setDate(d.getDate() + Math.round(row.ltDias));
         fechaEstimada = d.toISOString().slice(0, 10);
       }
+      // Calcular contenedores en base a la cantidad final
+      const ppc = Number(row.piezasPorContenedor || 0);
+      const cnts = ppc > 0 ? Math.ceil(cantidadFinal / ppc) : null;
+
       const linea = await sol.agregarLinea(solicitudId, {
         sku: row.sku,
         descripcion: row.descripcion,
-        cantidad: row.sugerido,
+        cantidad: cantidadFinal,
         proveedor: row.supplier || '',
         fecha_estimada: fechaEstimada,
         ultimo_costo_usd: row.ultimoCostoUsd || row.costoUnitUsd || null,
-        piezas_por_contenedor: row.piezasPorContenedor || null,
-        contenedores: row.contenedoresSugeridos || null,
+        piezas_por_contenedor: ppc || null,
+        contenedores: cnts,
         es_consolidado: !!row.esConsolidado,
       });
       if (linea && linea.id) {
-        toast.success(`✓ ${row.sku} agregado al borrador #${solicitudId} (${row.sugerido.toLocaleString('es-MX')} pzs)`);
+        toast.success(`✓ ${row.sku} · ${cantidadFinal.toLocaleString('es-MX')} pzs agregado al borrador #${solicitudId}`);
+        setSkuParaAgregar(null);
       } else {
         toast.error('La línea no se guardó (respuesta vacía de la BD)');
       }
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error('[Forecast] error en onAgregarSolicitud', err);
+      console.error('[Forecast] error en confirmarAgregarLinea', err);
       toast.error(`Error agregando ${row.sku}: ${err?.message || err}`);
     }
   };
@@ -776,6 +785,15 @@ export default function ForecastClientesTab() {
         onEliminarSolicitud={sol.eliminarSolicitud}
       />
 
+      {/* MODAL AGREGAR LÍNEA — selector de contenedores/piezas custom */}
+      {skuParaAgregar && (
+        <AgregarLineaModal
+          row={skuParaAgregar}
+          onClose={() => setSkuParaAgregar(null)}
+          onConfirm={confirmarAgregarLinea}
+        />
+      )}
+
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard icon={AlertTriangle} label="SKUs con brecha" value={kpis.conBrecha} color="#EF4444" />
@@ -1022,12 +1040,16 @@ function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud }) {
           {r.ltDias ? <span className="text-gray-700">{Math.round(r.ltDias)}d</span> : <span className="text-gray-300">?</span>}
         </td>
         <td className="px-2 py-2 text-center">
-          {onAgregarSolicitud && r.sugerido > 0 && (
+          {onAgregarSolicitud && (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onAgregarSolicitud(r); }}
               className="inline-flex items-center justify-center w-6 h-6 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-700 transition"
-              title={`Agregar a solicitud de compra (${FMT_N(r.sugerido)} pzs sugeridas)`}
+              title={
+                r.sugerido > 0
+                  ? `Agregar a solicitud (sugerido: ${FMT_N(r.sugerido)} pzs)`
+                  : 'Agregar a solicitud (cantidad personalizada)'
+              }
             >
               +
             </button>
