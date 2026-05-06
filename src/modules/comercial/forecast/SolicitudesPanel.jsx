@@ -14,6 +14,7 @@ export default function SolicitudesPanel({
   lineasDe,
   activoId,
   setActivoId,
+  puedeEditar = false,
   onCrearNuevo,
   onEditarLinea,
   onEliminarLinea,
@@ -24,12 +25,16 @@ export default function SolicitudesPanel({
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
         <p className="text-xs text-gray-500 mb-2">Sin borradores abiertos</p>
-        <button
-          onClick={onCrearNuevo}
-          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium"
-        >
-          <Plus className="w-3.5 h-3.5" /> Nuevo borrador
-        </button>
+        {puedeEditar ? (
+          <button
+            onClick={onCrearNuevo}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium"
+          >
+            <Plus className="w-3.5 h-3.5" /> Nuevo borrador
+          </button>
+        ) : (
+          <p className="text-[10px] text-gray-400 italic">Solo lectura</p>
+        )}
       </div>
     );
   }
@@ -62,13 +67,15 @@ export default function SolicitudesPanel({
             </button>
           );
         })}
-        <button
-          onClick={onCrearNuevo}
-          className="px-3 py-2 text-xs text-emerald-700 hover:bg-emerald-50 ml-auto whitespace-nowrap"
-          title="Nuevo borrador"
-        >
-          <Plus className="w-3.5 h-3.5 inline" /> Nuevo
-        </button>
+        {puedeEditar && (
+          <button
+            onClick={onCrearNuevo}
+            className="px-3 py-2 text-xs text-emerald-700 hover:bg-emerald-50 ml-auto whitespace-nowrap"
+            title="Nuevo borrador"
+          >
+            <Plus className="w-3.5 h-3.5 inline" /> Nuevo
+          </button>
+        )}
       </div>
 
       {/* Detalle del borrador activo */}
@@ -99,38 +106,50 @@ export default function SolicitudesPanel({
           </div>
         )}
 
-        {/* Footer */}
-        {lineas.length > 0 && (
+        {/* Footer — totales (solo si hay líneas) + acciones */}
+        {puedeEditar && (
           <div className="border-t border-gray-100 mt-3 pt-2 space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-600">Total piezas:</span>
-              <span className="font-bold tabular-nums">{FMT_N(totalPiezas)}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-600">Total USD (estimado):</span>
-              <span className="font-bold tabular-nums text-emerald-700">${FMT_N(totalUsd)}</span>
-            </div>
+            {lineas.length > 0 && (
+              <>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-600">Total piezas:</span>
+                  <span className="font-bold tabular-nums">{FMT_N(totalPiezas)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-600">Total USD (estimado):</span>
+                  <span className="font-bold tabular-nums text-emerald-700">${FMT_N(totalUsd)}</span>
+                </div>
+              </>
+            )}
             <div className="flex gap-2 pt-1.5">
-              <button
-                onClick={() => {
-                  if (confirm('¿Cerrar este borrador como solicitud pendiente?')) {
-                    onCerrar(activo.id);
-                  }
-                }}
-                className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium"
-              >
-                <FileCheck className="w-3.5 h-3.5" /> Cerrar como solicitud
-              </button>
+              {lineas.length > 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm('¿Cerrar este borrador como solicitud pendiente?')) {
+                      onCerrar(activo.id);
+                    }
+                  }}
+                  className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium"
+                >
+                  <FileCheck className="w-3.5 h-3.5" /> Cerrar como solicitud
+                </button>
+              )}
               <button
                 onClick={() => {
                   if (confirm('¿Eliminar este borrador completo?')) {
                     onEliminarSolicitud(activo.id);
                   }
                 }}
-                className="px-2 py-1.5 rounded-md bg-red-50 hover:bg-red-100 text-red-700"
+                className={[
+                  'px-3 py-1.5 rounded-md text-xs font-medium',
+                  lineas.length === 0
+                    ? 'flex-1 bg-red-50 hover:bg-red-100 text-red-700 inline-flex items-center justify-center gap-1'
+                    : 'bg-red-50 hover:bg-red-100 text-red-700',
+                ].join(' ')}
                 title="Eliminar borrador"
               >
                 <Trash2 className="w-3.5 h-3.5" />
+                {lineas.length === 0 && <span>Eliminar borrador vacío</span>}
               </button>
             </div>
           </div>

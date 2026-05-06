@@ -451,44 +451,126 @@ export default function ForecastClientesTab() {
       toast.error('No tienes permiso para crear solicitudes de compra.');
       return;
     }
+    if (!row.sugerido || row.sugerido <= 0) {
+      toast.error(`${row.sku} no tiene cantidad sugerida (sugerido = 0)`);
+      return;
+    }
     try {
-      // Si no hay borrador activo, crear uno
+      // Decisión del borrador a usar (en orden de preferencia):
+      //   1. El borrador activo seleccionado por el usuario.
+      //   2. El borrador más reciente (sin tener que crear uno nuevo).
+      //   3. Si no hay ninguno, crear uno nuevo.
       let solicitudId = borradorActivoId;
+      if (!solicitudId && sol.borradores.length > 0) {
+        solicitudId = sol.borradores[0].id;
+        setBorradorActivoId(solicitudId);
+      }
       if (!solicitudId) {
         const nuevo = await sol.crearBorrador();
+        if (!nuevo || !nuevo.id) {
+          toast.error('No se pudo crear el borrador');
+          return;
+        }
         solicitudId = nuevo.id;
         setBorradorActivoId(solicitudId);
       }
-      // Calcular fecha estimada = hoy + lead_time
+
+      // Fecha estimada = hoy + lead_time
       let fechaEstimada = null;
       if (row.ltDias && row.ltDias > 0) {
         const d = new Date(); d.setDate(d.getDate() + Math.round(row.ltDias));
         fechaEstimada = d.toISOString().slice(0, 10);
       }
-      await sol.agregarLinea(solicitudId, {
+      const linea = await sol.agregarLinea(solicitudId, {
         sku: row.sku,
         descripcion: row.descripcion,
         cantidad: row.sugerido,
         proveedor: row.supplier || '',
         fecha_estimada: fechaEstimada,
-        ultimo_costo_usd: row.costoUnitUsd || null,
+        ultimo_costo_usd: row.ultimoCostoUsd || row.costoUnitUsd || null,
         piezas_por_contenedor: row.piezasPorContenedor || null,
         contenedores: row.contenedoresSugeridos || null,
-        es_consolidado: row.esConsolidado,
+        es_consolidado: !!row.esConsolidado,
       });
-      toast.success(`${row.sku} agregado al borrador #${solicitudId}`);
+      if (linea && linea.id) {
+        toast.success(`✓ ${row.sku} agregado al borrador #${solicitudId} (${row.sugerido.toLocaleString('es-MX')} pzs)`);
+      } else {
+        toast.error('La línea no se guardó (respuesta vacía de la BD)');
+      }
     } catch (err) {
-      toast.error(`Error: ${err.message || err}`);
+      // eslint-disable-next-line no-console
+      console.error('[Forecast] error en onAgregarSolicitud', err);
+      toast.error(`Error agregando ${row.sku}: ${err?.message || err}`);
     }
   };
 
   const onCrearNuevoBorrador = async () => {
-    if (!puedeEditarSol) return;
+    if (!puedeEditarSol) {
+      toast.error('No tienes permiso para crear borradores');
+      return;
+    }
     try {
       const nuevo = await sol.crearBorrador();
-      setBorradorActivoId(nuevo.id);
+      if (nuevo && nuevo.id) {
+        setBorradorActivoId(nuevo.id);
+        toast.success(`Borrador #${nuevo.id} creado`);
+      } else {
+        toast.error('No se pudo crear el borrador');
+      }
     } catch (err) {
-      toast.error(`Error creando borrador: ${err.message || err}`);
+      // eslint-disable-next-line no-console
+      console.error('[Forecast] error creando borrador', err);
+      toast.error(`Error creando borrador: ${err?.message || err}`);
+    }
+  };
+
+  // Eliminar borrador (con manejo de errores)
+  const onEliminarSolicitudWrapped = async (id) => {
+    if (!puedeEditarSol) return;
+    try {
+      await sol.eliminarSolicitud(id);
+      toast.success(`Borrador #${id} eliminado`);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[Forecast] error eliminando borrador', err);
+      toast.error(`No se pudo eliminar: ${err?.message || err}`);
+    }
+  };
+
+  // Eliminar línea (con manejo de errores)
+  const onEliminarLineaWrapped = async (lineaId) => {
+    if (!puedeEditarSol) return;
+    try {
+      await sol.eliminarLinea(lineaId);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[Forecast] error eliminando línea', err);
+      toast.error(`No se pudo eliminar: ${err?.message || err}`);
+    }
+  };
+
+  // Cerrar borrador (con manejo de errores)
+  const onCerrarBorradorWrapped = async (id) => {
+    if (!puedeEditarSol) return;
+    try {
+      await sol.cerrarBorrador(id);
+      toast.success(`Borrador #${id} cerrado como solicitud pendiente`);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[Forecast] error cerrando borrador', err);
+      toast.error(`No se pudo cerrar: ${err?.message || err}`);
+    }
+  };
+
+  // Editar línea (con manejo de errores)
+  const onEditarLineaWrapped = async (lineaId, cambios) => {
+    if (!puedeEditarSol) return;
+    try {
+      await sol.editarLinea(lineaId, cambios);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[Forecast] error editando línea', err);
+      toast.error(`No se pudo editar: ${err?.message || err}`);
     }
   };
 
@@ -743,11 +825,12 @@ export default function ForecastClientesTab() {
             lineasDe={sol.lineasDe}
             activoId={borradorActivoId}
             setActivoId={setBorradorActivoId}
-            onCrearNuevo={puedeEditarSol ? onCrearNuevoBorrador : null}
-            onEditarLinea={puedeEditarSol ? sol.editarLinea : null}
-            onEliminarLinea={puedeEditarSol ? sol.eliminarLinea : null}
-            onCerrar={puedeEditarSol ? sol.cerrarBorrador : null}
-            onEliminarSolicitud={puedeEditarSol ? sol.eliminarSolicitud : null}
+            puedeEditar={puedeEditarSol}
+            onCrearNuevo={onCrearNuevoBorrador}
+            onEditarLinea={onEditarLineaWrapped}
+            onEliminarLinea={onEliminarLineaWrapped}
+            onCerrar={onCerrarBorradorWrapped}
+            onEliminarSolicitud={onEliminarSolicitudWrapped}
           />
         )}
       </div>
