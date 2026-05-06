@@ -85,6 +85,8 @@ export function useSolicitudes(perfil) {
       piezas_por_contenedor: linea.piezas_por_contenedor != null ? Number(linea.piezas_por_contenedor) : null,
       contenedores: linea.contenedores != null ? Number(linea.contenedores) : null,
       es_consolidado: !!linea.es_consolidado,
+      envios: linea.envios || null,
+      grupo_contenedor: linea.grupo_contenedor || null,
       orden,
     };
 

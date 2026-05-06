@@ -8,20 +8,50 @@ export async function exportarSolicitudExcel(solicitud, lineas) {
   // Cargar SheetJS dinámicamente (igual que el resto del proyecto)
   const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
 
-  const filas = (lineas || [])
+  // Explotar líneas con múltiples envíos en filas separadas (Envío 1/N, 2/N, ...)
+  const filas = [];
+  (lineas || [])
     .sort((a, b) => (a.orden || 0) - (b.orden || 0))
-    .map((l) => ({
-      'SKU':                  l.sku,
-      'Descripción':          l.descripcion || '',
-      'Cantidad':             Number(l.cantidad) || 0,
-      'Proveedor':            l.proveedor || '',
-      'Fecha estimada arribo': l.fecha_estimada || '',
-      'Último costo USD':     l.ultimo_costo_usd != null ? Number(l.ultimo_costo_usd) : '',
-      'Total USD':            (Number(l.cantidad) || 0) * (Number(l.ultimo_costo_usd) || 0),
-      'Pzs / contenedor':     l.piezas_por_contenedor || '',
-      'Contenedores':         l.contenedores || '',
-      'Consolidado':          l.es_consolidado ? 'Sí' : '',
-    }));
+    .forEach((l) => {
+      const costo = l.ultimo_costo_usd != null ? Number(l.ultimo_costo_usd) : 0;
+      const tieneEnvios = Array.isArray(l.envios) && l.envios.length > 1;
+      if (tieneEnvios) {
+        const total = l.envios.length;
+        l.envios.forEach((e, i) => {
+          const qty = Number(e.cantidad) || 0;
+          filas.push({
+            'SKU':                  l.sku,
+            'Descripción':          l.descripcion || '',
+            'Envío':                `${i + 1}/${total}`,
+            'Cantidad':             qty,
+            'Proveedor':            l.proveedor || '',
+            'Fecha estimada arribo': e.fecha_estimada || '',
+            'Último costo USD':     costo || '',
+            'Total USD':            qty * costo,
+            'Pzs / contenedor':     l.piezas_por_contenedor || '',
+            'Contenedores':         l.contenedores || '',
+            'Consolidado':          l.es_consolidado ? 'Sí' : '',
+            'Grupo contenedor':     l.grupo_contenedor || '',
+          });
+        });
+      } else {
+        const qty = Number(l.cantidad) || 0;
+        filas.push({
+          'SKU':                  l.sku,
+          'Descripción':          l.descripcion || '',
+          'Envío':                '1/1',
+          'Cantidad':             qty,
+          'Proveedor':            l.proveedor || '',
+          'Fecha estimada arribo': l.fecha_estimada || '',
+          'Último costo USD':     costo || '',
+          'Total USD':            qty * costo,
+          'Pzs / contenedor':     l.piezas_por_contenedor || '',
+          'Contenedores':         l.contenedores || '',
+          'Consolidado':          l.es_consolidado ? 'Sí' : '',
+          'Grupo contenedor':     l.grupo_contenedor || '',
+        });
+      }
+    });
 
   // Total al final
   const totalPiezas = filas.reduce((a, f) => a + Number(f['Cantidad'] || 0), 0);

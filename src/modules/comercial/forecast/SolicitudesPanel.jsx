@@ -5,9 +5,18 @@
 // pasar a estado 'pendiente'.
 
 import React, { useState } from 'react';
-import { Plus, X, FileCheck, Trash2, Edit3 } from 'lucide-react';
+import { Plus, X, FileCheck, Trash2, Edit3, Calendar, Combine } from 'lucide-react';
+import EnviosEditor from './EnviosEditor';
+import GrupoContenedorEditor from './GrupoContenedorEditor';
 
 const FMT_N = (n) => Math.round(n || 0).toLocaleString('es-MX');
+const MES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function fmtFechaC(iso) {
+  if (!iso) return '—';
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  if (!y) return iso;
+  return `${d} ${MES_CORTO[m - 1]} ${String(y).slice(2)}`;
+}
 
 export default function SolicitudesPanel({
   borradores,
@@ -94,11 +103,13 @@ export default function SolicitudesPanel({
             Agrega SKUs con el botón "+" de la tabla principal
           </div>
         ) : (
-          <div className="space-y-1.5 max-h-80 overflow-y-auto">
+          <div className="space-y-1.5 max-h-96 overflow-y-auto">
             {lineas.map((l) => (
               <LineaRow
                 key={l.id}
                 linea={l}
+                lineasDelBorrador={lineas}
+                puedeEditar={puedeEditar}
                 onEditar={onEditarLinea}
                 onEliminar={onEliminarLinea}
               />
@@ -159,8 +170,11 @@ export default function SolicitudesPanel({
   );
 }
 
-function LineaRow({ linea, onEditar, onEliminar }) {
+function LineaRow({ linea, lineasDelBorrador = [], puedeEditar = true, onEditar, onEliminar }) {
   const [editando, setEditando] = useState(false);
+  const [enviosOpen, setEnviosOpen] = useState(false);
+  const [grupoOpen, setGrupoOpen] = useState(false);
+  const tieneEnvios = Array.isArray(linea.envios) && linea.envios.length > 1;
   const [draft, setDraft] = useState({
     cantidad: linea.cantidad || 0,
     proveedor: linea.proveedor || '',
@@ -240,23 +254,97 @@ function LineaRow({ linea, onEditar, onEliminar }) {
         <span className="text-gray-500 truncate flex-1" title={linea.descripcion}>
           {linea.descripcion || ''}
         </span>
-        <button
-          onClick={() => setEditando(true)}
-          className="text-blue-600 hover:bg-blue-50 rounded p-0.5"
-          title="Editar"
-        >
-          <Edit3 className="w-3 h-3" />
-        </button>
-        <button
-          onClick={() => {
-            if (confirm(`¿Eliminar línea de ${linea.sku}?`)) onEliminar(linea.id);
-          }}
-          className="text-red-500 hover:bg-red-50 rounded p-0.5"
-          title="Eliminar"
-        >
-          <X className="w-3 h-3" />
-        </button>
+        {puedeEditar && (
+          <>
+            <button
+              onClick={() => setEnviosOpen(true)}
+              className={[
+                'rounded p-0.5',
+                tieneEnvios
+                  ? 'text-blue-700 bg-blue-50 hover:bg-blue-100'
+                  : 'text-blue-600 hover:bg-blue-50',
+              ].join(' ')}
+              title={tieneEnvios ? `${linea.envios.length} envíos parciales` : 'Dividir en envíos'}
+            >
+              <Calendar className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => setGrupoOpen(true)}
+              className={[
+                'rounded p-0.5',
+                linea.grupo_contenedor
+                  ? 'text-purple-700 bg-purple-50 hover:bg-purple-100'
+                  : 'text-purple-600 hover:bg-purple-50',
+              ].join(' ')}
+              title={linea.grupo_contenedor
+                ? `Grupo contenedor: ${linea.grupo_contenedor}`
+                : 'Agrupar en mismo contenedor'}
+            >
+              <Combine className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => setEditando(true)}
+              className="text-blue-600 hover:bg-blue-50 rounded p-0.5"
+              title="Editar"
+            >
+              <Edit3 className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => {
+                if (confirm(`¿Eliminar línea de ${linea.sku}?`)) onEliminar(linea.id);
+              }}
+              className="text-red-500 hover:bg-red-50 rounded p-0.5"
+              title="Eliminar"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </>
+        )}
       </div>
+
+      {/* Indicadores: envíos divididos / grupo contenedor */}
+      {(tieneEnvios || linea.grupo_contenedor) && (
+        <div className="flex flex-wrap gap-1 mt-1">
+          {tieneEnvios && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
+              📅 {linea.envios.length} envíos · {linea.envios.map((e, i) => `${FMT_N(e.cantidad)}${e.fecha_estimada ? ` (${fmtFechaC(e.fecha_estimada)})` : ''}`).join(' · ')}
+            </span>
+          )}
+          {linea.grupo_contenedor && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700">
+              🔗 Grupo {linea.grupo_contenedor}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* MODAL ENVÍOS */}
+      {enviosOpen && (
+        <EnviosEditor
+          linea={linea}
+          onClose={() => setEnviosOpen(false)}
+          onGuardar={async (cambios) => {
+            await onEditar(linea.id, cambios);
+            setEnviosOpen(false);
+          }}
+        />
+      )}
+
+      {/* MODAL GRUPO CONTENEDOR */}
+      {grupoOpen && (
+        <GrupoContenedorEditor
+          linea={linea}
+          lineasDelBorrador={lineasDelBorrador}
+          onClose={() => setGrupoOpen(false)}
+          onGuardar={async (cambios) => {
+            // cambios = [{id, grupo_contenedor}, ...]
+            for (const c of cambios) {
+              await onEditar(c.id, { grupo_contenedor: c.grupo_contenedor });
+            }
+            setGrupoOpen(false);
+          }}
+        />
+      )}
       <div className="flex items-baseline gap-3 text-[10px] text-gray-500 mt-0.5">
         {linea.proveedor && <span>📦 {linea.proveedor}</span>}
         {linea.fecha_estimada && <span>📅 {linea.fecha_estimada}</span>}
