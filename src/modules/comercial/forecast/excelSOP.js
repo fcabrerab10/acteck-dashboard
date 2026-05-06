@@ -57,15 +57,12 @@ export async function exportarSolicitudExcel(solicitud, lineas) {
     .forEach((l) => {
       const costo = l.ultimo_costo_usd != null ? Number(l.ultimo_costo_usd) : 0;
       const tieneEnvios = Array.isArray(l.envios) && l.envios.length > 1;
-      // # de Contenedores — si es consolidado o tiene grupo, mostrar texto
-      const contenedoresLabel = (() => {
-        if (l.es_consolidado || l.grupo_contenedor) {
-          return l.grupo_contenedor
-            ? `Consolidado (grupo ${l.grupo_contenedor})`
-            : 'Consolidado';
-        }
-        return l.contenedores ? Number(l.contenedores) : '';
-      })();
+      // # de Contenedores — número o "Consolidado".
+      // El campo grupo_contenedor (administración interna) NO se muestra,
+      // ya que compras solo necesita saber si va consolidado o no.
+      const contenedoresLabel = (l.es_consolidado || l.grupo_contenedor)
+        ? 'Consolidado'
+        : (l.contenedores ? Number(l.contenedores) : '');
 
       if (tieneEnvios) {
         const total = l.envios.length;
