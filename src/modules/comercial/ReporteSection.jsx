@@ -524,7 +524,7 @@ function ReporteRow({ r, canEdit, expanded, enRiesgo = false, onToggleExpand, on
       {expanded && (
         <tr className="border-t border-gray-100 bg-blue-50/30">
           <td colSpan={20} className="p-4">
-            <ExpandedDetail sku={r.sku} invTotal={r.invTotal} invDisp={r.invDisp} invApartado={r.invApartado} invPorAlmacen={r.inv} precioAaa={r.precio_aaa} />
+            <ExpandedDetail sku={r.sku} descripcion={r.descripcion} roadmap={r.roadmap} invTotal={r.invTotal} invDisp={r.invDisp} invApartado={r.invApartado} invPorAlmacen={r.inv} precioAaa={r.precio_aaa} />
           </td>
         </tr>
       )}
@@ -588,7 +588,7 @@ function PrecioCell({ valor, esManual, canEdit, tipo, onSave, placeholder }) {
 }
 
 // ────────── Detalle expandido ──────────
-function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, precioAaa }) {
+function ExpandedDetail({ sku, descripcion, roadmap, invTotal, invDisp, invApartado, invPorAlmacen, precioAaa }) {
   const [data, setData] = useState({ loading: true });
 
   useEffect(() => {
@@ -832,6 +832,29 @@ function ExpandedDetail({ sku, invTotal, invDisp, invApartado, invPorAlmacen, pr
 
   return (
     <div className="space-y-3 text-sm">
+      {/* Header: SKU + descripción completa (la descripción de la tabla
+          está truncada — aquí va completa, sin recortar). */}
+      <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <span className="font-mono font-bold text-gray-800 text-sm">{sku}</span>
+          {roadmap && (() => {
+            const s = roadmapStyle(roadmap);
+            return (
+              <span
+                className="px-1.5 py-0.5 rounded text-[10px] font-bold"
+                style={{ backgroundColor: s.bg, color: s.color }}
+              >
+                {roadmap}
+              </span>
+            );
+          })()}
+          <span className="text-[10px] uppercase tracking-wide text-gray-400 ml-2">Descripción</span>
+        </div>
+        <div className="mt-1 text-sm text-gray-800 leading-relaxed">
+          {descripcion || <span className="italic text-gray-400">Sin descripción</span>}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Demanda 3 clientes — piezas + MXN coherente con Resumen Clientes */}
         <div className="bg-white rounded-lg border border-gray-200 p-3">
