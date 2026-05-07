@@ -90,14 +90,9 @@ export default function NovedadesCard({
     return set;
   }, [inventario]);
 
-  // Agrupar arribos ACTIVOS por SKU.
-  // "Activo" significa:
-  //   · estatus NO cancel/rechazada/perdida/concluido (CONCLUIDO ya se
-  //     recibió y no es tránsito), salvo CONCLUIDO que SÍ entra para
-  //     detectar "Llegó al CEDIS" en la sección 1 — pero descartamos
-  //     ETAs muy viejas (datos corruptos o fantasmas de hace años).
-  //   · ETA ≥ 1 ene 2025 (descarta arribos antiguos que quedaron
-  //     abiertos por error de captura).
+  // Agrupar arribos por SKU. Incluimos TODOS los no-cancelados (incl.
+  // CONCLUIDO) con ETA en los últimos ~12 meses; descarta arribos antiguos
+  // que quedaron abiertos por error de captura.
   const arribosPorSku = useMemo(() => {
     const ETA_MIN = new Date('2025-01-01');
     const map = new Map();
@@ -113,11 +108,9 @@ export default function NovedadesCard({
         const yr = eta.getFullYear();
         if (isNaN(eta) || yr < 2020 || yr > 2030) eta = null;
       }
-      // Si la ETA existe pero es muy antigua, ignoramos este arribo:
-      // probablemente es un dato corrupto / olvidado.
+      // Descarta arribos con ETA muy antigua (datos corruptos / olvidados)
       if (eta && eta < ETA_MIN) return;
-      // Si NO tiene eta y el estatus es CONCLUIDO, igual ignorar
-      // (ya recibido, sin fecha confiable).
+      // CONCLUIDO sin ETA confiable → ignoramos (no podemos saber si fue reciente)
       if (!eta && est.includes('concluido')) return;
       if (!map.has(sku)) {
         map.set(sku, { descripcion: e.descripcion || '', familia: e.familia || '', arribos: [] });
@@ -131,6 +124,7 @@ export default function NovedadesCard({
         eta,
         supplier: e.supplier,
         estatus: e.estatus,
+        concluido: est.includes('concluido'),
       });
     });
     map.forEach((v) => v.arribos.sort((a, b) => {
@@ -170,26 +164,49 @@ export default function NovedadesCard({
     };
   };
 
-  // Categorizar SKUs en 3 secciones
+  // Categorizar SKUs en 3 secciones — solo los REALMENTE ACTIVOS:
+  //   · Tiene compras abiertas (PO no concluida) → "Por venir"
+  //   · Solo POs concluidas recientes (60d) + tiene inventario → "Llegaron al CEDIS"
+  //   · Solo inventario, sin POs activas → "Pendientes"
+  //   · Sin nada activo (sin inventario, sin compras abiertas, último
+  //     embarque viejo) → NO aparece (es un SKU descontinuado de facto)
   const { llegadosArr, porVenirArr, pendientesArr } = useMemo(() => {
     const lleg = [];
     const pv = [];
     const pen = [];
+    const ahora = Date.now();
+    const limite60d = ahora - (60 * 86400000);
 
-    // Sección 1 y 2: SKUs en tránsito sin catalogar y sin inventario activo
-    arribosPorSku.forEach((data, sku) => {
+    // Universo de SKUs candidatos: con arribos recientes O con inventario
+    const candidatos = new Set([
+      ...arribosPorSku.keys(),
+      ...skusConInventario,
+    ]);
+
+    candidatos.forEach((sku) => {
       if (skusCatalogados.has(sku) || skusDescartados.has(sku)) return;
-      // Si tiene inventario activo → no es nuevo, va a pendientes (lo manejamos abajo)
-      if (skusConInventario.has(sku)) return;
+      const data = arribosPorSku.get(sku) || { arribos: [] };
+      const tieneInv = skusConInventario.has(sku);
+      // ¿Tiene compras abiertas? (POs no concluidas — siguen llegando)
+      const arribosAbiertos = data.arribos.filter((a) => !a.concluido);
+      // ¿Tiene una llegada reciente concluida? (≤ 60 días)
+      const arribosRecienConcluidos = data.arribos.filter((a) =>
+        a.concluido && a.eta && a.eta.getTime() >= limite60d);
+
       const fila = buildFila(sku);
-      if (llegoAlCedis(data.arribos)) lleg.push(fila);
-      else pv.push(fila);
-    });
 
-    // Sección 3: SKUs con inventario activo, sin roadmap
-    skusConInventario.forEach((sku) => {
-      if (skusCatalogados.has(sku) || skusDescartados.has(sku)) return;
-      pen.push(buildFila(sku));
+      if (arribosAbiertos.length > 0) {
+        // Caso 1: tiene PO en producción / tránsito / etc. → "Por venir"
+        pv.push(fila);
+      } else if (arribosRecienConcluidos.length > 0 && tieneInv) {
+        // Caso 2: ya llegó hace poco y está en bodega → avisar al usuario
+        lleg.push(fila);
+      } else if (tieneInv) {
+        // Caso 3: tiene inventario sin compras nuevas → catalogar
+        pen.push(fila);
+      }
+      // else: sin inventario y sin compras abiertas → SKU descontinuado de
+      // facto, no aparece (este es el caso que Fernando quería excluir).
     });
 
     // Orden default: por fecha de próximo arribo asc; sin fecha al final
@@ -201,7 +218,7 @@ export default function NovedadesCard({
     };
     lleg.sort(orderByEta);
     pv.sort(orderByEta);
-    pen.sort((a, b) => b.inventarioActual - a.inventarioActual); // pendientes por inventario desc
+    pen.sort((a, b) => b.inventarioActual - a.inventarioActual);
 
     return { llegadosArr: lleg, porVenirArr: pv, pendientesArr: pen };
   // eslint-disable-next-line react-hooks/exhaustive-deps
