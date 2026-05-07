@@ -21,13 +21,21 @@ const MES_NOMBRE = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct',
 
 const fmtFechaCorta = (d) => d ? `${d.getDate()} ${MES_NOMBRE[d.getMonth()]} ${String(d.getFullYear()).slice(2)}` : '—';
 
-// Marca derivada del prefijo del SKU + fallback a metadata
+// Marca derivada del prefijo del SKU + fallback a metadata.
+// Prefijos confirmados:
+//   · AC-*, ES-*  → Acteck
+//   · BR-*        → Balam Rush
+//   · MG-*, ZM-*  → DXT Gaming
+const MARCA_POR_PREFIJO = {
+  AC: 'Acteck',
+  ES: 'Acteck',
+  BR: 'Balam Rush',
+  MG: 'DXT Gaming',
+  ZM: 'DXT Gaming',
+};
 function inferirMarca(sku, meta) {
   const prefix = (sku || '').split('-')[0]?.toUpperCase();
-  if (prefix === 'AC') return 'Acteck';
-  if (prefix === 'BR') return 'Balam Rush';
-  if (prefix === 'MG') return 'DXT Gaming';
-  return meta?.marca || '';
+  return MARCA_POR_PREFIJO[prefix] || meta?.marca || '';
 }
 
 const llegoAlCedis = (arribos) =>
