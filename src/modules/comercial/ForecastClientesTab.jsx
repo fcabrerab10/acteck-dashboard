@@ -680,15 +680,16 @@ export default function ForecastClientesTab() {
   };
 
   // Agregar SKU al roadmap + Reporte de Resumen Clientes.
-  //   posicion: 'final-bloque' (default) → después del último SKU del mismo rdmp
-  //             'final-tabla'             → al final de toda la tabla del Reporte
-  const onAgregarRoadmap = async (sku, rdmp, descripcion, posicion = 'final-bloque') => {
+  //   posicion: 'despues'      → exactamente después del SKU `despuesDe` (shift +1 al resto)
+  //             'final-bloque' → al final del bloque del rdmp seleccionado
+  //             'final-tabla'  → al final de toda la tabla
+  const onAgregarRoadmap = async (sku, rdmp, descripcion, posicion = 'final-bloque', despuesDe = null) => {
     if (!perfil?.es_super_admin) {
       toast.error('Solo el super admin puede agregar al roadmap');
       return;
     }
     try {
-      // 1) roadmap_sku: clasificación (rdmp + descripción)
+      // 1) roadmap_sku: clasificación
       const { error: errRm } = await supabase
         .from('roadmap_sku')
         .upsert({
@@ -699,11 +700,34 @@ export default function ForecastClientesTab() {
         }, { onConflict: 'sku' });
       if (errRm) throw errRm;
 
-      // 2) reporte_skus: visibilidad en el Reporte + orden
-      // Calcular el `orden` deseado:
+      // 2) Calcular el orden deseado
       let nuevoOrden = null;
-      if (posicion === 'final-bloque') {
-        // Tomar el orden más alto de los SKUs que ya tienen el mismo rdmp
+      let mensaje = '';
+
+      if (posicion === 'despues' && despuesDe) {
+        // Posicionamiento exacto: justo después del SKU especificado
+        const ref = (data.reporteSkus || []).find((r) => r.sku === despuesDe);
+        if (!ref) {
+          toast.error(`No se encontró el SKU de referencia ${despuesDe}`);
+          return;
+        }
+        const ordenRef = Number(ref.orden || 0);
+        nuevoOrden = ordenRef + 1;
+        // Hacer espacio: shift +1 todos los SKUs con orden > ordenRef
+        // Lo hacemos en orden DESCENDENTE para evitar choques de unique
+        // (si la columna `orden` tuviera índice único). Aquí no lo tiene
+        // pero es mejor práctica.
+        const aShiftear = (data.reporteSkus || [])
+          .filter((r) => Number(r.orden || 0) > ordenRef)
+          .sort((a, b) => Number(b.orden || 0) - Number(a.orden || 0));
+        for (const r of aShiftear) {
+          await supabase
+            .from('reporte_skus')
+            .update({ orden: Number(r.orden) + 1 })
+            .eq('sku', r.sku);
+        }
+        mensaje = `después de ${despuesDe} (orden ${nuevoOrden})`;
+      } else if (posicion === 'final-bloque') {
         const skusDelBloque = (data.roadmap || [])
           .filter((r) => r.rdmp === rdmp && !r.descartado_en)
           .map((r) => r.sku);
@@ -711,15 +735,33 @@ export default function ForecastClientesTab() {
           .filter((r) => skusDelBloque.includes(r.sku))
           .map((r) => Number(r.orden || 0));
         if (ordenesDelBloque.length > 0) {
-          nuevoOrden = Math.max(...ordenesDelBloque) + 1;
+          // Insertar después del último del bloque (también shift)
+          const ultimoOrdenBloque = Math.max(...ordenesDelBloque);
+          nuevoOrden = ultimoOrdenBloque + 1;
+          const aShiftear = (data.reporteSkus || [])
+            .filter((r) => Number(r.orden || 0) > ultimoOrdenBloque)
+            .sort((a, b) => Number(b.orden || 0) - Number(a.orden || 0));
+          for (const r of aShiftear) {
+            await supabase
+              .from('reporte_skus')
+              .update({ orden: Number(r.orden) + 1 })
+              .eq('sku', r.sku);
+          }
+          mensaje = `al final del bloque ${rdmp} (orden ${nuevoOrden})`;
+        } else {
+          // No hay SKUs en ese bloque todavía → al final global
+          const todos = (data.reporteSkus || []).map((r) => Number(r.orden || 0));
+          nuevoOrden = todos.length > 0 ? Math.max(...todos) + 1 : 1;
+          mensaje = `al final (orden ${nuevoOrden}) — primer SKU del bloque ${rdmp}`;
         }
-      }
-      if (nuevoOrden == null) {
-        // Default: al final de toda la tabla
+      } else {
+        // 'final-tabla'
         const todos = (data.reporteSkus || []).map((r) => Number(r.orden || 0));
         nuevoOrden = todos.length > 0 ? Math.max(...todos) + 1 : 1;
+        mensaje = `al final (orden ${nuevoOrden})`;
       }
 
+      // 3) Insertar el nuevo SKU
       const { error: errRs } = await supabase
         .from('reporte_skus')
         .upsert({
@@ -730,7 +772,7 @@ export default function ForecastClientesTab() {
         }, { onConflict: 'sku' });
       if (errRs) throw errRs;
 
-      toast.success(`✓ ${sku} agregado como ${rdmp} · posición ${nuevoOrden} en el Reporte`);
+      toast.success(`✓ ${sku} agregado como ${rdmp} · ${mensaje}`);
       await data.reload();
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -1033,6 +1075,7 @@ export default function ForecastClientesTab() {
           embarques={data.embarques}
           metaBySku={metaBySku}
           inventario={data.inventario}
+          reporteSkus={data.reporteSkus}
           puedeEditar={!!perfil?.es_super_admin}
           onAgregarRoadmap={onAgregarRoadmap}
           onDescartar={onDescartarSku}

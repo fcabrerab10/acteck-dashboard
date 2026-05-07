@@ -50,6 +50,7 @@ export default function NovedadesCard({
   embarques,
   metaBySku,
   inventario,
+  reporteSkus,
   puedeEditar,
   onAgregarRoadmap,
   onDescartar,
@@ -366,9 +367,11 @@ export default function NovedadesCard({
       {skuModal && (
         <AgregarRoadmapModal
           sku={skuModal}
+          reporteSkus={reporteSkus}
+          roadmap={roadmap}
           onClose={() => setSkuModal(null)}
-          onConfirmar={async (rdmp, posicion) => {
-            await onAgregarRoadmap?.(skuModal.sku, rdmp, skuModal.descripcion || '', posicion);
+          onConfirmar={async (rdmp, posicion, despuesDe) => {
+            await onAgregarRoadmap?.(skuModal.sku, rdmp, skuModal.descripcion || '', posicion, despuesDe);
             setSkuModal(null);
           }}
         />
@@ -565,15 +568,43 @@ function FilaSku({ r, tipo, expandido, onToggle, puedeEditar, onAgregar, onDesca
   );
 }
 
-// Modal: selector de rdmp + posición
-function AgregarRoadmapModal({ sku, onClose, onConfirmar }) {
+// Modal: selector de rdmp + posición exacta
+function AgregarRoadmapModal({ sku, reporteSkus = [], roadmap = [], onClose, onConfirmar }) {
   const [rdmp, setRdmp] = useState('RMI');
   const [posicion, setPosicion] = useState('final-bloque');
+  const [skuDespues, setSkuDespues] = useState(null);     // SKU elegido como "después de"
+  const [busquedaSku, setBusquedaSku] = useState('');     // texto del autocomplete
   const [enviando, setEnviando] = useState(false);
+
+  // Mapa SKU → rdmp para mostrar el badge en el autocomplete
+  const rdmpBySku = useMemo(() => Object.fromEntries(
+    (roadmap || []).filter((r) => r.rdmp).map((r) => [r.sku, r])
+  ), [roadmap]);
+
+  // Lista filtrada para autocomplete
+  const sugerencias = useMemo(() => {
+    if (posicion !== 'despues') return [];
+    const q = busquedaSku.trim().toLowerCase();
+    if (!q) return [];
+    return (reporteSkus || [])
+      .filter((r) => r.sku && r.sku.toLowerCase().includes(q))
+      .sort((a, b) => Number(a.orden || 0) - Number(b.orden || 0))
+      .slice(0, 12);
+  }, [reporteSkus, busquedaSku, posicion]);
+
   const confirm = async () => {
     if (!rdmp) return;
+    if (posicion === 'despues' && !skuDespues) {
+      // eslint-disable-next-line no-alert
+      alert('Selecciona un SKU como referencia para "Después de…"');
+      return;
+    }
     setEnviando(true);
-    try { await onConfirmar(rdmp, posicion); } finally { setEnviando(false); }
+    try {
+      await onConfirmar(rdmp, posicion, skuDespues?.sku || null);
+    } finally {
+      setEnviando(false);
+    }
   };
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
@@ -618,21 +649,94 @@ function AgregarRoadmapModal({ sku, onClose, onConfirmar }) {
           <div>
             <div className="text-xs text-gray-600 mb-2 font-semibold">¿Dónde acomodarlo en la tabla del Reporte?</div>
             <div className="grid grid-cols-1 gap-1.5">
+              {/* Después de un SKU específico — el preferido para control fino */}
+              <label className={[
+                'flex items-start gap-2 p-2 rounded border cursor-pointer transition',
+                posicion === 'despues' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300',
+              ].join(' ')}>
+                <input
+                  type="radio" name="pos" value="despues"
+                  checked={posicion === 'despues'}
+                  onChange={(e) => setPosicion(e.target.value)}
+                  className="mt-0.5"
+                />
+                <div className="flex-1">
+                  <div className="text-xs font-semibold text-gray-800">Inmediatamente después de un SKU específico</div>
+                  <div className="text-[10px] text-gray-500">Tú eliges la posición exacta — el SKU queda en el siguiente renglón</div>
+                </div>
+              </label>
+
+              {/* Autocomplete cuando elige "después de" */}
+              {posicion === 'despues' && (
+                <div className="ml-6 space-y-1">
+                  {skuDespues ? (
+                    <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-purple-100 text-purple-800 text-xs">
+                      <Check className="w-3 h-3" />
+                      <span className="font-mono font-semibold">{skuDespues.sku}</span>
+                      <span className="text-purple-600 text-[10px]">orden actual: {skuDespues.orden}</span>
+                      <button
+                        type="button"
+                        onClick={() => { setSkuDespues(null); setBusquedaSku(''); }}
+                        className="ml-auto text-purple-600 hover:text-purple-900"
+                      >
+                        Cambiar
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        value={busquedaSku}
+                        onChange={(e) => setBusquedaSku(e.target.value)}
+                        placeholder="Escribe el SKU (ej. AC-936460)…"
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded"
+                        autoFocus
+                      />
+                      {sugerencias.length > 0 && (
+                        <div className="border border-gray-200 rounded max-h-48 overflow-y-auto bg-white">
+                          {sugerencias.map((s) => {
+                            const r = rdmpBySku[s.sku];
+                            const style = r?.rdmp ? roadmapStyle(r.rdmp) : null;
+                            return (
+                              <button
+                                key={s.sku}
+                                type="button"
+                                onClick={() => { setSkuDespues(s); setBusquedaSku(''); }}
+                                className="w-full flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-purple-50 border-b last:border-b-0 border-gray-100 text-left"
+                              >
+                                {style && (
+                                  <span className="px-1 py-0.5 rounded text-[9px] font-bold shrink-0" style={{ backgroundColor: style.bg, color: style.color }}>
+                                    {r.rdmp}
+                                  </span>
+                                )}
+                                <span className="font-mono font-semibold shrink-0">{s.sku}</span>
+                                <span className="text-gray-400 ml-auto text-[10px]">orden {s.orden}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {busquedaSku.length > 0 && sugerencias.length === 0 && (
+                        <div className="text-[10px] text-gray-400 italic px-2">Sin resultados</div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
               <label className={[
                 'flex items-start gap-2 p-2 rounded border cursor-pointer transition',
                 posicion === 'final-bloque' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300',
               ].join(' ')}>
                 <input
-                  type="radio"
-                  name="pos"
-                  value="final-bloque"
+                  type="radio" name="pos" value="final-bloque"
                   checked={posicion === 'final-bloque'}
                   onChange={(e) => setPosicion(e.target.value)}
                   className="mt-0.5"
                 />
                 <div className="flex-1">
-                  <div className="text-xs font-semibold text-gray-800">Junto a los demás {rdmp}</div>
-                  <div className="text-[10px] text-gray-500">Después del último SKU con el mismo bloque (recomendado)</div>
+                  <div className="text-xs font-semibold text-gray-800">Al final del bloque {rdmp}</div>
+                  <div className="text-[10px] text-gray-500">Después del último SKU con el mismo roadmap</div>
                 </div>
               </label>
               <label className={[
@@ -640,16 +744,14 @@ function AgregarRoadmapModal({ sku, onClose, onConfirmar }) {
                 posicion === 'final-tabla' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300',
               ].join(' ')}>
                 <input
-                  type="radio"
-                  name="pos"
-                  value="final-tabla"
+                  type="radio" name="pos" value="final-tabla"
                   checked={posicion === 'final-tabla'}
                   onChange={(e) => setPosicion(e.target.value)}
                   className="mt-0.5"
                 />
                 <div className="flex-1">
                   <div className="text-xs font-semibold text-gray-800">Al final de toda la tabla</div>
-                  <div className="text-[10px] text-gray-500">Última posición — útil si quieres revisarlo después</div>
+                  <div className="text-[10px] text-gray-500">Última posición global</div>
                 </div>
               </label>
             </div>
