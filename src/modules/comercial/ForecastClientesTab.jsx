@@ -692,15 +692,55 @@ export default function ForecastClientesTab() {
           sku,
           rdmp,
           descripcion: descripcion || null,
+          descartado_en: null, // si estaba descartado, lo recupera con rdmp asignado
         }, { onConflict: 'sku' });
       if (error) throw error;
       toast.success(`✓ ${sku} agregado al roadmap como ${rdmp}`);
-      // Recargar para que el SKU desaparezca de "Lo nuevo"
       await data.reload();
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[Forecast] error agregando al roadmap', err);
       toast.error(`No se pudo agregar al roadmap: ${err?.message || err}`);
+    }
+  };
+
+  // Descartar SKU (oculto de "Lo nuevo" hasta que se recupere)
+  const onDescartarSku = async (sku) => {
+    if (!perfil?.es_super_admin) return;
+    try {
+      const { error } = await supabase
+        .from('roadmap_sku')
+        .upsert({
+          sku,
+          rdmp: null,
+          descartado_en: new Date().toISOString(),
+        }, { onConflict: 'sku' });
+      if (error) throw error;
+      toast.success(`${sku} descartado`);
+      await data.reload();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[Forecast] error descartando', err);
+      toast.error(`No se pudo descartar: ${err?.message || err}`);
+    }
+  };
+
+  // Recuperar SKU descartado (vuelve a aparecer en "Lo nuevo")
+  const onRecuperarSku = async (sku) => {
+    if (!perfil?.es_super_admin) return;
+    try {
+      const { error } = await supabase
+        .from('roadmap_sku')
+        .delete()
+        .eq('sku', sku)
+        .not('descartado_en', 'is', null);
+      if (error) throw error;
+      toast.success(`${sku} recuperado`);
+      await data.reload();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[Forecast] error recuperando', err);
+      toast.error(`No se pudo recuperar: ${err?.message || err}`);
     }
   };
 
@@ -956,8 +996,12 @@ export default function ForecastClientesTab() {
         <NovedadesCard
           roadmap={data.roadmap}
           embarques={data.embarques}
+          metaBySku={metaBySku}
+          inventario={data.inventario}
           puedeEditar={!!perfil?.es_super_admin}
           onAgregarRoadmap={onAgregarRoadmap}
+          onDescartar={onDescartarSku}
+          onRecuperar={onRecuperarSku}
         />
         {puedeVerSol && (
           <SolicitudesPanel
