@@ -90,8 +90,16 @@ export default function NovedadesCard({
     return set;
   }, [inventario]);
 
-  // Agrupar arribos activos por SKU
+  // Agrupar arribos ACTIVOS por SKU.
+  // "Activo" significa:
+  //   · estatus NO cancel/rechazada/perdida/concluido (CONCLUIDO ya se
+  //     recibió y no es tránsito), salvo CONCLUIDO que SÍ entra para
+  //     detectar "Llegó al CEDIS" en la sección 1 — pero descartamos
+  //     ETAs muy viejas (datos corruptos o fantasmas de hace años).
+  //   · ETA ≥ 1 ene 2025 (descarta arribos antiguos que quedaron
+  //     abiertos por error de captura).
   const arribosPorSku = useMemo(() => {
+    const ETA_MIN = new Date('2025-01-01');
     const map = new Map();
     (embarques || []).forEach((e) => {
       const est = String(e.estatus || '').toLowerCase();
@@ -101,8 +109,16 @@ export default function NovedadesCard({
       const piezas = Number(e.po_qty || 0);
       const etaStr = e.arribo_cedis || e.arribo_almacen || e.eta_puerto || e.eta;
       let eta = etaStr ? new Date(etaStr) : null;
-      const yr = eta?.getFullYear();
-      if (eta && (isNaN(eta) || yr < 2020 || yr > 2030)) eta = null;
+      if (eta) {
+        const yr = eta.getFullYear();
+        if (isNaN(eta) || yr < 2020 || yr > 2030) eta = null;
+      }
+      // Si la ETA existe pero es muy antigua, ignoramos este arribo:
+      // probablemente es un dato corrupto / olvidado.
+      if (eta && eta < ETA_MIN) return;
+      // Si NO tiene eta y el estatus es CONCLUIDO, igual ignorar
+      // (ya recibido, sin fecha confiable).
+      if (!eta && est.includes('concluido')) return;
       if (!map.has(sku)) {
         map.set(sku, { descripcion: e.descripcion || '', familia: e.familia || '', arribos: [] });
       }
