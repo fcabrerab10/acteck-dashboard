@@ -26,7 +26,7 @@ const fmtFechaCorta = (d) => d ? `${d.getDate()} ${MES_NOMBRE[d.getMonth()]} ${S
 //   · AC-*, ES-*       → Acteck
 //   · BR-*             → Balam Rush
 //   · MG-*, ZM-*, TG-* → DXT Gaming
-//   · NA-*             → Xtreme PC
+//   · NA-*, RR-*       → Xtreme PC
 const MARCA_POR_PREFIJO = {
   AC: 'Acteck',
   ES: 'Acteck',
@@ -35,6 +35,7 @@ const MARCA_POR_PREFIJO = {
   ZM: 'DXT Gaming',
   TG: 'DXT Gaming',
   NA: 'Xtreme PC',
+  RR: 'Xtreme PC',
 };
 function inferirMarca(sku, meta) {
   const prefix = (sku || '').split('-')[0]?.toUpperCase();
