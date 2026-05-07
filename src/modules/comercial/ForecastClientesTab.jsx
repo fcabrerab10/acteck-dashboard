@@ -679,23 +679,58 @@ export default function ForecastClientesTab() {
     }
   };
 
-  // Agregar SKU al roadmap (para tarjeta "Lo nuevo que viene")
-  const onAgregarRoadmap = async (sku, rdmp, descripcion) => {
+  // Agregar SKU al roadmap + Reporte de Resumen Clientes.
+  //   posicion: 'final-bloque' (default) → después del último SKU del mismo rdmp
+  //             'final-tabla'             → al final de toda la tabla del Reporte
+  const onAgregarRoadmap = async (sku, rdmp, descripcion, posicion = 'final-bloque') => {
     if (!perfil?.es_super_admin) {
       toast.error('Solo el super admin puede agregar al roadmap');
       return;
     }
     try {
-      const { error } = await supabase
+      // 1) roadmap_sku: clasificación (rdmp + descripción)
+      const { error: errRm } = await supabase
         .from('roadmap_sku')
         .upsert({
           sku,
           rdmp,
           descripcion: descripcion || null,
-          descartado_en: null, // si estaba descartado, lo recupera con rdmp asignado
+          descartado_en: null,
         }, { onConflict: 'sku' });
-      if (error) throw error;
-      toast.success(`✓ ${sku} agregado al roadmap como ${rdmp}`);
+      if (errRm) throw errRm;
+
+      // 2) reporte_skus: visibilidad en el Reporte + orden
+      // Calcular el `orden` deseado:
+      let nuevoOrden = null;
+      if (posicion === 'final-bloque') {
+        // Tomar el orden más alto de los SKUs que ya tienen el mismo rdmp
+        const skusDelBloque = (data.roadmap || [])
+          .filter((r) => r.rdmp === rdmp && !r.descartado_en)
+          .map((r) => r.sku);
+        const ordenesDelBloque = (data.reporteSkus || [])
+          .filter((r) => skusDelBloque.includes(r.sku))
+          .map((r) => Number(r.orden || 0));
+        if (ordenesDelBloque.length > 0) {
+          nuevoOrden = Math.max(...ordenesDelBloque) + 1;
+        }
+      }
+      if (nuevoOrden == null) {
+        // Default: al final de toda la tabla
+        const todos = (data.reporteSkus || []).map((r) => Number(r.orden || 0));
+        nuevoOrden = todos.length > 0 ? Math.max(...todos) + 1 : 1;
+      }
+
+      const { error: errRs } = await supabase
+        .from('reporte_skus')
+        .upsert({
+          sku,
+          orden: nuevoOrden,
+          activo: true,
+          created_by: perfil?.id || null,
+        }, { onConflict: 'sku' });
+      if (errRs) throw errRs;
+
+      toast.success(`✓ ${sku} agregado como ${rdmp} · posición ${nuevoOrden} en el Reporte`);
       await data.reload();
     } catch (err) {
       // eslint-disable-next-line no-console

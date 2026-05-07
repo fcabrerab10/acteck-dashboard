@@ -367,8 +367,8 @@ export default function NovedadesCard({
         <AgregarRoadmapModal
           sku={skuModal}
           onClose={() => setSkuModal(null)}
-          onConfirmar={async (rdmp) => {
-            await onAgregarRoadmap?.(skuModal.sku, rdmp, skuModal.descripcion || '');
+          onConfirmar={async (rdmp, posicion) => {
+            await onAgregarRoadmap?.(skuModal.sku, rdmp, skuModal.descripcion || '', posicion);
             setSkuModal(null);
           }}
         />
@@ -565,14 +565,15 @@ function FilaSku({ r, tipo, expandido, onToggle, puedeEditar, onAgregar, onDesca
   );
 }
 
-// Modal: selector de rdmp para agregar al roadmap
+// Modal: selector de rdmp + posición
 function AgregarRoadmapModal({ sku, onClose, onConfirmar }) {
   const [rdmp, setRdmp] = useState('RMI');
+  const [posicion, setPosicion] = useState('final-bloque');
   const [enviando, setEnviando] = useState(false);
   const confirm = async () => {
     if (!rdmp) return;
     setEnviando(true);
-    try { await onConfirmar(rdmp); } finally { setEnviando(false); }
+    try { await onConfirmar(rdmp, posicion); } finally { setEnviando(false); }
   };
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
@@ -590,25 +591,70 @@ function AgregarRoadmapModal({ sku, onClose, onConfirmar }) {
             <span className="text-xs text-gray-500 truncate flex-1" title={sku.descripcion}>{sku.descripcion || ''}</span>
           </div>
         </div>
-        <div className="p-5 space-y-3">
-          <div className="text-xs text-gray-600 mb-2">Elige el bloque del roadmap:</div>
-          <div className="grid grid-cols-2 gap-2">
-            {ROADMAP_ORDER.map((code) => {
-              const s = roadmapStyle(code);
-              const info = roadmapInfo(code);
-              const sel = rdmp === code;
-              return (
-                <button key={code} type="button" onClick={() => setRdmp(code)}
-                  className={['p-2 rounded-md border-2 text-left transition', sel ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'].join(' ')}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor: s.bg, color: s.color }}>{code}</span>
-                    {sel && <Check className="w-3 h-3 text-blue-600 ml-auto" />}
-                  </div>
-                  <div className="text-[10px] text-gray-600 leading-tight">{info.descripcion || ''}</div>
-                </button>
-              );
-            })}
+        <div className="p-5 space-y-4">
+          {/* Bloque del roadmap */}
+          <div>
+            <div className="text-xs text-gray-600 mb-2 font-semibold">Bloque del roadmap:</div>
+            <div className="grid grid-cols-2 gap-2">
+              {ROADMAP_ORDER.map((code) => {
+                const s = roadmapStyle(code);
+                const info = roadmapInfo(code);
+                const sel = rdmp === code;
+                return (
+                  <button key={code} type="button" onClick={() => setRdmp(code)}
+                    className={['p-2 rounded-md border-2 text-left transition', sel ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'].join(' ')}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor: s.bg, color: s.color }}>{code}</span>
+                      {sel && <Check className="w-3 h-3 text-blue-600 ml-auto" />}
+                    </div>
+                    <div className="text-[10px] text-gray-600 leading-tight">{info.descripcion || ''}</div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          {/* Posición en el reporte */}
+          <div>
+            <div className="text-xs text-gray-600 mb-2 font-semibold">¿Dónde acomodarlo en la tabla del Reporte?</div>
+            <div className="grid grid-cols-1 gap-1.5">
+              <label className={[
+                'flex items-start gap-2 p-2 rounded border cursor-pointer transition',
+                posicion === 'final-bloque' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300',
+              ].join(' ')}>
+                <input
+                  type="radio"
+                  name="pos"
+                  value="final-bloque"
+                  checked={posicion === 'final-bloque'}
+                  onChange={(e) => setPosicion(e.target.value)}
+                  className="mt-0.5"
+                />
+                <div className="flex-1">
+                  <div className="text-xs font-semibold text-gray-800">Junto a los demás {rdmp}</div>
+                  <div className="text-[10px] text-gray-500">Después del último SKU con el mismo bloque (recomendado)</div>
+                </div>
+              </label>
+              <label className={[
+                'flex items-start gap-2 p-2 rounded border cursor-pointer transition',
+                posicion === 'final-tabla' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300',
+              ].join(' ')}>
+                <input
+                  type="radio"
+                  name="pos"
+                  value="final-tabla"
+                  checked={posicion === 'final-tabla'}
+                  onChange={(e) => setPosicion(e.target.value)}
+                  className="mt-0.5"
+                />
+                <div className="flex-1">
+                  <div className="text-xs font-semibold text-gray-800">Al final de toda la tabla</div>
+                  <div className="text-[10px] text-gray-500">Última posición — útil si quieres revisarlo después</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} disabled={enviando}
               className="flex-1 px-3 py-2 rounded-md border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium disabled:opacity-50">
