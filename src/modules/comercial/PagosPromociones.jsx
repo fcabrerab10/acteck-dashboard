@@ -164,6 +164,7 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
     monto_total_bolsa:     promoEdicion?.monto_total_bolsa ?? "",
     notas:                 promoEdicion?.notas || "",
     estatus:               promoEdicion?.estatus || "borrador",
+    fuente:                promoEdicion?.fuente || "",
   }));
   const [guardando, setGuardando] = useState(false);
 
@@ -279,6 +280,7 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
       fecha_baja_precio: tipo === "proteccion_precio" ? form.fecha_baja_precio : null,
       inventario_al_momento: tipo === "proteccion_precio" ? (form.inventario_al_momento !== "" ? Number(form.inventario_al_momento) : null) : null,
       monto_total_bolsa: tipo === "bolsa" ? Number(form.monto_total_bolsa) : null,
+      fuente: form.fuente || null,
     };
 
     setGuardando(true);
@@ -314,6 +316,45 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
           <input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })}
             className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
             placeholder="Ej. Promo Hot Sale — Teclados Mecánicos" autoFocus />
+        </Field>
+
+        {/* Fuente de pago — de dónde sale el dinero de esta promoción */}
+        <Field label="¿De dónde sale el dinero? *">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {[
+              { v: "fondo_mkt",     l: "Fondo MKT",     desc: "Descuenta del fondo MKT acumulado",     color: "violet" },
+              { v: "fondo_directo", l: "Fondo Directo", desc: "Descuenta del fondo Directo / Rebate", color: "blue" },
+              { v: "vendor",        l: "Vendor",        desc: "Lo paga el cliente con su dinero",      color: "gray" },
+              { v: "empresa",       l: "Empresa",       desc: "Sale de Revko / Acteck",                color: "emerald" },
+            ].map(opt => {
+              const sel = form.fuente === opt.v;
+              return (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => setForm({ ...form, fuente: opt.v })}
+                  className={`text-left px-3 py-2 rounded-lg border-2 transition-all ${
+                    sel
+                      ? opt.color === "violet" ? "border-violet-500 bg-violet-50"
+                      : opt.color === "blue"   ? "border-blue-500 bg-blue-50"
+                      : opt.color === "gray"   ? "border-gray-500 bg-gray-100"
+                      : "border-emerald-500 bg-emerald-50"
+                      : "border-gray-200 bg-white hover:border-gray-300"
+                  }`}
+                >
+                  <div className={`text-sm font-bold ${
+                    sel
+                      ? opt.color === "violet" ? "text-violet-700"
+                      : opt.color === "blue"   ? "text-blue-700"
+                      : opt.color === "gray"   ? "text-gray-700"
+                      : "text-emerald-700"
+                      : "text-gray-600"
+                  }`}>{opt.l}</div>
+                  <div className="text-[10px] text-gray-500 mt-0.5 leading-tight">{opt.desc}</div>
+                </button>
+              );
+            })}
+          </div>
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
@@ -721,7 +762,7 @@ function SelloutCierreMes({ promo, clienteKey, canEdit, onChange }) {
       const fechaCompromiso = `${nextAnio}-${pad(nextMes)}-15`;
       const concepto = `Sellout ${promo.titulo} — ${MESES_LARGOS[mes-1]} ${anio} — ${piezasPago} pzs × ${formatMXN(promo.monto_por_pieza)}`;
 
-      const { error } = await supabase.from("pagos").insert({
+      const { data: pagoNuevo, error } = await supabase.from("pagos").insert({
         cliente: clienteKey,
         categoria: "promociones",
         concepto,
@@ -733,8 +774,20 @@ function SelloutCierreMes({ promo, clienteKey, canEdit, onChange }) {
         mes_sellout: mes,
         anio_sellout: anio,
         piezas_mes: piezasPago,
-      });
+        fuente: promo.fuente || null,
+      }).select().single();
       if (error) throw error;
+      // Si la promoción tiene fuente=fondo_*, crear el movimiento del ledger
+      if (pagoNuevo && (pagoNuevo.fuente === "fondo_mkt" || pagoNuevo.fuente === "fondo_directo") && Number(monto) > 0 && clienteKey === "pcel") {
+        const tipo_fondo = pagoNuevo.fuente === "fondo_mkt" ? "mkt" : "directo";
+        await supabase.from("fondo_pcel_movimientos").insert([{
+          tipo_fondo, tipo_mov: "gasto",
+          fecha: fechaCompromiso, anio: nextAnio, trimestre: Math.ceil(nextMes / 3),
+          concepto, monto, folio: null,
+          pago_id: pagoNuevo.id,
+          notas: `Generado automáticamente desde Promoción "${promo.titulo}"`,
+        }]);
+      }
       toast.success(`Pago creado: ${formatMXN(monto)} compromiso ${formatFecha(fechaCompromiso)}`);
       // Si con este pago se acabó el inventario inicial, auto-cerrar
       const nuevoAcum = piezasPagadas + piezasPago;
@@ -767,18 +820,30 @@ function SelloutCierreMes({ promo, clienteKey, canEdit, onChange }) {
       const pad = (n) => String(n).padStart(2, "0");
       const fechaCompromiso = `${nextAnio}-${pad(nextMes)}-15`;
 
-      const { error: eIns } = await supabase.from("pagos").insert({
+      const conceptoResto = `Sellout ${promo.titulo} — Resto inventario ${piezasRestantes} pzs × ${formatMXN(promo.monto_por_pieza)}`;
+      const { data: pagoNuevoR, error: eIns } = await supabase.from("pagos").insert({
         cliente: clienteKey,
         categoria: "promociones",
-        concepto: `Sellout ${promo.titulo} — Resto inventario ${piezasRestantes} pzs × ${formatMXN(promo.monto_por_pieza)}`,
+        concepto: conceptoResto,
         monto,
         estatus: "pendiente",
         fecha_compromiso: fechaCompromiso,
         responsable: "Fernando Cabrera",
         promocion_id: promo.id,
         piezas_mes: piezasRestantes, // sin mes/anio_sellout → es "ajuste final"
-      });
+        fuente: promo.fuente || null,
+      }).select().single();
       if (eIns) throw eIns;
+      if (pagoNuevoR && (pagoNuevoR.fuente === "fondo_mkt" || pagoNuevoR.fuente === "fondo_directo") && Number(monto) > 0 && clienteKey === "pcel") {
+        const tipo_fondo = pagoNuevoR.fuente === "fondo_mkt" ? "mkt" : "directo";
+        await supabase.from("fondo_pcel_movimientos").insert([{
+          tipo_fondo, tipo_mov: "gasto",
+          fecha: fechaCompromiso, anio: nextAnio, trimestre: Math.ceil(nextMes / 3),
+          concepto: conceptoResto, monto, folio: null,
+          pago_id: pagoNuevoR.id,
+          notas: `Generado automáticamente desde Promoción "${promo.titulo}" (cierre restante)`,
+        }]);
+      }
       await supabase.from("promociones")
         .update({ cerrada_manual: true, cerrada_at: new Date().toISOString(), estatus: "pagada" })
         .eq("id", promo.id);
