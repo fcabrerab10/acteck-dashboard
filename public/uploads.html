@@ -46,9 +46,9 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const SOURCES = [
-  { id:'erp-acteck', title:'ERP Acteck — Ventas & Inventario', desc:'Archivo único con hojas Vw_TablaH_Ventas + Vw_TablaH_Inventario. Actualiza ventas (upsert incremental) e inventario (replace total) en una sola operación.', file:'Actualizaciones ERP.xlsx',
+  { id:'erp-acteck', title:'ERP Acteck — Facturación & Inventario', desc:'Archivo único con hojas Facturación + Vw_TablaH_Inventario. La hoja Facturación es la fuente canónica de sell-in (cliente×SKU×mes ya pre-filtrado por contabilidad). Reemplaza años 2025+2026 completos en facturacion_clientes y replace total de inventario.', file:'Actualizaciones ERP.xlsx',
     combined: [
-      { table:'ventas_erp', onConflict:'venta_id,venta_renglon', parser:'erpVentas', label:'Ventas' },
+      { table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', label:'Facturación (sell-in canónico)', replaceAnios:[2025,2026] },
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true }
     ]
   },
@@ -65,7 +65,6 @@ const SOURCES = [
   { id:'ec-digitalife', title:'Estado de cuenta · Digitalife', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
   { id:'roadmap-precios', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
   { id:'master-embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
-  { id:'facturacion-clientes', title:'Facturación Clientes (canónica)', desc:'Hoja "Facturación" del Excel Actualizaciones ERP — pivot de cliente×SKU×mes ya pre-filtrado por contabilidad. Despivota y reemplaza el sell-in para mostrar facturación correcta en Resumen Clientes y HomeCliente. Reemplaza años 2025 y 2026 completos en cada subida.', file:'Actualizaciones ERP.xlsx', table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', replaceAnios:[2025,2026] },
 ];
 
 const CHUNK = 200;
@@ -1026,7 +1025,7 @@ async function handleUpload(src){
         appendLog(src, `--- ${sub.label} (${sub.table}) ---`);
         const rows = PARSERS[sub.parser](wb);
         appendLog(src, `Filas parseadas: ${rows.length}`);
-        await postChunks(src, sub.table, sub.onConflict, rows);
+        await postChunks(src, sub.table, sub.onConflict, rows, sub.replaceAnios);
       }
     // Estados de cuenta and Roadmap+Precios have special handling
     } else if (src.parser === 'estadoCuenta') {
@@ -1058,8 +1057,9 @@ async function handleUpload(src){
     }
 
     // Auto-recalculate intermediate tables after certain uploads
+    // (erp-acteck ya no recalcula sell_in_sku ni ventas_mensuales: el sell-in
+    //  ahora viene directo de facturacion_clientes via hoja "Facturación")
     const recalcMap = {
-      'erp-acteck': ['ventas_mensuales', 'sell_in_sku'],
       'digitalife-sellout': ['sellout_sku'],
     };
     const recalcTables = recalcMap[src.id];
