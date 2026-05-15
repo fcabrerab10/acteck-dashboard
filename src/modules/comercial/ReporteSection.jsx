@@ -7,6 +7,7 @@ import { formatMXN } from '../../lib/utils';
 import {
   Search, X, Plus, ChevronDown, ChevronUp, ChevronRight, Trash2,
   Edit3, Package, Filter, FileText, Ship, ShoppingCart, ArrowUp, ArrowDown,
+  Download,
 } from 'lucide-react';
 import { roadmapStyle, roadmapInfo } from '../../lib/roadmapColors';
 import { EAN_SAT_DATA } from '../../lib/eanSatData';
@@ -212,6 +213,73 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
     });
   }, [rows, busqueda, filtroRoadmap, filtroMarca, soloConStock, soloSinEanSat, soloEnRiesgo, skusEnRiesgo]);
 
+  // ── Exportar a Excel ──
+  // Respeta los filtros activos (busqueda, roadmap, marca, soloConStock,
+  // soloSinEanSat, soloEnRiesgo). Carga xlsx dinámicamente para no inflar
+  // el bundle principal.
+  const [exporting, setExporting] = useState(false);
+  async function exportarExcel() {
+    if (filtrados.length === 0) { toast.info('No hay filas que exportar'); return; }
+    setExporting(true);
+    try {
+      const XLSX = await import('xlsx');
+      const wsData = filtrados.map((r) => {
+        const row = {
+          SKU: r.sku,
+          Roadmap: r.roadmap || '',
+          Descripción: r.descripcion || '',
+          Marca: r.marca || '',
+          EAN13: r.ean13 || '',
+          'Código SAT': r.codigo_sat || '',
+        };
+        // Una columna por almacén
+        for (const a of ALMACENES) {
+          row[a.label] = Number(r.invPorColumna[a.key]?.inv || 0);
+        }
+        row['Total'] = Number(r.invTotal || 0);
+        row['Precio AAA'] = r.precio_aaa != null ? Number(r.precio_aaa) : '';
+        row['Descuento'] = r.descuento != null ? Number(r.descuento) : '';
+        row['Precio C/Desc'] = r.precio_descuento != null ? Number(r.precio_descuento) : '';
+        return row;
+      });
+
+      const ws = XLSX.utils.json_to_sheet(wsData);
+      // Auto-fit aproximado del ancho de columnas
+      const colWidths = Object.keys(wsData[0] || {}).map((k) => ({
+        wch: Math.min(50, Math.max(k.length, ...wsData.slice(0, 100).map((r) => String(r[k] ?? '').length)) + 2),
+      }));
+      ws['!cols'] = colWidths;
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
+
+      // Hoja resumen con filtros aplicados (auditable)
+      const filtros = [
+        ['Generado', new Date().toLocaleString('es-MX')],
+        ['Filas exportadas', `${filtrados.length} de ${rows.length}`],
+        ['Búsqueda', busqueda || '(ninguna)'],
+        ['Roadmap', filtroRoadmap === 'todos' ? 'Todos' : filtroRoadmap],
+        ['Marca', filtroMarca === 'todas' ? 'Todas' : filtroMarca],
+        ['Solo con stock', soloConStock ? 'Sí' : 'No'],
+        ['Solo sin EAN/SAT', soloSinEanSat ? 'Sí' : 'No'],
+        ['Solo en riesgo', soloEnRiesgo ? 'Sí' : 'No'],
+      ];
+      const wsFiltros = XLSX.utils.aoa_to_sheet([['Filtros aplicados al exportar'], [], ...filtros]);
+      wsFiltros['!cols'] = [{ wch: 24 }, { wch: 40 }];
+      XLSX.utils.book_append_sheet(wb, wsFiltros, 'Filtros');
+
+      const fechaStr = new Date().toISOString().slice(0, 10);
+      const nombreArchivo = `Reporte_SKUs_${fechaStr}.xlsx`;
+      XLSX.writeFile(wb, nombreArchivo);
+      toast.success(`✓ Exportado: ${filtrados.length} SKUs`);
+    } catch (e) {
+      console.error('exportarExcel error:', e);
+      toast.error('Error al exportar: ' + (e?.message || e));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function eliminarSku(id) {
     if (!canEdit) return;
     if (!confirm('¿Quitar este SKU del reporte?')) return;
@@ -335,6 +403,15 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
                 )}
 
                 <span className="text-xs text-gray-500 ml-auto">{filtrados.length} de {rows.length} SKUs</span>
+
+                <button
+                  onClick={exportarExcel}
+                  disabled={exporting || filtrados.length === 0}
+                  title="Exportar las filas visibles (con filtros aplicados) a Excel"
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium flex items-center gap-1.5 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  <Download className="w-4 h-4" /> {exporting ? 'Generando…' : 'Exportar Excel'}
+                </button>
 
                 {canEdit && (
                   <button onClick={() => setModal({ tipo: 'agregar' })}
