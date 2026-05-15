@@ -881,7 +881,9 @@ const PARSERS = {
     // Mapeo cliente_nombre → cliente_key del dashboard
     const mapearCliente = (nombre) => {
       const n = String(nombre || '').toUpperCase();
-      if (n.includes('API GLOBAL')) return 'digitalife';
+      // Digitalife aparece en el ERP como "CAJADL01" (clave contable) o
+      // "API GLOBAL" (razón social). Soportamos ambos por si cambia el reporte.
+      if (n.includes('CAJADL01') || n.includes('API GLOBAL')) return 'digitalife';
       if (n.includes('PC ONLINE')) return 'pcel';
       if (n.includes('MERCADO LIBRE')) return 'mercadolibre';
       return null;
