@@ -848,9 +848,25 @@ const PARSERS = {
     const sh = wb.Sheets['Facturación'] || wb.Sheets['Facturacion'];
     if (!sh) throw new Error('No se encontró la hoja "Facturación"');
     const arr = XLSX.utils.sheet_to_json(sh, {defval:null, header:1});
-    // Indices 0-based: fila 5 del Excel = arr[4] (años); fila 6 = arr[5] (meses)
-    const aniosRow = arr[4] || [];
-    const mesesRow = arr[5] || [];
+    // Detectar dinámicamente la fila de headers Piezas/Monto (es robusto a que
+    // se agreguen/quiten filas arriba del pivot — p.ej. quitar subtotales).
+    // Luego: meses está justo arriba, años dos arriba, datos justo abajo.
+    let headerRowIdx = -1;
+    for (let r = 0; r < Math.min(20, arr.length); r++) {
+      const row = arr[r] || [];
+      let piezas = 0, monto = 0;
+      for (const v of row) {
+        if (v == null) continue;
+        const s = String(v).trim().toLowerCase();
+        if (s === 'piezas' || s === 'piezas ') piezas++;
+        if (s === 'monto') monto++;
+      }
+      if (piezas >= 2 && monto >= 2) { headerRowIdx = r; break; }
+    }
+    if (headerRowIdx < 2) throw new Error('No se encontró la fila de headers Piezas/Monto en la hoja Facturación');
+    const mesesRow  = arr[headerRowIdx - 1] || [];
+    const aniosRow  = arr[headerRowIdx - 2] || [];
+    const dataStart = headerRowIdx + 1;
 
     // Construir mapa col → (anio, mes). Recorremos mesesRow; cuando hay
     // número 1-12 ahí empieza un par (piezas en esa col, monto en col+1).
@@ -893,10 +909,10 @@ const PARSERS = {
     // Patrón: 2-6 letras mayúsculas + guión + caracteres alfanuméricos
     const SKU_RE = /^[A-Z]{2,8}-[A-Z0-9_]+/;
 
-    // Iterar filas de datos (desde arr[7] = fila 8 del Excel)
+    // Iterar filas de datos desde la fila detectada
     let clienteActual = null;
     const out = [];
-    for (let r = 7; r < arr.length; r++) {
+    for (let r = dataStart; r < arr.length; r++) {
       const row = arr[r];
       if (!row) continue;
       const v = row[0];
