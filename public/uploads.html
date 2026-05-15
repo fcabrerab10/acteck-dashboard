@@ -65,6 +65,7 @@ const SOURCES = [
   { id:'ec-digitalife', title:'Estado de cuenta · Digitalife', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
   { id:'roadmap-precios', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
   { id:'master-embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
+  { id:'facturacion-clientes', title:'Facturación Clientes (canónica)', desc:'Hoja "Facturación" del Excel Actualizaciones ERP — pivot de cliente×SKU×mes ya pre-filtrado por contabilidad. Despivota y reemplaza el sell-in para mostrar facturación correcta en Resumen Clientes y HomeCliente. Reemplaza años 2025 y 2026 completos en cada subida.', file:'Actualizaciones ERP.xlsx', table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', replaceAnios:[2025,2026] },
 ];
 
 const CHUNK = 200;
@@ -839,7 +840,93 @@ const PARSERS = {
       };
     }).filter(r => r.sku);
     return { roadmap, precios };
-  }
+  },
+
+  // Hoja "Facturación" = pivot dinámico de Excel (cliente padre + SKUs hijos
+  // en filas; años/meses en columnas; pares [Piezas, Monto]).
+  // Despivota a tabla normalizada (cliente_nombre, sku, anio, mes, piezas, monto).
+  facturacionClientes(wb){
+    const sh = wb.Sheets['Facturación'] || wb.Sheets['Facturacion'];
+    if (!sh) throw new Error('No se encontró la hoja "Facturación"');
+    const arr = XLSX.utils.sheet_to_json(sh, {defval:null, header:1});
+    // Indices 0-based: fila 5 del Excel = arr[4] (años); fila 6 = arr[5] (meses)
+    const aniosRow = arr[4] || [];
+    const mesesRow = arr[5] || [];
+
+    // Construir mapa col → (anio, mes). Recorremos mesesRow; cuando hay
+    // número 1-12 ahí empieza un par (piezas en esa col, monto en col+1).
+    // El año actual lo determina el último encabezado de año visto en aniosRow.
+    const colMap = [];
+    let anioActual = null;
+    const maxC = Math.max(aniosRow.length, mesesRow.length);
+    for (let c = 0; c < maxC; c++) {
+      const av = aniosRow[c];
+      if (av != null) {
+        const s = String(av).trim();
+        if (/^\d{4}$/.test(s)) {
+          const y = parseInt(s, 10);
+          if (y >= 2020 && y <= 2050) anioActual = y;
+        } else if (typeof av === 'number' && av >= 2020 && av <= 2050) {
+          anioActual = av;
+        } else if (/blanco|total/i.test(s)) {
+          anioActual = null;
+        }
+      }
+      const mv = mesesRow[c];
+      const m = typeof mv === 'number' ? mv : (mv != null && /^\d+$/.test(String(mv).trim()) ? parseInt(mv, 10) : null);
+      if (m && m >= 1 && m <= 12 && anioActual) {
+        colMap.push({ colPzs: c, colMnt: c + 1, anio: anioActual, mes: m });
+      }
+    }
+
+    // Mapeo cliente_nombre → cliente_key del dashboard
+    const mapearCliente = (nombre) => {
+      const n = String(nombre || '').toUpperCase();
+      if (n.includes('API GLOBAL')) return 'digitalife';
+      if (n.includes('PC ONLINE')) return 'pcel';
+      if (n.includes('MERCADO LIBRE')) return 'mercadolibre';
+      return null;
+    };
+
+    // Detectar SKU: típicamente AC-, BR-, ES-, MG-, ZM-, TG-, NA-, RR-, SWDVK-, etc.
+    // Patrón: 2-6 letras mayúsculas + guión + caracteres alfanuméricos
+    const SKU_RE = /^[A-Z]{2,8}-[A-Z0-9_]+/;
+
+    // Iterar filas de datos (desde arr[7] = fila 8 del Excel)
+    let clienteActual = null;
+    const out = [];
+    for (let r = 7; r < arr.length; r++) {
+      const row = arr[r];
+      if (!row) continue;
+      const v = row[0];
+      if (v == null) continue;
+      const s = String(v).trim();
+      if (!s) continue;
+      // Saltar filas de "(en blanco)" y "Total general"
+      if (/^\(en blanco\)$/i.test(s) || /total general/i.test(s)) continue;
+
+      if (SKU_RE.test(s)) {
+        if (!clienteActual) continue;
+        for (const cm of colMap) {
+          const pzs = toNum(row[cm.colPzs]);
+          const mnt = toNum(row[cm.colMnt]);
+          if ((pzs == null || pzs === 0) && (mnt == null || mnt === 0)) continue;
+          out.push({
+            cliente_nombre: clienteActual,
+            cliente_key: mapearCliente(clienteActual),
+            sku: s,
+            anio: cm.anio,
+            mes: cm.mes,
+            piezas: pzs || 0,
+            monto: mnt || 0,
+          });
+        }
+      } else {
+        clienteActual = s;
+      }
+    }
+    return out;
+  },
 };
 
 // ===== Last-updated helpers =====
@@ -964,7 +1051,10 @@ async function handleUpload(src){
     } else {
       const rows = PARSERS[src.parser](wb);
       appendLog(src, `Filas parseadas: ${rows.length}`);
-      await postChunks(src, src.table, src.onConflict, rows);
+
+      // Replace por años: el servidor borra esos años antes del primer chunk
+      // (para que desaparezcan los SKUs que ya no estén en el Excel).
+      await postChunks(src, src.table, src.onConflict, rows, src.replaceAnios);
     }
 
     // Auto-recalculate intermediate tables after certain uploads
@@ -1074,7 +1164,7 @@ async function handleSync(src){
   }
 }
 
-async function postChunks(src, table, onConflict, rows){
+async function postChunks(src, table, onConflict, rows, deleteAnios){
   // Deduplicate: keep last occurrence per conflict key to avoid
   // "ON CONFLICT cannot affect row a second time" errors
   const keys = onConflict.split(',').map(k => k.trim());
@@ -1091,10 +1181,17 @@ async function postChunks(src, table, onConflict, rows){
   let total = 0;
   for (let i=0; i<deduped.length; i+=CHUNK) {
     const batch = deduped.slice(i, i+CHUNK);
+    const payload = {table, onConflict, rows: batch};
+    // Solo en el primer chunk enviamos deleteAnios para que el servidor
+    // borre esos años antes del upsert (replace por año).
+    if (i === 0 && Array.isArray(deleteAnios) && deleteAnios.length > 0) {
+      payload.deleteAnios = deleteAnios;
+      appendLog(src, `  Replace anios: ${deleteAnios.join(', ')} (borrando antes del primer chunk)`);
+    }
     const r = await fetch('/api/import-central', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({table, onConflict, rows: batch})
+      body: JSON.stringify(payload)
     });
     if (!r.ok) {
       const t = await r.text();

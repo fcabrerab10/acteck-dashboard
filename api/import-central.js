@@ -26,7 +26,8 @@ const ALLOWED = {
   catalogo_sku_pcel:     'sku',
   estados_cuenta:        'cliente,anio,semana',
   estados_cuenta_detalle:'id',
-  embarques_compras:     'po,codigo'
+  embarques_compras:     'po,codigo',
+  facturacion_clientes:  'cliente_nombre,sku,anio,mes'
 };
 
 export default async function handler(req, res) {
@@ -34,9 +35,27 @@ export default async function handler(req, res) {
   if (!SRK) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
 
   try {
-    const { table, rows } = req.body || {};
+    const { table, rows, deleteAnios } = req.body || {};
     if (!table || !ALLOWED[table]) return res.status(400).json({ error: 'invalid table. allowed: ' + Object.keys(ALLOWED).join(', ') });
     if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'rows[] required' });
+
+    // Si vienen deleteAnios, borramos esos años de la tabla ANTES del upsert.
+    // Solo aplica al primer chunk del cliente (cliente envía deleteAnios:[...] una vez).
+    if (Array.isArray(deleteAnios) && deleteAnios.length > 0) {
+      for (const a of deleteAnios) {
+        const anio = parseInt(a);
+        if (!anio) continue;
+        const delUrl = `${SB_URL}/rest/v1/${table}?anio=eq.${anio}`;
+        const dr = await fetch(delUrl, {
+          method: 'DELETE',
+          headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, Prefer: 'return=minimal' },
+        });
+        if (!dr.ok) {
+          const txt = await dr.text();
+          return res.status(dr.status).json({ error: 'delete failed', detail: txt.slice(0, 500), anio });
+        }
+      }
+    }
 
     const url = `${SB_URL}/rest/v1/${table}?on_conflict=${ALLOWED[table]}`;
     const r = await fetch(url, {
