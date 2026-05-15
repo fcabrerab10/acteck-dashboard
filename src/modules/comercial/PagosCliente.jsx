@@ -74,7 +74,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [newRow, setNewRow]           = useState({
     folio: "", concepto: "", categoria: "promociones", monto: "",
     estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
-    responsable: "", notas: "",
+    responsable: "", notas: "", fuente: "",
   });
 
   const MESES_ARR = [
@@ -428,6 +428,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [fondoMov, setFondoMov] = useState([]);
   const [fondoLoading, setFondoLoading] = useState(false);
   const [showFondoForm, setShowFondoForm] = useState(false);
+  const [mostrarFondo, setMostrarFondo] = useState(false);  // toggle del ledger en pestaña Pagos
   const [fondoForm, setFondoForm] = useState({
     tipo_fondo: "mkt",
     tipo_mov: "gasto",
@@ -524,6 +525,37 @@ export default function PagosCliente({ cliente, clienteKey }) {
     setShowFondoForm(false);
     setFondoForm({ tipo_fondo: "mkt", tipo_mov: "gasto", fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: "", folio: "", notas: "" });
     flash("✓ Movimiento registrado");
+  };
+
+  // Crear movimiento de fondo a partir de un pago/promo (auto-link por pago_id)
+  const crearMovimientoDesdePago = async (pago) => {
+    const tipo_fondo = pago.fuente === "fondo_mkt" ? "mkt" : "directo";
+    const fecha = pago.fecha_pago_real || pago.fecha_compromiso || new Date().toISOString().slice(0, 10);
+    const d = new Date(fecha + "T00:00:00");
+    const mes = d.getMonth() + 1;
+    const row = {
+      tipo_fondo,
+      tipo_mov: "gasto",
+      fecha,
+      anio: d.getFullYear(),
+      trimestre: Math.ceil(mes / 3),
+      concepto: pago.concepto || "(Sin concepto)",
+      monto: Number(pago.monto) || 0,
+      folio: pago.folio || null,
+      pago_id: pago.id,
+      notas: `Generado automáticamente desde Pago ${pago.categoria} · fuente=${pago.fuente}`,
+    };
+    const { data, error } = await supabase.from("fondo_pcel_movimientos").insert([row]).select();
+    if (error) {
+      console.error("crearMovimientoDesdePago error:", error);
+      flash("⚠ Pago guardado pero no se pudo vincular al fondo");
+      return;
+    }
+    setFondoMov(prev => [...prev, ...(data || [])].sort((a, b) => {
+      if (a.fecha === b.fecha) return a.id - b.id;
+      return a.fecha < b.fecha ? -1 : 1;
+    }));
+    flash(`✓ Pago vinculado al Fondo ${tipo_fondo === "mkt" ? "MKT" : "Directo"}`);
   };
 
   const eliminarMovimientoFondo = async (id) => {
@@ -699,6 +731,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
       monto: parseFloat(newRow.monto) || 0,
       fecha_compromiso: newRow.fecha_compromiso || null,
       fecha_pago_real: newRow.fecha_pago_real || null,
+      fuente: newRow.fuente || null,
     };
     const { data, error } = await supabase.from("pagos").insert(record).select().single();
     if (error) {
@@ -707,9 +740,14 @@ export default function PagosCliente({ cliente, clienteKey }) {
       return;
     }
     setRegistros(prev => [...prev, data]);
+    // Si la fuente es fondo_mkt o fondo_directo (solo PCEL por ahora),
+    // crear el movimiento automáticamente en el ledger del fondo.
+    if (clienteKey === "pcel" && (data.fuente === "fondo_mkt" || data.fuente === "fondo_directo") && data.monto > 0) {
+      await crearMovimientoDesdePago(data);
+    }
     setNewRow({ folio: "", concepto: "", categoria: "promociones", monto: "",
                 estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
-                responsable: "", notas: "" });
+                responsable: "", notas: "", fuente: "" });
     setShowAdd(false);
     flash("Registro agregado ✓");
   };
@@ -761,6 +799,9 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const handleDelete = async (id) => {
     if (!window.confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")) return;
     setRegistros(prev => prev.filter(r => r.id !== id));
+    // Si el pago tenía un movimiento de fondo vinculado, borrarlo también.
+    await supabase.from("fondo_pcel_movimientos").delete().eq("pago_id", id);
+    setFondoMov(prev => prev.filter(m => m.pago_id !== id));
     const { error } = await supabase.from("pagos").delete().eq("id", id);
     if (error) { flash("Error al eliminar: " + error.message, "err"); fetchData(); }
     else flash("Eliminado ✓");
@@ -1259,16 +1300,16 @@ export default function PagosCliente({ cliente, clienteKey }) {
                     <p className="text-xs text-gray-400 mt-1">{Object.values(rebateSynced).filter(Boolean).length} de 4 Qs registrados</p>
                   </div>
                 )}
-                {clienteKey === "pcel" && pcelCalc && (<>
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Rebate Trimestral</p>
-                    <p className="text-2xl font-bold text-blue-600">{pcelCalc.totalRebate > 0 ? "$" + Math.round(pcelCalc.totalRebate).toLocaleString("es-MX") : "$0"}</p>
-                    <p className="text-xs text-gray-400 mt-1">Acumulado {pcelCalc.quarterly.filter(q => q.sellIn > 0).length} trimestre(s)</p>
+                {clienteKey === "pcel" && (<>
+                  <div className="cursor-pointer hover:bg-violet-50 rounded-lg p-2 -m-2 transition-colors" onClick={() => setMostrarFondo(v => !v)} title="Click para ver ledger del fondo">
+                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Fondo MKT</p>
+                    <p className="text-2xl font-bold text-violet-600">{formatMXN(fondoResumen.saldoMkt)}</p>
+                    <p className="text-xs text-gray-400 mt-1">{new Date().getFullYear()}: +{formatMXN(fondoResumen.aporteMktAnio)} · −{formatMXN(fondoResumen.gastoMktAnio)}</p>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Fondo MKT</p>
-                    <p className="text-2xl font-bold text-emerald-600">{pcelCalc.totalFondo > 0 ? "$" + Math.round(pcelCalc.totalFondo).toLocaleString("es-MX") : "$0"}</p>
-                    <p className="text-xs text-gray-400 mt-1">Acumulado sobre Sell In</p>
+                  <div className="cursor-pointer hover:bg-blue-50 rounded-lg p-2 -m-2 transition-colors" onClick={() => setMostrarFondo(v => !v)} title="Click para ver ledger del fondo">
+                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Fondo Directo</p>
+                    <p className="text-2xl font-bold text-blue-600">{formatMXN(fondoResumen.saldoDirecto)}</p>
+                    <p className="text-xs text-gray-400 mt-1">{new Date().getFullYear()}: +{formatMXN(fondoResumen.aporteDirectoAnio)} · −{formatMXN(fondoResumen.gastoDirectoAnio)}</p>
                   </div>
                 </>)}
               </div>
@@ -1624,6 +1665,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       { label: "Categoría *", key: "categoria", type: "select-cat" },
                       { label: "Concepto *",  key: "concepto",  type: "text" },
                       { label: "Monto (MXN)", key: "monto",     type: "number" },
+                      { label: "Fuente de pago", key: "fuente", type: "select-fuente" },
                       { label: "Estatus",     key: "estatus",   type: "select-est" },
                       { label: "F. Compromiso", key: "fecha_compromiso", type: "date" },
                       { label: "F. Pago Real",  key: "fecha_pago_real",  type: "date" },
@@ -1642,6 +1684,15 @@ export default function PagosCliente({ cliente, clienteKey }) {
                           <select value={newRow.estatus} onChange={e => setNewRow(p => ({ ...p, estatus: e.target.value }))}
                             className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
                             {ESTATUS_OPT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        ) : type === "select-fuente" ? (
+                          <select value={newRow.fuente} onChange={e => setNewRow(p => ({ ...p, fuente: e.target.value }))}
+                            className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
+                            <option value="">— Sin asignar —</option>
+                            <option value="fondo_mkt">Fondo MKT</option>
+                            <option value="fondo_directo">Fondo Directo</option>
+                            <option value="vendor">Vendor (cliente paga)</option>
+                            <option value="empresa">Empresa (Revko)</option>
                           </select>
                         ) : (
                           <input type={type} value={newRow[key] || ""} placeholder={key === "monto" ? "0" : key === "folio" ? "Folio del cliente" : ""}
@@ -2561,31 +2612,15 @@ export default function PagosCliente({ cliente, clienteKey }) {
             </div>
           )}
 
-          {/* ═══ Fondo PCEL: Marketing + Directo (ledger) ═══ */}
-          {clienteKey === "pcel" && catActiva === "marketing" && (
-            <div className="space-y-6">
-              {/* KPI cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-violet-500">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Fondo MKT</p>
-                  <p className="text-2xl font-bold text-violet-600">{formatMXN(fondoResumen.saldoMkt)}</p>
-                  <p className="text-xs text-gray-400 mt-1">{new Date().getFullYear()}: +{formatMXN(fondoResumen.aporteMktAnio)} · −{formatMXN(fondoResumen.gastoMktAnio)}</p>
+          {/* ═══ Fondo PCEL: ledger (toggle desde KPI cards) ═══ */}
+          {clienteKey === "pcel" && mostrarFondo && (
+            <div className="space-y-4 mb-6">
+              <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-violet-600" />
+                  <p className="text-sm text-violet-900"><strong>Fondos PCEL</strong> — total aportado {formatMXN(fondoResumen.entradasMkt + fondoResumen.entradasDirecto)} · total gastado {formatMXN(fondoResumen.gastosMkt + fondoResumen.gastosDirecto)}</p>
                 </div>
-                <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-blue-500">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Fondo Directo</p>
-                  <p className="text-2xl font-bold text-blue-600">{formatMXN(fondoResumen.saldoDirecto)}</p>
-                  <p className="text-xs text-gray-400 mt-1">{new Date().getFullYear()}: +{formatMXN(fondoResumen.aporteDirectoAnio)} · −{formatMXN(fondoResumen.gastoDirectoAnio)}</p>
-                </div>
-                <div className="bg-white rounded-2xl shadow-sm p-5">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total aportado (histórico)</p>
-                  <p className="text-2xl font-bold text-emerald-600">{formatMXN(fondoResumen.entradasMkt + fondoResumen.entradasDirecto)}</p>
-                  <p className="text-xs text-gray-400 mt-1">MKT {formatMXN(fondoResumen.entradasMkt)} · Directo {formatMXN(fondoResumen.entradasDirecto)}</p>
-                </div>
-                <div className="bg-white rounded-2xl shadow-sm p-5">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total gastado (histórico)</p>
-                  <p className="text-2xl font-bold text-rose-600">{formatMXN(fondoResumen.gastosMkt + fondoResumen.gastosDirecto)}</p>
-                  <p className="text-xs text-gray-400 mt-1">MKT {formatMXN(fondoResumen.gastosMkt)} · Directo {formatMXN(fondoResumen.gastosDirecto)}</p>
-                </div>
+                <button onClick={() => setMostrarFondo(false)} className="text-xs text-violet-600 hover:text-violet-800 font-semibold">Cerrar ▲</button>
               </div>
 
               {/* Ledger por tipo de fondo */}
