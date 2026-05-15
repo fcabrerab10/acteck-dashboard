@@ -285,14 +285,70 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
 
     setGuardando(true);
     let err;
+    let promoGuardada = null;
     if (promoEdicion) {
       ({ error: err } = await supabase.from("promociones").update(payload).eq("id", promoEdicion.id));
+      promoGuardada = { ...promoEdicion, ...payload };
     } else {
-      ({ error: err } = await supabase.from("promociones").insert(payload));
+      const { data: inserted, error: e2 } = await supabase.from("promociones").insert(payload).select().single();
+      err = e2;
+      promoGuardada = inserted;
     }
     setGuardando(false);
     if (err) return toast.error("No se pudo guardar: " + err.message);
-    toast.success(promoEdicion ? "Promoción actualizada" : `Promoción creada como ${ESTATUS_PROMO[estatusTarget].label.toLowerCase()}`);
+
+    // ── Auto-crear pago + movimiento del fondo para tipos de monto fijo ──
+    // bolsa: monto_total_bolsa es el compromiso total
+    // proteccion_precio: (precio_viejo - precio_nuevo) × inventario_al_momento
+    // sellout / sell_in: NO se auto-crea (se va creando con cerrarMes mensualmente)
+    if (!promoEdicion && promoGuardada && form.fuente && form.fuente !== "vendor") {
+      let montoCompromiso = 0;
+      if (tipo === "bolsa") {
+        montoCompromiso = Number(form.monto_total_bolsa) || 0;
+      } else if (tipo === "proteccion_precio") {
+        const dif = (Number(form.precio_viejo) || 0) - (Number(form.precio_nuevo) || 0);
+        const inv = Number(form.inventario_al_momento) || 0;
+        montoCompromiso = dif > 0 ? dif * inv : 0;
+      }
+      if (montoCompromiso > 0) {
+        const hoy = new Date();
+        const fechaCompromiso = form.fecha_fin || `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+        const conceptoPago = `Promoción ${tipo} — ${form.titulo}`;
+        const { data: pagoNuevo, error: ePago } = await supabase.from("pagos").insert({
+          cliente: clienteKey,
+          categoria: "promociones",
+          concepto: conceptoPago,
+          monto: montoCompromiso,
+          estatus: "pendiente",
+          fecha_compromiso: fechaCompromiso,
+          responsable: "Fernando Cabrera",
+          promocion_id: promoGuardada.id,
+          fuente: form.fuente,
+        }).select().single();
+        if (!ePago && pagoNuevo && form.fuente === "fondo_mkt" && clienteKey === "pcel") {
+          const d = new Date(fechaCompromiso + "T00:00:00");
+          await supabase.from("fondo_pcel_movimientos").insert([{
+            tipo_fondo: "mkt",
+            tipo_mov: "gasto",
+            fecha: fechaCompromiso,
+            anio: d.getFullYear(),
+            trimestre: Math.ceil((d.getMonth() + 1) / 3),
+            concepto: conceptoPago,
+            monto: montoCompromiso,
+            folio: null,
+            pago_id: pagoNuevo.id,
+            notas: `Auto-generado al crear la promoción "${form.titulo}"`,
+          }]);
+          toast.success(`Promoción creada · Fondo MKT descontado ${formatMXN(montoCompromiso)}`);
+        } else if (!ePago) {
+          toast.success(`Promoción creada · Pago de ${formatMXN(montoCompromiso)} registrado`);
+        }
+      }
+    }
+
+    if (promoEdicion) toast.success("Promoción actualizada");
+    else if (!form.fuente || form.fuente === "vendor" || (tipo !== "bolsa" && tipo !== "proteccion_precio"))
+      toast.success(`Promoción creada como ${ESTATUS_PROMO[estatusTarget].label.toLowerCase()}`);
     onSaved && onSaved();
   }
 
@@ -320,12 +376,11 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
 
         {/* Fuente de pago — de dónde sale el dinero de esta promoción */}
         <Field label="¿De dónde sale el dinero? *">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             {[
-              { v: "fondo_mkt",     l: "Fondo MKT",     desc: "Descuenta del fondo MKT acumulado",     color: "violet" },
-              { v: "fondo_directo", l: "Fondo Directo", desc: "Descuenta del fondo Directo / Rebate", color: "blue" },
-              { v: "vendor",        l: "Vendor",        desc: "Lo paga el cliente con su dinero",      color: "gray" },
-              { v: "empresa",       l: "Empresa",       desc: "Sale de Revko / Acteck",                color: "emerald" },
+              { v: "fondo_mkt", l: "Fondo MKT",  desc: "Descuenta del fondo MKT acumulado",   color: "violet" },
+              { v: "vendor",    l: "Vendor",     desc: "Convenio Vendor — lo paga el cliente",color: "gray" },
+              { v: "empresa",   l: "Empresa",    desc: "Sale de Revko / Acteck directo",      color: "emerald" },
             ].map(opt => {
               const sel = form.fuente === opt.v;
               return (
@@ -336,7 +391,6 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
                   className={`text-left px-3 py-2 rounded-lg border-2 transition-all ${
                     sel
                       ? opt.color === "violet" ? "border-violet-500 bg-violet-50"
-                      : opt.color === "blue"   ? "border-blue-500 bg-blue-50"
                       : opt.color === "gray"   ? "border-gray-500 bg-gray-100"
                       : "border-emerald-500 bg-emerald-50"
                       : "border-gray-200 bg-white hover:border-gray-300"
@@ -345,7 +399,6 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
                   <div className={`text-sm font-bold ${
                     sel
                       ? opt.color === "violet" ? "text-violet-700"
-                      : opt.color === "blue"   ? "text-blue-700"
                       : opt.color === "gray"   ? "text-gray-700"
                       : "text-emerald-700"
                       : "text-gray-600"

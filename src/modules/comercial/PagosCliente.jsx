@@ -529,7 +529,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
 
   // Crear movimiento de fondo a partir de un pago/promo (auto-link por pago_id)
   const crearMovimientoDesdePago = async (pago) => {
-    const tipo_fondo = pago.fuente === "fondo_mkt" ? "mkt" : "directo";
+    const tipo_fondo = "mkt";  // solo MKT por ahora (Fondo Directo no se gestiona)
     const fecha = pago.fecha_pago_real || pago.fecha_compromiso || new Date().toISOString().slice(0, 10);
     const d = new Date(fecha + "T00:00:00");
     const mes = d.getMonth() + 1;
@@ -740,9 +740,9 @@ export default function PagosCliente({ cliente, clienteKey }) {
       return;
     }
     setRegistros(prev => [...prev, data]);
-    // Si la fuente es fondo_mkt o fondo_directo (solo PCEL por ahora),
+    // Si la fuente es fondo_mkt (solo PCEL por ahora),
     // crear el movimiento automáticamente en el ledger del fondo.
-    if (clienteKey === "pcel" && (data.fuente === "fondo_mkt" || data.fuente === "fondo_directo") && data.monto > 0) {
+    if (clienteKey === "pcel" && data.fuente === "fondo_mkt" && data.monto > 0) {
       await crearMovimientoDesdePago(data);
     }
     setNewRow({ folio: "", concepto: "", categoria: "promociones", monto: "",
@@ -1262,7 +1262,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Resumen de Pagos 2026</h3>
                 <span className="text-xs text-gray-400">{registros.length} registros</span>
               </div>
-              <div className={"grid grid-cols-2 gap-x-6 gap-y-5 " + (clienteKey === "pcel" && pcelCalc ? "md:grid-cols-5" : "md:grid-cols-4")}>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-5 md:grid-cols-4">
                 <div>
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Pagado</p>
                   <p className="text-2xl font-bold text-green-600">{totalPagado > 0 ? formatMXN(totalPagado) : "$0"}</p>
@@ -1300,18 +1300,13 @@ export default function PagosCliente({ cliente, clienteKey }) {
                     <p className="text-xs text-gray-400 mt-1">{Object.values(rebateSynced).filter(Boolean).length} de 4 Qs registrados</p>
                   </div>
                 )}
-                {clienteKey === "pcel" && (<>
+                {clienteKey === "pcel" && (
                   <div className="cursor-pointer hover:bg-violet-50 rounded-lg p-2 -m-2 transition-colors" onClick={() => setMostrarFondo(v => !v)} title="Click para ver ledger del fondo">
                     <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Fondo MKT</p>
                     <p className="text-2xl font-bold text-violet-600">{formatMXN(fondoResumen.saldoMkt)}</p>
                     <p className="text-xs text-gray-400 mt-1">{new Date().getFullYear()}: +{formatMXN(fondoResumen.aporteMktAnio)} · −{formatMXN(fondoResumen.gastoMktAnio)}</p>
                   </div>
-                  <div className="cursor-pointer hover:bg-blue-50 rounded-lg p-2 -m-2 transition-colors" onClick={() => setMostrarFondo(v => !v)} title="Click para ver ledger del fondo">
-                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Fondo Directo</p>
-                    <p className="text-2xl font-bold text-blue-600">{formatMXN(fondoResumen.saldoDirecto)}</p>
-                    <p className="text-xs text-gray-400 mt-1">{new Date().getFullYear()}: +{formatMXN(fondoResumen.aporteDirectoAnio)} · −{formatMXN(fondoResumen.gastoDirectoAnio)}</p>
-                  </div>
-                </>)}
+                )}
               </div>
             </div>
 
@@ -1690,8 +1685,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                             className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
                             <option value="">— Sin asignar —</option>
                             <option value="fondo_mkt">Fondo MKT</option>
-                            <option value="fondo_directo">Fondo Directo</option>
-                            <option value="vendor">Vendor (cliente paga)</option>
+                            <option value="vendor">Vendor (convenio cliente)</option>
                             <option value="empresa">Empresa (Revko)</option>
                           </select>
                         ) : (
