@@ -423,6 +423,120 @@ export default function PagosCliente({ cliente, clienteKey }) {
       if (data) setPcelPagosReg(data);
     })();
   }, [clienteKey]);
+
+  // ── Fondo PCEL (MKT + Directo) — ledger de movimientos ──
+  const [fondoMov, setFondoMov] = useState([]);
+  const [fondoLoading, setFondoLoading] = useState(false);
+  const [showFondoForm, setShowFondoForm] = useState(false);
+  const [fondoForm, setFondoForm] = useState({
+    tipo_fondo: "mkt",
+    tipo_mov: "gasto",
+    fecha: new Date().toISOString().slice(0, 10),
+    concepto: "",
+    monto: "",
+    folio: "",
+    notas: "",
+  });
+
+  const fetchFondoMov = React.useCallback(async () => {
+    if (clienteKey !== "pcel" || !DB_CONFIGURED) return;
+    setFondoLoading(true);
+    const { data } = await supabase
+      .from("fondo_pcel_movimientos")
+      .select("*")
+      .order("fecha", { ascending: true })
+      .order("id", { ascending: true });
+    setFondoMov(data || []);
+    setFondoLoading(false);
+  }, [clienteKey]);
+
+  useEffect(() => { fetchFondoMov(); }, [fetchFondoMov]);
+
+  // Cálculo de saldos + ledger con saldo running por tipo de fondo
+  const fondoResumen = React.useMemo(() => {
+    const ledger = { mkt: [], directo: [] };
+    const saldo = { mkt: 0, directo: 0 };
+    const entradas = { mkt: 0, directo: 0 };
+    const gastos = { mkt: 0, directo: 0 };
+    const aporteAnioActual = { mkt: 0, directo: 0 };
+    const gastoAnioActual = { mkt: 0, directo: 0 };
+    const anio = new Date().getFullYear();
+
+    for (const m of fondoMov) {
+      const t = m.tipo_fondo;
+      const monto = Number(m.monto) || 0;
+      if (m.tipo_mov === "gasto") {
+        saldo[t] -= monto;
+        gastos[t] += monto;
+        if (m.anio === anio) gastoAnioActual[t] += monto;
+      } else {
+        saldo[t] += monto;
+        entradas[t] += monto;
+        if (m.anio === anio && m.tipo_mov === "aporte") aporteAnioActual[t] += monto;
+      }
+      ledger[t].push({ ...m, saldo_running: saldo[t] });
+    }
+    return {
+      saldoMkt: saldo.mkt, saldoDirecto: saldo.directo,
+      entradasMkt: entradas.mkt, entradasDirecto: entradas.directo,
+      gastosMkt: gastos.mkt, gastosDirecto: gastos.directo,
+      aporteMktAnio: aporteAnioActual.mkt, aporteDirectoAnio: aporteAnioActual.directo,
+      gastoMktAnio: gastoAnioActual.mkt, gastoDirectoAnio: gastoAnioActual.directo,
+      ledger,
+    };
+  }, [fondoMov]);
+
+  const crearMovimientoFondo = async () => {
+    if (!fondoForm.concepto || !fondoForm.monto) {
+      flash("⚠ Concepto y monto requeridos");
+      return;
+    }
+    const monto = parseFloat(fondoForm.monto);
+    if (isNaN(monto) || monto <= 0) {
+      flash("⚠ Monto inválido");
+      return;
+    }
+    const fecha = fondoForm.fecha;
+    const d = new Date(fecha + "T00:00:00");
+    const mes = d.getMonth() + 1;
+    const trimestre = Math.ceil(mes / 3);
+    const row = {
+      tipo_fondo: fondoForm.tipo_fondo,
+      tipo_mov: fondoForm.tipo_mov,
+      fecha,
+      anio: d.getFullYear(),
+      trimestre,
+      concepto: fondoForm.concepto.trim(),
+      monto,
+      folio: fondoForm.folio.trim() || null,
+      notas: fondoForm.notas.trim() || null,
+    };
+    const { data, error } = await supabase.from("fondo_pcel_movimientos").insert([row]).select();
+    if (error) {
+      console.error("crearMovimientoFondo error:", error);
+      flash("⚠ Error al guardar movimiento");
+      return;
+    }
+    setFondoMov(prev => [...prev, ...(data || [])].sort((a, b) => {
+      if (a.fecha === b.fecha) return a.id - b.id;
+      return a.fecha < b.fecha ? -1 : 1;
+    }));
+    setShowFondoForm(false);
+    setFondoForm({ tipo_fondo: "mkt", tipo_mov: "gasto", fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: "", folio: "", notas: "" });
+    flash("✓ Movimiento registrado");
+  };
+
+  const eliminarMovimientoFondo = async (id) => {
+    if (!window.confirm("¿Eliminar este movimiento? El saldo se recalculará.")) return;
+    const { error } = await supabase.from("fondo_pcel_movimientos").delete().eq("id", id);
+    if (error) {
+      console.error("eliminarMovimientoFondo error:", error);
+      flash("⚠ Error al eliminar");
+      return;
+    }
+    setFondoMov(prev => prev.filter(m => m.id !== id));
+    flash("✓ Movimiento eliminado");
+  };
   
   const guardarPagoPcel = async (tipo, periodo, montoCalc) => {
     if (!DB_CONFIGURED) return;
@@ -2447,6 +2561,159 @@ export default function PagosCliente({ cliente, clienteKey }) {
             </div>
           )}
 
+          {/* ═══ Fondo PCEL: Marketing + Directo (ledger) ═══ */}
+          {clienteKey === "pcel" && catActiva === "marketing" && (
+            <div className="space-y-6">
+              {/* KPI cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-violet-500">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Fondo MKT</p>
+                  <p className="text-2xl font-bold text-violet-600">{formatMXN(fondoResumen.saldoMkt)}</p>
+                  <p className="text-xs text-gray-400 mt-1">{new Date().getFullYear()}: +{formatMXN(fondoResumen.aporteMktAnio)} · −{formatMXN(fondoResumen.gastoMktAnio)}</p>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm p-5 border-l-4 border-blue-500">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Fondo Directo</p>
+                  <p className="text-2xl font-bold text-blue-600">{formatMXN(fondoResumen.saldoDirecto)}</p>
+                  <p className="text-xs text-gray-400 mt-1">{new Date().getFullYear()}: +{formatMXN(fondoResumen.aporteDirectoAnio)} · −{formatMXN(fondoResumen.gastoDirectoAnio)}</p>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm p-5">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total aportado (histórico)</p>
+                  <p className="text-2xl font-bold text-emerald-600">{formatMXN(fondoResumen.entradasMkt + fondoResumen.entradasDirecto)}</p>
+                  <p className="text-xs text-gray-400 mt-1">MKT {formatMXN(fondoResumen.entradasMkt)} · Directo {formatMXN(fondoResumen.entradasDirecto)}</p>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm p-5">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total gastado (histórico)</p>
+                  <p className="text-2xl font-bold text-rose-600">{formatMXN(fondoResumen.gastosMkt + fondoResumen.gastosDirecto)}</p>
+                  <p className="text-xs text-gray-400 mt-1">MKT {formatMXN(fondoResumen.gastosMkt)} · Directo {formatMXN(fondoResumen.gastosDirecto)}</p>
+                </div>
+              </div>
+
+              {/* Ledger por tipo de fondo */}
+              {["mkt", "directo"].map(tipo => {
+                const filas = [...fondoResumen.ledger[tipo]].reverse(); // newest first
+                const titulo = tipo === "mkt" ? "Fondo de Marketing" : "Fondo Directo (Generación Sell Out)";
+                const color = tipo === "mkt" ? "violet" : "blue";
+                return (
+                  <div key={tipo} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between p-5 border-b border-gray-100">
+                      <div>
+                        <h3 className={`text-lg font-bold text-${color}-600`}>{titulo}</h3>
+                        <p className="text-xs text-gray-400 mt-0.5">{filas.length} movimientos · Saldo actual {formatMXN(tipo === "mkt" ? fondoResumen.saldoMkt : fondoResumen.saldoDirecto)}</p>
+                      </div>
+                      <button
+                        onClick={() => { setFondoForm(f => ({ ...f, tipo_fondo: tipo, tipo_mov: "gasto", fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: "", folio: "", notas: "" })); setShowFondoForm(true); }}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold bg-${color}-500 text-white hover:bg-${color}-600`}
+                      >
+                        + Movimiento
+                      </button>
+                    </div>
+                    {filas.length === 0 ? (
+                      <p className="text-sm text-gray-400 italic text-center py-8">Sin movimientos.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50 border-b border-gray-100">
+                            <tr>
+                              <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Fecha</th>
+                              <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Tipo</th>
+                              <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Concepto</th>
+                              <th className="text-center py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Q</th>
+                              <th className="text-right py-2 px-3 text-xs font-semibold text-emerald-600 uppercase">Entrada</th>
+                              <th className="text-right py-2 px-3 text-xs font-semibold text-rose-600 uppercase">Salida</th>
+                              <th className="text-right py-2 px-3 text-xs font-semibold text-gray-600 uppercase">Saldo</th>
+                              <th className="text-center py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Folio</th>
+                              <th className="w-10"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filas.map(m => (
+                              <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50">
+                                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">{new Date(m.fecha + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "2-digit" })}</td>
+                                <td className="py-2 px-3">
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                                    m.tipo_mov === "inicial" ? "bg-gray-100 text-gray-600" :
+                                    m.tipo_mov === "aporte" ? "bg-emerald-100 text-emerald-700" :
+                                    "bg-rose-100 text-rose-700"
+                                  }`}>{m.tipo_mov}</span>
+                                </td>
+                                <td className="py-2 px-3 text-gray-800">{m.concepto}{m.notas && <span className="block text-xs text-gray-400">{m.notas}</span>}</td>
+                                <td className="py-2 px-3 text-center text-gray-500 text-xs">{m.trimestre ? `Q${m.trimestre} ${m.anio}` : "—"}</td>
+                                <td className="py-2 px-3 text-right text-emerald-600 font-semibold">{m.tipo_mov !== "gasto" ? formatMXN(Number(m.monto)) : "—"}</td>
+                                <td className="py-2 px-3 text-right text-rose-600 font-semibold">{m.tipo_mov === "gasto" ? formatMXN(Number(m.monto)) : "—"}</td>
+                                <td className="py-2 px-3 text-right text-gray-800 font-bold">{formatMXN(m.saldo_running)}</td>
+                                <td className="py-2 px-3 text-center text-gray-400 text-xs">{m.folio || "—"}</td>
+                                <td className="py-2 px-3 text-center">
+                                  {m.tipo_mov !== "inicial" && canEdit && (
+                                    <button onClick={() => eliminarMovimientoFondo(m.id)} className="text-gray-300 hover:text-rose-500 text-xs" title="Eliminar movimiento">✕</button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Modal: nuevo movimiento */}
+              {showFondoForm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+                  <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                      <h3 className="font-bold text-gray-800">Nuevo movimiento de fondo</h3>
+                      <button onClick={() => setShowFondoForm(false)} className="p-1 rounded hover:bg-gray-100 text-gray-500 text-lg">✕</button>
+                    </div>
+                    <div className="p-5 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block">
+                          <span className="text-xs text-gray-500 font-semibold">Fondo</span>
+                          <select value={fondoForm.tipo_fondo} onChange={e => setFondoForm(f => ({ ...f, tipo_fondo: e.target.value }))} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm">
+                            <option value="mkt">Fondo MKT</option>
+                            <option value="directo">Fondo Directo</option>
+                          </select>
+                        </label>
+                        <label className="block">
+                          <span className="text-xs text-gray-500 font-semibold">Tipo</span>
+                          <select value={fondoForm.tipo_mov} onChange={e => setFondoForm(f => ({ ...f, tipo_mov: e.target.value }))} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm">
+                            <option value="gasto">Gasto (salida)</option>
+                            <option value="aporte">Aporte (entrada)</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="block">
+                        <span className="text-xs text-gray-500 font-semibold">Fecha</span>
+                        <input type="date" value={fondoForm.fecha} onChange={e => setFondoForm(f => ({ ...f, fecha: e.target.value }))} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs text-gray-500 font-semibold">Concepto *</span>
+                        <input type="text" value={fondoForm.concepto} onChange={e => setFondoForm(f => ({ ...f, concepto: e.target.value }))} placeholder="Ej. Hot Sale, Promociones Mar 26, Rebate Q1" className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block">
+                          <span className="text-xs text-gray-500 font-semibold">Monto *</span>
+                          <input type="number" value={fondoForm.monto} onChange={e => setFondoForm(f => ({ ...f, monto: e.target.value }))} placeholder="0.00" className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs text-gray-500 font-semibold">Folio</span>
+                          <input type="text" value={fondoForm.folio} onChange={e => setFondoForm(f => ({ ...f, folio: e.target.value }))} placeholder="—" className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
+                        </label>
+                      </div>
+                      <label className="block">
+                        <span className="text-xs text-gray-500 font-semibold">Notas</span>
+                        <input type="text" value={fondoForm.notas} onChange={e => setFondoForm(f => ({ ...f, notas: e.target.value }))} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100">
+                      <button onClick={() => setShowFondoForm(false)} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100">Cancelar</button>
+                      <button onClick={crearMovimientoFondo} className="px-4 py-2 rounded-lg text-sm font-semibold bg-violet-500 text-white hover:bg-violet-600">Guardar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
         </>
       )}
