@@ -214,47 +214,105 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
   }, [rows, busqueda, filtroRoadmap, filtroMarca, soloConStock, soloSinEanSat, soloEnRiesgo, skusEnRiesgo]);
 
   // ── Exportar a Excel ──
-  // Respeta los filtros activos (busqueda, roadmap, marca, soloConStock,
-  // soloSinEanSat, soloEnRiesgo). Carga xlsx dinámicamente para no inflar
-  // el bundle principal.
+  // Respeta los filtros activos. Mismo orden que la tabla en pantalla.
+  // Headers con fondo negro + texto blanco bold; formatos por columna
+  // (número, dinero, %). Carga xlsx-js-style dinámicamente.
   const [exporting, setExporting] = useState(false);
   async function exportarExcel() {
     if (filtrados.length === 0) { toast.info('No hay filas que exportar'); return; }
     setExporting(true);
     try {
-      const XLSX = await import('xlsx');
-      const wsData = filtrados.map((r) => {
-        const row = {
-          SKU: r.sku,
-          Roadmap: r.roadmap || '',
-          Descripción: r.descripcion || '',
-          Marca: r.marca || '',
-          EAN13: r.ean13 || '',
-          'Código SAT': r.codigo_sat || '',
-        };
-        // Una columna por almacén
-        for (const a of ALMACENES) {
-          row[a.label] = Number(r.invPorColumna[a.key]?.inv || 0);
-        }
-        row['Total'] = Number(r.invTotal || 0);
-        row['Precio AAA'] = r.precio_aaa != null ? Number(r.precio_aaa) : '';
-        row['Descuento'] = r.descuento != null ? Number(r.descuento) : '';
-        row['Precio C/Desc'] = r.precio_descuento != null ? Number(r.precio_descuento) : '';
-        return row;
+      const XLSX = (await import('xlsx-js-style')).default;
+
+      // Definición de columnas en EL MISMO ORDEN que la tabla en pantalla:
+      // SKU · Roadmap · Descripción · EAN13 · Código SAT · [almacenes] · Total · AAA · Desc · Precio C/Desc
+      const NUM_FMT   = '#,##0';
+      const MONEY_FMT = '"$"#,##0.00';
+      const PCT_FMT   = '0.00%';
+
+      const cols = [
+        { header: 'SKU',          get: (r) => r.sku,                       type: 's',  width: 14 },
+        { header: 'Roadmap',      get: (r) => r.roadmap || '',             type: 's',  width: 12 },
+        { header: 'Descripción',  get: (r) => r.descripcion || '',         type: 's',  width: 45 },
+        { header: 'EAN13',        get: (r) => r.ean13 || '',               type: 's',  width: 16 },
+        { header: 'Código SAT',   get: (r) => r.codigo_sat || '',          type: 's',  width: 12 },
+        ...ALMACENES.map((a) => ({
+          header: a.label,
+          get: (r) => Number(r.invPorColumna[a.key]?.inv || 0),
+          type: 'n', fmt: NUM_FMT, width: 9,
+        })),
+        { header: 'Total',        get: (r) => Number(r.invTotal || 0),     type: 'n', fmt: NUM_FMT,   width: 10 },
+        { header: 'AAA',          get: (r) => r.precio_aaa,                type: 'n', fmt: MONEY_FMT, width: 12 },
+        { header: 'Desc.',        get: (r) => r.descuento,                 type: 'n', fmt: PCT_FMT,   width: 10 },
+        { header: 'Precio C/Desc',get: (r) => r.precio_descuento,          type: 'n', fmt: MONEY_FMT, width: 14 },
+      ];
+
+      // Estilos
+      const headerStyle = {
+        font:      { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 11 },
+        fill:      { fgColor: { rgb: 'FF000000' } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+        border: {
+          top:    { style: 'thin', color: { rgb: 'FF000000' } },
+          bottom: { style: 'thin', color: { rgb: 'FF000000' } },
+          left:   { style: 'thin', color: { rgb: 'FF000000' } },
+          right:  { style: 'thin', color: { rgb: 'FF000000' } },
+        },
+      };
+      const cellBorder = {
+        top:    { style: 'thin', color: { rgb: 'FFE5E7EB' } },
+        bottom: { style: 'thin', color: { rgb: 'FFE5E7EB' } },
+        left:   { style: 'thin', color: { rgb: 'FFE5E7EB' } },
+        right:  { style: 'thin', color: { rgb: 'FFE5E7EB' } },
+      };
+
+      // Construir AOA con celdas estilizadas
+      const ws = {};
+      const range = { s: { r: 0, c: 0 }, e: { r: filtrados.length, c: cols.length - 1 } };
+
+      // Header row
+      cols.forEach((c, i) => {
+        const addr = XLSX.utils.encode_cell({ r: 0, c: i });
+        ws[addr] = { v: c.header, t: 's', s: headerStyle };
       });
 
-      const ws = XLSX.utils.json_to_sheet(wsData);
-      // Auto-fit aproximado del ancho de columnas
-      const colWidths = Object.keys(wsData[0] || {}).map((k) => ({
-        wch: Math.min(50, Math.max(k.length, ...wsData.slice(0, 100).map((r) => String(r[k] ?? '').length)) + 2),
-      }));
-      ws['!cols'] = colWidths;
+      // Data rows
+      filtrados.forEach((r, rIdx) => {
+        cols.forEach((c, cIdx) => {
+          const addr = XLSX.utils.encode_cell({ r: rIdx + 1, c: cIdx });
+          const value = c.get(r);
+          if (value === null || value === undefined || value === '') {
+            ws[addr] = { v: '', t: 's', s: { border: cellBorder } };
+            return;
+          }
+          if (c.type === 'n') {
+            const num = Number(value);
+            ws[addr] = {
+              v: isNaN(num) ? '' : num,
+              t: isNaN(num) ? 's' : 'n',
+              s: { numFmt: c.fmt, alignment: { horizontal: 'right' }, border: cellBorder },
+            };
+          } else {
+            ws[addr] = {
+              v: String(value),
+              t: 's',
+              s: { alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: cellBorder },
+            };
+          }
+        });
+      });
+
+      ws['!ref'] = XLSX.utils.encode_range(range);
+      ws['!cols'] = cols.map((c) => ({ wch: c.width }));
+      ws['!rows'] = [{ hpt: 28 }]; // alto extra para header
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
 
       // Hoja resumen con filtros aplicados (auditable)
-      const filtros = [
+      const filtrosAOA = [
+        [{ v: 'Filtros aplicados al exportar', s: { font: { bold: true, sz: 12 } } }],
+        [],
         ['Generado', new Date().toLocaleString('es-MX')],
         ['Filas exportadas', `${filtrados.length} de ${rows.length}`],
         ['Búsqueda', busqueda || '(ninguna)'],
@@ -264,12 +322,17 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
         ['Solo sin EAN/SAT', soloSinEanSat ? 'Sí' : 'No'],
         ['Solo en riesgo', soloEnRiesgo ? 'Sí' : 'No'],
       ];
-      const wsFiltros = XLSX.utils.aoa_to_sheet([['Filtros aplicados al exportar'], [], ...filtros]);
+      const wsFiltros = XLSX.utils.aoa_to_sheet(filtrosAOA);
       wsFiltros['!cols'] = [{ wch: 24 }, { wch: 40 }];
       XLSX.utils.book_append_sheet(wb, wsFiltros, 'Filtros');
 
-      const fechaStr = new Date().toISOString().slice(0, 10);
-      const nombreArchivo = `Reporte_SKUs_${fechaStr}.xlsx`;
+      // Nombre de archivo: "Reporte DD MMM YYYY.xlsx"
+      const hoy = new Date();
+      const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+      const dd = String(hoy.getDate()).padStart(2, '0');
+      const mmm = meses[hoy.getMonth()];
+      const yyyy = hoy.getFullYear();
+      const nombreArchivo = `Reporte ${dd} ${mmm} ${yyyy}.xlsx`;
       XLSX.writeFile(wb, nombreArchivo);
       toast.success(`✓ Exportado: ${filtrados.length} SKUs`);
     } catch (e) {
