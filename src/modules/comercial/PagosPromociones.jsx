@@ -250,7 +250,8 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
     // Sólo la fecha de inicio es obligatoria. La fecha fin puede quedar en blanco
     // ("indefinida") y se cierra después cuando se defina.
     if (!form.fecha_inicio) return toast.error("Fecha de inicio requerida");
-    if (form.skus.length === 0 && tipo !== "bolsa") return toast.error("Agrega al menos un SKU");
+    // SKU es opcional — sirve para snapshot de inventario y cruce con sellout,
+    // pero la promo puede vivir sin SKUs si es genérica.
     if (tipo === "sellout" || tipo === "sell_in") {
       if (!form.monto_por_pieza) return toast.error("Monto por pieza requerido");
     }
@@ -433,7 +434,7 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
         </div>
 
         {/* SKUs (no para Bolsa a menos que quieras) */}
-        <Field label={tipo === "bolsa" ? "SKUs aplicables (opcional)" : "SKUs *"}>
+        <Field label="SKUs aplicables (opcional)">
           <div className="flex gap-2">
             <input
               value={skuInput}
