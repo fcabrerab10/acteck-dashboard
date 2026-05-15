@@ -238,7 +238,9 @@ async function recalcSelloutSku() {
 
 const RECALC_MAP = {
   ventas_mensuales: recalcVentasMensuales,
-  sell_in_sku: recalcSellInSku,
+  // sell_in_sku desactivado (2026-05-14): ahora es una VISTA sobre
+  // facturacion_clientes — no se recalcula desde ventas_erp.
+  // sell_in_sku: recalcSellInSku,
   sellout_sku: recalcSelloutSku,
 };
 

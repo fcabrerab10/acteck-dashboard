@@ -884,20 +884,11 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           }));
           counts.productos += await upsertData("productos_cliente", rows, "cliente,sku");
 
-          for (const prod of productos) {
-            for (const [mes, data] of Object.entries(prod.meses)) {
-              const sellInRow = {
-                cliente: clienteKey,
-                sku: prod.sku,
-                anio: 2026,
-                mes: parseInt(mes),
-                piezas: data.piezas,
-                monto_pesos: data.monto,
-              };
-              await supabase.from("sell_in_sku").upsert([sellInRow], { onConflict: "cliente,sku,anio,mes" });
-              counts.sellIn++;
-            }
-          }
+          // Nota (2026-05-14): sell_in_sku ahora es una VISTA sobre
+          // facturacion_clientes — el sell-in canónico viene de la hoja
+          // "Facturación" del ERP vía /uploads.html. Este upsert legacy
+          // queda deshabilitado para no chocar contra la vista.
+          // for (const prod of productos) { ... upsert sell_in_sku ... }
         } else if (file.name.includes("Digitalife")) {
           const { productosRDMP, selloutMap, invMap } = await parseDigitalife(file);
 
