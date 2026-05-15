@@ -301,7 +301,8 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
     // ── Auto-crear pago + movimiento del fondo para tipos de monto fijo ──
     // bolsa: monto_total_bolsa es el compromiso total
     // proteccion_precio: (precio_viejo - precio_nuevo) × inventario_al_momento
-    // sellout / sell_in: NO se auto-crea (se va creando con cerrarMes mensualmente)
+    // sellout / sell_in con inventario: NO auto (se cierra mes a mes)
+    // sellout / sell_in SIN inventario: trata monto_por_pieza como total fijo
     if (!promoEdicion && promoGuardada && form.fuente && form.fuente !== "vendor") {
       let montoCompromiso = 0;
       if (tipo === "bolsa") {
@@ -310,6 +311,12 @@ function FormPromocion({ tipo, clienteKey, onBack, onSaved, promoEdicion }) {
         const dif = (Number(form.precio_viejo) || 0) - (Number(form.precio_nuevo) || 0);
         const inv = Number(form.inventario_al_momento) || 0;
         montoCompromiso = dif > 0 ? dif * inv : 0;
+      } else if (tipo === "sellout" || tipo === "sell_in") {
+        const inv = Number(form.inventario_inicial) || 0;
+        const mpp = Number(form.monto_por_pieza) || 0;
+        // Sin inventario → trata el monto_por_pieza como total fijo
+        // Con inventario → no descontamos aquí (lo hace cerrarMes mes a mes)
+        if (inv === 0 && mpp > 0) montoCompromiso = mpp;
       }
       if (montoCompromiso > 0) {
         const hoy = new Date();
