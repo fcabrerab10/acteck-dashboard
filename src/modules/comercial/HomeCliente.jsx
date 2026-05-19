@@ -280,6 +280,8 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   const [sellOutSku, setSellOutSku] = React.useState([]);
   // Comparativa año anterior: { 1: { sell_in, sell_out }, 2: {...}, ... }
   const [sellInPrevAnio, setSellInPrevAnio] = React.useState({});
+  // KPI activo en drill-down ('sellin' | 'cumpl' | 'brecha' | null)
+  const [kpiExpandido, setKpiExpandido] = React.useState(null);
   const [periodoTipo, setPeriodoTipo] = React.useState('ytd');
   const [periodoMes, setPeriodoMes] = React.useState(new Date().getMonth() + 1);
   const [periodoRango, setPeriodoRango] = React.useState([1, 12]);
@@ -1425,13 +1427,179 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     React.createElement("div", { style: { fontSize: 16, color: "#94A3B8" } }, "Cargando datos..."));
 
   return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 20, padding: "0 4px" } },
-    // Row 0: Header with Semaforo
-    React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: "14px 20px" } },
-      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
-        React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, color: "#1E293B", margin: 0 } }, (cliente && cliente.nombre ? cliente.nombre : clienteKey)),
-        React.createElement("span", { style: { fontSize: 13, color: "#94A3B8" } }, cliente && cliente.marca ? cliente.marca : "Acteck / Balam Rush")
+    // Row 0: HEADER prominente con color de cliente + cuota anual
+    React.createElement("div", {
+      style: {
+        background: cliente?.color ? `linear-gradient(135deg, ${cliente.color}EE 0%, ${cliente.color}B0 100%)` : "linear-gradient(135deg, #1E293B 0%, #475569 100%)",
+        borderRadius: 16,
+        padding: "20px 28px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        flexWrap: "wrap",
+        gap: 16,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+      }
+    },
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" } },
+        React.createElement("div", {
+          style: {
+            background: "rgba(255,255,255,0.95)",
+            borderRadius: 999,
+            padding: "8px 22px",
+            fontSize: 22,
+            fontWeight: 800,
+            color: cliente?.color || "#1E293B",
+            letterSpacing: "0.5px",
+          }
+        }, (cliente && cliente.nombre ? cliente.nombre : clienteKey).toUpperCase()),
+        cliente?.marca && React.createElement("span", { style: { fontSize: 14, color: "rgba(255,255,255,0.85)", fontWeight: 500 } }, cliente.marca),
       ),
-      React.createElement(Semaforo, { estado: estadoSalud })
+      // Cuota Anual a la derecha
+      meta.meta_sell_in_min > 0 && React.createElement("div", { style: { textAlign: "right", color: "#fff" } },
+        React.createElement("div", { style: { fontSize: 11, fontWeight: 600, letterSpacing: "1px", opacity: 0.85, textTransform: "uppercase" } }, "Cuota Anual"),
+        React.createElement("div", { style: { fontSize: 28, fontWeight: 800, marginTop: 2, lineHeight: 1.1 } },
+          "$" + (meta.meta_sell_in_min / 1e6).toFixed(meta.meta_sell_in_min >= 10e6 ? 0 : 1) + "M"
+        ),
+        meta.meta_sell_in_optimista > meta.meta_sell_in_min && React.createElement("div", { style: { fontSize: 11, opacity: 0.85, marginTop: 2 } },
+          "Ideal: $" + (meta.meta_sell_in_optimista / 1e6).toFixed(meta.meta_sell_in_optimista >= 10e6 ? 0 : 1) + "M"
+        ),
+      ),
+    ),
+    // Row 0.5: 3 KPI cards prominentes — Sell In · % Cuota Mín · Brecha
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 } },
+      // KPI 1: Sell-In del periodo
+      React.createElement("div", {
+        style: {
+          background: "#fff", borderRadius: 14, border: "1px solid #E2E8F0",
+          padding: "18px 22px", cursor: "pointer", transition: "all 0.15s",
+          boxShadow: kpiExpandido === "sellin" ? "0 4px 16px rgba(59,130,246,0.15)" : "0 1px 3px rgba(0,0,0,0.04)",
+          borderColor: kpiExpandido === "sellin" ? "#3B82F6" : "#E2E8F0",
+        },
+        onClick: () => setKpiExpandido(kpiExpandido === "sellin" ? null : "sellin"),
+      },
+        React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase" } },
+          `Sell-In ${periodoTipo === "trimestre" ? "Q" + Math.ceil(periodoMes/3) : periodoTipo === "mes" ? MESES_CORTOS[periodoMes-1] : periodoTipo === "rango" ? "Rango" : "YTD"}`),
+        React.createElement("div", { style: { fontSize: 30, fontWeight: 800, color: "#1E40AF", marginTop: 4, lineHeight: 1.1 } },
+          totalSellIn >= 1e6 ? "$" + (totalSellIn / 1e6).toFixed(1) + "M" : formatMXN(totalSellIn)),
+        React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginTop: 2 } },
+          formatMXN(totalSellIn)),
+      ),
+      // KPI 2: % Cuota Mín
+      React.createElement("div", {
+        style: {
+          background: "#fff", borderRadius: 14, border: "1px solid #E2E8F0",
+          padding: "18px 22px", cursor: "pointer", transition: "all 0.15s",
+          boxShadow: kpiExpandido === "cumpl" ? "0 4px 16px rgba(16,185,129,0.15)" : "0 1px 3px rgba(0,0,0,0.04)",
+          borderColor: kpiExpandido === "cumpl" ? "#10B981" : "#E2E8F0",
+        },
+        onClick: () => setKpiExpandido(kpiExpandido === "cumpl" ? null : "cumpl"),
+      },
+        React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase" } }, "% Cuota Mín"),
+        React.createElement("div", {
+          style: {
+            fontSize: 30, fontWeight: 800, marginTop: 4, lineHeight: 1.1,
+            color: cumplimientoMin >= 95 ? "#059669" : cumplimientoMin >= 80 ? "#D97706" : "#DC2626",
+          }
+        }, cumplimientoMin.toFixed(1) + "%"),
+        // Barra de progreso
+        React.createElement("div", { style: { background: "#F1F5F9", borderRadius: 999, height: 6, marginTop: 8, overflow: "hidden" } },
+          React.createElement("div", {
+            style: {
+              width: Math.min(cumplimientoMin, 100) + "%",
+              height: "100%",
+              background: cumplimientoMin >= 95 ? "#10B981" : cumplimientoMin >= 80 ? "#F59E0B" : "#EF4444",
+              transition: "width 0.4s",
+            }
+          })
+        ),
+        React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 6, fontWeight: 600 } },
+          cumplimientoMin >= 95 ? "≥ 95% → Excelente" : cumplimientoMin >= 80 ? "80-95% → Saludable" : cumplimientoMin >= 65 ? "65-80% → Atención" : "< 65% → Crítico"),
+      ),
+      // KPI 3: Brecha vs cuota
+      React.createElement("div", {
+        style: {
+          background: "#fff", borderRadius: 14, border: "1px solid #E2E8F0",
+          padding: "18px 22px", cursor: "pointer", transition: "all 0.15s",
+          boxShadow: kpiExpandido === "brecha" ? "0 4px 16px rgba(239,68,68,0.15)" : "0 1px 3px rgba(0,0,0,0.04)",
+          borderColor: kpiExpandido === "brecha" ? "#EF4444" : "#E2E8F0",
+        },
+        onClick: () => setKpiExpandido(kpiExpandido === "brecha" ? null : "brecha"),
+      },
+        React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase" } }, "Brecha"),
+        (function(){
+          const brecha = totalSellIn - totalCuotaMin;
+          return React.createElement(React.Fragment, null,
+            React.createElement("div", {
+              style: {
+                fontSize: 30, fontWeight: 800, marginTop: 4, lineHeight: 1.1,
+                color: brecha >= 0 ? "#059669" : "#DC2626",
+              }
+            }, (brecha >= 0 ? "+" : "-") + "$" + Math.abs(brecha / 1e3).toFixed(0) + "K"),
+            React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginTop: 4 } },
+              "vs cuota $" + (totalCuotaMin / 1e6).toFixed(2) + "M"),
+          );
+        })(),
+      ),
+    ),
+    // Drill-down expandido (cuando algún KPI está activo)
+    kpiExpandido && React.createElement("div", {
+      style: {
+        background: "#F8FAFC", borderRadius: 12, border: "1px solid #E2E8F0",
+        padding: "16px 20px", animation: "fadeIn 0.2s",
+      }
+    },
+      kpiExpandido === "sellin" && React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1E40AF", marginBottom: 10 } }, "📊 Desglose Sell-In del periodo"),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 } },
+          ventasFiltradas.map(v => React.createElement("div", {
+            key: v.mes,
+            style: { background: "#fff", borderRadius: 8, padding: "8px 12px", border: "1px solid #E2E8F0" }
+          },
+            React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 600, textTransform: "uppercase" } }, MESES_CORTOS[v.mes - 1]),
+            React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#1E293B", marginTop: 2 } },
+              Number(v.sell_in) > 0 ? formatMXN(Number(v.sell_in)) : "—"),
+          ))
+        )
+      ),
+      kpiExpandido === "cumpl" && React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#059669", marginBottom: 10 } }, "📈 Cumplimiento detallado"),
+        React.createElement("div", { style: { display: "flex", gap: 24, fontSize: 13, flexWrap: "wrap" } },
+          React.createElement("div", null,
+            React.createElement("div", { style: { color: "#94A3B8", fontSize: 11, fontWeight: 600 } }, "Real periodo"),
+            React.createElement("div", { style: { fontWeight: 700, color: "#1E293B" } }, formatMXN(totalSellIn))),
+          React.createElement("div", null,
+            React.createElement("div", { style: { color: "#94A3B8", fontSize: 11, fontWeight: 600 } }, "Cuota Mín"),
+            React.createElement("div", { style: { fontWeight: 700, color: "#F59E0B" } }, formatMXN(totalCuotaMin))),
+          React.createElement("div", null,
+            React.createElement("div", { style: { color: "#94A3B8", fontSize: 11, fontWeight: 600 } }, "Cuota Ideal"),
+            React.createElement("div", { style: { fontWeight: 700, color: "#DC2626" } }, formatMXN(totalCuotaIdeal))),
+          React.createElement("div", null,
+            React.createElement("div", { style: { color: "#94A3B8", fontSize: 11, fontWeight: 600 } }, "% vs Min"),
+            React.createElement("div", { style: { fontWeight: 700, color: cumplimientoMin >= 95 ? "#10B981" : cumplimientoMin >= 80 ? "#F59E0B" : "#EF4444" } }, cumplimientoMin.toFixed(1) + "%")),
+          React.createElement("div", null,
+            React.createElement("div", { style: { color: "#94A3B8", fontSize: 11, fontWeight: 600 } }, "% vs Ideal"),
+            React.createElement("div", { style: { fontWeight: 700, color: cumplimientoIdeal >= 95 ? "#10B981" : cumplimientoIdeal >= 80 ? "#F59E0B" : "#EF4444" } }, cumplimientoIdeal.toFixed(1) + "%")),
+        )
+      ),
+      kpiExpandido === "brecha" && (function(){
+        const brecha = totalSellIn - totalCuotaMin;
+        const brechaIdeal = totalSellIn - totalCuotaIdeal;
+        return React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#DC2626", marginBottom: 10 } }, "🎯 Análisis de brecha"),
+          React.createElement("div", { style: { display: "flex", gap: 24, fontSize: 13, flexWrap: "wrap" } },
+            React.createElement("div", null,
+              React.createElement("div", { style: { color: "#94A3B8", fontSize: 11, fontWeight: 600 } }, "Brecha vs Mín"),
+              React.createElement("div", { style: { fontWeight: 700, color: brecha >= 0 ? "#10B981" : "#EF4444" } }, (brecha >= 0 ? "+" : "") + formatMXN(brecha))),
+            React.createElement("div", null,
+              React.createElement("div", { style: { color: "#94A3B8", fontSize: 11, fontWeight: 600 } }, "Brecha vs Ideal"),
+              React.createElement("div", { style: { fontWeight: 700, color: brechaIdeal >= 0 ? "#10B981" : "#EF4444" } }, (brechaIdeal >= 0 ? "+" : "") + formatMXN(brechaIdeal))),
+            brecha < 0 && React.createElement("div", null,
+              React.createElement("div", { style: { color: "#94A3B8", fontSize: 11, fontWeight: 600 } }, "Falta vender"),
+              React.createElement("div", { style: { fontWeight: 700, color: "#EF4444" } }, formatMXN(Math.abs(brecha)))),
+          )
+        );
+      })()
     ),
     // Banner: última actualización por fuente (Sell In / Sell Out / Inventario)
     React.createElement("div", { style: { background: "linear-gradient(90deg, #EFF6FF 0%, #F8FAFC 100%)", border: "1px solid #BFDBFE", borderRadius: 12, padding: "10px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 12 } },
