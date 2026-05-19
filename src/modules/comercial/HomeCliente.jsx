@@ -604,20 +604,25 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   }, [sellOutSku, invClienteLatest, productos, invActeck, clienteKey]);
 
   // ─── DÍAS DE COBERTURA INVENTARIO ────────────────────────────────────────
+  // Fórmula correcta: piezas / piezas (no mezcla costo vs precio retail).
+  //   días = inv_piezas / (so_piezas_últimos_3m_calendario / 90)
+  // El inventario está en stock (piezas) y el sell-out en piezas — comparable.
   const _diasCobertura = React.useMemo(() => {
-    if (totalInvValor <= 0) return null;
-    // Promedio de sellout diario (últimos 3 meses o YTD)
+    if (!invClienteLatest.length) return null;
+    const invPiezas = invClienteLatest.reduce((s, r) => s + (Number(r.stock) || 0), 0);
+    if (invPiezas <= 0) return null;
+    // Promedio de sellout DIARIO en piezas (últimos 3 meses calendario).
     const ultMes = Math.max(...sellOutSku.map(r => Number(r.mes) || 0), 0);
     if (ultMes === 0) return null;
     const tresMeses = Math.max(1, ultMes - 2);
-    const montoSO = sellOutSku.filter(r => {
+    const piezasSO = sellOutSku.filter(r => {
       const m = Number(r.mes) || 0;
       return m >= tresMeses && m <= ultMes;
-    }).reduce((s, r) => s + (Number(r.monto_pesos) || 0), 0);
+    }).reduce((s, r) => s + (Number(r.piezas) || 0), 0);
     const dias = (ultMes - tresMeses + 1) * 30;
-    const soDiario = dias > 0 ? montoSO / dias : 0;
-    return soDiario > 0 ? Math.round(totalInvValor / soDiario) : null;
-  }, [totalInvValor, sellOutSku]);
+    const soDiarioPzs = dias > 0 ? piezasSO / dias : 0;
+    return soDiarioPzs > 0 ? Math.round(invPiezas / soDiarioPzs) : null;
+  }, [invClienteLatest, sellOutSku]);
 
   // ─── PERIOD FILTER ────────────────────────────────────────────────────────
   const mesesFiltrados = React.useMemo(() => {
