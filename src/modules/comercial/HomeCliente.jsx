@@ -278,6 +278,8 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   const [anioResumen, setAnioResumen] = React.useState(2026);
   const [sellInSku, setSellInSku] = React.useState([]);
   const [sellOutSku, setSellOutSku] = React.useState([]);
+  // Comparativa año anterior: { 1: { sell_in, sell_out }, 2: {...}, ... }
+  const [sellInPrevAnio, setSellInPrevAnio] = React.useState({});
   const [periodoTipo, setPeriodoTipo] = React.useState('ytd');
   const [periodoMes, setPeriodoMes] = React.useState(new Date().getMonth() + 1);
   const [periodoRango, setPeriodoRango] = React.useState([1, 12]);
@@ -350,6 +352,27 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       setProductos(prodData);
       setInvActeck(invActData);
       setLoading(false);
+    })();
+  }, [clienteKey, anioResumen]);
+
+  // ── Fetch comparativo año anterior (sell_in + sell_out) ──
+  React.useEffect(() => {
+    if (!DB_CONFIGURED) return;
+    const anioPrev = anioResumen - 1;
+    (async () => {
+      const [siPrev, soPrev] = await Promise.all([
+        fetchAllPages(() => supabase.from("sell_in_sku").select("mes,monto_pesos").eq("cliente", clienteKey).eq("anio", anioPrev)),
+        fetchSelloutSku(clienteKey, anioPrev),
+      ]);
+      const map = {};
+      for (let m = 1; m <= 12; m++) map[m] = { sell_in: 0, sell_out: 0 };
+      (siPrev || []).forEach(r => {
+        const m = Number(r.mes); if (map[m]) map[m].sell_in += Number(r.monto_pesos) || 0;
+      });
+      (soPrev || []).forEach(r => {
+        const m = Number(r.mes); if (map[m]) map[m].sell_out += Number(r.monto_pesos) || 0;
+      });
+      setSellInPrevAnio(map);
     })();
   }, [clienteKey, anioResumen]);
 
@@ -633,26 +656,31 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
 
   // ─── SVG LINE CHART ─────────────────────────────────────────────────────────
   function LineChartSellInOut() {
-  const data = [];
-  for (let m = 1; m <= 12; m++) {
+  // Respeta el periodo seleccionado (mesesFiltrados ya viene del state)
+  const mesesParaGrafica = mesesFiltrados.length > 0 ? mesesFiltrados : Array.from({length: 12}, (_, i) => i + 1);
+  const data = mesesParaGrafica.map(m => {
     const v = ventasPorMes[m];
     const cuotaIdeal = cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : (v ? Number(v.cuota) || 0 : 0);
     const cuotaMin   = cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_min)   || 0 : 0;
     const sellIn  = v ? Number(v.sell_in)  || 0 : 0;
     const sellOut = v ? Number(v.sell_out) || 0 : 0;
     const inventario = v ? Number(v.inventario_valor) || 0 : 0;
-    data.push({
+    // Comparativa contra a\u00f1o anterior: lookup en sellInPrevAnio (ver hook abajo)
+    const sellInPrev  = (sellInPrevAnio && sellInPrevAnio[m]) ? sellInPrevAnio[m].sell_in  || 0 : 0;
+    const sellOutPrev = (sellInPrevAnio && sellInPrevAnio[m]) ? sellInPrevAnio[m].sell_out || 0 : 0;
+    return {
       mes: m,
       mesLabel: MESES_CORTOS[m - 1],
       sellIn, sellOut, inventario,
       cuota: cuotaIdeal,
       cuotaMin,
+      sellInPrev, sellOutPrev,
       cumplimiento: cuotaIdeal > 0 ? (sellIn / cuotaIdeal) * 100 : null,
-    });
-  }
-  const hasDataMonths = data.filter(d => d.sellIn > 0 || d.sellOut > 0 || d.cuota > 0);
+    };
+  });
+  const hasDataMonths = data.filter(d => d.sellIn > 0 || d.sellOut > 0 || d.cuota > 0 || d.sellInPrev > 0);
   if (hasDataMonths.length === 0) {
-    return React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#94A3B8" } }, "Sin datos de ventas a\u00fan");
+    return React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#94A3B8" } }, "Sin datos de ventas en el periodo seleccionado");
   }
 
   // Recharts tooltip
@@ -699,6 +727,9 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       React.createElement(Area, { type: "monotone", dataKey: "sellOut", name: "Sell Out", stroke: "#10B981", strokeWidth: 2.5, fill: "url(#areaSellOut)", activeDot: { r: 5 } }),
       React.createElement(Line, { type: "monotone", dataKey: "cuota",      name: "Cuota",      stroke: "#F59E0B", strokeWidth: 2, strokeDasharray: "6 4", dot: { r: 2, fill: "#F59E0B" }, activeDot: { r: 4 } }),
       React.createElement(Line, { type: "monotone", dataKey: "inventario", name: "Inventario", stroke: "#8B5CF6", strokeWidth: 2, strokeDasharray: "4 4", dot: { r: 2, fill: "#8B5CF6" }, activeDot: { r: 4 } }),
+      // Sell In año anterior (comparativa)
+      React.createElement(Line, { type: "monotone", dataKey: "sellInPrev",  name: `Sell In ${anioResumen - 1}`,  stroke: "#94A3B8", strokeWidth: 1.5, strokeDasharray: "3 3", dot: { r: 2, fill: "#94A3B8" }, activeDot: { r: 4 } }),
+      React.createElement(Line, { type: "monotone", dataKey: "sellOutPrev", name: `Sell Out ${anioResumen - 1}`, stroke: "#86EFAC", strokeWidth: 1.5, strokeDasharray: "3 3", dot: { r: 2, fill: "#86EFAC" }, activeDot: { r: 4 } }),
     )
   );
   }
