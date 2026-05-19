@@ -1724,9 +1724,31 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" } },
         // (Fila superior YTD/Variación eliminada — solo header de 3 secciones)
         // Header de 3 secciones — Cumplimiento vs Cuota | Facturación vs Año Ant | Sell-In vs Sell-Out
+        // IMPORTANTE: las 3 secciones se calculan SOLO hasta el mes corriente
+        // (los meses futuros del periodo no inflan el denominador ni el comparativo).
         (function(){
-          const cump = totalCuotaMin > 0 ? (totalSellIn / totalCuotaMin * 100) : null;
-          const ef = totalSellIn > 0 && totalSellOut > 0 ? (totalSellOut / totalSellIn * 100) : null;
+          const hoyMes = new Date().getMonth() + 1;
+          const anioHoy = new Date().getFullYear();
+          // Si el año seleccionado es el actual, limitar al mes corriente; si es pasado, usar todo el periodo
+          const mesTope = (anioResumen === anioHoy) ? hoyMes : 12;
+          const mesesHastaActual = mesesFiltrados.filter(m => m <= mesTope);
+
+          // Recalcular sumas solo hasta mes corriente
+          const sellInHasta = mesesHastaActual.reduce((s, m) => s + (ventasPorMes[m] ? Number(ventasPorMes[m].sell_in) || 0 : 0), 0);
+          const sellOutHasta = mesesHastaActual.reduce((s, m) => s + (ventasPorMes[m] ? Number(ventasPorMes[m].sell_out) || 0 : 0), 0);
+          const cuotaMinHasta = mesesHastaActual.reduce((s, m) => s + (cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_min) || 0 : 0), 0);
+          const sellInPrevHasta = mesesHastaActual.reduce((s, m) => s + ((sellInPrevAnio && sellInPrevAnio[m]) ? Number(sellInPrevAnio[m].sell_in) || 0 : 0), 0);
+
+          const cump = cuotaMinHasta > 0 ? (sellInHasta / cuotaMinHasta * 100) : null;
+          const variacionAbsH = sellInHasta - sellInPrevHasta;
+          const variacionPctH = sellInPrevHasta > 0 ? (variacionAbsH / sellInPrevHasta * 100) : null;
+          const ef = sellInHasta > 0 && sellOutHasta > 0 ? (sellOutHasta / sellInHasta * 100) : null;
+
+          // Etiqueta del periodo limitado: ej. "al mes de Mayo" o "hasta May 2026"
+          const mesActualLabel = MESES_CORTOS[mesTope - 1];
+          const hastaLabel = (anioResumen === anioHoy && mesesFiltrados.some(m => m > mesTope))
+            ? ` (al ${mesActualLabel})` : "";
+
           return React.createElement("div", {
             style: {
               display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
@@ -1736,35 +1758,35 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
           },
             // LEFT: Cumplimiento vs Cuota
             React.createElement("div", { style: { padding: "14px 20px", borderRight: "1px solid #E2E8F0" } },
-              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "🎯 Cumplimiento vs Cuota"),
+              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "🎯 Cumplimiento vs Cuota" + hastaLabel),
               React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 } },
                 React.createElement("span", {
                   style: { fontSize: 22, fontWeight: 800, color: cump === null ? "#94A3B8" : cump >= 95 ? "#059669" : cump >= 80 ? "#D97706" : "#DC2626" }
                 }, cump !== null ? cump.toFixed(1) + "%" : "—"),
                 React.createElement("span", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } },
-                  formatMXN(totalSellIn) + " / " + formatMXN(totalCuotaMin)),
+                  formatMXN(sellInHasta) + " / " + formatMXN(cuotaMinHasta)),
               ),
             ),
             // CENTER: Facturación vs Año Anterior
             React.createElement("div", { style: { padding: "14px 20px", borderRight: "1px solid #E2E8F0" } },
-              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "📊 Facturación vs Año Anterior"),
+              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "📊 Facturación vs Año Anterior" + hastaLabel),
               React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 } },
                 React.createElement("span", {
-                  style: { fontSize: 22, fontWeight: 800, color: variacionPct === null ? "#94A3B8" : variacionPct >= 0 ? "#059669" : "#DC2626" }
-                }, variacionPct !== null ? (variacionPct >= 0 ? "+" : "") + variacionPct.toFixed(1) + "%" : "—"),
+                  style: { fontSize: 22, fontWeight: 800, color: variacionPctH === null ? "#94A3B8" : variacionPctH >= 0 ? "#059669" : "#DC2626" }
+                }, variacionPctH !== null ? (variacionPctH >= 0 ? "+" : "") + variacionPctH.toFixed(1) + "%" : "—"),
                 React.createElement("span", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } },
-                  (variacionAbs >= 0 ? "+" : "") + formatMXN(variacionAbs)),
+                  (variacionAbsH >= 0 ? "+" : "") + formatMXN(variacionAbsH)),
               ),
             ),
             // RIGHT: Sell-In vs Sell-Out
             React.createElement("div", { style: { padding: "14px 20px" } },
-              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "🔁 Sell-In vs Sell-Out"),
+              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "🔁 Sell-In vs Sell-Out" + hastaLabel),
               React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 } },
                 React.createElement("span", {
                   style: { fontSize: 22, fontWeight: 800, color: ef === null ? "#94A3B8" : ef >= 80 ? "#059669" : ef >= 50 ? "#D97706" : "#DC2626" }
                 }, ef !== null ? ef.toFixed(1) + "%" : "—"),
                 React.createElement("span", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } },
-                  "SO: " + (totalSellOut >= 1e6 ? "$" + (totalSellOut/1e6).toFixed(1) + "M" : totalSellOut >= 1e3 ? "$" + (totalSellOut/1e3).toFixed(0) + "K" : "$0")),
+                  "SO: " + (sellOutHasta >= 1e6 ? "$" + (sellOutHasta/1e6).toFixed(1) + "M" : sellOutHasta >= 1e3 ? "$" + (sellOutHasta/1e3).toFixed(0) + "K" : "$0")),
               ),
             ),
           );
