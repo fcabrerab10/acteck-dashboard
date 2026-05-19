@@ -282,6 +282,8 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   const [sellInPrevAnio, setSellInPrevAnio] = React.useState({});
   // KPI activo en drill-down ('sellin' | 'cumpl' | 'brecha' | null)
   const [kpiExpandido, setKpiExpandido] = React.useState(null);
+  // Modal popup de drill-down: null | 'sellin' | 'sellout' | 'inventario' | 'cobranza' | 'brecha' | 'sugerido'
+  const [kpiModal, setKpiModal] = React.useState(null);
   const [periodoTipo, setPeriodoTipo] = React.useState('ytd');
   const [periodoMes, setPeriodoMes] = React.useState(new Date().getMonth() + 1);
   const [periodoRango, setPeriodoRango] = React.useState([1, 12]);
@@ -1466,8 +1468,140 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         ),
       ),
     ),
-    // Row 0.5: 3 KPI cards prominentes — Sell In · % Cuota Mín · Brecha
-    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 } },
+    // Row 0.5: GRID DE 6 TARJETAS SEMÁFORO — interactivas con drill-down en modal
+    (function(){
+      // Calcular indicadores
+      const eficienciaSO = totalSellIn > 0 && totalSellOut > 0 ? (totalSellOut / totalSellIn * 100) : 0;
+      const brecha = totalSellIn - totalCuotaMin;
+      const dso = estadoCuenta?.dso || null;
+      const saldoCxC = estadoCuenta?.saldo_actual || 0;
+      const saldoVencido = estadoCuenta?.saldo_vencido || 0;
+      const pctVencido = saldoCxC > 0 ? (saldoVencido / saldoCxC * 100) : 0;
+      const periodoLabel = periodoTipo === "trimestre" ? "Q" + Math.ceil(periodoMes/3) : periodoTipo === "mes" ? MESES_CORTOS[periodoMes-1] : periodoTipo === "rango" ? `${MESES_CORTOS[periodoRango[0]-1]}-${MESES_CORTOS[periodoRango[1]-1]}` : "YTD";
+
+      const tarjetas = [
+        // 1. SELL-IN
+        {
+          id: "sellin", color: "#3B82F6", colorBg: "#EFF6FF",
+          titulo: `Sell-In ${periodoLabel}`,
+          valor: totalSellIn >= 1e6 ? "$" + (totalSellIn / 1e6).toFixed(2) + "M" : formatMXN(totalSellIn),
+          subValor: formatMXN(totalSellIn),
+          metrica2: { label: "Cumplimiento Mín", valor: cumplimientoMin.toFixed(1) + "%", color: cumplimientoMin >= 95 ? "#10B981" : cumplimientoMin >= 80 ? "#F59E0B" : "#EF4444" },
+          metrica3: { label: "Cuota Mín", valor: formatMXN(totalCuotaMin) },
+          progreso: { pct: Math.min(cumplimientoMin, 120), color: cumplimientoMin >= 95 ? "#10B981" : cumplimientoMin >= 80 ? "#F59E0B" : "#EF4444" },
+          estado: cumplimientoMin >= 95 ? { label: "Excelente", color: "#10B981" } : cumplimientoMin >= 80 ? { label: "Saludable", color: "#F59E0B" } : cumplimientoMin >= 65 ? { label: "Atención", color: "#F59E0B" } : { label: "Crítico", color: "#EF4444" },
+        },
+        // 2. SELL-OUT
+        {
+          id: "sellout", color: "#10B981", colorBg: "#ECFDF5",
+          titulo: `Sell-Out ${periodoLabel}`,
+          valor: totalSellOut >= 1e6 ? "$" + (totalSellOut / 1e6).toFixed(2) + "M" : formatMXN(totalSellOut),
+          subValor: formatMXN(totalSellOut),
+          metrica2: { label: "Eficiencia SO/SI", valor: eficienciaSO > 0 ? eficienciaSO.toFixed(1) + "%" : "—", color: eficienciaSO >= 80 ? "#10B981" : eficienciaSO >= 50 ? "#F59E0B" : "#EF4444" },
+          metrica3: _weeklySellout.deltaPct !== null
+            ? { label: "Δ Semana", valor: (_weeklySellout.deltaPct >= 0 ? "▲ +" : "▼ ") + Math.abs(_weeklySellout.deltaPct).toFixed(1) + "%", color: _weeklySellout.deltaPct >= 0 ? "#10B981" : "#EF4444" }
+            : { label: "Δ Semana", valor: "—" },
+          estado: eficienciaSO >= 80 ? { label: "Saludable", color: "#10B981" } : eficienciaSO >= 50 ? { label: "Moderado", color: "#F59E0B" } : eficienciaSO > 0 ? { label: "Atención", color: "#EF4444" } : { label: "Sin datos", color: "#94A3B8" },
+        },
+        // 3. INVENTARIO
+        {
+          id: "inventario", color: "#8B5CF6", colorBg: "#F5F3FF",
+          titulo: "Inventario Cliente",
+          valor: totalInvValor >= 1e6 ? "$" + (totalInvValor / 1e6).toFixed(2) + "M" : formatMXN(totalInvValor),
+          subValor: formatMXN(totalInvValor),
+          metrica2: { label: "Días cobertura", valor: _diasCobertura !== null ? _diasCobertura + " d" : "—", color: _diasCobertura === null ? "#94A3B8" : _diasCobertura <= 30 ? "#EF4444" : _diasCobertura <= 90 ? "#10B981" : _diasCobertura <= 150 ? "#F59E0B" : "#EF4444" },
+          metrica3: { label: "SKUs activos", valor: invClienteLatest.length + " SKUs" },
+          estado: _diasCobertura === null ? { label: "Sin datos", color: "#94A3B8" } : _diasCobertura <= 30 ? { label: "Stockout riesgo", color: "#EF4444" } : _diasCobertura <= 90 ? { label: "Óptimo", color: "#10B981" } : _diasCobertura <= 150 ? { label: "Alto", color: "#F59E0B" } : { label: "Sobreinventario", color: "#EF4444" },
+        },
+        // 4. CRÉDITO Y COBRANZA
+        {
+          id: "cobranza", color: "#EF4444", colorBg: "#FEF2F2",
+          titulo: "Crédito y Cobranza",
+          valor: saldoCxC >= 1e6 ? "$" + (saldoCxC / 1e6).toFixed(2) + "M" : formatMXN(saldoCxC),
+          subValor: formatMXN(saldoCxC),
+          metrica2: { label: "DSO", valor: dso !== null ? dso + " d" : "—", color: dso === null ? "#94A3B8" : dso <= 60 ? "#10B981" : dso <= 90 ? "#F59E0B" : "#EF4444" },
+          metrica3: { label: "Vencido", valor: saldoVencido > 0 ? formatMXN(saldoVencido) + " (" + pctVencido.toFixed(0) + "%)" : "—", color: pctVencido > 15 ? "#EF4444" : pctVencido > 5 ? "#F59E0B" : "#64748B" },
+          estado: dso === null ? { label: "Sin datos", color: "#94A3B8" } : (dso <= 60 && pctVencido <= 5) ? { label: "Saludable", color: "#10B981" } : (dso <= 90 && pctVencido <= 15) ? { label: "Atención", color: "#F59E0B" } : { label: "Crítico", color: "#EF4444" },
+        },
+        // 5. BRECHA
+        {
+          id: "brecha", color: brecha >= 0 ? "#059669" : "#DC2626", colorBg: brecha >= 0 ? "#ECFDF5" : "#FEF2F2",
+          titulo: "Brecha vs Cuota",
+          valor: (brecha >= 0 ? "+$" : "-$") + Math.abs(brecha / 1e3).toFixed(0) + "K",
+          subValor: formatMXN(brecha),
+          metrica2: { label: "vs Cuota Mín", valor: formatMXN(totalCuotaMin) },
+          metrica3: { label: "vs Cuota Ideal", valor: formatMXN(totalCuotaIdeal) },
+          estado: brecha >= 0 ? { label: "Cuota alcanzada", color: "#10B981" } : brecha >= -totalCuotaMin * 0.1 ? { label: "Cerca de meta", color: "#F59E0B" } : { label: "Lejos de meta", color: "#EF4444" },
+        },
+        // 6. SUGERIDO REPOSICIÓN
+        {
+          id: "sugerido", color: "#0891B2", colorBg: "#ECFEFF",
+          titulo: "Sugerido Reposición",
+          valor: _sugeridoTotal.monto >= 1e6 ? "$" + (_sugeridoTotal.monto / 1e6).toFixed(2) + "M" : formatMXN(_sugeridoTotal.monto),
+          subValor: formatMXN(_sugeridoTotal.monto),
+          metrica2: { label: "Piezas", valor: _sugeridoTotal.piezas.toLocaleString("es-MX") },
+          metrica3: { label: "SKUs", valor: _sugeridoTotal.skus + " SKUs" },
+          estado: _sugeridoTotal.monto > 0 ? { label: "Oportunidad", color: "#0891B2" } : { label: "Sin pendientes", color: "#10B981" },
+        },
+      ];
+
+      return React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 } },
+        ...tarjetas.map(t => React.createElement("div", {
+          key: t.id,
+          onClick: () => setKpiModal(t.id),
+          style: {
+            background: "#fff",
+            borderRadius: 14,
+            border: "1px solid #E2E8F0",
+            borderLeft: `4px solid ${t.color}`,
+            padding: "16px 18px",
+            cursor: "pointer",
+            transition: "all 0.15s",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+            display: "flex", flexDirection: "column", gap: 10,
+          },
+          onMouseEnter: (e) => { e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)"; e.currentTarget.style.transform = "translateY(-1px)"; },
+          onMouseLeave: (e) => { e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)"; e.currentTarget.style.transform = "translateY(0)"; },
+        },
+          // Header de la tarjeta
+          React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 } },
+            React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" } }, t.titulo),
+            // Badge estado
+            React.createElement("span", {
+              style: {
+                fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
+                color: t.estado.color, background: t.estado.color + "15",
+                whiteSpace: "nowrap",
+              }
+            }, t.estado.label),
+          ),
+          // Valor principal
+          React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: 26, fontWeight: 800, color: t.color, lineHeight: 1.1 } }, t.valor),
+            React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, t.subValor),
+          ),
+          // Barra de progreso (si aplica)
+          t.progreso && React.createElement("div", null,
+            React.createElement("div", { style: { background: "#F1F5F9", borderRadius: 999, height: 5, overflow: "hidden" } },
+              React.createElement("div", { style: { width: t.progreso.pct + "%", height: "100%", background: t.progreso.color, transition: "width 0.4s" } })
+            ),
+          ),
+          // 2 métricas secundarias
+          React.createElement("div", { style: { display: "flex", gap: 12, justifyContent: "space-between", borderTop: "1px dashed #E2E8F0", paddingTop: 8 } },
+            React.createElement("div", null,
+              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 600 } }, t.metrica2.label),
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: t.metrica2.color || "#1E293B" } }, t.metrica2.valor),
+            ),
+            React.createElement("div", { style: { textAlign: "right" } },
+              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 600 } }, t.metrica3.label),
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: t.metrica3.color || "#1E293B" } }, t.metrica3.valor),
+            ),
+          ),
+        ))
+      );
+    })(),
+    // === BLOCK LEGACY: 3 cards de Fase 2A ===
+    false && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 } },
       // KPI 1: Sell-In del periodo
       React.createElement("div", {
         style: {
@@ -1731,15 +1865,214 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       ),
       React.createElement(LineChartSellInOut, null)
     ),
-    // Row 2: Panel operativo 4 columnas (Cuota / Comercial / Inventario / Financiera)
-    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "0.9fr 1.3fr 1fr 1fr", gap: 14 } },
-      React.createElement(ProgresoCuotaCard, null),
-      React.createElement(ComercialCard, null),
-      React.createElement(InventarioCard, null),
-      React.createElement(FinancieraCard, null)
-    ),
+    // Row 2 ELIMINADO (4 cards fusionadas en el grid de 6 tarjetas arriba)
     // Row 3: Tareas del cliente
-    React.createElement(TareasCard, null)
+    React.createElement(TareasCard, null),
+    // === MODAL POPUP de drill-down ===
+    kpiModal && React.createElement("div", {
+      onClick: () => setKpiModal(null),
+      style: {
+        position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+        background: "rgba(15, 23, 42, 0.55)", zIndex: 1000,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20, backdropFilter: "blur(2px)",
+      }
+    },
+      React.createElement("div", {
+        onClick: (e) => e.stopPropagation(),
+        style: {
+          background: "#fff", borderRadius: 16, padding: 0,
+          maxWidth: 720, width: "100%", maxHeight: "85vh",
+          overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+          animation: "fadeIn 0.2s",
+        }
+      },
+        // Header del modal
+        React.createElement("div", {
+          style: {
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "16px 24px", borderBottom: "1px solid #E2E8F0",
+            position: "sticky", top: 0, background: "#fff", zIndex: 1,
+          }
+        },
+          React.createElement("div", null,
+            React.createElement("h3", { style: { fontSize: 18, fontWeight: 800, color: "#1E293B", margin: 0 } },
+              kpiModal === "sellin" ? "📊 Detalle Sell-In" :
+              kpiModal === "sellout" ? "🛒 Detalle Sell-Out" :
+              kpiModal === "inventario" ? "📦 Detalle Inventario" :
+              kpiModal === "cobranza" ? "💳 Detalle Crédito y Cobranza" :
+              kpiModal === "brecha" ? "🎯 Análisis de Brecha" :
+              kpiModal === "sugerido" ? "💡 Sugerido Reposición" : "Detalle"),
+            React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginTop: 2 } },
+              (cliente?.nombre || clienteKey) + " · " + (periodoTipo === "trimestre" ? "Q" + Math.ceil(periodoMes/3) : periodoTipo === "mes" ? MESES_CORTOS[periodoMes-1] : periodoTipo === "rango" ? "Rango" : "YTD") + " " + anioResumen),
+          ),
+          React.createElement("button", {
+            onClick: () => setKpiModal(null),
+            style: {
+              background: "transparent", border: "none", fontSize: 24, color: "#94A3B8",
+              cursor: "pointer", padding: "0 8px", lineHeight: 1,
+            }
+          }, "×"),
+        ),
+        // Body del modal — drill-down según KPI
+        React.createElement("div", { style: { padding: "20px 24px" } },
+          // SELL-IN drill-down
+          kpiModal === "sellin" && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 } },
+              React.createElement("div", { style: { background: "#EFF6FF", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Sell-In real"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#1E40AF" } }, formatMXN(totalSellIn)),
+              ),
+              React.createElement("div", { style: { background: "#FEF3C7", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Cuota Mín"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#D97706" } }, formatMXN(totalCuotaMin)),
+              ),
+              React.createElement("div", { style: { background: "#FEE2E2", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Cuota Ideal"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#DC2626" } }, formatMXN(totalCuotaIdeal)),
+              ),
+              React.createElement("div", { style: { background: cumplimientoMin >= 95 ? "#ECFDF5" : cumplimientoMin >= 80 ? "#FEF3C7" : "#FEE2E2", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "% Cumplimiento"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: cumplimientoMin >= 95 ? "#059669" : cumplimientoMin >= 80 ? "#D97706" : "#DC2626" } }, cumplimientoMin.toFixed(1) + "%"),
+              ),
+            ),
+            // Desglose por mes
+            React.createElement("div", null,
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1E293B", marginBottom: 8 } }, "Desglose por mes"),
+              React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 } },
+                ventasFiltradas.map(v => {
+                  const cuotaMes = cuotasPorMes[v.mes] ? Number(cuotasPorMes[v.mes].cuota_min) || 0 : 0;
+                  const pctMes = cuotaMes > 0 ? (Number(v.sell_in) / cuotaMes * 100) : 0;
+                  return React.createElement("div", {
+                    key: v.mes,
+                    style: { background: "#F8FAFC", padding: "8px 12px", borderRadius: 8, borderLeft: `3px solid ${pctMes >= 95 ? "#10B981" : pctMes >= 80 ? "#F59E0B" : pctMes > 0 ? "#EF4444" : "#94A3B8"}` }
+                  },
+                    React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 600, textTransform: "uppercase" } }, MESES_CORTOS[v.mes - 1]),
+                    React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#1E293B" } }, Number(v.sell_in) > 0 ? formatMXN(Number(v.sell_in)) : "—"),
+                    pctMes > 0 && React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, pctMes.toFixed(0) + "% cuota"),
+                  );
+                })
+              )
+            )
+          ),
+          // SELL-OUT drill-down
+          kpiModal === "sellout" && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 } },
+              React.createElement("div", { style: { background: "#ECFDF5", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Sell-Out"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#059669" } }, formatMXN(totalSellOut)),
+              ),
+              React.createElement("div", { style: { background: "#F1F5F9", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Eficiencia SO/SI"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#1E293B" } }, totalSellIn > 0 ? (totalSellOut / totalSellIn * 100).toFixed(1) + "%" : "—"),
+              ),
+              _weeklySellout.deltaPct !== null && React.createElement("div", { style: { background: _weeklySellout.deltaPct >= 0 ? "#ECFDF5" : "#FEE2E2", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Δ Semana vs anterior"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: _weeklySellout.deltaPct >= 0 ? "#059669" : "#DC2626" } },
+                  (_weeklySellout.deltaPct >= 0 ? "▲ +" : "▼ ") + Math.abs(_weeklySellout.deltaPct).toFixed(1) + "%"),
+              ),
+            ),
+            // Marcas Top
+            _marcasTop.length > 0 && React.createElement("div", null,
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1E293B", marginBottom: 8 } }, "Mix de marcas (Sell-Out)"),
+              _marcasTop.map(m => {
+                const color = m.marca === 'Acteck' ? '#3B82F6' : m.marca === 'Balam Rush' ? '#8B5CF6' : '#94A3B8';
+                return React.createElement("div", { key: m.marca, style: { marginBottom: 10 } },
+                  React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12, marginBottom: 4 } },
+                    React.createElement("span", { style: { fontWeight: 700, color: "#1E293B" } }, m.marca),
+                    React.createElement("span", { style: { color, fontWeight: 700 } }, m.pct.toFixed(1) + "% · " + formatMXN(m.monto)),
+                  ),
+                  React.createElement("div", { style: { height: 6, background: "#E2E8F0", borderRadius: 3, overflow: "hidden" } },
+                    React.createElement("div", { style: { height: "100%", width: m.pct + "%", background: color, transition: "width .6s" } })
+                  ),
+                );
+              })
+            ),
+          ),
+          // INVENTARIO drill-down
+          kpiModal === "inventario" && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 } },
+              React.createElement("div", { style: { background: "#F5F3FF", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Valor inventario"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#7C3AED" } }, formatMXN(totalInvValor)),
+                React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, invClienteLatest.length + " SKUs activos"),
+              ),
+              React.createElement("div", { style: { background: "#F8FAFC", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Días cobertura"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: _diasCobertura === null ? "#94A3B8" : _diasCobertura <= 90 ? "#059669" : _diasCobertura <= 150 ? "#D97706" : "#DC2626" } },
+                  _diasCobertura !== null ? _diasCobertura + " d" : "—"),
+                React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } },
+                  _diasCobertura === null ? "—" : _diasCobertura <= 30 ? "Riesgo stockout" : _diasCobertura <= 90 ? "Óptimo" : _diasCobertura <= 150 ? "Alto" : "Sobreinventario"),
+              ),
+              _latestWeek.semana && React.createElement("div", { style: { background: "#F8FAFC", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Última actualización"),
+                React.createElement("div", { style: { fontSize: 16, fontWeight: 700, color: "#1E293B" } }, "Semana " + _latestWeek.semana),
+                React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, "Año " + _latestWeek.anio),
+              ),
+            ),
+          ),
+          // COBRANZA drill-down
+          kpiModal === "cobranza" && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 } },
+              React.createElement("div", { style: { background: "#FEF2F2", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Saldo actual"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#DC2626" } }, formatMXN(estadoCuenta?.saldo_actual || 0)),
+              ),
+              React.createElement("div", { style: { background: "#FEF3C7", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Saldo vencido"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#D97706" } }, formatMXN(estadoCuenta?.saldo_vencido || 0)),
+              ),
+              React.createElement("div", { style: { background: "#F1F5F9", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "DSO real"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#1E293B" } }, (estadoCuenta?.dso || "—") + " días"),
+              ),
+            ),
+            estadoCuenta?.anio && React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", textAlign: "right" } },
+              "Última semana: " + estadoCuenta.semana + "/" + estadoCuenta.anio),
+          ),
+          // BRECHA drill-down
+          kpiModal === "brecha" && (function(){
+            const brecha = totalSellIn - totalCuotaMin;
+            const brechaIdeal = totalSellIn - totalCuotaIdeal;
+            return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+              React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 } },
+                React.createElement("div", { style: { background: brecha >= 0 ? "#ECFDF5" : "#FEE2E2", padding: 12, borderRadius: 8 } },
+                  React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Brecha vs Cuota Mín"),
+                  React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: brecha >= 0 ? "#059669" : "#DC2626" } }, (brecha >= 0 ? "+" : "") + formatMXN(brecha)),
+                ),
+                React.createElement("div", { style: { background: brechaIdeal >= 0 ? "#ECFDF5" : "#FEE2E2", padding: 12, borderRadius: 8 } },
+                  React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Brecha vs Cuota Ideal"),
+                  React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: brechaIdeal >= 0 ? "#059669" : "#DC2626" } }, (brechaIdeal >= 0 ? "+" : "") + formatMXN(brechaIdeal)),
+                ),
+              ),
+              brecha < 0 && React.createElement("div", { style: { background: "#FEF3C7", padding: 14, borderRadius: 8, fontSize: 13, color: "#92400E" } },
+                React.createElement("strong", null, "Para cerrar la brecha: "),
+                "Necesitas vender ", React.createElement("strong", null, formatMXN(Math.abs(brecha))), " adicionales para alcanzar la cuota mínima del periodo."),
+            );
+          })(),
+          // SUGERIDO drill-down
+          kpiModal === "sugerido" && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 } },
+              React.createElement("div", { style: { background: "#ECFEFF", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Monto"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#0891B2" } }, formatMXN(_sugeridoTotal.monto)),
+              ),
+              React.createElement("div", { style: { background: "#F0FDF4", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Piezas"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#047857" } }, _sugeridoTotal.piezas.toLocaleString("es-MX")),
+              ),
+              React.createElement("div", { style: { background: "#F8FAFC", padding: 12, borderRadius: 8 } },
+                React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 600 } }, "SKUs"),
+                React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#1E293B" } }, _sugeridoTotal.skus),
+              ),
+            ),
+            React.createElement("div", { style: { fontSize: 12, color: "#64748B", lineHeight: 1.6 } },
+              "💡 Estos son SKUs que el cliente ya está vendiendo pero le falta stock para mantener su ritmo de sell-out. Reponerlos asegura no perder ventas. Para ver el detalle por SKU, ve a ",
+              React.createElement("strong", null, "Estrategia de Producto"), "."),
+          ),
+        )
+      )
+    )
   );
 }
 
