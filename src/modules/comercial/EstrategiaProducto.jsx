@@ -2722,334 +2722,87 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       );
     })(),
 
-    // ── 5 KPIs que apoyan el sugerido + strip mensual de cuotas ──
-    // 1) SKUs en riesgo · 2) Total a sugerir · 3) Cuota del mes · 4) Cumplimiento YTD · 5) Último envío
-    aggs && kpis && (function(){
-      const cliCfg = clienteKey === 'pcel' ? { cadenciaDias: 14, label: 'PCEL (cada 2 sem)' } : { cadenciaDias: 7, label: 'Digitalife (sem)' };
-      const MESES_LBL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-      // 1) SKUs en riesgo
-      const numRiesgo = skusRiesgo.length;
-      const piezasUrgentes = skusRiesgo.reduce((a, s) => a + (s.sugerido || 0), 0);
-      // 2) Total a sugerir — derivado del Detalle por SKU (fuente de verdad)
-      const sugMonto = (kpisSugerido && kpisSugerido.sugMonto) || 0;
-      const sugPiezas = (kpisSugerido && kpisSugerido.sugPiezas) || 0;
-      const sugSkus = (kpisSugerido && kpisSugerido.sugSkus) || 0;
-      // 3) Cuota del mes — si el mes actual aún no tiene sell-in cargado,
-      // usamos el último mes con datos (avisamos al usuario en el subtítulo).
-      const mesActualReal = new Date().getMonth() + 1;
-      let mesParaTarjeta = mesActualReal;
-      let cuotaMes = kpis.cuotaMesActual || 0;
-      let siMes = kpis.siMesActual || 0;
-      let mesEsActualReal = true;
-      if (siMes === 0 && kpis.cumplimientoMensual) {
-        // Buscar el último mes con sell-in registrado
-        const ultimoConDatos = [...kpis.cumplimientoMensual]
-          .filter(m => m.sellIn > 0 && !m.esFuturo)
-          .sort((a, b) => b.mes - a.mes)[0];
-        if (ultimoConDatos) {
-          mesParaTarjeta = ultimoConDatos.mes;
-          mesEsActualReal = false;
-          siMes = ultimoConDatos.sellIn;
-          cuotaMes = ultimoConDatos.cuota;
-        }
-      }
-      const pctMes = cuotaMes > 0 ? (siMes / cuotaMes) * 100 : null;
-      const faltaMes = cuotaMes > 0 ? Math.max(0, cuotaMes - siMes) : 0;
-      // 4) Cumplimiento YTD
-      const cumplPct = (kpis.cuotaYTD && kpis.cuotaYTD > 0) ? (kpis.siYTD / kpis.cuotaYTD) * 100 : null;
-      // 5) Último envío
-      const ultPropuesta = (propuestasHist || []).slice().sort((a,b)=>{
+    // ── 4 KPIs nuevos: Valor inv · Piezas inv · Por categoría · Última propuesta ──
+    (function(){
+      if (!datos) return null;
+      const filas = skuDetail || [];
+      const valorInvTotal = filas.reduce((a, r) => a + (Number(r.valorInv) || 0), 0);
+      const piezasInvTotal = filas.reduce((a, r) => a + (Number(r.stock) || 0), 0);
+      const skusActivos = filas.filter(r => (Number(r.stock) || 0) > 0).length;
+
+      // Por categoría: agregar valor + piezas + #SKUs
+      const porCat = {};
+      filas.forEach(r => {
+        const cat = (r.categoria || 'Sin categoría').trim() || 'Sin categoría';
+        if (!porCat[cat]) porCat[cat] = { valor: 0, piezas: 0, skus: 0 };
+        porCat[cat].valor += Number(r.valorInv) || 0;
+        porCat[cat].piezas += Number(r.stock) || 0;
+        if ((Number(r.stock) || 0) > 0) porCat[cat].skus += 1;
+      });
+      const categorias = Object.entries(porCat)
+        .map(([cat, v]) => ({ cat, ...v, pct: valorInvTotal > 0 ? (v.valor / valorInvTotal * 100) : 0 }))
+        .sort((a, b) => b.valor - a.valor)
+        .slice(0, 6);
+
+      // Última propuesta
+      const ultProp = (propuestasHist || []).slice().sort((a, b) => {
         const fa = new Date(a.fecha_propuesta || a.created_at).getTime();
         const fb = new Date(b.fecha_propuesta || b.created_at).getTime();
         return fb - fa;
       })[0];
-      const diasSinEnviar = ultPropuesta
-        ? Math.floor((Date.now() - new Date(ultPropuesta.fecha_propuesta || ultPropuesta.created_at).getTime()) / 86400000)
+      const diasSinEnviar = ultProp
+        ? Math.floor((Date.now() - new Date(ultProp.fecha_propuesta || ultProp.created_at).getTime()) / 86400000)
         : null;
-      const cadenciaVencida = diasSinEnviar != null && diasSinEnviar >= cliCfg.cadenciaDias;
+      const ultPropFecha = ultProp ? new Date(ultProp.fecha_propuesta || ultProp.created_at) : null;
+      const fechaLabel = ultPropFecha
+        ? ultPropFecha.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '—';
 
-      return React.createElement('div', null,
-        // ── Grid de 5 tarjetas ──
-        React.createElement('div', {
-          style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }
-        },
-          // 1) SKUs en riesgo
-          React.createElement('div', {
-            className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
-            style: { borderColor: numRiesgo > 0 ? '#EF4444' : '#10B981' }
-          },
-            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDD34 SKUs en riesgo'),
-            React.createElement('p', { style: { fontSize: 28, fontWeight: 700, color: numRiesgo > 0 ? '#B91C1C' : '#065F46', marginBottom: 2 } }, numRiesgo.toLocaleString('es-MX')),
-            React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
-              piezasUrgentes > 0
-                ? (piezasUrgentes.toLocaleString('es-MX') + ' pzs sugeridas urgentes')
-                : (numRiesgo === 0 ? '✓ Sin riesgo de desabasto' : 'Sin sugerido (revisar Acteck)'))
-          ),
-          // 2) Total a sugerir
-          React.createElement('div', {
-            className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
-            style: { borderColor: '#10B981', background: sugMonto > 0 ? '#F0FDF4' : '#fff' }
-          },
-            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDCE6 Total a sugerir'),
-            React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: sugMonto > 0 ? '#047857' : '#94A3B8', marginBottom: 2 } }, formatMXN(sugMonto)),
-            React.createElement('p', { style: { fontSize: 11, color: '#64748B' } }, sugSkus + ' SKUs · ' + sugPiezas.toLocaleString('es-MX') + ' pzs')
-          ),
-          // 3) Cuota del mes (clickable → expande detalle Q)
-          React.createElement('div', {
-            className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
-            style: {
-              borderColor: pctMes == null ? '#94A3B8' : pctMes >= 100 ? '#10B981' : pctMes >= 70 ? '#F59E0B' : '#EF4444',
-              cursor: 'pointer',
-              outline: kpiAbierto === 'cuotaMes' ? '2px solid #1E40AF' : 'none',
-            },
-            onClick: () => setKpiAbierto(kpiAbierto === 'cuotaMes' ? null : 'cuotaMes'),
-            title: 'Click para ver detalle del mes y trimestre'
-          },
-            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } },
-              '\uD83D\uDCC8 Cuota ' + MESES_LBL[mesParaTarjeta - 1] + (mesEsActualReal ? '' : ' (último con datos)') + (kpiAbierto === 'cuotaMes' ? ' ▾' : ' ▸')),
-            React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: pctMes == null ? '#94A3B8' : pctMes >= 100 ? '#047857' : pctMes >= 70 ? '#B45309' : '#B91C1C', marginBottom: 2 } },
-              pctMes == null
-                ? 'Sin cuota'
-                : faltaMes > 0
-                  ? ('Faltan ' + formatMXN(faltaMes))
-                  : '✓ Cumplida'),
-            React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
-              pctMes == null
-                ? ''
-                : (pctMes.toFixed(0) + '% · ' + formatMXN(siMes) + ' / ' + formatMXN(cuotaMes)))
-          ),
-          // 4) Cumplimiento YTD (clickable → expande detalle YTD)
-          React.createElement('div', {
-            className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
-            style: {
-              borderColor: cumplPct == null ? '#94A3B8' : cumplPct >= 90 ? '#10B981' : cumplPct >= 70 ? '#F59E0B' : '#EF4444',
-              cursor: 'pointer',
-              outline: kpiAbierto === 'cumplYTD' ? '2px solid #1E40AF' : 'none',
-            },
-            onClick: () => setKpiAbierto(kpiAbierto === 'cumplYTD' ? null : 'cumplYTD'),
-            title: 'Click para ver detalle YTD'
-          },
-            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83C\uDFAF Cumplimiento YTD' + (kpiAbierto === 'cumplYTD' ? ' ▾' : ' ▸')),
-            React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: cumplPct == null ? '#94A3B8' : cumplPct >= 90 ? '#047857' : cumplPct >= 70 ? '#B45309' : '#B91C1C', marginBottom: 2 } },
-              cumplPct == null ? 'Sin cuota' : cumplPct.toFixed(0) + '%'),
-            React.createElement('p', { style: { fontSize: 11, color: '#64748B' } },
-              kpis.cuotaYTD ? formatMXN(kpis.siYTD || 0) + ' / ' + formatMXN(kpis.cuotaYTD) : '')
-          ),
-          // 5) Último envío
-          React.createElement('div', {
-            className: 'bg-white rounded-xl shadow-sm p-4 border-t-4',
-            style: { borderColor: cadenciaVencida ? '#EF4444' : '#06B6D4' }
-          },
-            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 } }, '\uD83D\uDCC5 Último envío'),
-            React.createElement('p', { style: { fontSize: 22, fontWeight: 700, color: cadenciaVencida ? '#B91C1C' : '#0E7490', marginBottom: 2 } },
-              ultPropuesta
-                ? (diasSinEnviar === 0 ? 'Hoy' : (diasSinEnviar + ' días'))
-                : 'Nunca'),
-            React.createElement('p', { style: { fontSize: 11, color: cadenciaVencida ? '#B91C1C' : '#64748B', fontWeight: cadenciaVencida ? 600 : 400 } },
-              ultPropuesta
-                ? (cadenciaVencida ? '⚠ Toca enviar (' + cliCfg.label + ')' : 'Cadencia: ' + cliCfg.label)
-                : 'Cadencia: ' + cliCfg.label)
-          )
-        ),
-        // ── Panel desplegable: detalle de Cuota mes (con info trimestre) ──
-        kpiAbierto === 'cuotaMes' && kpis.qActualData && React.createElement('div', {
-          className: 'bg-white rounded-xl shadow-sm p-4 mt-3',
-          style: { borderLeft: '4px solid #F59E0B' }
-        },
-          React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 } },
-            React.createElement('p', { style: { fontSize: 12, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' } },
-              'Detalle ' + MESES_LBL[mesParaTarjeta - 1] + ' + Q' + kpis.trimestreActual),
-            React.createElement('button', { onClick: () => setKpiAbierto(null), style: { background: 'transparent', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 16 }, title: 'Cerrar' }, '✕')
-          ),
-          // Grid de 2 columnas: mes vs trimestre
-          React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 } },
-            // ─── Columna MES ───
-            React.createElement('div', { style: { padding: 14, background: '#FFFBEB', borderRadius: 10, border: '1px solid #FDE68A' } },
-              React.createElement('p', { style: { fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 8 } }, '📅 ' + MESES_LBL[mesParaTarjeta - 1]),
-              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
-                React.createElement('span', { style: { color: '#475569' } }, 'Cuota mín.:'),
-                React.createElement('span', { style: { fontWeight: 600, color: '#1E293B' } }, formatMXN(cuotaMes))
-              ),
-              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
-                React.createElement('span', { style: { color: '#475569' } }, 'Sell-In real:'),
-                React.createElement('span', { style: { fontWeight: 600, color: '#1E40AF' } }, formatMXN(siMes))
-              ),
-              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 14, paddingTop: 6, borderTop: '1px solid #FDE68A', marginTop: 4 } },
-                React.createElement('span', { style: { fontWeight: 700, color: faltaMes > 0 ? '#B91C1C' : '#065F46' } }, faltaMes > 0 ? 'Falta:' : '✓ Cumplida'),
-                React.createElement('span', { style: { fontWeight: 800, color: faltaMes > 0 ? '#B91C1C' : '#065F46' } }, faltaMes > 0 ? formatMXN(faltaMes) : (pctMes ? pctMes.toFixed(0) + '%' : ''))
-              )
-            ),
-            // ─── Columna Q (trimestre) ───
-            React.createElement('div', { style: { padding: 14, background: '#EFF6FF', borderRadius: 10, border: '1px solid #BFDBFE' } },
-              React.createElement('p', { style: { fontSize: 11, fontWeight: 700, color: '#1E40AF', marginBottom: 8 } },
-                '📊 Q' + kpis.trimestreActual + ' (' + kpis.qActualData.meses.map(m => MESES_LBL[m-1]).join('-') + ')'),
-              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
-                React.createElement('span', { style: { color: '#475569' } }, 'Cuota Q total:'),
-                React.createElement('span', { style: { fontWeight: 600, color: '#1E293B' } }, formatMXN(kpis.qActualData.cuota))
-              ),
-              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
-                React.createElement('span', { style: { color: '#475569' } }, 'Vendido Q (acum.):'),
-                React.createElement('span', { style: { fontWeight: 600, color: '#1E40AF' } }, formatMXN(kpis.qActualData.sellInAcumulado))
-              ),
-              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 14, paddingTop: 6, borderTop: '1px solid #BFDBFE', marginTop: 4 } },
-                React.createElement('span', { style: { fontWeight: 700, color: kpis.qActualData.falta > 0 ? '#B91C1C' : '#065F46' } }, kpis.qActualData.falta > 0 ? 'Falta para Q:' : '✓ Q cumplido'),
-                React.createElement('span', { style: { fontWeight: 800, color: kpis.qActualData.falta > 0 ? '#B91C1C' : '#065F46' } },
-                  kpis.qActualData.falta > 0 ? formatMXN(kpis.qActualData.falta) : (kpis.qActualData.pct != null ? kpis.qActualData.pct.toFixed(0) + '%' : ''))
-              )
-            )
-          ),
-          // Botones calculadora reversa (F)
-          canEdit && React.createElement('div', { style: { marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
-            React.createElement('span', { style: { fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' } }, '🎯 Sugerencia para llegar a la meta:'),
-            faltaMes > 0 && React.createElement('button', {
-              onClick: () => calcularParaCuota('mes'),
-              title: 'Calcula qué SKUs subir al sugerido agresivo para cubrir el gap del mes',
-              style: { padding: '6px 12px', background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }
-            }, 'Para mes (' + formatMXN(faltaMes) + ')'),
-            kpis.qActualData && kpis.qActualData.falta > 0 && React.createElement('button', {
-              onClick: () => calcularParaCuota('q'),
-              title: 'Calcula qué SKUs subir al sugerido agresivo para cubrir el gap del Q',
-              style: { padding: '6px 12px', background: '#DBEAFE', color: '#1E40AF', border: '1px solid #BFDBFE', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }
-            }, 'Para Q (' + formatMXN(kpis.qActualData.falta) + ')'),
-            (faltaMes <= 0 && (!kpis.qActualData || kpis.qActualData.falta <= 0)) && React.createElement('span', { style: { fontSize: 11, color: '#065F46', fontStyle: 'italic' } }, '✓ Mes y Q al día — no falta nada')
-          ),
-          // Tabla pequeña con los 4 trimestres
-          React.createElement('div', { style: { marginTop: 14 } },
-            React.createElement('p', { style: { fontSize: 11, color: '#475569', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 } }, 'Resumen por trimestre'),
-            React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 } },
-              kpis.cuotasQ.map((q) => {
-                const isAct = q.esActual;
-                const ok = q.pct != null && q.pct >= 100;
-                const bg = q.cuota === 0 ? '#F1F5F9'
-                  : ok ? '#D1FAE5'
-                  : (q.pct != null && q.pct >= 70) ? '#FEF3C7'
-                  : '#FEE2E2';
-                return React.createElement('div', {
-                  key: q.q,
-                  style: { padding: 10, background: bg, borderRadius: 8, border: isAct ? '2px solid #1E40AF' : '1px solid #E2E8F0', textAlign: 'center' }
-                },
-                  React.createElement('p', { style: { fontSize: 10, fontWeight: 600, color: '#475569', marginBottom: 4 } }, 'Q' + q.q),
-                  React.createElement('p', { style: { fontSize: 14, fontWeight: 700, color: '#1E293B' } },
-                    q.pct == null ? '—' : q.pct.toFixed(0) + '%'),
-                  React.createElement('p', { style: { fontSize: 9, color: '#64748B', marginTop: 2 } },
-                    formatMXN(q.cuota))
-                );
-              })
-            )
-          )
-        ),
-        // ── Panel desplegable: detalle Cumplimiento YTD ──
-        kpiAbierto === 'cumplYTD' && React.createElement('div', {
-          className: 'bg-white rounded-xl shadow-sm p-4 mt-3',
-          style: { borderLeft: '4px solid #1E40AF' }
-        },
-          React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 } },
-            React.createElement('p', { style: { fontSize: 12, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' } }, 'Detalle YTD ' + new Date().getFullYear()),
-            React.createElement('button', { onClick: () => setKpiAbierto(null), style: { background: 'transparent', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 16 }, title: 'Cerrar' }, '✕')
-          ),
-          (function(){
-            const cuotaTotal = (kpis.cuotasQ || []).reduce((s, q) => s + (q.cuota || 0), 0);
-            const faltaYTD = Math.max(0, (kpis.cuotaYTD || 0) - (kpis.siYTD || 0));
-            const faltaAnio = Math.max(0, cuotaTotal - (kpis.siYTD || 0));
-            return React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 } },
-              // YTD
-              React.createElement('div', { style: { padding: 14, background: '#EFF6FF', borderRadius: 10, border: '1px solid #BFDBFE' } },
-                React.createElement('p', { style: { fontSize: 11, fontWeight: 700, color: '#1E40AF', marginBottom: 8 } }, '📈 YTD (Ene-' + MESES_LBL[mesActualReal - 1] + ')'),
-                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
-                  React.createElement('span', { style: { color: '#475569' } }, 'Cuota YTD:'),
-                  React.createElement('span', { style: { fontWeight: 600, color: '#1E293B' } }, formatMXN(kpis.cuotaYTD || 0))
-                ),
-                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
-                  React.createElement('span', { style: { color: '#475569' } }, 'Sell-In YTD:'),
-                  React.createElement('span', { style: { fontWeight: 600, color: '#1E40AF' } }, formatMXN(kpis.siYTD || 0))
-                ),
-                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 14, paddingTop: 6, borderTop: '1px solid #BFDBFE', marginTop: 4 } },
-                  React.createElement('span', { style: { fontWeight: 700, color: faltaYTD > 0 ? '#B91C1C' : '#065F46' } }, faltaYTD > 0 ? 'Falta:' : '✓ Al día'),
-                  React.createElement('span', { style: { fontWeight: 800, color: faltaYTD > 0 ? '#B91C1C' : '#065F46' } }, faltaYTD > 0 ? formatMXN(faltaYTD) : '')
-                )
-              ),
-              // Anual
-              React.createElement('div', { style: { padding: 14, background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' } },
-                React.createElement('p', { style: { fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 8 } }, '🎯 Anual (12 meses)'),
-                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
-                  React.createElement('span', { style: { color: '#475569' } }, 'Cuota anual:'),
-                  React.createElement('span', { style: { fontWeight: 600, color: '#1E293B' } }, formatMXN(cuotaTotal))
-                ),
-                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 } },
-                  React.createElement('span', { style: { color: '#475569' } }, 'Vendido (YTD):'),
-                  React.createElement('span', { style: { fontWeight: 600, color: '#1E40AF' } }, formatMXN(kpis.siYTD || 0))
-                ),
-                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 14, paddingTop: 6, borderTop: '1px solid #E2E8F0', marginTop: 4 } },
-                  React.createElement('span', { style: { fontWeight: 700, color: faltaAnio > 0 ? '#B91C1C' : '#065F46' } }, 'Falta para meta:'),
-                  React.createElement('span', { style: { fontWeight: 800, color: faltaAnio > 0 ? '#B91C1C' : '#065F46' } }, formatMXN(faltaAnio))
-                )
-              )
-            );
-          })()
-        ),
-        // ── Mini banner: % acierto últimas propuestas (N) ──
-        aciertoPromedio && React.createElement('div', {
-          style: {
-            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px',
-            background: aciertoPromedio.pct >= 70 ? '#F0FDF4' : aciertoPromedio.pct >= 50 ? '#FFFBEB' : '#FEF2F2',
-            border: '1px solid ' + (aciertoPromedio.pct >= 70 ? '#A7F3D0' : aciertoPromedio.pct >= 50 ? '#FDE68A' : '#FECACA'),
-            borderRadius: 10, marginTop: 8
-          }
-        },
-          React.createElement('span', { style: { fontSize: 18 } }, aciertoPromedio.pct >= 70 ? '🎯' : aciertoPromedio.pct >= 50 ? '📊' : '⚠'),
-          React.createElement('div', { style: { flex: 1 } },
-            React.createElement('p', { style: { fontSize: 13, fontWeight: 700, color: aciertoPromedio.pct >= 70 ? '#065F46' : aciertoPromedio.pct >= 50 ? '#92400E' : '#991B1B', margin: 0 } },
-              'Acierto promedio: ' + aciertoPromedio.pct.toFixed(0) + '% (últimas ' + aciertoPromedio.n + ' propuestas)'),
-            React.createElement('p', { style: { fontSize: 11, color: '#64748B', margin: '2px 0 0' } },
-              'De lo que sugeriste, qué % efectivamente compró el cliente en los 14 días siguientes.')
-          )
-        ),
+      const fmtMXN = (n) => n >= 1e6 ? '$' + (n/1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + (n/1e3).toFixed(0) + 'K' : '$' + Math.round(n);
 
-        // ── Strip mensual: 12 meses con cumplimiento de cuota ──
-        kpis.cumplimientoMensual && kpis.cumplimientoMensual.some(m => m.cuota > 0) && React.createElement('div', {
-          className: 'bg-white rounded-xl shadow-sm p-4 mt-3'
-        },
-          React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 } },
-            React.createElement('p', { style: { fontSize: 11, color: '#475569', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' } }, 'Cumplimiento mensual'),
-            React.createElement('p', { style: { fontSize: 10, color: '#94A3B8' } }, 'Cuota mín. vs Sell-In real · ' + new Date().getFullYear())
-          ),
-          React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 6 } },
-            kpis.cumplimientoMensual.map((m) => {
-              const isFut = m.esFuturo;
-              const isAct = m.esActual;
-              const isOk = m.pct != null && m.pct >= 100;
-              const isNear = m.pct != null && m.pct >= 70 && m.pct < 100;
-              const isLow = m.pct != null && m.pct < 70;
-              const bg = isFut ? '#F8FAFC'
-                : m.cuota === 0 ? '#F1F5F9'
-                : isOk ? '#D1FAE5'
-                : isNear ? '#FEF3C7'
-                : '#FEE2E2';
-              const txt = isFut ? '#94A3B8'
-                : m.cuota === 0 ? '#94A3B8'
-                : isOk ? '#065F46'
-                : isNear ? '#B45309'
-                : '#B91C1C';
-              return React.createElement('div', {
-                key: m.mes,
-                style: {
-                  background: bg,
-                  border: isAct ? '2px solid #1E40AF' : '1px solid #E2E8F0',
-                  borderRadius: 8,
-                  padding: '8px 4px',
-                  textAlign: 'center',
-                },
-                title: m.cuota === 0
-                  ? MESES_LBL[m.mes-1] + ': sin cuota'
-                  : MESES_LBL[m.mes-1] + ': ' + formatMXN(m.sellIn) + ' / ' + formatMXN(m.cuota) + ' (' + (m.pct != null ? m.pct.toFixed(0) + '%' : '—') + ')',
-              },
-                React.createElement('p', { style: { fontSize: 10, color: '#64748B', fontWeight: 600, marginBottom: 2 } }, MESES_LBL[m.mes-1]),
-                React.createElement('p', { style: { fontSize: 13, fontWeight: 700, color: txt, lineHeight: 1.1 } },
-                  isFut ? '—' : (m.cuota === 0 ? '—' : (isOk ? '✓' : (m.pct != null ? m.pct.toFixed(0) + '%' : '—'))))
-              );
-            })
-          )
-        )
+      return React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 } },
+        // 1) Valor de Inventario
+        React.createElement('div', { className: 'bg-white rounded-xl shadow-sm p-4', style: { borderLeft: '4px solid #3B82F6' } },
+          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 700 } }, '💰 Valor de Inventario'),
+          React.createElement('p', { style: { fontSize: 26, fontWeight: 800, color: '#1E293B', lineHeight: 1.1 } }, fmtMXN(valorInvTotal)),
+          React.createElement('p', { style: { fontSize: 11, color: '#94A3B8', marginTop: 4 } }, formatMXN(valorInvTotal)),
+        ),
+        // 2) Inventario en piezas
+        React.createElement('div', { className: 'bg-white rounded-xl shadow-sm p-4', style: { borderLeft: '4px solid #10B981' } },
+          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 700 } }, '📦 Inventario en Piezas'),
+          React.createElement('p', { style: { fontSize: 26, fontWeight: 800, color: '#1E293B', lineHeight: 1.1 } }, piezasInvTotal.toLocaleString('es-MX')),
+          React.createElement('p', { style: { fontSize: 11, color: '#94A3B8', marginTop: 4 } }, skusActivos + ' SKUs con stock'),
+        ),
+        // 3) Inventario por categoría
+        React.createElement('div', { className: 'bg-white rounded-xl shadow-sm p-4', style: { borderLeft: '4px solid #8B5CF6', gridColumn: 'span 2', minHeight: 0 } },
+          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, fontWeight: 700 } }, '🏷️ Inventario por Categoría'),
+          categorias.length === 0
+            ? React.createElement('p', { style: { fontSize: 12, color: '#94A3B8', fontStyle: 'italic' } }, 'Sin datos')
+            : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+              ...categorias.map(c => React.createElement('div', { key: c.cat, style: { display: 'flex', flexDirection: 'column', gap: 2 } },
+                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11 } },
+                  React.createElement('span', { style: { fontWeight: 600, color: '#1E293B', maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, c.cat),
+                  React.createElement('span', { style: { fontWeight: 700, color: '#7C3AED' } }, fmtMXN(c.valor) + ' · ' + c.pct.toFixed(0) + '%'),
+                ),
+                React.createElement('div', { style: { height: 4, background: '#F1F5F9', borderRadius: 2, overflow: 'hidden' } },
+                  React.createElement('div', { style: { height: '100%', width: c.pct + '%', background: '#8B5CF6', borderRadius: 2 } })
+                ),
+              ))
+            )
+        ),
+        // 4) Última propuesta de sugerido
+        React.createElement('div', { className: 'bg-white rounded-xl shadow-sm p-4', style: { borderLeft: '4px solid #F59E0B' } },
+          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 700 } }, '📤 Última Propuesta'),
+          ultProp
+            ? React.createElement(React.Fragment, null,
+              React.createElement('p', { style: { fontSize: 22, fontWeight: 800, color: '#1E293B', lineHeight: 1.1 } }, fmtMXN(Number(ultProp.monto_total) || 0)),
+              React.createElement('p', { style: { fontSize: 11, color: '#64748B', marginTop: 4 } },
+                fechaLabel + ' · ' + (ultProp.skus_count || 0) + ' SKUs · ' + (Number(ultProp.piezas_total) || 0).toLocaleString('es-MX') + ' pzs'),
+              diasSinEnviar !== null && React.createElement('p', { style: { fontSize: 10, color: diasSinEnviar > 14 ? '#DC2626' : diasSinEnviar > 7 ? '#D97706' : '#10B981', marginTop: 2, fontWeight: 600 } },
+                'Hace ' + diasSinEnviar + ' día' + (diasSinEnviar !== 1 ? 's' : '')),
+            )
+            : React.createElement('p', { style: { fontSize: 14, color: '#94A3B8', fontStyle: 'italic', marginTop: 8 } }, 'Sin propuestas todavía'),
+        ),
       );
     })(),
 
@@ -3093,15 +2846,21 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 "Solo activos"
               ),
               // Reiniciar Sugerido: borra todos los overrides manuales del cliente
-              canEdit && Object.keys(sugeridoEdits).length > 0 && React.createElement("button", {
-                onClick: () => {
-                  if (window.confirm("\u00bfReiniciar el sugerido de " + Object.keys(sugeridoEdits).length + " SKU(s)? Volver\u00e1n a sus valores autom\u00e1ticos.")) {
-                    resetSugeridoOverrides(false);
+              canEdit && React.createElement("button", {
+                onClick: async () => {
+                  const numOverrides = Object.keys(sugeridoEdits).length;
+                  if (numOverrides === 0) {
+                    setMessage("\u2139 No hay sugeridos manuales para reiniciar");
+                    setTimeout(() => setMessage(""), 2500);
+                    return;
+                  }
+                  if (window.confirm("\u00bfReiniciar el sugerido de " + numOverrides + " SKU(s)? Volver\u00e1n a sus valores autom\u00e1ticos.")) {
+                    await resetSugeridoOverrides(false);
                   }
                 },
                 title: "Borra todos los valores manuales del sugerido. Los SKUs vuelven al c\u00e1lculo autom\u00e1tico.",
                 style: { padding: "8px 14px", background: "#fff", color: "#7C3AED", border: "1.5px solid #C4B5FD", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }
-              }, "\u21bb Reiniciar Sugerido (" + Object.keys(sugeridoEdits).length + ")"),
+              }, "\u21bb Reiniciar Sugerido" + (Object.keys(sugeridoEdits).length > 0 ? " (" + Object.keys(sugeridoEdits).length + ")" : "")),
               // Exportar Excel guarda snapshot en propuestas_compra → requiere edición
               canEdit && React.createElement("button", {
                 onClick: exportToExcel,
@@ -3110,95 +2869,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
             ),
           ),
 
-          // ═══ TOOLBAR DE SUGERIDO EN BULK ═══
-          // Botones para aplicar fórmula de cobertura: Mínimo (60d), Normal (90d), Agresivo (120d)
-          // Modificadores: Aplicar a filtrados, Solo SKUs sin stock
-          // Acciones: Reiniciar, Deshacer
-          canEdit && React.createElement("div", {
-            style: {
-              display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center",
-              padding: 10, marginBottom: 12, borderRadius: 8,
-              background: "#F8FAFC", border: "1px solid #E2E8F0"
-            }
-          },
-            React.createElement("span", { style: { fontSize: 11, fontWeight: 600, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginRight: 4 } }, "\uD83C\uDFC1 Sugerido en bulk:"),
-            // Mínimo (60d)
-            React.createElement("button", {
-              onClick: () => previewBulk('minimo', 2),
-              title: "Recalcula con cobertura objetivo de 2 meses (60 días). Lo justo.",
-              style: { padding: "6px 12px", background: "#fff", color: "#065F46", border: "1px solid #6EE7B7", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }
-            }, "\uD83D\uDFE2 Mínimo (60d)"),
-            // Normal (90d)
-            React.createElement("button", {
-              onClick: () => previewBulk('normal', 3),
-              title: "Cobertura objetivo de 3 meses (90 días). Recomendado.",
-              style: { padding: "6px 12px", background: "#fff", color: "#1E40AF", border: "1px solid #93C5FD", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }
-            }, "\uD83D\uDFE1 Normal (90d)"),
-            // Agresivo (120d)
-            React.createElement("button", {
-              onClick: () => previewBulk('agresivo', 4),
-              title: "Cobertura objetivo de 4 meses (120 días). Empuja stock al cliente.",
-              style: { padding: "6px 12px", background: "#fff", color: "#B91C1C", border: "1px solid #FCA5A5", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }
-            }, "\uD83D\uDD34 Agresivo (120d)"),
-            // Separador
-            React.createElement("span", { style: { width: 1, height: 22, background: "#E2E8F0" } }),
-            // Reiniciar
-            React.createElement("button", {
-              onClick: () => previewBulk('reiniciar', null),
-              title: "Borra todos los overrides manuales. Vuelve al sugerido auto-calculado.",
-              style: { padding: "6px 12px", background: "#fff", color: "#475569", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }
-            }, "↻ Reiniciar"),
-            // Deshacer (sólo si hay snapshot)
-            React.createElement("button", {
-              onClick: deshacerBulk,
-              disabled: !undoSnapshot,
-              title: undoSnapshot ? ("Deshacer: " + undoSnapshot.etiqueta) : "Nada que deshacer",
-              style: {
-                padding: "6px 12px",
-                background: undoSnapshot ? "#FFFBEB" : "#F1F5F9",
-                color: undoSnapshot ? "#92400E" : "#94A3B8",
-                border: "1px solid " + (undoSnapshot ? "#FDE68A" : "#E2E8F0"),
-                borderRadius: 6, fontSize: 12, fontWeight: 600,
-                cursor: undoSnapshot ? "pointer" : "not-allowed"
-              }
-            }, "↶ Deshacer"),
-            // Modificadores
-            React.createElement("span", { style: { width: 1, height: 22, background: "#E2E8F0" } }),
-            React.createElement("label", {
-              style: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#475569", cursor: "pointer", userSelect: "none", padding: "4px 8px", borderRadius: 6, background: bulkSoloFiltrados ? "#EEF2FF" : "transparent" }
-            },
-              React.createElement("input", {
-                type: "checkbox", checked: bulkSoloFiltrados,
-                onChange: (e) => setBulkSoloFiltrados(e.target.checked),
-                style: { cursor: "pointer" }
-              }),
-              "Sólo filtrados"
-            ),
-            React.createElement("label", {
-              style: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#475569", cursor: "pointer", userSelect: "none", padding: "4px 8px", borderRadius: 6, background: bulkSoloSinStock ? "#FEF2F2" : "transparent" }
-            },
-              React.createElement("input", {
-                type: "checkbox", checked: bulkSoloSinStock,
-                onChange: (e) => setBulkSoloSinStock(e.target.checked),
-                style: { cursor: "pointer" }
-              }),
-              "Sólo sin stock"
-            ),
-            // Botón Propuesta personalizada (A)
-            React.createElement("span", { style: { width: 1, height: 22, background: "#E2E8F0" } }),
-            React.createElement("button", {
-              onClick: abrirPropPersonalizada,
-              title: "Genera una propuesta solo con SKUs específicos que tú elijas",
-              style: { padding: "6px 12px", background: "#7C3AED", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }
-            }, "✨ Propuesta personalizada"),
-            // Excluidos del envío (info badge)
-            excluidosSku.size > 0 && React.createElement("span", {
-              style: { marginLeft: "auto", fontSize: 11, color: "#92400E", background: "#FEF3C7", padding: "4px 8px", borderRadius: 6, fontWeight: 600 },
-              title: "SKUs excluidos del envío: " + [...excluidosSku].join(", ")
-            }, "\uD83D\uDEAB " + excluidosSku.size + " excluidos")
-          ),
+          // (Toolbar bulk de sugerido removido por solicitud del usuario)
 
-        React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflowY: "auto" } },
+React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflowY: "auto" } },
           React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
             React.createElement("thead", {},
               React.createElement("tr", { style: { position: "sticky", top: 0, background: "#F8FAFC", zIndex: 1 } },
