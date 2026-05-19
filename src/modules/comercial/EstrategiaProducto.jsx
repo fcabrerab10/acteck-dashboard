@@ -1587,24 +1587,58 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const ultimoPrecio = ultimaVenta
           ? Math.round((Number(ultimaVenta.monto_pesos) / Number(ultimaVenta.piezas)) * 100) / 100
           : 0;
-        const mesActual = new Date().getMonth() + 1;
-        const soSinMesActual = soData.filter(r => Number(r.mes) < mesActual).sort((a, b) => Number(a.mes) - Number(b.mes));
-        // promedio90d = promedio mensual de piezas vendidas en últimos 3 meses completos
-        const ultimos3 = soSinMesActual.slice(-3);
-        const promedio90d = ultimos3.length > 0 ? Math.round(ultimos3.reduce((s, r) => s + (r.piezas || 0), 0) / ultimos3.length) : 0;
+        // ═══ NUEVO promedio90d (refleja tendencia + pro-rateo del mes en curso) ═══
+        // Antes: promedio simple de últimos 3 meses completos (sin mes actual).
+        //        Factor estacional se calculaba pero NO se aplicaba (bug).
+        // Ahora:
+        //   1. Pro-ratear el mes en curso: piezas_act × (30 / días_transcurridos)
+        //      (solo si lleva ≥ 7 días, para no amplificar ruido de inicio de mes)
+        //   2. Promedio = (mes_actual_pro-rateado + mes_anterior + mes_2_atrás) / 3
+        //   3. Aplicar factor estacional (clamp 0.7-1.5) al promedio
+        //      → sí refleja aceleración/desaceleración
+        const hoyDate = new Date();
+        const mesActual = hoyDate.getMonth() + 1;
+        const anioActualNow = hoyDate.getFullYear();
+        const diasEnMesActual = new Date(anioActualNow, mesActual, 0).getDate();
+        const diasTranscurridos = hoyDate.getDate();
+        const incluirMesActual = diasTranscurridos >= 7;
+        const factorProRateoSO = (incluirMesActual && diasTranscurridos > 0)
+          ? diasEnMesActual / diasTranscurridos : 1;
 
-        // Factor estacional: últimos 3 meses vs 3 meses anteriores (si hay historial suficiente)
+        const soOrdenados = soData.slice().sort((a, b) => Number(a.mes) - Number(b.mes));
+        const soSinMesActual = soOrdenados.filter(r => Number(r.mes) < mesActual);
+        const ultimos3MesesPrevios = soSinMesActual.slice(-3);  // 3 meses completos antes del actual
+
+        // Piezas del mes en curso pro-rateadas (si aplicable)
+        const rowMesActual = soOrdenados.find(r => Number(r.mes) === mesActual);
+        const piezasMesActualProrrateadas = (incluirMesActual && rowMesActual)
+          ? Math.round((Number(rowMesActual.piezas) || 0) * factorProRateoSO) : null;
+
+        // Construir array de últimos 3 meses con pro-rateo aplicado al mes en curso
+        // Si incluimos el mes actual, descartamos el más viejo de los 3 previos
+        const ultimosTresValores = incluirMesActual && piezasMesActualProrrateadas !== null
+          ? [...soSinMesActual.slice(-2).map(r => Number(r.piezas) || 0), piezasMesActualProrrateadas]
+          : ultimos3MesesPrevios.map(r => Number(r.piezas) || 0);
+        const promedioBase = ultimosTresValores.length > 0
+          ? ultimosTresValores.reduce((s, v) => s + v, 0) / ultimosTresValores.length
+          : 0;
+
+        // Factor estacional: últimos 3 meses (con pro-rateo) vs los 3 anteriores
         let factorEstacional = 1.0;
-        if (soSinMesActual.length >= 6) {
-          const anteriores3 = soSinMesActual.slice(-6, -3);
-          const sumUltimos3 = ultimos3.reduce((s, r) => s + (r.piezas || 0), 0);
-          const sumAnt3 = anteriores3.reduce((s, r) => s + (r.piezas || 0), 0);
+        if (soSinMesActual.length >= 5) {
+          const anteriores3 = incluirMesActual
+            ? soSinMesActual.slice(-5, -2)   // si incluimos mes actual, "anteriores 3" son meses 3,4,5 atrás
+            : soSinMesActual.slice(-6, -3);  // sin mes actual, "anteriores 3" son meses 4,5,6 atrás
+          const sumUltimos3 = ultimosTresValores.reduce((s, v) => s + v, 0);
+          const sumAnt3 = anteriores3.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
           if (sumAnt3 > 0) {
             factorEstacional = sumUltimos3 / sumAnt3;
-            // Clamp 0.7 - 1.5 para evitar extremos
             factorEstacional = Math.max(0.7, Math.min(1.5, factorEstacional));
           }
         }
+
+        // Aplicar factor estacional al promedio base
+        const promedio90d = Math.round(promedioBase * factorEstacional);
 
         const stock = Number(invData?.stock) || 0;
         // Fallback: cuando inventario_cliente.valor está NULL (caso común
