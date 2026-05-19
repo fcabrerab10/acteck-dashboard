@@ -1437,45 +1437,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     React.createElement("div", { style: { fontSize: 16, color: "#94A3B8" } }, "Cargando datos..."));
 
   return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 20, padding: "0 4px" } },
-    // Row 0: HEADER prominente con color de cliente + cuota anual
-    React.createElement("div", {
-      style: {
-        background: cliente?.color ? `linear-gradient(135deg, ${cliente.color}EE 0%, ${cliente.color}B0 100%)` : "linear-gradient(135deg, #1E293B 0%, #475569 100%)",
-        borderRadius: 16,
-        padding: "20px 28px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        flexWrap: "wrap",
-        gap: 16,
-        boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-      }
-    },
-      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" } },
-        React.createElement("div", {
-          style: {
-            background: "rgba(255,255,255,0.95)",
-            borderRadius: 999,
-            padding: "8px 22px",
-            fontSize: 22,
-            fontWeight: 800,
-            color: cliente?.color || "#1E293B",
-            letterSpacing: "0.5px",
-          }
-        }, (cliente && cliente.nombre ? cliente.nombre : clienteKey).toUpperCase()),
-        cliente?.marca && React.createElement("span", { style: { fontSize: 14, color: "rgba(255,255,255,0.85)", fontWeight: 500 } }, cliente.marca),
-      ),
-      // Cuota Anual a la derecha
-      meta.meta_sell_in_min > 0 && React.createElement("div", { style: { textAlign: "right", color: "#fff" } },
-        React.createElement("div", { style: { fontSize: 11, fontWeight: 600, letterSpacing: "1px", opacity: 0.85, textTransform: "uppercase" } }, "Cuota Anual"),
-        React.createElement("div", { style: { fontSize: 28, fontWeight: 800, marginTop: 2, lineHeight: 1.1 } },
-          "$" + (meta.meta_sell_in_min / 1e6).toFixed(meta.meta_sell_in_min >= 10e6 ? 0 : 1) + "M"
-        ),
-        meta.meta_sell_in_optimista > meta.meta_sell_in_min && React.createElement("div", { style: { fontSize: 11, opacity: 0.85, marginTop: 2 } },
-          "Ideal: $" + (meta.meta_sell_in_optimista / 1e6).toFixed(meta.meta_sell_in_optimista >= 10e6 ? 0 : 1) + "M"
-        ),
-      ),
-    ),
+    // Row 0: HEADER eliminado (cliente ya se muestra en el sidebar/breadcrumb)
     // === BLOCK LEGACY: 3 cards de Fase 2A ===
     false && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 } },
       // KPI 1: Sell-In del periodo
@@ -1805,6 +1767,9 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
             const cur = Number(v.sell_in) || 0;
             const prev = sellInPrevAnio?.[v.mes] ? Number(sellInPrevAnio[v.mes].sell_in) || 0 : 0;
             const delta = prev > 0 ? ((cur - prev) / prev * 100) : null;
+            const cuotaMes = cuotasPorMes[v.mes] ? Number(cuotasPorMes[v.mes].cuota_min) || 0 : 0;
+            const pctCuota = cuotaMes > 0 ? (cur / cuotaMes * 100) : null;
+            const colorCuota = pctCuota === null ? "#94A3B8" : pctCuota >= 95 ? "#059669" : pctCuota >= 80 ? "#D97706" : "#DC2626";
             const isLast = idx === ventasFiltradas.length - 1;
             return React.createElement("div", {
               key: v.mes,
@@ -1817,10 +1782,15 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
               React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, MESES_CORTOS[v.mes - 1].toUpperCase()),
               React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: colorActual, marginTop: 4 } },
                 cur >= 1e6 ? "$" + (cur / 1e6).toFixed(1) + "M" : "$" + (cur / 1e3).toFixed(0) + "K"),
+              // % cuota logrado del mes
+              pctCuota !== null && React.createElement("div", {
+                style: { fontSize: 11, fontWeight: 700, color: colorCuota, marginTop: 4 }
+              }, pctCuota.toFixed(0) + "% cuota"),
+              // YoY vs año anterior
               delta !== null && React.createElement("div", {
-                style: { fontSize: 11, fontWeight: 700, color: delta >= 0 ? "#059669" : "#DC2626", marginTop: 4 }
-              }, (delta >= 0 ? "▲ +" : "▼ ") + Math.abs(delta).toFixed(1) + "%"),
-              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 2 } },
+                style: { fontSize: 10, fontWeight: 700, color: delta >= 0 ? "#059669" : "#DC2626", marginTop: 2 }
+              }, (delta >= 0 ? "▲ +" : "▼ ") + Math.abs(delta).toFixed(1) + "% YoY"),
+              React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", marginTop: 2 } },
                 "vs " + (prev >= 1e6 ? "$" + (prev / 1e6).toFixed(2) + "M" : prev >= 1e3 ? "$" + (prev / 1e3).toFixed(0) + "K" : "$0")),
             );
           })
@@ -1909,7 +1879,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         },
       ];
 
-      return React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 } },
+      return React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 } },
         ...tarjetas.map(t => {
           const activa = kpiModal === t.id;
           return React.createElement("div", {
