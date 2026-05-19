@@ -284,6 +284,8 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   const [kpiExpandido, setKpiExpandido] = React.useState(null);
   // Modal popup de drill-down: null | 'sellin' | 'sellout' | 'inventario' | 'cobranza' | 'brecha' | 'sugerido'
   const [kpiModal, setKpiModal] = React.useState(null);
+  // Vista activa de la gráfica: 'cumplimiento' | 'facturacion' | 'sellinout'
+  const [chartView, setChartView] = React.useState('cumplimiento');
   const [periodoTipo, setPeriodoTipo] = React.useState('ytd');
   const [periodoMes, setPeriodoMes] = React.useState(new Date().getMonth() + 1);
   const [periodoRango, setPeriodoRango] = React.useState([1, 12]);
@@ -660,29 +662,41 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
 
   // ─── SVG LINE CHART ─────────────────────────────────────────────────────────
   function LineChartSellInOut() {
-  // Gráfica simplificada estilo mockup: Sell-In actual vs año anterior
   const mesesParaGrafica = mesesFiltrados.length > 0 ? mesesFiltrados : Array.from({length: 12}, (_, i) => i + 1);
+  const hoy = new Date();
+  const mesActualReal = hoy.getFullYear() === anioResumen ? hoy.getMonth() + 1 : 12;
   const data = mesesParaGrafica.map(m => {
     const v = ventasPorMes[m];
+    const cuotaIdeal = cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : 0;
+    const cuotaMin = cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_min) || 0 : 0;
     const sellIn  = v ? Number(v.sell_in)  || 0 : 0;
     const sellOut = v ? Number(v.sell_out) || 0 : 0;
-    const cuota = cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : 0;
     const sellInPrev = (sellInPrevAnio && sellInPrevAnio[m]) ? sellInPrevAnio[m].sell_in || 0 : 0;
-    const sellOutPrev = (sellInPrevAnio && sellInPrevAnio[m]) ? sellInPrevAnio[m].sell_out || 0 : 0;
-    return { mes: m, mesLabel: MESES_CORTOS[m - 1], sellIn, sellOut, cuota, sellInPrev, sellOutPrev };
+    const futuro = m > mesActualReal;
+    return {
+      mes: m,
+      mesLabel: MESES_CORTOS[m - 1],
+      sellIn: futuro ? null : sellIn,
+      sellOut: futuro ? null : sellOut,
+      cuota: cuotaIdeal,
+      cuotaMin,
+      sellInPrev,
+      pctCumplimiento: cuotaMin > 0 && !futuro ? (sellIn / cuotaMin * 100) : null,
+    };
   });
-  const hasDataMonths = data.filter(d => d.sellIn > 0 || d.sellOut > 0 || d.cuota > 0 || d.sellInPrev > 0);
-  if (hasDataMonths.length === 0) {
+  const hasAnyData = data.some(d => d.sellIn > 0 || d.sellOut > 0 || d.cuota > 0 || d.sellInPrev > 0);
+  if (!hasAnyData) {
     return React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#94A3B8" } }, "Sin datos de ventas en el periodo seleccionado");
   }
 
   const fmtAxis = (v) => v >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? "$" + (v / 1e3).toFixed(0) + "K" : "$" + v;
-  const fmtTip  = (v) => formatMXN(Number(v) || 0);
+  const fmtTip = (v) => formatMXN(Number(v) || 0);
   const colorActual = cliente?.color || "#DC2626";
+
+  // Tooltip dinámico según vista activa
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload || payload.length === 0) return null;
     const row = payload[0]?.payload || {};
-    const delta = row.sellInPrev > 0 ? ((row.sellIn - row.sellInPrev) / row.sellInPrev * 100) : null;
     return React.createElement("div", {
       style: {
         background: "rgba(15,23,42,0.96)", color: "#fff", padding: "10px 14px",
@@ -690,22 +704,54 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
       }
     },
-      React.createElement("div", { style: { fontWeight: 700, marginBottom: 6, color: "#E2E8F0" } }, label),
-      row.sellIn > 0 && React.createElement("div", { style: { color: colorActual } }, "\u25cf Sell-In " + anioResumen + ": " + fmtTip(row.sellIn)),
-      row.sellOut > 0 && React.createElement("div", { style: { color: "#10B981" } }, "\u25cf Sell-Out: " + fmtTip(row.sellOut)),
-      row.cuota > 0 && React.createElement("div", { style: { color: "#F59E0B" } }, "\u25cf Cuota: " + fmtTip(row.cuota)),
-      row.sellInPrev > 0 && React.createElement("div", { style: { color: "#94A3B8" } }, "\u25cf Sell-In " + (anioResumen - 1) + ": " + fmtTip(row.sellInPrev)),
-      delta !== null && React.createElement("div", {
-        style: { color: delta >= 0 ? "#86EFAC" : "#FCA5A5", marginTop: 4, fontWeight: 700 }
-      }, (delta >= 0 ? "\u25b2 +" : "\u25bc ") + Math.abs(delta).toFixed(1) + "% YoY"),
+      React.createElement("div", { style: { fontWeight: 700, marginBottom: 6, color: "#E2E8F0" } }, label + " " + anioResumen),
+      // Cumplimiento vs Cuota
+      chartView === 'cumplimiento' && row.cuota > 0 && React.createElement("div", { style: { color: "#FCD34D" } }, "\u25cf Cuota Ideal: " + fmtTip(row.cuota)),
+      chartView === 'cumplimiento' && row.cuotaMin > 0 && React.createElement("div", { style: { color: "#FCA5A5" } }, "\u25cf Cuota Mín: " + fmtTip(row.cuotaMin)),
+      chartView === 'cumplimiento' && row.sellIn !== null && row.sellIn > 0 && React.createElement("div", { style: { color: colorActual } }, "\u25cf Sell-In: " + fmtTip(row.sellIn)),
+      chartView === 'cumplimiento' && row.pctCumplimiento !== null && React.createElement("div", { style: { color: row.pctCumplimiento >= 95 ? "#86EFAC" : row.pctCumplimiento >= 80 ? "#FCD34D" : "#FCA5A5", marginTop: 4, fontWeight: 700 } }, row.pctCumplimiento.toFixed(1) + "% cumplimiento"),
+      // Facturación vs Año Anterior
+      chartView === 'facturacion' && row.sellIn !== null && row.sellIn > 0 && React.createElement("div", { style: { color: colorActual } }, "\u25cf " + anioResumen + ": " + fmtTip(row.sellIn)),
+      chartView === 'facturacion' && row.sellInPrev > 0 && React.createElement("div", { style: { color: "#94A3B8" } }, "\u25cf " + (anioResumen - 1) + ": " + fmtTip(row.sellInPrev)),
+      chartView === 'facturacion' && row.sellInPrev > 0 && row.sellIn !== null && React.createElement("div", { style: { color: ((row.sellIn - row.sellInPrev) / row.sellInPrev * 100) >= 0 ? "#86EFAC" : "#FCA5A5", marginTop: 4, fontWeight: 700 } }, (((row.sellIn - row.sellInPrev) / row.sellInPrev * 100) >= 0 ? "\u25b2 +" : "\u25bc ") + Math.abs((row.sellIn - row.sellInPrev) / row.sellInPrev * 100).toFixed(1) + "% YoY"),
+      // Sell-In vs Sell-Out
+      chartView === 'sellinout' && row.sellIn !== null && row.sellIn > 0 && React.createElement("div", { style: { color: colorActual } }, "\u25cf Sell-In: " + fmtTip(row.sellIn)),
+      chartView === 'sellinout' && row.sellOut !== null && row.sellOut > 0 && React.createElement("div", { style: { color: "#10B981" } }, "\u25cf Sell-Out: " + fmtTip(row.sellOut)),
+      chartView === 'sellinout' && row.sellOut !== null && row.sellOut > 0 && row.sellIn > 0 && React.createElement("div", { style: { color: "#FCD34D", marginTop: 4 } }, "Eficiencia: " + (row.sellOut / row.sellIn * 100).toFixed(1) + "%"),
     );
   };
+
+  // Series según vista activa
+  const seriesPorVista = {
+    cumplimiento: [
+      // Cuota Ideal: línea ámbar dasheada
+      { type: "Line", dataKey: "cuota", name: "Cuota Ideal", stroke: "#F59E0B", strokeWidth: 2.5, strokeDasharray: "8 4", dot: { r: 3, fill: "#F59E0B" }, activeDot: { r: 5 } },
+      // Cuota Mín: línea naranja punteada
+      { type: "Line", dataKey: "cuotaMin", name: "Cuota Mín", stroke: "#EF4444", strokeWidth: 2, strokeDasharray: "3 3", dot: { r: 2, fill: "#EF4444" }, activeDot: { r: 4 } },
+      // Sell-In: área sólida cliente color (línea fuerte)
+      { type: "Area", dataKey: "sellIn", name: "Sell-In Real", stroke: colorActual, strokeWidth: 3, fill: "url(#areaSellInActual)", activeDot: { r: 6, fill: colorActual, stroke: "#fff", strokeWidth: 2 }, dot: { r: 5, fill: colorActual, stroke: "#fff", strokeWidth: 2 } },
+    ],
+    facturacion: [
+      // Año anterior: línea gris dasheada (atrás)
+      { type: "Line", dataKey: "sellInPrev", name: String(anioResumen - 1), stroke: "#94A3B8", strokeWidth: 2.5, strokeDasharray: "6 4", dot: { r: 4, fill: "#94A3B8", stroke: "#fff", strokeWidth: 1.5 }, activeDot: { r: 5 } },
+      // Año actual: área cliente color (al frente)
+      { type: "Area", dataKey: "sellIn", name: String(anioResumen), stroke: colorActual, strokeWidth: 3, fill: "url(#areaSellInActual)", activeDot: { r: 6, fill: colorActual, stroke: "#fff", strokeWidth: 2 }, dot: { r: 5, fill: colorActual, stroke: "#fff", strokeWidth: 2 } },
+    ],
+    sellinout: [
+      // Sell-In: área cliente color
+      { type: "Area", dataKey: "sellIn", name: "Sell-In", stroke: colorActual, strokeWidth: 3, fill: "url(#areaSellInActual)", activeDot: { r: 6, fill: colorActual, stroke: "#fff", strokeWidth: 2 }, dot: { r: 5, fill: colorActual, stroke: "#fff", strokeWidth: 2 } },
+      // Sell-Out: línea verde gruesa
+      { type: "Line", dataKey: "sellOut", name: "Sell-Out", stroke: "#10B981", strokeWidth: 3, dot: { r: 5, fill: "#10B981", stroke: "#fff", strokeWidth: 2 }, activeDot: { r: 6 } },
+    ],
+  };
+
+  const series = seriesPorVista[chartView] || seriesPorVista.cumplimiento;
 
   return React.createElement(ResponsiveContainer, { width: "100%", height: 340 },
     React.createElement(ComposedChart, { data, margin: { top: 30, right: 20, left: 0, bottom: 0 } },
       React.createElement("defs", null,
         React.createElement("linearGradient", { id: "areaSellInActual", x1: "0", y1: "0", x2: "0", y2: "1" },
-          React.createElement("stop", { offset: "0%", stopColor: colorActual, stopOpacity: 0.18 }),
+          React.createElement("stop", { offset: "0%", stopColor: colorActual, stopOpacity: 0.22 }),
           React.createElement("stop", { offset: "100%", stopColor: colorActual, stopOpacity: 0.02 })
         ),
       ),
@@ -714,34 +760,10 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       React.createElement(YAxis, { tickFormatter: fmtAxis, tick: { fontSize: 11, fill: "#64748B" }, axisLine: { stroke: "#CBD5E1" }, tickLine: false, width: 70 }),
       React.createElement(Tooltip, { content: React.createElement(CustomTooltip, null), cursor: { stroke: "#94A3B8", strokeDasharray: "3 3" } }),
       React.createElement(Legend, { wrapperStyle: { fontSize: 13, fontWeight: 600 }, iconType: "circle", verticalAlign: "top", align: "center" }),
-      // Sell-In año actual: área + línea
-      React.createElement(Area, {
-        type: "monotone", dataKey: "sellIn", name: "Sell-In " + anioResumen,
-        stroke: colorActual, strokeWidth: 3, fill: "url(#areaSellInActual)",
-        activeDot: { r: 6, fill: colorActual, stroke: "#fff", strokeWidth: 2 },
-        dot: { r: 5, fill: colorActual, stroke: "#fff", strokeWidth: 2 },
-      }),
-      // Sell-Out: línea verde sólida
-      React.createElement(Line, {
-        type: "monotone", dataKey: "sellOut", name: "Sell-Out " + anioResumen,
-        stroke: "#10B981", strokeWidth: 2.5,
-        dot: { r: 4, fill: "#10B981", stroke: "#fff", strokeWidth: 1.5 },
-        activeDot: { r: 5 },
-      }),
-      // Cuota: línea ámbar dasheada
-      React.createElement(Line, {
-        type: "monotone", dataKey: "cuota", name: "Cuota",
-        stroke: "#F59E0B", strokeWidth: 2, strokeDasharray: "8 4",
-        dot: { r: 3, fill: "#F59E0B" },
-        activeDot: { r: 4 },
-      }),
-      // Sell-In año anterior: línea gris punteada
-      React.createElement(Line, {
-        type: "monotone", dataKey: "sellInPrev", name: "Sell-In " + (anioResumen - 1),
-        stroke: "#94A3B8", strokeWidth: 2, strokeDasharray: "6 4",
-        dot: { r: 4, fill: "#94A3B8", stroke: "#fff", strokeWidth: 1.5 },
-        activeDot: { r: 5 },
-      }),
+      ...series.map((s, i) => s.type === "Area"
+        ? React.createElement(Area, { key: i, type: "monotone", ...s })
+        : React.createElement(Line, { key: i, type: "monotone", connectNulls: false, ...s })
+      ),
     )
   );
   }
@@ -1753,9 +1775,25 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
               : React.createElement("div", { style: { fontSize: 22, color: "#94A3B8", marginTop: 10 } }, "—"),
           ),
         ),
-        // Título de la gráfica
-        React.createElement("div", { style: { padding: "16px 24px 0", display: "flex", alignItems: "center", gap: 8 } },
-          React.createElement("h3", { style: { margin: 0, fontSize: 14, color: colorActual, fontWeight: 800, letterSpacing: "0.5px", textTransform: "uppercase" } }, `📊 Sell-In Mensual — ${anioResumen} vs ${anioResumen - 1}`),
+        // Tabs de vistas de la gráfica
+        React.createElement("div", { style: { padding: "16px 24px 0", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+          ...[
+            { id: 'cumplimiento', label: '🎯 Cumplimiento vs Cuota', desc: 'al mes en curso' },
+            { id: 'facturacion',  label: '📊 Facturación vs Año Anterior', desc: 'comparativo YoY' },
+            { id: 'sellinout',    label: '🔁 Sell-In vs Sell-Out', desc: 'eficiencia de venta' },
+          ].map(tab => React.createElement("button", {
+            key: tab.id,
+            onClick: () => setChartView(tab.id),
+            style: {
+              padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              border: chartView === tab.id ? `2px solid ${colorActual}` : "1.5px solid #E2E8F0",
+              background: chartView === tab.id ? colorActual : "#fff",
+              color: chartView === tab.id ? "#fff" : "#475569",
+              transition: "all 0.15s",
+              boxShadow: chartView === tab.id ? `0 2px 8px ${colorActual}30` : "none",
+            },
+            title: tab.desc,
+          }, tab.label)),
         ),
         // Gráfica
         React.createElement("div", { style: { padding: "0 12px 16px" } },
