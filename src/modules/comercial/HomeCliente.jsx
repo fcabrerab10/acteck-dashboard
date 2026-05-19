@@ -2237,24 +2237,77 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       const marcasConDatos = ['acteck', 'balam'].filter(k => marcas[k].si > 0 || marcas[k].so > 0 || marcas[k].inv > 0);
       if (marcasConDatos.length === 0) return null;
 
-      // ── Proyección de cierre anual ──
+      // ── Proyección de cierre anual: ESTACIONAL (basada en patrón del año previo)
+      // Algoritmo:
+      //   1. growth_factor = sell-in_YTD_actual / sell-in_YTD_anterior (mismos meses)
+      //   2. Para cada mes futuro: proyectado = sell-in_mes_año_anterior × growth_factor
+      //   3. Total proyección = YTD actual + Σ proyecciones meses futuros
+      // Fallback: si no hay datos del año anterior, usa ritmo mixto (40% YTD + 60% últimos 3m).
       const hoyFecha = new Date();
       const mesActualReal2 = hoyFecha.getFullYear() === anioResumen ? hoyFecha.getMonth() + 1 : 12;
-      // Sell-In YTD total (todo el año, no respeta el filtro de periodo)
-      const sellInYTD = Object.values(ventasPorMes).reduce((s, v) => s + (Number(v.sell_in) || 0), 0);
+      const mesesRestantes = Math.max(0, 12 - mesActualReal2);
+
+      // Sell-In: YTD actual y previo (mismos meses)
+      const sellInYTD = Object.entries(ventasPorMes)
+        .filter(([m]) => Number(m) <= mesActualReal2)
+        .reduce((s, [, v]) => s + (Number(v.sell_in) || 0), 0);
+      const sellInYTDPrev = Object.keys(sellInPrevAnio || {})
+        .filter(m => Number(m) <= mesActualReal2)
+        .reduce((s, m) => s + (Number(sellInPrevAnio[m]?.sell_in) || 0), 0);
+      const growthFactorSI = sellInYTDPrev > 0 ? sellInYTD / sellInYTDPrev : null;
+
+      // Sell-Out: YTD actual y previo (mismos meses)
+      const sellOutYTD = Object.entries(ventasPorMes)
+        .filter(([m]) => Number(m) <= mesActualReal2)
+        .reduce((s, [, v]) => s + (Number(v.sell_out) || 0), 0);
+      const sellOutYTDPrev = Object.keys(sellInPrevAnio || {})
+        .filter(m => Number(m) <= mesActualReal2)
+        .reduce((s, m) => s + (Number(sellInPrevAnio[m]?.sell_out) || 0), 0);
+      const growthFactorSO = sellOutYTDPrev > 0 ? sellOutYTD / sellOutYTDPrev : null;
+
+      // Proyección por mes futuro (estacional): valor_mes_año_prev × growth_factor
+      const proyMesesFuturos_SI = [];
+      const proyMesesFuturos_SO = [];
+      for (let m = mesActualReal2 + 1; m <= 12; m++) {
+        const prevSI = Number(sellInPrevAnio?.[m]?.sell_in) || 0;
+        const prevSO = Number(sellInPrevAnio?.[m]?.sell_out) || 0;
+        proyMesesFuturos_SI.push({
+          mes: m,
+          valor: growthFactorSI !== null && prevSI > 0 ? prevSI * growthFactorSI : null,
+        });
+        proyMesesFuturos_SO.push({
+          mes: m,
+          valor: growthFactorSO !== null && prevSO > 0 ? prevSO * growthFactorSO : null,
+        });
+      }
+
+      // Si la proyección estacional falla (no hay año previo o no datos por mes),
+      // usar fallback de ritmo mixto.
       const avgYTD = mesActualReal2 > 0 ? sellInYTD / mesActualReal2 : 0;
-      // Promedio últimos 3 meses con datos
       const ultimos3Meses = [];
       for (let m = mesActualReal2; m >= 1 && ultimos3Meses.length < 3; m--) {
         const v = ventasPorMes[m];
         if (v && Number(v.sell_in) > 0) ultimos3Meses.push(Number(v.sell_in));
       }
       const avg3m = ultimos3Meses.length > 0 ? ultimos3Meses.reduce((s, v) => s + v, 0) / ultimos3Meses.length : 0;
-      // Mixto: 40% YTD + 60% tendencia 3m
-      const ritmoProyectado = avgYTD * 0.4 + avg3m * 0.6;
-      const mesesRestantes = Math.max(0, 12 - mesActualReal2);
-      const proyAdicional = ritmoProyectado * mesesRestantes;
-      const proyAnual = sellInYTD + proyAdicional;
+      const ritmoFallback = avgYTD * 0.4 + avg3m * 0.6;
+      const usandoEstacional = growthFactorSI !== null && proyMesesFuturos_SI.some(p => p.valor !== null && p.valor > 0);
+
+      // Aplicar proyección (estacional si hay datos, fallback si no)
+      const proyAdicionalSI = usandoEstacional
+        ? proyMesesFuturos_SI.reduce((s, p) => s + (p.valor !== null ? p.valor : ritmoFallback), 0)
+        : ritmoFallback * mesesRestantes;
+      const proyAnual = sellInYTD + proyAdicionalSI;
+
+      // Para gráfica: mapa de proyección por mes (sell-in y sell-out)
+      const proySIPorMes = {};
+      const proySOPorMes = {};
+      proyMesesFuturos_SI.forEach(p => { proySIPorMes[p.mes] = p.valor !== null ? p.valor : ritmoFallback; });
+      proyMesesFuturos_SO.forEach(p => { proySOPorMes[p.mes] = p.valor; });
+
+      // ritmoProyectado para textos auxiliares (promedio mensual de proyección)
+      const ritmoProyectado = mesesRestantes > 0 ? proyAdicionalSI / mesesRestantes : ritmoFallback;
+
       const cuotaAnual = Number(meta.meta_sell_in_min) || 0;
       const pctProy = cuotaAnual > 0 ? (proyAnual / cuotaAnual * 100) : null;
       const brechaProy = proyAnual - cuotaAnual;
@@ -2403,17 +2456,33 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
               brechaProy < 0 && mesesRestantes > 0 && React.createElement("div", { style: { fontSize: 11, color: "#DC2626", marginTop: 2, fontWeight: 600 } }, "Falta " + formatMXN(ritmoNecesario) + "/mes"),
             ),
           ),
-          // Gráfica de barras: Real + Proyectado mes a mes
+          // Gráfica: Sell-In/Sell-Out reales + proyección estacional + año anterior
           React.createElement("div", { style: { padding: "16px 20px" } },
-            React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 8, fontWeight: 600 } }, "Sell-In mensual: real + proyectado"),
-            React.createElement(ResponsiveContainer, { width: "100%", height: 220 },
+            React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 8, fontWeight: 600 } },
+              usandoEstacional
+                ? `Proyección estacional (basada en año ${anioResumen - 1} × crecimiento ${growthFactorSI !== null ? ((growthFactorSI - 1) * 100 >= 0 ? "+" : "") + ((growthFactorSI - 1) * 100).toFixed(1) + "%" : "—"})`
+                : "Proyección lineal (sin datos del año anterior)"
+            ),
+            React.createElement(ResponsiveContainer, { width: "100%", height: 240 },
               React.createElement(ComposedChart, {
                 data: Array.from({length: 12}, (_, i) => {
                   const m = i + 1;
                   const v = ventasPorMes[m];
-                  const real = m <= mesActualReal2 ? (v ? Number(v.sell_in) || 0 : 0) : null;
-                  const proy = m > mesActualReal2 ? ritmoProyectado : null;
-                  return { mes: MESES_CORTOS[i], real, proy, cuota: cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : 0 };
+                  const esFuturo = m > mesActualReal2;
+                  const realSI = !esFuturo ? (v ? Number(v.sell_in) || 0 : 0) : null;
+                  const realSO = !esFuturo ? (v ? Number(v.sell_out) || 0 : 0) : null;
+                  const proySI = esFuturo ? proySIPorMes[m] || null : null;
+                  const proySO = esFuturo ? proySOPorMes[m] || null : null;
+                  const prevSI = Number(sellInPrevAnio?.[m]?.sell_in) || 0;
+                  return {
+                    mes: MESES_CORTOS[i],
+                    real: realSI,
+                    proy: proySI,
+                    realSO,
+                    proySO,
+                    prevSI: prevSI || null,
+                    cuota: cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : 0,
+                  };
                 }),
                 margin: { top: 10, right: 10, left: 0, bottom: 0 }
               },
@@ -2426,9 +2495,18 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
                   labelStyle: { color: "#E2E8F0", fontWeight: 700 },
                 }),
                 React.createElement(Legend, { wrapperStyle: { fontSize: 11, fontWeight: 600 }, iconType: "circle" }),
+                // Cuota ideal (referencia)
                 React.createElement(Line, { type: "monotone", dataKey: "cuota", name: "Cuota Ideal", stroke: "#F59E0B", strokeWidth: 2, strokeDasharray: "6 4", dot: false }),
-                React.createElement(Area, { type: "monotone", dataKey: "real", name: "Real", stroke: cliente?.color || "#3B82F6", strokeWidth: 2.5, fill: (cliente?.color || "#3B82F6") + "30", connectNulls: false }),
-                React.createElement(Area, { type: "monotone", dataKey: "proy", name: "Proyectado", stroke: "#94A3B8", strokeWidth: 2, strokeDasharray: "4 4", fill: "#94A3B830", connectNulls: false }),
+                // Sell-In año anterior (referencia)
+                React.createElement(Line, { type: "monotone", dataKey: "prevSI", name: "Sell-In " + (anioResumen - 1), stroke: "#94A3B8", strokeWidth: 1.5, strokeDasharray: "3 3", dot: false }),
+                // Sell-In real (área cliente color)
+                React.createElement(Area, { type: "monotone", dataKey: "real", name: "Sell-In Real", stroke: cliente?.color || "#3B82F6", strokeWidth: 2.5, fill: (cliente?.color || "#3B82F6") + "30", connectNulls: false }),
+                // Sell-Out real (línea verde)
+                React.createElement(Line, { type: "monotone", dataKey: "realSO", name: "Sell-Out Real", stroke: "#10B981", strokeWidth: 2, dot: { r: 3, fill: "#10B981" }, connectNulls: false }),
+                // Sell-In proyectado (área cliente clara dasheada)
+                React.createElement(Area, { type: "monotone", dataKey: "proy", name: "Sell-In Proyectado", stroke: cliente?.color || "#3B82F6", strokeWidth: 2, strokeDasharray: "5 4", fill: (cliente?.color || "#3B82F6") + "15", connectNulls: false }),
+                // Sell-Out proyectado (línea verde dasheada)
+                React.createElement(Line, { type: "monotone", dataKey: "proySO", name: "Sell-Out Proyectado", stroke: "#10B981", strokeWidth: 1.5, strokeDasharray: "5 4", dot: { r: 2, fill: "#10B981" }, connectNulls: false }),
               )
             ),
           ),
