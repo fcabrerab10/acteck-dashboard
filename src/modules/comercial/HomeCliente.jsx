@@ -11,6 +11,7 @@ import { TrendingUp, Wallet, ClipboardList, Target, BarChart3, Package } from 'l
 import { fetchSelloutSku, fetchInventarioCliente } from '../../lib/pcelAdapter';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaCliente } from '../../lib/permisos';
+import AnalisisCliente from './AnalisisCliente';
 
 const iconStyle14 = { width: 14, height: 14, verticalAlign: "middle", marginRight: 4 };
 const iconStyle16 = { width: 16, height: 16, verticalAlign: "middle", marginRight: 6 };
@@ -2170,6 +2171,54 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
           ),
         )
       )
+    ),
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ANÁLISIS PROFUNDO (antes pestaña Análisis, ahora integrado al fondo del Resumen)
+    // ═══════════════════════════════════════════════════════════════════════════
+    React.createElement("div", {
+      style: {
+        marginTop: 24,
+        paddingTop: 24,
+        borderTop: "3px double #E2E8F0",
+      }
+    },
+      React.createElement("div", {
+        style: {
+          marginBottom: 16,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }
+      },
+        React.createElement("div", {
+          style: {
+            width: 4,
+            height: 28,
+            background: cliente?.color || "#3B82F6",
+            borderRadius: 2,
+          }
+        }),
+        React.createElement("h2", {
+          style: {
+            margin: 0,
+            fontSize: 20,
+            fontWeight: 800,
+            color: "#1E293B",
+            letterSpacing: "0.3px",
+          }
+        }, "🔍 Análisis Profundo"),
+        React.createElement("span", {
+          style: {
+            fontSize: 12,
+            color: "#94A3B8",
+            fontWeight: 500,
+          }
+        }, "— Eficiencia, comparativas, proyección anual"),
+      ),
+      React.createElement(AnalisisCliente, {
+        cliente: cliente?.nombre || clienteKey,
+        clienteKey,
+      }),
     )
   );
 }
