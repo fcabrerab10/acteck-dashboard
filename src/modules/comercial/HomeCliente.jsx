@@ -2171,7 +2171,283 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         )
       )
     ),
-    // ANÁLISIS — sección pendiente, se construirá desde cero
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 🔍 ANÁLISIS PROFUNDO
+    //   Bloque 1: Comparativa por Marca (Acteck vs Balam Rush)
+    //   Bloque 2: Proyección de Cierre Anual (método mixto: lineal + tendencia 3m)
+    //   Bloque 3: Insights automáticos
+    // ═══════════════════════════════════════════════════════════════════════════
+    (function(){
+      // ── Helper: clasificar SKU por marca ──
+      const skuMarca = {};
+      invClienteLatest.forEach(inv => { if (inv.sku && inv.marca) skuMarca[inv.sku] = inv.marca; });
+      productos.forEach(p => { if (p.sku && p.marca && !skuMarca[p.sku]) skuMarca[p.sku] = p.marca; });
+      const claseMarca = (sku) => {
+        const m = (skuMarca[sku] || '').toUpperCase();
+        if (m.includes('BALAM')) return 'balam';
+        if (m.includes('ACTECK') || m.includes('REVKO')) return 'acteck';
+        // Fallback por prefijo del SKU
+        const pfx = (sku || '').toUpperCase().split('-')[0];
+        if (['AC','ES','SWDVK','SW'].includes(pfx)) return 'acteck';
+        if (pfx === 'BR') return 'balam';
+        return 'otra';
+      };
+
+      // ── Agregar datos por marca ──
+      const marcas = {
+        acteck: { label: 'Acteck', color: '#3B82F6', si: 0, siPrev: 0, so: 0, soPrev: 0, inv: 0, skus: new Set(), sparkline: Array(12).fill(0) },
+        balam:  { label: 'Balam Rush', color: '#8B5CF6', si: 0, siPrev: 0, so: 0, soPrev: 0, inv: 0, skus: new Set(), sparkline: Array(12).fill(0) },
+      };
+
+      // Sell-In del año actual (sellInSku ya filtrado por anioResumen)
+      sellInSku.forEach(r => {
+        const k = claseMarca(r.sku);
+        if (!marcas[k]) return;
+        const monto = Number(r.monto_pesos) || 0;
+        marcas[k].si += monto;
+        const mes = Number(r.mes) || 0;
+        if (mes >= 1 && mes <= 12) marcas[k].sparkline[mes - 1] += monto;
+      });
+      // Sell-Out del año actual
+      sellOutSku.forEach(r => {
+        const k = claseMarca(r.sku);
+        if (!marcas[k]) return;
+        marcas[k].so += Number(r.monto_pesos) || 0;
+      });
+      // Inventario actual del cliente
+      invClienteLatest.forEach(r => {
+        const k = claseMarca(r.sku);
+        if (!marcas[k]) return;
+        marcas[k].inv += (Number(r.stock) || 0) * (Number(r.costo_convenio) || 0);
+        if (Number(r.stock) > 0) marcas[k].skus.add(r.sku);
+      });
+
+      // Totales para mix %
+      const siTotal = marcas.acteck.si + marcas.balam.si;
+      const soTotal = marcas.acteck.so + marcas.balam.so;
+
+      // YoY por marca: necesitamos sell-in del año anterior por SKU.
+      // sellInPrevAnio está agregado por mes (no por SKU), no nos sirve aquí.
+      // Para YoY por marca aproximada usamos la suma total ponderada por share actual.
+      // (Si quieres YoY exacto por marca, podemos extender el fetch a nivel SKU del año previo).
+      // Por ahora dejamos YoY = null y lo iteramos después si quieres.
+
+      // Cuáles marcas mostrar (las que tienen datos)
+      const marcasConDatos = ['acteck', 'balam'].filter(k => marcas[k].si > 0 || marcas[k].so > 0 || marcas[k].inv > 0);
+      if (marcasConDatos.length === 0) return null;
+
+      // ── Proyección de cierre anual ──
+      const hoyFecha = new Date();
+      const mesActualReal2 = hoyFecha.getFullYear() === anioResumen ? hoyFecha.getMonth() + 1 : 12;
+      // Sell-In YTD total (todo el año, no respeta el filtro de periodo)
+      const sellInYTD = Object.values(ventasPorMes).reduce((s, v) => s + (Number(v.sell_in) || 0), 0);
+      const avgYTD = mesActualReal2 > 0 ? sellInYTD / mesActualReal2 : 0;
+      // Promedio últimos 3 meses con datos
+      const ultimos3Meses = [];
+      for (let m = mesActualReal2; m >= 1 && ultimos3Meses.length < 3; m--) {
+        const v = ventasPorMes[m];
+        if (v && Number(v.sell_in) > 0) ultimos3Meses.push(Number(v.sell_in));
+      }
+      const avg3m = ultimos3Meses.length > 0 ? ultimos3Meses.reduce((s, v) => s + v, 0) / ultimos3Meses.length : 0;
+      // Mixto: 40% YTD + 60% tendencia 3m
+      const ritmoProyectado = avgYTD * 0.4 + avg3m * 0.6;
+      const mesesRestantes = Math.max(0, 12 - mesActualReal2);
+      const proyAdicional = ritmoProyectado * mesesRestantes;
+      const proyAnual = sellInYTD + proyAdicional;
+      const cuotaAnual = Number(meta.meta_sell_in_min) || 0;
+      const pctProy = cuotaAnual > 0 ? (proyAnual / cuotaAnual * 100) : null;
+      const brechaProy = proyAnual - cuotaAnual;
+      const ritmoNecesario = mesesRestantes > 0 ? (cuotaAnual - sellInYTD) / mesesRestantes : 0;
+
+      // ── Insights automáticos ──
+      const insights = [];
+      // Marca dominante
+      if (siTotal > 0) {
+        const top = marcasConDatos.map(k => ({ k, pct: marcas[k].si / siTotal * 100 })).sort((a,b) => b.pct - a.pct)[0];
+        if (top && top.pct >= 60) {
+          insights.push({ icon: '📌', msg: `Dependencia alta de ${marcas[top.k].label} (${top.pct.toFixed(0)}% del Sell-In del año).` });
+        } else if (marcasConDatos.length === 2) {
+          insights.push({ icon: '⚖️', msg: `Portafolio balanceado: ${marcas.acteck.label} ${(marcas.acteck.si/siTotal*100).toFixed(0)}% · ${marcas.balam.label} ${(marcas.balam.si/siTotal*100).toFixed(0)}%.` });
+        }
+      }
+      // Eficiencia
+      if (siTotal > 0 && soTotal > 0) {
+        const ef = soTotal / siTotal * 100;
+        if (ef < 50) insights.push({ icon: '⚠️', msg: `Eficiencia Sell-Out/Sell-In baja (${ef.toFixed(0)}%) — posible sobreinventario.` });
+        else if (ef >= 90) insights.push({ icon: '✅', msg: `Eficiencia Sell-Out/Sell-In saludable (${ef.toFixed(0)}%).` });
+      }
+      // Proyección vs cuota
+      if (pctProy !== null) {
+        if (pctProy >= 100) insights.push({ icon: '🎯', msg: `Proyección anual: ${formatMXN(proyAnual)} (${pctProy.toFixed(0)}% de cuota). Vas a cerrar arriba.` });
+        else if (pctProy >= 90) insights.push({ icon: '🟡', msg: `Proyección anual ${pctProy.toFixed(0)}% de cuota. Mantén ritmo y empuja últimos meses.` });
+        else insights.push({ icon: '🔴', msg: `Proyección anual ${pctProy.toFixed(0)}% (faltarían ${formatMXN(Math.abs(brechaProy))}). Necesitas ${formatMXN(ritmoNecesario)}/mes el resto del año.` });
+      }
+      // Tendencia (avg 3m vs avg YTD)
+      if (avgYTD > 0 && avg3m > 0) {
+        const trend = (avg3m - avgYTD) / avgYTD * 100;
+        if (trend >= 15) insights.push({ icon: '🚀', msg: `Aceleración: últimos 3 meses ${trend.toFixed(0)}% arriba del promedio del año.` });
+        else if (trend <= -15) insights.push({ icon: '📉', msg: `Desaceleración: últimos 3 meses ${Math.abs(trend).toFixed(0)}% abajo del promedio del año.` });
+      }
+      // SKUs sin movimiento (con inventario pero sin sell-out)
+      const skusConInvSinSO = invClienteLatest.filter(inv => {
+        if (Number(inv.stock) <= 0) return false;
+        const tieneSO = sellOutSku.some(s => s.sku === inv.sku && Number(s.piezas) > 0);
+        return !tieneSO;
+      });
+      if (skusConInvSinSO.length > 0) {
+        insights.push({ icon: '💤', msg: `${skusConInvSinSO.length} SKUs con inventario sin sell-out este año (revisar promoción).` });
+      }
+
+      // ── RENDER ──
+      const _colorSemMix = '#3B82F6';
+      return React.createElement("div", {
+        style: {
+          marginTop: 24,
+          paddingTop: 24,
+          borderTop: "3px double #E2E8F0",
+          display: "flex", flexDirection: "column", gap: 16,
+        }
+      },
+        // Header de la sección
+        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4 } },
+          React.createElement("div", { style: { width: 4, height: 28, background: cliente?.color || "#3B82F6", borderRadius: 2 } }),
+          React.createElement("h2", { style: { margin: 0, fontSize: 20, fontWeight: 800, color: "#1E293B", letterSpacing: "0.3px" } }, "🔍 Análisis Profundo"),
+          React.createElement("span", { style: { fontSize: 12, color: "#94A3B8", fontWeight: 500 } }, "— Comparativa por marca · Proyección · Insights"),
+        ),
+
+        // ─── BLOQUE 1: COMPARATIVA POR MARCA ───
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: `repeat(${marcasConDatos.length}, 1fr)`, gap: 14 } },
+          ...marcasConDatos.map(k => {
+            const m = marcas[k];
+            const pctMix = siTotal > 0 ? (m.si / siTotal * 100) : 0;
+            const maxSpark = Math.max(...m.sparkline, 1);
+            return React.createElement("div", {
+              key: k,
+              style: { background: "#fff", borderRadius: 14, border: "1px solid #E2E8F0", borderTop: `4px solid ${m.color}`, padding: "18px 20px" }
+            },
+              // Header
+              React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 } },
+                React.createElement("h3", { style: { margin: 0, fontSize: 18, fontWeight: 800, color: m.color } }, m.label),
+                React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", background: m.color + "15", padding: "3px 10px", borderRadius: 999 } }, pctMix.toFixed(0) + "% del Sell-In"),
+              ),
+              // Métricas en grid
+              React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 } },
+                React.createElement("div", null,
+                  React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "Sell-In " + anioResumen),
+                  React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "#1E293B" } }, m.si >= 1e6 ? "$" + (m.si/1e6).toFixed(2) + "M" : "$" + (m.si/1e3).toFixed(0) + "K"),
+                ),
+                React.createElement("div", null,
+                  React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "Sell-Out"),
+                  React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "#1E293B" } }, m.so >= 1e6 ? "$" + (m.so/1e6).toFixed(2) + "M" : "$" + (m.so/1e3).toFixed(0) + "K"),
+                ),
+                React.createElement("div", null,
+                  React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "Inventario"),
+                  React.createElement("div", { style: { fontSize: 16, fontWeight: 700, color: "#1E293B" } }, formatMXN(m.inv)),
+                ),
+                React.createElement("div", null,
+                  React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "SKUs activos"),
+                  React.createElement("div", { style: { fontSize: 16, fontWeight: 700, color: "#1E293B" } }, m.skus.size + " SKUs"),
+                ),
+              ),
+              // Sparkline 12 meses (Sell-In)
+              React.createElement("div", { style: { borderTop: "1px dashed #E2E8F0", paddingTop: 10 } },
+                React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 6 } }, "Tendencia Sell-In 12 meses"),
+                React.createElement("div", { style: { display: "flex", alignItems: "flex-end", gap: 3, height: 36 } },
+                  ...m.sparkline.map((v, i) => React.createElement("div", {
+                    key: i,
+                    title: MESES_CORTOS[i] + ": " + formatMXN(v),
+                    style: {
+                      flex: 1,
+                      height: maxSpark > 0 ? Math.max(2, (v / maxSpark) * 32) + "px" : "2px",
+                      background: v > 0 ? m.color : "#E2E8F0",
+                      borderRadius: "2px 2px 0 0",
+                    }
+                  })),
+                ),
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 9, color: "#94A3B8", marginTop: 2 } },
+                  React.createElement("span", null, "Ene"),
+                  React.createElement("span", null, "Dic"),
+                ),
+              ),
+            );
+          })
+        ),
+
+        // ─── BLOQUE 2: PROYECCIÓN DE CIERRE ANUAL ───
+        React.createElement("div", { style: { background: "#fff", borderRadius: 14, border: "1px solid #E2E8F0", overflow: "hidden" } },
+          // Header
+          React.createElement("div", { style: { padding: "16px 20px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 } },
+            React.createElement("h3", { style: { margin: 0, fontSize: 16, fontWeight: 800, color: "#1E293B" } }, "🎯 Proyección de Cierre Anual"),
+            React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "Método: mixto (lineal + tendencia 3 meses, peso 40/60)"),
+          ),
+          // Stats grid
+          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", borderBottom: "1px solid #E2E8F0" } },
+            React.createElement("div", { style: { padding: "16px 20px", borderRight: "1px solid #E2E8F0" } },
+              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "Cuota Anual"),
+              React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: "#1E293B", marginTop: 4 } }, cuotaAnual >= 1e6 ? "$" + (cuotaAnual/1e6).toFixed(1) + "M" : "—"),
+            ),
+            React.createElement("div", { style: { padding: "16px 20px", borderRight: "1px solid #E2E8F0" } },
+              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "Real YTD (al " + MESES_CORTOS[mesActualReal2 - 1] + ")"),
+              React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: "#1E293B", marginTop: 4 } }, sellInYTD >= 1e6 ? "$" + (sellInYTD/1e6).toFixed(2) + "M" : "$" + (sellInYTD/1e3).toFixed(0) + "K"),
+              cuotaAnual > 0 && React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, (sellInYTD/cuotaAnual*100).toFixed(0) + "% de cuota anual"),
+            ),
+            React.createElement("div", { style: { padding: "16px 20px", borderRight: "1px solid #E2E8F0" } },
+              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "Proyección Cierre"),
+              React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: pctProy === null ? "#94A3B8" : pctProy >= 100 ? "#059669" : pctProy >= 90 ? "#D97706" : "#DC2626", marginTop: 4 } }, proyAnual >= 1e6 ? "$" + (proyAnual/1e6).toFixed(2) + "M" : "$" + (proyAnual/1e3).toFixed(0) + "K"),
+              pctProy !== null && React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: pctProy >= 100 ? "#059669" : pctProy >= 90 ? "#D97706" : "#DC2626", marginTop: 2 } }, pctProy.toFixed(0) + "% de cuota anual"),
+            ),
+            React.createElement("div", { style: { padding: "16px 20px" } },
+              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "Brecha vs Cuota"),
+              React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: brechaProy >= 0 ? "#059669" : "#DC2626", marginTop: 4 } }, (brechaProy >= 0 ? "+" : "") + (Math.abs(brechaProy) >= 1e6 ? "$" + (brechaProy/1e6).toFixed(2) + "M" : "$" + (brechaProy/1e3).toFixed(0) + "K")),
+              brechaProy < 0 && mesesRestantes > 0 && React.createElement("div", { style: { fontSize: 11, color: "#DC2626", marginTop: 2, fontWeight: 600 } }, "Falta " + formatMXN(ritmoNecesario) + "/mes"),
+            ),
+          ),
+          // Gráfica de barras: Real + Proyectado mes a mes
+          React.createElement("div", { style: { padding: "16px 20px" } },
+            React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 8, fontWeight: 600 } }, "Sell-In mensual: real + proyectado"),
+            React.createElement(ResponsiveContainer, { width: "100%", height: 220 },
+              React.createElement(ComposedChart, {
+                data: Array.from({length: 12}, (_, i) => {
+                  const m = i + 1;
+                  const v = ventasPorMes[m];
+                  const real = m <= mesActualReal2 ? (v ? Number(v.sell_in) || 0 : 0) : null;
+                  const proy = m > mesActualReal2 ? ritmoProyectado : null;
+                  return { mes: MESES_CORTOS[i], real, proy, cuota: cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : 0 };
+                }),
+                margin: { top: 10, right: 10, left: 0, bottom: 0 }
+              },
+                React.createElement(CartesianGrid, { strokeDasharray: "3 3", stroke: "#E2E8F0", vertical: false }),
+                React.createElement(XAxis, { dataKey: "mes", tick: { fontSize: 11, fill: "#64748B" }, axisLine: { stroke: "#CBD5E1" }, tickLine: false }),
+                React.createElement(YAxis, { tickFormatter: (v) => v >= 1e6 ? "$" + (v/1e6).toFixed(1) + "M" : "$" + (v/1e3).toFixed(0) + "K", tick: { fontSize: 10, fill: "#64748B" }, axisLine: { stroke: "#CBD5E1" }, tickLine: false, width: 60 }),
+                React.createElement(Tooltip, {
+                  formatter: (v) => formatMXN(Number(v) || 0),
+                  contentStyle: { background: "rgba(15,23,42,0.96)", border: "none", borderRadius: 8, fontSize: 12, color: "#fff" },
+                  labelStyle: { color: "#E2E8F0", fontWeight: 700 },
+                }),
+                React.createElement(Legend, { wrapperStyle: { fontSize: 11, fontWeight: 600 }, iconType: "circle" }),
+                React.createElement(Line, { type: "monotone", dataKey: "cuota", name: "Cuota Ideal", stroke: "#F59E0B", strokeWidth: 2, strokeDasharray: "6 4", dot: false }),
+                React.createElement(Area, { type: "monotone", dataKey: "real", name: "Real", stroke: cliente?.color || "#3B82F6", strokeWidth: 2.5, fill: (cliente?.color || "#3B82F6") + "30", connectNulls: false }),
+                React.createElement(Area, { type: "monotone", dataKey: "proy", name: "Proyectado", stroke: "#94A3B8", strokeWidth: 2, strokeDasharray: "4 4", fill: "#94A3B830", connectNulls: false }),
+              )
+            ),
+          ),
+        ),
+
+        // ─── BLOQUE 3: INSIGHTS AUTOMÁTICOS ───
+        insights.length > 0 && React.createElement("div", { style: { background: "#fff", borderRadius: 14, border: "1px solid #E2E8F0", padding: "16px 20px" } },
+          React.createElement("h3", { style: { margin: "0 0 12px 0", fontSize: 16, fontWeight: 800, color: "#1E293B" } }, "💡 Insights Automáticos"),
+          React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+            ...insights.map((ins, i) => React.createElement("div", {
+              key: i,
+              style: { display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 12px", background: "#F8FAFC", borderRadius: 8, borderLeft: "3px solid #CBD5E1" }
+            },
+              React.createElement("span", { style: { fontSize: 16, flexShrink: 0 } }, ins.icon),
+              React.createElement("span", { style: { fontSize: 13, color: "#1E293B", lineHeight: 1.5 } }, ins.msg),
+            )),
+          ),
+        ),
+      );
+    })()
   );
 }
 
