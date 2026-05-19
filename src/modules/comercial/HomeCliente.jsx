@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
+import {
+  ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis,
+  CartesianGrid, Tooltip, Legend, ReferenceLine,
+} from 'recharts';
 import { clientes } from '../../lib/constants';
 import { formatMXN, formatFecha, calcularSalud, loadSheetJS } from '../../lib/utils';
 import { Semaforo, TarjetaPendientes } from '../../components';
@@ -629,10 +633,82 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
 
   // ─── SVG LINE CHART ─────────────────────────────────────────────────────────
   function LineChartSellInOut() {
+  const data = [];
+  for (let m = 1; m <= 12; m++) {
+    const v = ventasPorMes[m];
+    const cuotaIdeal = cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : (v ? Number(v.cuota) || 0 : 0);
+    const cuotaMin   = cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_min)   || 0 : 0;
+    const sellIn  = v ? Number(v.sell_in)  || 0 : 0;
+    const sellOut = v ? Number(v.sell_out) || 0 : 0;
+    const inventario = v ? Number(v.inventario_valor) || 0 : 0;
+    data.push({
+      mes: m,
+      mesLabel: MESES_CORTOS[m - 1],
+      sellIn, sellOut, inventario,
+      cuota: cuotaIdeal,
+      cuotaMin,
+      cumplimiento: cuotaIdeal > 0 ? (sellIn / cuotaIdeal) * 100 : null,
+    });
+  }
+  const hasDataMonths = data.filter(d => d.sellIn > 0 || d.sellOut > 0 || d.cuota > 0);
+  if (hasDataMonths.length === 0) {
+    return React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#94A3B8" } }, "Sin datos de ventas a\u00fan");
+  }
+
+  // Recharts tooltip
+  const fmtAxis = (v) => v >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? "$" + (v / 1e3).toFixed(0) + "K" : "$" + v;
+  const fmtTip  = (v) => formatMXN(Number(v) || 0);
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const row = payload[0]?.payload || {};
+    const cump = row.cuota > 0 ? (row.sellIn / row.cuota) * 100 : null;
+    return React.createElement("div", {
+      style: {
+        background: "rgba(15,23,42,0.96)", color: "#fff", padding: "10px 14px",
+        borderRadius: 8, fontSize: 12, lineHeight: 1.6, minWidth: 200,
+        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+      }
+    },
+      React.createElement("div", { style: { fontWeight: 700, marginBottom: 6, color: "#E2E8F0" } }, `${label} ${anioResumen}`),
+      row.sellIn > 0 && React.createElement("div", { style: { color: "#93C5FD" } }, `\u25cf Sell In: ${fmtTip(row.sellIn)}`),
+      row.sellOut > 0 && React.createElement("div", { style: { color: "#6EE7B7" } }, `\u25cf Sell Out: ${fmtTip(row.sellOut)}`),
+      row.cuota > 0 && React.createElement("div", { style: { color: "#FCD34D" } }, `\u25cf Cuota: ${fmtTip(row.cuota)}`),
+      cump != null && React.createElement("div", { style: { color: "#FCA5A5" } }, `\u25cf Cumplimiento: ${cump.toFixed(1)}%`),
+      row.inventario > 0 && React.createElement("div", { style: { color: "#C4B5FD" } }, `\u25cf Inventario: ${fmtTip(row.inventario)}`),
+    );
+  };
+
+  return React.createElement(ResponsiveContainer, { width: "100%", height: 360 },
+    React.createElement(ComposedChart, { data, margin: { top: 20, right: 20, left: 0, bottom: 0 } },
+      React.createElement("defs", null,
+        React.createElement("linearGradient", { id: "areaSellIn", x1: "0", y1: "0", x2: "0", y2: "1" },
+          React.createElement("stop", { offset: "0%", stopColor: "#3B82F6", stopOpacity: 0.35 }),
+          React.createElement("stop", { offset: "100%", stopColor: "#3B82F6", stopOpacity: 0.02 })
+        ),
+        React.createElement("linearGradient", { id: "areaSellOut", x1: "0", y1: "0", x2: "0", y2: "1" },
+          React.createElement("stop", { offset: "0%", stopColor: "#10B981", stopOpacity: 0.28 }),
+          React.createElement("stop", { offset: "100%", stopColor: "#10B981", stopOpacity: 0.02 })
+        ),
+      ),
+      React.createElement(CartesianGrid, { strokeDasharray: "3 3", stroke: "#E2E8F0" }),
+      React.createElement(XAxis, { dataKey: "mesLabel", tick: { fontSize: 12, fill: "#64748B" }, axisLine: { stroke: "#CBD5E1" }, tickLine: false }),
+      React.createElement(YAxis, { tickFormatter: fmtAxis, tick: { fontSize: 11, fill: "#64748B" }, axisLine: { stroke: "#CBD5E1" }, tickLine: false, width: 70 }),
+      React.createElement(Tooltip, { content: React.createElement(CustomTooltip, null), cursor: { stroke: "#94A3B8", strokeDasharray: "3 3" } }),
+      React.createElement(Legend, { wrapperStyle: { fontSize: 12, paddingTop: 8 }, iconType: "circle" }),
+      React.createElement(Area, { type: "monotone", dataKey: "sellIn",  name: "Sell In",  stroke: "#3B82F6", strokeWidth: 2.5, fill: "url(#areaSellIn)",  activeDot: { r: 5 } }),
+      React.createElement(Area, { type: "monotone", dataKey: "sellOut", name: "Sell Out", stroke: "#10B981", strokeWidth: 2.5, fill: "url(#areaSellOut)", activeDot: { r: 5 } }),
+      React.createElement(Line, { type: "monotone", dataKey: "cuota",      name: "Cuota",      stroke: "#F59E0B", strokeWidth: 2, strokeDasharray: "6 4", dot: { r: 2, fill: "#F59E0B" }, activeDot: { r: 4 } }),
+      React.createElement(Line, { type: "monotone", dataKey: "inventario", name: "Inventario", stroke: "#8B5CF6", strokeWidth: 2, strokeDasharray: "4 4", dot: { r: 2, fill: "#8B5CF6" }, activeDot: { r: 4 } }),
+    )
+  );
+  }
+
+  // \u2500\u2500 BLOCK LEGACY (no se usa; mantenido referenciado para no romper imports) \u2500\u2500
+  /* eslint-disable no-unused-vars */
+  function _LegacyLineChart() {
   const W = 780, H = 340, PAD = { t: 40, r: 70, b: 50, l: 75 };
   const plotW = W - PAD.l - PAD.r;
   const plotH = H - PAD.t - PAD.b;
-
   const data = [];
   for (let m = 1; m <= 12; m++) {
     const v = ventasPorMes[m];
@@ -1326,7 +1402,24 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       ),
       React.createElement(Semaforo, { estado: estadoSalud })
     ),
-    // Row 0.5a: Year selector
+    // Banner: última actualización por fuente (Sell In / Sell Out / Inventario)
+    React.createElement("div", { style: { background: "linear-gradient(90deg, #EFF6FF 0%, #F8FAFC 100%)", border: "1px solid #BFDBFE", borderRadius: 12, padding: "10px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 12 } },
+      React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, "📅 Última actualización:"),
+      // Sell In — última fecha del Sell In de este año (mayor mes con datos)
+      (function(){
+        const mesesConSellIn = Object.keys(ventasPorMes).map(Number).filter(m => ventasPorMes[m] && Number(ventasPorMes[m].sell_in) > 0);
+        const mesMax = mesesConSellIn.length ? Math.max(...mesesConSellIn) : null;
+        const label = mesMax ? (["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][mesMax - 1] + " " + anioResumen) : "—";
+        return React.createElement("span", { style: { fontSize: 12, color: "#3B82F6", fontWeight: 500 } }, `Sell In: ${label}`);
+      })(),
+      // Sell Out
+      React.createElement("span", { style: { fontSize: 12, color: "#10B981", fontWeight: 500 } }, `Sell Out: ${_ultimaFechaSellOut?.label || "—"}`),
+      // Inventario cliente
+      React.createElement("span", { style: { fontSize: 12, color: "#8B5CF6", fontWeight: 500 } },
+        `Inventario: ${_latestWeek.anio ? "Semana " + _latestWeek.semana + " de " + _latestWeek.anio : "—"}`
+      ),
+    ),
+    // Year selector
     React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } },
       React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: "#475569" } }, "Año:"),
       [2025, 2026].map(function(y) {
@@ -1334,50 +1427,92 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
           key: y,
           onClick: function() { setAnioResumen(y); },
           style: {
-            padding: "4px 16px", borderRadius: 8, border: "1px solid " + (anioResumen === y ? "#3B82F6" : "#E2E8F0"),
+            padding: "6px 18px", borderRadius: 10, border: "1px solid " + (anioResumen === y ? "#3B82F6" : "#E2E8F0"),
             background: anioResumen === y ? "#3B82F6" : "#fff",
             color: anioResumen === y ? "#fff" : "#475569",
-            fontWeight: 600, fontSize: 13, cursor: "pointer"
+            fontWeight: 600, fontSize: 14, cursor: "pointer", transition: "all 0.15s"
           }
         }, String(y));
       })
     ),
-    // Row 0.5: Period selector
-    React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" } },
-      React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, "Periodo:"),
-      ["ytd", "mes", "trimestre", "rango"].map(t => 
-        React.createElement("button", {
-          key: t,
-          onClick: () => setPeriodoTipo(t),
+    // Period selector — chips grandes tipo tarjetas
+    React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: "12px 16px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+      React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: "#334155", marginRight: 4 } }, "Periodo:"),
+      // YTD chip
+      React.createElement("button", {
+        onClick: () => setPeriodoTipo("ytd"),
+        style: {
+          padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer",
+          border: "1.5px solid " + (periodoTipo === "ytd" ? "#3B82F6" : "#E2E8F0"),
+          background: periodoTipo === "ytd" ? "#3B82F6" : "#fff",
+          color: periodoTipo === "ytd" ? "#fff" : "#475569",
+          transition: "all 0.15s", boxShadow: periodoTipo === "ytd" ? "0 2px 8px rgba(59,130,246,0.25)" : "none"
+        }
+      }, "YTD"),
+      // Q chips
+      [1, 2, 3, 4].map(q => {
+        const isActive = periodoTipo === "trimestre" && Math.ceil(periodoMes / 3) === q;
+        return React.createElement("button", {
+          key: "q" + q,
+          onClick: () => { setPeriodoTipo("trimestre"); setPeriodoMes((q - 1) * 3 + 1); },
           style: {
-            padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer",
-            border: periodoTipo === t ? "2px solid #4472C4" : "1px solid #E2E8F0",
-            background: periodoTipo === t ? "#EFF6FF" : "#fff",
-            color: periodoTipo === t ? "#4472C4" : "#64748B"
+            padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer",
+            border: "1.5px solid " + (isActive ? "#8B5CF6" : "#E2E8F0"),
+            background: isActive ? "#8B5CF6" : "#fff",
+            color: isActive ? "#fff" : "#475569",
+            transition: "all 0.15s", boxShadow: isActive ? "0 2px 8px rgba(139,92,246,0.25)" : "none"
           }
-        }, t === "ytd" ? "Acumulado YTD" : t === "mes" ? "Mes" : t === "trimestre" ? "Trimestre" : "Rango")
+        }, "Q" + q);
+      }),
+      // Mes chip (dropdown integrado)
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 0 } },
+        React.createElement("button", {
+          onClick: () => setPeriodoTipo("mes"),
+          style: {
+            padding: "10px 14px", borderTopLeftRadius: 10, borderBottomLeftRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer",
+            border: "1.5px solid " + (periodoTipo === "mes" ? "#10B981" : "#E2E8F0"),
+            borderRight: periodoTipo === "mes" ? "1.5px solid #10B981" : "1.5px solid #E2E8F0",
+            background: periodoTipo === "mes" ? "#10B981" : "#fff",
+            color: periodoTipo === "mes" ? "#fff" : "#475569",
+            transition: "all 0.15s", boxShadow: periodoTipo === "mes" ? "0 2px 8px rgba(16,185,129,0.25)" : "none"
+          }
+        }, "Mes"),
+        React.createElement("select", {
+          value: periodoMes,
+          onChange: e => { setPeriodoTipo("mes"); setPeriodoMes(Number(e.target.value)); },
+          style: {
+            padding: "10px 8px", borderTopRightRadius: 10, borderBottomRightRadius: 10, fontSize: 13, fontWeight: 600,
+            border: "1.5px solid " + (periodoTipo === "mes" ? "#10B981" : "#E2E8F0"),
+            borderLeft: "none",
+            background: periodoTipo === "mes" ? "#fff" : "#F8FAFC",
+            color: "#475569", cursor: "pointer",
+          }
+        }, MESES_CORTOS.map((m, i) => React.createElement("option", { key: i, value: i + 1 }, m)))
       ),
-      periodoTipo === "mes" && React.createElement("select", {
-        value: periodoMes,
-        onChange: e => setPeriodoMes(Number(e.target.value)),
-        style: { padding: "6px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12 }
-      }, MESES_CORTOS.map((m, i) => React.createElement("option", { key: i, value: i + 1 }, m))),
-      periodoTipo === "trimestre" && React.createElement("select", {
-        value: Math.ceil(periodoMes / 3),
-        onChange: e => setPeriodoMes((Number(e.target.value) - 1) * 3 + 1),
-        style: { padding: "6px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12 }
-      }, [1,2,3,4].map(q => React.createElement("option", { key: q, value: q }, "Q" + q))),
+      // Rango chip (avanzado)
+      React.createElement("button", {
+        onClick: () => setPeriodoTipo("rango"),
+        style: {
+          padding: "10px 14px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer",
+          border: "1.5px solid " + (periodoTipo === "rango" ? "#F59E0B" : "#E2E8F0"),
+          background: periodoTipo === "rango" ? "#F59E0B" : "#fff",
+          color: periodoTipo === "rango" ? "#fff" : "#475569",
+          transition: "all 0.15s",
+        }
+      }, "Rango ▾"),
+      // Sub-selectores cuando Rango está activo (Mes y Trimestre ya tienen su propio chip arriba)
       periodoTipo === "rango" && React.createElement(React.Fragment, null,
+        React.createElement("span", { style: { fontSize: 12, color: "#64748B" } }, "de"),
         React.createElement("select", {
           value: periodoRango[0],
           onChange: e => setPeriodoRango([Number(e.target.value), periodoRango[1]]),
-          style: { padding: "6px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12 }
+          style: { padding: "8px 10px", borderRadius: 8, border: "1.5px solid #F59E0B", fontSize: 13, fontWeight: 600 }
         }, MESES_CORTOS.map((m, i) => React.createElement("option", { key: i, value: i + 1 }, m))),
-        React.createElement("span", { style: { color: "#94A3B8" } }, "a"),
+        React.createElement("span", { style: { fontSize: 12, color: "#64748B" } }, "a"),
         React.createElement("select", {
           value: periodoRango[1],
           onChange: e => setPeriodoRango([periodoRango[0], Number(e.target.value)]),
-          style: { padding: "6px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12 }
+          style: { padding: "8px 10px", borderRadius: 8, border: "1.5px solid #F59E0B", fontSize: 13, fontWeight: 600 }
         }, MESES_CORTOS.map((m, i) => React.createElement("option", { key: i, value: i + 1 }, m)))
       ),
       // Cuota summary
