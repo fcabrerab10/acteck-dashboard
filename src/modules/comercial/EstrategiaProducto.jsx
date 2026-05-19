@@ -291,6 +291,25 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       );
   }, [canEdit, clienteKey]);
 
+  // Resetea TODOS los overrides de sugerido del cliente: limpia state local +
+  // borra de BD. Usado por:
+  //   1. Botón "Reiniciar Sugerido" en la tabla
+  //   2. Auto-reset después de exportar Excel
+  const resetSugeridoOverrides = React.useCallback(async (silent = false) => {
+    if (!canEdit) return;
+    // Snapshot para poder Deshacer
+    setUndoSnapshot({ edits: { ...sugeridoEdits }, etiqueta: silent ? 'Auto-reset post-export' : 'Reiniciar Sugerido' });
+    setSugeridoEdits({});
+    if (DB_CONFIGURED) {
+      const { error } = await supabase.from('sugerido_overrides').delete().eq('cliente', clienteKey);
+      if (error) console.error('reset overrides error:', error);
+    }
+    if (!silent) {
+      setMessage('↻ Sugeridos reiniciados — volvieron a sus valores automáticos');
+      setTimeout(() => setMessage(''), 3500);
+    }
+  }, [canEdit, sugeridoEdits, clienteKey]);
+
   // Aplica un cambio en bulk a un set de cambios { sku → nuevoSugerido }
   // Guarda snapshot para Undo y persiste en BD.
   const aplicarBulkSugerido = React.useCallback(async (cambios, etiqueta) => {
@@ -2367,6 +2386,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           if (error) console.error("guardar propuesta error:", error);
           else await cargarPropuestasCompra();
         } catch (e) { console.error(e); }
+        // Auto-reset de overrides después del export PCEL
+        await resetSugeridoOverrides(true);
+        setMessage('✓ Excel exportado · Sugeridos reseteados');
+        setTimeout(() => setMessage(''), 4000);
       };
 
       const exportToExcel = async () => {
@@ -2575,6 +2598,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         else await cargarPropuestasCompra();
       } catch (e) { console.error(e); }
     }
+    // Auto-reset de overrides después del export
+    await resetSugeridoOverrides(true);
+    setMessage('✓ Excel exportado · Sugeridos reseteados');
+    setTimeout(() => setMessage(''), 4000);
   };
 
   // ———— RENDER ————
@@ -3065,6 +3092,16 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 }),
                 "Solo activos"
               ),
+              // Reiniciar Sugerido: borra todos los overrides manuales del cliente
+              canEdit && Object.keys(sugeridoEdits).length > 0 && React.createElement("button", {
+                onClick: () => {
+                  if (window.confirm("\u00bfReiniciar el sugerido de " + Object.keys(sugeridoEdits).length + " SKU(s)? Volver\u00e1n a sus valores autom\u00e1ticos.")) {
+                    resetSugeridoOverrides(false);
+                  }
+                },
+                title: "Borra todos los valores manuales del sugerido. Los SKUs vuelven al c\u00e1lculo autom\u00e1tico.",
+                style: { padding: "8px 14px", background: "#fff", color: "#7C3AED", border: "1.5px solid #C4B5FD", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }
+              }, "\u21bb Reiniciar Sugerido (" + Object.keys(sugeridoEdits).length + ")"),
               // Exportar Excel guarda snapshot en propuestas_compra → requiere edición
               canEdit && React.createElement("button", {
                 onClick: exportToExcel,
@@ -3178,19 +3215,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 thSort("Prom 90d", "promedio90d"),
                 thSort("Inv Acteck", "invActeck"),
                 thSort("Tr\u00e1nsito", "invTransito"),
-                // Columnas estandarizadas para PCEL y Digitalife (mismo orden y nombres)
-                React.createElement("th", {
-                  key: "th-bo", onClick: () => handleSort("backOrder"),
-                  style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "backOrder" ? "#1D4ED8" : "#B91C1C", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#FEF2F2" },
-                  title: clienteKey === "pcel" ? "Back orders pendientes en sellout_pcel" : "Back order — no aplica para Digitalife"
-                }, "Back Order" + sortArrow("backOrder")),
-                React.createElement("th", {
-                  key: "th-pc", onClick: () => handleSort("promCompra"),
-                  style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "promCompra" ? "#1D4ED8" : "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#FEF3C7" },
-                  title: clienteKey === "pcel"
-                    ? "Promedio de piezas por compra (últimos 6 meses, ventas_erp)"
-                    : "Promedio de piezas/mes que el cliente compró (últimos 6 meses de sell_in_sku)"
-                }, "Prom compra" + sortArrow("promCompra")),
+                // (Columnas Back Order y Prom compra removidas por solicitud del usuario)
                 // ── Último Precio facturado (NUEVA, mismo orden ambos clientes) ──
                 React.createElement("th", {
                   key: "th-up", onClick: () => handleSort("ultimoPrecio"),
@@ -3204,11 +3229,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "precioAAAcd" ? "#1D4ED8" : "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#F0F9FF" },
                   title: "Precio AAA con descuento aplicado"
                 }, "Precio" + sortArrow("precioAAAcd")),
-                (clienteKey === "pcel" || clienteKey === "digitalife") && React.createElement("th", {
-                  key: "th-arr",
-                  style: { textAlign: "left", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#FEF3C7" },
-                  title: "Fecha de próximo arribo si el sugerido no se completa con inv Acteck"
-                }, "Pr\u00f3x. arribo (falta)"),
+                // (Columna Próx. arribo removida)
                 // Para PCEL se oculta la columna "Precio" genérica (precio_venta de productos_cliente
                 // está casi siempre vacío para PCEL); el precio real es "Precio AAA c/desc" de arriba.
                 (clienteKey !== "pcel" && clienteKey !== "digitalife") && React.createElement("th", { key: "th-precio-gen", style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
@@ -3258,18 +3279,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11 } }, (s.promedio90d || 0).toLocaleString("es-MX")),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: s.invActeck > 0 ? "#1E293B" : "#CBD5E1", fontSize: 11, fontWeight: s.invActeck > 0 ? 500 : 400 } }, (s.invActeck || 0).toLocaleString("es-MX")),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: s.invTransito > 0 ? "#7C3AED" : "#CBD5E1", fontSize: 11 } }, s.invTransito > 0 ? s.invTransito.toLocaleString("es-MX") : "-"),
-                  // Columnas estandarizadas (ambos clientes, mismo orden)
-                  React.createElement("td", {
-                    key: "td-bo",
-                    style: { textAlign: "right", padding: "6px", fontSize: 11, background: s.backOrder > 0 ? "#FEE2E2" : "#FEF2F2", color: s.backOrder > 0 ? "#991B1B" : "#CBD5E1", fontWeight: s.backOrder > 0 ? 700 : 400 }
-                  }, s.backOrder > 0 ? s.backOrder.toLocaleString("es-MX") : "-"),
-                  React.createElement("td", {
-                    key: "td-pc",
-                    style: { textAlign: "right", padding: "6px", fontSize: 11, background: "#FFFBEB", color: s.promCompra > 0 ? "#78350F" : "#CBD5E1", fontWeight: 500 },
-                    title: clienteKey === "pcel"
-                      ? (s.facturasHist > 0 ? (s.facturasHist + " compras históricas") : "Sin histórico de compras")
-                      : "Promedio sell-in últimos 6 meses"
-                  }, s.promCompra > 0 ? s.promCompra.toLocaleString("es-MX") : "-"),
+                  // (Celdas Back Order y Prom compra removidas)
                   // Último precio facturado (NUEVA, ambos clientes)
                   React.createElement("td", {
                     key: "td-up",
@@ -3420,34 +3430,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                       title: precioSaveState[s.sku] === "saved" ? "Guardado" : precioSaveState[s.sku] === "saving" ? "Guardando..." : "Error"
                     }, precioSaveState[s.sku] === "saved" ? "\u2713" : precioSaveState[s.sku] === "saving" ? "\u2026" : "!")
                   ),
-                  // Próx. arribo (si falta) — mostrar cuando sugerido > invActeck (PCEL y Digitalife)
-                  // Si hay fecha → fecha en español. Si hay piezas pero sin fecha → "N pzas en tránsito".
-                  (clienteKey === "pcel" || clienteKey === "digitalife") && (function() {
-                    const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
-                    const gap = Math.max(0, sug - (Number(s.invActeck) || 0));
-                    const hayGap = gap > 0;
-                    let contenido = "-";
-                    let color = "#CBD5E1";
-                    let fw = 400;
-                    if (hayGap) {
-                      if (s.arriboFecha) {
-                        contenido = formatFechaES(s.arriboFecha);
-                        color = "#78350F";
-                        fw = 600;
-                      } else if (s.arriboPiezas > 0) {
-                        contenido = `${Number(s.arriboPiezas).toLocaleString("es-MX")} pzas (sin fecha)`;
-                        color = "#A16207";
-                        fw = 500;
-                      }
-                    }
-                    return React.createElement("td", {
-                      key: "td-arr",
-                      style: { textAlign: "left", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#FEF3C7", color, fontWeight: fw },
-                      title: hayGap
-                        ? `Faltan ${gap} piezas · Tránsito: ${s.arriboPiezas || 0} piezas${s.arriboFecha ? ` · Arribo: ${s.arriboFecha}` : " · Sin fecha confirmada"}`
-                        : (s.arriboFecha || s.arriboPiezas ? `Stock suficiente (${s.invActeck})` : "Sin tránsito")
-                    }, contenido);
-                  })(),
+                  // (Celda Próx. arribo removida)
+
                   // TD de "Precio" genérico — oculto para PCEL (su precio es el AAA c/desc de arriba)
                   (clienteKey !== "pcel" && clienteKey !== "digitalife") && React.createElement("td", { key: "td-precio-gen", style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11, whiteSpace: "nowrap" } }, (s.precio && s.precio > 0) ? ("$" + Number(s.precio).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })) : "-"),
                   (function(){
