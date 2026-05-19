@@ -291,24 +291,47 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       );
   }, [canEdit, clienteKey]);
 
-  // Resetea TODOS los overrides de sugerido del cliente: limpia state local +
-  // borra de BD. Usado por:
+  // Pone TODOS los sugeridos en 0 (sobrescribe el cálculo automático).
+  // Guarda override=0 en BD para cada SKU del cliente. Usado por:
   //   1. Botón "Reiniciar Sugerido" en la tabla
   //   2. Auto-reset después de exportar Excel
-  const resetSugeridoOverrides = React.useCallback(async (silent = false) => {
+  // Nota: en lugar de borrar overrides (lo cual hacía que volvieran al auto),
+  // upsertea sugerido=0 para forzar la columna en 0.
+  const resetSugeridoOverrides = async (silent = false) => {
     if (!canEdit) return;
-    // Snapshot para poder Deshacer
+    // Snapshot para Deshacer
     setUndoSnapshot({ edits: { ...sugeridoEdits }, etiqueta: silent ? 'Auto-reset post-export' : 'Reiniciar Sugerido' });
-    setSugeridoEdits({});
-    if (DB_CONFIGURED) {
-      const { error } = await supabase.from('sugerido_overrides').delete().eq('cliente', clienteKey);
-      if (error) console.error('reset overrides error:', error);
+
+    // Obtener todos los SKUs del cliente desde datos.productos (no filtrados)
+    const skus = (datos && datos.productos ? datos.productos.map(p => p.sku) : (skuDetail || []).map(r => r.sku))
+      .filter(Boolean);
+
+    // Construir overrides locales = 0 para cada SKU
+    const newEdits = {};
+    skus.forEach(sku => { newEdits[sku] = 0; });
+    setSugeridoEdits(newEdits);
+
+    // Persistir en BD: upsert sugerido=0 para cada SKU (en batches)
+    if (DB_CONFIGURED && skus.length > 0) {
+      const rows = skus.map(sku => ({
+        cliente: clienteKey,
+        sku,
+        sugerido: 0,
+        updated_at: new Date().toISOString(),
+      }));
+      for (let i = 0; i < rows.length; i += 100) {
+        const batch = rows.slice(i, i + 100);
+        const { error } = await supabase.from('sugerido_overrides')
+          .upsert(batch, { onConflict: 'cliente,sku' });
+        if (error) console.error('reset overrides batch error:', error);
+      }
     }
+
     if (!silent) {
-      setMessage('↻ Sugeridos reiniciados — volvieron a sus valores automáticos');
+      setMessage('↻ Sugeridos reiniciados a 0 (' + skus.length + ' SKUs)');
       setTimeout(() => setMessage(''), 3500);
     }
-  }, [canEdit, sugeridoEdits, clienteKey]);
+  };
 
   // Aplica un cambio en bulk a un set de cambios { sku → nuevoSugerido }
   // Guarda snapshot para Undo y persiste en BD.
@@ -2949,22 +2972,16 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 }),
                 "Solo activos"
               ),
-              // Reiniciar Sugerido: borra todos los overrides manuales del cliente
+              // Reiniciar Sugerido: pone toda la columna sugerido en 0
               canEdit && React.createElement("button", {
                 onClick: async () => {
-                  const numOverrides = Object.keys(sugeridoEdits).length;
-                  if (numOverrides === 0) {
-                    setMessage("\u2139 No hay sugeridos manuales para reiniciar");
-                    setTimeout(() => setMessage(""), 2500);
-                    return;
-                  }
-                  if (window.confirm("\u00bfReiniciar el sugerido de " + numOverrides + " SKU(s)? Volver\u00e1n a sus valores autom\u00e1ticos.")) {
+                  if (window.confirm("\u00bfPoner toda la columna de Sugerido en 0?\n\nEsto sobrescribe los valores autom\u00e1ticos. Si quieres recuperar los autos, tendr\u00e1s que recargar datos.")) {
                     await resetSugeridoOverrides(false);
                   }
                 },
-                title: "Borra todos los valores manuales del sugerido. Los SKUs vuelven al c\u00e1lculo autom\u00e1tico.",
+                title: "Pone todos los sugeridos en 0 (sobrescribe el c\u00e1lculo autom\u00e1tico).",
                 style: { padding: "8px 14px", background: "#fff", color: "#7C3AED", border: "1.5px solid #C4B5FD", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }
-              }, "\u21bb Reiniciar Sugerido" + (Object.keys(sugeridoEdits).length > 0 ? " (" + Object.keys(sugeridoEdits).length + ")" : "")),
+              }, "\u21bb Reiniciar Sugerido"),
               // Exportar Excel guarda snapshot en propuestas_compra → requiere edición
               canEdit && React.createElement("button", {
                 onClick: exportToExcel,
