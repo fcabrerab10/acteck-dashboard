@@ -1722,35 +1722,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       })();
 
       return React.createElement("div", { style: { background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" } },
-        // KPI Row: 3 cards (actual / previo / variación)
-        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", borderBottom: "1px solid #E2E8F0" } },
-          // Card 1: Actual
-          React.createElement("div", { style: { padding: "18px 24px", borderRight: "1px solid #E2E8F0" } },
-            React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, `${periodoLabel} ${anioResumen}`),
-            React.createElement("div", { style: { fontSize: 36, fontWeight: 800, color: "#1E293B", lineHeight: 1.1, marginTop: 6 } },
-              totalSellIn >= 1e6 ? "$" + (totalSellIn / 1e6).toFixed(1) + "M" : "$" + (totalSellIn / 1e3).toFixed(0) + "K"),
-            React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginTop: 2 } }, formatMXN(totalSellIn)),
-          ),
-          // Card 2: Año anterior
-          React.createElement("div", { style: { padding: "18px 24px", borderRight: "1px solid #E2E8F0" } },
-            React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, `${periodoLabel} ${anioResumen - 1}`),
-            React.createElement("div", { style: { fontSize: 36, fontWeight: 800, color: "#94A3B8", lineHeight: 1.1, marginTop: 6 } },
-              totalSellInPrev >= 1e6 ? "$" + (totalSellInPrev / 1e6).toFixed(1) + "M" : "$" + (totalSellInPrev / 1e3).toFixed(0) + "K"),
-            React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginTop: 2 } }, formatMXN(totalSellInPrev)),
-          ),
-          // Card 3: Variación
-          React.createElement("div", { style: { padding: "18px 24px" } },
-            React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase" } }, "Variación"),
-            variacionPct !== null
-              ? React.createElement(React.Fragment, null,
-                React.createElement("div", { style: { fontSize: 36, fontWeight: 800, color: variacionPct >= 0 ? "#059669" : "#DC2626", lineHeight: 1.1, marginTop: 6 } },
-                  (variacionPct >= 0 ? "+" : "") + variacionPct.toFixed(1) + "%"),
-                React.createElement("div", { style: { fontSize: 12, color: variacionPct >= 0 ? "#059669" : "#DC2626", marginTop: 2, fontWeight: 600 } },
-                  (variacionAbs >= 0 ? "+" : "") + formatMXN(variacionAbs)),
-              )
-              : React.createElement("div", { style: { fontSize: 22, color: "#94A3B8", marginTop: 10 } }, "—"),
-          ),
-        ),
+        // (Fila superior YTD/Variación eliminada — solo header de 3 secciones)
         // Header de 3 secciones — Cumplimiento vs Cuota | Facturación vs Año Ant | Sell-In vs Sell-Out
         (function(){
           const cump = totalCuotaMin > 0 ? (totalSellIn / totalCuotaMin * 100) : null;
