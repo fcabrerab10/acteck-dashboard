@@ -37,7 +37,6 @@ const CLIENTES = {
     activo: true,
     pestanas: [
       { id: 'home',       label: 'Resumen',                icon: Home },
-      { id: 'analisis',   label: 'Análisis',               icon: TrendingUp },
       { id: 'estrategia', label: 'Estrategia de Producto', icon: Package },
       { id: 'marketing',  label: 'Marketing',              icon: Megaphone },
       { id: 'pagos',      label: 'Pagos',                  icon: Wallet },
@@ -50,7 +49,6 @@ const CLIENTES = {
     activo: true,
     pestanas: [
       { id: 'home',       label: 'Resumen',                icon: Home },
-      { id: 'analisis',   label: 'Análisis',               icon: TrendingUp },
       { id: 'estrategia', label: 'Estrategia de Producto', icon: Package },
       { id: 'marketing',  label: 'Marketing',              icon: Megaphone, disabled: true, hint: 'Pronto' },
       { id: 'pagos',      label: 'Pagos',                  icon: Wallet },
