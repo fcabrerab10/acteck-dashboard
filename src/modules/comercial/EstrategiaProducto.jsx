@@ -2933,6 +2933,56 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       );
     })(),
 
+    // ── Strip mensual: 12 meses con % cumplimiento de cuota ──
+    (function(){
+      if (!datos || !kpis || !kpis.cumplimientoMensual) return null;
+      const meses = kpis.cumplimientoMensual;
+      const MESES_LBL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+      return React.createElement('div', {
+        className: 'bg-white rounded-xl shadow-sm p-4',
+        style: { marginBottom: 16 }
+      },
+        React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 } },
+          React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, margin: 0 } }, '📅 Cumplimiento Mensual de Cuota'),
+          React.createElement('p', { style: { fontSize: 11, color: '#64748B', margin: 0 } }, 'Sell-In real / Cuota Mín por mes'),
+        ),
+        React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 4 } },
+          ...meses.map(m => {
+            const pct = m.pct;
+            const isFut = m.esFuturo;
+            const isActual = m.esActual;
+            // Color semáforo
+            let color = '#94A3B8', bg = '#F8FAFC';
+            if (!isFut && pct !== null) {
+              if (pct >= 95) { color = '#059669'; bg = '#D1FAE5'; }
+              else if (pct >= 80) { color = '#D97706'; bg = '#FEF3C7'; }
+              else { color = '#DC2626'; bg = '#FEE2E2'; }
+            }
+            const label = MESES_LBL[m.mes - 1];
+            const pctTxt = isFut ? '—' : (pct !== null ? pct.toFixed(0) + '%' : '—');
+            return React.createElement('div', {
+              key: m.mes,
+              title: isFut ? label + ' (mes futuro)' :
+                     pct !== null ? label + ' · Sell-In: $' + Math.round(m.sellIn).toLocaleString('es-MX') + ' · Cuota: $' + Math.round(m.cuota).toLocaleString('es-MX') + ' · ' + pct.toFixed(1) + '%' :
+                     label + ' · Sin cuota',
+              style: {
+                background: bg,
+                border: isActual ? '2px solid #3B82F6' : '1px solid ' + (isFut ? '#E2E8F0' : color + '40'),
+                borderRadius: 8,
+                padding: '8px 4px',
+                textAlign: 'center',
+                cursor: 'default',
+              }
+            },
+              React.createElement('div', { style: { fontSize: 10, color: '#64748B', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 } }, label),
+              React.createElement('div', { style: { fontSize: 16, fontWeight: 800, color, lineHeight: 1 } }, pctTxt),
+              isActual && !isFut && React.createElement('div', { style: { fontSize: 9, color: '#3B82F6', fontWeight: 600, marginTop: 2 } }, 'Actual'),
+            );
+          })
+        ),
+      );
+    })(),
+
 
           // SKU Detail - Full Table
       (function() {
