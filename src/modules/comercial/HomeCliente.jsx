@@ -665,11 +665,13 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   const data = mesesParaGrafica.map(m => {
     const v = ventasPorMes[m];
     const sellIn  = v ? Number(v.sell_in)  || 0 : 0;
-    // Comparativa contra a\u00f1o anterior: lookup en sellInPrevAnio (ver hook abajo)
+    const sellOut = v ? Number(v.sell_out) || 0 : 0;
+    const cuota = cuotasPorMes[m] ? Number(cuotasPorMes[m].cuota_ideal) || 0 : 0;
     const sellInPrev = (sellInPrevAnio && sellInPrevAnio[m]) ? sellInPrevAnio[m].sell_in || 0 : 0;
-    return { mes: m, mesLabel: MESES_CORTOS[m - 1], sellIn, sellInPrev };
+    const sellOutPrev = (sellInPrevAnio && sellInPrevAnio[m]) ? sellInPrevAnio[m].sell_out || 0 : 0;
+    return { mes: m, mesLabel: MESES_CORTOS[m - 1], sellIn, sellOut, cuota, sellInPrev, sellOutPrev };
   });
-  const hasDataMonths = data.filter(d => d.sellIn > 0 || d.sellInPrev > 0);
+  const hasDataMonths = data.filter(d => d.sellIn > 0 || d.sellOut > 0 || d.cuota > 0 || d.sellInPrev > 0);
   if (hasDataMonths.length === 0) {
     return React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#94A3B8" } }, "Sin datos de ventas en el periodo seleccionado");
   }
@@ -689,8 +691,10 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       }
     },
       React.createElement("div", { style: { fontWeight: 700, marginBottom: 6, color: "#E2E8F0" } }, label),
-      row.sellIn > 0 && React.createElement("div", { style: { color: colorActual } }, "\u25cf " + anioResumen + ": " + fmtTip(row.sellIn)),
-      row.sellInPrev > 0 && React.createElement("div", { style: { color: "#94A3B8" } }, "\u25cf " + (anioResumen - 1) + ": " + fmtTip(row.sellInPrev)),
+      row.sellIn > 0 && React.createElement("div", { style: { color: colorActual } }, "\u25cf Sell-In " + anioResumen + ": " + fmtTip(row.sellIn)),
+      row.sellOut > 0 && React.createElement("div", { style: { color: "#10B981" } }, "\u25cf Sell-Out: " + fmtTip(row.sellOut)),
+      row.cuota > 0 && React.createElement("div", { style: { color: "#F59E0B" } }, "\u25cf Cuota: " + fmtTip(row.cuota)),
+      row.sellInPrev > 0 && React.createElement("div", { style: { color: "#94A3B8" } }, "\u25cf Sell-In " + (anioResumen - 1) + ": " + fmtTip(row.sellInPrev)),
       delta !== null && React.createElement("div", {
         style: { color: delta >= 0 ? "#86EFAC" : "#FCA5A5", marginTop: 4, fontWeight: 700 }
       }, (delta >= 0 ? "\u25b2 +" : "\u25bc ") + Math.abs(delta).toFixed(1) + "% YoY"),
@@ -710,14 +714,30 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       React.createElement(YAxis, { tickFormatter: fmtAxis, tick: { fontSize: 11, fill: "#64748B" }, axisLine: { stroke: "#CBD5E1" }, tickLine: false, width: 70 }),
       React.createElement(Tooltip, { content: React.createElement(CustomTooltip, null), cursor: { stroke: "#94A3B8", strokeDasharray: "3 3" } }),
       React.createElement(Legend, { wrapperStyle: { fontSize: 13, fontWeight: 600 }, iconType: "circle", verticalAlign: "top", align: "center" }),
+      // Sell-In año actual: área + línea
       React.createElement(Area, {
-        type: "monotone", dataKey: "sellIn", name: String(anioResumen),
+        type: "monotone", dataKey: "sellIn", name: "Sell-In " + anioResumen,
         stroke: colorActual, strokeWidth: 3, fill: "url(#areaSellInActual)",
         activeDot: { r: 6, fill: colorActual, stroke: "#fff", strokeWidth: 2 },
         dot: { r: 5, fill: colorActual, stroke: "#fff", strokeWidth: 2 },
       }),
+      // Sell-Out: línea verde sólida
       React.createElement(Line, {
-        type: "monotone", dataKey: "sellInPrev", name: String(anioResumen - 1),
+        type: "monotone", dataKey: "sellOut", name: "Sell-Out " + anioResumen,
+        stroke: "#10B981", strokeWidth: 2.5,
+        dot: { r: 4, fill: "#10B981", stroke: "#fff", strokeWidth: 1.5 },
+        activeDot: { r: 5 },
+      }),
+      // Cuota: línea ámbar dasheada
+      React.createElement(Line, {
+        type: "monotone", dataKey: "cuota", name: "Cuota",
+        stroke: "#F59E0B", strokeWidth: 2, strokeDasharray: "8 4",
+        dot: { r: 3, fill: "#F59E0B" },
+        activeDot: { r: 4 },
+      }),
+      // Sell-In año anterior: línea gris punteada
+      React.createElement(Line, {
+        type: "monotone", dataKey: "sellInPrev", name: "Sell-In " + (anioResumen - 1),
         stroke: "#94A3B8", strokeWidth: 2, strokeDasharray: "6 4",
         dot: { r: 4, fill: "#94A3B8", stroke: "#fff", strokeWidth: 1.5 },
         activeDot: { r: 5 },
@@ -1456,138 +1476,6 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         ),
       ),
     ),
-    // Row 0.5: GRID DE 6 TARJETAS SEMÁFORO — interactivas con drill-down en modal
-    (function(){
-      // Calcular indicadores
-      const eficienciaSO = totalSellIn > 0 && totalSellOut > 0 ? (totalSellOut / totalSellIn * 100) : 0;
-      const brecha = totalSellIn - totalCuotaMin;
-      const dso = estadoCuenta?.dso || null;
-      const saldoCxC = estadoCuenta?.saldo_actual || 0;
-      const saldoVencido = estadoCuenta?.saldo_vencido || 0;
-      const pctVencido = saldoCxC > 0 ? (saldoVencido / saldoCxC * 100) : 0;
-      const periodoLabel = periodoTipo === "trimestre" ? "Q" + Math.ceil(periodoMes/3) : periodoTipo === "mes" ? MESES_CORTOS[periodoMes-1] : periodoTipo === "rango" ? `${MESES_CORTOS[periodoRango[0]-1]}-${MESES_CORTOS[periodoRango[1]-1]}` : "YTD";
-
-      const tarjetas = [
-        // 1. SELL-IN
-        {
-          id: "sellin", color: "#3B82F6", colorBg: "#EFF6FF",
-          titulo: `Sell-In ${periodoLabel}`,
-          valor: totalSellIn >= 1e6 ? "$" + (totalSellIn / 1e6).toFixed(2) + "M" : formatMXN(totalSellIn),
-          subValor: formatMXN(totalSellIn),
-          metrica2: { label: "Cumplimiento Mín", valor: cumplimientoMin.toFixed(1) + "%", color: cumplimientoMin >= 95 ? "#10B981" : cumplimientoMin >= 80 ? "#F59E0B" : "#EF4444" },
-          metrica3: { label: "Cuota Mín", valor: formatMXN(totalCuotaMin) },
-          progreso: { pct: Math.min(cumplimientoMin, 120), color: cumplimientoMin >= 95 ? "#10B981" : cumplimientoMin >= 80 ? "#F59E0B" : "#EF4444" },
-          estado: cumplimientoMin >= 95 ? { label: "Excelente", color: "#10B981" } : cumplimientoMin >= 80 ? { label: "Saludable", color: "#F59E0B" } : cumplimientoMin >= 65 ? { label: "Atención", color: "#F59E0B" } : { label: "Crítico", color: "#EF4444" },
-        },
-        // 2. SELL-OUT
-        {
-          id: "sellout", color: "#10B981", colorBg: "#ECFDF5",
-          titulo: `Sell-Out ${periodoLabel}`,
-          valor: totalSellOut >= 1e6 ? "$" + (totalSellOut / 1e6).toFixed(2) + "M" : formatMXN(totalSellOut),
-          subValor: formatMXN(totalSellOut),
-          metrica2: { label: "Eficiencia SO/SI", valor: eficienciaSO > 0 ? eficienciaSO.toFixed(1) + "%" : "—", color: eficienciaSO >= 80 ? "#10B981" : eficienciaSO >= 50 ? "#F59E0B" : "#EF4444" },
-          metrica3: _weeklySellout.deltaPct !== null
-            ? { label: "Δ Semana", valor: (_weeklySellout.deltaPct >= 0 ? "▲ +" : "▼ ") + Math.abs(_weeklySellout.deltaPct).toFixed(1) + "%", color: _weeklySellout.deltaPct >= 0 ? "#10B981" : "#EF4444" }
-            : { label: "Δ Semana", valor: "—" },
-          estado: eficienciaSO >= 80 ? { label: "Saludable", color: "#10B981" } : eficienciaSO >= 50 ? { label: "Moderado", color: "#F59E0B" } : eficienciaSO > 0 ? { label: "Atención", color: "#EF4444" } : { label: "Sin datos", color: "#94A3B8" },
-        },
-        // 3. INVENTARIO
-        {
-          id: "inventario", color: "#8B5CF6", colorBg: "#F5F3FF",
-          titulo: "Inventario Cliente",
-          valor: totalInvValor >= 1e6 ? "$" + (totalInvValor / 1e6).toFixed(2) + "M" : formatMXN(totalInvValor),
-          subValor: formatMXN(totalInvValor),
-          metrica2: { label: "Días cobertura", valor: _diasCobertura !== null ? _diasCobertura + " d" : "—", color: _diasCobertura === null ? "#94A3B8" : _diasCobertura <= 30 ? "#EF4444" : _diasCobertura <= 90 ? "#10B981" : _diasCobertura <= 150 ? "#F59E0B" : "#EF4444" },
-          metrica3: { label: "SKUs activos", valor: invClienteLatest.length + " SKUs" },
-          estado: _diasCobertura === null ? { label: "Sin datos", color: "#94A3B8" } : _diasCobertura <= 30 ? { label: "Stockout riesgo", color: "#EF4444" } : _diasCobertura <= 90 ? { label: "Óptimo", color: "#10B981" } : _diasCobertura <= 150 ? { label: "Alto", color: "#F59E0B" } : { label: "Sobreinventario", color: "#EF4444" },
-        },
-        // 4. CRÉDITO Y COBRANZA
-        {
-          id: "cobranza", color: "#EF4444", colorBg: "#FEF2F2",
-          titulo: "Crédito y Cobranza",
-          valor: saldoCxC >= 1e6 ? "$" + (saldoCxC / 1e6).toFixed(2) + "M" : formatMXN(saldoCxC),
-          subValor: formatMXN(saldoCxC),
-          metrica2: { label: "DSO", valor: dso !== null ? dso + " d" : "—", color: dso === null ? "#94A3B8" : dso <= 60 ? "#10B981" : dso <= 90 ? "#F59E0B" : "#EF4444" },
-          metrica3: { label: "Vencido", valor: saldoVencido > 0 ? formatMXN(saldoVencido) + " (" + pctVencido.toFixed(0) + "%)" : "—", color: pctVencido > 15 ? "#EF4444" : pctVencido > 5 ? "#F59E0B" : "#64748B" },
-          estado: dso === null ? { label: "Sin datos", color: "#94A3B8" } : (dso <= 60 && pctVencido <= 5) ? { label: "Saludable", color: "#10B981" } : (dso <= 90 && pctVencido <= 15) ? { label: "Atención", color: "#F59E0B" } : { label: "Crítico", color: "#EF4444" },
-        },
-        // 5. BRECHA
-        {
-          id: "brecha", color: brecha >= 0 ? "#059669" : "#DC2626", colorBg: brecha >= 0 ? "#ECFDF5" : "#FEF2F2",
-          titulo: "Brecha vs Cuota",
-          valor: (brecha >= 0 ? "+$" : "-$") + Math.abs(brecha / 1e3).toFixed(0) + "K",
-          subValor: formatMXN(brecha),
-          metrica2: { label: "vs Cuota Mín", valor: formatMXN(totalCuotaMin) },
-          metrica3: { label: "vs Cuota Ideal", valor: formatMXN(totalCuotaIdeal) },
-          estado: brecha >= 0 ? { label: "Cuota alcanzada", color: "#10B981" } : brecha >= -totalCuotaMin * 0.1 ? { label: "Cerca de meta", color: "#F59E0B" } : { label: "Lejos de meta", color: "#EF4444" },
-        },
-        // 6. SUGERIDO REPOSICIÓN
-        {
-          id: "sugerido", color: "#0891B2", colorBg: "#ECFEFF",
-          titulo: "Sugerido Reposición",
-          valor: _sugeridoTotal.monto >= 1e6 ? "$" + (_sugeridoTotal.monto / 1e6).toFixed(2) + "M" : formatMXN(_sugeridoTotal.monto),
-          subValor: formatMXN(_sugeridoTotal.monto),
-          metrica2: { label: "Piezas", valor: _sugeridoTotal.piezas.toLocaleString("es-MX") },
-          metrica3: { label: "SKUs", valor: _sugeridoTotal.skus + " SKUs" },
-          estado: _sugeridoTotal.monto > 0 ? { label: "Oportunidad", color: "#0891B2" } : { label: "Sin pendientes", color: "#10B981" },
-        },
-      ];
-
-      return React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 } },
-        ...tarjetas.map(t => React.createElement("div", {
-          key: t.id,
-          onClick: () => setKpiModal(t.id),
-          style: {
-            background: "#fff",
-            borderRadius: 14,
-            border: "1px solid #E2E8F0",
-            borderLeft: `4px solid ${t.color}`,
-            padding: "16px 18px",
-            cursor: "pointer",
-            transition: "all 0.15s",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-            display: "flex", flexDirection: "column", gap: 10,
-          },
-          onMouseEnter: (e) => { e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)"; e.currentTarget.style.transform = "translateY(-1px)"; },
-          onMouseLeave: (e) => { e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)"; e.currentTarget.style.transform = "translateY(0)"; },
-        },
-          // Header de la tarjeta
-          React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 } },
-            React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" } }, t.titulo),
-            // Badge estado
-            React.createElement("span", {
-              style: {
-                fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
-                color: t.estado.color, background: t.estado.color + "15",
-                whiteSpace: "nowrap",
-              }
-            }, t.estado.label),
-          ),
-          // Valor principal
-          React.createElement("div", null,
-            React.createElement("div", { style: { fontSize: 26, fontWeight: 800, color: t.color, lineHeight: 1.1 } }, t.valor),
-            React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, t.subValor),
-          ),
-          // Barra de progreso (si aplica)
-          t.progreso && React.createElement("div", null,
-            React.createElement("div", { style: { background: "#F1F5F9", borderRadius: 999, height: 5, overflow: "hidden" } },
-              React.createElement("div", { style: { width: t.progreso.pct + "%", height: "100%", background: t.progreso.color, transition: "width 0.4s" } })
-            ),
-          ),
-          // 2 métricas secundarias
-          React.createElement("div", { style: { display: "flex", gap: 12, justifyContent: "space-between", borderTop: "1px dashed #E2E8F0", paddingTop: 8 } },
-            React.createElement("div", null,
-              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 600 } }, t.metrica2.label),
-              React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: t.metrica2.color || "#1E293B" } }, t.metrica2.valor),
-            ),
-            React.createElement("div", { style: { textAlign: "right" } },
-              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 600 } }, t.metrica3.label),
-              React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: t.metrica3.color || "#1E293B" } }, t.metrica3.valor),
-            ),
-          ),
-        ))
-      );
-    })(),
     // === BLOCK LEGACY: 3 cards de Fase 2A ===
     false && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 } },
       // KPI 1: Sell-In del periodo
@@ -1944,27 +1832,155 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         ),
       );
     })(),
+    // Row 0.5: GRID DE 6 TARJETAS SEMÁFORO — interactivas con drill-down en modal
+    (function(){
+      // Calcular indicadores
+      const eficienciaSO = totalSellIn > 0 && totalSellOut > 0 ? (totalSellOut / totalSellIn * 100) : 0;
+      const brecha = totalSellIn - totalCuotaMin;
+      const dso = estadoCuenta?.dso || null;
+      const saldoCxC = estadoCuenta?.saldo_actual || 0;
+      const saldoVencido = estadoCuenta?.saldo_vencido || 0;
+      const pctVencido = saldoCxC > 0 ? (saldoVencido / saldoCxC * 100) : 0;
+      const periodoLabel = periodoTipo === "trimestre" ? "Q" + Math.ceil(periodoMes/3) : periodoTipo === "mes" ? MESES_CORTOS[periodoMes-1] : periodoTipo === "rango" ? `${MESES_CORTOS[periodoRango[0]-1]}-${MESES_CORTOS[periodoRango[1]-1]}` : "YTD";
+
+      const tarjetas = [
+        // 1. SELL-IN
+        {
+          id: "sellin", color: "#3B82F6", colorBg: "#EFF6FF",
+          titulo: `Sell-In ${periodoLabel}`,
+          valor: totalSellIn >= 1e6 ? "$" + (totalSellIn / 1e6).toFixed(2) + "M" : formatMXN(totalSellIn),
+          subValor: formatMXN(totalSellIn),
+          metrica2: { label: "Cumplimiento Mín", valor: cumplimientoMin.toFixed(1) + "%", color: cumplimientoMin >= 95 ? "#10B981" : cumplimientoMin >= 80 ? "#F59E0B" : "#EF4444" },
+          metrica3: { label: "Cuota Mín", valor: formatMXN(totalCuotaMin) },
+          progreso: { pct: Math.min(cumplimientoMin, 120), color: cumplimientoMin >= 95 ? "#10B981" : cumplimientoMin >= 80 ? "#F59E0B" : "#EF4444" },
+          estado: cumplimientoMin >= 95 ? { label: "Excelente", color: "#10B981" } : cumplimientoMin >= 80 ? { label: "Saludable", color: "#F59E0B" } : cumplimientoMin >= 65 ? { label: "Atención", color: "#F59E0B" } : { label: "Crítico", color: "#EF4444" },
+        },
+        // 2. SELL-OUT
+        {
+          id: "sellout", color: "#10B981", colorBg: "#ECFDF5",
+          titulo: `Sell-Out ${periodoLabel}`,
+          valor: totalSellOut >= 1e6 ? "$" + (totalSellOut / 1e6).toFixed(2) + "M" : formatMXN(totalSellOut),
+          subValor: formatMXN(totalSellOut),
+          metrica2: { label: "Eficiencia SO/SI", valor: eficienciaSO > 0 ? eficienciaSO.toFixed(1) + "%" : "—", color: eficienciaSO >= 80 ? "#10B981" : eficienciaSO >= 50 ? "#F59E0B" : "#EF4444" },
+          metrica3: _weeklySellout.deltaPct !== null
+            ? { label: "Δ Semana", valor: (_weeklySellout.deltaPct >= 0 ? "▲ +" : "▼ ") + Math.abs(_weeklySellout.deltaPct).toFixed(1) + "%", color: _weeklySellout.deltaPct >= 0 ? "#10B981" : "#EF4444" }
+            : { label: "Δ Semana", valor: "—" },
+          estado: eficienciaSO >= 80 ? { label: "Saludable", color: "#10B981" } : eficienciaSO >= 50 ? { label: "Moderado", color: "#F59E0B" } : eficienciaSO > 0 ? { label: "Atención", color: "#EF4444" } : { label: "Sin datos", color: "#94A3B8" },
+        },
+        // 3. INVENTARIO
+        {
+          id: "inventario", color: "#8B5CF6", colorBg: "#F5F3FF",
+          titulo: "Inventario Cliente",
+          valor: totalInvValor >= 1e6 ? "$" + (totalInvValor / 1e6).toFixed(2) + "M" : formatMXN(totalInvValor),
+          subValor: formatMXN(totalInvValor),
+          metrica2: { label: "Días cobertura", valor: _diasCobertura !== null ? _diasCobertura + " d" : "—", color: _diasCobertura === null ? "#94A3B8" : _diasCobertura <= 30 ? "#EF4444" : _diasCobertura <= 90 ? "#10B981" : _diasCobertura <= 150 ? "#F59E0B" : "#EF4444" },
+          metrica3: { label: "SKUs activos", valor: invClienteLatest.length + " SKUs" },
+          estado: _diasCobertura === null ? { label: "Sin datos", color: "#94A3B8" } : _diasCobertura <= 30 ? { label: "Stockout riesgo", color: "#EF4444" } : _diasCobertura <= 90 ? { label: "Óptimo", color: "#10B981" } : _diasCobertura <= 150 ? { label: "Alto", color: "#F59E0B" } : { label: "Sobreinventario", color: "#EF4444" },
+        },
+        // 4. CRÉDITO Y COBRANZA
+        {
+          id: "cobranza", color: "#EF4444", colorBg: "#FEF2F2",
+          titulo: "Crédito y Cobranza",
+          valor: saldoCxC >= 1e6 ? "$" + (saldoCxC / 1e6).toFixed(2) + "M" : formatMXN(saldoCxC),
+          subValor: formatMXN(saldoCxC),
+          metrica2: { label: "DSO", valor: dso !== null ? dso + " d" : "—", color: dso === null ? "#94A3B8" : dso <= 60 ? "#10B981" : dso <= 90 ? "#F59E0B" : "#EF4444" },
+          metrica3: { label: "Vencido", valor: saldoVencido > 0 ? formatMXN(saldoVencido) + " (" + pctVencido.toFixed(0) + "%)" : "—", color: pctVencido > 15 ? "#EF4444" : pctVencido > 5 ? "#F59E0B" : "#64748B" },
+          estado: dso === null ? { label: "Sin datos", color: "#94A3B8" } : (dso <= 60 && pctVencido <= 5) ? { label: "Saludable", color: "#10B981" } : (dso <= 90 && pctVencido <= 15) ? { label: "Atención", color: "#F59E0B" } : { label: "Crítico", color: "#EF4444" },
+        },
+        // 5. BRECHA
+        {
+          id: "brecha", color: brecha >= 0 ? "#059669" : "#DC2626", colorBg: brecha >= 0 ? "#ECFDF5" : "#FEF2F2",
+          titulo: "Brecha vs Cuota",
+          valor: (brecha >= 0 ? "+$" : "-$") + Math.abs(brecha / 1e3).toFixed(0) + "K",
+          subValor: formatMXN(brecha),
+          metrica2: { label: "vs Cuota Mín", valor: formatMXN(totalCuotaMin) },
+          metrica3: { label: "vs Cuota Ideal", valor: formatMXN(totalCuotaIdeal) },
+          estado: brecha >= 0 ? { label: "Cuota alcanzada", color: "#10B981" } : brecha >= -totalCuotaMin * 0.1 ? { label: "Cerca de meta", color: "#F59E0B" } : { label: "Lejos de meta", color: "#EF4444" },
+        },
+        // 6. SUGERIDO REPOSICIÓN
+        {
+          id: "sugerido", color: "#0891B2", colorBg: "#ECFEFF",
+          titulo: "Sugerido Reposición",
+          valor: _sugeridoTotal.monto >= 1e6 ? "$" + (_sugeridoTotal.monto / 1e6).toFixed(2) + "M" : formatMXN(_sugeridoTotal.monto),
+          subValor: formatMXN(_sugeridoTotal.monto),
+          metrica2: { label: "Piezas", valor: _sugeridoTotal.piezas.toLocaleString("es-MX") },
+          metrica3: { label: "SKUs", valor: _sugeridoTotal.skus + " SKUs" },
+          estado: _sugeridoTotal.monto > 0 ? { label: "Oportunidad", color: "#0891B2" } : { label: "Sin pendientes", color: "#10B981" },
+        },
+      ];
+
+      return React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 } },
+        ...tarjetas.map(t => {
+          const activa = kpiModal === t.id;
+          return React.createElement("div", {
+          key: t.id,
+          onClick: () => setKpiModal(kpiModal === t.id ? null : t.id),
+          style: {
+            background: activa ? t.colorBg : "#fff",
+            borderRadius: 14,
+            border: activa ? `2px solid ${t.color}` : "1px solid #E2E8F0",
+            borderLeft: `4px solid ${t.color}`,
+            padding: "16px 18px",
+            cursor: "pointer",
+            transition: "all 0.15s",
+            boxShadow: activa ? `0 4px 16px ${t.color}30` : "0 1px 3px rgba(0,0,0,0.04)",
+            display: "flex", flexDirection: "column", gap: 10,
+            transform: activa ? "translateY(-2px)" : "translateY(0)",
+          },
+          onMouseEnter: (e) => { if (!activa) { e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)"; e.currentTarget.style.transform = "translateY(-1px)"; } },
+          onMouseLeave: (e) => { if (!activa) { e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)"; e.currentTarget.style.transform = "translateY(0)"; } },
+        },
+          // Header de la tarjeta
+          React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 } },
+            React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" } }, t.titulo),
+            // Badge estado
+            React.createElement("span", {
+              style: {
+                fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
+                color: t.estado.color, background: t.estado.color + "15",
+                whiteSpace: "nowrap",
+              }
+            }, t.estado.label),
+          ),
+          // Valor principal
+          React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: 26, fontWeight: 800, color: t.color, lineHeight: 1.1 } }, t.valor),
+            React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, t.subValor),
+          ),
+          // Barra de progreso (si aplica)
+          t.progreso && React.createElement("div", null,
+            React.createElement("div", { style: { background: "#F1F5F9", borderRadius: 999, height: 5, overflow: "hidden" } },
+              React.createElement("div", { style: { width: t.progreso.pct + "%", height: "100%", background: t.progreso.color, transition: "width 0.4s" } })
+            ),
+          ),
+          // 2 métricas secundarias
+          React.createElement("div", { style: { display: "flex", gap: 12, justifyContent: "space-between", borderTop: "1px dashed #E2E8F0", paddingTop: 8 } },
+            React.createElement("div", null,
+              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 600 } }, t.metrica2.label),
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: t.metrica2.color || "#1E293B" } }, t.metrica2.valor),
+            ),
+            React.createElement("div", { style: { textAlign: "right" } },
+              React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 600 } }, t.metrica3.label),
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: t.metrica3.color || "#1E293B" } }, t.metrica3.valor),
+            ),
+          ),
+        );
+        })
+      );
+    })(),
     // Row 2 ELIMINADO (4 cards fusionadas en el grid de 6 tarjetas arriba)
     // Row 3 ELIMINADO: Tareas (quitada por solicitud del usuario)
-    // === MODAL POPUP de drill-down ===
+    // === EXPAND INLINE de drill-down (reemplaza modal popup) ===
     kpiModal && React.createElement("div", {
-      onClick: () => setKpiModal(null),
       style: {
-        position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-        background: "rgba(15, 23, 42, 0.55)", zIndex: 1000,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 20, backdropFilter: "blur(2px)",
+        background: "#fff", borderRadius: 12,
+        border: "1px solid #E2E8F0",
+        overflow: "hidden",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.04)",
+        animation: "fadeIn 0.2s",
       }
     },
-      React.createElement("div", {
-        onClick: (e) => e.stopPropagation(),
-        style: {
-          background: "#fff", borderRadius: 16, padding: 0,
-          maxWidth: 720, width: "100%", maxHeight: "85vh",
-          overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
-          animation: "fadeIn 0.2s",
-        }
-      },
+      React.createElement("div", { style: { padding: 0 } },
         // Header del modal
         React.createElement("div", {
           style: {
