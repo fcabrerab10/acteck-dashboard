@@ -606,19 +606,41 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   // ─── DÍAS DE COBERTURA INVENTARIO ────────────────────────────────────────
   // Convención del negocio: inventario valuado a COSTO, sell-out a PRECIO RETAIL.
   //   días = inv_$_costo / (sell_out_$_retail_últimos_3m / 90)
+  // Pro-rateo del mes en curso: si el mes corriente lleva solo N días de M,
+  // escalamos su sell-out × (M/N) para que represente un mes completo y no
+  // baje el promedio artificialmente.
   const _diasCobertura = React.useMemo(() => {
     if (totalInvValor <= 0) return null;
     const ultMes = Math.max(...sellOutSku.map(r => Number(r.mes) || 0), 0);
     if (ultMes === 0) return null;
     const tresMeses = Math.max(1, ultMes - 2);
-    const montoSO = sellOutSku.filter(r => {
+
+    // Pro-rateo del mes en curso (solo si anioResumen === año actual)
+    const hoy = new Date();
+    const mesHoy = hoy.getMonth() + 1;
+    const anioHoy = hoy.getFullYear();
+    const diasEnMesHoy = new Date(anioHoy, mesHoy, 0).getDate();
+    const diasTranscurridos = hoy.getDate();
+    const factorProRateo = (anioResumen === anioHoy && diasTranscurridos > 0)
+      ? diasEnMesHoy / diasTranscurridos : 1;
+
+    // Suma por mes con pro-rateo aplicado al mes en curso
+    const sumaPorMes = {};
+    sellOutSku.forEach(r => {
       const m = Number(r.mes) || 0;
-      return m >= tresMeses && m <= ultMes;
-    }).reduce((s, r) => s + (Number(r.monto_pesos) || 0), 0);
+      if (m < tresMeses || m > ultMes) return;
+      sumaPorMes[m] = (sumaPorMes[m] || 0) + (Number(r.monto_pesos) || 0);
+    });
+    let montoSO = 0;
+    Object.entries(sumaPorMes).forEach(([m, v]) => {
+      const factor = (Number(m) === mesHoy && anioResumen === anioHoy) ? factorProRateo : 1;
+      montoSO += v * factor;
+    });
+
     const dias = (ultMes - tresMeses + 1) * 30;
     const soDiario = dias > 0 ? montoSO / dias : 0;
     return soDiario > 0 ? Math.round(totalInvValor / soDiario) : null;
-  }, [totalInvValor, sellOutSku]);
+  }, [totalInvValor, sellOutSku, anioResumen]);
 
   // ─── PERIOD FILTER ────────────────────────────────────────────────────────
   const mesesFiltrados = React.useMemo(() => {
