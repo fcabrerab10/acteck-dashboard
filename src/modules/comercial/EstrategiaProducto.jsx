@@ -1012,7 +1012,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         fetchSelloutSku(clienteKey, 2026),
         fetchInventarioCliente(clienteKey),
         fetchAllPagesREST(`inventario_acteck?select=articulo,no_almacen,disponible&no_almacen=in.(${ACTECK_ALMACENES.join(',')})`),
-        fetchAllPagesREST(`transito_sku?select=sku,inventario_transito,siguiente_arribo,payload,sort_order`),
+        // v_transito_sku: vista canónica (suma embarques_compras con estatus en
+        // PRODUCCION/ZARPAR/TRANSITO/RESGUARDO/etc., excluye entregas directas al cliente).
+        // Misma fuente que la pestaña Forecast Clientes para mantener consistencia.
+        fetchAllPagesREST(`v_transito_sku?select=sku,cantidad,eta_mas_cercana,embarques_detalle`),
         fetchAllPagesREST(`roadmap_sku?select=sku,rdmp,descripcion,payload,sort_order&order=sort_order.asc`),
         fetchAllPagesREST(`precios_sku?select=sku,precio_aaa,descuento,precio_descuento`),
         // Extras sólo para PCEL:
@@ -1060,11 +1063,12 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         actStockBySku[r.articulo] = (actStockBySku[r.articulo] || 0) + (Number(r.disponible) || 0);
       });
 
-      // Transit by SKU
+      // Transit by SKU — usa `cantidad` de v_transito_sku (suma embarques_compras
+      // filtrados por estatus activo, excluyendo entregas directas al cliente).
       const transitoBySku = {};
       transito.forEach(r => {
         if (!r.sku) return;
-        transitoBySku[r.sku] = (transitoBySku[r.sku] || 0) + (Number(r.inventario_transito) || 0);
+        transitoBySku[r.sku] = (transitoBySku[r.sku] || 0) + (Number(r.cantidad) || 0);
       });
 
       // Filter inventario_cliente to most recent snapshot week (avoid stale history)
@@ -1560,8 +1564,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const nuevos = transitoFiltered.filter(t => !roadmapSet.has(t.sku)).map(t => ({
       sku: t.sku,
       descripcion: getDesc(t, "—"),
-      piezas: Number(t.inventario_transito) || 0,
-      arribo: getArriboCedis(t),
+      piezas: Number(t.cantidad) || 0,
+      arribo: t.eta_mas_cercana || getArriboCedis(t),
       cedis: getCedis(t),
     }));
     // En tránsito + roadmap = reposición planeada (incluye inv Acteck actual)
@@ -1572,8 +1576,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         sku: r.sku,
         descripcion: r.descripcion || getDesc(t, ""),
         rdmp: r.rdmp,
-        piezas: Number(t.inventario_transito) || 0,
-        arribo: getArriboCedis(t),
+        piezas: Number(t.cantidad) || 0,
+        arribo: t.eta_mas_cercana || getArriboCedis(t),
         cedis: getCedis(t),
         invActeck: Number(actStockBySku[r.sku]) || 0,
       };
@@ -1893,14 +1897,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           metaMeses: metaMesesDigi,
           metaRazon: metaRazonDigi,
           precioAAAcd:     (datos.preciosBySku && (datos.preciosBySku[skuExterno] || datos.preciosBySku[p.sku]) || {}).precio_descuento || 0,
-          // Próximo arribo del SKU: lookup en transito_sku por modelo Acteck
+          // Próximo arribo del SKU: lookup en v_transito_sku
           arriboFecha: (function() {
             const t = (datos.transito || []).find(x => x.sku === skuExterno || x.sku === p.sku);
-            return t ? (t.siguiente_arribo || null) : null;
+            return t ? (t.eta_mas_cercana || null) : null;
           })(),
           arriboPiezas: (function() {
             const t = (datos.transito || []).find(x => x.sku === skuExterno || x.sku === p.sku);
-            return t ? (Number(t.inventario_transito) || 0) : 0;
+            return t ? (Number(t.cantidad) || 0) : 0;
           })(),
         };
       })
@@ -2220,13 +2224,13 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const XLSX = await loadSheetJS();
         if (!XLSX) { alert("Error cargando librería Excel"); return; }
 
-        // Diccionario de próximo arribo (de transito_sku, payload tiene fechas)
+        // Diccionario de próximo arribo (de v_transito_sku)
         const arriboBySku = {};
         (datos.transito || []).forEach(t => {
           if (!t.sku) return;
           arriboBySku[t.sku] = {
-            piezas: Number(t.inventario_transito) || 0,
-            fecha:  t.siguiente_arribo || null,
+            piezas: Number(t.cantidad) || 0,
+            fecha:  t.eta_mas_cercana || null,
           };
         });
 
