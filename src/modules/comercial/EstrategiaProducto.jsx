@@ -567,6 +567,86 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     await cargarPropuestasCompra();
   };
 
+  // ── Modal para registrar OC ──
+  const [ocModal, setOcModal] = React.useState(null);
+  const abrirRegistrarOC = (prop) => {
+    if (!canEdit) return;
+    setOcModal({
+      propId: prop.id,
+      monto: prop.monto_oc != null ? String(prop.monto_oc) : "",
+      piezas: prop.piezas_oc != null ? String(prop.piezas_oc) : "",
+      folio: prop.folio_oc || "",
+      fecha: prop.fecha_oc ? String(prop.fecha_oc).slice(0, 10) : new Date().toISOString().slice(0, 10),
+      monto_total: Number(prop.monto_total) || 0,
+      piezas_total: Number(prop.piezas_total) || 0,
+    });
+  };
+  const guardarOC = async () => {
+    if (!ocModal || !canEdit) return;
+    const payload = {
+      monto_oc: ocModal.monto !== "" ? Number(ocModal.monto) : null,
+      piezas_oc: ocModal.piezas !== "" ? Number(ocModal.piezas) : null,
+      folio_oc: ocModal.folio.trim() || null,
+      fecha_oc: ocModal.fecha || null,
+      estatus: "cerrada",
+      cerrada_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from("propuestas_compra")
+      .update(payload).eq("id", ocModal.propId);
+    if (error) { alert("Error al guardar OC: " + error.message); return; }
+    setOcModal(null);
+    await cargarPropuestasCompra();
+  };
+
+  // ── Editar propuesta: cargar sus filas como overrides en el Detalle por SKU ──
+  const editarPropuestaEnDetalle = async (prop) => {
+    if (!canEdit) return;
+    const filas = Array.isArray(prop.filas) ? prop.filas : [];
+    if (filas.length === 0) { alert("Esta propuesta no tiene filas guardadas."); return; }
+    const ok = confirm(
+      "¿Cargar los " + filas.length + " SKUs de esta propuesta en el Detalle?\n" +
+      "Los sugeridos actuales se SOBRESCRIBIRÁN con los de esta propuesta.\n" +
+      "Después puedes editarlos y exportar de nuevo."
+    );
+    if (!ok) return;
+
+    // Snapshot para deshacer
+    setUndoSnapshot({ edits: { ...sugeridoEdits }, etiqueta: 'Cargar propuesta #' + prop.id });
+
+    // Construir overrides desde las filas
+    const newSug = {};
+    const newPrec = {};
+    filas.forEach(r => {
+      // Diferentes layouts según cliente: Digitalife usa "SKU", PCEL usa "SKU Cliente" o "SKU"
+      const sku = r["SKU"] || r["SKU Cliente"] || r.sku;
+      const sug = Number(r["Sugerido"] || r.sugerido || 0);
+      const prec = Number(r["Precio"] || r.precio || 0);
+      if (!sku) return;
+      newSug[sku] = sug;
+      if (prec > 0) newPrec[sku] = prec;
+    });
+
+    setSugeridoEdits(newSug);
+    setPrecioEdits(prev => ({ ...prev, ...newPrec }));
+
+    // Persistir overrides
+    if (DB_CONFIGURED && Object.keys(newSug).length > 0) {
+      const rows = Object.entries(newSug).map(([sku, sugerido]) => ({
+        cliente: clienteKey, sku, sugerido,
+        updated_at: new Date().toISOString(),
+      }));
+      for (let i = 0; i < rows.length; i += 100) {
+        await supabase.from('sugerido_overrides').upsert(rows.slice(i, i + 100), { onConflict: 'cliente,sku' });
+      }
+    }
+    setMessage("✏ Propuesta #" + prop.id + " cargada (" + Object.keys(newSug).length + " SKUs). Edita en la tabla.");
+    setTimeout(() => setMessage(""), 4500);
+    // Scroll a la tabla
+    setTimeout(() => {
+      try { document.querySelector('table')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
+    }, 200);
+  };
+
   // Formato de fecha en español medio: "5 de mayo de 2026"
   const formatFechaES = (s) => {
     if (!s) return "";
@@ -3319,79 +3399,72 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                     React.createElement("thead", null,
                       React.createElement("tr", { style: { background: "#F1F5F9", position: "sticky", top: 0 } },
                         React.createElement("th", { style: { textAlign: "left", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Fecha"),
-                        React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Estatus"),
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "SKUs"),
                         React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Piezas"),
-                        React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Monto"),
-                        React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#1E40AF", fontWeight: 600, background: "#EFF6FF" }, title: "% de piezas sugeridas que el cliente efectivamente compró en los 14 días siguientes" }, "% Acierto"),
+                        React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Monto Propuesto"),
+                        React.createElement("th", { style: { textAlign: "right", padding: "6px 10px", fontSize: 11, color: "#7C3AED", fontWeight: 600, background: "#F5F3FF" }, title: "Monto de OC colocada por el cliente" }, "Monto OC"),
+                        React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#1E40AF", fontWeight: 600, background: "#EFF6FF" }, title: "% del monto propuesto que el cliente convirtió en OC" }, "% Conv."),
                         React.createElement("th", { style: { textAlign: "center", padding: "6px 10px", fontSize: 11, color: "#64748B", fontWeight: 600 } }, "Acciones"),
                       )
                     ),
                     React.createElement("tbody", null,
                       (propuestasConTracking || propuestasHist).map(p => {
-                        const esPend = (p.estatus || "pendiente") === "pendiente";
+                        const montoProp = Number(p.monto_total) || 0;
+                        const montoOC = p.monto_oc != null ? Number(p.monto_oc) : null;
+                        const tieneOC = montoOC !== null && montoOC > 0;
+                        const pctConv = (tieneOC && montoProp > 0) ? (montoOC / montoProp * 100) : null;
                         return React.createElement("tr", {
                           key: p.id,
-                          style: { borderBottom: "1px solid #F1F5F9", background: esPend ? "#EFF6FF" : "#fff", opacity: esPend ? 1 : 0.75 }
+                          style: { borderBottom: "1px solid #F1F5F9", background: tieneOC ? "#F0FDF4" : "#fff" }
                         },
                           React.createElement("td", { style: { padding: "6px 10px", fontSize: 11, color: "#1E293B" } },
                             (function() {
                               try {
                                 const d = new Date(p.fecha);
-                                return d.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
-                                  + " \u00B7 " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
-                              } catch { return String(p.fecha).slice(0, 16); }
-                            })()
-                          ),
-                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "center" } },
-                            esPend
-                              ? React.createElement("span", { style: { padding: "2px 8px", borderRadius: 10, background: "#DBEAFE", color: "#1E40AF", fontSize: 10, fontWeight: 700 } }, "\u00b7 Pendiente")
-                              : React.createElement("span", { style: { padding: "2px 8px", borderRadius: 10, background: "#D1FAE5", color: "#065F46", fontSize: 10, fontWeight: 700 } }, "\u2713 Cerrada")
+                                return d.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+                              } catch { return String(p.fecha).slice(0, 10); }
+                            })(),
+                            p.folio_oc && React.createElement("div", { style: { fontSize: 10, color: "#7C3AED", fontWeight: 600, marginTop: 2 } }, "Folio OC: " + p.folio_oc),
                           ),
                           React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11 } }, (p.skus_count || 0).toLocaleString("es-MX")),
                           React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11 } }, (Number(p.piezas_total) || 0).toLocaleString("es-MX")),
-                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11, fontWeight: 600, color: "#065F46" } },
-                            "$" + Math.round(Number(p.monto_total) || 0).toLocaleString("es-MX")
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11, fontWeight: 600, color: "#1E293B" } },
+                            "$" + Math.round(montoProp).toLocaleString("es-MX")
                           ),
-                          // Celda % Acierto
-                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "center", fontSize: 11, background: "#F8FAFC" } },
-                            (function() {
-                              const t = p.tracking;
-                              if (!t || t.sinFilas || t.error) {
-                                return React.createElement("span", { style: { color: "#94A3B8", fontStyle: "italic" }, title: t && t.error ? "Error en cálculo" : "Sin detalle por SKU" }, "—");
-                              }
-                              if (t.pct == null) return React.createElement("span", { style: { color: "#94A3B8" } }, "—");
-                              const c = t.pct >= 70 ? "#065F46" : t.pct >= 50 ? "#92400E" : "#B91C1C";
-                              const bg = t.pct >= 70 ? "#D1FAE5" : t.pct >= 50 ? "#FEF3C7" : "#FEE2E2";
-                              return React.createElement("span", {
-                                style: { padding: "2px 8px", borderRadius: 10, background: bg, color: c, fontWeight: 700 },
-                                title: "Sugeriste " + t.totalSug.toLocaleString("es-MX") + " pzs · Compró " + t.totalCompr.toLocaleString("es-MX") +
-                                  " (" + t.skusComprados + " de " + t.skusTotales + " SKUs)\nVentana: " + (t.ventana || '14d') + "\nMétodo: " + (t.metodoMatch || '—')
-                              }, t.pct.toFixed(0) + "%");
-                            })()
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "right", fontSize: 11, fontWeight: 700, background: "#F5F3FF", color: tieneOC ? "#7C3AED" : "#94A3B8" } },
+                            tieneOC ? "$" + Math.round(montoOC).toLocaleString("es-MX") : "\u2014"
+                          ),
+                          React.createElement("td", { style: { padding: "6px 10px", textAlign: "center", fontSize: 11, background: "#EFF6FF" } },
+                            pctConv === null
+                              ? React.createElement("span", { style: { color: "#94A3B8" } }, "\u2014")
+                              : (function() {
+                                  const c = pctConv >= 80 ? "#065F46" : pctConv >= 50 ? "#92400E" : "#B91C1C";
+                                  const bg = pctConv >= 80 ? "#D1FAE5" : pctConv >= 50 ? "#FEF3C7" : "#FEE2E2";
+                                  return React.createElement("span", {
+                                    style: { padding: "2px 8px", borderRadius: 10, background: bg, color: c, fontWeight: 700 }
+                                  }, pctConv.toFixed(0) + "%");
+                                })()
                           ),
                           React.createElement("td", { style: { padding: "6px 10px", textAlign: "center", whiteSpace: "nowrap" } },
                             React.createElement("button", {
                               onClick: () => descargarPropuestaHistorica(p),
-                              style: { padding: "3px 8px", fontSize: 11, background: "#3B82F6", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", marginRight: 6 },
+                              style: { padding: "4px 8px", fontSize: 11, background: "#3B82F6", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", marginRight: 4 },
                               title: "Re-descargar Excel"
                             }, "\uD83D\uDCE5"),
-                            // Cerrar/Reactivar/Borrar sólo para usuarios con permiso de edición
-                            canEdit && (esPend
-                              ? React.createElement("button", {
-                                  onClick: () => cerrarPropuesta(p.id),
-                                  style: { padding: "3px 8px", fontSize: 11, background: "#fff", color: "#059669", border: "1px solid #6EE7B7", borderRadius: 4, cursor: "pointer", marginRight: 6 },
-                                  title: "Cerrar propuesta (los SKUs volver\u00e1n a aparecer en riesgo si aplica)"
-                                }, "\u2713 Cerrar")
-                              : React.createElement("button", {
-                                  onClick: () => reactivarPropuesta(p.id),
-                                  style: { padding: "3px 8px", fontSize: 11, background: "#fff", color: "#1E40AF", border: "1px solid #BFDBFE", borderRadius: 4, cursor: "pointer", marginRight: 6 },
-                                  title: "Reactivar propuesta"
-                                }, "\u21bb Reactivar")),
+                            canEdit && React.createElement("button", {
+                              onClick: () => editarPropuestaEnDetalle(p),
+                              style: { padding: "4px 8px", fontSize: 11, background: "#fff", color: "#7C3AED", border: "1px solid #C4B5FD", borderRadius: 4, cursor: "pointer", marginRight: 4, fontWeight: 600 },
+                              title: "Cargar esta propuesta en el Detalle por SKU para editarla y exportar de nuevo"
+                            }, "\u270F\uFE0F Editar"),
+                            canEdit && React.createElement("button", {
+                              onClick: () => abrirRegistrarOC(p),
+                              style: { padding: "4px 8px", fontSize: 11, background: tieneOC ? "#10B981" : "#fff", color: tieneOC ? "#fff" : "#10B981", border: "1px solid #6EE7B7", borderRadius: 4, cursor: "pointer", marginRight: 4, fontWeight: 600 },
+                              title: tieneOC ? "Ver / editar OC registrada" : "Registrar monto de OC del cliente"
+                            }, tieneOC ? "\u2713 OC" : "\uD83D\uDCB0 Registrar OC"),
                             canEdit && React.createElement("button", {
                               onClick: () => borrarPropuestaHistorica(p.id),
-                              style: { padding: "3px 8px", fontSize: 11, background: "#fff", color: "#EF4444", border: "1px solid #FCA5A5", borderRadius: 4, cursor: "pointer" },
-                              title: "Eliminar"
+                              style: { padding: "4px 8px", fontSize: 11, background: "#fff", color: "#EF4444", border: "1px solid #FCA5A5", borderRadius: 4, cursor: "pointer" },
+                              title: "Eliminar propuesta del historial"
                             }, "\uD83D\uDDD1\uFE0F")
                           ),
                         );
@@ -3671,6 +3744,88 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
               )
             );
           })()
+        )
+      ),
+
+      // ═══ MODAL DE REGISTRAR OC ═══
+      ocModal && React.createElement("div", {
+        onClick: () => setOcModal(null),
+        style: {
+          position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 100,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+        }
+      },
+        React.createElement("div", {
+          onClick: (e) => e.stopPropagation(),
+          style: { background: "#fff", borderRadius: 16, padding: 0, maxWidth: 520, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }
+        },
+          // Header
+          React.createElement("div", { style: { padding: "16px 24px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" } },
+            React.createElement("div", null,
+              React.createElement("h3", { style: { margin: 0, fontSize: 17, fontWeight: 800, color: "#1E293B" } }, "💰 Registrar OC del Cliente"),
+              React.createElement("p", { style: { fontSize: 12, color: "#94A3B8", margin: "2px 0 0 0" } },
+                "Propuesta: $" + Math.round(ocModal.monto_total).toLocaleString("es-MX") + " · " + ocModal.piezas_total.toLocaleString("es-MX") + " pzs"),
+            ),
+            React.createElement("button", { onClick: () => setOcModal(null), style: { background: "transparent", border: "none", fontSize: 22, color: "#94A3B8", cursor: "pointer" } }, "×"),
+          ),
+          // Form
+          React.createElement("div", { style: { padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 } },
+            React.createElement("div", null,
+              React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 700, color: "#64748B", marginBottom: 4 } }, "Monto de la OC (MXN)"),
+              React.createElement("input", {
+                type: "number", min: 0, step: "0.01",
+                value: ocModal.monto,
+                onChange: (e) => setOcModal(v => ({ ...v, monto: e.target.value })),
+                placeholder: "Ej. 250000",
+                style: { width: "100%", padding: "10px 12px", border: "1.5px solid #C4B5FD", borderRadius: 8, fontSize: 16, fontWeight: 600 }
+              }),
+              ocModal.monto !== "" && ocModal.monto_total > 0 && React.createElement("div", { style: { fontSize: 11, color: "#7C3AED", marginTop: 4, fontWeight: 600 } },
+                "Conversión: " + (Number(ocModal.monto) / ocModal.monto_total * 100).toFixed(1) + "% del propuesto"
+              ),
+            ),
+            React.createElement("div", null,
+              React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 700, color: "#64748B", marginBottom: 4 } }, "Piezas de la OC (opcional)"),
+              React.createElement("input", {
+                type: "number", min: 0,
+                value: ocModal.piezas,
+                onChange: (e) => setOcModal(v => ({ ...v, piezas: e.target.value })),
+                placeholder: "Ej. 1500",
+                style: { width: "100%", padding: "10px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 14 }
+              }),
+            ),
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } },
+              React.createElement("div", null,
+                React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 700, color: "#64748B", marginBottom: 4 } }, "Folio OC"),
+                React.createElement("input", {
+                  type: "text",
+                  value: ocModal.folio,
+                  onChange: (e) => setOcModal(v => ({ ...v, folio: e.target.value })),
+                  placeholder: "Ej. OC-2026-04321",
+                  style: { width: "100%", padding: "10px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 14 }
+                }),
+              ),
+              React.createElement("div", null,
+                React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 700, color: "#64748B", marginBottom: 4 } }, "Fecha OC"),
+                React.createElement("input", {
+                  type: "date",
+                  value: ocModal.fecha,
+                  onChange: (e) => setOcModal(v => ({ ...v, fecha: e.target.value })),
+                  style: { width: "100%", padding: "10px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 14 }
+                }),
+              ),
+            ),
+          ),
+          // Footer
+          React.createElement("div", { style: { padding: "14px 24px", borderTop: "1px solid #E2E8F0", display: "flex", justifyContent: "flex-end", gap: 8 } },
+            React.createElement("button", {
+              onClick: () => setOcModal(null),
+              style: { padding: "10px 18px", background: "#fff", color: "#64748B", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }
+            }, "Cancelar"),
+            React.createElement("button", {
+              onClick: guardarOC,
+              style: { padding: "10px 18px", background: "#10B981", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }
+            }, "💾 Guardar OC"),
+          ),
         )
       ),
 
