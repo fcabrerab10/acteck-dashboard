@@ -2354,6 +2354,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           .filter(s => {
             // Excluidos del envío: nunca van al Excel
             if (excluidosSku.has(s.sku)) return false;
+            // En modo edición de propuesta: solo los SKUs de esa propuesta
+            if (skusEnEdicion && !skusEnEdicion.has(String(s.sku))) return false;
             const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
             return sug > 0;
           })
@@ -2551,8 +2553,11 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         return `${d} ${meses[m-1]} ${y}`;
       } catch { return s; }
     };
-    // Excluidos del envío: nunca van al Excel
-    const skuDetailFiltrado = skuDetail.filter(s => !excluidosSku.has(s.sku));
+    // Excluidos del envío: nunca van al Excel.
+    // Si estamos editando una propuesta, exportar SOLO los SKUs de esa propuesta.
+    const skuDetailFiltrado = skuDetail
+      .filter(s => !excluidosSku.has(s.sku))
+      .filter(s => skusEnEdicion ? skusEnEdicion.has(String(s.sku)) : true);
     const allRows = skuDetailFiltrado.map(function(s) {
       const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
       const precio = esDigi
@@ -3223,7 +3228,7 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                 // está casi siempre vacío para PCEL); el precio real es "Precio AAA c/desc" de arriba.
                 (clienteKey !== "pcel" && clienteKey !== "digitalife") && React.createElement("th", { key: "th-precio-gen", style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 700, color: "#065F46", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#ECFDF5" } },
-                  React.createElement("div", { style: { fontSize: 10, color: "#10B981", fontWeight: 600 } }, "Σ " + formatMXN((skuDetail || []).reduce(function(acc, r){ var sug = sugeridoEdits[r.sku] !== undefined ? Number(sugeridoEdits[r.sku]) : Number(r.sugerido || 0); var precioBase = (clienteKey === "pcel" || clienteKey === "digitalife") ? (precioEdits[r.sku] !== undefined ? Number(precioEdits[r.sku]) : Number(r.precioAAAcd || 0)) : Number(r.precio || 0); return acc + sug * precioBase; }, 0))),
+                  React.createElement("div", { style: { fontSize: 10, color: "#10B981", fontWeight: 600 } }, "Σ " + formatMXN((skusEnEdicion ? (skuDetail || []).filter(r => skusEnEdicion.has(String(r.sku))) : (skuDetail || [])).reduce(function(acc, r){ var sug = sugeridoEdits[r.sku] !== undefined ? Number(sugeridoEdits[r.sku]) : Number(r.sugerido || 0); var precioBase = (clienteKey === "pcel" || clienteKey === "digitalife") ? (precioEdits[r.sku] !== undefined ? Number(precioEdits[r.sku]) : Number(r.precioAAAcd || 0)) : Number(r.precio || 0); return acc + sug * precioBase; }, 0))),
                   React.createElement("div", {}, "Total")
                 ),
               ),
