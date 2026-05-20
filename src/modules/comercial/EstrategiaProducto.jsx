@@ -598,26 +598,38 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     await cargarPropuestasCompra();
   };
 
+  // ── Modo "editando propuesta": filtra la tabla a SOLO los SKUs de esa propuesta ──
+  const [propuestaEnEdicion, setPropuestaEnEdicion] = React.useState(null);
+  // Set de SKUs de la propuesta en edición (para filtrar la tabla)
+  const skusEnEdicion = React.useMemo(() => {
+    if (!propuestaEnEdicion) return null;
+    const set = new Set();
+    (propuestaEnEdicion.filas || []).forEach(r => {
+      const sku = r["SKU"] || r["SKU Cliente"] || r.sku;
+      if (sku) set.add(String(sku));
+    });
+    return set;
+  }, [propuestaEnEdicion]);
+
   // ── Editar propuesta: cargar sus filas como overrides en el Detalle por SKU ──
   const editarPropuestaEnDetalle = async (prop) => {
     if (!canEdit) return;
     const filas = Array.isArray(prop.filas) ? prop.filas : [];
     if (filas.length === 0) { alert("Esta propuesta no tiene filas guardadas."); return; }
     const ok = confirm(
-      "¿Cargar los " + filas.length + " SKUs de esta propuesta en el Detalle?\n" +
-      "Los sugeridos actuales se SOBRESCRIBIRÁN con los de esta propuesta.\n" +
-      "Después puedes editarlos y exportar de nuevo."
+      "¿Cargar la propuesta #" + prop.id + " en el Detalle por SKU?\n\n" +
+      "La tabla se filtrará para mostrar SOLO los " + filas.length + " SKUs de esta propuesta " +
+      "con sus valores originales. Podrás ajustar y exportar de nuevo."
     );
     if (!ok) return;
 
     // Snapshot para deshacer
     setUndoSnapshot({ edits: { ...sugeridoEdits }, etiqueta: 'Cargar propuesta #' + prop.id });
 
-    // Construir overrides desde las filas
+    // Construir overrides SOLO con los SKUs de la propuesta
     const newSug = {};
     const newPrec = {};
     filas.forEach(r => {
-      // Diferentes layouts según cliente: Digitalife usa "SKU", PCEL usa "SKU Cliente" o "SKU"
       const sku = r["SKU"] || r["SKU Cliente"] || r.sku;
       const sug = Number(r["Sugerido"] || r.sugerido || 0);
       const prec = Number(r["Precio"] || r.precio || 0);
@@ -627,10 +639,14 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     });
 
     setSugeridoEdits(newSug);
-    setPrecioEdits(prev => ({ ...prev, ...newPrec }));
+    setPrecioEdits(newPrec);
+    setPropuestaEnEdicion(prop);  // activa el filtro
 
-    // Persistir overrides
+    // Persistir overrides en BD
     if (DB_CONFIGURED && Object.keys(newSug).length > 0) {
+      // Primero borrar TODOS los overrides actuales del cliente (para que solo queden los de la propuesta)
+      await supabase.from('sugerido_overrides').delete().eq('cliente', clienteKey);
+      // Luego insertar los de la propuesta
       const rows = Object.entries(newSug).map(([sku, sugerido]) => ({
         cliente: clienteKey, sku, sugerido,
         updated_at: new Date().toISOString(),
@@ -639,12 +655,26 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         await supabase.from('sugerido_overrides').upsert(rows.slice(i, i + 100), { onConflict: 'cliente,sku' });
       }
     }
-    setMessage("✏ Propuesta #" + prop.id + " cargada (" + Object.keys(newSug).length + " SKUs). Edita en la tabla.");
+    setMessage("✏ Editando propuesta #" + prop.id + " · " + Object.keys(newSug).length + " SKUs en la tabla");
     setTimeout(() => setMessage(""), 4500);
     // Scroll a la tabla
     setTimeout(() => {
       try { document.querySelector('table')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
     }, 200);
+  };
+
+  // Salir del modo edición (limpia el filtro y los overrides)
+  const cerrarEdicionPropuesta = async () => {
+    if (!propuestaEnEdicion) return;
+    if (!confirm("¿Salir del modo edición? Los sugeridos cargados se limpiarán.")) return;
+    setPropuestaEnEdicion(null);
+    setSugeridoEdits({});
+    setPrecioEdits({});
+    if (DB_CONFIGURED) {
+      await supabase.from('sugerido_overrides').delete().eq('cliente', clienteKey);
+    }
+    setMessage("✓ Modo edición cerrado");
+    setTimeout(() => setMessage(""), 2500);
   };
 
   // Formato de fecha en español medio: "5 de mayo de 2026"
@@ -2495,6 +2525,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         } catch (e) { console.error(e); }
         // Auto-reset de overrides después del export PCEL
         await resetSugeridoOverrides(true);
+        setPropuestaEnEdicion(null);
         setMessage('✓ Excel exportado · Sugeridos reseteados');
         setTimeout(() => setMessage(''), 4000);
       };
@@ -2707,6 +2738,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     }
     // Auto-reset de overrides después del export
     await resetSugeridoOverrides(true);
+    setPropuestaEnEdicion(null);
     setMessage('✓ Excel exportado · Sugeridos reseteados');
     setTimeout(() => setMessage(''), 4000);
   };
@@ -3075,6 +3107,35 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         // Lista de categorías disponibles desde productos_cliente (ordenadas alfabéticamente)
         const categoriasUnicas = Array.from(new Set((datos.productos || []).map(p => p.categoria).filter(Boolean))).sort();
         return React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
+          // Banner cuando se est\u00e1 editando una propuesta (filtra la tabla)
+          propuestaEnEdicion && React.createElement("div", {
+            style: {
+              background: "#F5F3FF",
+              border: "1.5px solid #C4B5FD",
+              borderRadius: 10,
+              padding: "10px 14px",
+              marginBottom: 14,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }
+          },
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+              React.createElement("span", { style: { fontSize: 18 } }, "\u270f\ufe0f"),
+              React.createElement("div", null,
+                React.createElement("div", { style: { fontWeight: 700, color: "#5B21B6", fontSize: 13 } },
+                  "Editando propuesta #" + propuestaEnEdicion.id),
+                React.createElement("div", { style: { fontSize: 11, color: "#7C3AED" } },
+                  "La tabla muestra solo los " + (skusEnEdicion ? skusEnEdicion.size : 0) + " SKUs de esta propuesta. Edita y exporta para guardar los cambios."),
+              ),
+            ),
+            React.createElement("button", {
+              onClick: cerrarEdicionPropuesta,
+              style: { padding: "6px 14px", background: "#fff", color: "#7C3AED", border: "1.5px solid #C4B5FD", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }
+            }, "Cerrar edici\u00f3n"),
+          ),
           React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 } },
             React.createElement("h3", { className: "font-bold text-gray-800" },
               "Detalle por SKU",
@@ -3168,7 +3229,7 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
               ),
             ),
             React.createElement("tbody", {},
-              skuDetail.map(function(s, idx) {
+              (skusEnEdicion ? skuDetail.filter(s => skusEnEdicion.has(String(s.sku))) : skuDetail).map(function(s, idx) {
                 const excluido = excluidosSku.has(s.sku);
                 const rowBg = excluido
                   ? "#F1F5F9"
