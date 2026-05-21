@@ -611,42 +611,51 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     return set;
   }, [propuestaEnEdicion]);
 
-  // ── Editar propuesta: cargar sus filas como overrides en el Detalle por SKU ──
+  // ── Editar propuesta: reinicia todos los sugeridos a 0, excepto los de la propuesta ──
   const editarPropuestaEnDetalle = async (prop) => {
     if (!canEdit) return;
     const filas = Array.isArray(prop.filas) ? prop.filas : [];
     if (filas.length === 0) { alert("Esta propuesta no tiene filas guardadas."); return; }
     const ok = confirm(
-      "¿Cargar la propuesta #" + prop.id + " en el Detalle por SKU?\n\n" +
-      "La tabla se filtrará para mostrar SOLO los " + filas.length + " SKUs de esta propuesta " +
-      "con sus valores originales. Podrás ajustar y exportar de nuevo."
+      "¿Editar la propuesta #" + prop.id + "?\n\n" +
+      "Se REINICIARÁ la columna de Sugerido a 0 para todos los SKUs.\n" +
+      "Solo los " + filas.length + " SKUs de esta propuesta tendrán sus valores cargados.\n" +
+      "Puedes agregar más SKUs subiendo su sugerido manualmente."
     );
     if (!ok) return;
 
-    // Snapshot para deshacer
+    // Snapshot para Deshacer
     setUndoSnapshot({ edits: { ...sugeridoEdits }, etiqueta: 'Cargar propuesta #' + prop.id });
 
-    // Construir overrides SOLO con los SKUs de la propuesta
-    const newSug = {};
-    const newPrec = {};
+    // Mapa de la propuesta: sku → sugerido y sku → precio
+    const propuestaMap = {};
+    const propuestaPrecMap = {};
     filas.forEach(r => {
       const sku = r["SKU"] || r["SKU Cliente"] || r.sku;
       const sug = Number(r["Sugerido"] || r.sugerido || 0);
       const prec = Number(r["Precio"] || r.precio || 0);
       if (!sku) return;
-      newSug[sku] = sug;
-      if (prec > 0) newPrec[sku] = prec;
+      propuestaMap[sku] = sug;
+      if (prec > 0) propuestaPrecMap[sku] = prec;
+    });
+
+    // TODOS los SKUs del cliente (de productos_cliente)
+    const todosSkus = (datos && datos.productos ? datos.productos.map(p => p.sku) : [])
+      .filter(Boolean);
+
+    // Construir overrides: propuesta = su valor, resto = 0
+    const newSug = {};
+    todosSkus.forEach(sku => {
+      newSug[sku] = propuestaMap[sku] !== undefined ? propuestaMap[sku] : 0;
     });
 
     setSugeridoEdits(newSug);
-    setPrecioEdits(newPrec);
-    setPropuestaEnEdicion(prop);  // activa el filtro
+    setPrecioEdits(propuestaPrecMap);
+    setPropuestaEnEdicion(prop);
 
-    // Persistir overrides en BD
-    if (DB_CONFIGURED && Object.keys(newSug).length > 0) {
-      // Primero borrar TODOS los overrides actuales del cliente (para que solo queden los de la propuesta)
+    // Persistir en BD: delete all + upsert con los valores correctos
+    if (DB_CONFIGURED && todosSkus.length > 0) {
       await supabase.from('sugerido_overrides').delete().eq('cliente', clienteKey);
-      // Luego insertar los de la propuesta
       const rows = Object.entries(newSug).map(([sku, sugerido]) => ({
         cliente: clienteKey, sku, sugerido,
         updated_at: new Date().toISOString(),
@@ -655,9 +664,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         await supabase.from('sugerido_overrides').upsert(rows.slice(i, i + 100), { onConflict: 'cliente,sku' });
       }
     }
-    setMessage("✏ Editando propuesta #" + prop.id + " · " + Object.keys(newSug).length + " SKUs en la tabla");
+    const propSkusCount = Object.keys(propuestaMap).length;
+    setMessage("✏ Editando propuesta #" + prop.id + " · " + propSkusCount + " SKUs cargados, resto en 0");
     setTimeout(() => setMessage(""), 4500);
-    // Scroll a la tabla
     setTimeout(() => {
       try { document.querySelector('table')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
     }, 200);
@@ -3128,7 +3137,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
                 React.createElement("div", { style: { fontWeight: 700, color: "#5B21B6", fontSize: 13 } },
                   "Editando propuesta #" + propuestaEnEdicion.id),
                 React.createElement("div", { style: { fontSize: 11, color: "#7C3AED" } },
-                  "Los " + (skusEnEdicion ? skusEnEdicion.size : 0) + " SKUs de la propuesta están resaltados en lavanda. Puedes editar sus valores o agregar SKUs nuevos. Al exportar se generará una propuesta nueva."),
+                  "Tabla reiniciada a 0. Los " + (skusEnEdicion ? skusEnEdicion.size : 0) + " SKUs de la propuesta (resaltados en lavanda) tienen sus valores cargados. Puedes editarlos o agregar más SKUs con sugerido > 0."),
               ),
             ),
             React.createElement("button", {
