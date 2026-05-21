@@ -2359,12 +2359,37 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const FMT_INT   = "#,##0";
         const FMT_MONEY = '"$"#,##0';
 
+        // Candado precio: detectar SKUs con sugerido > 0 pero sin precio
+        const sinPrecioPCEL = [];
+        skuDetail.forEach(s => {
+          if (excluidosSku.has(s.sku)) return;
+          const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
+          if (sug <= 0) return;
+          const precioOv = precioEdits[s.sku];
+          const prec = preciosBySku[s.modelo] || preciosBySku[s.sku] || null;
+          const precioFinal = Math.round(precioOv !== undefined ? Number(precioOv) : (prec ? Number(prec.precio_descuento) || 0 : 0));
+          if (precioFinal <= 0) sinPrecioPCEL.push(s);
+        });
+        if (sinPrecioPCEL.length > 0) {
+          const lista = sinPrecioPCEL.slice(0, 10).map(s => "  · " + s.sku + (s.modelo ? " (" + s.modelo + ")" : "")).join("\n");
+          const hayMas = sinPrecioPCEL.length > 10 ? "\n  · ...y " + (sinPrecioPCEL.length - 10) + " más" : "";
+          const ok = confirm(
+            "⚠️ " + sinPrecioPCEL.length + " SKU(s) tienen sugerido > 0 pero SIN precio:\n\n" + lista + hayMas +
+            "\n\nEstos SKUs se EXCLUIRÁN del Excel. ¿Continuar?\n(Cancelar para asignarles precio y volver a exportar)"
+          );
+          if (!ok) return;
+        }
+
         const baseRows = skuDetail
           .filter(s => {
-            // Excluidos del envío: nunca van al Excel
             if (excluidosSku.has(s.sku)) return false;
             const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
-            return sug > 0;
+            if (sug <= 0) return false;
+            // Candado: sin precio → no va al Excel
+            const precioOv = precioEdits[s.sku];
+            const prec = preciosBySku[s.modelo] || preciosBySku[s.sku] || null;
+            const precioFinal = Math.round(precioOv !== undefined ? Number(precioOv) : (prec ? Number(prec.precio_descuento) || 0 : 0));
+            return precioFinal > 0;
           })
           .map(s => {
             const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
@@ -2562,22 +2587,43 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     };
     // Excluidos del envío: nunca van al Excel.
     const skuDetailFiltrado = skuDetail.filter(s => !excluidosSku.has(s.sku));
+
+    // ── Candado: detectar SKUs con sugerido > 0 PERO sin precio (no pueden cotizarse) ──
+    const sinPrecioConSug = skuDetailFiltrado.filter(s => {
+      const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
+      const precio = esDigi
+        ? (precioEdits[s.sku] !== undefined ? Number(precioEdits[s.sku]) : Number(s.precioAAAcd || 0))
+        : Number(s.precio || 0);
+      return sug > 0 && precio <= 0;
+    });
+    if (sinPrecioConSug.length > 0) {
+      const lista = sinPrecioConSug.slice(0, 10).map(s => "  · " + s.sku + (s.descripcion ? " — " + s.descripcion.slice(0, 40) : "")).join("\n");
+      const hayMas = sinPrecioConSug.length > 10 ? "\n  · ...y " + (sinPrecioConSug.length - 10) + " más" : "";
+      const ok = confirm(
+        "⚠️ " + sinPrecioConSug.length + " SKU(s) tienen sugerido > 0 pero SIN precio:\n\n" + lista + hayMas +
+        "\n\nEstos SKUs se EXCLUIRÁN del Excel. ¿Continuar con el export?\n" +
+        "(Cancelar para asignarles precio y volver a exportar)"
+      );
+      if (!ok) return;
+    }
+
     const allRows = skuDetailFiltrado.map(function(s) {
       const sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
       const precio = esDigi
         ? (precioEdits[s.sku] !== undefined ? Number(precioEdits[s.sku]) : Number(s.precioAAAcd || 0))
         : Number(s.precio || 0);
-      const total = sug * precio;
+      // Candado: si no tiene precio, sugerido efectivo = 0 (se filtra abajo)
+      const sugEf = precio > 0 ? sug : 0;
+      const total = sugEf * precio;
       return {
         SKU: s.sku,
         "Descripción": s.descripcionLarga || s.descripcion || "",
         "Stock Cliente": Number(s.stock) || 0,
         "Promedio 90d": Number(s.promedio90d) || 0,
-        "Sugerido": sug,
+        "Sugerido": sugEf,
         "Precio": precio,
         "Total": total,
-        // Metadatos para clasificar y armar la hoja de tránsito
-        _sug: sug, _total: total, _cat: (s.categoria || "").trim().toLowerCase(),
+        _sug: sugEf, _total: total, _cat: (s.categoria || "").trim().toLowerCase(),
         _invActeck: Number(s.invActeck) || 0,
         _arriboPiezas: Number(s.arriboPiezas) || 0,
         _arriboFecha: s.arriboFecha || null,
@@ -3295,40 +3341,49 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                     title: s.ultimoPrecio > 0 ? "Precio unitario de la última venta facturada" : "Sin venta registrada"
                   }, s.ultimoPrecio > 0 ? formatMXN(s.ultimoPrecio) : "-"),
                   (function(){
-                    // Gate: sin inventario ni tránsito → sugerido = 0 forzado
-                    // (ignora override manual). Input disabled para que sea obvio.
+                    // Gates para deshabilitar el input de sugerido:
+                    //   1. sinStock: no hay inventario ni tránsito Acteck (no podemos surtir)
+                    //   2. sinPrecio: el SKU no tiene precio (no podemos cotizar)
                     const sinStock = (clienteKey === "pcel" || clienteKey === "digitalife")
                       && (Number(s.invActeck) || 0) === 0
                       && (Number(s.invTransito) || 0) === 0;
-                    const valEff = sinStock ? 0
+                    const precioVigente = (clienteKey === "pcel" || clienteKey === "digitalife")
+                      ? (precioEdits[s.sku] !== undefined ? Number(precioEdits[s.sku]) : Number(s.precioAAAcd || 0))
+                      : Number(s.precio || 0);
+                    const sinPrecio = precioVigente <= 0;
+                    const bloqueado = sinStock || sinPrecio;
+                    const valEff = bloqueado ? 0
                       : (sugeridoEdits[s.sku] !== undefined ? sugeridoEdits[s.sku] : (s.sugerido || 0));
+                    const motivoBloqueo = !canEdit ? "Solo lectura"
+                      : sinStock ? "Sin inventario ni tránsito Acteck — no se puede sugerir"
+                      : sinPrecio ? "Sin precio asignado — agrega un precio para poder sugerir"
+                      : undefined;
                     return React.createElement("td", { style: { textAlign: "right", padding: "6px", fontSize: 11, position: "relative" } },
                       React.createElement("input", {
                         type: "number", min: 0,
                         value: valEff,
-                        disabled: sinStock,
+                        disabled: bloqueado,
                         readOnly: !canEdit,
-                        title: !canEdit ? "Solo lectura" : (sinStock ? "Sin inventario ni tránsito Acteck — no se puede sugerir" : undefined),
+                        title: motivoBloqueo,
                         onChange: function(e) {
-                          if (sinStock) return;
+                          if (bloqueado) return;
                           var nv = Number(e.target.value) || 0;
                           var v = {}; v[s.sku] = nv;
                           setSugeridoEdits(Object.assign({}, sugeridoEdits, v));
                           debounceSaveSugerido(s.sku, nv);
                         },
                         onBlur: function(e) {
-                          if (sinStock) return;
-                          // Flush inmediato al salir (cancela debounce y guarda ya)
+                          if (bloqueado) return;
                           if (sugeridoTimeouts.current[s.sku]) clearTimeout(sugeridoTimeouts.current[s.sku]);
                           saveSugeridoOverride(s.sku, Number(e.target.value) || 0);
                         },
                         style: {
                           width: 60, padding: "2px 4px",
-                          border: "1px solid " + (sinStock ? "#F1F5F9" : "#E2E8F0"),
+                          border: "1px solid " + (bloqueado ? "#F1F5F9" : "#E2E8F0"),
                           borderRadius: 4, textAlign: "right", fontSize: 11,
-                          background: sinStock ? "#F8FAFC" : "#fff",
-                          color: sinStock ? "#CBD5E1" : "#1E293B",
-                          cursor: sinStock ? "not-allowed" : "text",
+                          background: sinPrecio ? "#FEF3C7" : bloqueado ? "#F8FAFC" : "#fff",
+                          color: bloqueado ? "#CBD5E1" : "#1E293B",
+                          cursor: bloqueado ? "not-allowed" : "text",
                         }
                       }),
                     // Indicador visual del guardado
