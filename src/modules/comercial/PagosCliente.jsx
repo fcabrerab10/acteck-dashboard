@@ -76,8 +76,21 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [newRow, setNewRow]           = useState({
     folio: "", concepto: "", categoria: "promociones", monto: "",
     estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
-    responsable: "", notas: "", fuente: "",
+    responsable: "", notas: "", fuente: "", tipo_actividad: "",
   });
+
+  // Tipos de actividad de Marketing (selectables cuando categoria='marketing')
+  const TIPOS_ACTIVIDAD_MKT = [
+    { value: "stand", label: "Stand / Punto de venta" },
+    { value: "anuncios", label: "Anuncios pagados" },
+    { value: "evento", label: "Evento / Convención" },
+    { value: "redes_sociales", label: "Redes sociales" },
+    { value: "dem", label: "DEM (email mkt)" },
+    { value: "capacitacion", label: "Capacitación / Entrenamiento" },
+    { value: "material_pop", label: "Material POP / Display" },
+    { value: "promocion", label: "Promoción al consumidor" },
+    { value: "otro", label: "Otro" },
+  ];
 
   const MESES_ARR = [
     { key: "01", short: "Ene", full: "Enero" },
@@ -749,7 +762,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     }
     setNewRow({ folio: "", concepto: "", categoria: "promociones", monto: "",
                 estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
-                responsable: "", notas: "", fuente: "" });
+                responsable: "", notas: "", fuente: "", tipo_actividad: "" });
     setShowAdd(false);
     flash("Registro agregado ✓");
   };
@@ -1161,10 +1174,32 @@ export default function PagosCliente({ cliente, clienteKey }) {
     }
     if (field === "categoria") {
       const m = CATEGORIA_META[row.categoria] || CATEGORIA_META.promociones;
+      // Etiqueta auxiliar para marketing con fuente o tipo_actividad
+      const esMkt = row.categoria === "marketing";
+      const fuenteTag = esMkt && row.fuente === "empresa" ? { label: "Empresa", color: "#059669", bg: "#D1FAE5" }
+                     : esMkt && row.fuente === "fondo_mkt" ? { label: "Fondo MKT", color: "#7C3AED", bg: "#F3E8FF" }
+                     : esMkt && row.fuente === "vendor" ? { label: "Vendor", color: "#475569", bg: "#F1F5F9" }
+                     : null;
+      const tipoActividadLabel = esMkt && row.tipo_actividad
+        ? (TIPOS_ACTIVIDAD_MKT.find(t => t.value === row.tipo_actividad)?.label || row.tipo_actividad)
+        : null;
       return (
         <div className={DB_CONFIGURED ? "cursor-pointer" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
-          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full text-white font-semibold whitespace-nowrap"
-                style={{ backgroundColor: m.color }}>{m.icono} {m.label}</span>
+          <div className="flex flex-col gap-0.5">
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full text-white font-semibold whitespace-nowrap w-fit"
+                  style={{ backgroundColor: m.color }}>{m.icono} {m.label}</span>
+            {(fuenteTag || tipoActividadLabel) && (
+              <div className="flex gap-1 flex-wrap">
+                {fuenteTag && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+                        style={{ color: fuenteTag.color, backgroundColor: fuenteTag.bg }}>{fuenteTag.label}</span>
+                )}
+                {tipoActividadLabel && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded font-medium text-gray-600 bg-gray-100">{tipoActividadLabel}</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       );
     }
@@ -1678,6 +1713,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       { label: "Concepto *",  key: "concepto",  type: "text" },
                       { label: "Monto (MXN)", key: "monto",     type: "number" },
                       { label: "Fuente de pago", key: "fuente", type: "select-fuente" },
+                      ...(newRow.categoria === "marketing" ? [{ label: "Tipo de actividad", key: "tipo_actividad", type: "select-tipo-act" }] : []),
                       { label: "Estatus",     key: "estatus",   type: "select-est" },
                       { label: "F. Compromiso", key: "fecha_compromiso", type: "date" },
                       { label: "F. Pago Real",  key: "fecha_pago_real",  type: "date" },
@@ -1701,9 +1737,16 @@ export default function PagosCliente({ cliente, clienteKey }) {
                           <select value={newRow.fuente} onChange={e => setNewRow(p => ({ ...p, fuente: e.target.value }))}
                             className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
                             <option value="">— Sin asignar —</option>
-                            <option value="fondo_mkt">Fondo MKT</option>
+                            {/* Fondo MKT solo aplica para PCEL (Digitalife no tiene fondo) */}
+                            {clienteKey === "pcel" && <option value="fondo_mkt">Fondo MKT</option>}
                             <option value="vendor">Vendor (convenio cliente)</option>
                             <option value="empresa">Empresa (Revko)</option>
+                          </select>
+                        ) : type === "select-tipo-act" ? (
+                          <select value={newRow.tipo_actividad || ""} onChange={e => setNewRow(p => ({ ...p, tipo_actividad: e.target.value }))}
+                            className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
+                            <option value="">— Sin tipo —</option>
+                            {TIPOS_ACTIVIDAD_MKT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                           </select>
                         ) : (
                           <input type={type} value={newRow[key] || ""} placeholder={key === "monto" ? "0" : key === "folio" ? "Folio del cliente" : ""}
