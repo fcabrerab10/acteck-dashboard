@@ -58,6 +58,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
     try { localStorage.setItem("pagos_mostrar_futuros", String(mostrarFuturos)); } catch {}
   }, [mostrarFuturos]);
   const [expandedMonth, setExpandedMonth] = useState(null);
+  // Colapsable del Resumen General por Mes (default colapsado para no saturar)
+  const [resumenMensualAbierto, setResumenMensualAbierto] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportMeses, setExportMeses] = useState([]); // ["YYYY-MM", ...] multi-select
   const [historialPago, setHistorialPago] = useState(null); // { pago, entries }
@@ -929,11 +931,11 @@ export default function PagosCliente({ cliente, clienteKey }) {
     r.estatus !== "no_aplica" &&
     !esMesFuturo(r.fecha_compromiso);
 
-  // En "Todas": mostrar TODO lo que ya transcurrió (pendientes + pagados,
-  //   excluyendo sólo los pagos fijos futuros y los cancelados/no_aplica) para
-  //   que todas las categorías (SPIFF, Rebate, etc.) sean visibles a la vez.
-  // En cada categoría específica: solo los activos (pagados van al acordeón).
+  // En "Todas": mostrar SOLO los pendientes (no pagados, no cancelados,
+  //   no de meses futuros). Los pagados se van al menú "Pagos Completados"
+  //   para no saturar la tabla principal.
   const visibleEnTodas = (r) =>
+    r.estatus !== "pagado" &&
     r.estatus !== "cancelado" &&
     r.estatus !== "no_aplica" &&
     !esMesFuturo(r.fecha_compromiso);
@@ -1422,7 +1424,15 @@ export default function PagosCliente({ cliente, clienteKey }) {
             return (
               <div className="bg-white rounded-2xl shadow-sm p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <CardHeader titulo="Resumen General por Mes y Categoría" icon={CalendarDays} />
+                  <button
+                    onClick={() => setResumenMensualAbierto(v => !v)}
+                    className="flex items-center gap-2 text-left flex-1 hover:opacity-80 transition-opacity"
+                    title={resumenMensualAbierto ? "Colapsar" : "Expandir"}
+                  >
+                    <CardHeader titulo="Resumen General por Mes y Categoría" icon={CalendarDays} />
+                    <span className="text-gray-400 text-sm ml-1">{resumenMensualAbierto ? "▾" : "▸"}</span>
+                    <span className="text-xs text-gray-400 ml-2">({mb.length} meses)</span>
+                  </button>
                   <button
                     onClick={() => {
                       // preselecciona el mes anterior como default útil
@@ -1438,6 +1448,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                     📥 Exportar Excel
                   </button>
                 </div>
+                {resumenMensualAbierto && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -1508,6 +1519,12 @@ export default function PagosCliente({ cliente, clienteKey }) {
                     </tfoot>
                   </table>
                 </div>
+                )}
+                {!resumenMensualAbierto && (
+                  <div className="text-xs text-gray-500 italic py-2">
+                    Click en el título para ver el desglose mensual · Total anual: <strong className="text-blue-700">{formatMXN(totalAnio)}</strong>
+                  </div>
+                )}
               </div>
             );
           })()}
