@@ -1439,7 +1439,7 @@ function EmbudoConversion({ embudo }) {
                     : pct >= 90 ? '#10B981'
                     : pct >= 70 ? '#F59E0B'
                     : '#EF4444';
-                  const nombre = cli === 'digitalife' ? 'Digitalife' : cli === 'pcel' ? 'PCEL' : 'Mercado Libre';
+                  const nombre = cli === 'digitalife' ? 'Digitalife' : cli === 'pcel' ? 'PCEL' : cli;
                   return (
                     <div key={cli} className="bg-gray-50 rounded-lg p-3">
                       <div className="text-xs font-semibold text-gray-700 mb-1">{nombre}</div>

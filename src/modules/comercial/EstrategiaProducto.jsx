@@ -2766,7 +2766,6 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const mesNombre = mesesCap[hoy.getMonth()];
     const anioActual = hoy.getFullYear();
     const nombreCliente = clienteKey === "digitalife" ? "Digitalife"
-                        : clienteKey === "mercadolibre" ? "Mercado Libre"
                         : (cliente || clienteKey || "Cliente");
     XLSX.writeFile(wb, `Sugerido ${nombreCliente} ${mesNombre} ${anioActual}.xlsx`);
 

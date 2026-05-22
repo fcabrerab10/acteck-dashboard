@@ -230,37 +230,7 @@ export const clientes = {
       ],
     },
   },
-  mercadolibre: {
-    nombre: "Mercado Libre",
-    marca: "Acteck / Balam Rush",
-    ejecutivo: "Por asignar",
-    frecuencia: "Semanal",
-    color: "#FFE600",
-    cuotaAnual: 0,
-    kpis: {
-      sellInMes: 0,
-      cuotaMes: 0,
-      cuotaMes25M: 0,
-      sellInAcumulado: 0,
-      cuotaAcumulada: 0,
-      sellOut: 0,
-      sellOutAcumulado: 0,
-      diasInventario: 0,
-      inventarioValor: 0,
-      inventarioPiezas: 0,
-      ultimoMes: "---",
-    },
-    tendencia: { sellIn: [0], sellOut: [0], cuota: [0] },
-    pendientes: [],
-    pagos: [],
-    promocionesActivas: [],
-    cartera: null,
-    sellOutMarca: {},
-    minuta: {
-      fechaReunion: "",
-      proximaReunion: "",
-      asistentes: [],
-      acuerdos: [],
-    },
-  },
+  // Mercado Libre se migró a la nueva empresa "Axon de México"
+  // (módulo Administración Interna). Ya no figura como cliente del
+  // dashboard comercial.
 };

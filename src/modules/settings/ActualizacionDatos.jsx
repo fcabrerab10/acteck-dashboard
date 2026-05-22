@@ -60,7 +60,8 @@ const isoWeek = date => {
 function mapAdminInternaToCliente(admin) {
   if (!admin) return null;
   const up = String(admin).toUpperCase().trim();
-  if (up.includes('MERCADO LIBRE')) return 'mercadolibre';
+  // Mercado Libre ya no se gestiona desde el dashboard comercial (migrado a
+  // Axon de México). Sus filas del ERP se ignoran aquí.
   if (up.includes('DIGITALIFE') || up.includes('API GLOBAL')) return 'digitalife';
   if (up === 'PCEL' || up.includes('PC ONLINE')) return 'pcel';
   return null; // otros clientes se ignoran por ahora

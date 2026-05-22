@@ -11,8 +11,7 @@
  *       {
  *         clientes: {
  *           digitalife:   { home, analisis, estrategia, marketing, pagos, cartera },
- *           pcel:         { ... },
- *           mercadolibre: { ... }
+ *           pcel:         { ... }
  *         },
  *         globales: {
  *           resumen_clientes, forecast_clientes, admin_interna, configuracion
@@ -178,7 +177,7 @@ export const PESTANAS_GLOBALES = [
 export const CLIENTES = [
   { id: "digitalife",   label: "Digitalife" },
   { id: "pcel",         label: "PCEL" },
-  { id: "mercadolibre", label: "Mercado Libre" },
+  // Mercado Libre se migró a Axon de México (Administración Interna).
 ];
 
 // @deprecated Mantener para compat con UI vieja que aún referencia ROLES_UI

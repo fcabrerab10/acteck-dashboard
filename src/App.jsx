@@ -264,46 +264,10 @@ export default function App() {
 
   
 
-  const [mlData, setMlData] = useState(null);
-    const [mlLoading, setMlLoading] = useState(true);
-    useEffect(() => {
-      let cancelled = false;
-      setMlLoading(true);
-      fetch("/api/ml-sellout?year=2026")
-        .then(r => r.json())
-        .then(data => {
-          if (!cancelled && data.sellOutPorMes) setMlData(data);
-        })
-        .catch(err => console.error("ML sellout fetch error:", err))
-        .finally(() => { if (!cancelled) setMlLoading(false); });
-      return () => { cancelled = true; };
-    }, []);
-
-  // Enrich ML client with live data
-  const clientesDinamicos = { ...clientes };
-  if (mlData) {
-    const mesesArr = Object.keys(mlData.sellOutPorMes || {}).sort((a,b) => Number(a) - Number(b));
-    const ultimoMes = mesesArr.length > 0 ? mesesArr[mesesArr.length - 1] : null;
-    const sellOutUltimoMes = ultimoMes ? mlData.sellOutPorMes[ultimoMes] : 0;
-    clientesDinamicos.mercadolibre = {
-      ...clientes.mercadolibre,
-      ejecutivo: "Fernando Cabrera",
-      kpis: {
-        ...clientes.mercadolibre.kpis,
-        sellOut: sellOutUltimoMes,
-        sellOutAcumulado: mlData.totalMonto || 0,
-        ultimoMes: ultimoMes ? ["","Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][Number(ultimoMes)] : "---",
-      },
-      tendencia: {
-        ...clientes.mercadolibre.tendencia,
-        sellOut: mesesArr.map(m => mlData.sellOutPorMes[m]),
-      },
-      sellOutMarca: mlData.sellOutPorMarca || {},
-      sellOutPorMesMarca: mlData.sellOutPorMesMarca || {},
-      totalOrdenes: mlData.totalOrdenes || 0,
-      totalMonto: mlData.totalMonto || 0,
-    };
-  }
+  // Mercado Libre se migró a la nueva empresa "Axon de México" (módulo
+  // Administración Interna). Ya no aparece como cliente del dashboard
+  // comercial — no se fetchea ml-sellout ni se enriquece su entrada.
+  const clientesDinamicos = clientes;
 
   
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
@@ -482,7 +446,7 @@ export default function App() {
           <SinAcceso motivo={`No tienes acceso a esta pestaña de ${clienteActivo}.`} />
         ) : (
           <>
-        {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} isML={clienteActivo === "mercadolibre"} />}
+        {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} clienteKey={clienteActivo} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}

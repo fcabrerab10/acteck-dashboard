@@ -75,7 +75,6 @@ const PLANTILLAS = {
         clientes: {
           digitalife: { home:"ver", analisis:"ver", estrategia:"ver", marketing:"oculto", pagos:"oculto", cartera:"oculto" },
           pcel:       Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
-          mercadolibre: Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
         },
         globales: {
           resumen_clientes:"oculto", forecast_clientes:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
@@ -92,7 +91,6 @@ const PLANTILLAS = {
         clientes: {
           digitalife: Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
           pcel:       { home:"ver", analisis:"ver", estrategia:"ver", marketing:"oculto", pagos:"oculto", cartera:"oculto" },
-          mercadolibre: Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
         },
         globales: {
           resumen_clientes:"oculto", forecast_clientes:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
