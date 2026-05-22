@@ -1110,7 +1110,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
   // Load data from Supabase
   // Acteck warehouses to sum for "Inv Acteck" column
-  const ACTECK_ALMACENES = [1, 2, 3, 4, 14, 16, 17, 25, 44];
+  // ACTECK_ALMACENES eliminado: ahora usamos la vista v_inventario_comercial
+  // que ya filtra por almacenes con comercial=true (almacenes_config).
 
   const loadData = async () => {
     if (!DB_CONFIGURED || !supabase) return;
@@ -1130,7 +1131,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         fetchAllPagesREST(`sell_in_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
         fetchSelloutSku(clienteKey, 2026),
         fetchInventarioCliente(clienteKey),
-        fetchAllPagesREST(`inventario_acteck?select=articulo,no_almacen,disponible&no_almacen=in.(${ACTECK_ALMACENES.join(',')})`),
+        // v_inventario_comercial: vista canónica que suma `disponible` por SKU
+        // solo de almacenes comerciales (config en almacenes_config.comercial=true).
+        // Misma fuente que la pestaña Forecast Clientes para mantener consistencia.
+        fetchAllPagesREST(`v_inventario_comercial?select=sku,disponible`),
         // v_transito_sku: vista canónica (suma embarques_compras con estatus en
         // PRODUCCION/ZARPAR/TRANSITO/RESGUARDO/etc., excluye entregas directas al cliente).
         // Misma fuente que la pestaña Forecast Clientes para mantener consistencia.
@@ -1176,10 +1180,11 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       });
 
       // Pre-aggregate Acteck inventory by SKU (sum across all 9 warehouses)
+      // v_inventario_comercial ya viene agregado por SKU — no hace falta sumar
       const actStockBySku = {};
       invActeck.forEach(r => {
-        if (!r.articulo) return;
-        actStockBySku[r.articulo] = (actStockBySku[r.articulo] || 0) + (Number(r.disponible) || 0);
+        if (!r.sku) return;
+        actStockBySku[r.sku] = Number(r.disponible) || 0;
       });
 
       // Transit by SKU — usa `cantidad` de v_transito_sku (suma embarques_compras
