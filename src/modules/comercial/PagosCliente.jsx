@@ -7,6 +7,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaCliente } from '../../lib/permisos';
 import { Wallet, CalendarDays, BarChart3, ClipboardList } from 'lucide-react';
 import { NuevaPromocionButton, ListaPromociones } from './PagosPromociones';
+import LineamientosCliente from './LineamientosCliente';
 
 const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
@@ -2274,6 +2275,21 @@ export default function PagosCliente({ cliente, clienteKey }) {
             canEdit={canEdit}
             onTogglePagado={togglePagado}
           />
+
+          {/* Lineamientos editables (Fondo MKT, Rebate, SPIFF) */}
+          {(catActiva === "rebate" || catActiva === "spiff" || catActiva === "marketing" || catActiva === "todas") && (
+            <div className="mb-6">
+              <LineamientosCliente
+                clienteKey={clienteKey}
+                tipos={
+                  catActiva === "rebate" ? ["rebate"]
+                  : catActiva === "spiff" ? ["spiff"]
+                  : catActiva === "marketing" ? ["fondo_mkt"]
+                  : ["fondo_mkt", "rebate", "spiff"]
+                }
+              />
+            </div>
+          )}
 
           {/* Calculadora de Rebate Trimestral */}
           {clienteKey === "digitalife" && catActiva === "rebate" && (
