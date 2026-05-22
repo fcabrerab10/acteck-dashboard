@@ -2689,12 +2689,22 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         <h3 className={`text-lg font-bold text-${color}-600`}>{titulo}</h3>
                         <p className="text-xs text-gray-400 mt-0.5">{filas.length} movimientos · Saldo actual {formatMXN(tipo === "mkt" ? fondoResumen.saldoMkt : fondoResumen.saldoDirecto)}</p>
                       </div>
-                      <button
-                        onClick={() => { setFondoForm(f => ({ ...f, tipo_fondo: tipo, tipo_mov: "gasto", fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: "", folio: "", notas: "" })); setShowFondoForm(true); }}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold bg-${color}-500 text-white hover:bg-${color}-600`}
-                      >
-                        + Movimiento
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setFondoForm(f => ({ ...f, tipo_fondo: tipo, tipo_mov: "aporte", fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: "", folio: "", notas: "" })); setShowFondoForm(true); }}
+                          className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
+                          title="Agregar dinero al fondo (incluso si no se cumplió cuota)"
+                        >
+                          💰 Aportar
+                        </button>
+                        <button
+                          onClick={() => { setFondoForm(f => ({ ...f, tipo_fondo: tipo, tipo_mov: "gasto", fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: "", folio: "", notas: "" })); setShowFondoForm(true); }}
+                          className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-rose-500 hover:bg-rose-600 text-white"
+                          title="Registrar gasto / salida del fondo"
+                        >
+                          💸 Gasto
+                        </button>
+                      </div>
                     </div>
                     {filas.length === 0 ? (
                       <p className="text-sm text-gray-400 italic text-center py-8">Sin movimientos.</p>
@@ -2746,13 +2756,27 @@ export default function PagosCliente({ cliente, clienteKey }) {
                 );
               })}
 
-              {/* Modal: nuevo movimiento */}
-              {showFondoForm && (
+              {/* Modal: nuevo movimiento (UX diferenciada según aporte/gasto) */}
+              {showFondoForm && (() => {
+                const esAporte = fondoForm.tipo_mov === "aporte";
+                const tituloModal = esAporte ? "💰 Agregar aporte al fondo" : "💸 Registrar gasto del fondo";
+                const subtituloModal = esAporte
+                  ? "Suma dinero al fondo. Útil para aportes manuales cuando no se cumplió cuota pero decides aportar de todas formas."
+                  : "Registra una salida del fondo (evento, promoción, material, etc.)";
+                const conceptoPlaceholder = esAporte
+                  ? "Ej. Aporte discrecional Q2, Generación extra de marketing"
+                  : "Ej. Hot Sale, Promociones Mar 26, Rebate Q1";
+                const colorBtn = esAporte ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-500 hover:bg-rose-600";
+                const colorBg = esAporte ? "bg-emerald-50" : "bg-rose-50";
+                return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
                   <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                      <h3 className="font-bold text-gray-800">Nuevo movimiento de fondo</h3>
-                      <button onClick={() => setShowFondoForm(false)} className="p-1 rounded hover:bg-gray-100 text-gray-500 text-lg">✕</button>
+                    <div className={`flex items-center justify-between px-5 py-4 border-b border-gray-100 ${colorBg}`}>
+                      <div>
+                        <h3 className="font-bold text-gray-800">{tituloModal}</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">{subtituloModal}</p>
+                      </div>
+                      <button onClick={() => setShowFondoForm(false)} className="p-1 rounded hover:bg-white/50 text-gray-500 text-lg">✕</button>
                     </div>
                     <div className="p-5 space-y-3">
                       <div className="grid grid-cols-2 gap-3">
@@ -2764,10 +2788,10 @@ export default function PagosCliente({ cliente, clienteKey }) {
                           </select>
                         </label>
                         <label className="block">
-                          <span className="text-xs text-gray-500 font-semibold">Tipo</span>
+                          <span className="text-xs text-gray-500 font-semibold">Tipo de movimiento</span>
                           <select value={fondoForm.tipo_mov} onChange={e => setFondoForm(f => ({ ...f, tipo_mov: e.target.value }))} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm">
-                            <option value="gasto">Gasto (salida)</option>
-                            <option value="aporte">Aporte (entrada)</option>
+                            <option value="aporte">💰 Aporte (entrada)</option>
+                            <option value="gasto">💸 Gasto (salida)</option>
                           </select>
                         </label>
                       </div>
@@ -2777,7 +2801,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       </label>
                       <label className="block">
                         <span className="text-xs text-gray-500 font-semibold">Concepto *</span>
-                        <input type="text" value={fondoForm.concepto} onChange={e => setFondoForm(f => ({ ...f, concepto: e.target.value }))} placeholder="Ej. Hot Sale, Promociones Mar 26, Rebate Q1" className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
+                        <input type="text" value={fondoForm.concepto} onChange={e => setFondoForm(f => ({ ...f, concepto: e.target.value }))} placeholder={conceptoPlaceholder} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
                       </label>
                       <div className="grid grid-cols-2 gap-3">
                         <label className="block">
@@ -2790,17 +2814,20 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         </label>
                       </div>
                       <label className="block">
-                        <span className="text-xs text-gray-500 font-semibold">Notas</span>
-                        <input type="text" value={fondoForm.notas} onChange={e => setFondoForm(f => ({ ...f, notas: e.target.value }))} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
+                        <span className="text-xs text-gray-500 font-semibold">Notas / motivo</span>
+                        <input type="text" value={fondoForm.notas} onChange={e => setFondoForm(f => ({ ...f, notas: e.target.value }))} placeholder={esAporte ? "Ej. Aporte autorizado por dirección" : ""} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
                       </label>
                     </div>
                     <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100">
                       <button onClick={() => setShowFondoForm(false)} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100">Cancelar</button>
-                      <button onClick={crearMovimientoFondo} className="px-4 py-2 rounded-lg text-sm font-semibold bg-violet-500 text-white hover:bg-violet-600">Guardar</button>
+                      <button onClick={crearMovimientoFondo} className={`px-4 py-2 rounded-lg text-sm font-semibold text-white ${colorBtn}`}>
+                        {esAporte ? "💰 Guardar aporte" : "💸 Guardar gasto"}
+                      </button>
                     </div>
                   </div>
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
