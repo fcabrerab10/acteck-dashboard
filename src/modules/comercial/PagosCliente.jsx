@@ -117,7 +117,33 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const m = new Date().getMonth();
     return m < 3 ? 1 : m < 6 ? 2 : m < 9 ? 3 : 4;
   });
-  const REBATE_PCT = { monitores: 0.02, sillas: 0.02, accesorios: 0.03 };
+  // ── Lineamientos del cliente (lee desde lineamientos_cliente, fallback a hardcodes) ──
+  const [lineamientos, setLineamientos] = useState({});
+  useEffect(() => {
+    if (!DB_CONFIGURED || !clienteKey) return;
+    (async () => {
+      const { data } = await supabase
+        .from('lineamientos_cliente')
+        .select('tipo, config')
+        .eq('cliente', clienteKey);
+      const map = {};
+      (data || []).forEach(l => { map[l.tipo] = l.config || {}; });
+      setLineamientos(map);
+    })();
+  }, [clienteKey]);
+
+  // REBATE_PCT (Digitalife): lee de lineamientos.rebate.por_categoria con fallback a hardcoded
+  const REBATE_PCT = React.useMemo(() => {
+    const cfg = lineamientos?.rebate?.por_categoria;
+    if (cfg && typeof cfg === 'object') {
+      return {
+        monitores:  Number(cfg.monitores)  || 0.02,
+        sillas:     Number(cfg.sillas)     || 0.02,
+        accesorios: Number(cfg.accesorios) || 0.03,
+      };
+    }
+    return { monitores: 0.02, sillas: 0.02, accesorios: 0.03 };
+  }, [lineamientos]);
   const Q_MESES = { 1: [1,2,3], 2: [4,5,6], 3: [7,8,9], 4: [10,11,12] };
   const Q_FECHA_PAGO = { 1: "-04-15", 2: "-07-15", 3: "-10-15", 4: "-01-15" };
   const [rebateAllQ, setRebateAllQ] = useState({ 1: 0, 2: 0, 3: 0, 4: 0 });
@@ -130,18 +156,45 @@ export default function PagosCliente({ cliente, clienteKey }) {
   // Tiers: 90-100% → 0.10% · 100-120% → 0.16% · 120%+ → 0.18% · Tope $4,000
   // Ajustes manuales: meses cuya cuota se fija a mano; el faltante se redistribuye
   // en meses de temporada alta (Jul-Dic) proporcional a su Cuota SI.
-  const SPIFF_CUOTA_ANUAL = 23000000;
-  const SPIFF_H1_PCT = 0.40; // % del total anual asignado a Ene-Jun (H2 = 60%)
-  const SPIFF_CUOTA_OVERRIDES = {
-    2: 1533103, // Feb: cuota ajustada para que SO real ($1,379,793) = 90% → Básico mínimo
-  };
-  const SPIFF_REDISTRIBUIR_EN = [7, 8, 9, 10, 11, 12]; // Jul-Dic absorben el faltante
-  const SPIFF_TIERS = [
-    { key: "alto",    umbral: 1.20, pct: 0.0018, icon: "🥇", label: "Alto" },
-    { key: "medio",   umbral: 1.00, pct: 0.0016, icon: "🥈", label: "Medio" },
-    { key: "basico",  umbral: 0.90, pct: 0.0010, icon: "🥉", label: "Básico" },
-  ];
-  const SPIFF_TOPE = 4000;
+  // SPIFF Digitalife — lee de lineamientos.spiff con fallback a hardcodes
+  const SPIFF_CUOTA_ANUAL = React.useMemo(() =>
+    Number(lineamientos?.spiff?.cuota_anual) || 23000000,
+    [lineamientos]
+  );
+  const SPIFF_H1_PCT = React.useMemo(() =>
+    Number(lineamientos?.spiff?.split_h1_h2?.[0]) || 0.40,
+    [lineamientos]
+  );
+  const SPIFF_CUOTA_OVERRIDES = React.useMemo(() =>
+    lineamientos?.spiff?.cuota_overrides || { 2: 1533103 },
+    [lineamientos]
+  );
+  const SPIFF_REDISTRIBUIR_EN = React.useMemo(() =>
+    lineamientos?.spiff?.redistribuir_en || [7, 8, 9, 10, 11, 12],
+    [lineamientos]
+  );
+  const SPIFF_TIERS = React.useMemo(() => {
+    const tiers = lineamientos?.spiff?.tiers;
+    if (Array.isArray(tiers) && tiers.length > 0) {
+      // Mapear formato lineamientos {min_alcance, pct} → formato calculadora {umbral, pct, key, icon, label}
+      return tiers.map(t => ({
+        umbral: Number(t.min_alcance ?? t.umbral) || 0,
+        pct: Number(t.pct) || 0,
+        key: t.key || (Number(t.min_alcance ?? t.umbral) >= 1.20 ? 'alto' : Number(t.min_alcance ?? t.umbral) >= 1.00 ? 'medio' : 'basico'),
+        icon: t.icon || (Number(t.min_alcance ?? t.umbral) >= 1.20 ? '🥇' : Number(t.min_alcance ?? t.umbral) >= 1.00 ? '🥈' : '🥉'),
+        label: t.label || (Number(t.min_alcance ?? t.umbral) >= 1.20 ? 'Alto' : Number(t.min_alcance ?? t.umbral) >= 1.00 ? 'Medio' : 'Básico'),
+      })).sort((a, b) => b.umbral - a.umbral);
+    }
+    return [
+      { key: "alto",    umbral: 1.20, pct: 0.0018, icon: "🥇", label: "Alto" },
+      { key: "medio",   umbral: 1.00, pct: 0.0016, icon: "🥈", label: "Medio" },
+      { key: "basico",  umbral: 0.90, pct: 0.0010, icon: "🥉", label: "Básico" },
+    ];
+  }, [lineamientos]);
+  const SPIFF_TOPE = React.useMemo(() =>
+    Number(lineamientos?.spiff?.tope_mensual) || 4000,
+    [lineamientos]
+  );
   const [digiSellOut26, setDigiSellOut26] = useState({});
   const [digiCuotas, setDigiCuotas] = useState([]);
   const [spiffPagos, setSpiffPagos] = useState({});  // { "2026-01": pagoRow, ... }
@@ -395,7 +448,11 @@ export default function PagosCliente({ cliente, clienteKey }) {
 
   // ── PCEL Condiciones Comerciales (Rebate + Fondo MKT + SPIFF) ──
   const [pcelSellIn, setPcelSellIn] = useState({});
-  const SPIFF_PCT = 0.0021;
+  // SPIFF PCEL: % fijo del sell-in. Lee de lineamientos.spiff.pct_fijo con fallback.
+  const SPIFF_PCT = React.useMemo(() =>
+    Number(lineamientos?.spiff?.pct_fijo) || 0.0021,
+    [lineamientos]
+  );
   const [pcelOverrideRebate, setPcelOverrideRebate] = useState({1:"",2:"",3:"",4:""});
   const [pcelOverrideSpiff, setPcelOverrideSpiff] = useState({});
   const [pcelPagosReg, setPcelPagosReg] = useState([]);
@@ -607,6 +664,41 @@ export default function PagosCliente({ cliente, clienteKey }) {
     }
   };
 
+  // PCEL Rebate tiers — lee de lineamientos.rebate.tiers con fallback a PCEL_REAL.rebateTiers
+  const pcelRebateTiers = React.useMemo(() => {
+    const t = lineamientos?.rebate?.tiers;
+    if (Array.isArray(t) && t.length > 0) {
+      return t.map(x => ({
+        min: Number(x.min_alcance ?? x.min) || 0,
+        pct: Number(x.pct) || 0,
+        label: x.label || (Number(x.min_alcance ?? x.min) * 100).toFixed(0) + '%+',
+      })).sort((a, b) => a.min - b.min);
+    }
+    return PCEL_REAL.rebateTiers;
+  }, [lineamientos]);
+
+  // PCEL Fondo MKT — lee de lineamientos.fondo_mkt.tiers (si existe) o cae a PCEL_REAL.fondoMktTiers
+  const pcelFondoMktTiers = React.useMemo(() => {
+    const t = lineamientos?.fondo_mkt?.tiers;
+    if (Array.isArray(t) && t.length > 0) {
+      return t.map(x => ({
+        maxAlcance: Number(x.max_alcance ?? x.maxAlcance) || Infinity,
+        pct: Number(x.pct) || 0,
+        label: x.label || '',
+      })).sort((a, b) => a.maxAlcance - b.maxAlcance);
+    }
+    // Si solo hay aporte_pct simple en lineamientos, construir un tier único
+    const aportePctSimple = Number(lineamientos?.fondo_mkt?.aporte_pct);
+    const alcanceMin = Number(lineamientos?.fondo_mkt?.alcance_minimo_pct) || 100;
+    if (aportePctSimple > 0) {
+      return [
+        { maxAlcance: alcanceMin / 100 - 0.0001, pct: 0, label: `< ${alcanceMin}%` },
+        { maxAlcance: Infinity, pct: aportePctSimple, label: `≥ ${alcanceMin}%` },
+      ];
+    }
+    return PCEL_REAL.fondoMktTiers;
+  }, [lineamientos]);
+
   const pcelCalc = React.useMemo(() => {
     if (clienteKey !== "pcel") return null;
     const cuotas = pcelCuotasSupa || PCEL_REAL.cuota50M;
@@ -628,11 +720,11 @@ export default function PagosCliente({ cliente, clienteKey }) {
       const qCuota = meses.reduce((s, m) => s + (cuotas[m] || 0), 0);
       const qAlcance = qCuota > 0 ? qSellIn / qCuota : 0;
       let rebatePct = 0, rebateLabel = "< 90%";
-      for (const t of PCEL_REAL.rebateTiers) {
+      for (const t of pcelRebateTiers) {
         if (qAlcance >= t.min) { rebatePct = t.pct; rebateLabel = t.label; }
       }
       let fondoPct = 0, fondoLabel = "< 100%";
-      for (const t of PCEL_REAL.fondoMktTiers) {
+      for (const t of pcelFondoMktTiers) {
         if (qAlcance <= t.maxAlcance) { fondoPct = t.pct; fondoLabel = t.label; break; }
       }
       const overrideR = pcelOverrideRebate[qi+1];
@@ -661,7 +753,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const alcance = totalCuota > 0 ? totalSellIn / totalCuota : 0;
     
     return { totalSellIn, totalCuota, alcance, quarterly, totalRebate, totalFondo, totalSpiff, spiffByMonth, monthly };
-  }, [clienteKey, pcelSellIn, pcelCuotasSupa, pcelOverrideRebate, pcelOverrideSpiff]);
+  }, [clienteKey, pcelSellIn, pcelCuotasSupa, pcelOverrideRebate, pcelOverrideSpiff, pcelRebateTiers, pcelFondoMktTiers]);
 
 
 // ── Data loading ──
@@ -2603,7 +2695,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-gray-400 mt-3">* Tiers: {PCEL_REAL.rebateTiers.map(t => t.label + "=" + (t.pct*100) + "%").join(", ")}</p>
+              <p className="text-xs text-gray-400 mt-3">* Tiers: {pcelRebateTiers.map(t => t.label + "=" + (t.pct*100) + "%").join(", ")}</p>
             </div>
           )}
           {/* ═══ Calculadora SPIFF Mensual PCEL ═══ */}
