@@ -84,6 +84,7 @@ const MENU_CONFIG = [
       { type: 'separator', label: 'Clientes' },
       { type: 'cliente', clienteId: 'digitalife' },
       { type: 'cliente', clienteId: 'pcel' },
+      { type: 'cliente', clienteId: 'dicotech' },
     ],
   },
   {
