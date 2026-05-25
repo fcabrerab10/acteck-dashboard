@@ -64,6 +64,7 @@ function mapAdminInternaToCliente(admin) {
   // Axon de México). Sus filas del ERP se ignoran aquí.
   if (up.includes('DIGITALIFE') || up.includes('API GLOBAL')) return 'digitalife';
   if (up === 'PCEL' || up.includes('PC ONLINE')) return 'pcel';
+  if (up.includes('DICOTECH')) return 'dicotech';
   return null; // otros clientes se ignoran por ahora
 }
 

@@ -55,6 +55,18 @@ const CLIENTES = {
       { id: 'cartera',    label: 'Crédito y Cobranza',     icon: CreditCard },
     ],
   },
+  dicotech: {
+    label: 'Dicotech',
+    color: '#0EA5E9',
+    activo: true,
+    pestanas: [
+      { id: 'home',       label: 'Resumen',                icon: Home },
+      { id: 'estrategia', label: 'Estrategia de Producto', icon: Package },
+      { id: 'marketing',  label: 'Marketing',              icon: Megaphone },
+      { id: 'pagos',      label: 'Pagos',                  icon: Wallet },
+      { id: 'cartera',    label: 'Crédito y Cobranza',     icon: CreditCard },
+    ],
+  },
   // Mercado Libre se migró a la nueva empresa "Axon de México"
   // (Administración Interna → Axon de México). Se mantiene fuera de
   // este map para que no aparezca como cliente de Acteck.

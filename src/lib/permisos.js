@@ -177,6 +177,7 @@ export const PESTANAS_GLOBALES = [
 export const CLIENTES = [
   { id: "digitalife",   label: "Digitalife" },
   { id: "pcel",         label: "PCEL" },
+  { id: "dicotech",     label: "Dicotech" },
   // Mercado Libre se migró a Axon de México (Administración Interna).
 ];
 

@@ -1574,7 +1574,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       const disponibleActeck = invActeck + invTransito;
 
       // Gate "sin stock" — aplica tanto para PCEL como Digitalife
-      const esPcelOrDgl = clienteKey === "pcel" || clienteKey === "digitalife";
+      const esPcelOrDgl = (clienteKey === "pcel" || clienteKey === "digitalife" || clienteKey === "dicotech");
       const sinStock = esPcelOrDgl && invActeck === 0 && invTransito === 0;
 
       let sugerido = 0;
@@ -1588,7 +1588,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           sugerido = Math.min(ideal, disponibleActeck);
           if (sugerido > 0 && sugerido < MIN) sugerido = MIN;
         }
-      } else if (!sinStock && clienteKey === "digitalife") {
+      } else if (!sinStock && (clienteKey === "digitalife" || clienteKey === "dicotech")) {
         // Fórmula DIGITALIFE v4 — meta dinámica 90/120/150 días
         if (disponibleActeck >= MIN && prom > 0) {
           let crecimiento = 0;
@@ -2068,7 +2068,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const ov = sugeridoEditsRef.current[r.sku];
         return (ov !== undefined && ov !== null && ov !== "") ? safeNum(ov) : safeNum(r.sugerido);
       }
-      if (sortCol === "precioAAAcd" && (clienteKey === "pcel" || clienteKey === "digitalife")) {
+      if (sortCol === "precioAAAcd" && ((clienteKey === "pcel" || clienteKey === "digitalife" || clienteKey === "dicotech"))) {
         const ov = precioEditsRef.current[r.sku];
         return (ov !== undefined && ov !== null && ov !== "") ? safeNum(ov) : safeNum(r.precioAAAcd);
       }
@@ -2577,7 +2577,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
     // Para Digitalife: precio = AAA c/desc (con override si aplica).
     // Para otros clientes: usa precio_venta como antes.
-    const esDigi = clienteKey === "digitalife";
+    const esDigi = (clienteKey === "digitalife" || clienteKey === "dicotech");
 
     // 1) Armar filas simplificadas para propuesta al cliente
     const formatFechaESShort = (s) => {
@@ -2765,7 +2765,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const mesesCap = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
     const mesNombre = mesesCap[hoy.getMonth()];
     const anioActual = hoy.getFullYear();
-    const nombreCliente = clienteKey === "digitalife" ? "Digitalife"
+    const nombreCliente = (clienteKey === "digitalife" || clienteKey === "dicotech") ? "Digitalife"
+                        : clienteKey === "dicotech" ? "Dicotech"
                         : (cliente || clienteKey || "Cliente");
     XLSX.writeFile(wb, `Sugerido ${nombreCliente} ${mesNombre} ${anioActual}.xlsx`);
 
@@ -2783,7 +2784,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         const totSug = sumBy(allRows, "_sug");
         const totMonto = sumBy(allRows, "_total");
         const payload = {
-          cliente: "digitalife",
+          cliente: clienteKey,
           filas: filasSnapshot,
           skus_count: filasSnapshot.length,
           piezas_total: totSug,
@@ -3272,7 +3273,7 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                 }, "Último precio" + sortArrow("ultimoPrecio")),
                 thSort("Sugerido", "sugerido"),
                 // Columnas adicionales para PCEL: Precio AAA C/desc + Próx. arribo si falta
-                (clienteKey === "pcel" || clienteKey === "digitalife") && React.createElement("th", {
+                ((clienteKey === "pcel" || clienteKey === "digitalife" || clienteKey === "dicotech")) && React.createElement("th", {
                   key: "th-aaa", onClick: () => handleSort("precioAAAcd"),
                   style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: sortCol === "precioAAAcd" ? "#1D4ED8" : "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", background: "#F0F9FF" },
                   title: "Precio AAA con descuento aplicado"
@@ -3280,9 +3281,9 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                 // (Columna Próx. arribo removida)
                 // Para PCEL se oculta la columna "Precio" genérica (precio_venta de productos_cliente
                 // está casi siempre vacío para PCEL); el precio real es "Precio AAA c/desc" de arriba.
-                (clienteKey !== "pcel" && clienteKey !== "digitalife") && React.createElement("th", { key: "th-precio-gen", style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
+                ((clienteKey !== "pcel" && clienteKey !== "digitalife" && clienteKey !== "dicotech")) && React.createElement("th", { key: "th-precio-gen", style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, "Precio"),
                 React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 700, color: "#065F46", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", background: "#ECFDF5" } },
-                  React.createElement("div", { style: { fontSize: 10, color: "#10B981", fontWeight: 600 } }, "Σ " + formatMXN((skuDetail || []).reduce(function(acc, r){ var sug = sugeridoEdits[r.sku] !== undefined ? Number(sugeridoEdits[r.sku]) : Number(r.sugerido || 0); var precioBase = (clienteKey === "pcel" || clienteKey === "digitalife") ? (precioEdits[r.sku] !== undefined ? Number(precioEdits[r.sku]) : Number(r.precioAAAcd || 0)) : Number(r.precio || 0); return acc + sug * precioBase; }, 0))),
+                  React.createElement("div", { style: { fontSize: 10, color: "#10B981", fontWeight: 600 } }, "Σ " + formatMXN((skuDetail || []).reduce(function(acc, r){ var sug = sugeridoEdits[r.sku] !== undefined ? Number(sugeridoEdits[r.sku]) : Number(r.sugerido || 0); var precioBase = ((clienteKey === "pcel" || clienteKey === "digitalife" || clienteKey === "dicotech")) ? (precioEdits[r.sku] !== undefined ? Number(precioEdits[r.sku]) : Number(r.precioAAAcd || 0)) : Number(r.precio || 0); return acc + sug * precioBase; }, 0))),
                   React.createElement("div", {}, "Total")
                 ),
               ),
@@ -3348,10 +3349,10 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                     // Gates para deshabilitar el input de sugerido:
                     //   1. sinStock: no hay inventario ni tránsito Acteck (no podemos surtir)
                     //   2. sinPrecio: el SKU no tiene precio (no podemos cotizar)
-                    const sinStock = (clienteKey === "pcel" || clienteKey === "digitalife")
+                    const sinStock = ((clienteKey === "pcel" || clienteKey === "digitalife" || clienteKey === "dicotech"))
                       && (Number(s.invActeck) || 0) === 0
                       && (Number(s.invTransito) || 0) === 0;
-                    const precioVigente = (clienteKey === "pcel" || clienteKey === "digitalife")
+                    const precioVigente = ((clienteKey === "pcel" || clienteKey === "digitalife" || clienteKey === "dicotech"))
                       ? (precioEdits[s.sku] !== undefined ? Number(precioEdits[s.sku]) : Number(s.precioAAAcd || 0))
                       : Number(s.precio || 0);
                     const sinPrecio = precioVigente <= 0;
@@ -3406,7 +3407,7 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                     // meta (120d ó 150d) por crecimiento o roadmap año actual,
                     // se pinta una píldora pequeña a la izquierda del sugerido
                     // para que sepas por qué es más alto.
-                    (clienteKey === "digitalife" && s.metaMeses && s.metaMeses > 3) && React.createElement("span", {
+                    ((clienteKey === "digitalife" || clienteKey === "dicotech") && s.metaMeses && s.metaMeses > 3) && React.createElement("span", {
                       style: {
                         position: "absolute", left: -2, top: "50%", transform: "translateY(-50%)",
                         fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3,
@@ -3419,7 +3420,7 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                   );
                   })(),
                   // Precio AAA c/desc editable (PCEL y Digitalife): parece texto plano, pero al hover/focus se reveal
-                  (clienteKey === "pcel" || clienteKey === "digitalife") && React.createElement("td", {
+                  ((clienteKey === "pcel" || clienteKey === "digitalife" || clienteKey === "dicotech")) && React.createElement("td", {
                     key: "td-aaa",
                     style: { textAlign: "right", padding: "6px", fontSize: 11, whiteSpace: "nowrap", background: "#F0F9FF", position: "relative" }
                   },
@@ -3500,11 +3501,11 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                   // (Celda Próx. arribo removida)
 
                   // TD de "Precio" genérico — oculto para PCEL (su precio es el AAA c/desc de arriba)
-                  (clienteKey !== "pcel" && clienteKey !== "digitalife") && React.createElement("td", { key: "td-precio-gen", style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11, whiteSpace: "nowrap" } }, (s.precio && s.precio > 0) ? ("$" + Number(s.precio).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })) : "-"),
+                  ((clienteKey !== "pcel" && clienteKey !== "digitalife" && clienteKey !== "dicotech")) && React.createElement("td", { key: "td-precio-gen", style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11, whiteSpace: "nowrap" } }, (s.precio && s.precio > 0) ? ("$" + Number(s.precio).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })) : "-"),
                   (function(){
                     var sug = sugeridoEdits[s.sku] !== undefined ? Number(sugeridoEdits[s.sku]) : Number(s.sugerido || 0);
                     // Para PCEL: override o precio AAA con descuento. Otros: precio_venta.
-                    var precioBase = (clienteKey === "pcel" || clienteKey === "digitalife")
+                    var precioBase = ((clienteKey === "pcel" || clienteKey === "digitalife" || clienteKey === "dicotech"))
                       ? (precioEdits[s.sku] !== undefined ? Number(precioEdits[s.sku]) : Number(s.precioAAAcd || 0))
                       : Number(s.precio || 0);
                     var tot = sug * precioBase;
@@ -3516,7 +3517,7 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
           ),
         ),
         // ═══ Historial de propuestas exportadas (PCEL y Digitalife) ═══
-        (clienteKey === "pcel" || clienteKey === "digitalife") && React.createElement("div", {
+        ((clienteKey === "pcel" || clienteKey === "digitalife" || clienteKey === "dicotech")) && React.createElement("div", {
           style: { marginTop: 16, borderTop: "1px solid #E2E8F0", paddingTop: 12 }
         },
           React.createElement("button", {

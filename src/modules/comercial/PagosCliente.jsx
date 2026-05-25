@@ -201,7 +201,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [spiffLoading, setSpiffLoading] = useState(false);
 
   useEffect(() => {
-    if (clienteKey !== "digitalife" || !DB_CONFIGURED) return;
+    if ((clienteKey !== "digitalife" && clienteKey !== "dicotech") || !DB_CONFIGURED) return;
     setSpiffLoading(true);
     (async () => {
       const anio = new Date().getFullYear();
@@ -209,7 +209,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
       const fetchAll = async (qs) => {
         let all = [], from = 0, PAGE = 1000;
         while (true) {
-          const { data } = await supabase.from("sellout_sku").select(qs).eq("cliente", "digitalife").eq("anio", anio).range(from, from + PAGE - 1);
+          const { data } = await supabase.from("sellout_sku").select(qs).eq("cliente", clienteKey).eq("anio", anio).range(from, from + PAGE - 1);
           if (!data || data.length === 0) break;
           all = all.concat(data);
           if (data.length < PAGE) break;
@@ -219,8 +219,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
       };
       const [soData, cuotasData, existingSpiffPagos] = await Promise.all([
         fetchAll("mes,monto_pesos"),
-        supabase.from("cuotas_mensuales").select("mes,cuota_min,cuota_ideal").eq("cliente", "digitalife").eq("anio", anio).order("mes"),
-        supabase.from("pagos").select("*").eq("cliente", "digitalife").eq("categoria", "spiff"),
+        supabase.from("cuotas_mensuales").select("mes,cuota_min,cuota_ideal").eq("cliente", clienteKey).eq("anio", anio).order("mes"),
+        supabase.from("pagos").select("*").eq("cliente", clienteKey).eq("categoria", "spiff"),
       ]);
       const byMes = {};
       soData.forEach(r => { const m = Number(r.mes); byMes[m] = (byMes[m] || 0) + (Number(r.monto_pesos) || 0); });
@@ -243,7 +243,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
 
   // Cálculo del SPIFF por mes
   const spiffCalc = React.useMemo(() => {
-    if (clienteKey !== "digitalife" || digiCuotas.length === 0) return null;
+    if ((clienteKey !== "digitalife" && clienteKey !== "dicotech") || digiCuotas.length === 0) return null;
     const totalSI = digiCuotas.reduce((s, c) => s + (Number(c.cuota_min) || 0), 0);
     const anio = new Date().getFullYear();
 
@@ -322,7 +322,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const nextAnio = calc.mes === 12 ? anio + 1 : anio;
     const fechaCompromiso = `${nextAnio}-${String(nextMes).padStart(2, "0")}-15`;
     const row = {
-      cliente: "digitalife", categoria: "spiff", folio: null,
+      cliente: clienteKey, categoria: "spiff", folio: null,
       concepto: `SPIFF ${mesLabel} ${anio} — ${calc.tier?.label || "Sin tier"}`,
       monto: calc.comision,
       estatus: "pendiente", fecha_compromiso: fechaCompromiso,
@@ -347,7 +347,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const nextAnio = mes === 12 ? anio + 1 : anio;
     const fechaCompromiso = `${nextAnio}-${String(nextMes).padStart(2, "0")}-15`;
     const row = {
-      cliente: "digitalife", categoria: "spiff", folio: null,
+      cliente: clienteKey, categoria: "spiff", folio: null,
       concepto: `SPIFF ${mesLabel} ${anio} — No aplica`,
       monto: 0, estatus: "cancelado",
       fecha_compromiso: fechaCompromiso,
@@ -379,12 +379,12 @@ export default function PagosCliente({ cliente, clienteKey }) {
   // Cálculo de rebate extraído en función reusable (para poder disparar
   // actualizaciones manuales desde el botón "Actualizar").
   const calcularRebate = React.useCallback(async () => {
-    if (clienteKey !== "digitalife" || !DB_CONFIGURED) return;
+    if ((clienteKey !== "digitalife" && clienteKey !== "dicotech") || !DB_CONFIGURED) return;
     setRebateLoading(true);
     const anio = new Date().getFullYear();
     const [siRes, prodRes] = await Promise.all([
-      supabase.from("sell_in_sku").select("sku,mes,monto_pesos").eq("cliente", "digitalife").eq("anio", anio),
-      supabase.from("productos_cliente").select("sku,categoria").eq("cliente", "digitalife")
+      supabase.from("sell_in_sku").select("sku,mes,monto_pesos").eq("cliente", clienteKey).eq("anio", anio),
+      supabase.from("productos_cliente").select("sku,categoria").eq("cliente", clienteKey)
     ]);
     const catMap = {};
     (prodRes.data || []).forEach(p => { catMap[p.sku] = (p.categoria || "").trim().toLowerCase(); });
@@ -778,7 +778,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     // Filtrar por cliente activo (incluye registros legados sin cliente=NULL solo para digitalife,
     // ya que la columna cliente se agregó después y los registros viejos son de Digitalife)
     let query = supabase.from("pagos").select("*").order("created_at");
-    if (clienteKey === "digitalife") {
+    if ((clienteKey === "digitalife" || clienteKey === "dicotech")) {
       query = query.or(`cliente.eq.${clienteKey},cliente.is.null`);
     } else {
       query = query.eq("cliente", clienteKey);
@@ -1423,7 +1423,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                     </div>
                   )}
                 </div>
-                {clienteKey === "digitalife" && (
+                {(clienteKey === "digitalife" || clienteKey === "dicotech") && (
                   <div>
                     <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Rebate Acum.</p>
                     <p className="text-2xl font-bold text-red-600">{(() => { const total = Math.round(Object.values(rebateAllQ).reduce((s, v) => s + v, 0)); return total > 0 ? formatMXN(total) : "$0"; })()}</p>
@@ -2384,7 +2384,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
           )}
 
           {/* Calculadora de Rebate Trimestral */}
-          {clienteKey === "digitalife" && catActiva === "rebate" && (
+          {(clienteKey === "digitalife" || clienteKey === "dicotech") && catActiva === "rebate" && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -2474,7 +2474,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                           fecha_compromiso: fechaQ,
                           responsable: "Acteck",
                           notas: "Monitores: $" + Math.round(rebateData.monitores).toLocaleString("es-MX") + " (2%), Sillas: $" + Math.round(rebateData.sillas).toLocaleString("es-MX") + " (2%), Accesorios: $" + Math.round(rebateData.accesorios).toLocaleString("es-MX") + " (3%)",
-                          cliente: "digitalife"
+                          cliente: clienteKey
                         };
                         const { data, error } = await supabase.from("pagos").insert(record).select().single();
                         if (!error && data) {
@@ -2494,7 +2494,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
           )}
 
           {/* Calculadora SPIFF Digitalife — por crecimiento de Sellout */}
-          {clienteKey === "digitalife" && catActiva === "spiff" && spiffCalc && (
+          {(clienteKey === "digitalife" || clienteKey === "dicotech") && catActiva === "spiff" && spiffCalc && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div>

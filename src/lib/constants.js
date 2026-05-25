@@ -230,6 +230,40 @@ export const clientes = {
       ],
     },
   },
+  dicotech: {
+    nombre: "Dicotech",
+    marca: "Acteck / Balam Rush",
+    ejecutivo: "Fernando Cabrera",
+    frecuencia: "Semanal",
+    color: "#0EA5E9",
+    cuotaAnual: 0,
+    // Cliente nuevo — sin datos históricos todavía. KPIs en 0 hasta que se
+    // suba info al ERP (sell_in_sku) y a las vistas de inventario.
+    kpis: {
+      sellInMes: 0,
+      cuotaMes: 0,
+      cuotaMes25M: 0,
+      sellInAcumulado: 0,
+      cuotaAcumulada: 0,
+      sellOut: 0,
+      sellOutAcumulado: 0,
+      diasInventario: 0,
+      inventarioValor: 0,
+      inventarioPiezas: 0,
+      ultimoMes: "---",
+    },
+    tendencia: [],
+    pendientes: [],
+    pagos: [],
+    promocionesActivas: [],
+    minuta: {
+      fechaReunion: "",
+      proximaReunion: "",
+      asistentes: [],
+      acuerdos: [],
+    },
+    cartera: null,
+  },
   // Mercado Libre se migró a la nueva empresa "Axon de México"
   // (módulo Administración Interna). Ya no figura como cliente del
   // dashboard comercial.
