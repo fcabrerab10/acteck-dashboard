@@ -591,7 +591,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       if (promMes <= 0) return;
       const stock = stockBySku[sku] || 0;
       let sug = Math.max(0, Math.round(promMes * 3 - stock));
-      if (clienteKey === 'digitalife' && stock < promMes && sug < 11) sug = 11;
+      if ((clienteKey === 'digitalife' || clienteKey === 'dicotech') && stock < promMes && sug < 11) sug = 11;
       const disponible = actStockBySku[sku] || 0;
       sug = Math.min(sug, disponible);
       if (sug > 0) {

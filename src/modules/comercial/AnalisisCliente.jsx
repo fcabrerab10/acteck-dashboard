@@ -379,7 +379,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
         if (promMes <= 0) return;
         var stk = stockBy[sku] || 0;
         var sug = Math.max(0, Math.round(promMes * 3 - stk));
-        if (clienteKey === 'digitalife' && stk < promMes && sug < 11) sug = 11;
+        if ((clienteKey === 'digitalife' || clienteKey === 'dicotech') && stk < promMes && sug < 11) sug = 11;
         if (sug > 0) { sugPiezas += sug; sugMonto += sug * (precioBy[sku] || 0); sugSkus++; }
       });
       if (sugMonto > 0) {
