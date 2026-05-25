@@ -197,7 +197,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
   );
   const [digiSellOut26, setDigiSellOut26] = useState({});
   const [digiCuotas, setDigiCuotas] = useState([]);
-  const [spiffPagos, setSpiffPagos] = useState({});  // { "2026-01": pagoRow, ... }
+  const [dicoSellIn, setDicoSellIn] = useState({});      // Dicotech: sell-in mensual $
+  const [spiffPagos, setSpiffPagos] = useState({});  // Digitalife: { "2026-01": pagoRow } | Dicotech: { "2026-01-SI": ..., "2026-01-SO": ... }
   const [spiffLoading, setSpiffLoading] = useState(false);
 
   useEffect(() => {
@@ -217,23 +218,41 @@ export default function PagosCliente({ cliente, clienteKey }) {
         }
         return all;
       };
-      const [soData, cuotasData, existingSpiffPagos] = await Promise.all([
+      // Sell-In sólo lo cargamos para Dicotech (lo usa la calculadora SPIFF SI).
+      const siProm = clienteKey === "dicotech"
+        ? supabase.from("sell_in_sku").select("mes,monto_pesos").eq("cliente", clienteKey).eq("anio", anio)
+        : Promise.resolve({ data: [] });
+      const [soData, cuotasData, existingSpiffPagos, siRes] = await Promise.all([
         fetchAll("mes,monto_pesos"),
         supabase.from("cuotas_mensuales").select("mes,cuota_min,cuota_ideal").eq("cliente", clienteKey).eq("anio", anio).order("mes"),
         supabase.from("pagos").select("*").eq("cliente", clienteKey).eq("categoria", "spiff"),
+        siProm,
       ]);
       const byMes = {};
       soData.forEach(r => { const m = Number(r.mes); byMes[m] = (byMes[m] || 0) + (Number(r.monto_pesos) || 0); });
       setDigiSellOut26(byMes);
       setDigiCuotas(cuotasData.data || []);
-      // Mapear pagos spiff por mes
+      // Sell-In Dicotech
+      const siByMes = {};
+      (siRes.data || []).forEach(r => { const m = Number(r.mes); siByMes[m] = (siByMes[m] || 0) + (Number(r.monto_pesos) || 0); });
+      setDicoSellIn(siByMes);
+      // Mapear pagos spiff por mes. Para Dicotech soporta sufijo SI/SO.
       const spMap = {};
+      const mesNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
       (existingSpiffPagos.data || []).forEach(p => {
-        const match = p.concepto && p.concepto.match(/SPIFF (\w+) (\d{4})/);
-        if (match) {
-          const mesNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-          const mesIdx = mesNames.indexOf(match[1]);
-          if (mesIdx >= 0) spMap[`${match[2]}-${String(mesIdx + 1).padStart(2, "0")}`] = p;
+        if (!p.concepto) return;
+        // Dicotech: "SPIFF-SI Enero 2026 — …" o "SPIFF-SO Enero 2026 — …"
+        const dual = p.concepto.match(/SPIFF-(SI|SO) (\w+) (\d{4})/);
+        if (dual) {
+          const mesIdx = mesNames.indexOf(dual[2]);
+          if (mesIdx >= 0) spMap[`${dual[3]}-${String(mesIdx + 1).padStart(2, "0")}-${dual[1]}`] = p;
+          return;
+        }
+        // Digitalife (legacy): "SPIFF Enero 2026 — …"
+        const single = p.concepto.match(/SPIFF (\w+) (\d{4})/);
+        if (single) {
+          const mesIdx = mesNames.indexOf(single[1]);
+          if (mesIdx >= 0) spMap[`${single[2]}-${String(mesIdx + 1).padStart(2, "0")}`] = p;
         }
       });
       setSpiffPagos(spMap);
@@ -313,6 +332,129 @@ export default function PagosCliente({ cliente, clienteKey }) {
       return s + c.comision;                          // Calculado (aún no creado)
     }, 0);
   }, [spiffCalc]);
+
+  // ── SPIFF Dual de Dicotech ──
+  // (1) Sell-In tiered mensual: 131%+=0.15%, 115-130%=0.12%, 95-114.99%=0.09%
+  // (2) Sell-Out flat mensual: 95%+=0.06%
+  // Cuota SO = cuota_min Sell-In × 1.06 (cuota_factor)
+  // Lee config desde lineamientos.spiff (modo:"dual")
+  const spiffDicotechCalc = React.useMemo(() => {
+    if (clienteKey !== "dicotech" || digiCuotas.length === 0) return null;
+    const cfg = lineamientos?.spiff || {};
+    if (cfg.modo !== "dual") return null;
+    const siTiers = ((cfg.sell_in?.tiers) || []).map(t => ({
+      umbral: Number(t.min_alcance) || 0,
+      pct: Number(t.pct) || 0,
+      label: t.label || "",
+    })).sort((a, b) => b.umbral - a.umbral);
+    const soPctFijo = Number(cfg.sell_out?.pct_fijo) || 0;
+    const soMinAlcance = Number(cfg.sell_out?.min_alcance) || 0.95;
+    const soCuotaFactor = Number(cfg.sell_out?.cuota_factor) || 1.06;
+
+    const anio = new Date().getFullYear();
+    const results = [];
+    for (let m = 1; m <= 12; m++) {
+      const cRow = digiCuotas.find(x => Number(x.mes) === m);
+      const cuotaSI = cRow ? Number(cRow.cuota_min) || 0 : 0;
+      const cuotaSO = cuotaSI * soCuotaFactor;
+      const siActual = Number(dicoSellIn[m]) || 0;
+      const soActual = Number(digiSellOut26[m]) || 0;
+      const alcanceSI = cuotaSI > 0 ? siActual / cuotaSI : 0;
+      const alcanceSO = cuotaSO > 0 ? soActual / cuotaSO : 0;
+      const tierSI = siTiers.find(t => alcanceSI >= t.umbral) || null;
+      const comisionSI = tierSI ? siActual * tierSI.pct : 0;
+      const aplicaSO = alcanceSO >= soMinAlcance;
+      const comisionSO = aplicaSO ? soActual * soPctFijo : 0;
+      const keyMes = `${anio}-${String(m).padStart(2, "0")}`;
+      results.push({
+        mes: m, cuotaSI, cuotaSO, siActual, soActual,
+        alcanceSI, alcanceSO, tierSI, comisionSI, comisionSO,
+        soPctFijo, soMinAlcance, aplicaSO,
+        pagoSI: spiffPagos[`${keyMes}-SI`],
+        pagoSO: spiffPagos[`${keyMes}-SO`],
+      });
+    }
+    return results;
+  }, [clienteKey, digiCuotas, dicoSellIn, digiSellOut26, spiffPagos, lineamientos]);
+
+  const spiffDicotechTotalYTD = React.useMemo(() => {
+    if (!spiffDicotechCalc) return { si: 0, so: 0, total: 0 };
+    let si = 0, so = 0;
+    for (const c of spiffDicotechCalc) {
+      const sumar = (pago, calcAmt) => {
+        if (pago && pago.estatus === "cancelado") return 0;
+        if (pago) return Number(pago.monto) || 0;
+        return calcAmt;
+      };
+      si += sumar(c.pagoSI, c.comisionSI);
+      so += sumar(c.pagoSO, c.comisionSO);
+    }
+    return { si, so, total: si + so };
+  }, [spiffDicotechCalc]);
+
+  // Crear pago SPIFF dual (Dicotech). tipo = "SI" | "SO"
+  // forzado=true permite generar el pago aunque no alcance la cuota mínima
+  // (botón "pagar manual" pedido por el user).
+  const crearSpiffDicotechPago = async (calc, tipo, forzado = false) => {
+    if (!canEdit) return;
+    const mesNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    const mesLabel = mesNames[calc.mes - 1];
+    const anio = new Date().getFullYear();
+    const nextMes = calc.mes === 12 ? 1 : calc.mes + 1;
+    const nextAnio = calc.mes === 12 ? anio + 1 : anio;
+    const fechaCompromiso = `${nextAnio}-${String(nextMes).padStart(2, "0")}-15`;
+    let montoAuto = 0;
+    let detalle = "";
+    if (tipo === "SI") {
+      montoAuto = calc.comisionSI;
+      detalle = `Sell-In: ${formatMXN(calc.siActual)} · Cuota SI: ${formatMXN(calc.cuotaSI)} · Alcance ${(calc.alcanceSI*100).toFixed(0)}% · Tier ${calc.tierSI?.label || "Sin tier"}`;
+    } else {
+      montoAuto = calc.comisionSO;
+      detalle = `Sell-Out: ${formatMXN(calc.soActual)} · Cuota SO: ${formatMXN(calc.cuotaSO)} · Alcance ${(calc.alcanceSO*100).toFixed(0)}% · ${(calc.soPctFijo*100).toFixed(2)}%`;
+    }
+    // Si fue forzado y el monto auto es 0, pedimos un monto manual al usuario
+    let monto = montoAuto;
+    if (forzado && montoAuto === 0) {
+      const input = window.prompt(`SPIFF ${tipo} ${mesLabel} — pago manual (no llegó a la cuota mínima).\n\nIngresa el monto en MXN a pagar:`, "0");
+      if (input == null) return;
+      monto = Number(input.replace(/[^0-9.-]/g, "")) || 0;
+      if (monto <= 0) { alert("Monto inválido."); return; }
+    }
+    const row = {
+      cliente: clienteKey, categoria: "spiff", folio: null,
+      concepto: `SPIFF-${tipo} ${mesLabel} ${anio}${forzado ? " — manual" : ""}`,
+      monto,
+      estatus: "pendiente", fecha_compromiso: fechaCompromiso,
+      responsable: "Fernando Cabrera",
+      notas: `${detalle}${forzado ? " · Pago manual forzado" : ""}`,
+    };
+    const { data, error } = await supabase.from("pagos").insert(row).select().single();
+    if (error) { alert("Error creando pago: " + (error.message || JSON.stringify(error))); return; }
+    setSpiffPagos(p => ({ ...p, [`${anio}-${String(calc.mes).padStart(2, "0")}-${tipo}`]: data }));
+    flash(`✓ SPIFF ${tipo} ${mesLabel} generado`);
+  };
+
+  const marcarSpiffDicotechNoAplica = async (mes, tipo) => {
+    if (!canEdit) return;
+    const mesNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    const mesLabel = mesNames[mes - 1];
+    const anio = new Date().getFullYear();
+    const nextMes = mes === 12 ? 1 : mes + 1;
+    const nextAnio = mes === 12 ? anio + 1 : anio;
+    const fechaCompromiso = `${nextAnio}-${String(nextMes).padStart(2, "0")}-15`;
+    const row = {
+      cliente: clienteKey, categoria: "spiff", folio: null,
+      concepto: `SPIFF-${tipo} ${mesLabel} ${anio} — No aplica`,
+      monto: 0, estatus: "cancelado",
+      fecha_compromiso: fechaCompromiso,
+      responsable: "Fernando Cabrera",
+      notas: "Marcado como No aplica manualmente",
+    };
+    const { data, error } = await supabase.from("pagos").insert(row).select().single();
+    if (error) { alert("Error: " + (error.message || JSON.stringify(error))); return; }
+    setSpiffPagos(p => ({ ...p, [`${anio}-${String(mes).padStart(2, "0")}-${tipo}`]: data }));
+    flash(`✓ SPIFF ${tipo} ${mesLabel} marcado como No aplica`);
+  };
 
   const crearSpiffPago = async (calc) => {
     if (!canEdit) return;
@@ -2494,7 +2636,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
           )}
 
           {/* Calculadora SPIFF Digitalife — por crecimiento de Sellout */}
-          {(clienteKey === "digitalife" || clienteKey === "dicotech") && catActiva === "spiff" && spiffCalc && (
+          {clienteKey === "digitalife" && catActiva === "spiff" && spiffCalc && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div>
@@ -2617,6 +2759,186 @@ export default function PagosCliente({ cliente, clienteKey }) {
 
               <div className="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500">
                 💡 <strong>Fecha de pago automática:</strong> día 15 del mes siguiente · <strong>Responsable:</strong> PM Digitalife
+              </div>
+            </div>
+          )}
+
+          {/* ═══ Calculadora SPIFF DUAL Dicotech (Sell-In tiered + Sell-Out flat) ═══ */}
+          {clienteKey === "dicotech" && catActiva === "spiff" && spiffDicotechCalc && (
+            <div className="space-y-6 mb-6">
+              {/* Header con totales YTD */}
+              <div className="bg-white rounded-2xl shadow-sm p-5">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🚀</span>
+                      <h3 className="text-lg font-bold text-gray-800">SPIFF Dicotech {new Date().getFullYear()}</h3>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Calculadora dual: SPIFF Sell-In con tiers de cumplimiento + SPIFF Sell-Out flat. Cuota SO = Cuota Sell-In × {((lineamientos?.spiff?.sell_out?.cuota_factor || 1.06)).toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="flex gap-6">
+                    <div className="text-right">
+                      <p className="text-[10px] text-gray-400 uppercase">SPIFF SI YTD</p>
+                      <p className="text-xl font-bold text-indigo-600">{formatMXN(spiffDicotechTotalYTD.si)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-gray-400 uppercase">SPIFF SO YTD</p>
+                      <p className="text-xl font-bold text-emerald-600">{formatMXN(spiffDicotechTotalYTD.so)}</p>
+                    </div>
+                    <div className="text-right border-l border-gray-200 pl-6">
+                      <p className="text-[10px] text-gray-400 uppercase">Total YTD</p>
+                      <p className="text-2xl font-bold text-purple-700">{formatMXN(spiffDicotechTotalYTD.total)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SPIFF Sell-In */}
+              <div className="bg-white rounded-2xl shadow-sm p-5">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                  <h4 className="font-bold text-indigo-700 inline-flex items-center gap-2">📥 SPIFF Sell-In (tiers de cumplimiento)</h4>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {(lineamientos?.spiff?.sell_in?.tiers || []).slice().sort((a,b)=>(b.min_alcance||0)-(a.min_alcance||0)).map((t,i) => (
+                      <span key={i} className="px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700">
+                        <strong>{t.label || ((t.min_alcance*100).toFixed(0)+"%+")}</strong> · {((t.pct||0)*100).toFixed(2)}%
+                      </span>
+                    ))}
+                    <span className="px-3 py-1 rounded-full bg-gray-50 border border-gray-200 text-gray-400">&lt;95% → Sin SPIFF</span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Mes</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Cuota SI</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell-In Real</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Alcance</th>
+                        <th className="text-center py-2 px-3 font-semibold text-gray-600">Tier</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Comisión</th>
+                        <th className="text-center py-2 px-3 font-semibold text-gray-600">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {spiffDicotechCalc.map(c => {
+                        const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+                        const p = c.pagoSI;
+                        const isNoAplica = p && p.estatus === "cancelado";
+                        const isGenerado = p && p.estatus !== "cancelado";
+                        const alcancePct = (c.alcanceSI * 100).toFixed(0);
+                        let alcanceColor = "#94a3b8";
+                        if (c.alcanceSI >= 1.31) alcanceColor = "#10b981";
+                        else if (c.alcanceSI >= 1.15) alcanceColor = "#3b82f6";
+                        else if (c.alcanceSI >= 0.95) alcanceColor = "#6366f1";
+                        else if (c.siActual > 0) alcanceColor = "#ef4444";
+                        return (
+                          <tr key={`si-${c.mes}`} className={`border-b border-gray-100 ${isNoAplica ? "opacity-50" : ""}`}>
+                            <td className="py-2 px-3 font-medium text-gray-800">{MESES_F[c.mes - 1]}</td>
+                            <td className="py-2 px-3 text-right text-gray-500 text-xs">{formatMXN(c.cuotaSI)}</td>
+                            <td className="py-2 px-3 text-right text-gray-700 font-medium">{c.siActual > 0 ? formatMXN(c.siActual) : "—"}</td>
+                            <td className="py-2 px-3 text-right font-bold" style={{ color: alcanceColor }}>{c.siActual > 0 ? alcancePct + "%" : "—"}</td>
+                            <td className="py-2 px-3 text-center">{c.tierSI ? <span className="text-xs px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 font-semibold">{c.tierSI.label}</span> : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2 px-3 text-right font-bold text-indigo-700">{isNoAplica ? <span className="text-gray-400">—</span> : c.comisionSI > 0 ? formatMXN(c.comisionSI) : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2 px-3 text-center">
+                              {isNoAplica ? (
+                                <button onClick={() => revertirSpiff(p.id)} className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1">↺ Revertir</button>
+                              ) : isGenerado ? (
+                                <div className="flex items-center gap-1 justify-center">
+                                  <span className={`text-xs px-2 py-1 rounded ${p.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}</span>
+                                  <button onClick={() => revertirSpiff(p.id)} className="text-xs text-red-500 hover:text-red-700">🗑</button>
+                                </div>
+                              ) : c.tierSI && c.comisionSI > 0 ? (
+                                <div className="flex gap-1 justify-center flex-wrap">
+                                  <button onClick={() => crearSpiffDicotechPago(c, "SI", false)} className="text-xs bg-indigo-600 text-white rounded px-2 py-1 hover:bg-indigo-700">Generar</button>
+                                  <button onClick={() => marcarSpiffDicotechNoAplica(c.mes, "SI")} className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
+                                </div>
+                              ) : c.siActual > 0 ? (
+                                <div className="flex gap-1 justify-center flex-wrap">
+                                  <button onClick={() => crearSpiffDicotechPago(c, "SI", true)} className="text-xs bg-amber-500 text-white rounded px-2 py-1 hover:bg-amber-600" title="Pagar aunque no llegue a cuota mínima">💸 Pagar manual</button>
+                                  <button onClick={() => marcarSpiffDicotechNoAplica(c.mes, "SI")} className="text-xs bg-gray-100 text-gray-500 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
+                                </div>
+                              ) : <span className="text-xs text-gray-300">Sin datos</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* SPIFF Sell-Out */}
+              <div className="bg-white rounded-2xl shadow-sm p-5">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                  <h4 className="font-bold text-emerald-700 inline-flex items-center gap-2">📤 SPIFF Sell-Out (flat {((lineamientos?.spiff?.sell_out?.pct_fijo || 0)*100).toFixed(2)}%)</h4>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="px-3 py-1 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700">
+                      <strong>≥{((lineamientos?.spiff?.sell_out?.min_alcance || 0.95)*100).toFixed(0)}%</strong> alcance → {((lineamientos?.spiff?.sell_out?.pct_fijo || 0)*100).toFixed(2)}%
+                    </span>
+                    <span className="px-3 py-1 rounded-full bg-gray-50 border border-gray-200 text-gray-400">&lt;{((lineamientos?.spiff?.sell_out?.min_alcance || 0.95)*100).toFixed(0)}% → Sin SPIFF</span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Mes</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Cuota SO</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell-Out Real</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Alcance</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Comisión</th>
+                        <th className="text-center py-2 px-3 font-semibold text-gray-600">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {spiffDicotechCalc.map(c => {
+                        const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+                        const p = c.pagoSO;
+                        const isNoAplica = p && p.estatus === "cancelado";
+                        const isGenerado = p && p.estatus !== "cancelado";
+                        const alcancePct = (c.alcanceSO * 100).toFixed(0);
+                        let alcanceColor = "#94a3b8";
+                        if (c.alcanceSO >= 1.20) alcanceColor = "#10b981";
+                        else if (c.alcanceSO >= 0.95) alcanceColor = "#059669";
+                        else if (c.soActual > 0) alcanceColor = "#ef4444";
+                        return (
+                          <tr key={`so-${c.mes}`} className={`border-b border-gray-100 ${isNoAplica ? "opacity-50" : ""}`}>
+                            <td className="py-2 px-3 font-medium text-gray-800">{MESES_F[c.mes - 1]}</td>
+                            <td className="py-2 px-3 text-right text-gray-500 text-xs">{formatMXN(c.cuotaSO)}</td>
+                            <td className="py-2 px-3 text-right text-gray-700 font-medium">{c.soActual > 0 ? formatMXN(c.soActual) : "—"}</td>
+                            <td className="py-2 px-3 text-right font-bold" style={{ color: alcanceColor }}>{c.soActual > 0 ? alcancePct + "%" : "—"}</td>
+                            <td className="py-2 px-3 text-right font-bold text-emerald-700">{isNoAplica ? <span className="text-gray-400">—</span> : c.comisionSO > 0 ? formatMXN(c.comisionSO) : <span className="text-gray-300">—</span>}</td>
+                            <td className="py-2 px-3 text-center">
+                              {isNoAplica ? (
+                                <button onClick={() => revertirSpiff(p.id)} className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1">↺ Revertir</button>
+                              ) : isGenerado ? (
+                                <div className="flex items-center gap-1 justify-center">
+                                  <span className={`text-xs px-2 py-1 rounded ${p.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}</span>
+                                  <button onClick={() => revertirSpiff(p.id)} className="text-xs text-red-500 hover:text-red-700">🗑</button>
+                                </div>
+                              ) : c.aplicaSO && c.comisionSO > 0 ? (
+                                <div className="flex gap-1 justify-center flex-wrap">
+                                  <button onClick={() => crearSpiffDicotechPago(c, "SO", false)} className="text-xs bg-emerald-600 text-white rounded px-2 py-1 hover:bg-emerald-700">Generar</button>
+                                  <button onClick={() => marcarSpiffDicotechNoAplica(c.mes, "SO")} className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
+                                </div>
+                              ) : c.soActual > 0 ? (
+                                <div className="flex gap-1 justify-center flex-wrap">
+                                  <button onClick={() => crearSpiffDicotechPago(c, "SO", true)} className="text-xs bg-amber-500 text-white rounded px-2 py-1 hover:bg-amber-600" title="Pagar aunque no llegue a cuota mínima">💸 Pagar manual</button>
+                                  <button onClick={() => marcarSpiffDicotechNoAplica(c.mes, "SO")} className="text-xs bg-gray-100 text-gray-500 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
+                                </div>
+                              ) : <span className="text-xs text-gray-300">Sin datos</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+                  💡 <strong>Pagar manual:</strong> el botón ámbar aparece cuando hay datos pero no se llegó a la cuota mínima. Te permite pagar de todos modos con el monto que decidas.
+                </div>
               </div>
             </div>
           )}
