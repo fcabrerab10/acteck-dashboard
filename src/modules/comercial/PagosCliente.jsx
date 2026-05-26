@@ -349,13 +349,20 @@ export default function PagosCliente({ cliente, clienteKey }) {
     })).sort((a, b) => b.umbral - a.umbral);
     const soPctFijo = Number(cfg.sell_out?.pct_fijo) || 0;
     const soMinAlcance = Number(cfg.sell_out?.min_alcance) || 0.95;
-    const soCuotaFactor = Number(cfg.sell_out?.cuota_factor) || 1.06;
+    const soCuotaFactorDefault = Number(cfg.sell_out?.cuota_factor) || 1.06;
+    // Overrides por mes (AAAA-MM → factor). Permite manejar el cambio
+    // histórico (Ene-May 2026 = 1.05, Jun+ = 1.06) sin tocar código.
+    const soFactorOverrides = cfg.sell_out?.cuota_factor_override_meses || {};
 
     const anio = new Date().getFullYear();
     const results = [];
     for (let m = 1; m <= 12; m++) {
       const cRow = digiCuotas.find(x => Number(x.mes) === m);
       const cuotaSI = cRow ? Number(cRow.cuota_min) || 0 : 0;
+      const ymKey = `${anio}-${String(m).padStart(2,"0")}`;
+      const soCuotaFactor = soFactorOverrides[ymKey] != null
+        ? Number(soFactorOverrides[ymKey])
+        : soCuotaFactorDefault;
       const cuotaSO = cuotaSI * soCuotaFactor;
       const siActual = Number(dicoSellIn[m]) || 0;
       const soActual = Number(digiSellOut26[m]) || 0;
@@ -2775,7 +2782,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       <h3 className="text-lg font-bold text-gray-800">SPIFF Dicotech {new Date().getFullYear()}</h3>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      Calculadora dual: SPIFF Sell-In con tiers de cumplimiento + SPIFF Sell-Out flat. Cuota SO = Cuota Sell-In × {((lineamientos?.spiff?.sell_out?.cuota_factor || 1.06)).toFixed(2)}
+                      Calculadora dual: SPIFF Sell-In con tiers de cumplimiento + SPIFF Sell-Out flat. Cuota SO = Cuota Sell-In × factor (varía por mes: revisa Lineamientos para el detalle).
                     </p>
                   </div>
                   <div className="flex gap-6">
