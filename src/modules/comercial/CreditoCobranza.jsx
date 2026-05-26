@@ -106,11 +106,18 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
   const notasCredito   = Math.abs(Number(estado?.notas_credito) || 0);
   const tipoCambio     = Number(estado?.tipo_cambio) || 0;
 
-  // Línea y plazo desde clientes_credito_config (manual, no del Excel)
-  const lineaUSD       = Number(config?.linea_credito_usd) || 0;
-  const PLAZO          = Number(config?.plazo_dias_credito) || 90;
-  const lineaMXN       = lineaUSD * tipoCambio;
-  const usoPct         = lineaMXN > 0 ? Math.min(Math.round((saldoActual / lineaMXN) * 100), 999) : null;
+  // Línea y plazo desde clientes_credito_config (manual, no del Excel).
+  // Algunos clientes (ej. Dicotech) tienen DOS líneas: una en USD respaldada
+  // por aseguradora (Solunion) + otra en MXN respaldada por pagaré. Sumamos
+  // ambas en MXN para calcular el % de uso real.
+  const lineaUSD          = Number(config?.linea_credito_usd) || 0;
+  const lineaMXNPagare    = Number(config?.linea_credito_mxn_pagare) || 0;
+  const aseguradora       = config?.aseguradora || null;
+  const tipoGarantiaMXN   = config?.tipo_garantia_mxn || null;
+  const PLAZO             = Number(config?.plazo_dias_credito) || 90;
+  const lineaUSDtoMXN     = lineaUSD * tipoCambio;
+  const lineaMXN          = lineaUSDtoMXN + lineaMXNPagare;     // total combinado
+  const usoPct            = lineaMXN > 0 ? Math.min(Math.round((saldoActual / lineaMXN) * 100), 999) : null;
 
   // ═══ Aging calculado desde estados_cuenta_detalle (en vez de los campos
   //     agregados del corte que a veces vienen vacíos).
@@ -588,8 +595,10 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
             <div className="flex items-center justify-between flex-wrap gap-3 mb-2">
               <div>
                 <p className="text-2xl font-bold text-gray-800">
-                  {formatUSD(lineaUSD)}
-                  {tipoCambio > 0 && <span className="text-sm font-normal text-gray-400"> = {formatMXN(lineaMXN)}</span>}
+                  {formatMXN(lineaMXN)}
+                  {lineaMXNPagare > 0 && lineaUSD > 0 && (
+                    <span className="text-sm font-normal text-gray-400"> total combinado</span>
+                  )}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">
                   <span className={`inline-block w-2 h-2 rounded-full ${lineaStatus.dot} mr-1`}></span>
@@ -606,10 +615,37 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
               <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(usoPct, 100)}%`, backgroundColor: lineaStatus.color }}></div>
             </div>
             <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-              <span>$0</span><span>70%</span><span>90%</span><span>{formatUSD(lineaUSD)}</span>
+              <span>$0</span><span>70%</span><span>90%</span><span>{formatMXN(lineaMXN)}</span>
             </div>
+
+            {/* Desglose cuando hay dos líneas (USD asegurada + MXN pagaré) */}
+            {(lineaUSD > 0 || lineaMXNPagare > 0) && (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                {lineaUSD > 0 && (
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[10px] uppercase tracking-wide text-blue-700 font-semibold">Línea USD asegurada</span>
+                      {aseguradora && <span className="text-[10px] text-blue-600">{aseguradora}</span>}
+                    </div>
+                    <p className="text-lg font-bold text-blue-900 mt-1">{formatUSD(lineaUSD)}</p>
+                    {tipoCambio > 0 && (
+                      <p className="text-[10px] text-blue-600 mt-0.5">= {formatMXN(lineaUSDtoMXN)} · TC {tipoCambio.toFixed(2)}</p>
+                    )}
+                  </div>
+                )}
+                {lineaMXNPagare > 0 && (
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[10px] uppercase tracking-wide text-emerald-700 font-semibold">Línea MXN propia</span>
+                      {tipoGarantiaMXN && <span className="text-[10px] text-emerald-600">{tipoGarantiaMXN}</span>}
+                    </div>
+                    <p className="text-lg font-bold text-emerald-900 mt-1">{formatMXN(lineaMXNPagare)}</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        ) : lineaUSD > 0 && tipoCambio === 0 ? (
+        ) : lineaUSD > 0 && tipoCambio === 0 && lineaMXNPagare === 0 ? (
           <p className="text-sm text-gray-400 mt-2 italic">
             Línea configurada ({formatUSD(lineaUSD)}) pero el corte actual no trae tipo de cambio — no se puede calcular el uso %.
           </p>
@@ -1032,12 +1068,18 @@ function AgingConFacturas({ aging, agTotal, agPct, facturas, diasAtraso, diasPro
 function EditableLineaPlazo({ clienteKey, config, canEdit, onSaved }) {
   const [abierto, setAbierto] = useState(false);
   const [lineaUSD, setLineaUSD] = useState(config?.linea_credito_usd ?? "");
+  const [aseguradora, setAseguradora] = useState(config?.aseguradora ?? "");
+  const [lineaMXNPagare, setLineaMXNPagare] = useState(config?.linea_credito_mxn_pagare ?? "");
+  const [tipoGarantiaMXN, setTipoGarantiaMXN] = useState(config?.tipo_garantia_mxn ?? "");
   const [plazo, setPlazo]       = useState(config?.plazo_dias_credito ?? 90);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
     if (abierto) {
       setLineaUSD(config?.linea_credito_usd ?? "");
+      setAseguradora(config?.aseguradora ?? "");
+      setLineaMXNPagare(config?.linea_credito_mxn_pagare ?? "");
+      setTipoGarantiaMXN(config?.tipo_garantia_mxn ?? "");
       setPlazo(config?.plazo_dias_credito ?? 90);
     }
   }, [abierto, config]);
@@ -1049,6 +1091,9 @@ function EditableLineaPlazo({ clienteKey, config, canEdit, onSaved }) {
     const payload = {
       cliente: clienteKey,
       linea_credito_usd: lineaUSD === "" ? null : Number(lineaUSD),
+      aseguradora: aseguradora.trim() || null,
+      linea_credito_mxn_pagare: lineaMXNPagare === "" ? null : Number(lineaMXNPagare),
+      tipo_garantia_mxn: tipoGarantiaMXN.trim() || null,
       plazo_dias_credito: Number(plazo) || 90,
     };
     const { error } = await supabase.from("clientes_credito_config").upsert(payload, { onConflict: "cliente" });
@@ -1069,31 +1114,60 @@ function EditableLineaPlazo({ clienteKey, config, canEdit, onSaved }) {
   }
 
   return (
-    <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
-      <div className="flex items-center gap-1">
-        <span className="text-[10px] text-gray-500 uppercase font-semibold">Línea USD</span>
-        <input type="number" value={lineaUSD}
-               onChange={e => setLineaUSD(e.target.value)}
-               placeholder="500000"
-               className="w-24 px-2 py-0.5 border border-gray-300 rounded text-xs" />
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2 min-w-[320px]">
+      <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <label className="text-[10px] text-gray-500 uppercase font-semibold block">Línea USD asegurada</label>
+          <input type="number" value={lineaUSD}
+                 onChange={e => setLineaUSD(e.target.value)}
+                 placeholder="60000"
+                 className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+        </div>
+        <div className="flex-1">
+          <label className="text-[10px] text-gray-500 uppercase font-semibold block">Aseguradora</label>
+          <input type="text" value={aseguradora}
+                 onChange={e => setAseguradora(e.target.value)}
+                 placeholder="Solunion"
+                 className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+        </div>
       </div>
-      <div className="flex items-center gap-1">
-        <span className="text-[10px] text-gray-500 uppercase font-semibold">Plazo</span>
-        <input type="number" value={plazo}
-               onChange={e => setPlazo(e.target.value)}
-               className="w-14 px-2 py-0.5 border border-gray-300 rounded text-xs" />
-        <span className="text-[10px] text-gray-500">días</span>
+      <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <label className="text-[10px] text-gray-500 uppercase font-semibold block">Línea MXN propia</label>
+          <input type="number" value={lineaMXNPagare}
+                 onChange={e => setLineaMXNPagare(e.target.value)}
+                 placeholder="5000000"
+                 className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+        </div>
+        <div className="flex-1">
+          <label className="text-[10px] text-gray-500 uppercase font-semibold block">Tipo garantía</label>
+          <input type="text" value={tipoGarantiaMXN}
+                 onChange={e => setTipoGarantiaMXN(e.target.value)}
+                 placeholder="Pagaré"
+                 className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+        </div>
       </div>
-      <button onClick={guardar} disabled={guardando}
-              className="p-1 rounded bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white"
-              title="Guardar">
-        <Check className="w-3.5 h-3.5" />
-      </button>
-      <button onClick={() => setAbierto(false)}
-              className="p-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700"
-              title="Cancelar">
-        <XIcon className="w-3.5 h-3.5" />
-      </button>
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <div className="flex items-center gap-1">
+          <label className="text-[10px] text-gray-500 uppercase font-semibold">Plazo</label>
+          <input type="number" value={plazo}
+                 onChange={e => setPlazo(e.target.value)}
+                 className="w-16 px-2 py-1 border border-gray-300 rounded text-xs" />
+          <span className="text-[10px] text-gray-500">días</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={guardar} disabled={guardando}
+                  className="p-1 rounded bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white"
+                  title="Guardar">
+            <Check className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => setAbierto(false)}
+                  className="p-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700"
+                  title="Cancelar">
+            <XIcon className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
