@@ -17,7 +17,9 @@ const CATEGORIA_META = {
   pagosFijos: { label: "Pagos Fijos", color: "#3b82f6" },
   pagosVariables: { label: "Pagos Variables", color: "#10b981" },
   rebate: { label: "Rebate", color: "#ef4444" },
-  spiff: { label: "SPIFF", color: "#9333ea" }
+  spiff: { label: "SPIFF", color: "#9333ea" },
+  // Solo aplica a Dicotech por ahora (interno, no visible para el cliente).
+  fondoMkt: { label: "Fondo MKT", color: "#7C3AED", soloPara: ["dicotech"] },
 };
 
 const ESTATUS_OPT = [
@@ -439,6 +441,110 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (error) { alert("Error creando pago: " + (error.message || JSON.stringify(error))); return; }
     setSpiffPagos(p => ({ ...p, [`${anio}-${String(calc.mes).padStart(2, "0")}-${tipo}`]: data }));
     flash(`✓ SPIFF ${tipo} ${mesLabel} generado`);
+  };
+
+  // ── Fondo MKT trimestral interno de Dicotech ──
+  // Auto-provisiona 1% del sell-in trimestral si alcance Q ≥ 100%.
+  // El cliente NO sabe del fondo (es reserva interna). Si no llega, el
+  // usuario puede provisionar manualmente con un monto a discreción.
+  const [dicoFondoProvisiones, setDicoFondoProvisiones] = useState([]);
+  useEffect(() => {
+    if (clienteKey !== "dicotech" || !DB_CONFIGURED) return;
+    (async () => {
+      const anio = new Date().getFullYear();
+      const { data } = await supabase.from("provisiones_fondo")
+        .select("*").eq("cliente", "dicotech").eq("anio", anio).order("trimestre");
+      setDicoFondoProvisiones(data || []);
+    })();
+  }, [clienteKey, registros.length]);
+
+  const dicoFondoCalc = React.useMemo(() => {
+    if (clienteKey !== "dicotech" || digiCuotas.length === 0) return null;
+    const cfg = lineamientos?.fondo_mkt || {};
+    const aportePct = Number(cfg.aporte_pct) || 0.01;
+    const alcanceMin = (Number(cfg.alcance_minimo_pct) || 100) / 100;
+    const QUARTERS = [[1,2,3], [4,5,6], [7,8,9], [10,11,12]];
+    const labels = ["Q1 (Ene-Mar)", "Q2 (Abr-Jun)", "Q3 (Jul-Sep)", "Q4 (Oct-Dic)"];
+    return QUARTERS.map((meses, qi) => {
+      const cuotaQ = meses.reduce((s, m) => {
+        const r = digiCuotas.find(x => Number(x.mes) === m);
+        return s + (r ? Number(r.cuota_min) || 0 : 0);
+      }, 0);
+      const sellInQ = meses.reduce((s, m) => s + (Number(dicoSellIn[m]) || 0), 0);
+      const alcance = cuotaQ > 0 ? sellInQ / cuotaQ : 0;
+      const cumple = alcance >= alcanceMin;
+      const aporteAuto = cumple ? sellInQ * aportePct : 0;
+      const provision = dicoFondoProvisiones.find(p => p.trimestre === qi + 1);
+      return {
+        q: qi + 1, label: labels[qi], meses, cuotaQ, sellInQ, alcance,
+        cumple, aportePct, alcanceMin,
+        aporteAuto, provision,
+      };
+    });
+  }, [clienteKey, digiCuotas, dicoSellIn, lineamientos, dicoFondoProvisiones]);
+
+  const dicoFondoTotalYTD = React.useMemo(() => {
+    if (!dicoFondoCalc) return { provisionado: 0, potencial: 0 };
+    let provisionado = 0, potencial = 0;
+    for (const q of dicoFondoCalc) {
+      if (q.provision) provisionado += Number(q.provision.monto) || 0;
+      else if (q.cumple) potencial += q.aporteAuto;
+    }
+    return { provisionado, potencial };
+  }, [dicoFondoCalc]);
+
+  // Provisionar fondo MKT — auto si ya cumple, o pide monto si es manual
+  const provisionarFondoDicotech = async (q, forzado = false) => {
+    if (!canEdit) return;
+    const anio = new Date().getFullYear();
+    let monto = q.aporteAuto;
+    if (forzado || !q.cumple) {
+      const sugerido = q.sellInQ * q.aportePct;
+      const input = window.prompt(
+        `Provisión manual de Fondo MKT ${q.label} ${anio}\n\n` +
+        `Cuota del Q: ${formatMXN(q.cuotaQ)}\n` +
+        `Sell-In del Q: ${formatMXN(q.sellInQ)}\n` +
+        `Alcance: ${(q.alcance*100).toFixed(0)}% (no alcanzó ${(q.alcanceMin*100).toFixed(0)}%)\n\n` +
+        `Sugerido (${(q.aportePct*100).toFixed(2)}% del sell-in): ${formatMXN(sugerido)}\n\n` +
+        `Ingresa el monto a provisionar (MXN):`,
+        sugerido.toFixed(0)
+      );
+      if (input == null) return;
+      monto = Number(String(input).replace(/[^0-9.-]/g, "")) || 0;
+      if (monto <= 0) { alert("Monto inválido."); return; }
+    }
+    const row = {
+      cliente: clienteKey,
+      anio,
+      trimestre: q.q,
+      monto,
+      base_calculo: q.sellInQ,
+      pct_aplicado: q.aportePct,
+      alcance: q.alcance,
+      cumple_cuota: q.cumple,
+      manual: !q.cumple || forzado,
+      notas: q.cumple
+        ? `Provisión automática: ${(q.aportePct*100).toFixed(2)}% de ${formatMXN(q.sellInQ)}`
+        : `Provisión manual: alcance ${(q.alcance*100).toFixed(0)}% (no llegó al ${(q.alcanceMin*100).toFixed(0)}%)`,
+    };
+    const { data, error } = await supabase.from("provisiones_fondo")
+      .upsert([row], { onConflict: "cliente,anio,trimestre" })
+      .select().single();
+    if (error) { alert("Error: " + error.message); return; }
+    setDicoFondoProvisiones(prev => {
+      const others = prev.filter(p => p.trimestre !== q.q);
+      return [...others, data].sort((a, b) => a.trimestre - b.trimestre);
+    });
+    flash(`✓ Fondo ${q.label} provisionado: ${formatMXN(monto)}`);
+  };
+
+  const revertirProvisionFondoDicotech = async (provision) => {
+    if (!canEdit) return;
+    if (!window.confirm(`¿Eliminar provisión de Fondo MKT ${provision.trimestre === 1 ? "Q1" : provision.trimestre === 2 ? "Q2" : provision.trimestre === 3 ? "Q3" : "Q4"} (${formatMXN(provision.monto)})?`)) return;
+    const { error } = await supabase.from("provisiones_fondo").delete().eq("id", provision.id);
+    if (error) { alert("Error: " + error.message); return; }
+    setDicoFondoProvisiones(prev => prev.filter(p => p.id !== provision.id));
+    flash("✓ Provisión revertida");
   };
 
   const marcarSpiffDicotechNoAplica = async (mes, tipo) => {
@@ -1914,7 +2020,10 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${catActiva === "todas" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
                   Todas
                 </button>
-                {Object.entries(CATEGORIA_META).filter(([key]) => !(clienteKey === "pcel" && key === "pagosFijos")).map(([key, meta]) => (
+                {Object.entries(CATEGORIA_META)
+                  .filter(([key, meta]) => !(clienteKey === "pcel" && key === "pagosFijos"))
+                  .filter(([key, meta]) => !meta.soloPara || meta.soloPara.includes(clienteKey))
+                  .map(([key, meta]) => (
                   <button key={key} onClick={() => setCatActiva(catActiva === key ? "todas" : key)}
                     className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${catActiva === key ? "text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
                     style={catActiva === key ? { backgroundColor: meta.color } : {}}>
@@ -2946,6 +3055,113 @@ export default function PagosCliente({ cliente, clienteKey }) {
                 <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
                   💡 <strong>Pagar manual:</strong> el botón ámbar aparece cuando hay datos pero no se llegó a la cuota mínima. Te permite pagar de todos modos con el monto que decidas.
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ Fondo MKT Trimestral Interno Dicotech ═══ */}
+          {clienteKey === "dicotech" && catActiva === "fondoMkt" && dicoFondoCalc && (
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 mb-4 flex items-start gap-2">
+                <span className="text-amber-600 mt-0.5">🔒</span>
+                <div className="text-xs text-amber-900 leading-relaxed">
+                  <strong>Fondo MKT interno — no visible para el cliente.</strong> Esta reserva se calcula automáticamente como
+                  {' '}{((lineamientos?.fondo_mkt?.aporte_pct || 0.01)*100).toFixed(2)}% del sell-in trimestral cuando Dicotech alcanza el
+                  {' '}{lineamientos?.fondo_mkt?.alcance_minimo_pct || 100}% de su cuota Q. Si no llega, puedes provisionar manualmente con el botón ámbar.
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">💰</span>
+                    <h3 className="text-lg font-bold text-gray-800">Fondo MKT Dicotech {new Date().getFullYear()}</h3>
+                  </div>
+                </div>
+                <div className="flex gap-6">
+                  <div className="text-right">
+                    <p className="text-[10px] text-gray-400 uppercase">Provisionado YTD</p>
+                    <p className="text-xl font-bold text-purple-700">{formatMXN(dicoFondoTotalYTD.provisionado)}</p>
+                  </div>
+                  <div className="text-right border-l border-gray-200 pl-6">
+                    <p className="text-[10px] text-gray-400 uppercase">Potencial pendiente</p>
+                    <p className="text-xl font-bold text-amber-600">{formatMXN(dicoFondoTotalYTD.potencial)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-left py-2 px-3 font-semibold text-gray-600">Trimestre</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Cuota Q</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell-In Q</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Alcance</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Aporte (1%)</th>
+                      <th className="text-left py-2 px-3 font-semibold text-gray-600">Estado</th>
+                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dicoFondoCalc.map(q => {
+                      const alcancePct = (q.alcance * 100).toFixed(0);
+                      let alcanceColor = "#94a3b8";
+                      if (q.alcance >= 1.20) alcanceColor = "#10b981";
+                      else if (q.alcance >= 1.00) alcanceColor = "#3b82f6";
+                      else if (q.alcance >= 0.50) alcanceColor = "#f59e0b";
+                      else if (q.sellInQ > 0) alcanceColor = "#ef4444";
+                      const p = q.provision;
+                      return (
+                        <tr key={q.q} className="border-b border-gray-100">
+                          <td className="py-2 px-3 font-medium text-gray-800">{q.label}</td>
+                          <td className="py-2 px-3 text-right text-gray-500 text-xs">{formatMXN(q.cuotaQ)}</td>
+                          <td className="py-2 px-3 text-right text-gray-700 font-medium">{q.sellInQ > 0 ? formatMXN(q.sellInQ) : "—"}</td>
+                          <td className="py-2 px-3 text-right font-bold" style={{ color: alcanceColor }}>{q.sellInQ > 0 ? alcancePct + "%" : "—"}</td>
+                          <td className="py-2 px-3 text-right font-bold text-purple-700">
+                            {p ? formatMXN(Number(p.monto)) : (q.cumple ? formatMXN(q.aporteAuto) : <span className="text-gray-300">—</span>)}
+                          </td>
+                          <td className="py-2 px-3 text-xs">
+                            {p ? (
+                              <span className={`px-2 py-1 rounded ${p.manual ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>
+                                {p.manual ? "💸 Manual" : "✓ Auto"}
+                              </span>
+                            ) : q.cumple ? (
+                              <span className="text-xs text-gray-500">Listo para provisionar</span>
+                            ) : q.sellInQ > 0 ? (
+                              <span className="text-xs text-gray-400">No alcanza cuota</span>
+                            ) : (
+                              <span className="text-xs text-gray-300">Sin datos</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {p ? (
+                              <button onClick={() => revertirProvisionFondoDicotech(p)}
+                                      className="text-xs text-red-500 hover:text-red-700"
+                                      title="Eliminar provisión">🗑 Revertir</button>
+                            ) : q.cumple ? (
+                              <button onClick={() => provisionarFondoDicotech(q, false)}
+                                      className="text-xs bg-purple-600 text-white rounded px-2 py-1 hover:bg-purple-700">
+                                Provisionar
+                              </button>
+                            ) : q.sellInQ > 0 ? (
+                              <button onClick={() => provisionarFondoDicotech(q, true)}
+                                      className="text-xs bg-amber-500 text-white rounded px-2 py-1 hover:bg-amber-600"
+                                      title="Provisionar aunque no llegue a cuota">
+                                💸 Provisionar manual
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-300">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+                💡 La provisión queda registrada en <code className="bg-gray-100 px-1 rounded">provisiones_fondo</code>. Cuando ejecutes la inversión real (campaña, material POP, etc.), créala como pago de Marketing con fuente=empresa y referencia al Q.
               </div>
             </div>
           )}
