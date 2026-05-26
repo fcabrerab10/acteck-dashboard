@@ -930,14 +930,20 @@ const PARSERS = {
       }
     }
 
-    // Mapeo cliente_nombre → cliente_key del dashboard
+    // Mapeo cliente_nombre → cliente_key del dashboard.
+    // El ERP nuevo usa estructura jerárquica: DISTRIBUIDOR/RETAIL/etc (padre)
+    // → cliente real → SKU. Solo nos interesan los clientes que gestionamos
+    // desde el dashboard; los padres y los demás clientes retornan null y
+    // sus filas se descartan más abajo.
     const mapearCliente = (nombre) => {
       const n = String(nombre || '').toUpperCase();
-      // Digitalife aparece en el ERP como "CAJADL01" (clave contable) o
-      // "API GLOBAL" (razón social). Soportamos ambos por si cambia el reporte.
+      // Digitalife aparece como "CAJADL01" (clave contable) o "API GLOBAL"
+      // (razón social). Soportamos ambos por si cambia el reporte.
       if (n.includes('CAJADL01') || n.includes('API GLOBAL')) return 'digitalife';
       if (n.includes('PC ONLINE')) return 'pcel';
-      if (n.includes('MERCADO LIBRE')) return 'mercadolibre';
+      // Dicotech aparece como "DICOTECH MAYORISTA DE TECNOLOGIA" en el ERP.
+      if (n.includes('DICOTECH')) return 'dicotech';
+      // Mercado Libre se migró a Axon de México — sus filas se ignoran aquí.
       return null;
     };
 
@@ -960,13 +966,18 @@ const PARSERS = {
 
       if (SKU_RE.test(s)) {
         if (!clienteActual) continue;
+        // Solo aterrizamos SKUs de clientes que gestionamos. Esto descarta
+        // filas de subtotales jerárquicos (DISTRIBUIDOR, RETAIL, etc) y
+        // de clientes no soportados en el dashboard.
+        const cKey = mapearCliente(clienteActual);
+        if (!cKey) continue;
         for (const cm of colMap) {
           const pzs = toNum(row[cm.colPzs]);
           const mnt = toNum(row[cm.colMnt]);
           if ((pzs == null || pzs === 0) && (mnt == null || mnt === 0)) continue;
           out.push({
             cliente_nombre: clienteActual,
-            cliente_key: mapearCliente(clienteActual),
+            cliente_key: cKey,
             sku: s,
             anio: cm.anio,
             mes: cm.mes,
