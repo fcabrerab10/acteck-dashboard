@@ -63,6 +63,7 @@ const SOURCES = [
   },
   { id:'ec-pcel', title:'Estado de cuenta · PCEL', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
   { id:'ec-digitalife', title:'Estado de cuenta · Digitalife', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
+  { id:'ec-dicotech', title:'Estado de cuenta · Dicotech', desc:'Archivo 00708SemanaNN (REVKO TECHNOLOGY). Upsert (cliente, anio, semana) + aging en detalle.', file:'00708SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'dicotech' },
   { id:'roadmap-precios', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
   { id:'master-embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
 ];
@@ -369,7 +370,7 @@ const PARSERS = {
     }
 
     // Razón social: B8
-    const razon_social = toStr(cellVal('B8')) || (cliente==='pcel'?'PC ONLINE':'API GLOBAL');
+    const razon_social = toStr(cellVal('B8')) || (cliente==='pcel'?'PC ONLINE':cliente==='dicotech'?'REVKO TECHNOLOGY SA DE CV':'API GLOBAL');
 
     // Resumen
     const saldo_actual   = toNum(cellVal('F8')) || 0;
