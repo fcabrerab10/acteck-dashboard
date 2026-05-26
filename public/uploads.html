@@ -53,6 +53,7 @@ const SOURCES = [
     ]
   },
   { id:'digitalife-sellout', title:'Digitalife · Sellout histórico', desc:'Historico Sellout Digitalife (hoja "Sellout Digitalife"). Append con dedup por fecha+parte+cantidad+total.', file:'Historico Sellout Digitalife.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
+  { id:'dicotech-sellout', title:'Dicotech · Sellout semanal (CSV)', desc:'Reporte semanal del correo: Reporte-SellOut_Ventas Semanal Acteck_Revko.csv. Append a sellout_detalle (dedup por Venta+Clave+Cantidad). Tras subir, se recalcula sellout_sku automáticamente.', file:'Reporte-SellOut_Ventas Semanal Acteck_Revko.csv', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'dicotechSelloutSemanal' },
   { id:'digitalife-inv', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Snapshot semanal por (cliente, sku, anio, semana).', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv' },
   { id:'pcel-vm', title:'PCEL · venta-marca semanal', desc:'Archivo venta-marca-ACTECK. Actualiza sellout semanal + histórico mensual + catálogo SKU.', file:'venta-marca-ACTECK.xlsx',
     combined: [
@@ -140,6 +141,40 @@ const PARSERS = {
       if (!o.fecha || !o.no_parte) return null;
       o.row_hash = hash([o.fecha,o.no_parte,o.cantidad,o.total].join('|'));
       return o;
+    }).filter(Boolean);
+  },
+  // Sellout semanal de Dicotech — CSV con 22 columnas (separador coma).
+  // Columnas relevantes: Fecha, Venta (folio), Clave (código interno),
+  // Cantidad, Descripcion, Marca, total_venta, total_venta_antes_IVA,
+  // precio_venta_antes_IVA, Numero de parte (SKU canónico).
+  dicotechSelloutSemanal(wb){
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null, raw:false});
+    return rows.map((r, i) => {
+      const fecha = toISODate(r['Fecha']);
+      const noParte = toStr(r['Numero de parte']);
+      if (!fecha || !noParte) return null;
+      const cantidad = toNum(r['Cantidad']);
+      const totalSinIVA = toNum(r['total_venta_antes_IVA']);
+      const totalConIVA = toNum(r['total_venta']);
+      const precioSinIVA = toNum(r['precio_venta_antes_IVA']);
+      const ivaCalc = Math.max(0, totalConIVA - totalSinIVA);
+      // Hash determinístico: Venta (folio) + Clave + Cantidad + total + índice
+      const hashSrc = [r['Venta'], r['Clave'], cantidad, totalSinIVA, i].join('|');
+      return {
+        cliente: 'dicotech',
+        fecha,
+        marca: toStr(r['Marca']),
+        no_parte: noParte,
+        descripcion: toStr(r['Descripcion']),
+        cantidad,
+        precio: precioSinIVA,
+        descuento: 0,
+        iva: ivaCalc,
+        subtotal: totalSinIVA,
+        total: totalConIVA,
+        row_hash: hash(hashSrc),
+      };
     }).filter(Boolean);
   },
   digitalifeInv(wb){
@@ -982,7 +1017,7 @@ function renderCards(){
       file = el('span', {}, '');
       btn = el('button', {class:'btn', onclick: () => handleSync(src)}, '🔄 Sincronizar');
     } else {
-      file = el('input', {type:'file', accept:'.xlsx,.xls', id:`file-${src.id}`});
+      file = el('input', {type:'file', accept:'.xlsx,.xls,.csv', id:`file-${src.id}`});
       btn = el('button', {class:'btn', onclick: () => handleUpload(src)}, 'Subir');
       if (src.disabled) { btn.disabled = true; btn.textContent = 'Próximamente'; }
     }
@@ -1080,6 +1115,7 @@ async function handleUpload(src){
     //  ahora viene directo de facturacion_clientes via hoja "Facturación")
     const recalcMap = {
       'digitalife-sellout': ['sellout_sku'],
+      'dicotech-sellout':   ['sellout_sku'],
     };
     const recalcTables = recalcMap[src.id];
     if (recalcTables) {
