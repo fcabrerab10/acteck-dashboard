@@ -1186,16 +1186,16 @@ function SeccionKPIs({ seccion, kpis, lineas, ptsObtenidos, propuestas, editable
         <div className="border-t border-gray-100">
           {seccion.id === "propuestas" && (
             <div className="bg-pink-50/50 px-4 py-3 border-b border-pink-100 text-xs text-pink-900">
-              <Lightbulb className="w-3.5 h-3.5 inline mr-1" />
-              <strong>{propuestas?.length || 0} propuesta{propuestas?.length !== 1 ? "s" : ""}</strong> registrada{propuestas?.length !== 1 ? "s" : ""} en la semana.
+              <div className="flex items-center gap-1 mb-2">
+                <Lightbulb className="w-3.5 h-3.5" />
+                <strong>{propuestas?.length || 0} propuesta{propuestas?.length !== 1 ? "s" : ""}</strong> registrada{propuestas?.length !== 1 ? "s" : ""} en la semana. Asigna pts directamente (cada pt = $50 al bono mensual):
+              </div>
               {propuestas?.length > 0 && (
-                <ul className="mt-1 ml-5 list-disc space-y-0.5">
+                <div className="space-y-1.5">
                   {propuestas.map((p) => (
-                    <li key={p.id}>
-                      <strong>{p.descripcion}</strong>{p.estatus !== "propuesta" && ` · ${ESTATUS_PROP[p.estatus]?.label}`}
-                    </li>
+                    <PropuestaRow key={p.id} prop={p} editable={editable} />
                   ))}
-                </ul>
+                </div>
               )}
             </div>
           )}
@@ -1210,6 +1210,63 @@ function SeccionKPIs({ seccion, kpis, lineas, ptsObtenidos, propuestas, editable
             })}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// Inline editor de pts y estatus para una propuesta
+function PropuestaRow({ prop, editable }) {
+  const [pts, setPts] = useState(Number(prop.bonus_pts_aplicado || 0));
+  const [estatus, setEstatus] = useState(prop.estatus || "propuesta");
+  const [saving, setSaving] = useState(false);
+  const cambioPendiente = pts !== Number(prop.bonus_pts_aplicado || 0) || estatus !== prop.estatus;
+
+  const guardar = async () => {
+    if (!editable || !cambioPendiente) return;
+    setSaving(true);
+    const { error } = await supabase.from("propuestas_equipo")
+      .update({ bonus_pts_aplicado: Number(pts) || 0, estatus })
+      .eq("id", prop.id);
+    setSaving(false);
+    if (error) toast.error("Error: " + error.message);
+    else {
+      toast.success("Guardado");
+      prop.bonus_pts_aplicado = Number(pts) || 0;
+      prop.estatus = estatus;
+    }
+  };
+
+  return (
+    <div className="bg-white border border-pink-100 rounded px-2 py-1.5 flex items-center gap-2 flex-wrap">
+      <div className="flex-1 min-w-[200px]">
+        <div className="text-xs text-gray-800 font-medium">{prop.descripcion}</div>
+        <div className="text-[10px] text-gray-500">{prop.fecha_propuesta}</div>
+      </div>
+      {editable ? (
+        <>
+          <select value={estatus} onChange={(e) => setEstatus(e.target.value)}
+            className="text-[10px] px-1.5 py-1 rounded border border-gray-200 bg-white">
+            {Object.entries(ESTATUS_PROP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          <div className="flex items-center gap-1">
+            <input type="number" min="0" step="0.5"
+              value={pts} onChange={(e) => setPts(e.target.value)}
+              className="w-14 px-1.5 py-1 text-xs border border-pink-300 rounded text-right" />
+            <span className="text-[10px] text-gray-500">pts = ${(Number(pts) || 0) * 50}</span>
+          </div>
+          <button onClick={guardar} disabled={!cambioPendiente || saving}
+            className={`text-[10px] px-2 py-1 rounded ${cambioPendiente ? "bg-pink-600 text-white hover:bg-pink-700" : "bg-gray-100 text-gray-400"} disabled:opacity-50`}>
+            {saving ? "..." : "Guardar"}
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+            {ESTATUS_PROP[estatus]?.label || estatus}
+          </span>
+          <span className="text-xs font-bold text-pink-700">+{pts} pts</span>
+        </>
       )}
     </div>
   );
