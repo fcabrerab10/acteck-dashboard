@@ -80,6 +80,10 @@ export default function PagosCliente({ cliente, clienteKey }) {
     folio: "", concepto: "", categoria: "promociones", monto: "",
     estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
     responsable: "", notas: "", fuente: "", tipo_actividad: "",
+    // Split de fondos (solo Dicotech): cuánto sale de cada fondo.
+    // Si suman menos que el monto total, el resto se considera "externo"
+    // (lo paga Acteck directo, sin tocar fondos).
+    monto_fondo_mkt_cliente: "", monto_fondo_interno: "",
   });
 
   // Tipos de actividad de Marketing (selectables cuando categoria='marketing')
@@ -1194,14 +1198,29 @@ export default function PagosCliente({ cliente, clienteKey }) {
   // ── Add record (non-fijos) ──
   const handleAdd = async () => {
     if (!newRow.concepto.trim()) return;
+    const montoTotal = parseFloat(newRow.monto) || 0;
+    const montoFC = parseFloat(newRow.monto_fondo_mkt_cliente) || 0;
+    const montoFI = parseFloat(newRow.monto_fondo_interno) || 0;
+
+    // Validar que el split no exceda el monto total
+    if (clienteKey === "dicotech" && (montoFC + montoFI) > montoTotal + 0.01) {
+      alert(`El split de fondos ($${(montoFC+montoFI).toFixed(2)}) supera el monto total del pago ($${montoTotal.toFixed(2)}).`);
+      return;
+    }
+
     const record = {
-      ...newRow,
       cliente: clienteKey,
       folio: newRow.folio.trim() || "",
-      monto: parseFloat(newRow.monto) || 0,
+      concepto: newRow.concepto,
+      categoria: newRow.categoria,
+      monto: montoTotal,
+      estatus: newRow.estatus,
       fecha_compromiso: newRow.fecha_compromiso || null,
       fecha_pago_real: newRow.fecha_pago_real || null,
+      responsable: newRow.responsable,
+      notas: newRow.notas,
       fuente: newRow.fuente || null,
+      tipo_actividad: newRow.tipo_actividad || null,
     };
     const { data, error } = await supabase.from("pagos").insert(record).select().single();
     if (error) {
@@ -1210,14 +1229,52 @@ export default function PagosCliente({ cliente, clienteKey }) {
       return;
     }
     setRegistros(prev => [...prev, data]);
+
     // Si la fuente es fondo_mkt (solo PCEL por ahora),
     // crear el movimiento automáticamente en el ledger del fondo.
     if (clienteKey === "pcel" && data.fuente === "fondo_mkt" && data.monto > 0) {
       await crearMovimientoDesdePago(data);
     }
+
+    // Dicotech: aplicar el split de fondos como movimientos en fondos_mkt_movimientos.
+    // Si el usuario marcó monto_fondo_mkt_cliente y/o monto_fondo_interno, se crean
+    // las aplicaciones correspondientes para que los saldos del fondo bajen.
+    if (clienteKey === "dicotech" && (montoFC > 0 || montoFI > 0)) {
+      const fecha = newRow.fecha_compromiso || newRow.fecha_pago_real || new Date().toISOString().slice(0,10);
+      const mes = Number(fecha.slice(5,7));
+      const anio = Number(fecha.slice(0,4));
+      const movs = [];
+      if (montoFC > 0) {
+        movs.push({
+          cliente: "dicotech", anio, mes,
+          tipo_fondo: "mkt_cliente", tipo_movimiento: "aplicacion",
+          monto: montoFC, pago_id: data.id,
+          notas: `Aplicación del pago "${data.concepto}" (${data.categoria})`
+        });
+      }
+      if (montoFI > 0) {
+        movs.push({
+          cliente: "dicotech", anio, mes,
+          tipo_fondo: "interno", tipo_movimiento: "aplicacion",
+          monto: montoFI, pago_id: data.id,
+          notas: `Aplicación del pago "${data.concepto}" (${data.categoria})`
+        });
+      }
+      if (movs.length > 0) {
+        const { data: movsData, error: emErr } = await supabase
+          .from("fondos_mkt_movimientos").insert(movs).select();
+        if (emErr) {
+          alert("Pago creado, pero falló registrar aplicación al fondo: " + emErr.message);
+        } else {
+          setDicoFondoMovs(prev => [...prev, ...movsData].sort((a,b) => a.mes - b.mes));
+        }
+      }
+    }
+
     setNewRow({ folio: "", concepto: "", categoria: "promociones", monto: "",
                 estatus: "pendiente", fecha_compromiso: "", fecha_pago_real: "",
-                responsable: "", notas: "", fuente: "", tipo_actividad: "" });
+                responsable: "", notas: "", fuente: "", tipo_actividad: "",
+                monto_fondo_mkt_cliente: "", monto_fondo_interno: "" });
     setShowAdd(false);
     flash("Registro agregado ✓");
   };
@@ -1270,8 +1327,12 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (!window.confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")) return;
     setRegistros(prev => prev.filter(r => r.id !== id));
     // Si el pago tenía un movimiento de fondo vinculado, borrarlo también.
+    // PCEL legacy:
     await supabase.from("fondo_pcel_movimientos").delete().eq("pago_id", id);
     setFondoMov(prev => prev.filter(m => m.pago_id !== id));
+    // Dicotech: revertir aplicaciones en fondos_mkt_movimientos
+    await supabase.from("fondos_mkt_movimientos").delete().eq("pago_id", id);
+    setDicoFondoMovs(prev => prev.filter(m => m.pago_id !== id));
     const { error } = await supabase.from("pagos").delete().eq("id", id);
     if (error) { flash("Error al eliminar: " + error.message, "err"); fetchData(); }
     else flash("Eliminado ✓");
@@ -2214,6 +2275,85 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       </div>
                     ))}
                   </div>
+
+                  {/* Split de fondos — solo Dicotech */}
+                  {clienteKey === "dicotech" && (
+                    <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-purple-800 uppercase tracking-wide">💰 ¿De qué fondo sale el pago?</span>
+                        <span className="text-[10px] text-purple-600">Opcional — déjalo en blanco si no toca fondos</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-[10px] text-emerald-700 font-semibold uppercase">Desde Fondo MKT Cliente</label>
+                          <input
+                            type="number" step="0.01"
+                            value={newRow.monto_fondo_mkt_cliente}
+                            onChange={e => setNewRow(p => ({ ...p, monto_fondo_mkt_cliente: e.target.value }))}
+                            placeholder="0.00"
+                            className="w-full border border-emerald-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
+                          <span className="text-[10px] text-emerald-600">Saldo actual: {formatMXN(dicoFondoTablaMensual?.saldoCliActual || 0)}</span>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-purple-700 font-semibold uppercase">Desde Fondo Interno</label>
+                          <input
+                            type="number" step="0.01"
+                            value={newRow.monto_fondo_interno}
+                            onChange={e => setNewRow(p => ({ ...p, monto_fondo_interno: e.target.value }))}
+                            placeholder="0.00"
+                            className="w-full border border-purple-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
+                          <span className="text-[10px] text-purple-600">Saldo actual: {formatMXN(dicoFondoTablaMensual?.saldoIntActual || 0)}</span>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-600 font-semibold uppercase">Resto (Acteck directo)</label>
+                          <div className="px-2 py-1.5 border border-gray-200 rounded-lg bg-gray-50 text-sm">
+                            {(() => {
+                              const t = parseFloat(newRow.monto) || 0;
+                              const fc = parseFloat(newRow.monto_fondo_mkt_cliente) || 0;
+                              const fi = parseFloat(newRow.monto_fondo_interno) || 0;
+                              const resto = t - fc - fi;
+                              const exc = resto < 0;
+                              return <span className={exc ? "text-red-600 font-bold" : "text-gray-700"}>{formatMXN(Math.max(0, resto))}{exc && " (split excede monto)"}</span>;
+                            })()}
+                          </div>
+                          <span className="text-[10px] text-gray-500">Lo que paga la empresa sin tocar fondos</span>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex gap-2 flex-wrap text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const t = parseFloat(newRow.monto) || 0;
+                            const saldoCli = dicoFondoTablaMensual?.saldoCliActual || 0;
+                            const tomaCli = Math.min(t, Math.max(0, saldoCli));
+                            const tomaInt = Math.max(0, t - tomaCli);
+                            setNewRow(p => ({ ...p, monto_fondo_mkt_cliente: tomaCli.toFixed(2), monto_fondo_interno: tomaInt.toFixed(2) }));
+                          }}
+                          className="px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700">
+                          Auto split (cliente → interno)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewRow(p => ({ ...p, monto_fondo_mkt_cliente: (parseFloat(p.monto) || 0).toFixed(2), monto_fondo_interno: "" }))}
+                          className="px-2 py-1 rounded bg-emerald-500 text-white hover:bg-emerald-600">
+                          Todo del cliente
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewRow(p => ({ ...p, monto_fondo_mkt_cliente: "", monto_fondo_interno: (parseFloat(p.monto) || 0).toFixed(2) }))}
+                          className="px-2 py-1 rounded bg-purple-500 text-white hover:bg-purple-600">
+                          Todo del interno
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewRow(p => ({ ...p, monto_fondo_mkt_cliente: "", monto_fondo_interno: "" }))}
+                          className="px-2 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">
+                          Limpiar split
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex gap-2 mt-4">
                     <button onClick={handleAdd} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors">
                       Guardar registro
@@ -3212,7 +3352,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         <th rowSpan={2} className="text-left py-2 px-2 font-semibold text-gray-700 align-bottom">Mes</th>
                         <th colSpan={4} className="text-center py-1 px-2 font-bold text-emerald-700 border-b border-emerald-200">FONDO MKT CLIENTE</th>
                         <th colSpan={4} className="text-center py-1 px-2 font-bold text-purple-700 border-b border-purple-200 border-l-2 border-l-gray-300">FONDO INTERNO</th>
-                        <th rowSpan={2} className="text-center py-2 px-2 font-semibold text-gray-700 align-bottom border-l-2 border-l-gray-300">Aplicar pago</th>
+                        <th rowSpan={2} className="text-center py-2 px-2 font-semibold text-gray-700 align-bottom border-l-2 border-l-gray-300">Aplicaciones</th>
                       </tr>
                       <tr className="border-b border-gray-200 bg-gray-50">
                         <th className="text-right py-2 px-2 font-semibold text-emerald-700">Saldo inicio</th>
@@ -3248,32 +3388,25 @@ export default function PagosCliente({ cliente, clienteKey }) {
                             <td className="py-2 px-2 text-right text-purple-700 font-semibold">{f.genInt > 0 ? formatMXN(f.genInt) : "—"}</td>
                             <td className="py-2 px-2 text-right text-red-600">{f.apliInt > 0 ? "-" + formatMXN(f.apliInt) : "—"}</td>
                             <td className={`py-2 px-2 text-right font-bold border-r-2 border-r-gray-300 ${f.saldoIntFinal < 0 ? "text-red-600" : "text-gray-800"}`}>{fmtSaldo(f.saldoIntFinal)}</td>
-                            {/* Acción */}
+                            {/* Aplicaciones del mes (vinculadas a pagos manuales) */}
                             <td className="py-2 px-2 text-center">
                               {esFuturo ? (
                                 <span className="text-[10px] text-gray-300">Futuro</span>
-                              ) : yaPagado ? (
+                              ) : f.aplicaciones.length > 0 ? (
                                 <div className="flex flex-col items-center gap-0.5">
-                                  <span className="text-[10px] px-2 py-0.5 rounded bg-green-100 text-green-700">✓ Aplicado</span>
                                   {f.aplicaciones.map(a => (
-                                    <button key={a.id} onClick={() => revertirMovimientoFondo(a.id)}
-                                            className="text-[10px] text-red-500 hover:text-red-700"
-                                            title={`Revertir ${a.tipo_fondo}: ${formatMXN(Number(a.monto))}`}>🗑 {a.tipo_fondo === "interno" ? "I" : "C"}</button>
+                                    <div key={a.id} className="flex items-center gap-1">
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${a.tipo_fondo === "interno" ? "bg-purple-100 text-purple-700" : "bg-emerald-100 text-emerald-700"}`}>
+                                        {a.tipo_fondo === "interno" ? "Int" : "Cli"}: {formatMXN(Number(a.monto))}
+                                      </span>
+                                      <button onClick={() => revertirMovimientoFondo(a.id)}
+                                              className="text-[10px] text-red-500 hover:text-red-700"
+                                              title="Revertir aplicación (no borra el pago, solo el movimiento del fondo)">🗑</button>
+                                    </div>
                                   ))}
                                 </div>
                               ) : (
-                                <div className="flex flex-col gap-1">
-                                  <button onClick={() => aplicarPagoFondoDicotech(f.mes, dicoFondoTablaMensual.planMonto, "auto", `Plan MKT ${MESES_F[f.mes-1]}`)}
-                                          className="text-[10px] bg-emerald-600 text-white rounded px-2 py-1 hover:bg-emerald-700"
-                                          title="Toma del fondo cliente primero, del interno si no alcanza">
-                                    Auto split
-                                  </button>
-                                  <button onClick={() => aplicarPagoFondoDicotech(f.mes, dicoFondoTablaMensual.planMonto, "interno", `Plan MKT ${MESES_F[f.mes-1]} (manual interno)`)}
-                                          className="text-[10px] bg-purple-600 text-white rounded px-2 py-1 hover:bg-purple-700"
-                                          title="Tomar todo del fondo interno">
-                                    Solo Interno
-                                  </button>
-                                </div>
+                                <span className="text-[10px] text-gray-300">—</span>
                               )}
                             </td>
                           </tr>
@@ -3282,8 +3415,14 @@ export default function PagosCliente({ cliente, clienteKey }) {
                     </tbody>
                   </table>
                 </div>
-                <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                  💡 <strong>Auto split:</strong> usa el Fondo MKT Cliente primero y completa con el Fondo Interno si no alcanza. <strong>Solo Interno:</strong> descuenta todo del fondo interno (saldo puede ir negativo). El monto del plan MKT mensual se edita desde el panel de Lineamientos → fondo_mkt → plan_mkt_contratado.monto_mensual.
+                <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500 space-y-1">
+                  <p>💡 <strong>Esta tabla solo muestra los saldos.</strong> Para registrar un pago que descuente de los fondos, ve a <strong>"+ Nuevo registro"</strong> arriba y usa el selector <em>"¿De qué fondo sale el pago?"</em> al final del formulario. Ahí puedes:</p>
+                  <ul className="list-disc list-inside pl-2 space-y-0.5">
+                    <li><span className="text-emerald-700 font-semibold">Auto split</span> — toma del fondo cliente primero, completa con interno</li>
+                    <li><span className="text-emerald-600 font-semibold">Todo del cliente</span> / <span className="text-purple-600 font-semibold">Todo del interno</span> — atajos</li>
+                    <li>O escribir un monto específico en cada fondo (split a tu medida)</li>
+                  </ul>
+                  <p>Los movimientos quedan vinculados al pago vía <code className="bg-gray-100 px-1 rounded">pago_id</code> — si borras el pago, las aplicaciones se reverten automáticamente.</p>
                 </div>
               </div>
             </div>
