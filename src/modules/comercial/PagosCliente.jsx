@@ -820,6 +820,9 @@ export default function PagosCliente({ cliente, clienteKey }) {
     [lineamientos]
   );
   const [pcelOverrideRebate, setPcelOverrideRebate] = useState({1:"",2:"",3:"",4:""});
+  // Override independiente del Fondo MKT (igual que Rebate, para decidir
+  // si se le paga al cliente aunque no alcance la cuota del Q).
+  const [pcelOverrideFondo, setPcelOverrideFondo] = useState({1:"",2:"",3:"",4:""});
   const [pcelOverrideSpiff, setPcelOverrideSpiff] = useState({});
   const [pcelPagosReg, setPcelPagosReg] = useState([]);
   const [showPagoForm, setShowPagoForm] = useState(null);
@@ -3566,11 +3569,16 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   </thead>
                   <tbody>
                     {pcelCalc.quarterly.map((q, i) => {
-                      const isApproved = pcelOverrideRebate[q.q] === "approved";
+                      const isRebApproved = pcelOverrideRebate[q.q] === "approved";
+                      const isFondoApproved = pcelOverrideFondo[q.q] === "approved";
                       const meetsQuota = q.alcance >= 0.9;
-                      const shouldPay = q.sellIn > 0 && (meetsQuota || isApproved);
-                      const rebateAmt = shouldPay ? q.sellIn * q.rebatePct : 0;
-                      const fondoAmt = shouldPay ? q.fondoAmount : 0;
+                      // Cada concepto se aprueba por separado: si se alcanza
+                      // cuota → auto; si no → solo si el override correspondiente.
+                      const payRebate = q.sellIn > 0 && (meetsQuota || isRebApproved);
+                      const payFondo  = q.sellIn > 0 && (meetsQuota || isFondoApproved);
+                      const shouldPay = payRebate || payFondo;
+                      const rebateAmt = payRebate ? q.sellIn * q.rebatePct : 0;
+                      const fondoAmt  = payFondo ? q.fondoAmount : 0;
                       const pagoReg = pcelPagosReg.find(p => p.categoria === "rebate" && p.folio && p.folio.includes("Q" + q.q));
                       return (<React.Fragment key={i}>
                         <tr className={"border-b border-gray-100 " + (q.sellIn > 0 ? "hover:bg-gray-50" : "text-gray-300")}>
@@ -3578,13 +3586,26 @@ export default function PagosCliente({ cliente, clienteKey }) {
                           <td className="py-2 px-3 text-right text-gray-600">{q.sellIn > 0 ? "$" + Math.round(q.sellIn).toLocaleString("es-MX") : "—"}</td>
                           <td className="py-2 px-3 text-right text-gray-500">{q.cuota > 0 ? "$" + Math.round(q.cuota).toLocaleString("es-MX") : "—"}</td>
                           <td className="py-2 px-3 text-right">{q.sellIn > 0 ? <span className={"font-semibold " + (q.alcance >= 1.2 ? "text-green-600" : q.alcance >= 0.9 ? "text-blue-600" : "text-red-500")}>{(q.alcance * 100).toFixed(1)}%</span> : <span>—</span>}</td>
-                          <td className="py-2 px-3 text-right"><span className={"font-bold " + (shouldPay ? (isApproved && !meetsQuota ? "text-orange-600" : "text-blue-600") : "text-gray-300")}>{shouldPay ? "$" + Math.round(rebateAmt).toLocaleString("es-MX") + (!meetsQuota && isApproved ? " *" : "") : q.sellIn > 0 ? "$0" : "—"}</span></td>
-                          <td className="py-2 px-3 text-right text-emerald-600 font-bold">{shouldPay ? "$" + Math.round(fondoAmt).toLocaleString("es-MX") : q.sellIn > 0 ? "$0" : "—"}</td>
-                          <td className="py-1 px-2 text-center">{q.sellIn > 0 && !meetsQuota ? (
-                            <button onClick={() => setPcelOverrideRebate(prev => ({...prev, [q.q]: prev[q.q] === "approved" ? "" : "approved"}))} className={"px-3 py-1 rounded-full text-xs font-bold transition-all " + (isApproved ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-orange-100 hover:text-orange-600")}>{isApproved ? "Aprobado" : "Pagar"}</button>
-                          ) : q.sellIn > 0 && meetsQuota ? (
-                            <span className="text-xs text-green-500 font-semibold">✅</span>
-                          ) : null}</td>
+                          <td className="py-2 px-3 text-right"><span className={"font-bold " + (payRebate ? (isRebApproved && !meetsQuota ? "text-orange-600" : "text-blue-600") : "text-gray-300")}>{payRebate ? "$" + Math.round(rebateAmt).toLocaleString("es-MX") + (!meetsQuota && isRebApproved ? " *" : "") : q.sellIn > 0 ? "$0" : "—"}</span></td>
+                          <td className="py-2 px-3 text-right"><span className={"font-bold " + (payFondo ? (isFondoApproved && !meetsQuota ? "text-orange-600" : "text-emerald-600") : "text-gray-300")}>{payFondo ? "$" + Math.round(fondoAmt).toLocaleString("es-MX") + (!meetsQuota && isFondoApproved ? " *" : "") : q.sellIn > 0 ? "$0" : "—"}</span></td>
+                          <td className="py-1 px-2 text-center">
+                            {q.sellIn > 0 && meetsQuota ? (
+                              <span className="text-xs text-green-500 font-semibold" title="Auto-aprobado por cuota cumplida">✅ Cuota</span>
+                            ) : q.sellIn > 0 && !meetsQuota ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <button onClick={() => setPcelOverrideRebate(prev => ({...prev, [q.q]: prev[q.q] === "approved" ? "" : "approved"}))}
+                                  className={"px-2 py-0.5 rounded text-[10px] font-bold transition-all whitespace-nowrap " + (isRebApproved ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-blue-100 hover:text-blue-600")}
+                                  title="Aprobar/desaprobar pago de Rebate aunque no llegue a cuota">
+                                  {isRebApproved ? "✓ Rebate" : "💵 Rebate"}
+                                </button>
+                                <button onClick={() => setPcelOverrideFondo(prev => ({...prev, [q.q]: prev[q.q] === "approved" ? "" : "approved"}))}
+                                  className={"px-2 py-0.5 rounded text-[10px] font-bold transition-all whitespace-nowrap " + (isFondoApproved ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-emerald-100 hover:text-emerald-600")}
+                                  title="Aprobar/desaprobar pago de Fondo MKT aunque no llegue a cuota">
+                                  {isFondoApproved ? "✓ Fondo MKT" : "🎯 Fondo MKT"}
+                                </button>
+                              </div>
+                            ) : null}
+                          </td>
                           <td className="py-1 px-2 text-center">{shouldPay && !pagoReg ? (
                             <button onClick={() => setShowPagoForm(showPagoForm === "rebate-Q"+q.q ? null : "rebate-Q"+q.q)} className="px-2 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">+ Registrar</button>
                           ) : pagoReg ? (
@@ -3609,7 +3630,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       <td className="py-2 px-3 text-right font-bold text-gray-800">{"$" + Math.round(pcelCalc.totalSellIn).toLocaleString("es-MX")}</td>
                       <td className="py-2 px-3"></td><td className="py-2 px-3"></td>
                       <td className="py-2 px-3 text-right font-bold text-blue-600">{"$" + Math.round(pcelCalc.quarterly.reduce((s,q) => { const ok = q.alcance >= 0.9 || pcelOverrideRebate[q.q] === "approved"; return s + (q.sellIn > 0 && ok ? q.sellIn * q.rebatePct : 0); }, 0)).toLocaleString("es-MX")}</td>
-                      <td className="py-2 px-3 text-right font-bold text-emerald-600">{"$" + Math.round(pcelCalc.quarterly.reduce((s,q) => { const ok = q.alcance >= 0.9 || pcelOverrideRebate[q.q] === "approved"; return s + (q.sellIn > 0 && ok ? q.fondoAmount : 0); }, 0)).toLocaleString("es-MX")}</td>
+                      <td className="py-2 px-3 text-right font-bold text-emerald-600">{"$" + Math.round(pcelCalc.quarterly.reduce((s,q) => { const ok = q.alcance >= 0.9 || pcelOverrideFondo[q.q] === "approved"; return s + (q.sellIn > 0 && ok ? q.fondoAmount : 0); }, 0)).toLocaleString("es-MX")}</td>
                       <td></td><td></td>
                     </tr>
                   </tbody>
