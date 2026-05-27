@@ -2226,6 +2226,72 @@ function ExtrasPanel({ extras, personaActiva, canEdit, onAbrirModal, onBorrar })
 // ══════════════════════════════════════════════════════════════════════
 // ModalExtra — capturar/editar un extra
 // ══════════════════════════════════════════════════════════════════════
+// Selector de cliente con opción "personalizado" para escribir libre
+function ClienteSelector({ value, onChange }) {
+  const CLIENTES = ["Digitalife", "PCEL", "Dicotech"];
+  const isPredef = CLIENTES.includes(value);
+  // Si no es uno de los predefinidos y no está vacío, entonces es "personalizado"
+  const [custom, setCustom] = useState(!isPredef && !!value);
+  const sel = custom ? "__custom" : (value || "");
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Cliente involucrado</label>
+      <select
+        value={sel}
+        onChange={(e) => {
+          if (e.target.value === "__custom") { setCustom(true); onChange(""); }
+          else { setCustom(false); onChange(e.target.value); }
+        }}
+        className="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+        <option value="">— Selecciona —</option>
+        {CLIENTES.map((c) => <option key={c} value={c}>{c}</option>)}
+        <option value="__custom">✏️ Personalizado…</option>
+      </select>
+      {custom && (
+        <input type="text" autoFocus
+          value={value} onChange={(e) => onChange(e.target.value)}
+          placeholder="Escribe el cliente"
+          className="mt-2 w-full px-3 py-2 border rounded-lg text-sm" />
+      )}
+    </div>
+  );
+}
+
+// Selector de ubicación con opciones predefinidas + personalizado
+function UbicacionSelector({ value, onChange }) {
+  const UBICACIONES = [
+    { value: "GDL", label: "GDL — Guadalajara (local)" },
+    { value: "MTY", label: "MTY — Monterrey" },
+    { value: "AGS", label: "AGS — Aguascalientes" },
+    { value: "CDMX", label: "CDMX — Ciudad de México" },
+  ];
+  const isPredef = UBICACIONES.some((u) => u.value === value);
+  const [custom, setCustom] = useState(!isPredef && !!value);
+  const sel = custom ? "__custom" : (value || "");
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Ubicación</label>
+      <select
+        value={sel}
+        onChange={(e) => {
+          if (e.target.value === "__custom") { setCustom(true); onChange(""); }
+          else { setCustom(false); onChange(e.target.value); }
+        }}
+        className="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+        <option value="">— Selecciona —</option>
+        {UBICACIONES.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+        <option value="__custom">✏️ Personalizado…</option>
+      </select>
+      {custom && (
+        <input type="text" autoFocus
+          value={value} onChange={(e) => onChange(e.target.value)}
+          placeholder="Escribe la ubicación"
+          className="mt-2 w-full px-3 py-2 border rounded-lg text-sm" />
+      )}
+    </div>
+  );
+}
+
 function ModalExtra({ extra, personaActiva, creadoPor, onClose, onSaved }) {
   const esEdicion = !!extra;
   const hoy = new Date().toISOString().slice(0, 10);
@@ -2301,18 +2367,14 @@ function ModalExtra({ extra, personaActiva, creadoPor, onClose, onSaved }) {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Cliente involucrado</label>
-              <input type="text" value={form.cliente || ""} onChange={(e) => setForm({ ...form, cliente: e.target.value })}
-                placeholder="Digitalife / PCEL / Dicotech / otro"
-                className="w-full px-3 py-2 border rounded-lg text-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Ubicación</label>
-              <input type="text" value={form.ubicacion || ""} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })}
-                placeholder="GDL / MTY / AGS / CDMX..."
-                className="w-full px-3 py-2 border rounded-lg text-sm" />
-            </div>
+            <ClienteSelector
+              value={form.cliente || ""}
+              onChange={(v) => setForm({ ...form, cliente: v })}
+            />
+            <UbicacionSelector
+              value={form.ubicacion || ""}
+              onChange={(v) => setForm({ ...form, ubicacion: v })}
+            />
           </div>
 
           <div>
