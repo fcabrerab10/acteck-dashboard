@@ -92,6 +92,24 @@ const colorScore = (s) => {
   return "#EF4444";
 };
 
+// Catálogo de tipos de extras (monto base + si aplica modificador)
+const EXTRAS_TIPOS = {
+  visita_local:                { label: "🏢 Visita local GDL",            monto: 75,   aplicaModif: true  },
+  visita_foranea_sin_pernocta: { label: "✈️ Visita foránea ida-vuelta",     monto: 300,  aplicaModif: true  },
+  visita_foranea_con_pernocta: { label: "🏨 Visita foránea con pernocta", monto: 600,  aplicaModif: true  },
+  convencion:                  { label: "🎪 Convención / evento grande",   monto: 400,  aplicaModif: true  },
+  evento_comunidad:            { label: "👋 Evento comunidad (simbólico)", monto: 100,  aplicaModif: false },
+  capacitacion:                { label: "📚 Capacitación / curso",         monto: 150,  aplicaModif: false },
+};
+const EXTRAS_MODIF = {
+  supero:        { label: "🎯 Superó objetivos",   factor: 1.25, color: "#10B981" },
+  logro:         { label: "✓ Logró objetivos",     factor: 1.00, color: "#3B82F6" },
+  parcial:       { label: "⚠️ Logró parcialmente", factor: 0.75, color: "#F59E0B" },
+  no_logro:      { label: "✗ No logró",            factor: 0.50, color: "#EF4444" },
+  sin_objetivos: { label: "— Sin objetivos",       factor: 1.00, color: "#94A3B8" },
+  pendiente:     { label: "⏳ Pendiente",           factor: 1.00, color: "#94A3B8" },
+};
+
 // ────────── Componente principal ──────────
 export default function EvaluacionesPanel() {
   const perfil = usePerfil();
@@ -99,9 +117,11 @@ export default function EvaluacionesPanel() {
   const [internos, setInternos] = useState([]);
   const [personaActiva, setPersonaActiva] = useState(null);
   const [evaluaciones, setEvaluaciones] = useState([]);
+  const [extras, setExtras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [vistaActual, setVistaActual] = useState("evaluaciones"); // evaluaciones | propuestas | eventos
   const [modal, setModal] = useState(null);
+  const [modalExtra, setModalExtra] = useState(null);
 
   // Cargar perfiles internos
   useEffect(() => {
@@ -135,7 +155,17 @@ export default function EvaluacionesPanel() {
     setLoading(false);
   };
 
-  useEffect(() => { cargarEvaluaciones(personaActiva); }, [personaActiva]);
+  const cargarExtras = async (uid) => {
+    if (!uid) return;
+    const { data } = await supabase
+      .from("evaluacion_extras")
+      .select("*")
+      .eq("persona_user_id", uid)
+      .order("fecha", { ascending: false });
+    setExtras(data || []);
+  };
+
+  useEffect(() => { cargarEvaluaciones(personaActiva); cargarExtras(personaActiva); }, [personaActiva]);
 
   const personaInfo = useMemo(() => internos.find((p) => p.user_id === personaActiva), [internos, personaActiva]);
 
@@ -214,7 +244,13 @@ export default function EvaluacionesPanel() {
         // Bonus pts legacy (eventos, propuestas viejos) suman $50 por punto
         const sumBonus = cerradas.reduce((a, e) => a + Number(e.bonus_pts || 0), 0);
         bonoVariable += sumBonus * 50;
+        // Extras del mes (visitas, viajes, eventos, capacitaciones)
+        const extrasMes = extras.filter((x) => x.anio === row.anio && x.mes === row.mes);
+        const sumaExtras = extrasMes.reduce((a, x) => a + Number(x.monto_calculado || 0), 0);
+        bonoVariable += sumaExtras;
         row.bonoVariable = bonoVariable;
+        row.sumaExtras = sumaExtras;
+        row.extrasCount = extrasMes.length;
         // Techo absoluto $7,000 + piso $3,000 garantizado
         const TECHO = 7000;
         const PISO = 3000;
@@ -240,7 +276,7 @@ export default function EvaluacionesPanel() {
         : Math.round(3000 + (scoreMensual - 80) * 50);
     });
     return Object.values(m).sort((a, b) => `${b.anio}-${b.mes}`.localeCompare(`${a.anio}-${a.mes}`));
-  }, [evaluaciones, lineasPorEval]);
+  }, [evaluaciones, lineasPorEval, extras]);
 
   async function crearEvalEnFecha(fechaCualquiera) {
     if (!canEdit || !personaActiva) return;
@@ -373,14 +409,28 @@ export default function EvaluacionesPanel() {
 
       {/* CONTENIDO */}
       {vistaActual === "evaluaciones" && (
-        <ListaEvaluaciones
-          evaluaciones={evaluaciones}
-          resumenMensual={resumenMensual}
-          loading={loading}
-          canEdit={canEdit}
-          onAbrir={(id) => setModal({ evalId: id })}
-          onBorrar={borrarEval}
-        />
+        <>
+          <ListaEvaluaciones
+            evaluaciones={evaluaciones}
+            resumenMensual={resumenMensual}
+            loading={loading}
+            canEdit={canEdit}
+            onAbrir={(id) => setModal({ evalId: id })}
+            onBorrar={borrarEval}
+          />
+          {/* Extras del mes (visitas, viajes, eventos, capacitaciones) */}
+          <ExtrasPanel
+            extras={extras}
+            personaActiva={personaActiva}
+            canEdit={canEdit}
+            onAbrirModal={(extra) => setModalExtra(extra || { nuevo: true })}
+            onBorrar={async (id) => {
+              if (!window.confirm("¿Eliminar este extra?")) return;
+              await supabase.from("evaluacion_extras").delete().eq("id", id);
+              cargarExtras(personaActiva);
+            }}
+          />
+        </>
       )}
       {vistaActual === "propuestas" && (
         <PropuestasView personaActiva={personaActiva} canEdit={canEdit} esPropia={!canEdit} />
@@ -396,6 +446,17 @@ export default function EvaluacionesPanel() {
           canEdit={canEdit}
           personaActiva={personaActiva}
           onClose={() => { setModal(null); cargarEvaluaciones(personaActiva); }}
+        />
+      )}
+
+      {/* MODAL EXTRA (visita, viaje, evento, capacitación) */}
+      {modalExtra && (
+        <ModalExtra
+          extra={modalExtra.nuevo ? null : modalExtra}
+          personaActiva={personaActiva}
+          creadoPor={perfil?.user_id}
+          onClose={() => setModalExtra(null)}
+          onSaved={() => { setModalExtra(null); cargarExtras(personaActiva); }}
         />
       )}
 
@@ -502,7 +563,7 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
           <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
             <TrendingUp className="w-4 h-4 text-gray-600" />
             <h3 className="font-semibold text-gray-800">Resumen mensual</h3>
-            <span className="text-xs text-gray-500">Score = (Base prom × 0.8) + Suma de bonus del mes</span>
+            <span className="text-xs text-gray-500">Bono = MIN($7,000, MAX($3,000, suma KPIs + extras))</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -510,30 +571,36 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
                 <tr>
                   <th className="text-left px-4 py-2">Mes</th>
                   <th className="text-center px-3 py-2">Semanas</th>
-                  <th className="text-right px-3 py-2">Base prom</th>
-                  <th className="text-right px-3 py-2">Suma bonus</th>
-                  <th className="text-right px-3 py-2">Score mensual</th>
-                  <th className="text-right px-4 py-2">Bono</th>
+                  <th className="text-right px-3 py-2">$ KPIs</th>
+                  <th className="text-right px-3 py-2">$ Extras</th>
+                  <th className="text-right px-3 py-2">Score %</th>
+                  <th className="text-right px-4 py-2">Bono Final</th>
                 </tr>
               </thead>
               <tbody>
                 {resumenMensual.map((r) => {
                   const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+                  const dineroKpis = (r.bonoVariable || 0) - (r.sumaExtras || 0) - (r.sumaBonus || 0) * 50;
+                  const enTecho = r.bonoVariable > 7000;
+                  const enPiso = r.bonoVariable < 3000 && r.bonoVariable > 0;
                   return (
                     <tr key={`${r.anio}-${r.mes}`} className="border-t border-gray-100">
                       <td className="px-4 py-2.5 font-medium text-gray-800">{meses[r.mes - 1]} {r.anio}</td>
                       <td className="text-center px-3 py-2.5 text-gray-600">{r.evals.length}</td>
                       <td className="text-right px-3 py-2.5 text-gray-700 tabular-nums">
-                        {r.promedioBase != null ? r.promedioBase.toFixed(1) : "—"}
+                        {r.bonoVariable != null ? formatMXN(Math.max(0, Math.round(dineroKpis))) : "—"}
                       </td>
                       <td className="text-right px-3 py-2.5 text-amber-700 font-semibold tabular-nums">
-                        {r.promedioBase != null ? `+${r.sumaBonus.toFixed(1)}` : "—"}
+                        {r.sumaExtras > 0 ? `+${formatMXN(r.sumaExtras)}` : "—"}
+                        {r.extrasCount > 0 && <span className="text-[10px] text-gray-400 ml-1">({r.extrasCount})</span>}
                       </td>
                       <td className="text-right px-3 py-2.5 font-bold tabular-nums" style={{ color: colorScore(r.promedio) }}>
-                        {r.promedio != null ? r.promedio.toFixed(1) : "—"}
+                        {r.promedio != null ? r.promedio.toFixed(0) + "%" : "—"}
                       </td>
                       <td className="text-right px-4 py-2.5 font-bold text-emerald-700 tabular-nums">
                         {r.promedio != null ? formatMXN(r.bono) : "—"}
+                        {enTecho && <span className="text-[10px] text-orange-600 ml-1" title="Capeado al techo de $7,000">↑techo</span>}
+                        {enPiso && <span className="text-[10px] text-blue-600 ml-1" title="Piso garantizado de $3,000">↑piso</span>}
                       </td>
                     </tr>
                   );
@@ -1890,6 +1957,268 @@ function Field({ label, children }) {
     <div>
       <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
       {children}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ExtrasPanel — lista de visitas, viajes, eventos y capacitaciones
+// ══════════════════════════════════════════════════════════════════════
+function ExtrasPanel({ extras, personaActiva, canEdit, onAbrirModal, onBorrar }) {
+  // Agrupar por año-mes para mostrar como tabla con resumen mensual
+  const porMes = useMemo(() => {
+    const m = {};
+    extras.forEach((x) => {
+      const k = `${x.anio}-${String(x.mes).padStart(2,"0")}`;
+      if (!m[k]) m[k] = { anio: x.anio, mes: x.mes, items: [], total: 0 };
+      m[k].items.push(x);
+      m[k].total += Number(x.monto_calculado || 0);
+    });
+    return Object.values(m).sort((a, b) => `${b.anio}-${b.mes}`.localeCompare(`${a.anio}-${a.mes}`));
+  }, [extras]);
+
+  if (!personaActiva) return null;
+  const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+  return (
+    <div className="mt-5 bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-base">🎒</span>
+          <h3 className="font-semibold text-gray-800">Extras del mes (visitas, viajes, eventos)</h3>
+          <span className="text-xs text-gray-500">Suman al bono variable encima de los KPIs</span>
+        </div>
+        {canEdit && (
+          <button onClick={() => onAbrirModal(null)}
+            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1">
+            <Plus className="w-3.5 h-3.5" /> Registrar extra
+          </button>
+        )}
+      </div>
+      {porMes.length === 0 ? (
+        <div className="text-gray-400 text-sm p-6 text-center">
+          Sin extras registrados todavía. Click en "Registrar extra" para agregar una visita, viaje, evento o capacitación.
+        </div>
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {porMes.map((grp) => (
+            <div key={`${grp.anio}-${grp.mes}`}>
+              <div className="px-5 py-2 bg-amber-50 flex items-center justify-between">
+                <span className="text-sm font-semibold text-amber-900">{MESES[grp.mes-1]} {grp.anio}</span>
+                <span className="text-sm font-bold text-amber-700">+{formatMXN(grp.total)} <span className="text-xs font-normal text-amber-600">({grp.items.length} extra{grp.items.length>1?"s":""})</span></span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase">
+                    <tr>
+                      <th className="text-left px-4 py-1.5">Fecha</th>
+                      <th className="text-left px-3 py-1.5">Tipo</th>
+                      <th className="text-left px-3 py-1.5">Cliente / Lugar</th>
+                      <th className="text-left px-3 py-1.5">Objetivos</th>
+                      <th className="text-center px-3 py-1.5">Resultado</th>
+                      <th className="text-right px-3 py-1.5">Base</th>
+                      <th className="text-right px-3 py-1.5">×Mod</th>
+                      <th className="text-right px-3 py-1.5">Total</th>
+                      <th className="text-center px-3 py-1.5">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grp.items.map((x) => {
+                      const tipoInfo = EXTRAS_TIPOS[x.tipo] || { label: x.tipo };
+                      const modInfo = EXTRAS_MODIF[x.resultado] || EXTRAS_MODIF.pendiente;
+                      return (
+                        <tr key={x.id} className="border-t border-gray-100 hover:bg-gray-50/60">
+                          <td className="px-4 py-2 text-gray-700 whitespace-nowrap">{x.fecha}</td>
+                          <td className="px-3 py-2 text-gray-700">{tipoInfo.label}</td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {x.cliente && <strong>{x.cliente}</strong>}
+                            {x.cliente && x.ubicacion && " · "}
+                            {x.ubicacion && <span className="text-gray-500">{x.ubicacion}</span>}
+                            {!x.cliente && !x.ubicacion && <span className="text-gray-400">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate" title={x.objetivos || ""}>{x.objetivos || "—"}</td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="text-[10px] px-2 py-0.5 rounded font-medium" style={{ color: modInfo.color, backgroundColor: modInfo.color+"20" }}>
+                              {modInfo.label.split(" ")[0]}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-600 tabular-nums">{formatMXN(Number(x.monto_base))}</td>
+                          <td className="px-3 py-2 text-right text-gray-500 tabular-nums text-[10px]">×{Number(x.modificador).toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right font-bold text-emerald-700 tabular-nums">{formatMXN(Number(x.monto_calculado))}</td>
+                          <td className="px-3 py-2 text-center">
+                            {canEdit && (
+                              <div className="flex justify-center gap-1">
+                                <button onClick={() => onAbrirModal(x)} className="text-blue-600 hover:text-blue-800" title="Editar">✏️</button>
+                                <button onClick={() => onBorrar(x.id)} className="text-red-500 hover:text-red-700" title="Eliminar">🗑</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ModalExtra — capturar/editar un extra
+// ══════════════════════════════════════════════════════════════════════
+function ModalExtra({ extra, personaActiva, creadoPor, onClose, onSaved }) {
+  const esEdicion = !!extra;
+  const hoy = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState(extra || {
+    fecha: hoy, tipo: "visita_local", cliente: "", ubicacion: "",
+    objetivos: "", resultado: "pendiente", resultado_notas: "", notas: "",
+  });
+  const [guardando, setGuardando] = useState(false);
+
+  const tipoInfo = EXTRAS_TIPOS[form.tipo] || EXTRAS_TIPOS.visita_local;
+  const modifInfo = EXTRAS_MODIF[form.resultado] || EXTRAS_MODIF.pendiente;
+  // Si el tipo no aplica modificador (evento_comunidad, capacitacion), forzar a 1.0
+  const factorEfectivo = tipoInfo.aplicaModif ? modifInfo.factor : 1.0;
+  const montoCalculado = tipoInfo.monto * factorEfectivo;
+
+  const guardar = async () => {
+    if (!personaActiva) { alert("Selecciona una persona primero"); return; }
+    setGuardando(true);
+    const fecha = form.fecha || hoy;
+    const payload = {
+      persona_user_id: personaActiva,
+      fecha,
+      anio: Number(fecha.slice(0, 4)),
+      mes: Number(fecha.slice(5, 7)),
+      tipo: form.tipo,
+      cliente: form.cliente?.trim() || null,
+      ubicacion: form.ubicacion?.trim() || null,
+      objetivos: form.objetivos?.trim() || null,
+      resultado: form.resultado || "pendiente",
+      resultado_notas: form.resultado_notas?.trim() || null,
+      monto_base: tipoInfo.monto,
+      modificador: factorEfectivo,
+      monto_calculado: Math.round(montoCalculado * 100) / 100,
+      notas: form.notas?.trim() || null,
+      creado_por: creadoPor || null,
+    };
+    let res;
+    if (esEdicion) {
+      res = await supabase.from("evaluacion_extras").update(payload).eq("id", extra.id);
+    } else {
+      res = await supabase.from("evaluacion_extras").insert(payload);
+    }
+    setGuardando(false);
+    if (res.error) { alert("Error: " + res.error.message); return; }
+    onSaved?.();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-y-auto max-h-[92vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+            🎒 {esEdicion ? "Editar extra" : "Registrar extra"}
+          </h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Tipo de evento</label>
+              <select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+                {Object.entries(EXTRAS_TIPOS).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label} — {formatMXN(v.monto)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Fecha</label>
+              <input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg text-sm" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Cliente involucrado</label>
+              <input type="text" value={form.cliente || ""} onChange={(e) => setForm({ ...form, cliente: e.target.value })}
+                placeholder="Digitalife / PCEL / Dicotech / otro"
+                className="w-full px-3 py-2 border rounded-lg text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Ubicación</label>
+              <input type="text" value={form.ubicacion || ""} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })}
+                placeholder="GDL / MTY / AGS / CDMX..."
+                className="w-full px-3 py-2 border rounded-lg text-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Objetivos planteados</label>
+            <textarea value={form.objetivos || ""} onChange={(e) => setForm({ ...form, objetivos: e.target.value })}
+              placeholder="Ej: Cerrar acuerdo de surtido Q3 con Dicotech, revisar inventario, presentar nuevos productos..."
+              rows={2}
+              className="w-full px-3 py-2 border rounded-lg text-sm resize-y" />
+          </div>
+
+          {tipoInfo.aplicaModif && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Resultado (afecta monto)</label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {Object.entries(EXTRAS_MODIF).filter(([k]) => k !== "sin_objetivos").map(([k, v]) => (
+                  <button key={k} type="button" onClick={() => setForm({ ...form, resultado: k })}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium border-2 ${form.resultado === k ? "border-current" : "border-transparent bg-gray-50 hover:bg-gray-100"}`}
+                    style={form.resultado === k ? { color: v.color, backgroundColor: v.color+"15" } : {}}>
+                    {v.label} <span className="text-[10px]">×{v.factor}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {!tipoInfo.aplicaModif && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600">
+              ℹ️ Este tipo de evento ({tipoInfo.label}) no aplica modificador — siempre paga el monto base.
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Notas del resultado</label>
+            <input type="text" value={form.resultado_notas || ""} onChange={(e) => setForm({ ...form, resultado_notas: e.target.value })}
+              placeholder="Qué pasó realmente (opcional)"
+              className="w-full px-3 py-2 border rounded-lg text-sm" />
+          </div>
+
+          {/* Preview del cálculo */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+            <div className="flex items-center justify-between text-xs text-emerald-800">
+              <span>Monto base ({tipoInfo.label.split(" ").slice(1).join(" ")})</span>
+              <span className="font-mono">{formatMXN(tipoInfo.monto)}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-emerald-800">
+              <span>Modificador {tipoInfo.aplicaModif ? `(${modifInfo.label})` : "(no aplica)"}</span>
+              <span className="font-mono">× {factorEfectivo.toFixed(2)}</span>
+            </div>
+            <div className="border-t border-emerald-300 my-1.5"></div>
+            <div className="flex items-center justify-between font-bold text-emerald-900">
+              <span>Monto que suma al bono</span>
+              <span className="text-lg">{formatMXN(montoCalculado)}</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm hover:bg-gray-100">Cancelar</button>
+          <button onClick={guardar} disabled={guardando}
+            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-semibold">
+            {guardando ? "Guardando..." : esEdicion ? "Guardar cambios" : "Registrar extra"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
