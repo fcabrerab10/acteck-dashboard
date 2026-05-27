@@ -275,11 +275,10 @@ export default function EvaluacionesPanel() {
           dineroPorKpi[kpiId] = { dinero, promedioPct, valor_pesos: info.valor_pesos };
           bonoVariable += dinero;
         }
-        // Bonus pts del mes (modelo v2 — ya NO usamos evaluacion.bonus_pts
-        // legacy que tenía valores heredados del sistema viejo y duplicaba
-        // el conteo):
-        //   1) Propuestas implementadas (bonus_pts_aplicado) en el rango del mes
-        //   2) Eventos vinculados a evaluaciones cerradas del mes (bonus_pts)
+        // Bono variable = KPIs + extras. Las propuestas implementadas ya
+        // se reflejan en el KPI "Calidad de propuestas armadas" — no se
+        // suman aparte para evitar doble conteo. Se mantienen los counts
+        // para mostrar info, pero no afectan el monto del bono.
         const mesIni = `${row.anio}-${String(row.mes).padStart(2, "0")}-01`;
         const mesFin = `${row.anio}-${String(row.mes).padStart(2, "0")}-31`;
         const propsMes = propuestasMes.filter((p) => {
@@ -290,17 +289,13 @@ export default function EvaluacionesPanel() {
           const f = (e.fecha || "").slice(0, 10);
           return f >= mesIni && f <= mesFin;
         });
-        const sumPropuestas = propsMes.reduce((a, p) => a + Number(p.bonus_pts_aplicado || 0), 0);
-        const sumEventos = evtsMes.reduce((a, e) => a + Number(e.bonus_pts || 0), 0);
-        const sumBonus = sumPropuestas + sumEventos;
-        bonoVariable += sumBonus * 50;
         // Extras del mes (visitas, viajes, eventos, capacitaciones)
         const extrasMes = extras.filter((x) => x.anio === row.anio && x.mes === row.mes);
         const sumaExtras = extrasMes.reduce((a, x) => a + Number(x.monto_calculado || 0), 0);
         bonoVariable += sumaExtras;
         row.bonoVariable = bonoVariable;
         row.sumaExtras = sumaExtras;
-        row.sumaBonus = sumBonus;
+        row.sumaBonus = 0;  // Ya no suma al bono — solo informativo
         row.extrasCount = extrasMes.length;
         row.propuestasCount = propsMes.length;
         row.eventosCount = evtsMes.length;
@@ -1187,7 +1182,7 @@ function SeccionKPIs({ seccion, kpis, lineas, ptsObtenidos, propuestas, editable
           <div className="font-semibold text-gray-800">{seccion.label}</div>
           <div className="text-xs text-gray-500">
             {esPropuestas ? (
-              <>{propCount} propuesta{propCount !== 1 ? "s" : ""} en la semana · cada pt suma $50 al bono mensual</>
+              <>{propCount} propuesta{propCount !== 1 ? "s" : ""} en la semana · informativo (su calidad ya se refleja en el KPI "Calidad de propuestas")</>
             ) : (
               <>{kpis.length} KPI{kpis.length !== 1 ? "s" : ""} · máx {seccion.pts} pts {seccion.auto && "· Auto-calc disponible"}</>
             )}
@@ -1201,7 +1196,7 @@ function SeccionKPIs({ seccion, kpis, lineas, ptsObtenidos, propuestas, editable
         <div className="text-right">
           <div className="text-sm font-bold tabular-nums" style={{ color: seccion.color }}>
             {esPropuestas
-              ? <>+{ptsObtenidos.toFixed(1)} pts <span className="text-[10px] font-normal text-gray-500">= +{formatMXN(ptsObtenidos * 50)}</span></>
+              ? <>{ptsObtenidos.toFixed(1)} pts <span className="text-[10px] font-normal text-gray-500">(informativo)</span></>
               : <>{ptsObtenidos.toFixed(1)} / {pesoAplicable || seccion.pts}</>
             }
           </div>
@@ -1215,7 +1210,7 @@ function SeccionKPIs({ seccion, kpis, lineas, ptsObtenidos, propuestas, editable
             <div className="bg-pink-50/50 px-4 py-3 border-b border-pink-100 text-xs text-pink-900">
               <div className="flex items-center gap-1 mb-2">
                 <Lightbulb className="w-3.5 h-3.5" />
-                <strong>{propuestas?.length || 0} propuesta{propuestas?.length !== 1 ? "s" : ""}</strong> registrada{propuestas?.length !== 1 ? "s" : ""} en la semana. Asigna pts directamente (cada pt = $50 al bono mensual):
+                <strong>{propuestas?.length || 0} propuesta{propuestas?.length !== 1 ? "s" : ""}</strong> registrada{propuestas?.length !== 1 ? "s" : ""} en la semana. Los pts son informativos para histórico (la calidad ya se refleja en el KPI "Calidad de propuestas"):
               </div>
               {propuestas?.length > 0 && (
                 <div className="space-y-1.5">
@@ -1280,7 +1275,7 @@ function PropuestaRow({ prop, editable }) {
             <input type="number" min="0" step="0.5"
               value={pts} onChange={(e) => setPts(e.target.value)}
               className="w-14 px-1.5 py-1 text-xs border border-pink-300 rounded text-right" />
-            <span className="text-[10px] text-gray-500">pts = ${(Number(pts) || 0) * 50}</span>
+            <span className="text-[10px] text-gray-500">pts (informativo)</span>
           </div>
           <button onClick={guardar} disabled={!cambioPendiente || saving}
             className={`text-[10px] px-2 py-1 rounded ${cambioPendiente ? "bg-pink-600 text-white hover:bg-pink-700" : "bg-gray-100 text-gray-400"} disabled:opacity-50`}>
@@ -2498,17 +2493,10 @@ function ModalExportarMes({ row, personaInfo, evaluaciones, extras, onClose }) {
         lines.push(`      - ${x.fecha}: ${partes.join(" · ")} → ${formatMXN(Number(x.monto_calculado))}`);
       });
     }
-    if (row.sumaBonus > 0) {
-      const bonusTotal = row.sumaBonus * 50;
-      const detalle = [];
-      if (row.propuestasCount > 0) detalle.push(`${row.propuestasCount} propuesta${row.propuestasCount>1?"s":""} implementada${row.propuestasCount>1?"s":""}`);
-      if (row.eventosCount > 0) detalle.push(`${row.eventosCount} evento${row.eventosCount>1?"s":""}`);
-      lines.push(`  • Bonus por iniciativas (${row.sumaBonus.toFixed(1)} pts × $50)${detalle.length?" — "+detalle.join(" + "):""}: +${formatMXN(bonusTotal)}`);
+    if (row.propuestasCount > 0) {
+      lines.push(`  • Propuestas implementadas en el mes: ${row.propuestasCount} (su calidad ya se refleja en el KPI 'Calidad de propuestas')`);
       (row.propsMes || []).forEach((p) => {
-        lines.push(`      - Propuesta: ${(p.descripcion || "").slice(0, 90)}${p.descripcion?.length>90?"...":""} → +${p.bonus_pts_aplicado} pts`);
-      });
-      (row.evtsMes || []).forEach((e) => {
-        lines.push(`      - Evento ${e.fecha}: ${(e.descripcion || "").slice(0,80)} → +${e.bonus_pts} pts`);
+        lines.push(`      - ${(p.descripcion || "").slice(0, 100)}${p.descripcion?.length>100?"...":""}`);
       });
     }
     lines.push("");
