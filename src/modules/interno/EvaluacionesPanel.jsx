@@ -183,7 +183,7 @@ export default function EvaluacionesPanel() {
     (async () => {
       const ids = evaluaciones.map((e) => e.id);
       const { data } = await supabase.from("evaluacion_lineas")
-        .select("evaluacion_id, kpi_id, valor, valor_pesos_aplicado, peso_aplicado")
+        .select("evaluacion_id, kpi_id, calificacion, valor_pesos_aplicado, peso_aplicado, no_aplica")
         .in("evaluacion_id", ids);
       const byEval = {};
       (data || []).forEach((l) => {
@@ -211,12 +211,21 @@ export default function EvaluacionesPanel() {
       const lineasMes = cerradas.flatMap((e) => lineasPorEval[e.id] || []);
       const tieneValorPesos = lineasMes.some((l) => Number(l.valor_pesos_aplicado) > 0);
       if (tieneValorPesos) {
+        // Convierte calificación (1-5 estrellas) a porcentaje:
+        //   1★=0% · 2★=25% · 3★=50% · 4★=75% · 5★=100%
+        const calToPct = (cal) => {
+          const n = Number(cal);
+          if (!n || n < 1) return 0;
+          if (n >= 5) return 100;
+          return (n - 1) * 25;
+        };
         const porKpi = {};
         lineasMes.forEach((l) => {
           if (!l.valor_pesos_aplicado) return;
+          if (l.no_aplica) return; // N/A: no afecta promedio
           const k = l.kpi_id;
           if (!porKpi[k]) porKpi[k] = { sum: 0, count: 0, valor_pesos: Number(l.valor_pesos_aplicado) };
-          porKpi[k].sum += Number(l.valor || 0);
+          porKpi[k].sum += calToPct(l.calificacion);
           porKpi[k].count++;
         });
         let bonoVariable = 0;
@@ -304,17 +313,24 @@ export default function EvaluacionesPanel() {
     const { data: kpis } = await supabase.from("evaluaciones_kpis_template")
       .select("id, peso, valor_pesos").eq("activo", true);
     if (kpis?.length) {
-      // valor=100 por default → todo cumplido al 100%, el evaluador solo
-      // baja los que no cumplieron. Pre-rellenado para que sea rápido.
-      await supabase.from("evaluacion_lineas").insert(
+      // calificacion=5 (excelente) por default → todo cumplido al 100%.
+      // El evaluador solo baja la calificación de los KPIs que no se
+      // cumplieron. Cada estrella vale 25%:
+      //   1★=0% · 2★=25% · 3★=50% · 4★=75% · 5★=100%
+      const { error: insErr } = await supabase.from("evaluacion_lineas").insert(
         kpis.map((k) => ({
           evaluacion_id: data.id,
           kpi_id: k.id,
           peso_aplicado: k.peso,
           valor_pesos_aplicado: k.valor_pesos || 0,
-          valor: 100,
+          calificacion: 5,
+          auto_sugerido: 100,
         }))
       );
+      if (insErr) {
+        console.error("Error creando líneas:", insErr);
+        toast.error("Líneas no se crearon: " + insErr.message);
+      }
     }
     toast.success("Evaluación creada");
     cargarEvaluaciones(personaActiva);
