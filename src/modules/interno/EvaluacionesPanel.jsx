@@ -653,10 +653,27 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
                   const dineroKpis = (r.bonoVariable || 0) - (r.sumaExtras || 0) - (r.sumaBonus || 0) * 50;
                   const enTecho = r.bonoVariable > 8000;
                   const enPiso = r.bonoVariable < 3000 && r.bonoVariable > 0;
+                  // ¿El mes está completo? Compara contra fecha actual y nº de
+                  // semanas esperadas (~4-5 por mes natural).
+                  const hoy = new Date();
+                  const mesActual = hoy.getMonth() + 1;
+                  const anioActual = hoy.getFullYear();
+                  const esMesActual = r.anio === anioActual && r.mes === mesActual;
+                  const esFuturo = r.anio > anioActual || (r.anio === anioActual && r.mes > mesActual);
+                  // Estimar semanas esperadas: ~4.3 por mes
+                  const ultDiaMes = new Date(r.anio, r.mes, 0).getDate();
+                  const semanasEsperadas = Math.ceil(ultDiaMes / 7);
+                  const parcial = !esFuturo && r.evals.length < semanasEsperadas;
                   return (
                     <tr key={`${r.anio}-${r.mes}`} className="border-t border-gray-100">
-                      <td className="px-4 py-2.5 font-medium text-gray-800">{meses[r.mes - 1]} {r.anio}</td>
-                      <td className="text-center px-3 py-2.5 text-gray-600">{r.evals.length}</td>
+                      <td className="px-4 py-2.5 font-medium text-gray-800">
+                        {meses[r.mes - 1]} {r.anio}
+                        {esMesActual && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold">EN CURSO</span>}
+                        {parcial && !esMesActual && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">PARCIAL</span>}
+                      </td>
+                      <td className="text-center px-3 py-2.5 text-gray-600">
+                        {r.evals.length}{(parcial || esMesActual) ? ` / ${semanasEsperadas}` : ""}
+                      </td>
                       {canEdit && (
                         <td className="text-right px-3 py-2.5 text-gray-700 tabular-nums">
                           {r.bonoVariable != null ? formatMXN(Math.max(0, Math.round(dineroKpis))) : "—"}
@@ -673,7 +690,8 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
                       </td>
                       <td className="text-right px-4 py-2.5 font-bold text-emerald-700 tabular-nums">
                         {r.promedio != null ? formatMXN(r.bono) : "—"}
-                        {canEdit && enTecho && <span className="text-[10px] text-orange-600 ml-1" title="Capeado al techo de $7,000">↑techo</span>}
+                        {(parcial || esMesActual) && <div className="text-[9px] text-amber-600 font-normal italic">hasta ahora</div>}
+                        {canEdit && enTecho && <span className="text-[10px] text-orange-600 ml-1" title="Capeado al techo de $8,000">↑techo</span>}
                         {canEdit && enPiso && <span className="text-[10px] text-blue-600 ml-1" title="Piso garantizado de $3,000">↑piso</span>}
                       </td>
                       {canEdit && (
