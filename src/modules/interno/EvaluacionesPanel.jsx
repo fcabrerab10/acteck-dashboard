@@ -94,12 +94,12 @@ const colorScore = (s) => {
 
 // Catálogo de tipos de extras (monto base + si aplica modificador)
 const EXTRAS_TIPOS = {
-  visita_local:                { label: "🏢 Visita local GDL",            monto: 75,   aplicaModif: true  },
-  visita_foranea_sin_pernocta: { label: "✈️ Visita foránea ida-vuelta",     monto: 300,  aplicaModif: true  },
-  visita_foranea_con_pernocta: { label: "🏨 Visita foránea con pernocta", monto: 600,  aplicaModif: true  },
-  convencion:                  { label: "🎪 Convención / evento grande",   monto: 400,  aplicaModif: true  },
-  evento_comunidad:            { label: "👋 Evento comunidad (simbólico)", monto: 100,  aplicaModif: false },
-  capacitacion:                { label: "📚 Capacitación / curso",         monto: 150,  aplicaModif: false },
+  visita_local:                { label: "🏢 Visita local GDL",            monto: 40,   aplicaModif: true  },
+  visita_foranea_sin_pernocta: { label: "✈️ Visita foránea ida-vuelta",     monto: 200,  aplicaModif: true  },
+  visita_foranea_con_pernocta: { label: "🏨 Visita foránea con pernocta", monto: 400,  aplicaModif: true  },
+  convencion:                  { label: "🎪 Convención / evento grande",   monto: 250,  aplicaModif: true  },
+  evento_comunidad:            { label: "👋 Evento comunidad (simbólico)", monto: 50,   aplicaModif: false },
+  capacitacion:                { label: "📚 Capacitación / curso",         monto: 100,  aplicaModif: false },
 };
 const EXTRAS_MODIF = {
   supero:        { label: "🎯 Superó objetivos",   factor: 1.25, color: "#10B981" },
