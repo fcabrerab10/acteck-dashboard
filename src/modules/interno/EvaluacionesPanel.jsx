@@ -433,6 +433,7 @@ export default function EvaluacionesPanel() {
             canEdit={canEdit}
             onAbrir={(id) => setModal({ evalId: id })}
             onBorrar={borrarEval}
+            onExportar={(row) => setModal({ tipo: "exportarMes", row })}
           />
           {/* Extras del mes (visitas, viajes, eventos, capacitaciones) */}
           <ExtrasPanel
@@ -462,6 +463,17 @@ export default function EvaluacionesPanel() {
           canEdit={canEdit}
           personaActiva={personaActiva}
           onClose={() => { setModal(null); cargarEvaluaciones(personaActiva); }}
+        />
+      )}
+
+      {/* MODAL EXPORTAR MES (texto pre-formateado para correo) */}
+      {modal?.tipo === "exportarMes" && modal.row && (
+        <ModalExportarMes
+          row={modal.row}
+          personaInfo={personaInfo}
+          evaluaciones={evaluaciones.filter((e) => e.anio === modal.row.anio && e.mes === modal.row.mes)}
+          extras={extras.filter((x) => x.anio === modal.row.anio && x.mes === modal.row.mes)}
+          onClose={() => setModal(null)}
         />
       )}
 
@@ -568,7 +580,7 @@ function ModalSelectorSemana({ evaluaciones, onClose, onElegir }) {
 }
 
 // ────────── Lista evaluaciones + resumen mensual ──────────
-function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onAbrir, onBorrar }) {
+function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onAbrir, onBorrar, onExportar }) {
   if (loading) return <div className="text-gray-400 text-sm p-6">Cargando…</div>;
 
   return (
@@ -576,10 +588,15 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
       {/* Resumen mensual */}
       {resumenMensual.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
-            <TrendingUp className="w-4 h-4 text-gray-600" />
-            <h3 className="font-semibold text-gray-800">Resumen mensual</h3>
-            <span className="text-xs text-gray-500">Bono = MIN($7,000, MAX($3,000, suma KPIs + extras))</span>
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <TrendingUp className="w-4 h-4 text-gray-600" />
+              <h3 className="font-semibold text-gray-800">Resumen mensual</h3>
+              {/* La fórmula con techo/piso solo es visible para super_admin */}
+              {canEdit && (
+                <span className="text-xs text-gray-500">Bono = MIN($7,000, MAX($3,000, suma KPIs + extras))</span>
+              )}
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -587,10 +604,11 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
                 <tr>
                   <th className="text-left px-4 py-2">Mes</th>
                   <th className="text-center px-3 py-2">Semanas</th>
-                  <th className="text-right px-3 py-2">$ KPIs</th>
-                  <th className="text-right px-3 py-2">$ Extras</th>
+                  {canEdit && <th className="text-right px-3 py-2">$ KPIs</th>}
+                  {canEdit && <th className="text-right px-3 py-2">$ Extras</th>}
                   <th className="text-right px-3 py-2">Score %</th>
-                  <th className="text-right px-4 py-2">Bono Final</th>
+                  <th className="text-right px-4 py-2">{canEdit ? "Bono Final" : "Generado"}</th>
+                  {canEdit && <th className="text-center px-3 py-2">Exportar</th>}
                 </tr>
               </thead>
               <tbody>
@@ -603,21 +621,34 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
                     <tr key={`${r.anio}-${r.mes}`} className="border-t border-gray-100">
                       <td className="px-4 py-2.5 font-medium text-gray-800">{meses[r.mes - 1]} {r.anio}</td>
                       <td className="text-center px-3 py-2.5 text-gray-600">{r.evals.length}</td>
-                      <td className="text-right px-3 py-2.5 text-gray-700 tabular-nums">
-                        {r.bonoVariable != null ? formatMXN(Math.max(0, Math.round(dineroKpis))) : "—"}
-                      </td>
-                      <td className="text-right px-3 py-2.5 text-amber-700 font-semibold tabular-nums">
-                        {r.sumaExtras > 0 ? `+${formatMXN(r.sumaExtras)}` : "—"}
-                        {r.extrasCount > 0 && <span className="text-[10px] text-gray-400 ml-1">({r.extrasCount})</span>}
-                      </td>
+                      {canEdit && (
+                        <td className="text-right px-3 py-2.5 text-gray-700 tabular-nums">
+                          {r.bonoVariable != null ? formatMXN(Math.max(0, Math.round(dineroKpis))) : "—"}
+                        </td>
+                      )}
+                      {canEdit && (
+                        <td className="text-right px-3 py-2.5 text-amber-700 font-semibold tabular-nums">
+                          {r.sumaExtras > 0 ? `+${formatMXN(r.sumaExtras)}` : "—"}
+                          {r.extrasCount > 0 && <span className="text-[10px] text-gray-400 ml-1">({r.extrasCount})</span>}
+                        </td>
+                      )}
                       <td className="text-right px-3 py-2.5 font-bold tabular-nums" style={{ color: colorScore(r.promedio) }}>
                         {r.promedio != null ? r.promedio.toFixed(0) + "%" : "—"}
                       </td>
                       <td className="text-right px-4 py-2.5 font-bold text-emerald-700 tabular-nums">
                         {r.promedio != null ? formatMXN(r.bono) : "—"}
-                        {enTecho && <span className="text-[10px] text-orange-600 ml-1" title="Capeado al techo de $7,000">↑techo</span>}
-                        {enPiso && <span className="text-[10px] text-blue-600 ml-1" title="Piso garantizado de $3,000">↑piso</span>}
+                        {canEdit && enTecho && <span className="text-[10px] text-orange-600 ml-1" title="Capeado al techo de $7,000">↑techo</span>}
+                        {canEdit && enPiso && <span className="text-[10px] text-blue-600 ml-1" title="Piso garantizado de $3,000">↑piso</span>}
                       </td>
+                      {canEdit && (
+                        <td className="text-center px-3 py-2.5">
+                          <button onClick={() => onExportar?.(r)}
+                                  className="px-2 py-1 rounded text-[11px] font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 flex items-center gap-1 mx-auto"
+                                  title="Exportar resumen para correo de pago de bono">
+                            <FileText className="w-3 h-3" /> Exportar
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -2032,10 +2063,10 @@ function ExtrasPanel({ extras, personaActiva, canEdit, onAbrirModal, onBorrar })
                       <th className="text-left px-3 py-1.5">Cliente / Lugar</th>
                       <th className="text-left px-3 py-1.5">Objetivos</th>
                       <th className="text-center px-3 py-1.5">Resultado</th>
-                      <th className="text-right px-3 py-1.5">Base</th>
-                      <th className="text-right px-3 py-1.5">×Mod</th>
-                      <th className="text-right px-3 py-1.5">Total</th>
-                      <th className="text-center px-3 py-1.5">Acción</th>
+                      {canEdit && <th className="text-right px-3 py-1.5">Base</th>}
+                      {canEdit && <th className="text-right px-3 py-1.5">×Mod</th>}
+                      <th className="text-right px-3 py-1.5">{canEdit ? "Total" : "Ganado"}</th>
+                      {canEdit && <th className="text-center px-3 py-1.5">Acción</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -2058,17 +2089,17 @@ function ExtrasPanel({ extras, personaActiva, canEdit, onAbrirModal, onBorrar })
                               {modInfo.label.split(" ")[0]}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-right text-gray-600 tabular-nums">{formatMXN(Number(x.monto_base))}</td>
-                          <td className="px-3 py-2 text-right text-gray-500 tabular-nums text-[10px]">×{Number(x.modificador).toFixed(2)}</td>
+                          {canEdit && <td className="px-3 py-2 text-right text-gray-600 tabular-nums">{formatMXN(Number(x.monto_base))}</td>}
+                          {canEdit && <td className="px-3 py-2 text-right text-gray-500 tabular-nums text-[10px]">×{Number(x.modificador).toFixed(2)}</td>}
                           <td className="px-3 py-2 text-right font-bold text-emerald-700 tabular-nums">{formatMXN(Number(x.monto_calculado))}</td>
-                          <td className="px-3 py-2 text-center">
-                            {canEdit && (
+                          {canEdit && (
+                            <td className="px-3 py-2 text-center">
                               <div className="flex justify-center gap-1">
                                 <button onClick={() => onAbrirModal(x)} className="text-blue-600 hover:text-blue-800" title="Editar">✏️</button>
                                 <button onClick={() => onBorrar(x.id)} className="text-red-500 hover:text-red-700" title="Eliminar">🗑</button>
                               </div>
-                            )}
-                          </td>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -2233,6 +2264,107 @@ function ModalExtra({ extra, personaActiva, creadoPor, onClose, onSaved }) {
             className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-semibold">
             {guardando ? "Guardando..." : esEdicion ? "Guardar cambios" : "Registrar extra"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ModalExportarMes — resumen mensual exportable para correo
+// ══════════════════════════════════════════════════════════════════════
+function ModalExportarMes({ row, personaInfo, evaluaciones, extras, onClose }) {
+  const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const mesNombre = MESES[row.mes - 1];
+  const nombre = personaInfo?.nombre || "—";
+
+  // Construir el texto formateado del correo
+  const texto = useMemo(() => {
+    const lines = [];
+    lines.push(`Resumen mensual de desempeño — ${nombre}`);
+    lines.push(`Periodo: ${mesNombre} ${row.anio}`);
+    lines.push("");
+    lines.push(`Semanas evaluadas: ${evaluaciones.length}`);
+    lines.push(`Score mensual: ${row.promedio != null ? row.promedio.toFixed(0) + "%" : "—"}`);
+    lines.push("");
+    lines.push("Detalle:");
+    const dineroKpis = Math.max(0, Math.round((row.bonoVariable || 0) - (row.sumaExtras || 0) - (row.sumaBonus || 0) * 50));
+    lines.push(`  • KPIs (18 indicadores en 6 secciones): ${formatMXN(dineroKpis)}`);
+    if (row.sumaExtras > 0) {
+      lines.push(`  • Extras (${row.extrasCount} eventos): +${formatMXN(row.sumaExtras)}`);
+      extras.forEach((x) => {
+        const tipoLbl = (EXTRAS_TIPOS[x.tipo]?.label || x.tipo).replace(/^[^ ]+ /, ""); // sin emoji
+        const partes = [tipoLbl];
+        if (x.cliente) partes.push(x.cliente);
+        if (x.ubicacion) partes.push(x.ubicacion);
+        lines.push(`      - ${x.fecha}: ${partes.join(" · ")} → ${formatMXN(Number(x.monto_calculado))}`);
+      });
+    }
+    if (row.sumaBonus > 0) {
+      lines.push(`  • Bonus extras legacy (${row.sumaBonus.toFixed(1)} pts × $50): +${formatMXN(row.sumaBonus * 50)}`);
+    }
+    lines.push("");
+    lines.push(`Bono a pagar: ${formatMXN(row.bono)}`);
+    lines.push("");
+    lines.push(`Sin más por el momento, quedo atento.`);
+    return lines.join("\n");
+  }, [row, evaluaciones, extras, nombre, mesNombre]);
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(texto);
+      toast.success("Resumen copiado al portapapeles");
+    } catch {
+      toast.error("No se pudo copiar — selecciona y copia manualmente");
+    }
+  };
+
+  const descargar = () => {
+    const blob = new Blob([texto], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Resumen_${nombre.replace(/\s+/g, "_")}_${mesNombre}_${row.anio}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-y-auto max-h-[92vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+            <FileText className="w-5 h-5" /> Exportar resumen — {mesNombre} {row.anio}
+          </h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-xs text-gray-500">
+            Texto listo para copiar y pegar en el correo de autorización de pago de bono. Puedes editar antes de enviar.
+          </p>
+          <textarea
+            value={texto}
+            readOnly
+            rows={Math.min(20, texto.split("\n").length + 1)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono bg-gray-50 resize-y"
+          />
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="text-xs text-gray-500">
+              Total bono: <strong className="text-emerald-700">{formatMXN(row.bono)}</strong> ·
+              KPIs: {formatMXN(Math.max(0, Math.round((row.bonoVariable || 0) - (row.sumaExtras || 0) - (row.sumaBonus || 0) * 50)))} ·
+              Extras: {row.sumaExtras > 0 ? `+${formatMXN(row.sumaExtras)}` : "—"}
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={descargar} className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm font-semibold flex items-center gap-1">
+                <Save className="w-4 h-4" /> Descargar .txt
+              </button>
+              <button onClick={copiar} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center gap-1">
+                <FileText className="w-4 h-4" /> Copiar al portapapeles
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
