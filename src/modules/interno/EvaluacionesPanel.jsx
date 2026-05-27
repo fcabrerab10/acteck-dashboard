@@ -177,7 +177,7 @@ export default function EvaluacionesPanel() {
         row.promedio = null; row.bono = 0; row.sumaBonus = 0; row.promedioBase = null; row.bonoVariable = 0;
         return;
       }
-      // ── Modelo nuevo: cada KPI suma dinero ──
+      // ── Modelo nuevo v2: cada KPI suma dinero ──
       const lineasMes = cerradas.flatMap((e) => lineasPorEval[e.id] || []);
       const tieneValorPesos = lineasMes.some((l) => Number(l.valor_pesos_aplicado) > 0);
       if (tieneValorPesos) {
@@ -193,19 +193,37 @@ export default function EvaluacionesPanel() {
         const dineroPorKpi = {};
         for (const [kpiId, info] of Object.entries(porKpi)) {
           const promedioPct = info.count > 0 ? info.sum / info.count : 0;
-          const dinero = (promedioPct / 100) * info.valor_pesos;
+          // KPI especial "cuotas_cumplidas": escala con techo $1,200.
+          //   <70% → $0 · 70-100% lineal hasta $valor_pesos · 100-130% lineal
+          //   hasta $1,200 · >130% → $1,200.
+          // Para el resto: lineal simple (% × valor_pesos).
+          // El kpi_codigo se infiere por valor_pesos === 700 (single source). En la UI ya tenemos kpi_codigo, aquí no lo tenemos sin extra fetch — usamos heurística: si valor_pesos = 700 y promedioPct va arriba del 100%, aplicamos escala.
+          let dinero = 0;
+          if (info.valor_pesos === 700) {
+            // Asume cuotas_cumplidas (único KPI con valor exactamente $700)
+            if (promedioPct < 70) dinero = 0;
+            else if (promedioPct <= 100) dinero = (promedioPct - 70) * (700 / 30); // 70→0, 100→700
+            else if (promedioPct <= 130) dinero = 700 + (promedioPct - 100) * (500 / 30); // 100→700, 130→1200
+            else dinero = 1200;
+          } else {
+            dinero = (promedioPct / 100) * info.valor_pesos;
+          }
           dineroPorKpi[kpiId] = { dinero, promedioPct, valor_pesos: info.valor_pesos };
           bonoVariable += dinero;
         }
-        // Bonus extras (eventos, propuestas) suman $50 por punto, igual que la fórmula vieja
+        // Bonus pts legacy (eventos, propuestas viejos) suman $50 por punto
         const sumBonus = cerradas.reduce((a, e) => a + Number(e.bonus_pts || 0), 0);
         bonoVariable += sumBonus * 50;
         row.bonoVariable = bonoVariable;
-        row.bono = Math.max(3000, Math.round(bonoVariable));
+        // Techo absoluto $7,000 + piso $3,000 garantizado
+        const TECHO = 7000;
+        const PISO = 3000;
+        row.bono = Math.min(TECHO, Math.max(PISO, Math.round(bonoVariable)));
+        row.bonoTecho = TECHO;
+        row.bonoPiso = PISO;
         row.dineroPorKpi = dineroPorKpi;
         row.sumaBonus = sumBonus;
-        // Score mensual informativo: % promedio simple
-        row.promedio = bonoVariable > 0 ? Math.min(100, Math.round((bonoVariable / 6000) * 100)) : 0;
+        row.promedio = bonoVariable > 0 ? Math.min(100, Math.round((bonoVariable / TECHO) * 100)) : 0;
         row.promedioBase = row.promedio;
         return;
       }
