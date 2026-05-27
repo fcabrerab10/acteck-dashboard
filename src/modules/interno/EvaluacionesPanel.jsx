@@ -165,7 +165,25 @@ export default function EvaluacionesPanel() {
     setExtras(data || []);
   };
 
-  useEffect(() => { cargarEvaluaciones(personaActiva); cargarExtras(personaActiva); }, [personaActiva]);
+  // Cargar propuestas implementadas + eventos para sumar bonus al bono mensual.
+  // (evaluacion.bonus_pts puede no estar sincronizado con estos.)
+  const [propuestasMes, setPropuestasMes] = useState([]);
+  const [eventosMes, setEventosMes] = useState([]);
+  const cargarBonusExtras = async (uid) => {
+    if (!uid) return;
+    const [pRes, eRes] = await Promise.all([
+      supabase.from("propuestas_equipo").select("*").eq("persona_user_id", uid),
+      supabase.from("eventos_cliente").select("*").eq("persona_user_id", uid),
+    ]);
+    setPropuestasMes(pRes.data || []);
+    setEventosMes(eRes.data || []);
+  };
+
+  useEffect(() => {
+    cargarEvaluaciones(personaActiva);
+    cargarExtras(personaActiva);
+    cargarBonusExtras(personaActiva);
+  }, [personaActiva]);
 
   const personaInfo = useMemo(() => internos.find((p) => p.user_id === personaActiva), [internos, personaActiva]);
 
@@ -250,8 +268,27 @@ export default function EvaluacionesPanel() {
           dineroPorKpi[kpiId] = { dinero, promedioPct, valor_pesos: info.valor_pesos };
           bonoVariable += dinero;
         }
-        // Bonus pts legacy (eventos, propuestas viejos) suman $50 por punto
-        const sumBonus = cerradas.reduce((a, e) => a + Number(e.bonus_pts || 0), 0);
+        // Bonus pts del mes:
+        //   1) Propuestas implementadas (bonus_pts_aplicado) en el rango del mes
+        //   2) Eventos vinculados a evaluaciones cerradas del mes (bonus_pts)
+        //   3) Fallback evaluacion.bonus_pts (legacy, si existe)
+        const mesIni = `${row.anio}-${String(row.mes).padStart(2, "0")}-01`;
+        const mesFin = `${row.anio}-${String(row.mes).padStart(2, "0")}-31`;
+        const propsMes = propuestasMes.filter((p) => {
+          const f = (p.fecha_propuesta || "").slice(0, 10);
+          return f >= mesIni && f <= mesFin && Number(p.bonus_pts_aplicado || 0) > 0;
+        });
+        const evtsMes = eventosMes.filter((e) => {
+          const f = (e.fecha || "").slice(0, 10);
+          return f >= mesIni && f <= mesFin;
+        });
+        const sumPropuestas = propsMes.reduce((a, p) => a + Number(p.bonus_pts_aplicado || 0), 0);
+        const sumEventos = evtsMes.reduce((a, e) => a + Number(e.bonus_pts || 0), 0);
+        const sumLegacy = cerradas.reduce((a, e) => a + Number(e.bonus_pts || 0), 0);
+        // Si hay propuestas o eventos detectados directamente, usar esos; si no, caer al legacy
+        const sumBonus = (sumPropuestas + sumEventos) > 0
+          ? (sumPropuestas + sumEventos)
+          : sumLegacy;
         bonoVariable += sumBonus * 50;
         // Extras del mes (visitas, viajes, eventos, capacitaciones)
         const extrasMes = extras.filter((x) => x.anio === row.anio && x.mes === row.mes);
@@ -259,7 +296,12 @@ export default function EvaluacionesPanel() {
         bonoVariable += sumaExtras;
         row.bonoVariable = bonoVariable;
         row.sumaExtras = sumaExtras;
+        row.sumaBonus = sumBonus;
         row.extrasCount = extrasMes.length;
+        row.propuestasCount = propsMes.length;
+        row.eventosCount = evtsMes.length;
+        row.propsMes = propsMes;
+        row.evtsMes = evtsMes;
         // Techo absoluto $7,000 + piso $3,000 garantizado
         const TECHO = 7000;
         const PISO = 3000;
@@ -267,7 +309,6 @@ export default function EvaluacionesPanel() {
         row.bonoTecho = TECHO;
         row.bonoPiso = PISO;
         row.dineroPorKpi = dineroPorKpi;
-        row.sumaBonus = sumBonus;
         row.promedio = bonoVariable > 0 ? Math.min(100, Math.round((bonoVariable / TECHO) * 100)) : 0;
         row.promedioBase = row.promedio;
         return;
@@ -285,7 +326,7 @@ export default function EvaluacionesPanel() {
         : Math.round(3000 + (scoreMensual - 80) * 50);
     });
     return Object.values(m).sort((a, b) => `${b.anio}-${b.mes}`.localeCompare(`${a.anio}-${a.mes}`));
-  }, [evaluaciones, lineasPorEval, extras]);
+  }, [evaluaciones, lineasPorEval, extras, propuestasMes, eventosMes]);
 
   async function crearEvalEnFecha(fechaCualquiera) {
     if (!canEdit || !personaActiva) return;
@@ -2301,7 +2342,17 @@ function ModalExportarMes({ row, personaInfo, evaluaciones, extras, onClose }) {
       });
     }
     if (row.sumaBonus > 0) {
-      lines.push(`  • Bonus extras legacy (${row.sumaBonus.toFixed(1)} pts × $50): +${formatMXN(row.sumaBonus * 50)}`);
+      const bonusTotal = row.sumaBonus * 50;
+      const detalle = [];
+      if (row.propuestasCount > 0) detalle.push(`${row.propuestasCount} propuesta${row.propuestasCount>1?"s":""} implementada${row.propuestasCount>1?"s":""}`);
+      if (row.eventosCount > 0) detalle.push(`${row.eventosCount} evento${row.eventosCount>1?"s":""}`);
+      lines.push(`  • Bonus por iniciativas (${row.sumaBonus.toFixed(1)} pts × $50)${detalle.length?" — "+detalle.join(" + "):""}: +${formatMXN(bonusTotal)}`);
+      (row.propsMes || []).forEach((p) => {
+        lines.push(`      - Propuesta: ${(p.descripcion || "").slice(0, 90)}${p.descripcion?.length>90?"...":""} → +${p.bonus_pts_aplicado} pts`);
+      });
+      (row.evtsMes || []).forEach((e) => {
+        lines.push(`      - Evento ${e.fecha}: ${(e.descripcion || "").slice(0,80)} → +${e.bonus_pts} pts`);
+      });
     }
     lines.push("");
     lines.push(`Bono a pagar: ${formatMXN(row.bono)}`);
