@@ -98,8 +98,8 @@ const EXTRAS_TIPOS = {
   visita_foranea_sin_pernocta: { label: "✈️ Visita foránea ida-vuelta",     monto: 200,  aplicaModif: true  },
   visita_foranea_con_pernocta: { label: "🏨 Visita foránea con pernocta", monto: 400,  aplicaModif: true  },
   convencion:                  { label: "🎪 Convención / evento grande",   monto: 250,  aplicaModif: true  },
-  evento_comunidad:            { label: "👋 Evento comunidad (simbólico)", monto: 50,   aplicaModif: false },
-  capacitacion:                { label: "📚 Capacitación / curso",         monto: 100,  aplicaModif: false },
+  evento_comunidad:            { label: "👋 Evento comunidad (simbólico)", monto: 200,  aplicaModif: false },
+  capacitacion:                { label: "📚 Capacitación / curso",         monto: 50,   aplicaModif: false },
 };
 const EXTRAS_MODIF = {
   supero:        { label: "🎯 Superó objetivos",   factor: 1.25, color: "#10B981" },
@@ -250,19 +250,16 @@ export default function EvaluacionesPanel() {
         const dineroPorKpi = {};
         for (const [kpiId, info] of Object.entries(porKpi)) {
           const promedioPct = info.count > 0 ? info.sum / info.count : 0;
-          // KPI especial "cuotas_cumplidas": escala con techo $1,000.
-          //   <70% → $0 · 70-100% lineal hasta $valor_pesos · 100-130% lineal
-          //   hasta $1,000 · >130% → $1,000.
-          // Para el resto: lineal simple (% × valor_pesos).
-          // El kpi_codigo se infiere por valor_pesos === 600 (único KPI con
-          // exactamente $600 — cuotas_cumplidas).
+          // KPI especial "cuotas_cumplidas": escala con techo $900.
+          //   <70% → $0 · 70-100% lineal hasta $550 · 100-130% lineal hasta
+          //   $900 · >130% → $900. Resto: lineal simple (% × valor_pesos).
+          // Se detecta por valor_pesos === 550 (único KPI con ese valor).
           let dinero = 0;
-          if (info.valor_pesos === 600) {
-            // cuotas_cumplidas: base $600 al 100%, techo $1,000 al 130%+
+          if (info.valor_pesos === 550) {
             if (promedioPct < 70) dinero = 0;
-            else if (promedioPct <= 100) dinero = (promedioPct - 70) * (600 / 30); // 70→0, 100→600
-            else if (promedioPct <= 130) dinero = 600 + (promedioPct - 100) * (400 / 30); // 100→600, 130→1000
-            else dinero = 1000;
+            else if (promedioPct <= 100) dinero = (promedioPct - 70) * (550 / 30); // 70→0, 100→550
+            else if (promedioPct <= 130) dinero = 550 + (promedioPct - 100) * (350 / 30); // 100→550, 130→900
+            else dinero = 900;
           } else {
             dinero = (promedioPct / 100) * info.valor_pesos;
           }
