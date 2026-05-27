@@ -1047,7 +1047,14 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
           {SECCIONES.map((sec) => {
             const kpisSec = kpis.filter((k) => k.seccion === sec.id);
             const lineasSec = lineas.filter((l) => kpisSec.some((k) => k.id === l.kpi_id));
-            const ptsObtenidos = lineasSec.reduce((a, l) => a + Number(l.puntaje || 0), 0);
+            let ptsObtenidos = lineasSec.reduce((a, l) => a + Number(l.puntaje || 0), 0);
+            // La sección "propuestas" no tiene KPIs en el template — sus puntos
+            // vienen directamente de propuestas_equipo.bonus_pts_aplicado. Estos
+            // pts se suman al bono mensual en el resumen (cada pt vale $50).
+            if (sec.id === "propuestas") {
+              ptsObtenidos = (propuestas || [])
+                .reduce((a, p) => a + Number(p.bonus_pts_aplicado || 0), 0);
+            }
             return (
               <SeccionKPIs
                 key={sec.id}
@@ -1148,6 +1155,8 @@ function SeccionKPIs({ seccion, kpis, lineas, ptsObtenidos, propuestas, editable
   const aplicables = lineas.filter((l) => !l.no_aplica);
   const naCount = lineas.length - aplicables.length;
   const pesoAplicable = aplicables.reduce((a, l) => a + Number(l.peso_aplicado || 0), 0);
+  const esPropuestas = seccion.id === "propuestas";
+  const propCount = propuestas?.length || 0;
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden" style={{ borderLeft: `4px solid ${seccion.color}` }}>
@@ -1155,7 +1164,11 @@ function SeccionKPIs({ seccion, kpis, lineas, ptsObtenidos, propuestas, editable
         <div className="flex-1 text-left">
           <div className="font-semibold text-gray-800">{seccion.label}</div>
           <div className="text-xs text-gray-500">
-            {kpis.length} KPI{kpis.length !== 1 ? "s" : ""} · máx {seccion.pts} pts {seccion.auto && "· Auto-calc disponible"}
+            {esPropuestas ? (
+              <>{propCount} propuesta{propCount !== 1 ? "s" : ""} en la semana · cada pt suma $50 al bono mensual</>
+            ) : (
+              <>{kpis.length} KPI{kpis.length !== 1 ? "s" : ""} · máx {seccion.pts} pts {seccion.auto && "· Auto-calc disponible"}</>
+            )}
             {naCount > 0 && (
               <span className="ml-2 text-amber-600 font-semibold">
                 · {naCount} N/A ({pesoAplicable} pts aplicables)
@@ -1165,7 +1178,10 @@ function SeccionKPIs({ seccion, kpis, lineas, ptsObtenidos, propuestas, editable
         </div>
         <div className="text-right">
           <div className="text-sm font-bold tabular-nums" style={{ color: seccion.color }}>
-            {ptsObtenidos.toFixed(1)} / {pesoAplicable || seccion.pts}
+            {esPropuestas
+              ? <>+{ptsObtenidos.toFixed(1)} pts <span className="text-[10px] font-normal text-gray-500">= +{formatMXN(ptsObtenidos * 50)}</span></>
+              : <>{ptsObtenidos.toFixed(1)} / {pesoAplicable || seccion.pts}</>
+            }
           </div>
         </div>
         {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
