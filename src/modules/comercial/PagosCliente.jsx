@@ -443,99 +443,108 @@ export default function PagosCliente({ cliente, clienteKey }) {
     flash(`✓ SPIFF ${tipo} ${mesLabel} generado`);
   };
 
-  // ── Fondo MKT trimestral interno de Dicotech ──
-  // Auto-provisiona 1% del sell-in trimestral si alcance Q ≥ 100%.
-  // El cliente NO sabe del fondo (es reserva interna). Si no llega, el
-  // usuario puede provisionar manualmente con un monto a discreción.
-  const [dicoFondoProvisiones, setDicoFondoProvisiones] = useState([]);
+  // ── Fondo MKT Dual mensual de Dicotech (NUEVO modelo) ──
+  // Dos fondos paralelos por mes:
+  //   1) Fondo Interno: 1% del sell-in mes SIEMPRE (no visible al cliente)
+  //   2) Fondo MKT Cliente: tier % según alcance Q acumulado al cierre del mes
+  //      (0.75% si Q<90%, 0.75/1.00/1.25% según tier). Visible al cliente.
+  // Plan MKT contratado ($14,007.14 mensual fijo) sale del fondo cliente
+  // primero y del interno si no alcanza.
+  const [dicoFondoMovs, setDicoFondoMovs] = useState([]);
   useEffect(() => {
     if (clienteKey !== "dicotech" || !DB_CONFIGURED) return;
     (async () => {
       const anio = new Date().getFullYear();
-      const { data } = await supabase.from("provisiones_fondo")
-        .select("*").eq("cliente", "dicotech").eq("anio", anio).order("trimestre");
-      setDicoFondoProvisiones(data || []);
+      const { data } = await supabase.from("fondos_mkt_movimientos")
+        .select("*").eq("cliente","dicotech").eq("anio",anio)
+        .order("mes").order("tipo_fondo").order("tipo_movimiento");
+      setDicoFondoMovs(data || []);
     })();
   }, [clienteKey, registros.length]);
 
-  const dicoFondoCalc = React.useMemo(() => {
-    if (clienteKey !== "dicotech" || digiCuotas.length === 0) return null;
+  const dicoFondoTablaMensual = React.useMemo(() => {
+    if (clienteKey !== "dicotech") return null;
     const cfg = lineamientos?.fondo_mkt || {};
-    const aportePct = Number(cfg.aporte_pct) || 0.01;
-    const alcanceMin = (Number(cfg.alcance_minimo_pct) || 100) / 100;
-    const QUARTERS = [[1,2,3], [4,5,6], [7,8,9], [10,11,12]];
-    const labels = ["Q1 (Ene-Mar)", "Q2 (Abr-Jun)", "Q3 (Jul-Sep)", "Q4 (Oct-Dic)"];
-    return QUARTERS.map((meses, qi) => {
-      const cuotaQ = meses.reduce((s, m) => {
-        const r = digiCuotas.find(x => Number(x.mes) === m);
-        return s + (r ? Number(r.cuota_min) || 0 : 0);
-      }, 0);
-      const sellInQ = meses.reduce((s, m) => s + (Number(dicoSellIn[m]) || 0), 0);
-      const alcance = cuotaQ > 0 ? sellInQ / cuotaQ : 0;
-      const cumple = alcance >= alcanceMin;
-      const aporteAuto = cumple ? sellInQ * aportePct : 0;
-      const provision = dicoFondoProvisiones.find(p => p.trimestre === qi + 1);
-      return {
-        q: qi + 1, label: labels[qi], meses, cuotaQ, sellInQ, alcance,
-        cumple, aportePct, alcanceMin,
-        aporteAuto, provision,
-      };
-    });
-  }, [clienteKey, digiCuotas, dicoSellIn, lineamientos, dicoFondoProvisiones]);
-
-  const dicoFondoTotalYTD = React.useMemo(() => {
-    if (!dicoFondoCalc) return { provisionado: 0, potencial: 0 };
-    let provisionado = 0, potencial = 0;
-    for (const q of dicoFondoCalc) {
-      if (q.provision) provisionado += Number(q.provision.monto) || 0;
-      else if (q.cumple) potencial += q.aporteAuto;
+    const planMonto = Number(cfg.plan_mkt_contratado?.monto_mensual) || 0;
+    // Construir tabla mensual con saldo acumulado para cada fondo
+    const filas = [];
+    let saldoIntPrev = 0, saldoCliPrev = 0;
+    for (let m = 1; m <= 12; m++) {
+      const movsMes = dicoFondoMovs.filter(x => x.mes === m);
+      const genInt = movsMes.filter(x => x.tipo_fondo === "interno" && x.tipo_movimiento === "generacion").reduce((s,x) => s + Number(x.monto), 0);
+      const genCli = movsMes.filter(x => x.tipo_fondo === "mkt_cliente" && x.tipo_movimiento === "generacion").reduce((s,x) => s + Number(x.monto), 0);
+      const apliInt = movsMes.filter(x => x.tipo_fondo === "interno" && x.tipo_movimiento === "aplicacion").reduce((s,x) => s + Number(x.monto), 0);
+      const apliCli = movsMes.filter(x => x.tipo_fondo === "mkt_cliente" && x.tipo_movimiento === "aplicacion").reduce((s,x) => s + Number(x.monto), 0);
+      const saldoIntFinal = saldoIntPrev + genInt - apliInt;
+      const saldoCliFinal = saldoCliPrev + genCli - apliCli;
+      filas.push({
+        mes: m,
+        saldoIntInicio: saldoIntPrev, genInt, apliInt, saldoIntFinal,
+        saldoCliInicio: saldoCliPrev, genCli, apliCli, saldoCliFinal,
+        aplicaciones: movsMes.filter(x => x.tipo_movimiento === "aplicacion"),
+      });
+      saldoIntPrev = saldoIntFinal;
+      saldoCliPrev = saldoCliFinal;
     }
-    return { provisionado, potencial };
-  }, [dicoFondoCalc]);
+    return { filas, planMonto, saldoIntActual: saldoIntPrev, saldoCliActual: saldoCliPrev };
+  }, [clienteKey, dicoFondoMovs, lineamientos]);
 
-  // Provisionar fondo MKT — auto si ya cumple, o pide monto si es manual
-  const provisionarFondoDicotech = async (q, forzado = false) => {
+  // Aplicar un pago al fondo (típicamente el plan MKT mensual de $14K).
+  // El usuario elige de qué fondo sale ("mkt_cliente" | "interno"). Si elige
+  // "mkt_cliente" y el saldo no alcanza, automáticamente se hace split:
+  // toma lo que pueda del cliente y el resto del interno.
+  const aplicarPagoFondoDicotech = async (mes, montoTotal, fondoOrigen, concepto) => {
     if (!canEdit) return;
+    const cfg = lineamientos?.fondo_mkt || {};
+    const orden = cfg.plan_mkt_contratado?.orden_descuento || ["mkt_cliente","interno"];
+    const fila = dicoFondoTablaMensual?.filas.find(f => f.mes === mes);
+    if (!fila) return;
+    const saldoCli = fila.saldoCliInicio + fila.genCli - fila.apliCli;
+    const saldoInt = fila.saldoIntInicio + fila.genInt - fila.apliInt;
+    let movsToInsert = [];
     const anio = new Date().getFullYear();
-    let monto = q.aporteAuto;
-    if (forzado || !q.cumple) {
-      const sugerido = q.sellInQ * q.aportePct;
-      const input = window.prompt(
-        `Provisión manual de Fondo MKT ${q.label} ${anio}\n\n` +
-        `Cuota del Q: ${formatMXN(q.cuotaQ)}\n` +
-        `Sell-In del Q: ${formatMXN(q.sellInQ)}\n` +
-        `Alcance: ${(q.alcance*100).toFixed(0)}% (no alcanzó ${(q.alcanceMin*100).toFixed(0)}%)\n\n` +
-        `Sugerido (${(q.aportePct*100).toFixed(2)}% del sell-in): ${formatMXN(sugerido)}\n\n` +
-        `Ingresa el monto a provisionar (MXN):`,
-        sugerido.toFixed(0)
-      );
-      if (input == null) return;
-      monto = Number(String(input).replace(/[^0-9.-]/g, "")) || 0;
-      if (monto <= 0) { alert("Monto inválido."); return; }
+    let restante = montoTotal;
+    if (fondoOrigen === "mkt_cliente" || fondoOrigen === "auto") {
+      const disponible = saldoCli > 0 ? saldoCli : 0;
+      const toma = Math.min(restante, disponible);
+      if (toma > 0) {
+        movsToInsert.push({
+          cliente: "dicotech", anio, mes, tipo_fondo: "mkt_cliente",
+          tipo_movimiento: "aplicacion", monto: toma,
+          notas: concepto + (toma < montoTotal ? " (parcial — saldo insuficiente)" : "")
+        });
+        restante -= toma;
+      }
+      if (restante > 0) {
+        // Tomar del interno (saldo puede ir negativo, OK)
+        movsToInsert.push({
+          cliente: "dicotech", anio, mes, tipo_fondo: "interno",
+          tipo_movimiento: "aplicacion", monto: restante,
+          notas: concepto + " (complemento desde Fondo Interno)"
+        });
+        restante = 0;
+      }
+    } else {
+      // fondoOrigen === "interno": todo del interno
+      movsToInsert.push({
+        cliente: "dicotech", anio, mes, tipo_fondo: "interno",
+        tipo_movimiento: "aplicacion", monto: montoTotal,
+        notas: concepto
+      });
     }
-    const row = {
-      cliente: clienteKey,
-      anio,
-      trimestre: q.q,
-      monto,
-      base_calculo: q.sellInQ,
-      pct_aplicado: q.aportePct,
-      alcance: q.alcance,
-      cumple_cuota: q.cumple,
-      manual: !q.cumple || forzado,
-      notas: q.cumple
-        ? `Provisión automática: ${(q.aportePct*100).toFixed(2)}% de ${formatMXN(q.sellInQ)}`
-        : `Provisión manual: alcance ${(q.alcance*100).toFixed(0)}% (no llegó al ${(q.alcanceMin*100).toFixed(0)}%)`,
-    };
-    const { data, error } = await supabase.from("provisiones_fondo")
-      .upsert([row], { onConflict: "cliente,anio,trimestre" })
-      .select().single();
+    const { data, error } = await supabase.from("fondos_mkt_movimientos").insert(movsToInsert).select();
     if (error) { alert("Error: " + error.message); return; }
-    setDicoFondoProvisiones(prev => {
-      const others = prev.filter(p => p.trimestre !== q.q);
-      return [...others, data].sort((a, b) => a.trimestre - b.trimestre);
-    });
-    flash(`✓ Fondo ${q.label} provisionado: ${formatMXN(monto)}`);
+    setDicoFondoMovs(prev => [...prev, ...data].sort((a,b) => a.mes - b.mes));
+    flash(`✓ Pago aplicado al mes ${mes}: ${formatMXN(montoTotal)}`);
+  };
+
+  const revertirMovimientoFondo = async (movId) => {
+    if (!canEdit) return;
+    if (!window.confirm("¿Eliminar este movimiento del fondo?")) return;
+    const { error } = await supabase.from("fondos_mkt_movimientos").delete().eq("id", movId);
+    if (error) { alert("Error: " + error.message); return; }
+    setDicoFondoMovs(prev => prev.filter(m => m.id !== movId));
+    flash("✓ Movimiento revertido");
   };
 
   // ── Rebate trimestral Dicotech ──
@@ -643,15 +652,6 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (error) { alert("Error: " + error.message); return; }
     setRegistros(prev => [...prev, data]);
     flash(`✓ Rebate ${q.label} marcado No aplica`);
-  };
-
-  const revertirProvisionFondoDicotech = async (provision) => {
-    if (!canEdit) return;
-    if (!window.confirm(`¿Eliminar provisión de Fondo MKT ${provision.trimestre === 1 ? "Q1" : provision.trimestre === 2 ? "Q2" : provision.trimestre === 3 ? "Q3" : "Q4"} (${formatMXN(provision.monto)})?`)) return;
-    const { error } = await supabase.from("provisiones_fondo").delete().eq("id", provision.id);
-    if (error) { alert("Error: " + error.message); return; }
-    setDicoFondoProvisiones(prev => prev.filter(p => p.id !== provision.id));
-    flash("✓ Provisión revertida");
   };
 
   const marcarSpiffDicotechNoAplica = async (mes, tipo) => {
@@ -3167,108 +3167,124 @@ export default function PagosCliente({ cliente, clienteKey }) {
           )}
 
           {/* ═══ Fondo MKT Trimestral Interno Dicotech ═══ */}
-          {clienteKey === "dicotech" && catActiva === "fondoMkt" && dicoFondoCalc && (
-            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 mb-4 flex items-start gap-2">
-                <span className="text-amber-600 mt-0.5">🔒</span>
-                <div className="text-xs text-amber-900 leading-relaxed">
-                  <strong>Fondo MKT interno — no visible para el cliente.</strong> Esta reserva se calcula automáticamente como
-                  {' '}{((lineamientos?.fondo_mkt?.aporte_pct || 0.01)*100).toFixed(2)}% del sell-in trimestral cuando Dicotech alcanza el
-                  {' '}{lineamientos?.fondo_mkt?.alcance_minimo_pct || 100}% de su cuota Q. Si no llega, puedes provisionar manualmente con el botón ámbar.
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <div>
+          {clienteKey === "dicotech" && catActiva === "fondoMkt" && dicoFondoTablaMensual && (
+            <div className="space-y-6 mb-6">
+              {/* Header con saldos actuales */}
+              <div className="bg-white rounded-2xl shadow-sm p-5">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <span className="text-xl">💰</span>
-                    <h3 className="text-lg font-bold text-gray-800">Fondo MKT Dicotech {new Date().getFullYear()}</h3>
+                    <h3 className="text-lg font-bold text-gray-800">Fondos MKT Dicotech {new Date().getFullYear()}</h3>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    Plan MKT contratado: <strong>{formatMXN(dicoFondoTablaMensual.planMonto)}/mes</strong>
                   </div>
                 </div>
-                <div className="flex gap-6">
-                  <div className="text-right">
-                    <p className="text-[10px] text-gray-400 uppercase">Provisionado YTD</p>
-                    <p className="text-xl font-bold text-purple-700">{formatMXN(dicoFondoTotalYTD.provisionado)}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[10px] uppercase tracking-wide text-emerald-700 font-semibold">Fondo MKT Cliente</span>
+                      <span className="text-[10px] text-emerald-600">visible al cliente</span>
+                    </div>
+                    <p className={`text-2xl font-bold mt-1 ${dicoFondoTablaMensual.saldoCliActual < 0 ? "text-red-600" : "text-emerald-900"}`}>{formatMXN(dicoFondoTablaMensual.saldoCliActual)}</p>
+                    <p className="text-[10px] text-emerald-700 mt-0.5">Saldo final del año (con generaciones y aplicaciones)</p>
                   </div>
-                  <div className="text-right border-l border-gray-200 pl-6">
-                    <p className="text-[10px] text-gray-400 uppercase">Potencial pendiente</p>
-                    <p className="text-xl font-bold text-amber-600">{formatMXN(dicoFondoTotalYTD.potencial)}</p>
+                  <div className="bg-purple-50 border border-purple-100 rounded-lg p-3">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[10px] uppercase tracking-wide text-purple-700 font-semibold">Fondo Interno (Acteck)</span>
+                      <span className="text-[10px] text-purple-600">🔒 interno</span>
+                    </div>
+                    <p className={`text-2xl font-bold mt-1 ${dicoFondoTablaMensual.saldoIntActual < 0 ? "text-red-600" : "text-purple-900"}`}>{formatMXN(dicoFondoTablaMensual.saldoIntActual)}</p>
+                    <p className="text-[10px] text-purple-700 mt-0.5">1% del sell-in mensual SIEMPRE · no visible al cliente</p>
                   </div>
+                </div>
+                <div className="mt-3 text-xs text-gray-500">
+                  💡 Reglas: <strong>Fondo Interno</strong> = 1% × sell-in mes (siempre). <strong>Fondo MKT Cliente</strong> = tier % según alcance Q acumulado (0.75% si Q&lt;90%, 0.75/1.00/1.25% según tier). El plan MKT mensual se descuenta del fondo cliente primero, del interno si no alcanza.
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 bg-gray-50">
-                      <th className="text-left py-2 px-3 font-semibold text-gray-600">Trimestre</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Cuota Q</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell-In Q</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Alcance</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Aporte (1%)</th>
-                      <th className="text-left py-2 px-3 font-semibold text-gray-600">Estado</th>
-                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dicoFondoCalc.map(q => {
-                      const alcancePct = (q.alcance * 100).toFixed(0);
-                      let alcanceColor = "#94a3b8";
-                      if (q.alcance >= 1.20) alcanceColor = "#10b981";
-                      else if (q.alcance >= 1.00) alcanceColor = "#3b82f6";
-                      else if (q.alcance >= 0.50) alcanceColor = "#f59e0b";
-                      else if (q.sellInQ > 0) alcanceColor = "#ef4444";
-                      const p = q.provision;
-                      return (
-                        <tr key={q.q} className="border-b border-gray-100">
-                          <td className="py-2 px-3 font-medium text-gray-800">{q.label}</td>
-                          <td className="py-2 px-3 text-right text-gray-500 text-xs">{formatMXN(q.cuotaQ)}</td>
-                          <td className="py-2 px-3 text-right text-gray-700 font-medium">{q.sellInQ > 0 ? formatMXN(q.sellInQ) : "—"}</td>
-                          <td className="py-2 px-3 text-right font-bold" style={{ color: alcanceColor }}>{q.sellInQ > 0 ? alcancePct + "%" : "—"}</td>
-                          <td className="py-2 px-3 text-right font-bold text-purple-700">
-                            {p ? formatMXN(Number(p.monto)) : (q.cumple ? formatMXN(q.aporteAuto) : <span className="text-gray-300">—</span>)}
-                          </td>
-                          <td className="py-2 px-3 text-xs">
-                            {p ? (
-                              <span className={`px-2 py-1 rounded ${p.manual ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>
-                                {p.manual ? "💸 Manual" : "✓ Auto"}
-                              </span>
-                            ) : q.cumple ? (
-                              <span className="text-xs text-gray-500">Listo para provisionar</span>
-                            ) : q.sellInQ > 0 ? (
-                              <span className="text-xs text-gray-400">No alcanza cuota</span>
-                            ) : (
-                              <span className="text-xs text-gray-300">Sin datos</span>
-                            )}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            {p ? (
-                              <button onClick={() => revertirProvisionFondoDicotech(p)}
-                                      className="text-xs text-red-500 hover:text-red-700"
-                                      title="Eliminar provisión">🗑 Revertir</button>
-                            ) : q.cumple ? (
-                              <button onClick={() => provisionarFondoDicotech(q, false)}
-                                      className="text-xs bg-purple-600 text-white rounded px-2 py-1 hover:bg-purple-700">
-                                Provisionar
-                              </button>
-                            ) : q.sellInQ > 0 ? (
-                              <button onClick={() => provisionarFondoDicotech(q, true)}
-                                      className="text-xs bg-amber-500 text-white rounded px-2 py-1 hover:bg-amber-600"
-                                      title="Provisionar aunque no llegue a cuota">
-                                💸 Provisionar manual
-                              </button>
-                            ) : (
-                              <span className="text-xs text-gray-300">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                💡 La provisión queda registrada en <code className="bg-gray-100 px-1 rounded">provisiones_fondo</code>. Cuando ejecutes la inversión real (campaña, material POP, etc.), créala como pago de Marketing con fuente=empresa y referencia al Q.
+              {/* Tabla mensual estilo Excel del cliente */}
+              <div className="bg-white rounded-2xl shadow-sm p-5">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b-2 border-gray-200 bg-emerald-50">
+                        <th rowSpan={2} className="text-left py-2 px-2 font-semibold text-gray-700 align-bottom">Mes</th>
+                        <th colSpan={4} className="text-center py-1 px-2 font-bold text-emerald-700 border-b border-emerald-200">FONDO MKT CLIENTE</th>
+                        <th colSpan={4} className="text-center py-1 px-2 font-bold text-purple-700 border-b border-purple-200 border-l-2 border-l-gray-300">FONDO INTERNO</th>
+                        <th rowSpan={2} className="text-center py-2 px-2 font-semibold text-gray-700 align-bottom border-l-2 border-l-gray-300">Aplicar pago</th>
+                      </tr>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="text-right py-2 px-2 font-semibold text-emerald-700">Saldo inicio</th>
+                        <th className="text-right py-2 px-2 font-semibold text-emerald-700">Generación</th>
+                        <th className="text-right py-2 px-2 font-semibold text-emerald-700">Aplicación</th>
+                        <th className="text-right py-2 px-2 font-semibold text-emerald-700 border-r-2 border-r-gray-300">Saldo final</th>
+                        <th className="text-right py-2 px-2 font-semibold text-purple-700">Saldo inicio</th>
+                        <th className="text-right py-2 px-2 font-semibold text-purple-700">Generación</th>
+                        <th className="text-right py-2 px-2 font-semibold text-purple-700">Aplicación</th>
+                        <th className="text-right py-2 px-2 font-semibold text-purple-700 border-r-2 border-r-gray-300">Saldo final</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dicoFondoTablaMensual.filas.map(f => {
+                        const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+                        const yaPagado = f.aplicaciones.length > 0;
+                        const mesActual = new Date().getMonth() + 1;
+                        const esFuturo = f.mes > mesActual;
+                        const fmtSaldo = (n) => {
+                          const s = formatMXN(n);
+                          return n < 0 ? <span className="text-red-600">-{s.replace("$-","$")}</span> : s;
+                        };
+                        return (
+                          <tr key={f.mes} className={`border-b border-gray-100 ${esFuturo ? "opacity-40" : ""}`}>
+                            <td className="py-2 px-2 font-medium text-gray-800">{MESES_F[f.mes-1]}</td>
+                            {/* Fondo MKT Cliente */}
+                            <td className="py-2 px-2 text-right text-gray-500">{fmtSaldo(f.saldoCliInicio)}</td>
+                            <td className="py-2 px-2 text-right text-emerald-700 font-semibold">{f.genCli > 0 ? formatMXN(f.genCli) : "—"}</td>
+                            <td className="py-2 px-2 text-right text-red-600">{f.apliCli > 0 ? "-" + formatMXN(f.apliCli) : "—"}</td>
+                            <td className={`py-2 px-2 text-right font-bold border-r-2 border-r-gray-300 ${f.saldoCliFinal < 0 ? "text-red-600" : "text-gray-800"}`}>{fmtSaldo(f.saldoCliFinal)}</td>
+                            {/* Fondo Interno */}
+                            <td className="py-2 px-2 text-right text-gray-500">{fmtSaldo(f.saldoIntInicio)}</td>
+                            <td className="py-2 px-2 text-right text-purple-700 font-semibold">{f.genInt > 0 ? formatMXN(f.genInt) : "—"}</td>
+                            <td className="py-2 px-2 text-right text-red-600">{f.apliInt > 0 ? "-" + formatMXN(f.apliInt) : "—"}</td>
+                            <td className={`py-2 px-2 text-right font-bold border-r-2 border-r-gray-300 ${f.saldoIntFinal < 0 ? "text-red-600" : "text-gray-800"}`}>{fmtSaldo(f.saldoIntFinal)}</td>
+                            {/* Acción */}
+                            <td className="py-2 px-2 text-center">
+                              {esFuturo ? (
+                                <span className="text-[10px] text-gray-300">Futuro</span>
+                              ) : yaPagado ? (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <span className="text-[10px] px-2 py-0.5 rounded bg-green-100 text-green-700">✓ Aplicado</span>
+                                  {f.aplicaciones.map(a => (
+                                    <button key={a.id} onClick={() => revertirMovimientoFondo(a.id)}
+                                            className="text-[10px] text-red-500 hover:text-red-700"
+                                            title={`Revertir ${a.tipo_fondo}: ${formatMXN(Number(a.monto))}`}>🗑 {a.tipo_fondo === "interno" ? "I" : "C"}</button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="flex flex-col gap-1">
+                                  <button onClick={() => aplicarPagoFondoDicotech(f.mes, dicoFondoTablaMensual.planMonto, "auto", `Plan MKT ${MESES_F[f.mes-1]}`)}
+                                          className="text-[10px] bg-emerald-600 text-white rounded px-2 py-1 hover:bg-emerald-700"
+                                          title="Toma del fondo cliente primero, del interno si no alcanza">
+                                    Auto split
+                                  </button>
+                                  <button onClick={() => aplicarPagoFondoDicotech(f.mes, dicoFondoTablaMensual.planMonto, "interno", `Plan MKT ${MESES_F[f.mes-1]} (manual interno)`)}
+                                          className="text-[10px] bg-purple-600 text-white rounded px-2 py-1 hover:bg-purple-700"
+                                          title="Tomar todo del fondo interno">
+                                    Solo Interno
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+                  💡 <strong>Auto split:</strong> usa el Fondo MKT Cliente primero y completa con el Fondo Interno si no alcanza. <strong>Solo Interno:</strong> descuenta todo del fondo interno (saldo puede ir negativo). El monto del plan MKT mensual se edita desde el panel de Lineamientos → fondo_mkt → plan_mkt_contratado.monto_mensual.
+                </div>
               </div>
             </div>
           )}
