@@ -247,9 +247,18 @@ export default function EvaluacionesPanel() {
           porKpi[k].count++;
         });
         let bonoVariable = 0;
+        // Acumuladores para el score %: promedio de cumplimiento ponderado
+        // por valor_pesos (sin considerar la escala bonus de cuotas), para
+        // que el score refleje el desempeño real y no el techo del bono.
+        let valorMaxKpis = 0;
+        let dineroBaseKpis = 0;
         const dineroPorKpi = {};
         for (const [kpiId, info] of Object.entries(porKpi)) {
           const promedioPct = info.count > 0 ? info.sum / info.count : 0;
+          // Para el score: cumplimiento simple (cap a 100%) × valor_pesos.
+          // No se infla por la escala cuotas — esa es ganancia "extra".
+          valorMaxKpis += info.valor_pesos;
+          dineroBaseKpis += (Math.min(100, promedioPct) / 100) * info.valor_pesos;
           // KPI especial "cuotas_cumplidas": escala con techo $900.
           //   <70% → $0 · 70-100% lineal hasta $550 · 100-130% lineal hasta
           //   $900 · >130% → $900. Resto: lineal simple (% × valor_pesos).
@@ -304,7 +313,12 @@ export default function EvaluacionesPanel() {
         row.bonoTecho = TECHO;
         row.bonoPiso = PISO;
         row.dineroPorKpi = dineroPorKpi;
-        row.promedio = bonoVariable > 0 ? Math.min(100, Math.round((bonoVariable / TECHO) * 100)) : 0;
+        // Score % = cumplimiento ponderado de los KPIs (sin contar escala
+        // de cuotas ni extras). Refleja "qué tan bien cumplió" no "cuánto
+        // ganó del techo".
+        row.promedio = valorMaxKpis > 0
+          ? Math.round((dineroBaseKpis / valorMaxKpis) * 100)
+          : 0;
         row.promedioBase = row.promedio;
         return;
       }
