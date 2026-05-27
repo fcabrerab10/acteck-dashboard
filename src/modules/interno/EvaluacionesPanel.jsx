@@ -250,18 +250,19 @@ export default function EvaluacionesPanel() {
         const dineroPorKpi = {};
         for (const [kpiId, info] of Object.entries(porKpi)) {
           const promedioPct = info.count > 0 ? info.sum / info.count : 0;
-          // KPI especial "cuotas_cumplidas": escala con techo $1,200.
+          // KPI especial "cuotas_cumplidas": escala con techo $1,000.
           //   <70% → $0 · 70-100% lineal hasta $valor_pesos · 100-130% lineal
-          //   hasta $1,200 · >130% → $1,200.
+          //   hasta $1,000 · >130% → $1,000.
           // Para el resto: lineal simple (% × valor_pesos).
-          // El kpi_codigo se infiere por valor_pesos === 700 (single source). En la UI ya tenemos kpi_codigo, aquí no lo tenemos sin extra fetch — usamos heurística: si valor_pesos = 700 y promedioPct va arriba del 100%, aplicamos escala.
+          // El kpi_codigo se infiere por valor_pesos === 600 (único KPI con
+          // exactamente $600 — cuotas_cumplidas).
           let dinero = 0;
-          if (info.valor_pesos === 700) {
-            // Asume cuotas_cumplidas (único KPI con valor exactamente $700)
+          if (info.valor_pesos === 600) {
+            // cuotas_cumplidas: base $600 al 100%, techo $1,000 al 130%+
             if (promedioPct < 70) dinero = 0;
-            else if (promedioPct <= 100) dinero = (promedioPct - 70) * (700 / 30); // 70→0, 100→700
-            else if (promedioPct <= 130) dinero = 700 + (promedioPct - 100) * (500 / 30); // 100→700, 130→1200
-            else dinero = 1200;
+            else if (promedioPct <= 100) dinero = (promedioPct - 70) * (600 / 30); // 70→0, 100→600
+            else if (promedioPct <= 130) dinero = 600 + (promedioPct - 100) * (400 / 30); // 100→600, 130→1000
+            else dinero = 1000;
           } else {
             dinero = (promedioPct / 100) * info.valor_pesos;
           }
@@ -299,8 +300,8 @@ export default function EvaluacionesPanel() {
         row.eventosCount = evtsMes.length;
         row.propsMes = propsMes;
         row.evtsMes = evtsMes;
-        // Techo absoluto $7,000 + piso $3,000 garantizado
-        const TECHO = 7000;
+        // Techo absoluto $8,000 + piso $3,000 garantizado
+        const TECHO = 8000;
         const PISO = 3000;
         row.bono = Math.min(TECHO, Math.max(PISO, Math.round(bonoVariable)));
         row.bonoTecho = TECHO;
@@ -632,7 +633,7 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
               <h3 className="font-semibold text-gray-800">Resumen mensual</h3>
               {/* La fórmula con techo/piso solo es visible para super_admin */}
               {canEdit && (
-                <span className="text-xs text-gray-500">Bono = MIN($7,000, MAX($3,000, suma KPIs + extras))</span>
+                <span className="text-xs text-gray-500">Bono = MIN($8,000, MAX($3,000, suma KPIs + extras))</span>
               )}
             </div>
           </div>
@@ -653,7 +654,7 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
                 {resumenMensual.map((r) => {
                   const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
                   const dineroKpis = (r.bonoVariable || 0) - (r.sumaExtras || 0) - (r.sumaBonus || 0) * 50;
-                  const enTecho = r.bonoVariable > 7000;
+                  const enTecho = r.bonoVariable > 8000;
                   const enPiso = r.bonoVariable < 3000 && r.bonoVariable > 0;
                   return (
                     <tr key={`${r.anio}-${r.mes}`} className="border-t border-gray-100">
