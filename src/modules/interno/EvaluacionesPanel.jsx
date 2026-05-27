@@ -1071,16 +1071,11 @@ function ModalEvaluacion({ evalId, canEdit, personaActiva, onClose }) {
             );
           })}
 
-          {/* Bonus extras */}
-          <BonusSection
-            evalId={evalId}
-            eventos={eventos}
-            bonusExtras={bonusExtras}
-            propuestas={propuestas}
-            editable={editable}
-            personaActiva={personaActiva}
-            onChanged={cargar}
-          />
+          {/* Bonus extras — removido del modal de evaluación. Los eventos y
+              cursos se registran ahora en la sección "Extras del mes" del
+              panel principal (visitas, viajes, eventos, capacitaciones).
+              Las propuestas implementadas se siguen mostrando arriba en
+              su propia sección. */}
 
           {/* Retroalimentación */}
           <RetroSection
