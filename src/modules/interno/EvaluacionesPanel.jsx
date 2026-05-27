@@ -23,14 +23,19 @@ import {
  * Sólo super_admin (Fernando) edita. Karolina ve la suya read-only.
  */
 
+// v2: secciones alineadas al nuevo modelo "cada KPI suma dinero". El campo
+// `pts` representa el monto en MXN al 100% de cumplimiento de la sección
+// (suma de valor_pesos de los KPIs activos en esa sección). Los IDs deben
+// coincidir con `evaluaciones_kpis_template.seccion`.
 const SECCIONES = [
-  { id: "mercadolibre",    label: "Mercado Libre",            pts: 30, color: "#F59E0B" },
-  { id: "marketing_dgl",   label: "Plan de Marketing Digitalife", pts: 15, color: "#3B82F6", auto: true },
-  { id: "marketing_pcel",  label: "Plan de Marketing PCEL",   pts: 15, color: "#EF4444", auto: true },
-  { id: "recurrentes",     label: "Tareas recurrentes",       pts: 8,  color: "#10B981", auto: true },
-  { id: "tareas_dia",      label: "Tareas día a día",         pts: 7,  color: "#8B5CF6", auto: true },
-  { id: "softskills",      label: "Soft skills",              pts: 10, color: "#14B8A6" },
-  { id: "propuestas",      label: "Propuestas de mejora",     pts: 15, color: "#EC4899" },
+  { id: "registro_pagos",     label: "Registro y Conciliación de Pagos",  pts: 1500, color: "#0EA5E9", emoji: "🎯" },
+  { id: "ejecucion_mkt",      label: "Ejecución de Marketing",            pts: 1500, color: "#3B82F6", emoji: "📣", auto: true },
+  { id: "atencion_clientes",  label: "Atención a Clientes",               pts: 1200, color: "#10B981", emoji: "🤝" },
+  { id: "propuestas_cargas",  label: "Propuestas y Cargas de Datos",      pts: 600,  color: "#F59E0B", emoji: "📊" },
+  { id: "apoyo_comercial",    label: "Apoyo Comercial",                   pts: 600,  color: "#EF4444", emoji: "📈" },
+  { id: "competencias",       label: "Competencias (soft skills)",        pts: 600,  color: "#14B8A6", emoji: "🧠" },
+  // Sección extra legacy — solo se renderiza si existen propuestas/eventos
+  { id: "propuestas",         label: "Propuestas de mejora (bonus)",      pts: 0,    color: "#EC4899", emoji: "💡" },
 ];
 
 // Helper: convierte un % de cumplimiento a calificación 1-5
@@ -134,24 +139,77 @@ export default function EvaluacionesPanel() {
 
   const personaInfo = useMemo(() => internos.find((p) => p.user_id === personaActiva), [internos, personaActiva]);
 
-  // Score mensual = promedio de los 4 viernes del mes natural
-  // Resumen mensual: el bono se calcula como
-  //   score_mensual = (promedio_base_semanal × 0.8) + SUMA_bonus_del_mes
-  //   bono = mapping(score_mensual)
-  // Esto asegura que bonus extras (eventos, propuestas) NO se diluyan al promediar.
+  // Bono mensual NUEVO MODELO (cada KPI vale un monto en pesos):
+  //   - Por cada KPI activo, se promedia el valor (0-100) de las semanas cerradas del mes.
+  //   - dineroGanadoPorKpi = (promedioValor / 100) × valor_pesos_aplicado
+  //   - bonoVariable = SUMA(dineroGanadoPorKpi) + SUMA(bonus_pts del mes × $50/pt) — los bonus_pts vienen de eventos/propuestas extras y suman como atajo
+  //   - bonoFinal = MAX($3,000, bonoVariable)  [piso garantizado]
+  //
+  // Legacy: si las semanas viejas no tienen valor_pesos_aplicado en sus líneas,
+  // caemos al cálculo viejo (score_base × 0.8 + bonus_pts → mapping).
+  const [lineasPorEval, setLineasPorEval] = useState({});
+  useEffect(() => {
+    if (evaluaciones.length === 0) { setLineasPorEval({}); return; }
+    (async () => {
+      const ids = evaluaciones.map((e) => e.id);
+      const { data } = await supabase.from("evaluacion_lineas")
+        .select("evaluacion_id, kpi_id, valor, valor_pesos_aplicado, peso_aplicado")
+        .in("evaluacion_id", ids);
+      const byEval = {};
+      (data || []).forEach((l) => {
+        if (!byEval[l.evaluacion_id]) byEval[l.evaluacion_id] = [];
+        byEval[l.evaluacion_id].push(l);
+      });
+      setLineasPorEval(byEval);
+    })();
+  }, [evaluaciones]);
+
   const resumenMensual = useMemo(() => {
     const m = {};
     evaluaciones.forEach((e) => {
       const k = `${e.anio}-${String(e.mes).padStart(2, "0")}`;
-      if (!m[k]) m[k] = { anio: e.anio, mes: e.mes, evals: [], promedio: 0, bono: 0, sumaBonus: 0, promedioBase: 0 };
+      if (!m[k]) m[k] = { anio: e.anio, mes: e.mes, evals: [], promedio: 0, bono: 0, sumaBonus: 0, promedioBase: 0, bonoVariable: 0, dineroPorKpi: {} };
       m[k].evals.push(e);
     });
     Object.values(m).forEach((row) => {
       const cerradas = row.evals.filter((e) => e.estado === "cerrada");
       if (cerradas.length === 0) {
-        row.promedio = null; row.bono = 0; row.sumaBonus = 0; row.promedioBase = null;
+        row.promedio = null; row.bono = 0; row.sumaBonus = 0; row.promedioBase = null; row.bonoVariable = 0;
         return;
       }
+      // ── Modelo nuevo: cada KPI suma dinero ──
+      const lineasMes = cerradas.flatMap((e) => lineasPorEval[e.id] || []);
+      const tieneValorPesos = lineasMes.some((l) => Number(l.valor_pesos_aplicado) > 0);
+      if (tieneValorPesos) {
+        const porKpi = {};
+        lineasMes.forEach((l) => {
+          if (!l.valor_pesos_aplicado) return;
+          const k = l.kpi_id;
+          if (!porKpi[k]) porKpi[k] = { sum: 0, count: 0, valor_pesos: Number(l.valor_pesos_aplicado) };
+          porKpi[k].sum += Number(l.valor || 0);
+          porKpi[k].count++;
+        });
+        let bonoVariable = 0;
+        const dineroPorKpi = {};
+        for (const [kpiId, info] of Object.entries(porKpi)) {
+          const promedioPct = info.count > 0 ? info.sum / info.count : 0;
+          const dinero = (promedioPct / 100) * info.valor_pesos;
+          dineroPorKpi[kpiId] = { dinero, promedioPct, valor_pesos: info.valor_pesos };
+          bonoVariable += dinero;
+        }
+        // Bonus extras (eventos, propuestas) suman $50 por punto, igual que la fórmula vieja
+        const sumBonus = cerradas.reduce((a, e) => a + Number(e.bonus_pts || 0), 0);
+        bonoVariable += sumBonus * 50;
+        row.bonoVariable = bonoVariable;
+        row.bono = Math.max(3000, Math.round(bonoVariable));
+        row.dineroPorKpi = dineroPorKpi;
+        row.sumaBonus = sumBonus;
+        // Score mensual informativo: % promedio simple
+        row.promedio = bonoVariable > 0 ? Math.min(100, Math.round((bonoVariable / 6000) * 100)) : 0;
+        row.promedioBase = row.promedio;
+        return;
+      }
+      // ── Legacy: fórmula vieja para evaluaciones sin valor_pesos ──
       const sumBase  = cerradas.reduce((a, e) => a + Number(e.score_base || 0), 0);
       const sumBonus = cerradas.reduce((a, e) => a + Number(e.bonus_pts || 0), 0);
       const promedioBase = sumBase / cerradas.length;
@@ -164,7 +222,7 @@ export default function EvaluacionesPanel() {
         : Math.round(3000 + (scoreMensual - 80) * 50);
     });
     return Object.values(m).sort((a, b) => `${b.anio}-${b.mes}`.localeCompare(`${a.anio}-${a.mes}`));
-  }, [evaluaciones]);
+  }, [evaluaciones, lineasPorEval]);
 
   async function crearEvalEnFecha(fechaCualquiera) {
     if (!canEdit || !personaActiva) return;
@@ -190,10 +248,18 @@ export default function EvaluacionesPanel() {
     if (error) { toast.error("Error: " + error.message); return; }
 
     const { data: kpis } = await supabase.from("evaluaciones_kpis_template")
-      .select("id, peso").eq("activo", true);
+      .select("id, peso, valor_pesos").eq("activo", true);
     if (kpis?.length) {
+      // valor=100 por default → todo cumplido al 100%, el evaluador solo
+      // baja los que no cumplieron. Pre-rellenado para que sea rápido.
       await supabase.from("evaluacion_lineas").insert(
-        kpis.map((k) => ({ evaluacion_id: data.id, kpi_id: k.id, peso_aplicado: k.peso }))
+        kpis.map((k) => ({
+          evaluacion_id: data.id,
+          kpi_id: k.id,
+          peso_aplicado: k.peso,
+          valor_pesos_aplicado: k.valor_pesos || 0,
+          valor: 100,
+        }))
       );
     }
     toast.success("Evaluación creada");
