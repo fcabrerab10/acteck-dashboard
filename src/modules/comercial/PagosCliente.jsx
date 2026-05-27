@@ -538,6 +538,113 @@ export default function PagosCliente({ cliente, clienteKey }) {
     flash(`✓ Fondo ${q.label} provisionado: ${formatMXN(monto)}`);
   };
 
+  // ── Rebate trimestral Dicotech ──
+  // 2% del sell-in del Q si el alcance es ≥ 90%. Pago al cierre del Q.
+  // Si no llega, botón ámbar permite pagar manual con monto a discreción.
+  // Lee config desde lineamientos.rebate (tiers, alcance_minimo_pago).
+  const dicoRebateCalc = React.useMemo(() => {
+    if (clienteKey !== "dicotech" || digiCuotas.length === 0) return null;
+    const cfg = lineamientos?.rebate || {};
+    const tiers = (cfg.tiers || []).slice().sort((a, b) => Number(b.min_alcance) - Number(a.min_alcance));
+    const alcanceMin = Number(cfg.alcance_minimo_pago) || 0.90;
+    const QUARTERS = [[1,2,3], [4,5,6], [7,8,9], [10,11,12]];
+    const labels = ["Q1 (Ene-Mar)", "Q2 (Abr-Jun)", "Q3 (Jul-Sep)", "Q4 (Oct-Dic)"];
+    return QUARTERS.map((meses, qi) => {
+      const cuotaQ = meses.reduce((s, m) => {
+        const r = digiCuotas.find(x => Number(x.mes) === m);
+        return s + (r ? Number(r.cuota_min) || 0 : 0);
+      }, 0);
+      const sellInQ = meses.reduce((s, m) => s + (Number(dicoSellIn[m]) || 0), 0);
+      const alcance = cuotaQ > 0 ? sellInQ / cuotaQ : 0;
+      const tier = tiers.find(t => alcance >= Number(t.min_alcance)) || null;
+      const cumple = alcance >= alcanceMin;
+      const rebateAuto = cumple && tier ? sellInQ * Number(tier.pct) : 0;
+      // Pago existente (categoría='rebate' con concepto que matchee el Q)
+      const pagoExistente = registros.find(r => {
+        if (r.categoria !== "rebate" || r.cliente !== clienteKey) return false;
+        const mm = r.concepto?.match(/Q(\d)/);
+        return mm && Number(mm[1]) === qi + 1;
+      });
+      return {
+        q: qi + 1, label: labels[qi], meses, cuotaQ, sellInQ, alcance,
+        tier, cumple, alcanceMin, rebateAuto,
+        pagoExistente,
+      };
+    });
+  }, [clienteKey, digiCuotas, dicoSellIn, lineamientos, registros]);
+
+  const dicoRebateTotalYTD = React.useMemo(() => {
+    if (!dicoRebateCalc) return 0;
+    return dicoRebateCalc.reduce((s, q) => {
+      const p = q.pagoExistente;
+      if (p && p.estatus === "cancelado") return s;
+      if (p) return s + (Number(p.monto) || 0);
+      return s + q.rebateAuto;
+    }, 0);
+  }, [dicoRebateCalc]);
+
+  const generarRebateDicotech = async (q, forzado = false) => {
+    if (!canEdit) return;
+    const anio = new Date().getFullYear();
+    // Fecha de pago = día 15 del mes después del cierre del Q
+    const mesCierre = q.q * 3;
+    const fechaCompromiso = `${anio}-${String(mesCierre + 1).padStart(2, "0")}-15`;
+    let monto = q.rebateAuto;
+    if (forzado) {
+      const tiers = lineamientos?.rebate?.tiers || [];
+      const pctSugerido = tiers[tiers.length - 1]?.pct || 0.02;
+      const sugerido = q.sellInQ * Number(pctSugerido);
+      const input = window.prompt(
+        `Rebate manual ${q.label} ${anio}\n\n` +
+        `Cuota del Q: ${formatMXN(q.cuotaQ)}\n` +
+        `Sell-In del Q: ${formatMXN(q.sellInQ)}\n` +
+        `Alcance: ${(q.alcance*100).toFixed(0)}% (no alcanzó ${(q.alcanceMin*100).toFixed(0)}%)\n\n` +
+        `Sugerido (${(pctSugerido*100).toFixed(2)}% del sell-in): ${formatMXN(sugerido)}\n\n` +
+        `Ingresa el monto a pagar (MXN):`,
+        sugerido.toFixed(0)
+      );
+      if (input == null) return;
+      monto = Number(String(input).replace(/[^0-9.-]/g, "")) || 0;
+      if (monto <= 0) { alert("Monto inválido."); return; }
+    }
+    const row = {
+      cliente: clienteKey,
+      categoria: "rebate",
+      folio: null,
+      concepto: `Rebate Q${q.q} ${anio}${forzado ? " — manual" : ""}`,
+      monto,
+      estatus: "pendiente",
+      fecha_compromiso: fechaCompromiso,
+      responsable: "Acteck",
+      notas: forzado
+        ? `Pago manual: alcance ${(q.alcance*100).toFixed(0)}% (no llegó al ${(q.alcanceMin*100).toFixed(0)}%) · Sell-In Q: ${formatMXN(q.sellInQ)}`
+        : `${(Number(q.tier?.pct || 0.02)*100).toFixed(2)}% × ${formatMXN(q.sellInQ)} · alcance ${(q.alcance*100).toFixed(0)}% · ${q.tier?.label || ""}`,
+    };
+    const { data, error } = await supabase.from("pagos").insert(row).select().single();
+    if (error) { alert("Error: " + error.message); return; }
+    setRegistros(prev => [...prev, data]);
+    flash(`✓ Rebate ${q.label} generado: ${formatMXN(monto)}`);
+  };
+
+  const marcarRebateDicotechNoAplica = async (q) => {
+    if (!canEdit) return;
+    const anio = new Date().getFullYear();
+    const mesCierre = q.q * 3;
+    const fechaCompromiso = `${anio}-${String(mesCierre + 1).padStart(2, "0")}-15`;
+    const row = {
+      cliente: clienteKey, categoria: "rebate", folio: null,
+      concepto: `Rebate Q${q.q} ${anio} — No aplica`,
+      monto: 0, estatus: "cancelado",
+      fecha_compromiso: fechaCompromiso,
+      responsable: "Fernando Cabrera",
+      notas: "Marcado como No aplica manualmente",
+    };
+    const { data, error } = await supabase.from("pagos").insert(row).select().single();
+    if (error) { alert("Error: " + error.message); return; }
+    setRegistros(prev => [...prev, data]);
+    flash(`✓ Rebate ${q.label} marcado No aplica`);
+  };
+
   const revertirProvisionFondoDicotech = async (provision) => {
     if (!canEdit) return;
     if (!window.confirm(`¿Eliminar provisión de Fondo MKT ${provision.trimestre === 1 ? "Q1" : provision.trimestre === 2 ? "Q2" : provision.trimestre === 3 ? "Q3" : "Q4"} (${formatMXN(provision.monto)})?`)) return;
@@ -2642,7 +2749,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
           )}
 
           {/* Calculadora de Rebate Trimestral */}
-          {(clienteKey === "digitalife" || clienteKey === "dicotech") && catActiva === "rebate" && (
+          {clienteKey === "digitalife" && catActiva === "rebate" && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -3162,6 +3269,119 @@ export default function PagosCliente({ cliente, clienteKey }) {
               </div>
               <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
                 💡 La provisión queda registrada en <code className="bg-gray-100 px-1 rounded">provisiones_fondo</code>. Cuando ejecutes la inversión real (campaña, material POP, etc.), créala como pago de Marketing con fuente=empresa y referencia al Q.
+              </div>
+            </div>
+          )}
+
+          {/* ═══ Rebate Trimestral Dicotech (Fondo para Generación Sell Out) ═══ */}
+          {clienteKey === "dicotech" && catActiva === "rebate" && dicoRebateCalc && (
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🎁</span>
+                    <h3 className="text-lg font-bold text-gray-800">Rebate Dicotech {new Date().getFullYear()}</h3>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {lineamientos?.rebate?.nombre_oficial || "Fondo para Generación Sell Out"} · Trimestral · {((lineamientos?.rebate?.tiers?.[0]?.pct || 0.02)*100).toFixed(2)}% sobre Sell-In del Q si alcance ≥ {((lineamientos?.rebate?.alcance_minimo_pago || 0.90)*100).toFixed(0)}%
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-gray-400 uppercase">Acumulado YTD</p>
+                  <p className="text-2xl font-bold text-red-600">{formatMXN(dicoRebateTotalYTD)}</p>
+                </div>
+              </div>
+
+              {/* Tiers info */}
+              <div className="flex flex-wrap gap-2 mb-4 text-xs">
+                {(lineamientos?.rebate?.tiers || []).slice().sort((a,b) => Number(b.min_alcance) - Number(a.min_alcance)).map((t, i) => (
+                  <span key={i} className="px-3 py-1 rounded-full bg-red-50 border border-red-100 text-red-700">
+                    <strong>{t.label}</strong> · {(Number(t.pct)*100).toFixed(2)}%
+                  </span>
+                ))}
+                <span className="px-3 py-1 rounded-full bg-gray-50 border border-gray-200 text-gray-400">
+                  &lt; 90% → Sin rebate auto
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-left py-2 px-3 font-semibold text-gray-600">Trimestre</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Cuota Q</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell-In Q</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Alcance</th>
+                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Tier</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Rebate</th>
+                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dicoRebateCalc.map(q => {
+                      const p = q.pagoExistente;
+                      const isNoAplica = p && p.estatus === "cancelado";
+                      const isGenerado = p && p.estatus !== "cancelado";
+                      const alcancePct = (q.alcance * 100).toFixed(0);
+                      let alcanceColor = "#94a3b8";
+                      if (q.alcance >= 1.30) alcanceColor = "#10b981";
+                      else if (q.alcance >= 1.15) alcanceColor = "#3b82f6";
+                      else if (q.alcance >= 0.90) alcanceColor = "#dc2626";
+                      else if (q.sellInQ > 0) alcanceColor = "#ef4444";
+                      return (
+                        <tr key={q.q} className={`border-b border-gray-100 ${isNoAplica ? "opacity-50" : ""}`}>
+                          <td className="py-2 px-3 font-medium text-gray-800">{q.label}</td>
+                          <td className="py-2 px-3 text-right text-gray-500 text-xs">{formatMXN(q.cuotaQ)}</td>
+                          <td className="py-2 px-3 text-right text-gray-700 font-medium">{q.sellInQ > 0 ? formatMXN(q.sellInQ) : "—"}</td>
+                          <td className="py-2 px-3 text-right font-bold" style={{ color: alcanceColor }}>{q.sellInQ > 0 ? alcancePct + "%" : "—"}</td>
+                          <td className="py-2 px-3 text-center text-xs">
+                            {q.tier ? <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 font-semibold">{q.tier.label}</span> : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="py-2 px-3 text-right font-bold text-red-700">
+                            {isNoAplica ? <span className="text-gray-400">—</span> : q.rebateAuto > 0 ? formatMXN(q.rebateAuto) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {isNoAplica ? (
+                              <button onClick={() => revertirSpiff(p.id)}
+                                      className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1">↺ Revertir</button>
+                            ) : isGenerado ? (
+                              <div className="flex items-center gap-1 justify-center">
+                                <span className={`text-xs px-2 py-1 rounded ${p.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                                  {p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}
+                                </span>
+                                <button onClick={() => revertirSpiff(p.id)}
+                                        className="text-xs text-red-500 hover:text-red-700"
+                                        title="Eliminar pago">🗑</button>
+                              </div>
+                            ) : q.cumple && q.rebateAuto > 0 ? (
+                              <div className="flex gap-1 justify-center flex-wrap">
+                                <button onClick={() => generarRebateDicotech(q, false)}
+                                        className="text-xs bg-red-600 text-white rounded px-2 py-1 hover:bg-red-700">
+                                  Generar
+                                </button>
+                                <button onClick={() => marcarRebateDicotechNoAplica(q)}
+                                        className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
+                              </div>
+                            ) : q.sellInQ > 0 ? (
+                              <div className="flex gap-1 justify-center flex-wrap">
+                                <button onClick={() => generarRebateDicotech(q, true)}
+                                        className="text-xs bg-amber-500 text-white rounded px-2 py-1 hover:bg-amber-600"
+                                        title="Pagar aunque no llegue a 90%">
+                                  💸 Pagar manual
+                                </button>
+                                <button onClick={() => marcarRebateDicotechNoAplica(q)}
+                                        className="text-xs bg-gray-100 text-gray-500 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
+                              </div>
+                            ) : <span className="text-xs text-gray-300">Sin datos</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+                💡 <strong>Fecha de pago automática:</strong> día 15 del mes posterior al cierre del Q (ej. Q1 → 15 Abril) · El rebate es 2% para todos los tiers ≥ 90% — los tiers se conservan para mostrar el alcance real del Q.
               </div>
             </div>
           )}
