@@ -226,7 +226,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
         : Promise.resolve({ data: [] });
       const [soData, cuotasData, existingSpiffPagos, siRes] = await Promise.all([
         fetchAll("mes,monto_pesos"),
-        supabase.from("cuotas_mensuales").select("mes,cuota_min,cuota_ideal").eq("cliente", clienteKey).eq("anio", anio).order("mes"),
+        supabase.from("cuotas_mensuales").select("mes,cuota_min,cuota_ideal,cuota_minima_interna").eq("cliente", clienteKey).eq("anio", anio).order("mes"),
         supabase.from("pagos").select("*").eq("cliente", clienteKey).eq("categoria", "spiff"),
         siProm,
       ]);
