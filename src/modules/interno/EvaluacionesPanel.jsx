@@ -268,10 +268,11 @@ export default function EvaluacionesPanel() {
           dineroPorKpi[kpiId] = { dinero, promedioPct, valor_pesos: info.valor_pesos };
           bonoVariable += dinero;
         }
-        // Bonus pts del mes:
+        // Bonus pts del mes (modelo v2 — ya NO usamos evaluacion.bonus_pts
+        // legacy que tenía valores heredados del sistema viejo y duplicaba
+        // el conteo):
         //   1) Propuestas implementadas (bonus_pts_aplicado) en el rango del mes
         //   2) Eventos vinculados a evaluaciones cerradas del mes (bonus_pts)
-        //   3) Fallback evaluacion.bonus_pts (legacy, si existe)
         const mesIni = `${row.anio}-${String(row.mes).padStart(2, "0")}-01`;
         const mesFin = `${row.anio}-${String(row.mes).padStart(2, "0")}-31`;
         const propsMes = propuestasMes.filter((p) => {
@@ -284,11 +285,7 @@ export default function EvaluacionesPanel() {
         });
         const sumPropuestas = propsMes.reduce((a, p) => a + Number(p.bonus_pts_aplicado || 0), 0);
         const sumEventos = evtsMes.reduce((a, e) => a + Number(e.bonus_pts || 0), 0);
-        const sumLegacy = cerradas.reduce((a, e) => a + Number(e.bonus_pts || 0), 0);
-        // Si hay propuestas o eventos detectados directamente, usar esos; si no, caer al legacy
-        const sumBonus = (sumPropuestas + sumEventos) > 0
-          ? (sumPropuestas + sumEventos)
-          : sumLegacy;
+        const sumBonus = sumPropuestas + sumEventos;
         bonoVariable += sumBonus * 50;
         // Extras del mes (visitas, viajes, eventos, capacitaciones)
         const extrasMes = extras.filter((x) => x.anio === row.anio && x.mes === row.mes);
