@@ -3,9 +3,6 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-<meta http-equiv="Pragma" content="no-cache" />
-<meta http-equiv="Expires" content="0" />
 <title>Actualizar datos — Acteck Dashboard</title>
 <style>
   :root { --azul:#1e40af; --gris:#f3f4f6; --bord:#e5e7eb; --ok:#059669; --err:#dc2626; --warn:#d97706; }
@@ -48,84 +45,28 @@
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-// Cada source tiene:
-//   - grupo: 'globales' | 'digitalife' | 'pcel' | 'dicotech'
-//   - tipo:  'sellin' | 'sellout' | 'inventario' | 'estado_cuenta' | 'catalogo' | 'compras'
-//   - statusKey: la clave que devuelve /api/upload-status para mostrar "data hasta"
 const SOURCES = [
-  // ════════ GLOBALES (toda la empresa) ════════
-  { id:'erp-acteck', grupo:'globales', tipo:'sellin', statusKey:'facturacion_global',
-    title:'ERP Acteck — Facturación & Inventario',
-    desc:'Archivo único con hojas Facturación + Vw_TablaH_Inventario. La hoja Facturación es la fuente canónica de sell-in (cliente×SKU×mes pre-filtrado por contabilidad). Reemplaza años 2025+2026 completos en facturacion_clientes + replace total de inventario.',
-    file:'Actualizaciones ERP.xlsx',
+  { id:'erp-acteck', title:'ERP Acteck — Facturación & Inventario', desc:'Archivo único con hojas Facturación + Vw_TablaH_Inventario. La hoja Facturación es la fuente canónica de sell-in (cliente×SKU×mes ya pre-filtrado por contabilidad). Reemplaza años 2025+2026 completos en facturacion_clientes y replace total de inventario.', file:'Actualizaciones ERP.xlsx',
     combined: [
       { table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', label:'Facturación (sell-in canónico)', replaceAnios:[2025,2026] },
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true }
     ]
   },
-  { id:'roadmap-precios', grupo:'globales', tipo:'catalogo', statusKey:'roadmap',
-    title:'Catálogo · Roadmap y Precios',
-    desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo de roadmap_sku y precios_sku.',
-    file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
-  { id:'master-embarques', grupo:'globales', tipo:'compras', statusKey:'embarques',
-    title:'Master Embarques',
-    desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.',
-    file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
-
-  // ════════ DIGITALIFE ════════
-  { id:'digitalife-sellout', grupo:'digitalife', tipo:'sellout', statusKey:'sellout_digitalife',
-    title:'Sellout histórico',
-    desc:'Historico Sellout Digitalife (hoja "Sellout Digitalife"). Append con dedup por fecha+parte+cantidad+total.',
-    file:'Historico Sellout Digitalife.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
-  { id:'digitalife-inv', grupo:'digitalife', tipo:'inventario', statusKey:'inv_digitalife',
-    title:'Inventario semanal',
-    desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Snapshot semanal por (cliente, sku, anio, semana).',
-    file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv' },
-
-  // ════════ PCEL ════════
-  { id:'pcel-vm', grupo:'pcel', tipo:'sellout', statusKey:'sellout_pcel_semanal',
-    title:'Venta-marca semanal',
-    desc:'Archivo venta-marca-ACTECK. Actualiza sellout semanal + histórico mensual + catálogo SKU.',
-    file:'venta-marca-ACTECK.xlsx',
+  { id:'digitalife-sellout', title:'Digitalife · Sellout histórico', desc:'Historico Sellout Digitalife (hoja "Sellout Digitalife"). Append con dedup por fecha+parte+cantidad+total.', file:'Historico Sellout Digitalife.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
+  { id:'dicotech-sellout', title:'Dicotech · Sellout semanal (CSV)', desc:'Reporte semanal del correo: Reporte-SellOut_Ventas Semanal Acteck_Revko.csv. Append a sellout_detalle (dedup por Venta+Clave+Cantidad). Tras subir, se recalcula sellout_sku automáticamente.', file:'Reporte-SellOut_Ventas Semanal Acteck_Revko.csv', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'dicotechSelloutSemanal' },
+  { id:'digitalife-inv', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Snapshot semanal por (cliente, sku, anio, semana).', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv' },
+  { id:'pcel-vm', title:'PCEL · venta-marca semanal', desc:'Archivo venta-marca-ACTECK. Actualiza sellout semanal + histórico mensual + catálogo SKU.', file:'venta-marca-ACTECK.xlsx',
     combined: [
       { table:'sellout_pcel',          onConflict:'anio,semana,sku', parser:'pcelVentaMarca',      label:'Semanal' },
       { table:'sellout_pcel_mensual',  onConflict:'anio,mes,sku',    parser:'pcelMensualFromVM',   label:'Mensual histórico' },
       { table:'catalogo_sku_pcel',     onConflict:'sku',             parser:'pcelCatalogoFromVM',  label:'Catálogo SKU' },
     ]
   },
-
-  // ════════ DICOTECH ════════
-  { id:'dicotech-sellout', grupo:'dicotech', tipo:'sellout', statusKey:'sellout_dicotech',
-    title:'Sellout semanal (CSV)',
-    desc:'Reporte semanal del correo: Reporte-SellOut_Ventas Semanal Acteck_Revko.csv. Append a sellout_detalle (dedup por Venta+Clave+Cantidad). Tras subir, se recalcula sellout_sku automáticamente.',
-    file:'Reporte-SellOut_Ventas Semanal Acteck_Revko.csv', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'dicotechSelloutSemanal' },
-  { id:'dicotech-inv', grupo:'dicotech', tipo:'inventario', statusKey:'inv_dicotech',
-    title:'Inventario semanal',
-    desc:'Snapshot de inventario que reporta Dicotech (mismo formato que Digitalife: hoja con SKU/stock). Se carga a inventario_cliente con cliente=dicotech.',
-    file:'Inventario_Dicotech.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv', cliente:'dicotech' },
-
-  // ════════ ESTADOS DE CUENTA (sección dedicada de cobranza) ════════
-  { id:'ec-digitalife', grupo:'estados_cuenta', tipo:'estado_cuenta', statusKey:'ec_digitalife',
-    title:'Digitalife · Estado de cuenta',
-    desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.',
-    file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
-  { id:'ec-pcel', grupo:'estados_cuenta', tipo:'estado_cuenta', statusKey:'ec_pcel',
-    title:'PCEL · Estado de cuenta',
-    desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.',
-    file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
-  { id:'ec-dicotech', grupo:'estados_cuenta', tipo:'estado_cuenta', statusKey:'ec_dicotech',
-    title:'Dicotech · Estado de cuenta',
-    desc:'Archivo 00708SemanaNN (REVKO TECHNOLOGY). Upsert (cliente, anio, semana) + aging en detalle.',
-    file:'00708SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'dicotech' },
-];
-
-// Definición de los grupos (orden, etiqueta visual, color)
-const GRUPOS = [
-  { id:'globales',       label:'🌐 Globales (toda la empresa)', color:'#64748B', subtitle:'Datos generales que afectan a todos los clientes' },
-  { id:'digitalife',     label:'🔵 Digitalife',                color:'#3B82F6', subtitle:'API GLOBAL · CAJADL01' },
-  { id:'pcel',           label:'🔴 PCEL',                       color:'#EF4444', subtitle:'PC ONLINE' },
-  { id:'dicotech',       label:'🟢 Dicotech',                   color:'#10B981', subtitle:'DICOTECH MAYORISTA DE TECNOLOGIA · REVKO' },
-  { id:'estados_cuenta', label:'📑 Estados de Cuenta (cobranza)', color:'#7C3AED', subtitle:'Corte semanal con saldos vigentes, vencidos y aging por cliente' },
+  { id:'ec-pcel', title:'Estado de cuenta · PCEL', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
+  { id:'ec-digitalife', title:'Estado de cuenta · Digitalife', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
+  { id:'ec-dicotech', title:'Estado de cuenta · Dicotech', desc:'Archivo 00708SemanaNN (REVKO TECHNOLOGY). Upsert (cliente, anio, semana) + aging en detalle.', file:'00708SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'dicotech' },
+  { id:'roadmap-precios', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
+  { id:'master-embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
 ];
 
 const CHUNK = 200;
@@ -1077,136 +1018,46 @@ function el(tag, attrs={}, ...kids){
   return n;
 }
 
-// Caché del estado consultado a /api/upload-status — se llena en cargarStatus()
-let UPLOAD_STATUS = {};
-
-// Pinta la fecha "Datos hasta" según el tipo de fuente y la respuesta del endpoint
-function fmtDataUntil(src){
-  const info = UPLOAD_STATUS[src.statusKey];
-  if (!info) return null;
-  const fechaCarga = info.updated_at ? fmtDate(info.updated_at) : null;
-  let dataHasta = '';
-  if (src.tipo === 'sellout' && info.fecha) {
-    dataHasta = `Última venta: ${fmtFechaShort(info.fecha)}`;
-  } else if ((src.tipo === 'estado_cuenta' || src.statusKey === 'sellout_pcel_semanal') && info.anio && info.semana) {
-    dataHasta = `${src.tipo === 'estado_cuenta' ? 'Última semana' : 'Semana'}: ${info.anio} S${String(info.semana).padStart(2,'0')}`;
-    if (info.fecha_corte) dataHasta += ` (corte ${fmtFechaShort(info.fecha_corte)})`;
-  } else if (info.anio && info.mes) {
-    const MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    dataHasta = `Hasta: ${MES[info.mes-1]} ${info.anio}`;
-  } else if (src.statusKey === 'sellout_pcel_mensual' && info.anio && info.mes) {
-    const MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    dataHasta = `Hasta: ${MES[info.mes-1]} ${info.anio}`;
-  }
-  return { dataHasta, fechaCarga };
-}
-
-function fmtFechaShort(iso){
-  if (!iso) return '';
-  const s = String(iso).slice(0, 10);
-  const [y,m,d] = s.split('-');
-  if (!y || !m || !d) return s;
-  const MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  return `${d} ${MES[parseInt(m,10)-1]} ${y}`;
-}
-
-// Antigüedad relativa (cuántos días desde la fecha) → para colorear badge
-function diasDesde(iso){
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (isNaN(d)) return null;
-  return Math.floor((Date.now() - d.getTime()) / 86400000);
-}
-function colorFrescura(dias){
-  if (dias == null) return '#94A3B8';
-  if (dias <= 7)  return '#10B981';  // verde — fresco
-  if (dias <= 14) return '#F59E0B';  // ámbar — más de una semana
-  return '#EF4444';                  // rojo — atrasado
-}
-
-function renderSourceCard(src){
-  const log = el('pre', {class:'log', id:`log-${src.id}`});
-  const status = el('div', {class:'status-line'}, el('span', {class:'badge b-idle'}, 'Esperando archivo'));
-  let file, btn;
-  if (src.syncMode) {
-    file = el('span', {}, '');
-    btn = el('button', {class:'btn', onclick: () => handleSync(src)}, '🔄 Sincronizar');
-  } else {
-    file = el('input', {type:'file', accept:'.xlsx,.xls,.csv', id:`file-${src.id}`});
-    btn = el('button', {class:'btn', onclick: () => handleUpload(src)}, 'Subir');
-    if (src.disabled) { btn.disabled = true; btn.textContent = 'Próximamente'; }
-  }
-  let cronBtn = null;
-  if (src.cronEndpoint) {
-    cronBtn = el('button', {
-      class:'btn',
-      style: 'background:#10B981;color:#fff;',
-      onclick: () => handleCronSync(src),
-    }, '⚡ Auto-sync ahora');
-  }
-  // ── Badge de estado del dato (Datos hasta + cuándo se cargó + frescura) ──
-  const lastUpLS = getLastUpdated(src.id);
-  const statusInfo = fmtDataUntil(src);
-  const dataHasta = statusInfo && statusInfo.dataHasta;
-  const fechaCargaBD = statusInfo && statusInfo.fechaCarga;
-  const fechaCargaLS = lastUpLS ? fmtDate(lastUpLS) : null;
-  const fechaCarga = fechaCargaBD || fechaCargaLS;
-  const dias = diasDesde((UPLOAD_STATUS[src.statusKey] && UPLOAD_STATUS[src.statusKey].updated_at) || lastUpLS);
-  const dot = el('span', { style: `display:inline-block;width:8px;height:8px;border-radius:50%;background:${colorFrescura(dias)};margin-right:6px;vertical-align:middle;` });
-
-  const updBadge = el('div', {class:'last-updated', id:`updated-${src.id}`});
-  if (dataHasta) {
-    updBadge.append(dot, el('strong', {style:'color:#0F172A'}, dataHasta));
-    if (fechaCarga) updBadge.append(el('span', {style:'color:#64748B;margin-left:8px;'}, `· Subido ${fechaCarga}`));
-    if (dias != null) updBadge.append(el('span', {style:'color:#94A3B8;margin-left:8px;font-size:11px;'}, `(${dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias}d`})`));
-  } else if (fechaCarga) {
-    updBadge.append(dot, `🕐 Última actualización: ${fechaCarga}`);
-  } else {
-    updBadge.append(dot, el('span', {style:'color:#94A3B8;font-style:italic;'}, 'Sin datos cargados todavía'));
-  }
-
-  return el('div', {class:'card'},
-    el('h3', {}, src.title),
-    el('div', {class:'desc'}, src.desc),
-    el('div', {class:'meta'}, src.combined
-      ? `📄 ${src.file} · 🎯 ${src.combined.map(c=>c.table).join(' + ')}`
-      : `📄 ${src.file} · 🎯 ${src.table}`),
-    updBadge,
-    status,
-    el('div', {class:'actions'}, file, btn, cronBtn),
-    log
-  );
-}
-
 function renderCards(){
   const grid = document.getElementById('grid');
-  grid.innerHTML = '';
-  for (const grupo of GRUPOS) {
-    const sourcesGrupo = SOURCES.filter(s => s.grupo === grupo.id);
-    if (sourcesGrupo.length === 0) continue;
-    // Header del grupo
-    const header = el('div', {
-      style: `grid-column: 1 / -1; display:flex; align-items:baseline; gap:14px; padding:18px 4px 8px; border-bottom: 2px solid ${grupo.color}; margin: 10px 0 6px;`,
-    },
-      el('h2', { style: `margin:0; color:${grupo.color}; font-size:20px;` }, grupo.label),
-      el('span', { style: 'color:#64748B; font-size:13px;' }, grupo.subtitle),
-      el('span', { style: 'color:#94A3B8; font-size:12px; margin-left:auto;' }, `${sourcesGrupo.length} fuente${sourcesGrupo.length !== 1 ? 's' : ''}`)
-    );
-    grid.appendChild(header);
-    for (const src of sourcesGrupo) {
-      grid.appendChild(renderSourceCard(src));
+  for (const src of SOURCES) {
+    const log = el('pre', {class:'log', id:`log-${src.id}`});
+    const status = el('div', {class:'status-line'}, el('span', {class:'badge b-idle'}, 'Esperando archivo'));
+    let file, btn;
+    if (src.syncMode) {
+      file = el('span', {}, '');
+      btn = el('button', {class:'btn', onclick: () => handleSync(src)}, '🔄 Sincronizar');
+    } else {
+      file = el('input', {type:'file', accept:'.xlsx,.xls,.csv', id:`file-${src.id}`});
+      btn = el('button', {class:'btn', onclick: () => handleUpload(src)}, 'Subir');
+      if (src.disabled) { btn.disabled = true; btn.textContent = 'Próximamente'; }
     }
-  }
-}
-
-async function cargarStatus(){
-  try {
-    const r = await fetch('/api/upload-status');
-    if (!r.ok) return;
-    UPLOAD_STATUS = await r.json();
-    renderCards();
-  } catch (e) {
-    console.warn('No se pudo cargar upload-status:', e);
+    // Botón extra: sync vía cron endpoint (para Master Embarques)
+    let cronBtn = null;
+    if (src.cronEndpoint) {
+      cronBtn = el('button', {
+        class:'btn',
+        style: 'background:#10B981;color:#fff;',
+        onclick: () => handleCronSync(src),
+      }, '⚡ Auto-sync ahora');
+    }
+    // Last-updated badge
+    const lastUp = getLastUpdated(src.id);
+    const updBadge = el('div', {class:'last-updated', id:`updated-${src.id}`},
+      lastUp ? `🕐 Última actualización: ${fmtDate(lastUp)}` : '');
+    if (!lastUp) updBadge.style.display = 'none';
+    const card = el('div', {class:'card'},
+      el('h3', {}, src.title),
+      el('div', {class:'desc'}, src.desc),
+      el('div', {class:'meta'}, src.combined
+        ? `📄 ${src.file} · 🎯 ${src.combined.map(c=>c.table).join(' + ')}`
+        : `📄 ${src.file} · 🎯 ${src.table}`),
+      updBadge,
+      status,
+      el('div', {class:'actions'}, file, btn, cronBtn),
+      log
+    );
+    grid.appendChild(card);
   }
 }
 
@@ -1420,7 +1271,6 @@ async function postChunks(src, table, onConflict, rows, deleteAnios){
 }
 
 renderCards();
-cargarStatus();  // Re-renderiza una vez que llega el estado desde /api/upload-status
 
 </script>
 </body>
