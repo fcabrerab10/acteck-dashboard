@@ -259,16 +259,16 @@ export default function EvaluacionesPanel() {
           // No se infla por la escala cuotas — esa es ganancia "extra".
           valorMaxKpis += info.valor_pesos;
           dineroBaseKpis += (Math.min(100, promedioPct) / 100) * info.valor_pesos;
-          // KPI especial "cuotas_cumplidas": escala con techo $900.
-          //   <70% → $0 · 70-100% lineal hasta $550 · 100-130% lineal hasta
-          //   $900 · >130% → $900. Resto: lineal simple (% × valor_pesos).
-          // Se detecta por valor_pesos === 550 (único KPI con ese valor).
+          // KPI especial "cuotas_cumplidas": escala con techo $625.
+          //   <70% → $0 · 70-100% lineal hasta $375 · 100-130% lineal hasta
+          //   $625 · >130% → $625. Resto: lineal simple (% × valor_pesos).
+          // Se detecta por valor_pesos === 375 (único KPI con ese valor).
           let dinero = 0;
-          if (info.valor_pesos === 550) {
+          if (info.valor_pesos === 375) {
             if (promedioPct < 70) dinero = 0;
-            else if (promedioPct <= 100) dinero = (promedioPct - 70) * (550 / 30); // 70→0, 100→550
-            else if (promedioPct <= 130) dinero = 550 + (promedioPct - 100) * (350 / 30); // 100→550, 130→900
-            else dinero = 900;
+            else if (promedioPct <= 100) dinero = (promedioPct - 70) * (375 / 30); // 70→0, 100→375
+            else if (promedioPct <= 130) dinero = 375 + (promedioPct - 100) * (250 / 30); // 100→375, 130→625
+            else dinero = 625;
           } else {
             dinero = (promedioPct / 100) * info.valor_pesos;
           }
