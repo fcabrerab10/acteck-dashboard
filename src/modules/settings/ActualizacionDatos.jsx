@@ -356,8 +356,6 @@ export default function ActualizacionDatos({ perfil }) {
   const [busy, setBusy] = useState(null); // fuente que está subiendo
   const [logs, setLogs] = useState({});   // fuente -> string
 
-  const [uploadStatus, setUploadStatus] = useState({});
-
   const refreshStatus = async () => {
     try {
       const r = await fetch('/api/sync-status');
@@ -366,20 +364,7 @@ export default function ActualizacionDatos({ perfil }) {
     } catch (e) { /* ignore */ }
   };
 
-  const refreshUploadStatus = async () => {
-    try {
-      const r = await fetch('/api/upload-status');
-      if (!r.ok) return;
-      const j = await r.json();
-      setUploadStatus(j || {});
-    } catch (e) { /* ignore */ }
-  };
-
-  useEffect(() => {
-    refreshStatus(); refreshUploadStatus();
-    const t = setInterval(() => { refreshStatus(); refreshUploadStatus(); }, 60000);
-    return () => clearInterval(t);
-  }, []);
+  useEffect(() => { refreshStatus(); const t = setInterval(refreshStatus, 60000); return () => clearInterval(t); }, []);
 
   const appendLog = (fuente, msg) => setLogs(p => ({ ...p, [fuente]: ((p[fuente] || '') + msg + '\n').split('\n').slice(-30).join('\n') }));
 
@@ -530,175 +515,48 @@ export default function ActualizacionDatos({ perfil }) {
     setBusy(null);
   }
 
-  const GRUPOS = [
-    { id:'globales',       label:'🌐 Globales',          color:'#64748B', subtitle:'Datos generales (toda la empresa)' },
-    { id:'digitalife',     label:'🔵 Digitalife',        color:'#3B82F6', subtitle:'API GLOBAL · CAJADL01' },
-    { id:'pcel',           label:'🔴 PCEL',               color:'#EF4444', subtitle:'PC ONLINE' },
-    { id:'dicotech',       label:'🟢 Dicotech',           color:'#10B981', subtitle:'DICOTECH MAYORISTA · REVKO' },
-    { id:'estados_cuenta', label:'📑 Estados de Cuenta', color:'#7C3AED', subtitle:'Cortes semanales con aging por cliente' },
-  ];
+  return (
+    <div style={{ padding: 24 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: '0 0 6px' }}>Actualización de datos</h1>
+      <p style={{ color: '#64748b', margin: '0 0 20px', fontSize: 13 }}>Subidas manuales por fuente. Cada tarjeta muestra cuándo se actualizó por última vez.</p>
 
-  // statusKey apunta a la clave del endpoint /api/upload-status para mostrar
-  // la última fecha de datos. card es el JSX que se renderiza (reutiliza
-  // los handlers existentes que NO se modifican).
-  const FUENTES = [
-    // ── Globales ──
-    { grupo:'globales', statusKey:'facturacion_global', tipo:'mes', card: (
-        <Card key="erp" title="ERP Acteck — Facturación & Inventario" fuente="erp_sell_in" status={status} disabled={!!busy}
-          descripcion="Hojas Vw_TablaH_Ventas + Vw_TablaH_Inventario. Sell in upsert por fecha+SKU, inventario se reemplaza."
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+
+        <Card title="ERP diario" fuente="erp_sell_in" status={status} disabled={!!busy}
+          descripcion="Hojas Vw_TablaH_Ventas + Vw_TablaH_Inventario. Sell in hace upsert por fecha+SKU, inventario se reemplaza."
           onUpload={handleERP} log={logs.erp} />
-      )},
-    { grupo:'globales', statusKey:'roadmap', tipo:'updated', card: (
-        <Card key="cat" title="Catálogo · Roadmap y Precios" fuente="roadmap" status={status} disabled={!!busy}
+
+        <Card title="Catálogo (Roadmap + Precios)" fuente="roadmap" status={status} disabled={!!busy}
           descripcion="Archivo con hojas 'Roadmap Q2 2026' y 'BD Lista de Precios'. Reemplaza ambas tablas."
           onUpload={handleCatalogo} log={logs.catalogo} />
-      )},
-    // ── Digitalife ──
-    { grupo:'digitalife', statusKey:'sellout_digitalife', tipo:'sellout', card: (
-        <Card key="dgl-so" title="Sellout histórico" fuente="sellout_digitalife" status={status} disabled={!!busy}
-          descripcion="Sellout semanal crudo del cliente (10 columnas). Append con dedup por fecha+SKU."
+
+        <Card title="Sellout Digitalife" fuente="sellout_digitalife" status={status} disabled={!!busy}
+          descripcion="Sellout semanal crudo del cliente (10 columnas). Para subir histórico completo hay que avisar."
           onUpload={(f) => handleSelloutDigitalife(f, false)} log={logs.sellout_digitalife}>
           <label style={{ fontSize: 11, color: '#64748b' }}>
-            <input type="checkbox" style={{ marginRight: 4 }} onChange={e => window.__histDig = e.target.checked} />
+            <input type="checkbox" id={'chk_histdig'} style={{ marginRight: 4 }} onChange={e => window.__histDig = e.target.checked} />
             Este archivo es el histórico completo (reemplaza todo)
           </label>
         </Card>
-      )},
-    { grupo:'digitalife', statusKey:'inv_digitalife', tipo:'semana', card: (
-        <Card key="dgl-inv" title="Inventario semanal" fuente="inventario_digitalife" status={status} disabled={!!busy}
+
+        <Card title="Sellout PCEL" fuente="sellout_pcel" status={status} disabled={!!busy}
+          descripcion="Archivo 'venta-marca-...xls' por marca. Año desde nombre de archivo, semana desde columna 'Vta Semana N'."
+          onUpload={handleSelloutPcel} log={logs.sellout_pcel} />
+
+        <Card title="Inventario Digitalife" fuente="inventario_digitalife" status={status} disabled={!!busy}
           descripcion="Snapshot semanal de stock por SKU. Reemplaza inventario anterior del cliente."
           onUpload={handleInventarioDigitalife} log={logs.inventario_digitalife} />
-      )},
-    // ── PCEL ──
-    { grupo:'pcel', statusKey:'sellout_pcel', tipo:'semana', card: (
-        <Card key="pcel-vm" title="Venta-marca semanal" fuente="sellout_pcel" status={status} disabled={!!busy}
-          descripcion="Archivo venta-marca-ACTECK. Año desde nombre de archivo, semana desde columna 'Vta Semana N'."
-          onUpload={handleSelloutPcel} log={logs.sellout_pcel} />
-      )},
-    // ── Dicotech (todavía sin handler nativo aquí; redirigir al uploader completo) ──
-    { grupo:'dicotech', statusKey:'sellout_dicotech', tipo:'sellout', card: (
-        <CardExterna key="dico-so" title="Sellout semanal (CSV)"
-          descripcion="Reporte semanal del correo: Reporte-SellOut_Ventas Semanal Acteck_Revko.csv"
-          uploadsAnchor="#dicotech-sellout" />
-      )},
-    { grupo:'dicotech', statusKey:'inv_dicotech', tipo:'semana', card: (
-        <CardExterna key="dico-inv" title="Inventario semanal"
-          descripcion="Mismo formato que Digitalife (Hoja39). Se carga con cliente=dicotech."
-          uploadsAnchor="#dicotech-inv" />
-      )},
-    // ── Estados de Cuenta (los 3 usan el mismo handler que detecta cliente desde F2) ──
-    { grupo:'estados_cuenta', statusKey:'ec_digitalife', tipo:'semana', card: (
-        <Card key="ec-dgl" title="Digitalife · Estado de cuenta" fuente="edc_digitalife" status={status} disabled={!!busy}
-          descripcion="Archivo 00764SemanaNN — corte semanal con aging."
-          onUpload={handleEdC} log={logs.edc} />
-      )},
-    { grupo:'estados_cuenta', statusKey:'ec_pcel', tipo:'semana', card: (
-        <Card key="ec-pcel" title="PCEL · Estado de cuenta" fuente="edc_digitalife" status={status} disabled={!!busy}
-          descripcion="Archivo 00473SemanaNN — corte semanal con aging."
-          onUpload={handleEdC} log={logs.edc} />
-      )},
-    { grupo:'estados_cuenta', statusKey:'ec_dicotech', tipo:'semana', card: (
-        <Card key="ec-dico" title="Dicotech · Estado de cuenta" fuente="edc_digitalife" status={status} disabled={!!busy}
-          descripcion="Archivo 00708SemanaNN (REVKO) — corte semanal con aging."
-          onUpload={handleEdC} log={logs.edc} />
-      )},
-  ];
 
-  return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:16, marginBottom: 18, flexWrap:'wrap' }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: '0 0 6px' }}>Actualización de datos</h1>
-          <p style={{ color: '#64748b', margin: 0, fontSize: 13 }}>
-            Subidas agrupadas por cliente. <span style={{ color:'#10B981' }}>● ≤7d</span> · <span style={{ color:'#F59E0B' }}>● 8-14d</span> · <span style={{ color:'#EF4444' }}>● &gt;14d</span>
-          </p>
+        <Card title="Estado de Cuenta (Digitalife o PCEL)" fuente="edc_digitalife" status={status} disabled={!!busy}
+          descripcion="Detecta el cliente por el código en F2 (00473=PCEL, 00764=Digitalife). Reemplaza la semana si ya existía."
+          onUpload={handleEdC} log={logs.edc} />
+
+        <div style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', borderRadius: 12, padding: 20, gridColumn: '1 / -1' }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 4px' }}>Tránsito (automático desde Drive)</h3>
+          <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Pendiente de reconfigurar — sync scheduled task contra Master Embarques.</p>
         </div>
-        <a href="/uploads.html" target="_blank" rel="noopener"
-           style={{ background:'#3B82F6', color:'#fff', padding:'10px 18px', borderRadius:10, fontSize:13, fontWeight:600, textDecoration:'none', whiteSpace:'nowrap' }}>
-          📤 Uploader completo →
-        </a>
+
       </div>
-
-      {GRUPOS.map(grupo => {
-        const fuentesG = FUENTES.filter(f => f.grupo === grupo.id);
-        if (fuentesG.length === 0) return null;
-        return (
-          <div key={grupo.id} style={{ marginBottom: 28 }}>
-            <div style={{ display:'flex', alignItems:'baseline', gap:14, padding:'10px 4px 8px', borderBottom:`2px solid ${grupo.color}`, marginBottom: 12 }}>
-              <h2 style={{ margin:0, color:grupo.color, fontSize:17 }}>{grupo.label}</h2>
-              <span style={{ color:'#64748B', fontSize:12 }}>{grupo.subtitle}</span>
-              <span style={{ color:'#94A3B8', fontSize:11, marginLeft:'auto' }}>{fuentesG.length} fuente{fuentesG.length !== 1 ? 's' : ''}</span>
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(340px, 1fr))', gap:14 }}>
-              {fuentesG.map((f, i) => (
-                <div key={i} style={{ position:'relative' }}>
-                  <EstadoFreshura info={uploadStatus[f.statusKey]} tipo={f.tipo} color={grupo.color} />
-                  {f.card}
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── Badge de frescura que se monta encima de cada tarjeta ───
-function EstadoFreshura({ info, tipo, color }) {
-  const MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const fmtIso = (iso) => {
-    if (!iso) return null;
-    const s = String(iso).slice(0,10);
-    const [y,m,d] = s.split('-');
-    if (!y||!m||!d) return s;
-    return `${d} ${MES[parseInt(m,10)-1]} ${y}`;
-  };
-  if (!info) return (
-    <div style={{ padding:'4px 0 0', display:'flex', gap:6, alignItems:'center' }}>
-      <span style={{ width:8, height:8, borderRadius:'50%', background:'#94A3B8' }} />
-      <span style={{ fontSize:11, color:'#94A3B8', fontStyle:'italic' }}>Sin datos cargados</span>
-    </div>
-  );
-  const updatedAt = info.updated_at || null;
-  const dias = updatedAt ? Math.floor((Date.now() - new Date(updatedAt).getTime()) / 86400000) : null;
-  const dot = (dias == null) ? '#94A3B8' : (dias <= 7 ? '#10B981' : dias <= 14 ? '#F59E0B' : '#EF4444');
-  let dataHasta = '';
-  if (tipo === 'sellout' && info.fecha) dataHasta = `Última venta: ${fmtIso(info.fecha)}`;
-  else if (tipo === 'semana' && info.anio && info.semana) {
-    dataHasta = `${info.anio} S${String(info.semana).padStart(2,'0')}`;
-    if (info.fecha_corte) dataHasta += ` (corte ${fmtIso(info.fecha_corte)})`;
-  } else if (tipo === 'mes' && info.anio && info.mes) {
-    dataHasta = `Hasta: ${MES[info.mes-1]} ${info.anio}`;
-  } else if (tipo === 'updated' && updatedAt) {
-    dataHasta = `Actualizado ${fmtIso(updatedAt)}`;
-  }
-  return (
-    <div style={{ padding:'4px 0 6px', display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', fontSize:11 }}>
-      <span style={{ width:8, height:8, borderRadius:'50%', background:dot }} />
-      {dataHasta && <strong style={{ color:'#0F172A' }}>{dataHasta}</strong>}
-      {dias != null && (
-        <span style={{ color:'#94A3B8' }}>
-          ({dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias}d`})
-        </span>
-      )}
-    </div>
-  );
-}
-
-// Card "externa" para fuentes sin handler nativo en este panel — abre el
-// uploader completo (/uploads.html) en otra pestaña.
-function CardExterna({ title, descripcion, uploadsAnchor }) {
-  return (
-    <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div>
-        <h3 style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', margin: 0 }}>{title}</h3>
-        <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0 0' }}>{descripcion}</p>
-      </div>
-      <a href={`/uploads.html${uploadsAnchor || ''}`} target="_blank" rel="noopener"
-         style={{ background:'#64748B', color:'white', padding:'8px 14px', borderRadius:8, fontSize:13, fontWeight:500, textDecoration:'none', textAlign:'center' }}>
-        📤 Subir en uploader completo
-      </a>
     </div>
   );
 }
