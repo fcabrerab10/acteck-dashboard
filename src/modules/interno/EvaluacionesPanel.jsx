@@ -301,9 +301,9 @@ export default function EvaluacionesPanel() {
         row.eventosCount = evtsMes.length;
         row.propsMes = propsMes;
         row.evtsMes = evtsMes;
-        // Techo absoluto $4,800 + piso $3,000 garantizado
-        // (piso + $1,800 de variable máximo)
-        const TECHO = 4800;
+        // Techo absoluto $4,700 + piso $3,000 garantizado
+        // (piso + $1,700 de variable máximo)
+        const TECHO = 4700;
         const PISO = 3000;
         row.bono = Math.min(TECHO, Math.max(PISO, Math.round(bonoVariable)));
         row.bonoTecho = TECHO;
@@ -640,7 +640,7 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
               <h3 className="font-semibold text-gray-800">Resumen mensual</h3>
               {/* La fórmula con techo/piso solo es visible para super_admin */}
               {canEdit && (
-                <span className="text-xs text-gray-500">Bono = MIN($4,800, MAX($3,000, suma KPIs + extras))</span>
+                <span className="text-xs text-gray-500">Bono = MIN($4,700, MAX($3,000, suma KPIs + extras))</span>
               )}
             </div>
           </div>
@@ -661,7 +661,7 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
                 {resumenMensual.map((r) => {
                   const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
                   const dineroKpis = (r.bonoVariable || 0) - (r.sumaExtras || 0) - (r.sumaBonus || 0) * 50;
-                  const enTecho = r.bonoVariable > 4800;
+                  const enTecho = r.bonoVariable > 4700;
                   const enPiso = r.bonoVariable < 3000 && r.bonoVariable > 0;
                   // ¿El mes está completo? Compara contra fecha actual y nº de
                   // semanas esperadas (~4-5 por mes natural).
@@ -701,7 +701,7 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
                       <td className="text-right px-4 py-2.5 font-bold text-emerald-700 tabular-nums">
                         {r.promedio != null ? formatMXN(r.bono) : "—"}
                         {(parcial || esMesActual) && <div className="text-[9px] text-amber-600 font-normal italic">hasta ahora</div>}
-                        {canEdit && enTecho && <span className="text-[10px] text-orange-600 ml-1" title="Capeado al techo de $4,800">↑techo</span>}
+                        {canEdit && enTecho && <span className="text-[10px] text-orange-600 ml-1" title="Capeado al techo de $4,700">↑techo</span>}
                         {canEdit && enPiso && <span className="text-[10px] text-blue-600 ml-1" title="Piso garantizado de $3,000">↑piso</span>}
                       </td>
                       {canEdit && (
