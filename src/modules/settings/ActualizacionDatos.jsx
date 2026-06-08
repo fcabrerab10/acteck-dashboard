@@ -515,48 +515,172 @@ export default function ActualizacionDatos({ perfil }) {
     setBusy(null);
   }
 
+  return <PanelEstadoFuentes />;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Panel agrupado por cliente con estado de cada fuente.
+// Para subir archivos, el botón abre /uploads.html (panel completo).
+// ──────────────────────────────────────────────────────────────────────
+
+const FUENTES = [
+  // ── Globales ──
+  { id:'erp-acteck', grupo:'globales', tipo:'sellin', statusKey:'facturacion_global',
+    title:'ERP Acteck — Facturación & Inventario',
+    desc:'Archivo único: hoja Facturación (sell-in canónico cliente×SKU×mes) + Vw_TablaH_Inventario.' },
+  { id:'roadmap-precios', grupo:'globales', tipo:'catalogo', statusKey:'roadmap',
+    title:'Catálogo · Roadmap y Precios',
+    desc:'Roadmap y Precios.xlsx (2 hojas). Replace completo.' },
+  { id:'master-embarques', grupo:'globales', tipo:'compras', statusKey:'embarques',
+    title:'Master Embarques',
+    desc:'Embarques históricos por PO+CODIGO. Auto-sync desde Google Sheets.' },
+  // ── Digitalife ──
+  { id:'digitalife-sellout', grupo:'digitalife', tipo:'sellout', statusKey:'sellout_digitalife',
+    title:'Sellout histórico',
+    desc:'Historico Sellout Digitalife — append con dedup por fecha+SKU+cantidad.' },
+  { id:'digitalife-inv', grupo:'digitalife', tipo:'inventario', statusKey:'inv_digitalife',
+    title:'Inventario semanal',
+    desc:'Acteck_BalamRush_Inventario — snapshot semanal por (cliente, SKU, año, semana).' },
+  // ── PCEL ──
+  { id:'pcel-vm', grupo:'pcel', tipo:'sellout', statusKey:'sellout_pcel_semanal',
+    title:'Venta-marca semanal',
+    desc:'venta-marca-ACTECK — sellout semanal + histórico mensual + catálogo SKU.' },
+  // ── Dicotech ──
+  { id:'dicotech-sellout', grupo:'dicotech', tipo:'sellout', statusKey:'sellout_dicotech',
+    title:'Sellout semanal (CSV)',
+    desc:'Reporte CSV del correo semanal de Revko/Dicotech.' },
+  { id:'dicotech-inv', grupo:'dicotech', tipo:'inventario', statusKey:'inv_dicotech',
+    title:'Inventario semanal',
+    desc:'Inventario_Dicotech.xlsx con la misma estructura que Digitalife.' },
+  // ── Estados de Cuenta ──
+  { id:'ec-digitalife', grupo:'estados_cuenta', tipo:'estado_cuenta', statusKey:'ec_digitalife',
+    title:'Digitalife · Estado de cuenta',
+    desc:'Archivo 00764SemanaNN — corte semanal con aging.' },
+  { id:'ec-pcel', grupo:'estados_cuenta', tipo:'estado_cuenta', statusKey:'ec_pcel',
+    title:'PCEL · Estado de cuenta',
+    desc:'Archivo 00473SemanaNN — corte semanal con aging.' },
+  { id:'ec-dicotech', grupo:'estados_cuenta', tipo:'estado_cuenta', statusKey:'ec_dicotech',
+    title:'Dicotech · Estado de cuenta',
+    desc:'Archivo 00708SemanaNN (REVKO) — corte semanal con aging.' },
+];
+
+const GRUPOS = [
+  { id:'globales',       label:'🌐 Globales',                  color:'#64748B', subtitle:'Datos generales (toda la empresa)' },
+  { id:'digitalife',     label:'🔵 Digitalife',                color:'#3B82F6', subtitle:'API GLOBAL · CAJADL01' },
+  { id:'pcel',           label:'🔴 PCEL',                       color:'#EF4444', subtitle:'PC ONLINE' },
+  { id:'dicotech',       label:'🟢 Dicotech',                   color:'#10B981', subtitle:'DICOTECH MAYORISTA · REVKO' },
+  { id:'estados_cuenta', label:'📑 Estados de Cuenta',         color:'#7C3AED', subtitle:'Cortes semanales con aging por cliente' },
+];
+
+function PanelEstadoFuentes() {
+  const [status, setStatus] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/upload-status');
+        if (!r.ok) return;
+        const j = await r.json();
+        if (!cancel) setStatus(j);
+      } catch {/*ignore*/} finally { if (!cancel) setLoading(false); }
+    })();
+    return () => { cancel = true; };
+  }, []);
+
+  const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const fmtFechaShort = (iso) => {
+    if (!iso) return '';
+    const s = String(iso).slice(0,10);
+    const [y,m,d] = s.split('-');
+    if (!y||!m||!d) return s;
+    return `${d} ${MESES[parseInt(m,10)-1]} ${y}`;
+  };
+  const fmtDataUntil = (src) => {
+    const info = status[src.statusKey];
+    if (!info) return null;
+    if (src.tipo === 'sellout' && info.fecha) return `Última venta: ${fmtFechaShort(info.fecha)}`;
+    if (src.tipo === 'estado_cuenta' && info.anio && info.semana) {
+      const corte = info.fecha_corte ? ` (corte ${fmtFechaShort(info.fecha_corte)})` : '';
+      return `${info.anio} S${String(info.semana).padStart(2,'0')}${corte}`;
+    }
+    if ((src.tipo === 'inventario' || src.statusKey === 'sellout_pcel_semanal') && info.anio && info.semana) {
+      return `${info.anio} S${String(info.semana).padStart(2,'0')}`;
+    }
+    if (info.anio && info.mes) return `${MESES[info.mes-1]} ${info.anio}`;
+    return info.updated_at ? `Actualizado ${fmtFechaShort(info.updated_at)}` : null;
+  };
+  const diasDesde = (iso) => {
+    if (!iso) return null;
+    const d = new Date(iso); if (isNaN(d)) return null;
+    return Math.floor((Date.now() - d.getTime()) / 86400000);
+  };
+  const colorDot = (dias) => {
+    if (dias == null) return '#94A3B8';
+    if (dias <= 7) return '#10B981';
+    if (dias <= 14) return '#F59E0B';
+    return '#EF4444';
+  };
+
   return (
     <div style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: '0 0 6px' }}>Actualización de datos</h1>
-      <p style={{ color: '#64748b', margin: '0 0 20px', fontSize: 13 }}>Subidas manuales por fuente. Cada tarjeta muestra cuándo se actualizó por última vez.</p>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
-
-        <Card title="ERP diario" fuente="erp_sell_in" status={status} disabled={!!busy}
-          descripcion="Hojas Vw_TablaH_Ventas + Vw_TablaH_Inventario. Sell in hace upsert por fecha+SKU, inventario se reemplaza."
-          onUpload={handleERP} log={logs.erp} />
-
-        <Card title="Catálogo (Roadmap + Precios)" fuente="roadmap" status={status} disabled={!!busy}
-          descripcion="Archivo con hojas 'Roadmap Q2 2026' y 'BD Lista de Precios'. Reemplaza ambas tablas."
-          onUpload={handleCatalogo} log={logs.catalogo} />
-
-        <Card title="Sellout Digitalife" fuente="sellout_digitalife" status={status} disabled={!!busy}
-          descripcion="Sellout semanal crudo del cliente (10 columnas). Para subir histórico completo hay que avisar."
-          onUpload={(f) => handleSelloutDigitalife(f, false)} log={logs.sellout_digitalife}>
-          <label style={{ fontSize: 11, color: '#64748b' }}>
-            <input type="checkbox" id={'chk_histdig'} style={{ marginRight: 4 }} onChange={e => window.__histDig = e.target.checked} />
-            Este archivo es el histórico completo (reemplaza todo)
-          </label>
-        </Card>
-
-        <Card title="Sellout PCEL" fuente="sellout_pcel" status={status} disabled={!!busy}
-          descripcion="Archivo 'venta-marca-...xls' por marca. Año desde nombre de archivo, semana desde columna 'Vta Semana N'."
-          onUpload={handleSelloutPcel} log={logs.sellout_pcel} />
-
-        <Card title="Inventario Digitalife" fuente="inventario_digitalife" status={status} disabled={!!busy}
-          descripcion="Snapshot semanal de stock por SKU. Reemplaza inventario anterior del cliente."
-          onUpload={handleInventarioDigitalife} log={logs.inventario_digitalife} />
-
-        <Card title="Estado de Cuenta (Digitalife o PCEL)" fuente="edc_digitalife" status={status} disabled={!!busy}
-          descripcion="Detecta el cliente por el código en F2 (00473=PCEL, 00764=Digitalife). Reemplaza la semana si ya existía."
-          onUpload={handleEdC} log={logs.edc} />
-
-        <div style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', borderRadius: 12, padding: 20, gridColumn: '1 / -1' }}>
-          <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 4px' }}>Tránsito (automático desde Drive)</h3>
-          <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Pendiente de reconfigurar — sync scheduled task contra Master Embarques.</p>
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:16, marginBottom: 20, flexWrap:'wrap' }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: '0 0 6px' }}>Actualización de datos</h1>
+          <p style={{ color: '#64748b', margin: 0, fontSize: 13 }}>
+            Estado de las fuentes agrupadas por cliente. <span style={{ color:'#10B981' }}>● ≤7d</span> · <span style={{ color:'#F59E0B' }}>● 8-14d</span> · <span style={{ color:'#EF4444' }}>● &gt;14d</span>
+          </p>
         </div>
-
+        <a href="/uploads.html" target="_blank" rel="noopener"
+           style={{ background:'#3B82F6', color:'#fff', padding:'10px 18px', borderRadius:10, fontSize:13, fontWeight:600, textDecoration:'none', whiteSpace:'nowrap' }}>
+          📤 Abrir uploader completo →
+        </a>
       </div>
+
+      {GRUPOS.map(grupo => {
+        const fuentes = FUENTES.filter(f => f.grupo === grupo.id);
+        if (fuentes.length === 0) return null;
+        return (
+          <div key={grupo.id} style={{ marginBottom: 28 }}>
+            <div style={{ display:'flex', alignItems:'baseline', gap:14, padding:'14px 4px 8px', borderBottom:`2px solid ${grupo.color}`, marginBottom: 10 }}>
+              <h2 style={{ margin:0, color:grupo.color, fontSize:18 }}>{grupo.label}</h2>
+              <span style={{ color:'#64748B', fontSize:13 }}>{grupo.subtitle}</span>
+              <span style={{ color:'#94A3B8', fontSize:12, marginLeft:'auto' }}>{fuentes.length} fuente{fuentes.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))', gap:12 }}>
+              {fuentes.map(src => {
+                const info = status[src.statusKey];
+                const dataHasta = fmtDataUntil(src);
+                const dias = diasDesde(info?.updated_at);
+                const fechaCarga = info?.updated_at ? fmtFechaShort(info.updated_at) : null;
+                return (
+                  <div key={src.id} style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:12, padding:14, borderLeft:`4px solid ${grupo.color}` }}>
+                    <div style={{ fontWeight:600, fontSize:14, color:'#0F172A', marginBottom:4 }}>{src.title}</div>
+                    <div style={{ fontSize:11, color:'#64748B', marginBottom:8, lineHeight:1.4 }}>{src.desc}</div>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                      <span style={{ display:'inline-block', width:8, height:8, borderRadius:'50%', background:colorDot(dias) }}></span>
+                      {loading ? (
+                        <span style={{ fontSize:12, color:'#94A3B8', fontStyle:'italic' }}>Cargando…</span>
+                      ) : dataHasta ? (
+                        <strong style={{ fontSize:12, color:'#0F172A' }}>{dataHasta}</strong>
+                      ) : (
+                        <span style={{ fontSize:12, color:'#94A3B8', fontStyle:'italic' }}>Sin datos cargados</span>
+                      )}
+                      {fechaCarga && <span style={{ fontSize:11, color:'#64748B' }}>· {fechaCarga}</span>}
+                      {dias != null && (
+                        <span style={{ fontSize:11, color:'#94A3B8' }}>
+                          ({dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias}d`})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
