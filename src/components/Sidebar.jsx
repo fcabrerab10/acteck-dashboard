@@ -265,13 +265,17 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
               </button>
             )}
             {puedeActualizar && (
-              <a
-                href="/uploads.html"
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-colors"
+              <button
+                onClick={() => onNavegar(null, 'actualizacion')}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
+                  paginaActiva === 'actualizacion'
+                    ? 'bg-blue-50 text-blue-700 font-semibold'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                }`}
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                Actualizar Datos
-              </a>
+                Actualización de datos
+              </button>
             )}
           </div>
         )}
