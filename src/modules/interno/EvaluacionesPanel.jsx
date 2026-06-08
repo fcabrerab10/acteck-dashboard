@@ -259,16 +259,16 @@ export default function EvaluacionesPanel() {
           // No se infla por la escala cuotas — esa es ganancia "extra".
           valorMaxKpis += info.valor_pesos;
           dineroBaseKpis += (Math.min(100, promedioPct) / 100) * info.valor_pesos;
-          // KPI especial "cuotas_cumplidas": escala con techo $625.
-          //   <70% → $0 · 70-100% lineal hasta $375 · 100-130% lineal hasta
-          //   $625 · >130% → $625. Resto: lineal simple (% × valor_pesos).
-          // Se detecta por valor_pesos === 375 (único KPI con ese valor).
+          // KPI especial "cuotas_cumplidas": escala con techo $200.
+          //   <70% → $0 · 70-100% lineal hasta $125 · 100-130% lineal hasta
+          //   $200 · >130% → $200. Resto: lineal simple (% × valor_pesos).
+          // Se detecta por valor_pesos === 125 (único KPI con ese valor).
           let dinero = 0;
-          if (info.valor_pesos === 375) {
+          if (info.valor_pesos === 125) {
             if (promedioPct < 70) dinero = 0;
-            else if (promedioPct <= 100) dinero = (promedioPct - 70) * (375 / 30); // 70→0, 100→375
-            else if (promedioPct <= 130) dinero = 375 + (promedioPct - 100) * (250 / 30); // 100→375, 130→625
-            else dinero = 625;
+            else if (promedioPct <= 100) dinero = (promedioPct - 70) * (125 / 30); // 70→0, 100→125
+            else if (promedioPct <= 130) dinero = 125 + (promedioPct - 100) * (75 / 30); // 100→125, 130→200
+            else dinero = 200;
           } else {
             dinero = (promedioPct / 100) * info.valor_pesos;
           }
@@ -301,12 +301,12 @@ export default function EvaluacionesPanel() {
         row.eventosCount = evtsMes.length;
         row.propsMes = propsMes;
         row.evtsMes = evtsMes;
-        // Techo absoluto $4,700 + piso $3,000 garantizado
-        // (piso + $1,700 de variable máximo)
-        const TECHO = 4700;
+        // Nueva fórmula (v7): bono = PISO + KPIs + extras (sin techo)
+        // El piso es BASE FIJA, no garantía mínima. Cada KPI cumplido y
+        // cada extra ganado SUMA encima del piso. KPIs al 100% ≈ $1,400.
         const PISO = 3000;
-        row.bono = Math.min(TECHO, Math.max(PISO, Math.round(bonoVariable)));
-        row.bonoTecho = TECHO;
+        row.bono = Math.round(PISO + bonoVariable);
+        row.bonoTecho = null;  // sin techo
         row.bonoPiso = PISO;
         row.dineroPorKpi = dineroPorKpi;
         // Score % = cumplimiento ponderado de los KPIs (sin contar escala
@@ -640,7 +640,7 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
               <h3 className="font-semibold text-gray-800">Resumen mensual</h3>
               {/* La fórmula con techo/piso solo es visible para super_admin */}
               {canEdit && (
-                <span className="text-xs text-gray-500">Bono = MIN($4,700, MAX($3,000, suma KPIs + extras))</span>
+                <span className="text-xs text-gray-500">Bono = $3,000 piso + KPIs + extras (sin techo)</span>
               )}
             </div>
           </div>
@@ -661,8 +661,10 @@ function ListaEvaluaciones({ evaluaciones, resumenMensual, loading, canEdit, onA
                 {resumenMensual.map((r) => {
                   const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
                   const dineroKpis = (r.bonoVariable || 0) - (r.sumaExtras || 0) - (r.sumaBonus || 0) * 50;
-                  const enTecho = r.bonoVariable > 4700;
-                  const enPiso = r.bonoVariable < 3000 && r.bonoVariable > 0;
+                  // En el modelo v7 ya no hay techo absoluto. El piso es BASE
+                  // (se suma siempre), no garantía mínima.
+                  const enTecho = false;
+                  const enPiso = false;
                   // ¿El mes está completo? Compara contra fecha actual y nº de
                   // semanas esperadas (~4-5 por mes natural).
                   const hoy = new Date();
