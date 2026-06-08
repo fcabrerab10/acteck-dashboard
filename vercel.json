@@ -1,10 +1,4 @@
 {
-  "rewrites": [
-    {
-      "source": "/auth/mercadolibre",
-      "destination": "/api/auth/mercadolibre"
-    }
-  ],
   "crons": [
     {
       "path": "/api/cron?task=sync-master-embarques",
