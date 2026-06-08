@@ -1151,7 +1151,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         fetchAllPagesREST(`cuotas_mensuales?select=mes,cuota_min,cuota_ideal&cliente=eq.${clienteKey}&anio=eq.2026`),
         // Tracking N — Digitalife: sellout_detalle (fecha exacta últimos 120d)
         !esPcel
-          ? fetchAllPagesREST(`sellout_detalle?cliente=eq.digitalife&fecha=gte.${hace120dias}&select=fecha,no_parte,cantidad`).catch((e) => { console.error('selloutDiario:', e); return []; })
+          ? fetchAllPagesREST(`sellout_detalle?cliente=eq.${clienteKey}&fecha=gte.${hace120dias}&select=fecha,no_parte,cantidad`).catch((e) => { console.error('selloutDiario:', e); return []; })
           : Promise.resolve([]),
         // Tracking N — PCEL: sellout_pcel (anio,semana,vta_semana)
         esPcel
@@ -1441,7 +1441,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       const invAct = datos.actStockBySku[sku] || 0;
       const invTr = datos.transitoBySku[sku] || 0;
       let sug = Math.max(0, prom * 3 - stock);
-      if (clienteKey === 'digitalife' && stock < prom && sug < 11) sug = 11;
+      if ((clienteKey === 'digitalife' || clienteKey === 'dicotech') && stock < prom && sug < 11) sug = 11;
       sug = Math.min(sug, invAct + invTr);
       if (sug > 0) {
         const prod = datos.productos.find(p => p.sku === sku);
@@ -2765,7 +2765,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     const mesesCap = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
     const mesNombre = mesesCap[hoy.getMonth()];
     const anioActual = hoy.getFullYear();
-    const nombreCliente = (clienteKey === "digitalife" || clienteKey === "dicotech") ? "Digitalife"
+    const nombreCliente = clienteKey === "digitalife" ? "Digitalife"
                         : clienteKey === "dicotech" ? "Dicotech"
                         : (cliente || clienteKey || "Cliente");
     XLSX.writeFile(wb, `Sugerido ${nombreCliente} ${mesNombre} ${anioActual}.xlsx`);
