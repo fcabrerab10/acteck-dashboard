@@ -31,6 +31,19 @@
   .log.open{display:block}
   .status-line{font-size:12px;min-height:18px}
   .last-updated{font-size:11px;color:#059669;background:#dcfce7;padding:2px 8px;border-radius:12px;display:inline-block;margin-top:2px}
+  .grupo-section{grid-column:1 / -1;display:flex;flex-direction:column;gap:14px}
+  .grupo-header{cursor:pointer;display:flex;align-items:baseline;gap:14px;padding:18px 4px 8px;margin:10px 0 0;user-select:none;transition:opacity .15s}
+  .grupo-header:hover{opacity:.75}
+  .grupo-chevron{display:inline-block;transition:transform .2s;font-size:14px;color:#64748B;width:14px}
+  .grupo-section.collapsed .grupo-chevron{transform:rotate(-90deg)}
+  .grupo-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+  .grupo-section.collapsed .grupo-cards{display:none}
+  .fuente-status{display:flex;align-items:center;gap:6px;font-size:11px;color:#475569;background:#f1f5f9;padding:4px 10px;border-radius:12px;align-self:flex-start}
+  .fuente-status .dot{width:8px;height:8px;border-radius:50%;background:#94a3b8;flex:none}
+  .fuente-status.fresh .dot{background:#10b981}
+  .fuente-status.stale .dot{background:#f59e0b}
+  .fuente-status.old .dot{background:#ef4444}
+  .fuente-status.empty{color:#94a3b8;background:#f8fafc;font-style:italic}
 </style>
 </head>
 <body>
@@ -56,19 +69,19 @@ const GRUPOS = [
 
 const SOURCES = [
   // ── Globales ──
-  { id:'erp-acteck', grupo:'globales', title:'ERP Acteck — Facturación & Inventario', desc:'Archivo único con hojas Facturación + Vw_TablaH_Inventario. La hoja Facturación es la fuente canónica de sell-in (cliente×SKU×mes ya pre-filtrado por contabilidad). Reemplaza años 2025+2026 completos en facturacion_clientes y replace total de inventario.', file:'Actualizaciones ERP.xlsx',
+  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación & Inventario', desc:'Archivo único con hojas Facturación + Vw_TablaH_Inventario. La hoja Facturación es la fuente canónica de sell-in (cliente×SKU×mes ya pre-filtrado por contabilidad). Reemplaza años 2025+2026 completos en facturacion_clientes y replace total de inventario.', file:'Actualizaciones ERP.xlsx',
     combined: [
       { table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', label:'Facturación (sell-in canónico)', replaceAnios:[2025,2026] },
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true }
     ]
   },
-  { id:'roadmap-precios', grupo:'globales', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
-  { id:'master-embarques', grupo:'globales', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
+  { id:'roadmap-precios', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
+  { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
   // ── Digitalife ──
-  { id:'digitalife-sellout', grupo:'digitalife', title:'Digitalife · Sellout histórico', desc:'Historico Sellout Digitalife (hoja "Sellout Digitalife"). Append con dedup por fecha+parte+cantidad+total.', file:'Historico Sellout Digitalife.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
-  { id:'digitalife-inv', grupo:'digitalife', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Snapshot semanal por (cliente, sku, anio, semana).', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv' },
+  { id:'digitalife-sellout', grupo:'digitalife', tipo:'sellout', statusKey:'sellout_digitalife', title:'Digitalife · Sellout histórico', desc:'Historico Sellout Digitalife (hoja "Sellout Digitalife"). Append con dedup por fecha+parte+cantidad+total.', file:'Historico Sellout Digitalife.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
+  { id:'digitalife-inv', grupo:'digitalife', tipo:'semana', statusKey:'inv_digitalife', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Snapshot semanal por (cliente, sku, anio, semana).', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv' },
   // ── PCEL ──
-  { id:'pcel-vm', grupo:'pcel', title:'PCEL · venta-marca semanal', desc:'Archivo venta-marca-ACTECK. Actualiza sellout semanal + histórico mensual + catálogo SKU.', file:'venta-marca-ACTECK.xlsx',
+  { id:'pcel-vm', grupo:'pcel', tipo:'semana', statusKey:'sellout_pcel', title:'PCEL · venta-marca semanal', desc:'Archivo venta-marca-ACTECK. Actualiza sellout semanal + histórico mensual + catálogo SKU.', file:'venta-marca-ACTECK.xlsx',
     combined: [
       { table:'sellout_pcel',          onConflict:'anio,semana,sku', parser:'pcelVentaMarca',      label:'Semanal' },
       { table:'sellout_pcel_mensual',  onConflict:'anio,mes,sku',    parser:'pcelMensualFromVM',   label:'Mensual histórico' },
@@ -76,12 +89,12 @@ const SOURCES = [
     ]
   },
   // ── Dicotech ──
-  { id:'dicotech-sellout', grupo:'dicotech', title:'Dicotech · Sellout semanal (CSV)', desc:'Reporte semanal del correo: Reporte-SellOut_Ventas Semanal Acteck_Revko.csv. Append a sellout_detalle (dedup por Venta+Clave+Cantidad). Tras subir, se recalcula sellout_sku automáticamente.', file:'Reporte-SellOut_Ventas Semanal Acteck_Revko.csv', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'dicotechSelloutSemanal' },
-  { id:'dicotech-inv', grupo:'dicotech', title:'Dicotech · Inventario semanal', desc:'Archivo "Reporte-Inventario_Inventario Acteck Semanal.csv". Stock distribuido en 8 almacenes (DC, Arboledas, Amazon, Dicoags2, Guadalajara, Zacatecas, santafe, leon2) → se suman para el stock total por SKU. Snapshot semanal por (cliente, sku, anio, semana).', file:'Reporte-Inventario_Inventario Acteck Semanal.csv', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'dicotechInv' },
+  { id:'dicotech-sellout', grupo:'dicotech', tipo:'sellout', statusKey:'sellout_dicotech', title:'Dicotech · Sellout semanal (CSV)', desc:'Reporte semanal del correo: Reporte-SellOut_Ventas Semanal Acteck_Revko.csv. Append a sellout_detalle (dedup por Venta+Clave+Cantidad). Tras subir, se recalcula sellout_sku automáticamente.', file:'Reporte-SellOut_Ventas Semanal Acteck_Revko.csv', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'dicotechSelloutSemanal' },
+  { id:'dicotech-inv', grupo:'dicotech', tipo:'semana', statusKey:'inv_dicotech', title:'Dicotech · Inventario semanal', desc:'Archivo "Reporte-Inventario_Inventario Acteck Semanal.csv". Stock distribuido en 8 almacenes (DC, Arboledas, Amazon, Dicoags2, Guadalajara, Zacatecas, santafe, leon2) → se suman para el stock total por SKU. Snapshot semanal por (cliente, sku, anio, semana).', file:'Reporte-Inventario_Inventario Acteck Semanal.csv', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'dicotechInv' },
   // ── Estados de Cuenta ──
-  { id:'ec-digitalife', grupo:'estados_cuenta', title:'Digitalife · Estado de cuenta', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
-  { id:'ec-pcel', grupo:'estados_cuenta', title:'PCEL · Estado de cuenta', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
-  { id:'ec-dicotech', grupo:'estados_cuenta', title:'Dicotech · Estado de cuenta', desc:'Archivo 00708SemanaNN (REVKO TECHNOLOGY). Upsert (cliente, anio, semana) + aging en detalle.', file:'00708SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'dicotech' },
+  { id:'ec-digitalife', grupo:'estados_cuenta', tipo:'semana', statusKey:'ec_digitalife', title:'Digitalife · Estado de cuenta', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
+  { id:'ec-pcel', grupo:'estados_cuenta', tipo:'semana', statusKey:'ec_pcel', title:'PCEL · Estado de cuenta', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
+  { id:'ec-dicotech', grupo:'estados_cuenta', tipo:'semana', statusKey:'ec_dicotech', title:'Dicotech · Estado de cuenta', desc:'Archivo 00708SemanaNN (REVKO TECHNOLOGY). Upsert (cliente, anio, semana) + aging en detalle.', file:'00708SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'dicotech' },
 ];
 
 const CHUNK = 200;
@@ -1075,6 +1088,106 @@ function el(tag, attrs={}, ...kids){
   return n;
 }
 
+// ===== Estado de datos (última actualización por fuente) =====
+let UPLOAD_STATUS = {};
+const LS_COLAPSADOS_KEY = 'uploads_grupos_colapsados';
+
+const MES_CORTO_ES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+function fmtDiaMesAnio(iso){
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return `${d.getDate()} ${MES_CORTO_ES[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function diasDesde(iso){
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+
+function freshnessClass(dias){
+  if (dias == null) return '';
+  if (dias <= 7) return 'fresh';
+  if (dias <= 14) return 'stale';
+  return 'old';
+}
+
+// Devuelve {label, dias} para una fuente según su `tipo` y la respuesta de
+// /api/upload-status. dias se usa para colorear el semáforo.
+function describirEstado(src){
+  const info = UPLOAD_STATUS[src.statusKey];
+  if (!info) return null;
+
+  if (src.tipo === 'sellout') {
+    const label = info.fecha ? `Última venta: ${fmtDiaMesAnio(info.fecha)}` : null;
+    return label ? { label, dias: diasDesde(info.fecha) } : null;
+  }
+
+  if (src.tipo === 'semana') {
+    if (info.anio && info.semana) {
+      const corte = info.fecha_corte ? ` · corte ${fmtDiaMesAnio(info.fecha_corte)}` : '';
+      const dias = diasDesde(info.fecha_corte || info.updated_at);
+      return { label: `Semana ${info.semana}/${info.anio}${corte}`, dias };
+    }
+    return null;
+  }
+
+  if (src.tipo === 'mes') {
+    if (info.anio && info.mes) {
+      const mes = MES_CORTO_ES[info.mes - 1] || info.mes;
+      return { label: `Hasta ${mes} ${info.anio}`, dias: null };
+    }
+    return null;
+  }
+
+  if (src.tipo === 'updated') {
+    const f = fmtDiaMesAnio(info.updated_at);
+    return f ? { label: `Actualizado ${f}`, dias: diasDesde(info.updated_at) } : null;
+  }
+
+  return null;
+}
+
+function pintarEstadoFuente(src){
+  const node = document.getElementById(`fstatus-${src.id}`);
+  if (!node) return;
+  const est = describirEstado(src);
+  node.className = 'fuente-status';
+  if (!est) {
+    node.classList.add('empty');
+    node.innerHTML = '';
+    node.append(el('span', {class:'dot'}), 'Sin datos en Supabase');
+    return;
+  }
+  const cls = freshnessClass(est.dias);
+  if (cls) node.classList.add(cls);
+  node.innerHTML = '';
+  node.append(el('span', {class:'dot'}), est.label);
+}
+
+async function cargarStatusFuentes(){
+  try {
+    const r = await fetch('/api/upload-status', { cache: 'no-store' });
+    if (!r.ok) return;
+    UPLOAD_STATUS = await r.json();
+    for (const src of SOURCES) pintarEstadoFuente(src);
+  } catch (e) {
+    console.warn('No se pudo cargar /api/upload-status', e);
+  }
+}
+
+// ===== Colapsado de grupos =====
+function getColapsados(){
+  try { return JSON.parse(localStorage.getItem(LS_COLAPSADOS_KEY) || '{}'); } catch { return {}; }
+}
+function setColapsado(grupoId, val){
+  const c = getColapsados(); c[grupoId] = val;
+  try { localStorage.setItem(LS_COLAPSADOS_KEY, JSON.stringify(c)); } catch {}
+}
+
 // Construye una tarjeta para una fuente — separado para reutilizar el render
 // dentro de cada grupo.
 function buildSourceCard(src){
@@ -1101,12 +1214,16 @@ function buildSourceCard(src){
   const updBadge = el('div', {class:'last-updated', id:`updated-${src.id}`},
     lastUp ? `🕐 Última actualización: ${fmtDate(lastUp)}` : '');
   if (!lastUp) updBadge.style.display = 'none';
+  // Estado de los datos en Supabase (lo llena `pintarEstadoFuente`)
+  const dataStatus = el('div', { class:'fuente-status empty', id:`fstatus-${src.id}` },
+    el('span', {class:'dot'}), 'Cargando…');
   return el('div', {class:'card'},
     el('h3', {}, src.title),
     el('div', {class:'desc'}, src.desc),
     el('div', {class:'meta'}, src.combined
       ? `📄 ${src.file} · 🎯 ${src.combined.map(c=>c.table).join(' + ')}`
       : `📄 ${src.file} · 🎯 ${src.table}`),
+    dataStatus,
     updBadge,
     status,
     el('div', {class:'actions'}, file, btn, cronBtn),
@@ -1114,37 +1231,41 @@ function buildSourceCard(src){
   );
 }
 
+function renderGrupoSection(grupo, fuentesG){
+  const colapsadosLS = getColapsados();
+  const collapsed = !!colapsadosLS[grupo.id];
+
+  const chevron = el('span', {class:'grupo-chevron'}, '▼');
+  const header = el('div', { class:'grupo-header', style:`border-bottom: 2px solid ${grupo?.color || '#94A3B8'};` },
+    chevron,
+    el('h2', { style: `margin:0; color:${grupo?.color || '#94A3B8'}; font-size:20px;` }, grupo?.label || 'Otros'),
+    grupo?.subtitle ? el('span', { style: 'color:#64748B; font-size:13px;' }, grupo.subtitle) : null,
+    el('span', { style: 'color:#94A3B8; font-size:12px; margin-left:auto;' }, `${fuentesG.length} fuente${fuentesG.length !== 1 ? 's' : ''}`)
+  );
+
+  const cardsWrap = el('div', { class:'grupo-cards' });
+  for (const src of fuentesG) cardsWrap.appendChild(buildSourceCard(src));
+
+  const section = el('section', { class: 'grupo-section' + (collapsed ? ' collapsed' : '') }, header, cardsWrap);
+  header.addEventListener('click', () => {
+    const ahoraCol = !section.classList.contains('collapsed');
+    section.classList.toggle('collapsed', ahoraCol);
+    setColapsado(grupo?.id || '__otros__', ahoraCol);
+  });
+  return section;
+}
+
 function renderCards(){
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
-  // Iteramos por grupo. Para cada grupo dibujamos un header con su color y
-  // luego un sub-grid con las tarjetas de ese grupo.
   for (const grupo of GRUPOS) {
     const fuentesG = SOURCES.filter(s => s.grupo === grupo.id);
     if (fuentesG.length === 0) continue;
-
-    const header = el('div', {
-      style: `grid-column: 1 / -1; display:flex; align-items:baseline; gap:14px; padding:18px 4px 8px; border-bottom: 2px solid ${grupo.color}; margin: 10px 0 6px;`
-    },
-      el('h2', { style: `margin:0; color:${grupo.color}; font-size:20px;` }, grupo.label),
-      el('span', { style: 'color:#64748B; font-size:13px;' }, grupo.subtitle),
-      el('span', { style: 'color:#94A3B8; font-size:12px; margin-left:auto;' }, `${fuentesG.length} fuente${fuentesG.length !== 1 ? 's' : ''}`)
-    );
-    grid.appendChild(header);
-
-    for (const src of fuentesG) {
-      grid.appendChild(buildSourceCard(src));
-    }
+    grid.appendChild(renderGrupoSection(grupo, fuentesG));
   }
-
-  // Compatibilidad: si por algún motivo hay fuentes sin grupo, las ponemos al final
   const sinGrupo = SOURCES.filter(s => !s.grupo);
   if (sinGrupo.length > 0) {
-    const header = el('div', {
-      style: `grid-column: 1 / -1; padding:18px 4px 8px; border-bottom: 2px solid #94A3B8; margin: 10px 0 6px;`
-    }, el('h2', { style: 'margin:0; color:#94A3B8; font-size:20px;' }, 'Otros'));
-    grid.appendChild(header);
-    for (const src of sinGrupo) grid.appendChild(buildSourceCard(src));
+    grid.appendChild(renderGrupoSection({ id:'__otros__', label:'Otros', color:'#94A3B8', subtitle:'' }, sinGrupo));
   }
 }
 
@@ -1358,6 +1479,7 @@ async function postChunks(src, table, onConflict, rows, deleteAnios){
 }
 
 renderCards();
+cargarStatusFuentes();
 
 </script>
 </body>
