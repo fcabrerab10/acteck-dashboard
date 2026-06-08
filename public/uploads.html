@@ -55,6 +55,7 @@ const SOURCES = [
   { id:'digitalife-sellout', title:'Digitalife · Sellout histórico', desc:'Historico Sellout Digitalife (hoja "Sellout Digitalife"). Append con dedup por fecha+parte+cantidad+total.', file:'Historico Sellout Digitalife.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
   { id:'dicotech-sellout', title:'Dicotech · Sellout semanal (CSV)', desc:'Reporte semanal del correo: Reporte-SellOut_Ventas Semanal Acteck_Revko.csv. Append a sellout_detalle (dedup por Venta+Clave+Cantidad). Tras subir, se recalcula sellout_sku automáticamente.', file:'Reporte-SellOut_Ventas Semanal Acteck_Revko.csv', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'dicotechSelloutSemanal' },
   { id:'digitalife-inv', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Snapshot semanal por (cliente, sku, anio, semana).', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv' },
+  { id:'dicotech-inv', title:'Dicotech · Inventario semanal', desc:'Archivo Inventario_Dicotech (mismo formato que Digitalife, Hoja39 o primera hoja). Snapshot semanal por (cliente, sku, anio, semana). Si el formato cambia, avisa para ajustar el parser.', file:'Inventario_Dicotech.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'dicotechInv' },
   { id:'pcel-vm', title:'PCEL · venta-marca semanal', desc:'Archivo venta-marca-ACTECK. Actualiza sellout semanal + histórico mensual + catálogo SKU.', file:'venta-marca-ACTECK.xlsx',
     combined: [
       { table:'sellout_pcel',          onConflict:'anio,semana,sku', parser:'pcelVentaMarca',      label:'Semanal' },
@@ -190,6 +191,34 @@ const PARSERS = {
       const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
       return {
         cliente: 'digitalife',
+        sku: toStr(obj.parte ?? obj.sku ?? obj.no_parte),
+        anio,
+        semana,
+        marca: toStr(obj.marca),
+        titulo: toStr(obj.titulo ?? obj.descripcion),
+        stock: toInt(obj.stock ?? obj.inventario),
+        costo_convenio: toNum(obj.costo_convenio),
+        precio_venta: toNum(obj.precio_venta),
+        fecha_ultima_venta: toISODate(obj.fecha_ultima_venta),
+        dias_sin_venta: toNum(obj.dias_sin_venta),
+        valor: toNum(obj.valor),
+      };
+    }).filter(r => r.sku);
+  },
+  // Mismo esquema que digitalifeInv pero con cliente='dicotech'. Si Dicotech
+  // entrega un archivo con otras columnas, ajustamos los nombres aquí.
+  dicotechInv(wb){
+    const sh = wb.Sheets['Hoja39'] || wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
+    const now = new Date();
+    const anio = now.getFullYear();
+    const jan1 = new Date(anio, 0, 1);
+    const days = Math.floor((now - jan1) / 86400000);
+    const semana = Math.ceil((days + jan1.getDay() + 1) / 7);
+    return rows.map(r => {
+      const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
+      return {
+        cliente: 'dicotech',
         sku: toStr(obj.parte ?? obj.sku ?? obj.no_parte),
         anio,
         semana,
