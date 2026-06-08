@@ -78,10 +78,6 @@ const SOURCES = [
     title:'Inventario semanal',
     desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Snapshot semanal por (cliente, sku, anio, semana).',
     file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv' },
-  { id:'ec-digitalife', grupo:'digitalife', tipo:'estado_cuenta', statusKey:'ec_digitalife',
-    title:'Estado de cuenta',
-    desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.',
-    file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
 
   // ════════ PCEL ════════
   { id:'pcel-vm', grupo:'pcel', tipo:'sellout', statusKey:'sellout_pcel_semanal',
@@ -94,28 +90,39 @@ const SOURCES = [
       { table:'catalogo_sku_pcel',     onConflict:'sku',             parser:'pcelCatalogoFromVM',  label:'Catálogo SKU' },
     ]
   },
-  { id:'ec-pcel', grupo:'pcel', tipo:'estado_cuenta', statusKey:'ec_pcel',
-    title:'Estado de cuenta',
-    desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.',
-    file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
 
   // ════════ DICOTECH ════════
   { id:'dicotech-sellout', grupo:'dicotech', tipo:'sellout', statusKey:'sellout_dicotech',
     title:'Sellout semanal (CSV)',
     desc:'Reporte semanal del correo: Reporte-SellOut_Ventas Semanal Acteck_Revko.csv. Append a sellout_detalle (dedup por Venta+Clave+Cantidad). Tras subir, se recalcula sellout_sku automáticamente.',
     file:'Reporte-SellOut_Ventas Semanal Acteck_Revko.csv', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'dicotechSelloutSemanal' },
-  { id:'ec-dicotech', grupo:'dicotech', tipo:'estado_cuenta', statusKey:'ec_dicotech',
-    title:'Estado de cuenta',
+  { id:'dicotech-inv', grupo:'dicotech', tipo:'inventario', statusKey:'inv_dicotech',
+    title:'Inventario semanal',
+    desc:'Snapshot de inventario que reporta Dicotech (mismo formato que Digitalife: hoja con SKU/stock). Se carga a inventario_cliente con cliente=dicotech.',
+    file:'Inventario_Dicotech.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv', cliente:'dicotech' },
+
+  // ════════ ESTADOS DE CUENTA (sección dedicada de cobranza) ════════
+  { id:'ec-digitalife', grupo:'estados_cuenta', tipo:'estado_cuenta', statusKey:'ec_digitalife',
+    title:'Digitalife · Estado de cuenta',
+    desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.',
+    file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
+  { id:'ec-pcel', grupo:'estados_cuenta', tipo:'estado_cuenta', statusKey:'ec_pcel',
+    title:'PCEL · Estado de cuenta',
+    desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.',
+    file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
+  { id:'ec-dicotech', grupo:'estados_cuenta', tipo:'estado_cuenta', statusKey:'ec_dicotech',
+    title:'Dicotech · Estado de cuenta',
     desc:'Archivo 00708SemanaNN (REVKO TECHNOLOGY). Upsert (cliente, anio, semana) + aging en detalle.',
     file:'00708SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'dicotech' },
 ];
 
 // Definición de los grupos (orden, etiqueta visual, color)
 const GRUPOS = [
-  { id:'globales',   label:'🌐 Globales (toda la empresa)', color:'#64748B', subtitle:'Datos generales que afectan a todos los clientes' },
-  { id:'digitalife', label:'🔵 Digitalife',                color:'#3B82F6', subtitle:'API GLOBAL · CAJADL01' },
-  { id:'pcel',       label:'🔴 PCEL',                       color:'#EF4444', subtitle:'PC ONLINE' },
-  { id:'dicotech',   label:'🟢 Dicotech',                   color:'#10B981', subtitle:'DICOTECH MAYORISTA DE TECNOLOGIA · REVKO' },
+  { id:'globales',       label:'🌐 Globales (toda la empresa)', color:'#64748B', subtitle:'Datos generales que afectan a todos los clientes' },
+  { id:'digitalife',     label:'🔵 Digitalife',                color:'#3B82F6', subtitle:'API GLOBAL · CAJADL01' },
+  { id:'pcel',           label:'🔴 PCEL',                       color:'#EF4444', subtitle:'PC ONLINE' },
+  { id:'dicotech',       label:'🟢 Dicotech',                   color:'#10B981', subtitle:'DICOTECH MAYORISTA DE TECNOLOGIA · REVKO' },
+  { id:'estados_cuenta', label:'📑 Estados de Cuenta (cobranza)', color:'#7C3AED', subtitle:'Corte semanal con saldos vigentes, vencidos y aging por cliente' },
 ];
 
 const CHUNK = 200;

@@ -58,9 +58,11 @@ export default async function handler(req, res) {
         `facturacion_clientes?cliente_key=eq.pcel&select=anio,mes&order=anio.desc,mes.desc&limit=1`),
       fetchMax('facturacion_dicotech',
         `facturacion_clientes?cliente_key=eq.dicotech&select=anio,mes&order=anio.desc,mes.desc&limit=1`),
-      // Inventario Digitalife — última semana
+      // Inventario por cliente — última semana
       fetchMax('inv_digitalife',
         `inventario_cliente?cliente=eq.digitalife&select=anio,semana,updated_at&order=anio.desc,semana.desc&limit=1`),
+      fetchMax('inv_dicotech',
+        `inventario_cliente?cliente=eq.dicotech&select=anio,semana,updated_at&order=anio.desc,semana.desc&limit=1`),
       // Inventario Acteck — última actualización global (replace total)
       fetchMax('inventario_acteck',
         `inventario_acteck?select=updated_at&order=updated_at.desc&limit=1`),
