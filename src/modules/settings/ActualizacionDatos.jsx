@@ -368,8 +368,8 @@ export default function ActualizacionDatos({ perfil }) {
 
   const appendLog = (fuente, msg) => setLogs(p => ({ ...p, [fuente]: ((p[fuente] || '') + msg + '\n').split('\n').slice(-30).join('\n') }));
 
-  // Acceso: solo admin
-  if (perfil?.rol !== 'admin') {
+  // Acceso: super_admin o admin
+  if (!perfil?.es_super_admin && perfil?.rol !== 'admin') {
     return <div style={{ padding: 32 }}>Esta sección está reservada para administradores.</div>;
   }
 
