@@ -3259,7 +3259,7 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                 [1,2,3,4,5,6,7,8,9,10,11,12].map(function(m) {
                   return React.createElement("th", { key: "h"+m, style: { textAlign: "right", padding: "8px 4px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" } }, ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][m-1]);
                 }),
-                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, color: "#475569", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", color: sortCol === "stock" ? "#1D4ED8" : "#475569" }, onClick: () => handleSort("stock") }, "Inv Cliente" + sortArrow("stock")),
+                React.createElement("th", { style: { textAlign: "right", padding: "8px 6px", fontWeight: 600, borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap", cursor: "pointer", userSelect: "none", color: sortCol === "stock" ? "#1D4ED8" : "#475569" }, onClick: () => handleSort("stock") }, "Inv Cliente" + sortArrow("stock")),
                 thSort("Valor Inv", "valorInv"),
                 thSort("Prom 90d", "promedio90d"),
                 thSort("Inv Acteck", "invActeck"),
