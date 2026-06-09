@@ -59,7 +59,9 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
   const [open, setOpen] = useState(true);
   const [data, setData] = useState({ loading: true, skus: [], inventario: [], metadata: [], precios: [], roadmap: [] });
   const [busqueda, setBusqueda] = useState('');
-  const [filtroRoadmap, setFiltroRoadmap] = useState('todos');
+  // Multi-select de roadmaps: array vacío = "todos"
+  const [filtroRoadmap, setFiltroRoadmap] = useState([]);
+  const [roadmapDropdownOpen, setRoadmapDropdownOpen] = useState(false);
   const [filtroMarca, setFiltroMarca] = useState('todas');
   const [soloConStock, setSoloConStock] = useState(false);
   const [soloSinEanSat, setSoloSinEanSat] = useState(false);  // C2
@@ -204,7 +206,7 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
         const txt = `${r.sku} ${r.descripcion} ${r.roadmap}`.toLowerCase();
         if (!txt.includes(q)) return false;
       }
-      if (filtroRoadmap !== 'todos' && r.roadmap !== filtroRoadmap) return false;
+      if (filtroRoadmap.length > 0 && !filtroRoadmap.includes(r.roadmap)) return false;
       if (filtroMarca !== 'todas' && r.marca !== filtroMarca) return false;
       if (soloConStock && r.invTotal === 0) return false;
       if (soloSinEanSat && (r.ean13 || r.codigo_sat)) return false;
@@ -316,7 +318,7 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
         ['Generado', new Date().toLocaleString('es-MX')],
         ['Filas exportadas', `${filtrados.length} de ${rows.length}`],
         ['Búsqueda', busqueda || '(ninguna)'],
-        ['Roadmap', filtroRoadmap === 'todos' ? 'Todos' : filtroRoadmap],
+        ['Roadmap', filtroRoadmap.length === 0 ? 'Todos' : filtroRoadmap.join(', ')],
         ['Marca', filtroMarca === 'todas' ? 'Todas' : filtroMarca],
         ['Solo con stock', soloConStock ? 'Sí' : 'No'],
         ['Solo sin EAN/SAT', soloSinEanSat ? 'Sí' : 'No'],
@@ -429,11 +431,70 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
                   {busqueda && <button onClick={() => setBusqueda('')} className="absolute right-2 top-2 text-gray-400"><X className="w-3.5 h-3.5"/></button>}
                 </div>
 
-                <select value={filtroRoadmap} onChange={(e) => setFiltroRoadmap(e.target.value)}
-                  className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
-                  <option value="todos">Roadmap: todos</option>
-                  {roadmapsUnicos.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setRoadmapDropdownOpen((v) => !v)}
+                    className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white flex items-center gap-2 min-w-[180px] justify-between hover:border-gray-300"
+                    title="Seleccionar uno o más roadmaps"
+                  >
+                    <span className="truncate">
+                      {filtroRoadmap.length === 0
+                        ? 'Roadmap: todos'
+                        : filtroRoadmap.length === 1
+                          ? `Roadmap: ${filtroRoadmap[0]}`
+                          : `Roadmap: ${filtroRoadmap.length} seleccionados`}
+                    </span>
+                    <ChevronDown className="w-3.5 h-3.5 text-gray-500 flex-none" />
+                  </button>
+                  {roadmapDropdownOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setRoadmapDropdownOpen(false)}
+                      />
+                      <div className="absolute z-20 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 min-w-[220px] max-h-[320px] overflow-auto">
+                        <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-gray-100">
+                          <button
+                            type="button"
+                            onClick={() => setFiltroRoadmap([])}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Limpiar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFiltroRoadmap([...roadmapsUnicos])}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Seleccionar todos
+                          </button>
+                        </div>
+                        {roadmapsUnicos.length === 0 && (
+                          <div className="text-xs text-gray-400 px-1 py-1">Sin roadmaps disponibles</div>
+                        )}
+                        {roadmapsUnicos.map((r) => {
+                          const checked = filtroRoadmap.includes(r);
+                          return (
+                            <label key={r}
+                              className="flex items-center gap-2 px-1 py-1 text-sm cursor-pointer hover:bg-gray-50 rounded">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  if (e.target.checked) setFiltroRoadmap((prev) => [...prev, r]);
+                                  else setFiltroRoadmap((prev) => prev.filter((x) => x !== r));
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span>{r}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
 
                 <select value={filtroMarca} onChange={(e) => setFiltroMarca(e.target.value)}
                   className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
