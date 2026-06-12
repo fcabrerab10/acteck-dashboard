@@ -69,7 +69,7 @@ const GRUPOS = [
 
 const SOURCES = [
   // ── Globales ──
-  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación & Inventario', desc:'Archivo único con hojas Facturación + Vw_TablaH_Inventario. La hoja Facturación es la fuente canónica de sell-in (cliente×SKU×mes ya pre-filtrado por contabilidad). Reemplaza años 2025+2026 completos en facturacion_clientes y replace total de inventario.', file:'Actualizaciones ERP.xlsx',
+  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación & Inventario', desc:'Archivo único con hojas Venta Facturación (monto) + Venta Piezas (piezas) + Vw_TablaH_Inventario. Las dos primeras son la fuente canónica de sell-in (cliente×SKU×mes con devoluciones ya aplicadas). Reemplaza años 2025+2026 completos en facturacion_clientes y replace total de inventario.', file:'Actualizaciones ERP.xlsx',
     combined: [
       { table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', label:'Facturación (sell-in canónico)', replaceAnios:[2025,2026] },
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true }
@@ -947,117 +947,132 @@ const PARSERS = {
     return { roadmap, precios };
   },
 
-  // Hoja "Facturación" = pivot dinámico de Excel (cliente padre + SKUs hijos
-  // en filas; años/meses en columnas; pares [Piezas, Monto]).
-  // Despivota a tabla normalizada (cliente_nombre, sku, anio, mes, piezas, monto).
+  // Hojas "Venta Facturación" (monto) + "Venta Piezas" (piezas) — dos pivots
+  // separados del nuevo Excel ERP. Cada pivot tiene cliente padre + SKUs hijos
+  // en filas y años/meses en columnas (un valor por celda, no pares). Las
+  // devoluciones ya vienen aplicadas en el archivo.
+  // Despivota ambos y los combina por (cliente_nombre, sku, anio, mes).
   facturacionClientes(wb){
-    const sh = wb.Sheets['Facturación'] || wb.Sheets['Facturacion'];
-    if (!sh) throw new Error('No se encontró la hoja "Facturación"');
-    const arr = XLSX.utils.sheet_to_json(sh, {defval:null, header:1});
-    // Detectar dinámicamente la fila de headers Piezas/Monto (es robusto a que
-    // se agreguen/quiten filas arriba del pivot — p.ej. quitar subtotales).
-    // Luego: meses está justo arriba, años dos arriba, datos justo abajo.
-    let headerRowIdx = -1;
-    for (let r = 0; r < Math.min(20, arr.length); r++) {
-      const row = arr[r] || [];
-      let piezas = 0, monto = 0;
-      for (const v of row) {
-        if (v == null) continue;
-        const s = String(v).trim().toLowerCase();
-        if (s === 'piezas' || s === 'piezas ') piezas++;
-        if (s === 'monto') monto++;
-      }
-      if (piezas >= 2 && monto >= 2) { headerRowIdx = r; break; }
-    }
-    if (headerRowIdx < 2) throw new Error('No se encontró la fila de headers Piezas/Monto en la hoja Facturación');
-    const mesesRow  = arr[headerRowIdx - 1] || [];
-    const aniosRow  = arr[headerRowIdx - 2] || [];
-    const dataStart = headerRowIdx + 1;
-
-    // Construir mapa col → (anio, mes). Recorremos mesesRow; cuando hay
-    // número 1-12 ahí empieza un par (piezas en esa col, monto en col+1).
-    // El año actual lo determina el último encabezado de año visto en aniosRow.
-    const colMap = [];
-    let anioActual = null;
-    const maxC = Math.max(aniosRow.length, mesesRow.length);
-    for (let c = 0; c < maxC; c++) {
-      const av = aniosRow[c];
-      if (av != null) {
-        const s = String(av).trim();
-        if (/^\d{4}$/.test(s)) {
-          const y = parseInt(s, 10);
-          if (y >= 2020 && y <= 2050) anioActual = y;
-        } else if (typeof av === 'number' && av >= 2020 && av <= 2050) {
-          anioActual = av;
-        } else if (/blanco|total/i.test(s)) {
-          anioActual = null;
-        }
-      }
-      const mv = mesesRow[c];
-      const m = typeof mv === 'number' ? mv : (mv != null && /^\d+$/.test(String(mv).trim()) ? parseInt(mv, 10) : null);
-      if (m && m >= 1 && m <= 12 && anioActual) {
-        colMap.push({ colPzs: c, colMnt: c + 1, anio: anioActual, mes: m });
-      }
+    const shMonto = wb.Sheets['Venta Facturación'] || wb.Sheets['Venta Facturacion'] || wb.Sheets['Facturación'] || wb.Sheets['Facturacion'];
+    const shPzs   = wb.Sheets['Venta Piezas'] || wb.Sheets['Venta piezas'];
+    if (!shMonto && !shPzs) {
+      throw new Error('No se encontraron las hojas "Venta Facturación" / "Venta Piezas" en el Excel');
     }
 
-    // Mapeo cliente_nombre → cliente_key del dashboard.
-    // El ERP nuevo usa estructura jerárquica: DISTRIBUIDOR/RETAIL/etc (padre)
-    // → cliente real → SKU. Solo nos interesan los clientes que gestionamos
-    // desde el dashboard; los padres y los demás clientes retornan null y
-    // sus filas se descartan más abajo.
+    const SKU_RE = /^[A-Z]{2,8}-[A-Z0-9_]+/;
+
     const mapearCliente = (nombre) => {
       const n = String(nombre || '').toUpperCase();
-      // Digitalife aparece como "CAJADL01" (clave contable) o "API GLOBAL"
-      // (razón social). Soportamos ambos por si cambia el reporte.
       if (n.includes('CAJADL01') || n.includes('API GLOBAL')) return 'digitalife';
       if (n.includes('PC ONLINE')) return 'pcel';
-      // Dicotech aparece como "DICOTECH MAYORISTA DE TECNOLOGIA" en el ERP.
       if (n.includes('DICOTECH')) return 'dicotech';
-      // Mercado Libre se migró a Axon de México — sus filas se ignoran aquí.
       return null;
     };
 
-    // Detectar SKU: típicamente AC-, BR-, ES-, MG-, ZM-, TG-, NA-, RR-, SWDVK-, etc.
-    // Patrón: 2-6 letras mayúsculas + guión + caracteres alfanuméricos
-    const SKU_RE = /^[A-Z]{2,8}-[A-Z0-9_]+/;
+    // Despivota un pivot individual (cualquiera de los dos) y devuelve
+    // un Map "cliente|sku|anio|mes" → valor numérico.
+    const parsePivot = (sh) => {
+      if (!sh) return new Map();
+      const arr = XLSX.utils.sheet_to_json(sh, { defval: null, header: 1 });
 
-    // Iterar filas de datos desde la fila detectada
-    let clienteActual = null;
-    const out = [];
-    for (let r = dataStart; r < arr.length; r++) {
-      const row = arr[r];
-      if (!row) continue;
-      const v = row[0];
-      if (v == null) continue;
-      const s = String(v).trim();
-      if (!s) continue;
-      // Saltar filas de "(en blanco)" y "Total general"
-      if (/^\(en blanco\)$/i.test(s) || /total general/i.test(s)) continue;
-
-      if (SKU_RE.test(s)) {
-        if (!clienteActual) continue;
-        // Solo aterrizamos SKUs de clientes que gestionamos. Esto descarta
-        // filas de subtotales jerárquicos (DISTRIBUIDOR, RETAIL, etc) y
-        // de clientes no soportados en el dashboard.
-        const cKey = mapearCliente(clienteActual);
-        if (!cKey) continue;
-        for (const cm of colMap) {
-          const pzs = toNum(row[cm.colPzs]);
-          const mnt = toNum(row[cm.colMnt]);
-          if ((pzs == null || pzs === 0) && (mnt == null || mnt === 0)) continue;
-          out.push({
-            cliente_nombre: clienteActual,
-            cliente_key: cKey,
-            sku: s,
-            anio: cm.anio,
-            mes: cm.mes,
-            piezas: pzs || 0,
-            monto: mnt || 0,
-          });
+      // Detectar la fila de meses: es la primera fila (en las primeras 20)
+      // que contiene varios números 1..12 en columnas consecutivas.
+      let mesesRowIdx = -1;
+      for (let r = 0; r < Math.min(20, arr.length); r++) {
+        const row = arr[r] || [];
+        let count = 0;
+        for (const v of row) {
+          if (typeof v === 'number' && v >= 1 && v <= 12) count++;
+          else if (v != null && /^([1-9]|1[0-2])$/.test(String(v).trim())) count++;
         }
-      } else {
-        clienteActual = s;
+        if (count >= 6) { mesesRowIdx = r; break; }
       }
+      if (mesesRowIdx < 1) return new Map();
+
+      const mesesRow = arr[mesesRowIdx] || [];
+      const aniosRow = arr[mesesRowIdx - 1] || [];
+      const dataStart = mesesRowIdx + 1;
+
+      // Mapa col → (anio, mes). El año "actual" lo lleva la última celda
+      // de aniosRow con un número 2020..2050; "(en blanco)" o "Total..." lo limpia.
+      const colMap = [];
+      let anioActual = null;
+      const maxC = Math.max(aniosRow.length, mesesRow.length);
+      for (let c = 0; c < maxC; c++) {
+        const av = aniosRow[c];
+        if (av != null) {
+          if (typeof av === 'number' && av >= 2020 && av <= 2050) anioActual = av;
+          else {
+            const s = String(av).trim();
+            if (/^\d{4}$/.test(s)) {
+              const y = parseInt(s, 10);
+              if (y >= 2020 && y <= 2050) anioActual = y;
+            } else if (/blanco|total/i.test(s)) {
+              anioActual = null;
+            }
+          }
+        }
+        const mv = mesesRow[c];
+        let m = null;
+        if (typeof mv === 'number' && mv >= 1 && mv <= 12) m = mv;
+        else if (mv != null && /^([1-9]|1[0-2])$/.test(String(mv).trim())) m = parseInt(mv, 10);
+        if (m && anioActual) colMap.push({ col: c, anio: anioActual, mes: m });
+      }
+
+      // Iterar filas de datos. Primera columna alterna entre etiquetas de
+      // cliente (padre) y SKUs (hijos) — mantenemos contexto de cliente actual.
+      let clienteActual = null;
+      const out = new Map();
+      for (let r = dataStart; r < arr.length; r++) {
+        const row = arr[r];
+        if (!row) continue;
+        const v = row[0];
+        if (v == null) continue;
+        const s = String(v).trim();
+        if (!s) continue;
+        if (/^\(en blanco\)$/i.test(s) || /total general/i.test(s) || /^total /i.test(s)) continue;
+
+        if (SKU_RE.test(s)) {
+          if (!clienteActual) continue;
+          const cKey = mapearCliente(clienteActual);
+          if (!cKey) continue;
+          for (const cm of colMap) {
+            const val = toNum(row[cm.col]);
+            if (val == null || val === 0) continue;
+            out.set(`${clienteActual}|${s}|${cm.anio}|${cm.mes}`, val);
+          }
+        } else {
+          // Subtotales jerárquicos (DISTRIBUIDOR, RETAIL, MAYOREO…) o nombres
+          // de cliente. Solo nos importa quedarnos con el último nombre que
+          // mapearCliente reconoce — los demás los ignoramos manteniendo el
+          // contexto previo si no resuelve.
+          if (mapearCliente(s)) clienteActual = s;
+          else clienteActual = s; // mantener jerarquía por si el cliente es el inmediato superior
+        }
+      }
+      return out;
+    };
+
+    const piezasMap = parsePivot(shPzs);
+    const montoMap  = parsePivot(shMonto);
+
+    // Unir ambos por la misma clave (cliente|sku|anio|mes). Si una hoja
+    // tiene una celda y la otra no, la otra queda en 0.
+    const keys = new Set([...piezasMap.keys(), ...montoMap.keys()]);
+    const out = [];
+    for (const k of keys) {
+      const [clienteActual, sku, anioStr, mesStr] = k.split('|');
+      const cKey = mapearCliente(clienteActual);
+      if (!cKey) continue;
+      out.push({
+        cliente_nombre: clienteActual,
+        cliente_key: cKey,
+        sku,
+        anio: parseInt(anioStr, 10),
+        mes:  parseInt(mesStr, 10),
+        piezas: piezasMap.get(k) || 0,
+        monto:  montoMap.get(k)  || 0,
+      });
     }
     return out;
   },
