@@ -80,7 +80,7 @@ const MENU_CONFIG = [
     items: [
       { id: 'resumenClientes',  label: 'Resumen de Clientes', icon: BarChart3 },
       { id: 'forecastClientes', label: 'Forecast Clientes',   icon: Target },
-      { id: 'ordenesCompra',    label: 'Órdenes de Compra',   icon: FileCheck },
+      { id: 'ordenesCompra',    label: 'Tracking Pedidos',    icon: FileCheck },
       { type: 'separator', label: 'Clientes' },
       { type: 'cliente', clienteId: 'digitalife' },
       { type: 'cliente', clienteId: 'pcel' },

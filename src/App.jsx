@@ -13,7 +13,6 @@ import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, Marketi
 import ReporteTab from './modules/comercial/ReporteTab';
 import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
 import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
-import OrdenesCompraTab from './modules/comercial/OrdenesCompraTab';
 import EvaluacionesPanel from './modules/interno/EvaluacionesPanel';
 import AxonMexico from './modules/interno/AxonMexico';
 import LoginPage from './modules/auth/LoginPage';
@@ -179,7 +178,7 @@ const PESTANAS_INFO = {
 const GLOBAL_PAGES_INFO = {
   resumenClientes:  { label: 'Resumen de Clientes',    icon: BarChart3 },
   forecastClientes: { label: 'Forecast de Clientes',   icon: Target },
-  ordenesCompra:    { label: 'Órdenes de Compra',      icon: Target },
+  ordenesCompra:    { label: 'Tracking Pedidos',        icon: Target },
   adminInterna:     { label: 'Administración Interna', icon: Building2 },
   evaluaciones:     { label: 'Evaluaciones',            icon: Building2 },
   axonMexico:       { label: 'Axon de México',          icon: Building2 },
@@ -417,8 +416,14 @@ export default function App() {
           {paginaActiva === "forecastClientes" && <ForecastClientesTab />}
           {paginaActiva === "ordenesCompra" && (
             puedeVerPestanaGlobal(perfil, "ordenes_compra")
-              ? <OrdenesCompraTab />
-              : <SinAcceso motivo="No tienes acceso a Órdenes de Compra." />
+              ? (
+                <div className="p-12 text-center">
+                  <Target className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold text-gray-700 mb-2">Tracking Pedidos</h2>
+                  <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
+                </div>
+              )
+              : <SinAcceso motivo="No tienes acceso a Tracking Pedidos." />
           )}
           {paginaActiva === "adminInterna" && (
             // Permiso granular: nivel 'ver' o 'edit' en permisos.globales.admin_interna
