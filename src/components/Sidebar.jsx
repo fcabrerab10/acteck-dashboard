@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   ChevronRight, ChevronDown, Lock, LogOut, Eye, Settings, RefreshCw,
   Home, TrendingUp, Package, Megaphone, Wallet, CreditCard,
-  BarChart3, Target, ClipboardList, FileCheck, Award, Building2,
+  BarChart3, Target, ClipboardList, FileCheck, Award, Building2, Users,
 } from 'lucide-react';
 import {
   puedeConfigurar,
@@ -79,12 +79,20 @@ const MENU_CONFIG = [
     emoji: '📊',
     items: [
       { id: 'forecastClientes', label: 'Forecast Clientes',   icon: Target },
-      { id: 'ordenesCompra',    label: 'Tracking Pedidos',    icon: FileCheck },
       { type: 'separator', label: 'Clientes Propios' },
       { id: 'resumenClientes',  label: 'Resumen de Clientes', icon: BarChart3 },
-      { type: 'cliente', clienteId: 'digitalife' },
-      { type: 'cliente', clienteId: 'pcel' },
-      { type: 'cliente', clienteId: 'dicotech' },
+      { id: 'ordenesCompra',    label: 'Tracking Pedidos',    icon: FileCheck },
+      {
+        type: 'subgrupo',
+        id: 'clientesLista',
+        label: 'Clientes',
+        icon: Users,
+        children: [
+          { type: 'cliente', clienteId: 'digitalife' },
+          { type: 'cliente', clienteId: 'pcel' },
+          { type: 'cliente', clienteId: 'dicotech' },
+        ],
+      },
     ],
   },
   {
@@ -123,7 +131,7 @@ const loadExpanded = () => {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
-  return { direccionComercial: true, internaGrupo: true, axonGrupo: true, cliente_digitalife: true };
+  return { direccionComercial: true, internaGrupo: true, axonGrupo: true, clientesLista: true, cliente_digitalife: true };
 };
 const saveExpanded = (obj) => {
   try { localStorage.setItem(LS_KEY, JSON.stringify(obj)); } catch {}
@@ -302,21 +310,24 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, onNavegar, isActi
   const isOpen = expanded[grupo.id];
   const hasItems = grupo.items && grupo.items.length > 0;
 
-  const itemsFiltrados = (grupo.items || []).filter((item) => {
+  // Filtra hijos de cliente/global según permisos. Devuelve true si el item
+  // debe mostrarse al perfil actual.
+  const isItemVisible = (item) => {
     if (item.type === 'separator') return true;
     if (item.type === 'cliente') {
       if (modoPresent && item.clienteId !== clienteActivo) return false;
       return puedeVerCliente(perfil, item.clienteId);
     }
-    // Ítem "global" (Resumen de Clientes, Forecast, Admin Interna, etc.)
-    // Filtro por puedeVerPestanaGlobal mapeando el id UI al id del schema.
-    const permisoId = MENU_A_PERMISO_GLOBAL[item.id];
-    if (permisoId) {
-      return puedeVerPestanaGlobal(perfil, permisoId);
+    if (item.type === 'subgrupo') {
+      // Visible si al menos un hijo lo es.
+      return (item.children || []).some(isItemVisible);
     }
-    // Si no tiene mapeo explícito, se muestra por default (fallback seguro)
+    const permisoId = MENU_A_PERMISO_GLOBAL[item.id];
+    if (permisoId) return puedeVerPestanaGlobal(perfil, permisoId);
     return true;
-  });
+  };
+
+  const itemsFiltrados = (grupo.items || []).filter(isItemVisible);
 
   // Si no quedan items visibles (aparte de separadores), ocultar grupo entero.
   const hayNoSeparador = itemsFiltrados.some(i => i.type !== 'separator');
@@ -365,6 +376,60 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, onNavegar, isActi
                   clienteActivo={clienteActivo}
                   perfil={perfil}
                 />
+              );
+            }
+            if (item.type === 'subgrupo') {
+              const hijosVisibles = (item.children || []).filter(isItemVisible);
+              if (hijosVisibles.length === 0) return null;
+              const subOpen = expanded[item.id];
+              const Icon = item.icon;
+              return (
+                <div key={item.id}>
+                  <button
+                    onClick={() => toggle(item.id)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    {subOpen
+                      ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                      : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
+                    {Icon && <Icon className="w-4 h-4 text-gray-500" />}
+                    <span className="flex-1 text-left">{item.label}</span>
+                  </button>
+                  {subOpen && (
+                    <div className="ml-3 mt-0.5 pl-2 border-l border-gray-100 space-y-0.5">
+                      {hijosVisibles.map((child) => {
+                        if (child.type === 'cliente') {
+                          const cfg = CLIENTES[child.clienteId];
+                          if (!cfg) return null;
+                          return (
+                            <ClienteBloque
+                              key={child.clienteId}
+                              clienteId={child.clienteId}
+                              cfg={cfg}
+                              expanded={expanded}
+                              toggle={toggle}
+                              onNavegar={onNavegar}
+                              isActiveLeaf={isActiveLeaf}
+                              clienteActivo={clienteActivo}
+                              perfil={perfil}
+                            />
+                          );
+                        }
+                        return (
+                          <NavItem
+                            key={child.id}
+                            label={child.label}
+                            icon={child.icon}
+                            emoji={child.emoji}
+                            disabled={child.disabled}
+                            active={isActiveGlobal(child.id)}
+                            onClick={() => !child.disabled && onNavegar(null, child.id)}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             }
             return (
