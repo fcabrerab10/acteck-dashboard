@@ -78,7 +78,7 @@ const MENU_CONFIG = [
     label: 'Dirección Comercial',
     emoji: '📊',
     items: [
-      { id: 'forecastClientes', label: 'Forecast Clientes',   icon: Target },
+      { id: 'forecastClientes', label: 'S&OP',                icon: Target },
       { type: 'separator', label: 'Clientes Propios' },
       { id: 'resumenClientes',  label: 'Resumen de Clientes', icon: BarChart3 },
       { id: 'ordenesCompra',    label: 'Tracking Pedidos',    icon: FileCheck },

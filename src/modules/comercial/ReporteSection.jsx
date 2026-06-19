@@ -1248,7 +1248,7 @@ function ExpandedDetail({ sku, descripcion, roadmap, invTotal, invDisp, invApart
                 </div>
               )}
               <div className="text-[10px] text-gray-500 italic mt-1">
-                Ver detalle completo en <strong>Forecast Clientes</strong>
+                Ver detalle completo en <strong>S&amp;OP</strong>
               </div>
             </div>
           ) : (

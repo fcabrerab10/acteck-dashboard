@@ -975,7 +975,7 @@ export default function ForecastClientesTab() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
             <Activity className="w-6 h-6 text-gray-700" />
-            Forecast Clientes
+            S&amp;OP
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Planeación de compras agregada · Digitalife + PCEL

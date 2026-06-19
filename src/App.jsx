@@ -177,7 +177,7 @@ const PESTANAS_INFO = {
 };
 const GLOBAL_PAGES_INFO = {
   resumenClientes:  { label: 'Resumen de Clientes',    icon: BarChart3 },
-  forecastClientes: { label: 'Forecast de Clientes',   icon: Target },
+  forecastClientes: { label: 'S&OP',                   icon: Target },
   ordenesCompra:    { label: 'Tracking Pedidos',        icon: Target },
   adminInterna:     { label: 'Administración Interna', icon: Building2 },
   evaluaciones:     { label: 'Evaluaciones',            icon: Building2 },

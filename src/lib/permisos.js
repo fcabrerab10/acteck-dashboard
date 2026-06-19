@@ -164,8 +164,8 @@ export const PESTANAS_CLIENTE = [
 /** Pestañas globales (solo para internos). */
 export const PESTANAS_GLOBALES = [
   { id: "resumen_clientes",   label: "Resumen de Clientes",   desc: "Dashboard consolidado de los 3 clientes" },
-  { id: "forecast_clientes",  label: "Forecast Clientes",     desc: "Planeación de compras cross-cliente" },
-  { id: "ordenes_compra",     label: "Órdenes de Compra",     desc: "Gestión de OCs, fill rate y cruce con ERP" },
+  { id: "forecast_clientes",  label: "S&OP",                  desc: "Planeación de compras cross-cliente (Sales & Operations Planning)" },
+  { id: "ordenes_compra",     label: "Tracking Pedidos",      desc: "Gestión de OCs, fill rate y cruce con ERP" },
   { id: "admin_interna",      label: "Administración Interna", desc: "Pendientes & Calendario del equipo" },
   { id: "evaluaciones",       label: "Evaluaciones",          desc: "Evaluación de desempeño semanal y bono" },
   { id: "axon_mexico",        label: "Axon de México",        desc: "Nueva empresa para gestión de e-commerce" },
