@@ -17,6 +17,7 @@ import {
 const MENU_A_PERMISO_GLOBAL = {
   resumenClientes:  'resumen_clientes',
   forecastClientes: 'forecast_clientes',
+  estrategiaPrecios:'estrategia_precios',
   ordenesCompra:    'ordenes_compra',
   adminInterna:     'admin_interna',
   evaluaciones:     'evaluaciones',
@@ -81,6 +82,7 @@ const MENU_CONFIG = [
       { id: 'forecastClientes', label: 'S&OP',                icon: Target },
       { type: 'separator', label: 'Clientes Propios' },
       { id: 'resumenClientes',  label: 'Resumen de Clientes', icon: BarChart3 },
+      { id: 'estrategiaPrecios',label: 'Estrategia de Precios', icon: TrendingUp },
       { id: 'ordenesCompra',    label: 'Tracking Pedidos',    icon: FileCheck },
       {
         type: 'subgrupo',

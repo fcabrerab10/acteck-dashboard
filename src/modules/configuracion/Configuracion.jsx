@@ -41,7 +41,7 @@ const PLANTILLAS = {
         ),
         globales: {
           resumen_clientes:  "edit",
-          forecast_clientes: "edit", ordenes_compra:    "edit",
+          forecast_clientes: "edit", estrategia_precios: "edit", ordenes_compra:    "edit",
           admin_interna:     "edit",
           configuracion:     "oculto",
         },
@@ -59,7 +59,7 @@ const PLANTILLAS = {
         ),
         globales: {
           resumen_clientes:  "ver",
-          forecast_clientes: "ver", ordenes_compra:    "ver",
+          forecast_clientes: "ver", estrategia_precios: "ver", ordenes_compra:    "ver",
           admin_interna:     "ver",
           configuracion:     "oculto",
         },
@@ -78,7 +78,7 @@ const PLANTILLAS = {
           dicotech:   Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
         },
         globales: {
-          resumen_clientes:"oculto", forecast_clientes:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
+          resumen_clientes:"oculto", forecast_clientes:"oculto", estrategia_precios:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
         },
       },
     }),
@@ -95,7 +95,7 @@ const PLANTILLAS = {
           dicotech:   Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
         },
         globales: {
-          resumen_clientes:"oculto", forecast_clientes:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
+          resumen_clientes:"oculto", forecast_clientes:"oculto", estrategia_precios:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
         },
       },
     }),
@@ -112,7 +112,7 @@ const PLANTILLAS = {
           dicotech:   { home:"ver", analisis:"ver", estrategia:"ver", marketing:"oculto", pagos:"oculto", cartera:"oculto" },
         },
         globales: {
-          resumen_clientes:"oculto", forecast_clientes:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
+          resumen_clientes:"oculto", forecast_clientes:"oculto", estrategia_precios:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
         },
       },
     }),

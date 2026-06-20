@@ -165,6 +165,7 @@ export const PESTANAS_CLIENTE = [
 export const PESTANAS_GLOBALES = [
   { id: "resumen_clientes",   label: "Resumen de Clientes",   desc: "Dashboard consolidado de los 3 clientes" },
   { id: "forecast_clientes",  label: "S&OP",                  desc: "Planeación de compras cross-cliente (Sales & Operations Planning)" },
+  { id: "estrategia_precios", label: "Estrategia de Precios", desc: "Pricing por cliente y por SKU" },
   { id: "ordenes_compra",     label: "Tracking Pedidos",      desc: "Gestión de OCs, fill rate y cruce con ERP" },
   { id: "admin_interna",      label: "Administración Interna", desc: "Pendientes & Calendario del equipo" },
   { id: "evaluaciones",       label: "Evaluaciones",          desc: "Evaluación de desempeño semanal y bono" },
