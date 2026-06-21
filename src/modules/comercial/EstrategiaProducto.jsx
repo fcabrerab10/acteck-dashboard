@@ -2883,21 +2883,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   return React.createElement("div", { className: "max-w-none mx-auto p-6 space-y-6" },
     // Header
     React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
-      React.createElement("div", { className: "flex justify-between items-start mb-4" },
+      React.createElement("div", { className: "mb-4" },
         React.createElement("h2", { className: "text-2xl font-bold text-gray-800" }, vista === 'sellIn' ? "Sell In" : "Sell Out"),
-        // Botón de actualizar datos sólo para usuarios con permiso de edición
-        canEdit && React.createElement("button", {
-          className: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium",
-          onClick: () => document.getElementById("file-input-update").click(),
-        }, "📤 Actualizar datos"),
-        canEdit && React.createElement("input", {
-          id: "file-input-update",
-          type: "file",
-          multiple: true,
-          accept: ".xlsx,.xls",
-          style: { display: "none" },
-          onChange: handleUpload,
-        }),
       ),
       message && React.createElement("p", { className: `text-sm ${message.includes("Error") ? "text-red-600" : "text-green-600"}` }, message),
     ),
