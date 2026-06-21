@@ -46,7 +46,8 @@ const CLIENTES = {
     activo: true,
     pestanas: [
       { id: 'home',       label: 'Resumen',                icon: Home },
-      { id: 'estrategia', label: 'Estrategia de Producto', icon: Package },
+      { id: 'sellIn',     label: 'Sell In',                icon: ShoppingCart },
+      { id: 'estrategia', label: 'Sell Out',               icon: ShoppingBag },
       { id: 'marketing',  label: 'Marketing',              icon: Megaphone },
       { id: 'pagos',      label: 'Pagos',                  icon: Wallet },
       { id: 'cartera',    label: 'Crédito y Cobranza',     icon: CreditCard },
@@ -58,7 +59,8 @@ const CLIENTES = {
     activo: true,
     pestanas: [
       { id: 'home',       label: 'Resumen',                icon: Home },
-      { id: 'estrategia', label: 'Estrategia de Producto', icon: Package },
+      { id: 'sellIn',     label: 'Sell In',                icon: ShoppingCart },
+      { id: 'estrategia', label: 'Sell Out',               icon: ShoppingBag },
       { id: 'marketing',  label: 'Marketing',              icon: Megaphone, disabled: true, hint: 'Pronto' },
       { id: 'pagos',      label: 'Pagos',                  icon: Wallet },
       { id: 'cartera',    label: 'Crédito y Cobranza',     icon: CreditCard },
@@ -70,7 +72,8 @@ const CLIENTES = {
     activo: true,
     pestanas: [
       { id: 'home',       label: 'Resumen',                icon: Home },
-      { id: 'estrategia', label: 'Estrategia de Producto', icon: Package },
+      { id: 'sellIn',     label: 'Sell In',                icon: ShoppingCart },
+      { id: 'estrategia', label: 'Sell Out',               icon: ShoppingBag },
       { id: 'marketing',  label: 'Marketing',              icon: Megaphone },
       { id: 'pagos',      label: 'Pagos',                  icon: Wallet },
       { id: 'cartera',    label: 'Crédito y Cobranza',     icon: CreditCard },

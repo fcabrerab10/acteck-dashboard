@@ -155,7 +155,8 @@ export const NIVELES_PERMISO = [
 export const PESTANAS_CLIENTE = [
   { id: "home",       label: "Resumen",               desc: "Dashboard inicial con KPIs" },
   { id: "analisis",   label: "Análisis",              desc: "Ventas, tendencias, gráficas" },
-  { id: "estrategia", label: "Estrategia de Producto", desc: "Sugerido de compra, SKUs en riesgo" },
+  { id: "sellIn",     label: "Sell In",                desc: "Lo que Acteck factura a este cliente" },
+  { id: "estrategia", label: "Sell Out",               desc: "Lo que el cliente vende al mercado (sugerido, SKUs en riesgo)" },
   { id: "marketing",  label: "Marketing",             desc: "Actividades de marketing del cliente" },
   { id: "pagos",      label: "Pagos",                 desc: "Promociones, rebate, SPIFF, pagos fijos" },
   { id: "cartera",    label: "Crédito y Cobranza",    desc: "Cartera, aging, DSO" },

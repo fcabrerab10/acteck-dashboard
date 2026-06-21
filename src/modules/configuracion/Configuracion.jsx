@@ -79,7 +79,7 @@ const PLANTILLAS = {
       tipo: "externo",
       permisos: {
         clientes: {
-          digitalife: { home:"ver", analisis:"ver", estrategia:"ver", marketing:"oculto", pagos:"oculto", cartera:"oculto" },
+          digitalife: { home:"ver", analisis:"ver", sellIn:"ver", estrategia:"ver", marketing:"oculto", pagos:"oculto", cartera:"oculto" },
           pcel:       Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
           dicotech:   Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
         },
@@ -100,7 +100,7 @@ const PLANTILLAS = {
       permisos: {
         clientes: {
           digitalife: Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
-          pcel:       { home:"ver", analisis:"ver", estrategia:"ver", marketing:"oculto", pagos:"oculto", cartera:"oculto" },
+          pcel:       { home:"ver", analisis:"ver", sellIn:"ver", estrategia:"ver", marketing:"oculto", pagos:"oculto", cartera:"oculto" },
           dicotech:   Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
         },
         globales: {
@@ -121,7 +121,7 @@ const PLANTILLAS = {
         clientes: {
           digitalife: Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
           pcel:       Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
-          dicotech:   { home:"ver", analisis:"ver", estrategia:"ver", marketing:"oculto", pagos:"oculto", cartera:"oculto" },
+          dicotech:   { home:"ver", analisis:"ver", sellIn:"ver", estrategia:"ver", marketing:"oculto", pagos:"oculto", cartera:"oculto" },
         },
         globales: {
           estado_resultados:"oculto",

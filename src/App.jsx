@@ -108,7 +108,7 @@ function PanelActualizacion({ onClose, cliente, clienteKey, anio, onVentasUpdate
           React.createElement("div", { className: "flex items-center gap-2" },
             React.createElement("span", { className: "text-lg" }, "\uD83D\uDCE6"),
             React.createElement("div", { className: "flex-1" },
-              React.createElement("p", { className: "text-sm font-semibold text-emerald-800" }, "Estrategia de Producto"),
+              React.createElement("p", { className: "text-sm font-semibold text-emerald-800" }, "Sell Out"),
               React.createElement("p", { className: "text-xs text-emerald-500" }, "Reporte Acteck + Resumen Cliente")
             ),
             React.createElement("span", { className: "text-xs bg-emerald-600 text-white px-2 py-0.5 rounded-full font-medium" }, "Activo")
@@ -171,7 +171,8 @@ function UploadModalX({ onClose }) {
 const PESTANAS_INFO = {
   home:       { label: 'Resumen',                icon: Home },
   analisis:   { label: 'Análisis',               icon: TrendingUp },
-  estrategia: { label: 'Estrategia de Producto', icon: Package },
+  sellIn:     { label: 'Sell In',                icon: ShoppingCart },
+  estrategia: { label: 'Sell Out',               icon: ShoppingBag },
   marketing:  { label: 'Marketing',              icon: Megaphone },
   pagos:      { label: 'Pagos',                  icon: Wallet },
   cartera:    { label: 'Crédito y Cobranza',     icon: CreditCard },
@@ -379,7 +380,8 @@ export default function App() {
   const navItems = [
     { id: "home",       label: "Resumen",               icono: "°", habilitado: true  },
     { id: "analisis",   label: "An¡lisis",                icono: "°", habilitado: true  },
-    { id: "estrategia", label: "Estrategia de Producto", icono: "°", habilitado: true  },
+    { id: "sellIn",     label: "Sell In",                icono: "°", habilitado: true  },
+    { id: "estrategia", label: "Sell Out",               icono: "°", habilitado: true  },
     { id: "marketing",  label: "Marketing",              icono: "°", habilitado: clienteActivo !== "pcel"  },
     { id: "pagos",      label: "Pagos",                  icono: "°°", habilitado: true  },
     { id: "cartera",    label: "Crdito y Cobranza",     icono: "°", habilitado: true  },
@@ -455,7 +457,7 @@ export default function App() {
               )
               : <SinAcceso motivo="No tienes acceso a Análisis por Cliente." />
           )}
-          {paginaActiva === "sellIn" && (
+          {!clienteActivo && paginaActiva === "sellIn" && (
             puedeVerPestanaGlobal(perfil, "sell_in")
               ? (
                 <div className="p-12 text-center">
@@ -542,13 +544,20 @@ export default function App() {
             <>
         {clienteActivo && !puedeVerCliente(perfil, clienteActivo) ? (
           <SinAcceso motivo={`No tienes acceso al cliente ${clienteActivo}.`} />
-        ) : clienteActivo && ['home','analisis','estrategia','marketing','pagos','cartera'].includes(paginaActiva) && !puedeVerPestanaCliente(perfil, clienteActivo, paginaActiva) ? (
+        ) : clienteActivo && ['home','analisis','sellIn','estrategia','marketing','pagos','cartera'].includes(paginaActiva) && !puedeVerPestanaCliente(perfil, clienteActivo, paginaActiva) ? (
           // Gate granular por (cliente, pestaña). Bloquea URL directa a una
           // pestaña oculta para este cliente específico.
           <SinAcceso motivo={`No tienes acceso a esta pestaña de ${clienteActivo}.`} />
         ) : (
           <>
         {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />}
+        {paginaActiva === "sellIn"  && (
+          <div className="p-12 text-center">
+            <ShoppingCart className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-700 mb-2">Sell In — {c.nombre}</h2>
+            <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
+          </div>
+        )}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} clienteKey={clienteActivo} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
