@@ -8,7 +8,7 @@ import { Toaster } from './lib/toast';
 import {
   Home, TrendingUp, Package, Megaphone, Wallet, CreditCard,
   BarChart3, Target, ClipboardList, Settings as SettingsIcon, Building2,
-  Activity, PieChart, ShoppingCart, ShoppingBag,
+  Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator,
 } from 'lucide-react';
 import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, ForecastCliente } from './modules/comercial';
 import ReporteTab from './modules/comercial/ReporteTab';
@@ -178,10 +178,13 @@ const PESTANAS_INFO = {
 };
 const GLOBAL_PAGES_INFO = {
   resumenClientes:  { label: 'Resumen de Clientes',    icon: BarChart3 },
+  estadoResultados: { label: 'Estado de Resultados',   icon: Calculator },
   visionGeneral:    { label: 'Visión General',         icon: Activity },
   analisisClientes: { label: 'Análisis por Cliente',   icon: PieChart },
   sellIn:           { label: 'Sell In',                icon: ShoppingCart },
   sellOut:          { label: 'Sell Out',               icon: ShoppingBag },
+  inventarioGlobal: { label: 'Inventario',             icon: Boxes },
+  cobranzaGlobal:   { label: 'Cobranza',               icon: HandCoins },
   forecastClientes: { label: 'S&OP',                   icon: Target },
   estrategiaPrecios:{ label: 'Estrategia de Precios',  icon: TrendingUp },
   ordenesCompra:    { label: 'Tracking Pedidos',        icon: Target },
@@ -419,6 +422,17 @@ export default function App() {
               onDrillDown={(clienteKey) => { setClienteActivo(clienteKey); setPaginaActiva('home'); }}
             />
           )}
+          {paginaActiva === "estadoResultados" && (
+            puedeVerPestanaGlobal(perfil, "estado_resultados")
+              ? (
+                <div className="p-12 text-center">
+                  <Calculator className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold text-gray-700 mb-2">Estado de Resultados</h2>
+                  <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
+                </div>
+              )
+              : <SinAcceso motivo="No tienes acceso a Estado de Resultados." />
+          )}
           {paginaActiva === "visionGeneral" && (
             puedeVerPestanaGlobal(perfil, "vision_general")
               ? (
@@ -462,6 +476,28 @@ export default function App() {
                 </div>
               )
               : <SinAcceso motivo="No tienes acceso a Sell Out." />
+          )}
+          {paginaActiva === "inventarioGlobal" && (
+            puedeVerPestanaGlobal(perfil, "inventario_global")
+              ? (
+                <div className="p-12 text-center">
+                  <Boxes className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold text-gray-700 mb-2">Inventario</h2>
+                  <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
+                </div>
+              )
+              : <SinAcceso motivo="No tienes acceso a Inventario." />
+          )}
+          {paginaActiva === "cobranzaGlobal" && (
+            puedeVerPestanaGlobal(perfil, "cobranza_global")
+              ? (
+                <div className="p-12 text-center">
+                  <HandCoins className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold text-gray-700 mb-2">Cobranza</h2>
+                  <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
+                </div>
+              )
+              : <SinAcceso motivo="No tienes acceso a Cobranza." />
           )}
           {paginaActiva === "forecastClientes" && <ForecastClientesTab />}
           {paginaActiva === "estrategiaPrecios" && (

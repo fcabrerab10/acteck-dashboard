@@ -3,7 +3,7 @@ import {
   ChevronRight, ChevronDown, Lock, LogOut, Eye, Settings, RefreshCw,
   Home, TrendingUp, Package, Megaphone, Wallet, CreditCard,
   BarChart3, Target, ClipboardList, FileCheck, Award, Building2, Users,
-  Activity, PieChart, ShoppingCart, ShoppingBag,
+  Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator,
 } from 'lucide-react';
 import {
   puedeConfigurar,
@@ -17,10 +17,13 @@ import {
 // (ej: 'resumenClientes' en la UI → 'resumen_clientes' en permisos JSON).
 const MENU_A_PERMISO_GLOBAL = {
   resumenClientes:  'resumen_clientes',
+  estadoResultados: 'estado_resultados',
   visionGeneral:    'vision_general',
   analisisClientes: 'analisis_clientes',
   sellIn:           'sell_in',
   sellOut:          'sell_out',
+  inventarioGlobal: 'inventario_global',
+  cobranzaGlobal:   'cobranza_global',
   forecastClientes: 'forecast_clientes',
   estrategiaPrecios:'estrategia_precios',
   ordenesCompra:    'ordenes_compra',
@@ -80,6 +83,14 @@ const CLIENTES = {
 
 const MENU_CONFIG = [
   {
+    id: 'direccionGeneral',
+    label: 'Dirección General',
+    emoji: '🏛️',
+    items: [
+      { id: 'estadoResultados', label: 'Estado de Resultados', icon: Calculator },
+    ],
+  },
+  {
     id: 'direccionComercial',
     label: 'Dirección Comercial',
     emoji: '📊',
@@ -88,6 +99,8 @@ const MENU_CONFIG = [
       { id: 'analisisClientes', label: 'Análisis por Cliente', icon: PieChart },
       { id: 'sellIn',           label: 'Sell In',             icon: ShoppingCart },
       { id: 'sellOut',          label: 'Sell Out',            icon: ShoppingBag },
+      { id: 'inventarioGlobal', label: 'Inventario',          icon: Boxes },
+      { id: 'cobranzaGlobal',   label: 'Cobranza',            icon: HandCoins },
       { id: 'forecastClientes', label: 'S&OP',                icon: Target },
       { type: 'separator', label: 'Clientes Propios' },
       { id: 'resumenClientes',  label: 'Resumen de Clientes', icon: BarChart3 },
@@ -142,7 +155,7 @@ const loadExpanded = () => {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
-  return { direccionComercial: true, internaGrupo: true, axonGrupo: true, clientesLista: true, cliente_digitalife: true };
+  return { direccionGeneral: true, direccionComercial: true, internaGrupo: true, axonGrupo: true, clientesLista: true, cliente_digitalife: true };
 };
 const saveExpanded = (obj) => {
   try { localStorage.setItem(LS_KEY, JSON.stringify(obj)); } catch {}

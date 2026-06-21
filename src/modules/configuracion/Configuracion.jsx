@@ -41,7 +41,9 @@ const PLANTILLAS = {
         ),
         globales: {
           resumen_clientes:  "edit",
+          estado_resultados: "edit",
           vision_general: "edit", analisis_clientes: "edit", sell_in: "edit", sell_out: "edit",
+          inventario_global: "edit", cobranza_global: "edit",
           forecast_clientes: "edit", estrategia_precios: "edit", ordenes_compra:    "edit",
           admin_interna:     "edit",
           configuracion:     "oculto",
@@ -60,7 +62,9 @@ const PLANTILLAS = {
         ),
         globales: {
           resumen_clientes:  "ver",
+          estado_resultados: "ver",
           vision_general: "ver", analisis_clientes: "ver", sell_in: "ver", sell_out: "ver",
+          inventario_global: "ver", cobranza_global: "ver",
           forecast_clientes: "ver", estrategia_precios: "ver", ordenes_compra:    "ver",
           admin_interna:     "ver",
           configuracion:     "oculto",
@@ -80,7 +84,9 @@ const PLANTILLAS = {
           dicotech:   Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
         },
         globales: {
+          estado_resultados:"oculto",
           resumen_clientes:"oculto", vision_general:"oculto", analisis_clientes:"oculto", sell_in:"oculto", sell_out:"oculto",
+          inventario_global:"oculto", cobranza_global:"oculto",
           forecast_clientes:"oculto", estrategia_precios:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
         },
       },
@@ -98,7 +104,9 @@ const PLANTILLAS = {
           dicotech:   Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
         },
         globales: {
+          estado_resultados:"oculto",
           resumen_clientes:"oculto", vision_general:"oculto", analisis_clientes:"oculto", sell_in:"oculto", sell_out:"oculto",
+          inventario_global:"oculto", cobranza_global:"oculto",
           forecast_clientes:"oculto", estrategia_precios:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
         },
       },
@@ -116,7 +124,9 @@ const PLANTILLAS = {
           dicotech:   { home:"ver", analisis:"ver", estrategia:"ver", marketing:"oculto", pagos:"oculto", cartera:"oculto" },
         },
         globales: {
+          estado_resultados:"oculto",
           resumen_clientes:"oculto", vision_general:"oculto", analisis_clientes:"oculto", sell_in:"oculto", sell_out:"oculto",
+          inventario_global:"oculto", cobranza_global:"oculto",
           forecast_clientes:"oculto", estrategia_precios:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
         },
       },
