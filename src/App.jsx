@@ -11,6 +11,7 @@ import {
   Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator,
 } from 'lucide-react';
 import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, ForecastCliente } from './modules/comercial';
+import EstadoResultados from './modules/general/EstadoResultados';
 import ReporteTab from './modules/comercial/ReporteTab';
 import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
 import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
@@ -426,13 +427,7 @@ export default function App() {
           )}
           {paginaActiva === "estadoResultados" && (
             puedeVerPestanaGlobal(perfil, "estado_resultados")
-              ? (
-                <div className="p-12 text-center">
-                  <Calculator className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold text-gray-700 mb-2">Estado de Resultados</h2>
-                  <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
-                </div>
-              )
+              ? <EstadoResultados />
               : <SinAcceso motivo="No tienes acceso a Estado de Resultados." />
           )}
           {paginaActiva === "visionGeneral" && (
