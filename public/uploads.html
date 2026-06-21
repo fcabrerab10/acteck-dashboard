@@ -1178,6 +1178,38 @@ const PARSERS = {
       throw new Error('No se detectaron meses con valores reales (revisa que la hoja tenga la línea VENTAS Y SERVICIOS A TASA GENERAL).');
     }
 
+    // Pasada 1.5: capturar comments (annotations amarillas) de las celdas y
+    // mapearlos por (cuenta_norm, mes). Los comments en la col de nombres
+    // (B normalmente) aplican a TODA la cuenta.
+    const notasPorClave = {};
+    const notasPorCuenta = {};
+    const limpiarTexto = (t) => String(t || '').replace(/^[^:\n]+:\s*/, '').replace(/\s+/g, ' ').trim();
+    Object.keys(sh).forEach((addr) => {
+      if (addr[0] === '!') return;
+      const cell = sh[addr];
+      if (!cell || !cell.c) return;
+      const ref = XLSX.utils.decode_cell(addr);
+      const r = ref.r, c = ref.c;
+      const texto = limpiarTexto(cell.c.map((p) => p.t || '').join(' '));
+      if (!texto) return;
+      // Cuenta de esta fila
+      const row = arr[r];
+      if (!row) return;
+      let cuenta = null;
+      for (let cc = 0; cc < 3; cc++) {
+        const v = row[cc];
+        if (typeof v === 'string' && v.trim() !== '') { cuenta = v.trim(); break; }
+      }
+      if (!cuenta) return;
+      const slug = cuentaSlug(cuenta);
+      if (!slug) return;
+      if (colToMes[c] != null) {
+        notasPorClave[`${slug}|${colToMes[c]}`] = texto;
+      } else {
+        notasPorCuenta[slug] = texto;
+      }
+    });
+
     // Pasada 2: extraer valores SÓLO de los meses activos (incluye subtotales y ceros legítimos).
     const out = [];
     let orden = 0;
@@ -1213,6 +1245,7 @@ const PARSERS = {
           valor,
           orden,
           es_subtotal: esSubtotal,
+          nota: notasPorClave[`${slug}|${mes}`] || notasPorCuenta[slug] || null,
         });
       }
     }
