@@ -1131,7 +1131,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
 
       const [productos, sellIn, sellOut, inventario, invActeck, transito, roadmap, precios,
              histPcel, snapshotPcel, dglCategoriasRaw, cuotasMensualesRaw,
-             selloutDiarioRaw, selloutPcelSemanalRaw] = await Promise.all([
+             selloutDiarioRaw, selloutPcelSemanalRaw, sellInPrev] = await Promise.all([
         fetchAllPagesREST(`productos_cliente?select=*&cliente=eq.${clienteKey}`),
         fetchAllPagesREST(`sell_in_sku?select=*&cliente=eq.${clienteKey}&anio=eq.2026`),
         fetchSelloutSku(clienteKey, 2026),
@@ -1162,6 +1162,8 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         esPcel
           ? fetchAllPagesREST(`sellout_pcel?select=anio,semana,sku,vta_semana&order=anio.desc,semana.desc&limit=20000`).catch((e) => { console.error('selloutPcel:', e); return []; })
           : Promise.resolve([]),
+        // Sell In 2025 — para la tarjeta "YTD vs Año Anterior" en la vista Sell In.
+        fetchAllPagesREST(`sell_in_sku?select=mes,monto_pesos&cliente=eq.${clienteKey}&anio=eq.2025`).catch((e) => { console.error('sellInPrev:', e); return []; }),
       ]);
       const selloutDiario = selloutDiarioRaw || [];
       const selloutPcelSemanal = selloutPcelSemanalRaw || [];
@@ -1274,7 +1276,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       }
 
       setDatos({
-        productos: productosEfectivos, sellIn, sellOut,
+        productos: productosEfectivos, sellIn, sellOut, sellInPrev,
         inventario: inventarioLatest,
         inventarioAll: inventario,   // preserved for future historical views
         latestWeek: { anio: maxA, semana: maxS },
@@ -1493,6 +1495,13 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         siMesActual += Number(r.monto_pesos) || 0;
       }
     });
+    // Sell-In YTD del año anterior (para tarjeta "YTD vs Año Anterior" en Sell In)
+    let siYTDPrev = 0;
+    (datos.sellInPrev || []).forEach((r) => {
+      if (Number(r.mes) <= mesActualNum) {
+        siYTDPrev += Number(r.monto_pesos) || 0;
+      }
+    });
 
     // Cumplimiento mensual (12 meses) — para strip debajo de las tarjetas
     const cuotaPorMes = {};
@@ -1549,7 +1558,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     return {
       efi, skusActivos, skusConInv, diasCob, invActeckPiezas,
       sugPiezas, sugMonto, sugSkus,
-      siYTD, cuotaYTD, cuotaMesActual, siMesActual,
+      siYTD, siYTDPrev, cuotaYTD, cuotaMesActual, siMesActual,
       cumplimientoMensual,
       trimestreActual, cuotasQ, qActualData,
     };
@@ -2960,8 +2969,79 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
       );
     })(),
 
+    // ── Sell In: 4 KPIs financieros (solo cuando vista === 'sellIn') ──
+    vista === 'sellIn' && kpis && (function(){
+      const fmtMXN = (n) => n >= 1e6 ? '$' + (n/1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + (n/1e3).toFixed(0) + 'K' : '$' + Math.round(n || 0);
+      const MES_NOMBRE = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][new Date().getMonth()];
+
+      const siYTD       = Number(kpis.siYTD) || 0;
+      const siYTDPrev   = Number(kpis.siYTDPrev) || 0;
+      const siMes       = Number(kpis.siMesActual) || 0;
+      const cuotaMes    = Number(kpis.cuotaMesActual) || 0;
+      const cuotaYTD    = Number(kpis.cuotaYTD) || 0;
+
+      const pctMes      = cuotaMes > 0 ? (siMes / cuotaMes) * 100 : null;
+      const faltaMes    = Math.max(0, cuotaMes - siMes);
+      const pctYTD      = cuotaYTD > 0 ? (siYTD / cuotaYTD) * 100 : null;
+      const faltaYTD    = Math.max(0, cuotaYTD - siYTD);
+      const deltaYoY    = siYTDPrev > 0 ? ((siYTD - siYTDPrev) / siYTDPrev) * 100 : null;
+
+      // Semáforos: verde >= 95%, ámbar 80-95%, rojo <80%
+      const colorPct = (p) => p == null ? '#94A3B8' : p >= 95 ? '#10B981' : p >= 80 ? '#F59E0B' : '#EF4444';
+      const yoyColor = deltaYoY == null ? '#94A3B8' : deltaYoY >= 0 ? '#10B981' : '#EF4444';
+      const yoySign  = deltaYoY != null && deltaYoY >= 0 ? '+' : '';
+
+      const tarjetas = [
+        {
+          id: 'si-ytd', icono: '💵', titulo: 'Sell In YTD', color: '#3B82F6',
+          valor: fmtMXN(siYTD),
+          sub: 'Acumulado ene–' + MES_NOMBRE + ' · facturado al cliente',
+        },
+        {
+          id: 'si-mes', icono: '🎯', titulo: 'Sell In vs Cuota — ' + MES_NOMBRE, color: colorPct(pctMes),
+          valor: pctMes == null ? '—' : pctMes.toFixed(0) + '%',
+          sub: cuotaMes > 0
+            ? fmtMXN(siMes) + ' de ' + fmtMXN(cuotaMes) + (faltaMes > 0 ? ' · faltan ' + fmtMXN(faltaMes) : ' · cumplida ✓')
+            : 'Sin cuota configurada para el mes',
+        },
+        {
+          id: 'si-yoy', icono: '📈', titulo: 'YTD vs Año Anterior', color: yoyColor,
+          valor: deltaYoY == null ? '—' : yoySign + deltaYoY.toFixed(1) + '%',
+          sub: siYTDPrev > 0
+            ? '2025: ' + fmtMXN(siYTDPrev) + ' · Δ ' + (siYTD > siYTDPrev ? '+' : '') + fmtMXN(siYTD - siYTDPrev)
+            : 'Sin datos 2025 del mismo periodo',
+        },
+        {
+          id: 'si-cumpl', icono: '🏁', titulo: '% Cumplimiento Cuota YTD', color: colorPct(pctYTD),
+          valor: pctYTD == null ? '—' : pctYTD.toFixed(0) + '%',
+          sub: cuotaYTD > 0
+            ? fmtMXN(siYTD) + ' de ' + fmtMXN(cuotaYTD) + ' · faltan ' + fmtMXN(faltaYTD)
+            : 'Sin cuota YTD configurada',
+        },
+      ];
+
+      return React.createElement('div', { style: { marginBottom: 16 } },
+        React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 } },
+          ...tarjetas.map(t =>
+            React.createElement('div', {
+              key: t.id,
+              style: {
+                background: '#fff', borderRadius: 12, border: '1px solid #E2E8F0',
+                borderLeft: '4px solid ' + t.color, padding: 16,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              }
+            },
+              React.createElement('p', { style: { fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, margin: 0 } }, t.icono + ' ' + t.titulo),
+              React.createElement('p', { style: { fontSize: 24, fontWeight: 800, color: '#1E293B', lineHeight: 1.1, margin: '6px 0 0 0' } }, t.valor),
+              React.createElement('p', { style: { fontSize: 11, color: '#94A3B8', margin: '4px 0 0 0' } }, t.sub),
+            )
+          )
+        )
+      );
+    })(),
+
     // ── 4 KPIs nuevos: Valor inv · Piezas inv · Por categoría · Última propuesta ──
-    (function(){
+    vista !== 'sellIn' && (function(){
       if (!datos) return null;
       const filas = skuDetail || [];
       const valorInvTotal = filas.reduce((a, r) => a + (Number(r.valorInv) || 0), 0);
