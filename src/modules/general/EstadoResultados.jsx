@@ -85,6 +85,17 @@ export default function EstadoResultados() {
   const [mesEnfoque, setMesEnfoque] = useState(0);
   const [showVsAnioPrev, setShowVsAnioPrev] = useState(true);
   const [mesDrillDown, setMesDrillDown] = useState(null);
+  const [alertasDescartadas, setAlertasDescartadas] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('edr_alertas_descartadas') || '[]')); }
+    catch { return new Set(); }
+  });
+  const persistirDescartadas = (next) => {
+    setAlertasDescartadas(next);
+    try { localStorage.setItem('edr_alertas_descartadas', JSON.stringify(Array.from(next))); } catch {}
+  };
+  const descartarAlerta = (id) => persistirDescartadas(new Set([...alertasDescartadas, id]));
+  const restaurarAlerta = (id) => { const n = new Set(alertasDescartadas); n.delete(id); persistirDescartadas(n); };
+  const restaurarTodas = () => persistirDescartadas(new Set());
 
   useEffect(() => {
     (async () => {
@@ -235,6 +246,7 @@ export default function EstadoResultados() {
           const delta = ((v - vPrev) / Math.abs(vPrev)) * 100;
           if (Math.abs(delta) >= 25) {
             items.push({
+              id: `${anio}-mom-${slug}-${mesMax}`,
               type: 'mom',
               cuenta: c.cuenta, slug,
               mes: mesMax, delta,
@@ -251,6 +263,7 @@ export default function EstadoResultados() {
         const delta = ((v - vPrevY) / Math.abs(vPrevY)) * 100;
         if (Math.abs(delta) >= 40) {
           items.push({
+            id: `${anio}-yoy-${slug}-${mesMax}`,
             type: 'yoy',
             cuenta: c.cuenta, slug,
             mes: mesMax, delta,
@@ -410,7 +423,14 @@ export default function EstadoResultados() {
 
       {/* Alertas / outliers */}
       {alertas.length > 0 && (
-        <AlertasBanner alertas={alertas} onMesClick={(m) => setMesDrillDown(m)} />
+        <AlertasBanner
+          alertas={alertas}
+          descartadas={alertasDescartadas}
+          onDescartar={descartarAlerta}
+          onRestaurar={restaurarAlerta}
+          onRestaurarTodas={restaurarTodas}
+          onMesClick={(m) => setMesDrillDown(m)}
+        />
       )}
 
       {/* KPIs Bento */}
@@ -771,7 +791,13 @@ const tdLeft = { padding: '6px 12px', whiteSpace: 'nowrap', maxWidth: 280, overf
 const tdRight = { padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap', fontSize: 12 };
 
 // ────────── Banda de alertas ──────────
-function AlertasBanner({ alertas, onMesClick }) {
+function AlertasBanner({ alertas, descartadas, onDescartar, onRestaurar, onRestaurarTodas, onMesClick }) {
+  const [verDescartadas, setVerDescartadas] = useState(false);
+  const activas    = alertas.filter((a) => !descartadas.has(a.id));
+  const descartadasArr = alertas.filter((a) => descartadas.has(a.id));
+
+  if (activas.length === 0 && descartadasArr.length === 0) return null;
+
   return (
     <div style={{
       background: PALETTE.amber.bg, borderRadius: 12, padding: '10px 14px',
@@ -779,28 +805,87 @@ function AlertasBanner({ alertas, onMesClick }) {
     }} className="edr-no-print">
       <div className="flex items-start gap-2.5">
         <AlertTriangle className="w-4 h-4 flex-none mt-0.5" style={{ color: PALETTE.amber.mid }} />
-        <div className="flex-1">
-          <p style={{ fontSize: 11, color: PALETTE.amber.mid, fontWeight: 500, margin: 0, letterSpacing: '0.03em' }}>
-            Señales para revisar ({alertas.length})
-          </p>
-          <ul style={{ margin: '4px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: '4px 18px' }}>
-            {alertas.map((a, i) => (
-              <li key={i} style={{ fontSize: 12, color: PALETTE.amber.text, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  display: 'inline-block', minWidth: 28, padding: '1px 6px', borderRadius: 10,
-                  fontSize: 10, background: a.type === 'yoy' ? PALETTE.purple.bg : PALETTE.coral.bg,
-                  color: a.type === 'yoy' ? PALETTE.purple.text : PALETTE.coral.text,
-                  textAlign: 'center', fontWeight: 500,
-                }}>
-                  {a.type === 'yoy' ? 'YoY' : 'MoM'}
-                </span>
-                {a.mensaje}
-                <button onClick={() => onMesClick(a.mes)}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-3">
+            <p style={{ fontSize: 11, color: PALETTE.amber.mid, fontWeight: 500, margin: 0, letterSpacing: '0.03em' }}>
+              {activas.length > 0
+                ? `Señales para revisar (${activas.length})`
+                : `Todas las señales fueron descartadas`}
+            </p>
+            {descartadasArr.length > 0 && (
+              <button onClick={() => setVerDescartadas((v) => !v)}
+                className="text-[11px] underline hover:no-underline"
+                style={{ color: PALETTE.amber.mid }}>
+                {verDescartadas ? 'Ocultar descartadas' : `${descartadasArr.length} descartada${descartadasArr.length === 1 ? '' : 's'}`}
+              </button>
+            )}
+          </div>
+
+          {/* Activas */}
+          {activas.length > 0 && (
+            <ul style={{ margin: '6px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {activas.map((a) => (
+                <li key={a.id} style={{ fontSize: 12, color: PALETTE.amber.text, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    display: 'inline-block', minWidth: 28, padding: '1px 6px', borderRadius: 10,
+                    fontSize: 10, background: a.type === 'yoy' ? PALETTE.purple.bg : PALETTE.coral.bg,
+                    color: a.type === 'yoy' ? PALETTE.purple.text : PALETTE.coral.text,
+                    textAlign: 'center', fontWeight: 500, flex: 'none',
+                  }}>
+                    {a.type === 'yoy' ? 'YoY' : 'MoM'}
+                  </span>
+                  <span className="flex-1">{a.mensaje}</span>
+                  <button onClick={() => onMesClick(a.mes)}
+                    className="text-[10px] underline hover:no-underline whitespace-nowrap"
+                    style={{ color: PALETTE.amber.mid }}>ver mes</button>
+                  <button onClick={() => onDescartar(a.id)}
+                    title="Descartar"
+                    className="hover:bg-amber-200 rounded p-0.5"
+                    style={{ color: PALETTE.amber.mid, lineHeight: 0 }}>
+                    <X className="w-3 h-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Descartadas (expandible) */}
+          {verDescartadas && descartadasArr.length > 0 && (
+            <div style={{
+              marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${PALETTE.amber.mid}`,
+            }}>
+              <div className="flex items-baseline justify-between mb-2">
+                <p style={{ fontSize: 10, color: PALETTE.amber.mid, margin: 0, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                  Descartadas — click ↻ para restaurar
+                </p>
+                <button onClick={onRestaurarTodas}
                   className="text-[10px] underline hover:no-underline"
-                  style={{ color: PALETTE.amber.mid }}>ver mes</button>
-              </li>
-            ))}
-          </ul>
+                  style={{ color: PALETTE.amber.mid }}>
+                  Restaurar todas
+                </button>
+              </div>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {descartadasArr.map((a) => (
+                  <li key={a.id} style={{ fontSize: 12, color: PALETTE.amber.mid, display: 'flex', alignItems: 'center', gap: 8, opacity: 0.75 }}>
+                    <span style={{
+                      display: 'inline-block', minWidth: 28, padding: '1px 6px', borderRadius: 10,
+                      fontSize: 10, background: '#fff', border: `1px solid ${PALETTE.amber.mid}`,
+                      color: PALETTE.amber.mid, textAlign: 'center', fontWeight: 500, flex: 'none',
+                    }}>
+                      {a.type === 'yoy' ? 'YoY' : 'MoM'}
+                    </span>
+                    <span className="flex-1" style={{ textDecoration: 'line-through' }}>{a.mensaje}</span>
+                    <button onClick={() => onRestaurar(a.id)}
+                      title="Restaurar"
+                      className="text-[10px] underline hover:no-underline whitespace-nowrap"
+                      style={{ color: PALETTE.amber.mid }}>
+                      ↻ restaurar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </div>
