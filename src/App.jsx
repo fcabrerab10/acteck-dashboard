@@ -551,13 +551,7 @@ export default function App() {
         ) : (
           <>
         {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />}
-        {paginaActiva === "sellIn"  && (
-          <div className="p-12 text-center">
-            <ShoppingCart className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-gray-700 mb-2">Sell In — {c.nombre}</h2>
-            <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
-          </div>
-        )}
+        {paginaActiva === "sellIn"  && <EstrategiaProducto cliente={c.nombre} clienteKey={clienteActivo} vista="sellIn" />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} clienteKey={clienteActivo} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}

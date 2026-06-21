@@ -6,7 +6,12 @@ import { puedeEditarPestanaCliente } from '../../lib/permisos';
 import { roadmapStyle, roadmapInfo } from '../../lib/roadmapColors';
 import { PCEL_REAL } from '../../lib/constants';
 
-export default function EstrategiaProducto({ cliente, clienteKey, onUploadComplete }) {
+export default function EstrategiaProducto({ cliente, clienteKey, onUploadComplete, vista = 'sellOut' }) {
+  // vista: 'sellOut' (default — piezas vendidas al mercado, fuente: sellout_sku)
+  //        'sellIn'  (piezas facturadas al cliente, fuente: sell_in_sku / facturacion_clientes)
+  // Solo afecta los valores mensuales de la tabla principal y el título.
+  // Todos los cálculos derivados (sugerido, ABC, tracking N, etc.) siguen
+  // basados en sellout porque ese es el indicador de demanda real.
   const perfil = usePerfil();
   // Permiso granular por (clienteKey, 'estrategia'). Si está en 'ver', canEdit=false
   // y toda la UI queda solo-lectura (inputs bloqueados, botones ocultos).
@@ -1341,11 +1346,21 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     // catalogo_sku_pcel.modelo es "XXXXXX" (sin AC-). Por eso normalizamos
     // ambos lados con normModelo() para que las claves cuadren.
     const siByKey = {}, siMontoByKey = {}, soByKey = {}, soMontoByKey = {};
+    // Para la vista Sell In de la tabla principal necesitamos el desglose
+    // mensual por SKU. Index: key (sku ó modelo Acteck normalizado) → {mes: piezas}.
+    const siByKeyByMes = {}, siMontoByKeyByMes = {};
     datos.sellIn.forEach(r => {
       const k = esPcel ? normModelo(r.sku) : r.sku;
       if (!k) return;
       siByKey[k]      = (siByKey[k] || 0)      + (Number(r.piezas) || 0);
       siMontoByKey[k] = (siMontoByKey[k] || 0) + (Number(r.monto_pesos) || 0);
+      const m = Number(r.mes);
+      if (m >= 1 && m <= 12) {
+        if (!siByKeyByMes[k]) siByKeyByMes[k] = {};
+        if (!siMontoByKeyByMes[k]) siMontoByKeyByMes[k] = {};
+        siByKeyByMes[k][m] = (siByKeyByMes[k][m] || 0) + (Number(r.piezas) || 0);
+        siMontoByKeyByMes[k][m] = (siMontoByKeyByMes[k][m] || 0) + (Number(r.monto_pesos) || 0);
+      }
     });
     datos.sellOut.forEach(r => {
       const k = r.sku; if (!k) return;
@@ -1728,6 +1743,23 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         roadmapDescLongBySku[r.sku] = p["Descripcion 2"] || p["DESCRIPCION 2"] || p["Descripción 2"] || p["DESCRIPCIÓN 2"] || "";
       }
     });
+    // Índice mensual de Sell In para alimentar la vista "Sell In" de la tabla
+    // (columnas Ene…Dic muestran piezas/monto facturados al cliente).
+    // Para PCEL las llaves del sell_in_sku vienen como SKU Acteck (AC-XXX),
+    // así que normalizamos contra modelo. Para Digitalife/Dicotech es directo.
+    const esPcelMap = clienteKey === 'pcel';
+    const sellInByMesIndex = {};
+    const sellInMontoByMesIndex = {};
+    (datos.sellIn || []).forEach(r => {
+      const k = esPcelMap ? normModelo(r.sku) : r.sku;
+      if (!k) return;
+      const m = Number(r.mes);
+      if (m < 1 || m > 12) return;
+      if (!sellInByMesIndex[k])      sellInByMesIndex[k] = {};
+      if (!sellInMontoByMesIndex[k]) sellInMontoByMesIndex[k] = {};
+      sellInByMesIndex[k][m]      = (sellInByMesIndex[k][m] || 0)      + (Number(r.piezas) || 0);
+      sellInMontoByMesIndex[k][m] = (sellInMontoByMesIndex[k][m] || 0) + (Number(r.monto_pesos) || 0);
+    });
     return datos.productos
       .filter(p => !categoriaFilter || (p.categoria || "") === categoriaFilter)
       .filter(p => !searchFilter || (p.sku || "").toUpperCase().includes(searchFilter.toUpperCase()) || (p.modelo || "").toUpperCase().includes(searchFilter.toUpperCase()) || (p.descripcion || "").toUpperCase().includes(searchFilter.toUpperCase()))
@@ -1738,6 +1770,10 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         // de PCEL (sellout_pcel, sell_in, sellout) usamos el sku numérico.
         const skuExterno = (clienteKey === 'pcel' && p.modelo) ? p.modelo : p.sku;
         const siData = datos.sellIn.filter(r => r.sku === p.sku);
+        // Sell In mensual por SKU para la vista Sell In (columnas Ene…Dic).
+        const sellInKey   = esPcelMap ? normModelo(p.modelo) : p.sku;
+        const siByMes      = sellInByMesIndex[sellInKey]      || {};
+        const siMontoByMes = sellInMontoByMesIndex[sellInKey] || {};
         const soData = datos.sellOut.filter(r => r.sku === p.sku);
         const invData = datos.inventario.find(r => r.sku === p.sku);
 
@@ -2010,6 +2046,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
           invTransito,
           sugerido,
           soMontoTotal,
+          // Datos para la vista Sell In de la tabla (mensual)
+          siByMes,
+          siMontoByMes,
           // Campos específicos PCEL:
           backOrder,
           transPcel,
@@ -2808,7 +2847,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   if (!datos && !loading) {
     return React.createElement("div", { className: "max-w-4xl mx-auto p-6" },
       React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6 mb-6" },
-        React.createElement("h2", { className: "text-2xl font-bold text-gray-800 mb-4" }, "Estrategia de Producto"),
+        React.createElement("h2", { className: "text-2xl font-bold text-gray-800 mb-4" }, vista === 'sellIn' ? "Sell In" : "Sell Out"),
         React.createElement("p", { className: "text-gray-600 mb-4" }, "Carga archivos Excel para actualizar datos de Sell In, Sell Out e Inventario."),
         React.createElement("div", { className: "space-y-4" },
           React.createElement("div", {
@@ -2836,7 +2875,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
     // Header
     React.createElement("div", { className: "bg-white rounded-2xl shadow-sm p-6" },
       React.createElement("div", { className: "flex justify-between items-start mb-4" },
-        React.createElement("h2", { className: "text-2xl font-bold text-gray-800" }, "Estrategia de Producto"),
+        React.createElement("h2", { className: "text-2xl font-bold text-gray-800" }, vista === 'sellIn' ? "Sell In" : "Sell Out"),
         // Botón de actualizar datos sólo para usuarios con permiso de edición
         canEdit && React.createElement("button", {
           className: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium",
@@ -3329,9 +3368,17 @@ React.createElement("div", { style: { overflowX: "auto", maxHeight: 600, overflo
                   ),
                   React.createElement("td", { style: { padding: "6px", color: "#475569", fontSize: 11, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: s.descripcion }, s.descripcion),
                   [1,2,3,4,5,6,7,8,9,10,11,12].map(function(m) {
-                    var soData = datos.sellOut.filter(function(r) { return r.sku === s.sku && Number(r.mes) === m; });
-                    var pzas = soData.reduce(function(sum,r) { return sum + (Number(r.piezas) || 0); }, 0);
-                    return React.createElement("td", { key: "m"+m, style: { textAlign: "right", padding: "6px 4px", color: pzas > 0 ? "#1E293B" : "#CBD5E1", fontSize: 11 } }, pzas > 0 ? pzas : "-");
+                    var pzas;
+                    if (vista === 'sellIn') {
+                      pzas = Number((s.siByMes || {})[m]) || 0;
+                    } else {
+                      var soData = datos.sellOut.filter(function(r) { return r.sku === s.sku && Number(r.mes) === m; });
+                      pzas = soData.reduce(function(sum,r) { return sum + (Number(r.piezas) || 0); }, 0);
+                    }
+                    var titleAttr = vista === 'sellIn'
+                      ? (pzas > 0 ? `${pzas} piezas facturadas — ${formatMXN(Number((s.siMontoByMes || {})[m]) || 0)}` : 'Sin facturación este mes')
+                      : (pzas > 0 ? `${pzas} piezas vendidas al mercado` : 'Sin sellout este mes');
+                    return React.createElement("td", { key: "m"+m, title: titleAttr, style: { textAlign: "right", padding: "6px 4px", color: pzas > 0 ? "#1E293B" : "#CBD5E1", fontSize: 11 } }, pzas > 0 ? pzas : "-");
                   }),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", fontWeight: 500, color: "#1E293B", fontSize: 11 } }, (s.stock || 0).toLocaleString("es-MX")),
                   React.createElement("td", { style: { textAlign: "right", padding: "6px", color: "#64748B", fontSize: 11 } }, s.valorInv > 0 ? "$" + Math.round(s.valorInv).toLocaleString("es-MX") : "-"),
