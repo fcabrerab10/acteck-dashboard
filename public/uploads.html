@@ -77,6 +77,7 @@ const SOURCES = [
   },
   { id:'roadmap-precios', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
   { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
+  { id:'estados-resultados', grupo:'globales', tipo:'mes', statusKey:'estados_resultados', title:'Estado de Resultados (P&L)', desc:'Cierres mensuales/trimestrales del P&L (ej. "Cierre 1Q 2026.xlsx", "Cierre Diciembre 2025.xlsx"). Lee la hoja "Estado de Resultados" y carga sólo los meses con valores. No borra meses previos; upsert por (razón social, año, mes, cuenta).', file:'Cierre <período>.xlsx', table:'estados_resultados', onConflict:'razon_social,anio,mes,cuenta_norm', parser:'estadosResultados' },
   // ── Digitalife ──
   { id:'digitalife-sellout', grupo:'digitalife', tipo:'sellout', statusKey:'sellout_digitalife', title:'Digitalife · Sellout histórico', desc:'Historico Sellout Digitalife (hoja "Sellout Digitalife"). Append con dedup por fecha+parte+cantidad+total.', file:'Historico Sellout Digitalife.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
   { id:'digitalife-inv', grupo:'digitalife', tipo:'semana', statusKey:'inv_digitalife', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Snapshot semanal por (cliente, sku, anio, semana).', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv' },
@@ -1074,6 +1075,148 @@ const PARSERS = {
         monto:  montoMap.get(k)  || 0,
       });
     }
+    return out;
+  },
+
+  // Estado de Resultados (P&L) — hoja "Estado de Resultados".
+  // Layout:
+  //   Row 2: razón social
+  //   Row 4: "EJERCICIO YYYY" → de aquí sacamos el año
+  //   Row 6: headers de mes (Enero..Diciembre en cols C..N)
+  //   Row 7+: cuenta en col B, valores numéricos por mes en cols C..N
+  // Solo se cargan celdas con valor numérico (las vacías quedan sin tocar).
+  estadosResultados(wb){
+    const sh = wb.Sheets['Estado de Resultados'] || wb.Sheets['ESTADO DE RESULTADOS'] || wb.Sheets['Estado de resultados'];
+    if (!sh) throw new Error('No se encontró la hoja "Estado de Resultados"');
+    const arr = XLSX.utils.sheet_to_json(sh, { defval: null, header: 1 });
+
+    // Razón social (row 2 col B). Default REVKO si no aparece.
+    let razonSocial = 'REVKO TECHNOLOGY SA DE CV';
+    for (let r = 0; r < Math.min(6, arr.length); r++) {
+      const row = arr[r] || [];
+      for (const v of row) {
+        if (typeof v === 'string' && /S\.?A\.?\s*DE\s*C\.?V\.?/i.test(v)) {
+          razonSocial = v.trim();
+          break;
+        }
+      }
+    }
+
+    // Año desde "EJERCICIO YYYY" en las primeras filas.
+    let anio = null;
+    for (let r = 0; r < Math.min(8, arr.length); r++) {
+      const row = arr[r] || [];
+      for (const v of row) {
+        if (typeof v === 'string') {
+          const m = v.match(/EJERCICIO\s+(\d{4})/i);
+          if (m) { anio = parseInt(m[1], 10); break; }
+        }
+      }
+      if (anio) break;
+    }
+    if (!anio) throw new Error('No se detectó el año del P&L (busca "EJERCICIO YYYY" en las primeras filas).');
+
+    // Header row de meses — primera fila con varios meses en español.
+    const NOMBRES_MES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const norm = (s) => String(s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    let headerRowIdx = -1;
+    for (let r = 0; r < Math.min(20, arr.length); r++) {
+      const row = arr[r] || [];
+      let count = 0;
+      for (const v of row) if (NOMBRES_MES.includes(norm(v))) count++;
+      if (count >= 6) { headerRowIdx = r; break; }
+    }
+    if (headerRowIdx < 0) throw new Error('No se encontró la fila de headers de meses en la hoja');
+
+    // Mapa col → mes
+    const colToMes = {};
+    (arr[headerRowIdx] || []).forEach((v, c) => {
+      const idx = NOMBRES_MES.indexOf(norm(v));
+      if (idx >= 0) colToMes[c] = idx + 1;
+    });
+
+    // Subtotales conocidos (clave normalizada)
+    const SUBTOTALES = new Set([
+      'venta_neta', 'total_costo_de_venta', 'utilidad_bruta',
+      'total_gastos', 'total_gastos_proyectos',
+      'uafir_con_proyectos', 'uafir_sin_proyectos',
+      'total_productos_financieros',
+      'uaii_contable_con_proyecctos', 'uaii_contable_con_proyectos',
+      'uaii_contable_sin_proyectos',
+    ]);
+
+    const cuentaSlug = (s) => norm(s)
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    // Pasada 1: detectar qué meses tienen actividad real.
+    // Usamos VENTAS Y SERVICIOS A TASA GENERAL como indicador canónico — es la
+    // línea de ingresos principal y solo se llena cuando el mes ya cerró.
+    // Si no aparece esa fila, hacemos fallback al primer ingreso/gasto detalle
+    // con valor distinto de cero.
+    const mesesActivos = new Set();
+    let ventasGeneralRow = null;
+    for (let r = headerRowIdx + 1; r < arr.length; r++) {
+      const row = arr[r]; if (!row) continue;
+      let cuenta = null;
+      for (let c = 0; c < 3; c++) {
+        const v = row[c];
+        if (typeof v === 'string' && v.trim() !== '') { cuenta = v.trim(); break; }
+      }
+      if (cuenta && cuentaSlug(cuenta) === 'ventas_y_servicios_a_tasa_general') {
+        ventasGeneralRow = row;
+        break;
+      }
+    }
+    if (ventasGeneralRow) {
+      for (const [colStr, mes] of Object.entries(colToMes)) {
+        const v = ventasGeneralRow[Number(colStr)];
+        if (typeof v === 'number' && v !== 0) mesesActivos.add(mes);
+      }
+    }
+    if (mesesActivos.size === 0) {
+      throw new Error('No se detectaron meses con valores reales (revisa que la hoja tenga la línea VENTAS Y SERVICIOS A TASA GENERAL).');
+    }
+
+    // Pasada 2: extraer valores SÓLO de los meses activos (incluye subtotales y ceros legítimos).
+    const out = [];
+    let orden = 0;
+    for (let r = headerRowIdx + 1; r < arr.length; r++) {
+      const row = arr[r];
+      if (!row) continue;
+      let cuenta = null;
+      for (let c = 0; c < 3; c++) {
+        const v = row[c];
+        if (typeof v === 'string' && v.trim() !== '') { cuenta = v.trim(); break; }
+      }
+      if (!cuenta) continue;
+      if (/^informacion general$/i.test(cuenta)) continue;
+
+      const slug = cuentaSlug(cuenta);
+      if (!slug) continue;
+      orden++;
+      const esSubtotal = SUBTOTALES.has(slug);
+
+      for (const [colStr, mes] of Object.entries(colToMes)) {
+        if (!mesesActivos.has(mes)) continue;
+        const c = Number(colStr);
+        const v = row[c];
+        if (v == null || v === '' || typeof v === 'string') continue;
+        const valor = Number(v);
+        if (isNaN(valor)) continue;
+        out.push({
+          razon_social: razonSocial,
+          anio,
+          mes,
+          cuenta,
+          cuenta_norm: slug,
+          valor,
+          orden,
+          es_subtotal: esSubtotal,
+        });
+      }
+    }
+    if (out.length === 0) throw new Error('No se extrajo ninguna celda numérica del P&L.');
     return out;
   },
 };

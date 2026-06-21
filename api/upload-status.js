@@ -30,6 +30,7 @@ export default async function handler(req, res) {
     roadmap:            'roadmap_sku?select=updated_at&order=updated_at.desc&limit=1',
     precios:            'precios_sku?select=updated_at&order=updated_at.desc&limit=1',
     embarques:          'embarques_compras?select=updated_at&order=updated_at.desc&limit=1',
+    estados_resultados: 'estados_resultados?select=anio,mes,updated_at&order=anio.desc,mes.desc&limit=1',
     sellout_digitalife: 'sellout_detalle?cliente=eq.digitalife&select=fecha,updated_at&order=fecha.desc&limit=1',
     sellout_dicotech:   'sellout_detalle?cliente=eq.dicotech&select=fecha,updated_at&order=fecha.desc&limit=1',
     sellout_pcel:       'sellout_pcel?select=anio,semana&order=anio.desc,semana.desc&limit=1',

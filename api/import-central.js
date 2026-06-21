@@ -27,7 +27,8 @@ const ALLOWED = {
   estados_cuenta:        'cliente,anio,semana',
   estados_cuenta_detalle:'id',
   embarques_compras:     'po,codigo',
-  facturacion_clientes:  'cliente_nombre,sku,anio,mes'
+  facturacion_clientes:  'cliente_nombre,sku,anio,mes',
+  estados_resultados:    'razon_social,anio,mes,cuenta_norm',
 };
 
 export default async function handler(req, res) {
