@@ -41,6 +41,7 @@ const PLANTILLAS = {
         ),
         globales: {
           resumen_clientes:  "edit",
+          vision_general: "edit", analisis_clientes: "edit", sell_in: "edit", sell_out: "edit",
           forecast_clientes: "edit", estrategia_precios: "edit", ordenes_compra:    "edit",
           admin_interna:     "edit",
           configuracion:     "oculto",
@@ -59,6 +60,7 @@ const PLANTILLAS = {
         ),
         globales: {
           resumen_clientes:  "ver",
+          vision_general: "ver", analisis_clientes: "ver", sell_in: "ver", sell_out: "ver",
           forecast_clientes: "ver", estrategia_precios: "ver", ordenes_compra:    "ver",
           admin_interna:     "ver",
           configuracion:     "oculto",
@@ -78,7 +80,8 @@ const PLANTILLAS = {
           dicotech:   Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
         },
         globales: {
-          resumen_clientes:"oculto", forecast_clientes:"oculto", estrategia_precios:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
+          resumen_clientes:"oculto", vision_general:"oculto", analisis_clientes:"oculto", sell_in:"oculto", sell_out:"oculto",
+          forecast_clientes:"oculto", estrategia_precios:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
         },
       },
     }),
@@ -95,7 +98,8 @@ const PLANTILLAS = {
           dicotech:   Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, "oculto"])),
         },
         globales: {
-          resumen_clientes:"oculto", forecast_clientes:"oculto", estrategia_precios:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
+          resumen_clientes:"oculto", vision_general:"oculto", analisis_clientes:"oculto", sell_in:"oculto", sell_out:"oculto",
+          forecast_clientes:"oculto", estrategia_precios:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
         },
       },
     }),
@@ -112,7 +116,8 @@ const PLANTILLAS = {
           dicotech:   { home:"ver", analisis:"ver", estrategia:"ver", marketing:"oculto", pagos:"oculto", cartera:"oculto" },
         },
         globales: {
-          resumen_clientes:"oculto", forecast_clientes:"oculto", estrategia_precios:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
+          resumen_clientes:"oculto", vision_general:"oculto", analisis_clientes:"oculto", sell_in:"oculto", sell_out:"oculto",
+          forecast_clientes:"oculto", estrategia_precios:"oculto", ordenes_compra:"oculto", admin_interna:"oculto", configuracion:"oculto",
         },
       },
     }),

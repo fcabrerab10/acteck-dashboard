@@ -3,6 +3,7 @@ import {
   ChevronRight, ChevronDown, Lock, LogOut, Eye, Settings, RefreshCw,
   Home, TrendingUp, Package, Megaphone, Wallet, CreditCard,
   BarChart3, Target, ClipboardList, FileCheck, Award, Building2, Users,
+  Activity, PieChart, ShoppingCart, ShoppingBag,
 } from 'lucide-react';
 import {
   puedeConfigurar,
@@ -16,6 +17,10 @@ import {
 // (ej: 'resumenClientes' en la UI → 'resumen_clientes' en permisos JSON).
 const MENU_A_PERMISO_GLOBAL = {
   resumenClientes:  'resumen_clientes',
+  visionGeneral:    'vision_general',
+  analisisClientes: 'analisis_clientes',
+  sellIn:           'sell_in',
+  sellOut:          'sell_out',
   forecastClientes: 'forecast_clientes',
   estrategiaPrecios:'estrategia_precios',
   ordenesCompra:    'ordenes_compra',
@@ -79,6 +84,10 @@ const MENU_CONFIG = [
     label: 'Dirección Comercial',
     emoji: '📊',
     items: [
+      { id: 'visionGeneral',    label: 'Visión General',      icon: Activity },
+      { id: 'analisisClientes', label: 'Análisis por Cliente', icon: PieChart },
+      { id: 'sellIn',           label: 'Sell In',             icon: ShoppingCart },
+      { id: 'sellOut',          label: 'Sell Out',            icon: ShoppingBag },
       { id: 'forecastClientes', label: 'S&OP',                icon: Target },
       { type: 'separator', label: 'Clientes Propios' },
       { id: 'resumenClientes',  label: 'Resumen de Clientes', icon: BarChart3 },

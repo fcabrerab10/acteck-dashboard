@@ -164,6 +164,10 @@ export const PESTANAS_CLIENTE = [
 /** Pestañas globales (solo para internos). */
 export const PESTANAS_GLOBALES = [
   { id: "resumen_clientes",   label: "Resumen de Clientes",   desc: "Dashboard consolidado de los 3 clientes" },
+  { id: "vision_general",     label: "Visión General",        desc: "KPIs ejecutivos consolidados del negocio" },
+  { id: "analisis_clientes",  label: "Análisis por Cliente",  desc: "Vista comparativa lado a lado entre clientes" },
+  { id: "sell_in",            label: "Sell In",               desc: "Lo que Acteck factura a los clientes" },
+  { id: "sell_out",           label: "Sell Out",              desc: "Lo que los clientes venden al mercado" },
   { id: "forecast_clientes",  label: "S&OP",                  desc: "Planeación de compras cross-cliente (Sales & Operations Planning)" },
   { id: "estrategia_precios", label: "Estrategia de Precios", desc: "Pricing por cliente y por SKU" },
   { id: "ordenes_compra",     label: "Tracking Pedidos",      desc: "Gestión de OCs, fill rate y cruce con ERP" },
