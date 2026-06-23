@@ -69,9 +69,10 @@ const GRUPOS = [
 
 const SOURCES = [
   // ── Globales ──
-  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación & Inventario', desc:'Archivo único con hojas Venta Facturación (monto) + Venta Piezas (piezas) + Vw_TablaH_Inventario. Las dos primeras son la fuente canónica de sell-in (cliente×SKU×mes con devoluciones ya aplicadas). Reemplaza años 2025+2026 completos en facturacion_clientes y replace total de inventario.', file:'Actualizaciones ERP.xlsx',
+  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación, Inventario & Detalle', desc:'Archivo único con 4 hojas: Venta Facturación (monto pivot) + Venta Piezas (piezas pivot) + Vw_TablaH_Ventas (detalle granular cliente×canal×SKU×fecha, incluye Admin_Interna con desglose ML/Amazon/Sitio Web/etc) + Vw_TablaH_Inventario. Reemplaza años 2025+2026 en facturacion_clientes y ventas_erp, replace total de inventario.', file:'Actualizaciones ERP.xlsx',
     combined: [
       { table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', label:'Facturación (sell-in canónico)', replaceAnios:[2025,2026] },
+      { table:'ventas_erp', onConflict:'venta_id,venta_renglon', parser:'erpVentas', label:'Detalle granular (Vw_TablaH_Ventas)', replaceAnios:[2025,2026] },
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true }
     ]
   },
