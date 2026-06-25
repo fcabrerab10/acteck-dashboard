@@ -100,18 +100,14 @@ export default function VisionGeneral() {
     setLoading(true);
     setBloqueExpandido(null);
     (async () => {
-      // Mapeo de dimensión → vista + columna clave
-      const viewMap = {
-        canal:     { view: 'v_vision_margen_canal',     key: 'admin_interna' },
-        marca:     { view: 'v_vision_margen_marca',     key: 'marca' },
-        categoria: { view: 'v_vision_margen_categoria', key: 'categoria' },
-      };
-      const { view } = viewMap[dimension];
+      // Fuente: facturacion_clientes (Excel "Venta Facturación" del ERP).
+      // Por ahora solo soportamos dimension='canal' — marca/categoría
+      // requieren ventas_erp completo con marca/familia.
       const [a, p, p2, c, inv, cart, q] = await Promise.all([
-        supabase.from(view).select('*').eq('anio', anio),
-        supabase.from(view).select('*').eq('anio', anio - 1),
-        supabase.from(view).select('*').eq('anio', anio - 2),
-        supabase.from('v_vision_clientes_canal').select('*').eq('anio', anio),
+        supabase.from('v_vision_factura_canal').select('*').eq('anio', anio),
+        supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 1),
+        supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 2),
+        supabase.from('v_vision_factura_clientes').select('*').eq('anio', anio),
         supabase.from('v_vision_inventario_global').select('*').single(),
         supabase.from('v_vision_cartera_consolidada').select('*'),
         supabase.from('cuotas_canales').select('*').eq('anio', anio),
@@ -134,20 +130,23 @@ export default function VisionGeneral() {
     return m || 12;
   }, [margenAct]);
 
-  const dimKey = dimension === 'canal' ? 'admin_interna' : dimension === 'marca' ? 'marca' : 'categoria';
+  // Siempre dimension = 'canal' por ahora (facturacion_clientes no trae marca/categoría).
+  const dimKey = 'canal';
 
-  // ── KPIs Hero (Venta, Margen, Mes actual, Run-rate)
+  // ── KPIs Hero (Venta YTD, Mes actual, Run-rate, # clientes activos)
+  // Sin margen — facturacion_clientes no trae costo. Pendiente fórmula.
   const kpis = useMemo(() => {
     const ventaYTD   = sumYTDPor(margenAct, (r) => r.venta, mesMax);
-    const margenYTD  = sumYTDPor(margenAct, (r) => r.margen_bruto, mesMax);
     const piezasYTD  = sumYTDPor(margenAct, (r) => r.piezas, mesMax);
     const ventaPrev  = sumYTDPor(margenPrev, (r) => r.venta, mesMax);
     const ventaPrev2 = sumYTDPor(margenPrev2, (r) => r.venta, mesMax);
-    const margenPrevYTD = sumYTDPor(margenPrev, (r) => r.margen_bruto, mesMax);
 
     // Mes actual (no acumulado)
     const ventaMes  = margenAct.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.venta) || 0), 0);
     const ventaMesPrev = margenPrev.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.venta) || 0), 0);
+
+    // # clientes activos YTD
+    const nClientesActivos = new Set(clientesDim.map((c) => c.cliente_nombre)).size;
 
     // Run-rate: proyección lineal del año basada en YTD
     const runRate = mesMax > 0 ? ventaYTD * 12 / mesMax : 0;
@@ -158,10 +157,9 @@ export default function VisionGeneral() {
     const gapVsRunRate = cuotaTotal > 0 ? runRate - cuotaTotal : null;
 
     return {
-      ventaYTD, margenYTD, piezasYTD, ventaPrev, ventaPrev2, margenPrevYTD,
+      ventaYTD, piezasYTD, ventaPrev, ventaPrev2,
       ventaMes, ventaMesPrev,
-      pctMargen: ventaYTD > 0 ? (margenYTD / ventaYTD) * 100 : null,
-      pctMargenPrev: ventaPrev > 0 ? (margenPrevYTD / ventaPrev) * 100 : null,
+      nClientesActivos,
       deltaVenta:  ventaPrev > 0 ? ((ventaYTD - ventaPrev) / ventaPrev) * 100 : null,
       deltaVenta2: ventaPrev2 > 0 ? ((ventaYTD - ventaPrev2) / ventaPrev2) * 100 : null,
       deltaMes:    ventaMesPrev > 0 ? ((ventaMes - ventaMesPrev) / ventaMesPrev) * 100 : null,
@@ -172,19 +170,18 @@ export default function VisionGeneral() {
       gapVsCuota: cuotaTotal > 0 ? cuotaTotal - ventaYTD : null,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [margenAct, margenPrev, margenPrev2, cuotas, mesMax]);
+  }, [margenAct, margenPrev, margenPrev2, clientesDim, cuotas, mesMax]);
 
-  // ── Bloques de dimensión (canal/marca/categoría)
+  // ── Bloques por canal (sin margen — pendiente de fórmula)
   const bloques = useMemo(() => {
     const m = new Map();
     margenAct
       .filter((r) => Number(r.mes) <= mesMax)
       .forEach((r) => {
         const k = r[dimKey] || 'Otros';
-        if (!m.has(k)) m.set(k, { key: k, venta: 0, margen: 0, piezas: 0, byMes: {} });
+        if (!m.has(k)) m.set(k, { key: k, venta: 0, piezas: 0, byMes: {} });
         const it = m.get(k);
         it.venta  += Number(r.venta) || 0;
-        it.margen += Number(r.margen_bruto) || 0;
         it.piezas += Number(r.piezas) || 0;
         const ms = Number(r.mes);
         it.byMes[ms] = (it.byMes[ms] || 0) + (Number(r.venta) || 0);
@@ -205,7 +202,7 @@ export default function VisionGeneral() {
           ...it,
           share: totalActual > 0 ? (it.venta / totalActual) * 100 : 0,
           deltaYoY: prev > 0 ? ((it.venta - prev) / prev) * 100 : null,
-          pctMargen: it.venta > 0 ? (it.margen / it.venta) * 100 : null,
+          pctMargen: null,
           spark: Array.from({ length: mesMax }, (_, i) => Number(it.byMes[i + 1]) || 0),
         };
       })
@@ -213,14 +210,14 @@ export default function VisionGeneral() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [margenAct, margenPrev, dimKey, mesMax]);
 
-  // ── Clientes por canal expandido (solo para drill-down)
+  // ── Clientes del canal expandido (drill-down)
   const clientesDelBloque = useMemo(() => {
-    if (!bloqueExpandido || dimension !== 'canal') return [];
+    if (!bloqueExpandido) return [];
     return clientesDim
-      .filter((c) => (c.admin_interna || c.canal) === bloqueExpandido)
-      .filter((c) => c.cliente_label && c.cliente_label !== 'Sin nombre')
+      .filter((c) => c.canal === bloqueExpandido)
+      .filter((c) => c.cliente_nombre && c.cliente_nombre !== 'Sin nombre')
       .sort((a, b) => Number(b.venta || 0) - Number(a.venta || 0));
-  }, [clientesDim, bloqueExpandido, dimension]);
+  }, [clientesDim, bloqueExpandido]);
 
   // ── Tendencia 3 años para gráfica
   const tendencia = useMemo(() => {
@@ -297,19 +294,14 @@ export default function VisionGeneral() {
       {/* HERO */}
       <HeroCard kpis={kpis} anio={anio} mesMaxLabel={MESES_FULL[mesMax - 1]} />
 
-      {/* KPIs financieros (margen, inventario, cartera) */}
+      {/* KPIs (clientes activos, inventario, cartera) — margen pendiente */}
       <div className="grid grid-cols-3 gap-2.5">
-        <BentoKpi palette={PALETTE.teal} icon={TrendingUp} label="Margen bruto YTD"
-          valor={fmtCompact(kpis.margenYTD)}
+        <BentoKpi palette={PALETTE.teal} icon={TrendingUp} label="Clientes activos YTD"
+          valor={fmtInt(kpis.nClientesActivos)}
           delta={null}
           subtitulo={
             <span>
-              <strong style={{ color: PALETTE.teal.text }}>{fmtPct(kpis.pctMargen)}</strong>
-              {kpis.pctMargenPrev != null && (
-                <span style={{ marginLeft: 6, color: PALETTE.teal.mid }}>
-                  vs {kpis.pctMargenPrev.toFixed(1)}% en {anio - 1}
-                </span>
-              )}
+              Distintos cliente_nombre con facturaci&oacute;n &gt; 0
             </span>
           } />
         <BentoKpi palette={PALETTE.purple} icon={Package} label="Inventario en stock"
@@ -337,20 +329,28 @@ export default function VisionGeneral() {
       </div>
 
       {/* Toggle dimensión */}
-      <div className="flex items-center gap-3 px-1 mt-2">
+      <div className="flex items-center gap-3 px-1 mt-2 flex-wrap">
         <span className="text-[11px] text-gray-500 uppercase tracking-widest">Ver mix por</span>
         <div className="inline-flex gap-0.5 bg-gray-100 rounded-lg p-0.5 text-xs">
           {[
-            { id: 'canal',     lbl: 'Canal' },
-            { id: 'marca',     lbl: 'Marca' },
-            { id: 'categoria', lbl: 'Categoría' },
+            { id: 'canal',     lbl: 'Canal', enabled: true },
+            { id: 'marca',     lbl: 'Marca', enabled: false },
+            { id: 'categoria', lbl: 'Categoría', enabled: false },
           ].map((t) => (
-            <button key={t.id} onClick={() => setDimension(t.id)}
-              className={`px-3 py-1 rounded ${dimension === t.id ? 'bg-white shadow text-purple-700 font-medium' : 'text-gray-600'}`}>
+            <button key={t.id}
+              onClick={() => t.enabled && setDimension(t.id)}
+              disabled={!t.enabled}
+              title={!t.enabled ? 'Pendiente — requiere ventas_erp completo con marca/familia' : ''}
+              className={`px-3 py-1 rounded ${
+                dimension === t.id
+                  ? 'bg-white shadow text-purple-700 font-medium'
+                  : t.enabled ? 'text-gray-600' : 'text-gray-300 cursor-not-allowed'
+              }`}>
               {t.lbl}
             </button>
           ))}
         </div>
+        <span className="text-[10px] text-gray-400 italic">Marca / Categor&iacute;a pendientes</span>
       </div>
 
       {/* Bloques bento */}
@@ -564,25 +564,24 @@ function ClientesPanel({ canal, clientes, onClose }) {
       <table className="w-full" style={{ fontSize: 12 }}>
         <thead>
           <tr style={{ background: '#FAFBFC', borderBottom: '1px solid #E2E8F0' }}>
+            <th style={thLeft}>#</th>
             <th style={thLeft}>Cliente</th>
             <th style={thRight}>Venta YTD</th>
             <th style={thRight}>% del canal</th>
-            <th style={thRight}>Margen $</th>
-            <th style={thRight}>Margen %</th>
             <th style={thRight}>Piezas</th>
+            <th style={thRight}>Meses activos</th>
           </tr>
         </thead>
         <tbody>
-          {clientes.slice(0, 12).map((c, i) => {
+          {clientes.slice(0, 25).map((c, i) => {
             const venta = Number(c.venta) || 0;
-            const margen = Number(c.margen_bruto) || 0;
             const share = totalCanal > 0 ? (venta / totalCanal) * 100 : 0;
-            const pctMargen = venta > 0 ? (margen / venta) * 100 : null;
             return (
-              <tr key={c.cliente_label + i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+              <tr key={c.cliente_nombre + i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                <td style={{ ...tdLeft, color: '#94A3B8' }}>{i + 1}</td>
                 <td style={{ ...tdLeft, maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                  title={c.cliente_label}>
-                  {c.cliente_label}
+                  title={c.cliente_nombre}>
+                  {c.cliente_nombre}
                 </td>
                 <td style={{ ...tdRight, fontWeight: 500 }}>{fmtCompact(venta)}</td>
                 <td style={tdRight}>
@@ -593,9 +592,8 @@ function ClientesPanel({ canal, clientes, onClose }) {
                     </span>
                   </span>
                 </td>
-                <td style={tdRight}>{fmtCompact(margen)}</td>
-                <td style={{ ...tdRight, color: PALETTE.teal.mid, fontWeight: 500 }}>{fmtPct(pctMargen)}</td>
                 <td style={tdRight}>{fmtInt(c.piezas)}</td>
+                <td style={tdRight}>{c.meses_activos || '—'}</td>
               </tr>
             );
           })}

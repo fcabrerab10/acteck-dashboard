@@ -963,6 +963,9 @@ const PARSERS = {
 
     const SKU_RE = /^[A-Z]{2,8}-[A-Z0-9_]+/;
 
+    // Mapeo a cliente_key del dashboard (para los 3 distribuidores principales).
+    // Los demás clientes quedan con cliente_key = slug(canal) para no romper
+    // consultas que filtran por canal vía cliente_key.
     const mapearCliente = (nombre) => {
       const n = String(nombre || '').toUpperCase();
       if (n.includes('CAJADL01') || n.includes('API GLOBAL')) return 'digitalife';
@@ -970,6 +973,14 @@ const PARSERS = {
       if (n.includes('DICOTECH')) return 'dicotech';
       return null;
     };
+
+    // Canales del nivel padre del pivot (jerarquía exacta del Excel).
+    const CANALES_PADRE = new Set([
+      'DISTRIBUIDOR', 'MAYOREO', 'E-COMMERCE', 'MOSTRADOR',
+      'RETAIL REPRESENTADOS', 'RETAIL PROPIOS',
+    ]);
+    const esCanalPadre = (s) => CANALES_PADRE.has(String(s || '').toUpperCase().trim());
+    const slugCanal = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
     // Despivota un pivot individual (cualquiera de los dos) y devuelve
     // un Map "cliente|sku|anio|mes" → valor numérico.
@@ -1021,8 +1032,10 @@ const PARSERS = {
         if (m && anioActual) colMap.push({ col: c, anio: anioActual, mes: m });
       }
 
-      // Iterar filas de datos. Primera columna alterna entre etiquetas de
-      // cliente (padre) y SKUs (hijos) — mantenemos contexto de cliente actual.
+      // Iterar filas de datos. Jerarquía Excel: CANAL (padre) → CLIENTE →
+      // SKU (con valores por mes). Trackeamos canal+cliente y capturamos
+      // TODOS los clientes (sin filtro). Cada entrada incluye canal.
+      let canalActual = null;
       let clienteActual = null;
       const out = new Map();
       for (let r = dataStart; r < arr.length; r++) {
@@ -1035,21 +1048,20 @@ const PARSERS = {
         if (/^\(en blanco\)$/i.test(s) || /total general/i.test(s) || /^total /i.test(s)) continue;
 
         if (SKU_RE.test(s)) {
-          if (!clienteActual) continue;
-          const cKey = mapearCliente(clienteActual);
-          if (!cKey) continue;
+          if (!clienteActual || !canalActual) continue;
           for (const cm of colMap) {
             const val = toNum(row[cm.col]);
             if (val == null || val === 0) continue;
-            out.set(`${clienteActual}|${s}|${cm.anio}|${cm.mes}`, val);
+            // Clave: canal|cliente|sku|anio|mes
+            out.set(`${canalActual}|${clienteActual}|${s}|${cm.anio}|${cm.mes}`, val);
           }
+        } else if (esCanalPadre(s)) {
+          // Nueva sección de canal. Reset cliente.
+          canalActual = s.toUpperCase().trim();
+          clienteActual = null;
         } else {
-          // Subtotales jerárquicos (DISTRIBUIDOR, RETAIL, MAYOREO…) o nombres
-          // de cliente. Solo nos importa quedarnos con el último nombre que
-          // mapearCliente reconoce — los demás los ignoramos manteniendo el
-          // contexto previo si no resuelve.
-          if (mapearCliente(s)) clienteActual = s;
-          else clienteActual = s; // mantener jerarquía por si el cliente es el inmediato superior
+          // Es un nombre de cliente dentro del canal actual.
+          clienteActual = s;
         }
       }
       return out;
@@ -1058,17 +1070,19 @@ const PARSERS = {
     const piezasMap = parsePivot(shPzs);
     const montoMap  = parsePivot(shMonto);
 
-    // Unir ambos por la misma clave (cliente|sku|anio|mes). Si una hoja
-    // tiene una celda y la otra no, la otra queda en 0.
+    // Unir ambos por la misma clave (canal|cliente|sku|anio|mes). Si una
+    // hoja tiene una celda y la otra no, la otra queda en 0.
     const keys = new Set([...piezasMap.keys(), ...montoMap.keys()]);
     const out = [];
     for (const k of keys) {
-      const [clienteActual, sku, anioStr, mesStr] = k.split('|');
-      const cKey = mapearCliente(clienteActual);
-      if (!cKey) continue;
+      const [canal, clienteNombre, sku, anioStr, mesStr] = k.split('|');
+      // cliente_key: para los 3 distribuidores principales mantiene su key
+      // canónica; para todos los demás usa el slug del canal.
+      const cKey = mapearCliente(clienteNombre) || slugCanal(canal) || 'otros';
       out.push({
-        cliente_nombre: clienteActual,
+        cliente_nombre: clienteNombre,
         cliente_key: cKey,
+        canal,
         sku,
         anio: parseInt(anioStr, 10),
         mes:  parseInt(mesStr, 10),
