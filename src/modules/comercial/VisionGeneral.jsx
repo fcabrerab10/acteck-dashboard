@@ -1,19 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
-  Activity, TrendingUp, TrendingDown, Users, Package,
-  Wallet, AlertTriangle,
+  Activity, TrendingUp, TrendingDown, ChevronRight, ChevronDown,
+  Wallet, Package, Receipt, Target,
 } from 'lucide-react';
 import {
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip,
-  CartesianGrid, ResponsiveContainer, AreaChart, Area, Legend,
+  LineChart, Line, XAxis, YAxis, Tooltip,
+  CartesianGrid, ResponsiveContainer, Legend,
 } from 'recharts';
 
 // ────────── Constantes ──────────
 const MESES_LBL  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_FULL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-// Paleta Bento (igual que EstadoResultados para mantener consistencia)
+// Paleta Bento (consistente con Estado de Resultados)
 const PALETTE = {
   blue:   { bg: '#E6F1FB', text: '#042C53', mid: '#185FA5', strong: '#3B82F6' },
   teal:   { bg: '#E1F5EE', text: '#04342C', mid: '#0F6E56', strong: '#1D9E75' },
@@ -22,25 +22,25 @@ const PALETTE = {
   amber:  { bg: '#FAEEDA', text: '#412402', mid: '#854F0B', strong: '#BA7517' },
   red:    { bg: '#FCEBEB', text: '#501313', mid: '#A32D2D', strong: '#E24B4A' },
   pink:   { bg: '#FBEAF0', text: '#4B1528', mid: '#993556', strong: '#D4537E' },
+  green:  { bg: '#EAF3DE', text: '#173404', mid: '#3B6D11', strong: '#639922' },
   gray:   { bg: '#F1EFE8', text: '#2C2C2A', mid: '#5F5E5A', strong: '#888780' },
 };
 
-// Mapeo color por admin_interna (sub-canal específico)
+// Color por nombre de dimensión (canal/marca/categoría)
 const CANAL_COLOR = {
-  'DISTRIBUIDOR':         PALETTE.blue.mid,
-  'MERCADO LIBRE':        PALETTE.amber.mid,
-  'AMAZON':               PALETTE.coral.mid,
-  'SITIO WEB':            PALETTE.teal.mid,
-  'CYBERPURTA':           PALETTE.purple.mid,
-  'SANBORN':              PALETTE.pink.mid,
-  'WALMART':              PALETTE.purple.strong,
-  'MOSTRADOR':            PALETTE.teal.strong,
-  'RETAIL REPRESENTADOS': PALETTE.coral.strong,
-  'RETAIL PROPIOS':       PALETTE.pink.strong,
-  'MAYOREO':              PALETTE.blue.strong,
-  'otros':                PALETTE.gray.mid,
+  'DISTRIBUIDOR':         PALETTE.blue,
+  'MAYOREO':              PALETTE.purple,
+  'MERCADO LIBRE':        PALETTE.amber,
+  'AMAZON':               PALETTE.coral,
+  'SITIO WEB':            PALETTE.teal,
+  'CYBERPURTA':           PALETTE.purple,
+  'SANBORN':              PALETTE.pink,
+  'WALMART':              PALETTE.purple,
+  'MOSTRADOR':            PALETTE.green,
+  'RETAIL REPRESENTADOS': PALETTE.coral,
+  'RETAIL PROPIOS':       PALETTE.pink,
 };
-const colorCanal = (k) => CANAL_COLOR[String(k || '').toUpperCase()] || PALETTE.gray.mid;
+const colorBloque = (k) => CANAL_COLOR[String(k || '').toUpperCase()] || PALETTE.gray;
 
 // ────────── Formateadores ──────────
 const fmtCompact = (n) => {
@@ -60,16 +60,30 @@ const fmtPct = (n) => n == null || isNaN(n) ? '—' : n.toFixed(1) + '%';
 const fmtPctDelta = (n) => n == null || isNaN(n) ? '—' : (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
 const fmtInt = (n) => n == null || isNaN(n) ? '—' : Math.round(n).toLocaleString('es-MX');
 
+// ────────── Helpers ──────────
+const sumYTDPor = (rows, fn, mesMax) => rows
+  .filter((r) => Number(r.mes) <= mesMax)
+  .reduce((s, r) => s + (Number(fn(r)) || 0), 0);
+
 // ────────── Componente principal ──────────
 export default function VisionGeneral() {
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [aniosDisponibles, setAniosDisponibles] = useState([]);
-  const [mensualAct, setMensualAct] = useState([]);
-  const [mensualPrev, setMensualPrev] = useState([]);
-  const [topClientes, setTopClientes] = useState([]);
+  const [dimension, setDimension] = useState('canal'); // 'canal' | 'marca' | 'categoria'
+
+  // Datos por dimensión (carga reactiva)
+  const [margenAct, setMargenAct] = useState([]);
+  const [margenPrev, setMargenPrev] = useState([]);
+  const [margenPrev2, setMargenPrev2] = useState([]);
+  const [clientesDim, setClientesDim] = useState([]);
+  const [inventario, setInventario] = useState(null);
+  const [cartera, setCartera] = useState([]);
+  const [cuotas, setCuotas] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ── Cargar años disponibles
+  const [bloqueExpandido, setBloqueExpandido] = useState(null);
+
+  // ── Años disponibles
   useEffect(() => {
     (async () => {
       const { data } = await supabase
@@ -81,152 +95,167 @@ export default function VisionGeneral() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Cargar mensual del año + año anterior + top clientes
+  // ── Carga por dimensión + año
   useEffect(() => {
     setLoading(true);
+    setBloqueExpandido(null);
     (async () => {
-      const [a, p, t] = await Promise.all([
-        supabase.from('v_vision_canal_mensual').select('*').eq('anio', anio),
-        supabase.from('v_vision_canal_mensual').select('*').eq('anio', anio - 1),
-        supabase.from('v_vision_top_clientes').select('*').eq('anio', anio)
-          .order('monto', { ascending: false }).limit(15),
+      // Mapeo de dimensión → vista + columna clave
+      const viewMap = {
+        canal:     { view: 'v_vision_margen_canal',     key: 'admin_interna' },
+        marca:     { view: 'v_vision_margen_marca',     key: 'marca' },
+        categoria: { view: 'v_vision_margen_categoria', key: 'categoria' },
+      };
+      const { view } = viewMap[dimension];
+      const [a, p, p2, c, inv, cart, q] = await Promise.all([
+        supabase.from(view).select('*').eq('anio', anio),
+        supabase.from(view).select('*').eq('anio', anio - 1),
+        supabase.from(view).select('*').eq('anio', anio - 2),
+        supabase.from('v_vision_clientes_canal').select('*').eq('anio', anio),
+        supabase.from('v_vision_inventario_global').select('*').single(),
+        supabase.from('v_vision_cartera_consolidada').select('*'),
+        supabase.from('cuotas_canales').select('*').eq('anio', anio),
       ]);
-      setMensualAct(a.data || []);
-      setMensualPrev(p.data || []);
-      setTopClientes(t.data || []);
+      setMargenAct(a.data || []);
+      setMargenPrev(p.data || []);
+      setMargenPrev2(p2.data || []);
+      setClientesDim(c.data || []);
+      setInventario(inv.data || null);
+      setCartera(cart.data || []);
+      setCuotas(q.data || []);
       setLoading(false);
     })();
-  }, [anio]);
+  }, [anio, dimension]);
 
   // ── Mes máximo con datos
   const mesMax = useMemo(() => {
     let m = 0;
-    mensualAct.forEach((r) => { if (Number(r.mes) > m) m = Number(r.mes); });
+    margenAct.forEach((r) => { if (Number(r.mes) > m) m = Number(r.mes); });
     return m || 12;
-  }, [mensualAct]);
+  }, [margenAct]);
 
-  // ── Helpers de agregación
-  const sumYTDPor = (rows, fn, m = mesMax) => rows
-    .filter((r) => Number(r.mes) <= m)
-    .reduce((s, r) => s + (Number(fn(r)) || 0), 0);
+  const dimKey = dimension === 'canal' ? 'admin_interna' : dimension === 'marca' ? 'marca' : 'categoria';
 
-  // ── KPIs
+  // ── KPIs Hero (Venta, Margen, Mes actual, Run-rate)
   const kpis = useMemo(() => {
-    const monto      = sumYTDPor(mensualAct, (r) => r.monto);
-    const piezas     = sumYTDPor(mensualAct, (r) => r.piezas);
-    const montoPrev  = sumYTDPor(mensualPrev, (r) => r.monto);
-    const piezasPrev = sumYTDPor(mensualPrev, (r) => r.piezas);
-    const nClientes  = new Set(topClientes.map((c) => c.cliente_nombre)).size; // proxy aprox (top 15)
-    // Para # clientes total ytd, sumamos n_clientes únicos por canal (aprox)
-    const clientesTot = mensualAct
-      .filter((r) => Number(r.mes) <= mesMax)
-      .reduce((s, r) => Math.max(s, Number(r.n_clientes) || 0), 0);
-    const tkt = piezas > 0 ? monto / piezas : null;
+    const ventaYTD   = sumYTDPor(margenAct, (r) => r.venta, mesMax);
+    const margenYTD  = sumYTDPor(margenAct, (r) => r.margen_bruto, mesMax);
+    const piezasYTD  = sumYTDPor(margenAct, (r) => r.piezas, mesMax);
+    const ventaPrev  = sumYTDPor(margenPrev, (r) => r.venta, mesMax);
+    const ventaPrev2 = sumYTDPor(margenPrev2, (r) => r.venta, mesMax);
+    const margenPrevYTD = sumYTDPor(margenPrev, (r) => r.margen_bruto, mesMax);
+
+    // Mes actual (no acumulado)
+    const ventaMes  = margenAct.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.venta) || 0), 0);
+    const ventaMesPrev = margenPrev.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.venta) || 0), 0);
+
+    // Run-rate: proyección lineal del año basada en YTD
+    const runRate = mesMax > 0 ? ventaYTD * 12 / mesMax : 0;
+
+    // Cuota total
+    const cuotaTotal = cuotas.find((c) => c.dimension_tipo === 'TOTAL')?.meta_facturacion;
+    const cumplYTD = cuotaTotal > 0 ? (ventaYTD / cuotaTotal) * 100 : null;
+    const gapVsRunRate = cuotaTotal > 0 ? runRate - cuotaTotal : null;
 
     return {
-      monto, piezas, montoPrev, piezasPrev, tkt,
-      clientes: nClientes,
-      clientesTot,
-      deltaMonto:  montoPrev > 0 ? ((monto - montoPrev) / montoPrev) * 100 : null,
-      deltaPiezas: piezasPrev > 0 ? ((piezas - piezasPrev) / piezasPrev) * 100 : null,
+      ventaYTD, margenYTD, piezasYTD, ventaPrev, ventaPrev2, margenPrevYTD,
+      ventaMes, ventaMesPrev,
+      pctMargen: ventaYTD > 0 ? (margenYTD / ventaYTD) * 100 : null,
+      pctMargenPrev: ventaPrev > 0 ? (margenPrevYTD / ventaPrev) * 100 : null,
+      deltaVenta:  ventaPrev > 0 ? ((ventaYTD - ventaPrev) / ventaPrev) * 100 : null,
+      deltaVenta2: ventaPrev2 > 0 ? ((ventaYTD - ventaPrev2) / ventaPrev2) * 100 : null,
+      deltaMes:    ventaMesPrev > 0 ? ((ventaMes - ventaMesPrev) / ventaMesPrev) * 100 : null,
+      runRate,
+      cuotaTotal,
+      cumplYTD,
+      gapVsRunRate,
+      gapVsCuota: cuotaTotal > 0 ? cuotaTotal - ventaYTD : null,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mensualAct, mensualPrev, topClientes, mesMax]);
+  }, [margenAct, margenPrev, margenPrev2, cuotas, mesMax]);
 
-  // ── Mix por sub-canal (admin_interna) — agregación YTD
-  const mixCanales = useMemo(() => {
+  // ── Bloques de dimensión (canal/marca/categoría)
+  const bloques = useMemo(() => {
     const m = new Map();
-    mensualAct
+    margenAct
       .filter((r) => Number(r.mes) <= mesMax)
       .forEach((r) => {
-        const key = r.admin_interna || 'Otros';
-        if (!m.has(key)) m.set(key, { admin_interna: key, canal: r.canal, monto: 0, piezas: 0, n_clientes: 0 });
-        const c = m.get(key);
-        c.monto += Number(r.monto) || 0;
-        c.piezas += Number(r.piezas) || 0;
-        c.n_clientes = Math.max(c.n_clientes, Number(r.n_clientes) || 0);
+        const k = r[dimKey] || 'Otros';
+        if (!m.has(k)) m.set(k, { key: k, venta: 0, margen: 0, piezas: 0, byMes: {} });
+        const it = m.get(k);
+        it.venta  += Number(r.venta) || 0;
+        it.margen += Number(r.margen_bruto) || 0;
+        it.piezas += Number(r.piezas) || 0;
+        const ms = Number(r.mes);
+        it.byMes[ms] = (it.byMes[ms] || 0) + (Number(r.venta) || 0);
       });
     // Δ YoY
-    const prevByCanal = new Map();
-    mensualPrev
+    const prevMap = new Map();
+    margenPrev
       .filter((r) => Number(r.mes) <= mesMax)
       .forEach((r) => {
-        const key = r.admin_interna || 'Otros';
-        prevByCanal.set(key, (prevByCanal.get(key) || 0) + (Number(r.monto) || 0));
+        const k = r[dimKey] || 'Otros';
+        prevMap.set(k, (prevMap.get(k) || 0) + (Number(r.venta) || 0));
       });
-    const totalActual = Array.from(m.values()).reduce((s, c) => s + c.monto, 0);
+    const totalActual = Array.from(m.values()).reduce((s, c) => s + c.venta, 0);
     return Array.from(m.values())
-      .map((c) => {
-        const prev = prevByCanal.get(c.admin_interna) || 0;
+      .map((it) => {
+        const prev = prevMap.get(it.key) || 0;
         return {
-          ...c,
-          share: totalActual > 0 ? (c.monto / totalActual) * 100 : 0,
-          deltaYoY: prev > 0 ? ((c.monto - prev) / prev) * 100 : null,
+          ...it,
+          share: totalActual > 0 ? (it.venta / totalActual) * 100 : 0,
+          deltaYoY: prev > 0 ? ((it.venta - prev) / prev) * 100 : null,
+          pctMargen: it.venta > 0 ? (it.margen / it.venta) * 100 : null,
+          spark: Array.from({ length: mesMax }, (_, i) => Number(it.byMes[i + 1]) || 0),
         };
       })
-      .sort((a, b) => b.monto - a.monto);
+      .sort((a, b) => b.venta - a.venta);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mensualAct, mensualPrev, mesMax]);
+  }, [margenAct, margenPrev, dimKey, mesMax]);
 
-  // ── Tendencia mensual: 12 meses, una col por sub-canal
+  // ── Clientes por canal expandido (solo para drill-down)
+  const clientesDelBloque = useMemo(() => {
+    if (!bloqueExpandido || dimension !== 'canal') return [];
+    return clientesDim
+      .filter((c) => (c.admin_interna || c.canal) === bloqueExpandido)
+      .filter((c) => c.cliente_label && c.cliente_label !== 'Sin nombre')
+      .sort((a, b) => Number(b.venta || 0) - Number(a.venta || 0));
+  }, [clientesDim, bloqueExpandido, dimension]);
+
+  // ── Tendencia 3 años para gráfica
   const tendencia = useMemo(() => {
-    const canalesTop = mixCanales.slice(0, 7).map((c) => c.admin_interna); // top 7 + otros
-    const otrasCanal = new Set(
-      mixCanales.slice(7).map((c) => c.admin_interna)
-    );
-    const data = [];
-    for (let i = 1; i <= 12; i++) {
-      const row = { mes: MESES_LBL[i - 1] };
-      canalesTop.forEach((c) => { row[c] = 0; });
-      if (otrasCanal.size > 0) row['Otros'] = 0;
-      data.push(row);
-    }
-    mensualAct.forEach((r) => {
-      const mes = Number(r.mes);
-      if (mes < 1 || mes > 12) return;
-      const key = canalesTop.includes(r.admin_interna) ? r.admin_interna
-                 : (otrasCanal.size > 0 ? 'Otros' : null);
-      if (!key) return;
-      data[mes - 1][key] = (data[mes - 1][key] || 0) + (Number(r.monto) || 0);
-    });
-    return { data: data.slice(0, mesMax || 12), canales: [...canalesTop, ...(otrasCanal.size > 0 ? ['Otros'] : [])] };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mensualAct, mixCanales, mesMax]);
-
-  // ── Alertas / concentración
-  const alertas = useMemo(() => {
-    const out = [];
-    const total = kpis.monto;
-    if (total > 0) {
-      // Cliente con concentración >25%
-      const topCli = topClientes[0];
-      if (topCli && (Number(topCli.monto) / total) > 0.25) {
-        out.push({
-          type: 'concentracion',
-          msg: `${topCli.cliente_nombre} concentra ${((Number(topCli.monto) / total) * 100).toFixed(1)}% de la facturación (${topCli.admin_interna})`,
-        });
-      }
-      // Top canal
-      const topCanal = mixCanales[0];
-      if (topCanal && topCanal.share > 50) {
-        out.push({
-          type: 'canal',
-          msg: `${topCanal.admin_interna} concentra ${topCanal.share.toFixed(1)}% del total`,
-        });
-      }
-      // Canal en caída
-      mixCanales.slice(0, 5).forEach((c) => {
-        if (c.deltaYoY != null && c.deltaYoY <= -15) {
-          out.push({
-            type: 'caida',
-            msg: `${c.admin_interna}: ${fmtPctDelta(c.deltaYoY)} vs ${anio - 1} (${fmtCompact(c.monto)})`,
-          });
-        }
+    const sumarPorMes = (rows) => {
+      const arr = Array(12).fill(null);
+      rows.forEach((r) => {
+        const m = Number(r.mes);
+        if (m < 1 || m > 12) return;
+        arr[m - 1] = (arr[m - 1] || 0) + (Number(r.venta) || 0);
       });
-    }
-    return out;
+      return arr;
+    };
+    const act = sumarPorMes(margenAct);
+    const pr1 = sumarPorMes(margenPrev);
+    const pr2 = sumarPorMes(margenPrev2);
+    return Array.from({ length: 12 }, (_, i) => ({
+      mes: MESES_LBL[i],
+      [`${anio}`]: act[i],
+      [`${anio - 1}`]: pr1[i],
+      [`${anio - 2}`]: pr2[i],
+    }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kpis.monto, mixCanales, topClientes, anio]);
+  }, [margenAct, margenPrev, margenPrev2, anio]);
+
+  // ── Cartera consolidada
+  const carteraResumen = useMemo(() => {
+    const total = cartera.reduce((s, c) => s + (Number(c.saldo_actual) || 0), 0);
+    const vencido = cartera.reduce((s, c) => s + (Number(c.saldo_vencido) || 0), 0);
+    const aging0_30 = cartera.reduce((s, c) => s + (Number(c.aging_d0_30) || 0), 0);
+    const aging31_60 = cartera.reduce((s, c) => s + (Number(c.aging_d31_60) || 0), 0);
+    const aging61_90 = cartera.reduce((s, c) => s + (Number(c.aging_d61_90) || 0), 0);
+    const agingMas90 = cartera.reduce((s, c) => s + (Number(c.aging_mas90) || 0), 0);
+    return { total, vencido, aging0_30, aging31_60, aging61_90, agingMas90,
+             pctVencido: total > 0 ? (vencido / total) * 100 : null };
+  }, [cartera]);
 
   if (loading) {
     return (
@@ -236,7 +265,7 @@ export default function VisionGeneral() {
       </div>
     );
   }
-  if (mensualAct.length === 0) {
+  if (margenAct.length === 0) {
     return (
       <div className="p-12 text-center text-gray-500">
         <Activity className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -265,259 +294,411 @@ export default function VisionGeneral() {
         </label>
       </div>
 
-      {/* Alertas */}
-      {alertas.length > 0 && <AlertasBanner alertas={alertas} />}
+      {/* HERO */}
+      <HeroCard kpis={kpis} anio={anio} mesMaxLabel={MESES_FULL[mesMax - 1]} />
 
-      {/* KPIs Bento */}
-      <div className="grid grid-cols-4 gap-2.5">
-        <BentoKpi palette={PALETTE.blue} icon={Wallet} label="Facturación YTD"
-          valor={fmtCompact(kpis.monto)} delta={kpis.deltaMonto}
-          deltaLabel={`vs ${anio - 1}`}
-          subtitulo={kpis.montoPrev > 0 ? `${anio - 1}: ${fmtCompact(kpis.montoPrev)}` : `${anio - 1} sin datos`} />
-        <BentoKpi palette={PALETTE.teal} icon={Package} label="Piezas YTD"
-          valor={fmtInt(kpis.piezas)} delta={kpis.deltaPiezas}
-          deltaLabel={`vs ${anio - 1}`}
-          subtitulo={kpis.piezasPrev > 0 ? `${anio - 1}: ${fmtInt(kpis.piezasPrev)} pzs` : ''} />
-        <BentoKpi palette={PALETTE.purple} icon={Users} label="Clientes activos"
-          valor={fmtInt(kpis.clientesTot)} delta={null}
-          subtitulo={`Distintos cliente_nombre del periodo`} />
-        <BentoKpi palette={PALETTE.coral} icon={TrendingUp} label="Ticket promedio"
-          valor={kpis.tkt != null ? fmtMoney(kpis.tkt) : '—'} delta={null}
-          subtitulo={`$ / pieza facturada`} />
+      {/* KPIs financieros (margen, inventario, cartera) */}
+      <div className="grid grid-cols-3 gap-2.5">
+        <BentoKpi palette={PALETTE.teal} icon={TrendingUp} label="Margen bruto YTD"
+          valor={fmtCompact(kpis.margenYTD)}
+          delta={null}
+          subtitulo={
+            <span>
+              <strong style={{ color: PALETTE.teal.text }}>{fmtPct(kpis.pctMargen)}</strong>
+              {kpis.pctMargenPrev != null && (
+                <span style={{ marginLeft: 6, color: PALETTE.teal.mid }}>
+                  vs {kpis.pctMargenPrev.toFixed(1)}% en {anio - 1}
+                </span>
+              )}
+            </span>
+          } />
+        <BentoKpi palette={PALETTE.purple} icon={Package} label="Inventario en stock"
+          valor={fmtCompact(inventario?.valor_inventario)}
+          delta={null}
+          subtitulo={
+            <span>
+              {fmtInt(inventario?.skus_con_stock)} SKUs ·{' '}
+              {kpis.ventaYTD > 0 && inventario?.valor_inventario
+                ? Math.round((Number(inventario.valor_inventario) / (kpis.ventaYTD / mesMax)) ) + ' días cobertura'
+                : ''}
+            </span>
+          } />
+        <BentoKpi palette={PALETTE.coral} icon={Receipt} label="Cartera por cobrar"
+          valor={fmtCompact(carteraResumen.total)}
+          delta={null}
+          subtitulo={
+            <span>
+              Vencido <strong style={{ color: PALETTE.coral.text }}>{fmtCompact(carteraResumen.vencido)}</strong>
+              {carteraResumen.pctVencido != null && (
+                <span> ({carteraResumen.pctVencido.toFixed(1)}%)</span>
+              )}
+            </span>
+          } />
       </div>
 
-      {/* Mix de canales — donut + tabla */}
-      <MixCanalesCard mix={mixCanales} anio={anio} anioPrev={anio - 1} total={kpis.monto} />
+      {/* Toggle dimensión */}
+      <div className="flex items-center gap-3 px-1 mt-2">
+        <span className="text-[11px] text-gray-500 uppercase tracking-widest">Ver mix por</span>
+        <div className="inline-flex gap-0.5 bg-gray-100 rounded-lg p-0.5 text-xs">
+          {[
+            { id: 'canal',     lbl: 'Canal' },
+            { id: 'marca',     lbl: 'Marca' },
+            { id: 'categoria', lbl: 'Categoría' },
+          ].map((t) => (
+            <button key={t.id} onClick={() => setDimension(t.id)}
+              className={`px-3 py-1 rounded ${dimension === t.id ? 'bg-white shadow text-purple-700 font-medium' : 'text-gray-600'}`}>
+              {t.lbl}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      {/* Tendencia mensual por canal */}
-      <TendenciaCard data={tendencia.data} canales={tendencia.canales} anio={anio} mesMax={mesMax} />
+      {/* Bloques bento */}
+      <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+        {bloques.map((b) => (
+          <BloqueBento key={b.key} item={b}
+            expandido={bloqueExpandido === b.key}
+            onClick={() => setBloqueExpandido(bloqueExpandido === b.key ? null : b.key)}
+            puedeExpandir={dimension === 'canal'} />
+        ))}
+      </div>
 
-      {/* Top 15 clientes */}
-      <TopClientesCard clientes={topClientes} total={kpis.monto} />
+      {/* Drill-down de clientes del bloque expandido (solo dimension=canal) */}
+      {bloqueExpandido && dimension === 'canal' && (
+        <ClientesPanel canal={bloqueExpandido} clientes={clientesDelBloque}
+          onClose={() => setBloqueExpandido(null)} />
+      )}
+
+      {/* Cartera con aging */}
+      <CarteraCard cartera={cartera} resumen={carteraResumen} />
+
+      {/* Tendencia 3 años */}
+      <TendenciaCard data={tendencia} anio={anio} mesMax={mesMax} />
 
       <p className="text-[11px] text-gray-400 px-2">
-        Fuente: <code>v_vision_canal_mensual</code> + <code>v_vision_top_clientes</code> (agregación de ventas_erp).
-        monto = monto_venta_pesos neto (devoluciones incluidas).
+        Fuente: vistas SQL sobre ventas_erp · inventario_acteck · estados_cuenta.
+        Margen = monto_venta_pesos − costo_venta_pesos. Cuota: edita tabla{' '}
+        <code>cuotas_canales</code> en Supabase.
       </p>
     </div>
   );
 }
 
-// ────────── KPI Bento ──────────
+// ────────── HERO Card ──────────
+function HeroCard({ kpis, anio, mesMaxLabel }) {
+  return (
+    <div className="grid gap-2.5" style={{ gridTemplateColumns: '1.6fr 1fr' }}>
+      {/* Facturación YTD grande */}
+      <div style={{ background: PALETTE.blue.bg, borderRadius: 14, padding: '20px 24px' }}>
+        <p style={{ fontSize: 11, margin: 0, color: PALETTE.blue.mid, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+          Facturación YTD
+        </p>
+        <p style={{ fontSize: 42, fontWeight: 500, margin: '6px 0 8px', color: PALETTE.blue.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+          {fmtCompact(kpis.ventaYTD)}
+        </p>
+        <div className="flex flex-wrap gap-x-5 gap-y-1" style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+          {kpis.deltaVenta != null && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: kpis.deltaVenta >= 0 ? '#0F6E56' : '#A32D2D', fontWeight: 500 }}>
+              {kpis.deltaVenta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              {fmtPctDelta(kpis.deltaVenta)} vs {anio - 1}
+              <span style={{ color: PALETTE.blue.mid, opacity: 0.7, fontWeight: 400 }}>
+                ({fmtCompact(kpis.ventaPrev)})
+              </span>
+            </span>
+          )}
+          {kpis.deltaVenta2 != null && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: kpis.deltaVenta2 >= 0 ? '#0F6E56' : '#A32D2D', fontWeight: 500 }}>
+              {kpis.deltaVenta2 >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              {fmtPctDelta(kpis.deltaVenta2)} vs {anio - 2}
+              <span style={{ color: PALETTE.blue.mid, opacity: 0.7, fontWeight: 400 }}>
+                ({fmtCompact(kpis.ventaPrev2)})
+              </span>
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Columna lateral: Mes actual + Run-rate vs cuota */}
+      <div className="grid grid-rows-2 gap-2.5">
+        <div style={{ background: PALETTE.teal.bg, borderRadius: 12, padding: '14px 16px' }}>
+          <p style={{ fontSize: 11, margin: 0, color: PALETTE.teal.mid, letterSpacing: '0.03em' }}>
+            {mesMaxLabel} (mes en curso)
+          </p>
+          <p style={{ fontSize: 24, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.teal.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+            {fmtCompact(kpis.ventaMes)}
+          </p>
+          {kpis.deltaMes != null && (
+            <span style={{ fontSize: 11, color: kpis.deltaMes >= 0 ? '#0F6E56' : '#A32D2D', fontVariantNumeric: 'tabular-nums' }}>
+              {fmtPctDelta(kpis.deltaMes)} vs {mesMaxLabel.toLowerCase()} {anio - 1}
+            </span>
+          )}
+        </div>
+        <div style={{ background: kpis.cuotaTotal > 0 ? PALETTE.purple.bg : PALETTE.gray.bg, borderRadius: 12, padding: '14px 16px' }}>
+          <div className="flex items-center gap-2" style={{ marginBottom: 2 }}>
+            <Target className="w-3.5 h-3.5" style={{ color: kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid }} />
+            <p style={{ fontSize: 11, margin: 0, color: kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid, letterSpacing: '0.03em' }}>
+              {kpis.cuotaTotal > 0 ? 'Run-rate vs cuota' : 'Run-rate proyectado'}
+            </p>
+          </div>
+          <p style={{ fontSize: 24, fontWeight: 500, margin: '4px 0 2px',
+            color: kpis.cuotaTotal > 0 ? PALETTE.purple.text : PALETTE.gray.text,
+            fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+            {fmtCompact(kpis.runRate)}
+          </p>
+          {kpis.cuotaTotal > 0 ? (
+            <span style={{ fontSize: 11, color: PALETTE.purple.mid }}>
+              Meta: {fmtCompact(kpis.cuotaTotal)} ·{' '}
+              <strong style={{ color: kpis.gapVsRunRate >= 0 ? '#0F6E56' : '#A32D2D' }}>
+                {fmtPctDelta(kpis.cumplYTD - 100)} cumpl. YTD
+              </strong>
+            </span>
+          ) : (
+            <span style={{ fontSize: 11, color: PALETTE.gray.mid, fontStyle: 'italic' }}>
+              Sin cuota cargada · agrega en cuotas_canales
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ────────── Bento KPI ──────────
 function BentoKpi({ palette, icon: Icon, label, valor, subtitulo, delta, deltaLabel }) {
   return (
     <div style={{ background: palette.bg, borderRadius: 12, padding: '14px 16px' }}>
-      <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+      <div className="flex items-center justify-between" style={{ marginBottom: 2 }}>
         <p style={{ fontSize: 11, margin: 0, color: palette.mid, letterSpacing: '0.03em' }}>{label}</p>
         {Icon && <Icon className="w-3.5 h-3.5" style={{ color: palette.mid }} />}
       </div>
-      <p style={{
-        fontSize: 24, fontWeight: 500, margin: '2px 0 4px',
-        color: palette.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1,
-      }}>
+      <p style={{ fontSize: 24, fontWeight: 500, margin: '4px 0 2px', color: palette.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
         {valor}
       </p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 14, flexWrap: 'wrap' }}>
+      <div style={{ fontSize: 11, color: palette.mid, minHeight: 14 }}>
         {delta != null && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 11, fontWeight: 500,
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginRight: 8, fontWeight: 500,
             color: delta >= 0 ? '#0F6E56' : '#A32D2D' }}>
             {delta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
             {fmtPctDelta(delta)} {deltaLabel}
           </span>
         )}
-        {subtitulo && <span style={{ fontSize: 11, color: palette.mid }}>{subtitulo}</span>}
+        {subtitulo}
       </div>
     </div>
   );
 }
 
-// ────────── Mix de canales (donut + tabla) ──────────
-function MixCanalesCard({ mix, anio, anioPrev, total }) {
-  if (mix.length === 0) return null;
+// ────────── Bloque Bento (canal/marca/categoría) ──────────
+function BloqueBento({ item, expandido, onClick, puedeExpandir }) {
+  const palette = colorBloque(item.key);
+  const max = Math.max(...item.spark, 0) || 1;
+  const min = Math.min(...item.spark, 0);
+  const range = max - min || 1;
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 grid gap-4" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
-      <div>
-        <p className="text-sm font-medium text-gray-800 mb-2">Mix por canal · YTD</p>
-        <div style={{ width: '100%', height: 260 }}>
-          <ResponsiveContainer>
-            <PieChart>
-              <Pie data={mix} dataKey="monto" nameKey="admin_interna"
-                innerRadius={60} outerRadius={100} stroke="#fff" strokeWidth={2}
-                isAnimationActive={false}>
-                {mix.map((c, i) => <Cell key={i} fill={colorCanal(c.admin_interna)} />)}
-              </Pie>
-              <Tooltip
-                formatter={(v, n, p) => [fmtMoney(v) + ` · ${(p.payload.share || 0).toFixed(1)}%`, p.payload.admin_interna]}
-                contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-            </PieChart>
-          </ResponsiveContainer>
+    <button onClick={onClick}
+      disabled={!puedeExpandir}
+      style={{
+        textAlign: 'left', display: 'block', background: '#fff',
+        border: '1px solid ' + (expandido ? palette.mid : '#E2E8F0'),
+        borderRadius: 12, padding: 14, cursor: puedeExpandir ? 'pointer' : 'default',
+        transition: 'border 0.15s, box-shadow 0.15s',
+        boxShadow: expandido ? `0 0 0 3px ${palette.bg}` : 'none',
+      }}>
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <span style={{ width: 10, height: 10, borderRadius: 5, background: palette.mid, display: 'inline-block' }} />
+          <p style={{ fontSize: 12, margin: 0, color: '#1E293B', fontWeight: 500, lineHeight: 1.2 }}>{item.key}</p>
         </div>
-        <p className="text-[11px] text-gray-400 text-center mt-1">
-          Total facturación: {fmtCompact(total)}
+        <span style={{ fontSize: 10, padding: '1px 8px', background: '#F1F5F9', borderRadius: 10, color: '#6B6A64', fontWeight: 500 }}>
+          {item.share.toFixed(1)}%
+        </span>
+      </div>
+      <p style={{ fontSize: 22, fontWeight: 500, margin: '6px 0 2px', color: '#0F172A', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+        {fmtCompact(item.venta)}
+      </p>
+      <div style={{ display: 'flex', gap: 10, fontSize: 11, fontVariantNumeric: 'tabular-nums', flexWrap: 'wrap' }}>
+        {item.deltaYoY != null && (
+          <span style={{ color: item.deltaYoY >= 0 ? '#0F6E56' : '#A32D2D', fontWeight: 500 }}>
+            {fmtPctDelta(item.deltaYoY)} YoY
+          </span>
+        )}
+        {item.pctMargen != null && (
+          <span style={{ color: PALETTE.teal.mid }}>
+            margen {item.pctMargen.toFixed(1)}%
+          </span>
+        )}
+      </div>
+      {/* Mini sparkline */}
+      {item.spark.length > 0 && (
+        <svg viewBox="0 0 120 28" style={{ width: '100%', height: 28, marginTop: 8 }} preserveAspectRatio="none">
+          <polyline fill="none" stroke={palette.mid} strokeWidth="1.5"
+            points={item.spark.map((v, i) => {
+              const x = item.spark.length > 1 ? (i / (item.spark.length - 1)) * 120 : 60;
+              const y = 28 - (((v - min) / range) * 24);
+              return `${x},${y}`;
+            }).join(' ')} />
+        </svg>
+      )}
+      {puedeExpandir && (
+        <div className="flex items-center gap-1 mt-1" style={{ fontSize: 10, color: '#94A3B8' }}>
+          {expandido ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          {expandido ? 'ocultar clientes' : 'ver clientes'}
+        </div>
+      )}
+    </button>
+  );
+}
+
+// ────────── Drill-down: Clientes del canal ──────────
+function ClientesPanel({ canal, clientes, onClose }) {
+  if (clientes.length === 0) return null;
+  const totalCanal = clientes.reduce((s, c) => s + (Number(c.venta) || 0), 0);
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="flex items-baseline justify-between mb-3">
+        <p className="text-sm font-medium text-gray-800">
+          Clientes en <span style={{ color: colorBloque(canal).mid }}>{canal}</span>
+        </p>
+        <button onClick={onClose} className="text-[11px] text-gray-500 hover:text-gray-800">cerrar ✕</button>
+      </div>
+      <table className="w-full" style={{ fontSize: 12 }}>
+        <thead>
+          <tr style={{ background: '#FAFBFC', borderBottom: '1px solid #E2E8F0' }}>
+            <th style={thLeft}>Cliente</th>
+            <th style={thRight}>Venta YTD</th>
+            <th style={thRight}>% del canal</th>
+            <th style={thRight}>Margen $</th>
+            <th style={thRight}>Margen %</th>
+            <th style={thRight}>Piezas</th>
+          </tr>
+        </thead>
+        <tbody>
+          {clientes.slice(0, 12).map((c, i) => {
+            const venta = Number(c.venta) || 0;
+            const margen = Number(c.margen_bruto) || 0;
+            const share = totalCanal > 0 ? (venta / totalCanal) * 100 : 0;
+            const pctMargen = venta > 0 ? (margen / venta) * 100 : null;
+            return (
+              <tr key={c.cliente_label + i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                <td style={{ ...tdLeft, maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  title={c.cliente_label}>
+                  {c.cliente_label}
+                </td>
+                <td style={{ ...tdRight, fontWeight: 500 }}>{fmtCompact(venta)}</td>
+                <td style={tdRight}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{share.toFixed(1)}%</span>
+                    <span style={{ width: 40, height: 6, background: '#F1F5F9', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
+                      <span style={{ position: 'absolute', inset: 0, width: `${Math.min(share, 100)}%`, background: colorBloque(canal).mid }} />
+                    </span>
+                  </span>
+                </td>
+                <td style={tdRight}>{fmtCompact(margen)}</td>
+                <td style={{ ...tdRight, color: PALETTE.teal.mid, fontWeight: 500 }}>{fmtPct(pctMargen)}</td>
+                <td style={tdRight}>{fmtInt(c.piezas)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ────────── Cartera con aging ──────────
+function CarteraCard({ cartera, resumen }) {
+  if (cartera.length === 0) return null;
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="flex items-baseline justify-between mb-3">
+        <p className="text-sm font-medium text-gray-800">Cartera por cobrar</p>
+        <p className="text-[11px] text-gray-400">
+          Total {fmtMoney(resumen.total)} · Vencido {fmtCompact(resumen.vencido)}
+          {resumen.pctVencido != null && ` (${resumen.pctVencido.toFixed(1)}%)`}
         </p>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full" style={{ fontSize: 12 }}>
-          <thead>
-            <tr style={{ background: '#FAFBFC', borderBottom: '1px solid #E2E8F0' }}>
-              <th style={{ ...thLeft, minWidth: 140 }}>Canal</th>
-              <th style={thRight}>Monto</th>
-              <th style={thRight}>% del total</th>
-              <th style={thRight}>Clientes</th>
-              <th style={{ ...thRight, background: PALETTE.purple.bg, color: PALETTE.purple.text }}>vs {anioPrev}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {mix.map((c) => (
-              <tr key={c.admin_interna} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                <td style={tdLeft}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 4, background: colorCanal(c.admin_interna) }} />
-                    {c.admin_interna}
-                  </span>
-                  <span className="block text-[10px] text-gray-400">{c.canal}</span>
-                </td>
-                <td style={{ ...tdRight, fontWeight: 500 }}>{fmtCompact(c.monto)}</td>
-                <td style={tdRight}>
-                  <BarPct pct={c.share} color={colorCanal(c.admin_interna)} />
-                </td>
-                <td style={tdRight}>{fmtInt(c.n_clientes)}</td>
-                <td style={{ ...tdRight, background: PALETTE.purple.bg,
-                  color: c.deltaYoY == null ? '#94A3B8' : c.deltaYoY >= 0 ? '#0F6E56' : '#A32D2D',
-                  fontWeight: 500 }}>
-                  {c.deltaYoY == null ? '—' : fmtPctDelta(c.deltaYoY)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="grid grid-cols-4 gap-2 mb-4">
+        <AgingTile palette={PALETTE.teal}  label="0–30 días"  valor={resumen.aging0_30}  total={resumen.total} />
+        <AgingTile palette={PALETTE.amber} label="31–60 días" valor={resumen.aging31_60} total={resumen.total} />
+        <AgingTile palette={PALETTE.coral} label="61–90 días" valor={resumen.aging61_90} total={resumen.total} />
+        <AgingTile palette={PALETTE.red}   label="+90 días"   valor={resumen.agingMas90} total={resumen.total} />
       </div>
+      <table className="w-full" style={{ fontSize: 12 }}>
+        <thead>
+          <tr style={{ background: '#FAFBFC', borderBottom: '1px solid #E2E8F0' }}>
+            <th style={thLeft}>Cliente</th>
+            <th style={thRight}>Saldo total</th>
+            <th style={thRight}>Vencido</th>
+            <th style={thRight}>% vencido</th>
+            <th style={thRight}>DSO</th>
+            <th style={thRight}>Corte</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cartera.sort((a, b) => Number(b.saldo_actual || 0) - Number(a.saldo_actual || 0)).map((c) => {
+            const pctVenc = c.saldo_actual > 0 ? (Number(c.saldo_vencido) / Number(c.saldo_actual)) * 100 : 0;
+            return (
+              <tr key={c.cliente} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                <td style={{ ...tdLeft, textTransform: 'capitalize' }}>{c.cliente}</td>
+                <td style={{ ...tdRight, fontWeight: 500 }}>{fmtCompact(c.saldo_actual)}</td>
+                <td style={tdRight}>{fmtCompact(c.saldo_vencido)}</td>
+                <td style={{ ...tdRight, color: pctVenc >= 20 ? PALETTE.red.mid : pctVenc >= 10 ? PALETTE.amber.mid : PALETTE.teal.mid, fontWeight: 500 }}>
+                  {pctVenc.toFixed(1)}%
+                </td>
+                <td style={tdRight}>{c.dso != null ? Math.round(Number(c.dso)) + 'd' : '—'}</td>
+                <td style={{ ...tdRight, color: '#94A3B8' }}>{c.fecha_corte || '—'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function BarPct({ pct, color }) {
+function AgingTile({ palette, label, valor, total }) {
+  const pct = total > 0 ? (valor / total) * 100 : 0;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
-      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{pct.toFixed(1)}%</span>
-      <span style={{ width: 50, height: 6, background: '#F1F5F9', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
-        <span style={{ position: 'absolute', inset: 0, width: `${Math.min(pct, 100)}%`, background: color }} />
-      </span>
-    </span>
+    <div style={{ background: palette.bg, borderRadius: 10, padding: '10px 12px' }}>
+      <p style={{ fontSize: 10, color: palette.mid, margin: 0, letterSpacing: '0.03em', textTransform: 'uppercase' }}>{label}</p>
+      <p style={{ fontSize: 18, fontWeight: 500, margin: '4px 0 2px', color: palette.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+        {fmtCompact(valor)}
+      </p>
+      <p style={{ fontSize: 11, color: palette.mid, margin: 0, fontVariantNumeric: 'tabular-nums' }}>
+        {pct.toFixed(1)}%
+      </p>
+    </div>
   );
 }
 
-// ────────── Tendencia (área apilada) ──────────
-function TendenciaCard({ data, canales, anio, mesMax }) {
+// ────────── Tendencia 3 años ──────────
+function TendenciaCard({ data, anio, mesMax }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
       <div className="flex items-baseline justify-between mb-2">
-        <p className="text-sm font-medium text-gray-800">Facturación mensual por canal</p>
-        <p className="text-[11px] text-gray-400">{anio} · {mesMax} meses con datos</p>
+        <p className="text-sm font-medium text-gray-800">Tendencia mensual · 3 años</p>
+        <p className="text-[11px] text-gray-400">{anio - 2}, {anio - 1}, {anio}</p>
       </div>
-      <div style={{ width: '100%', height: 280 }}>
+      <div style={{ width: '100%', height: 260 }}>
         <ResponsiveContainer>
-          <AreaChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+          <LineChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="#F1F5F9" vertical={false} />
             <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
             <YAxis tickFormatter={(v) => '$' + (v / 1e6).toFixed(0) + 'M'} tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v) => fmtMoney(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-            <Legend wrapperStyle={{ fontSize: 10, paddingTop: 6 }} iconType="square" />
-            {canales.map((c) => (
-              <Area key={c} type="monotone" dataKey={c} stackId="1"
-                stroke={colorCanal(c)} fill={colorCanal(c)} fillOpacity={0.85}
-                isAnimationActive={false} />
-            ))}
-          </AreaChart>
+            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+            <Legend wrapperStyle={{ fontSize: 11 }} iconType="line" />
+            <Line type="monotone" dataKey={`${anio - 2}`} stroke={PALETTE.gray.mid} strokeWidth={1.2} strokeDasharray="3 3" dot={false} isAnimationActive={false} />
+            <Line type="monotone" dataKey={`${anio - 1}`} stroke={PALETTE.blue.mid}  strokeWidth={1.6} dot={false} isAnimationActive={false} />
+            <Line type="monotone" dataKey={`${anio}`}     stroke={PALETTE.purple.mid} strokeWidth={2.2} dot={{ r: 3, fill: PALETTE.purple.mid }} isAnimationActive={false} />
+          </LineChart>
         </ResponsiveContainer>
       </div>
     </div>
   );
 }
 
-// ────────── Top clientes ──────────
-function TopClientesCard({ clientes, total }) {
-  if (clientes.length === 0) return null;
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <div className="flex items-baseline justify-between mb-2">
-        <p className="text-sm font-medium text-gray-800">Top 15 clientes · YTD</p>
-        <p className="text-[11px] text-gray-400">% del total facturado</p>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full" style={{ fontSize: 12 }}>
-          <thead>
-            <tr style={{ background: '#FAFBFC', borderBottom: '1px solid #E2E8F0' }}>
-              <th style={{ ...thLeft, width: 30 }}>#</th>
-              <th style={thLeft}>Cliente</th>
-              <th style={thLeft}>Canal</th>
-              <th style={thRight}>Monto</th>
-              <th style={thRight}>%</th>
-              <th style={thRight}>Piezas</th>
-              <th style={thRight}>Meses activos</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clientes.map((c, i) => {
-              const share = total > 0 ? (Number(c.monto) / total) * 100 : 0;
-              return (
-                <tr key={c.cliente_nombre + i} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                  <td style={{ ...tdLeft, color: '#94A3B8' }}>{i + 1}</td>
-                  <td style={tdLeft} title={c.cliente_nombre}>
-                    <span className="block" style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {c.cliente_nombre}
-                    </span>
-                  </td>
-                  <td style={tdLeft}>
-                    <span style={{
-                      fontSize: 10, padding: '2px 8px', borderRadius: 10,
-                      background: colorCanal(c.admin_interna) + '20', color: '#1E293B',
-                    }}>
-                      {c.admin_interna}
-                    </span>
-                  </td>
-                  <td style={{ ...tdRight, fontWeight: 500 }}>{fmtCompact(c.monto)}</td>
-                  <td style={tdRight}>
-                    <BarPct pct={share} color={colorCanal(c.admin_interna)} />
-                  </td>
-                  <td style={tdRight}>{fmtInt(c.piezas)}</td>
-                  <td style={tdRight}>{c.meses_activos}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// ────────── Alertas ──────────
-function AlertasBanner({ alertas }) {
-  return (
-    <div style={{
-      background: PALETTE.amber.bg, borderRadius: 12, padding: '10px 14px',
-      borderLeft: `4px solid ${PALETTE.amber.strong}`,
-    }}>
-      <div className="flex items-start gap-2.5">
-        <AlertTriangle className="w-4 h-4 flex-none mt-0.5" style={{ color: PALETTE.amber.mid }} />
-        <div className="flex-1">
-          <p style={{ fontSize: 11, color: PALETTE.amber.mid, fontWeight: 500, margin: 0, letterSpacing: '0.03em' }}>
-            Insights del periodo ({alertas.length})
-          </p>
-          <ul style={{ margin: '4px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {alertas.map((a, i) => (
-              <li key={i} style={{ fontSize: 12, color: PALETTE.amber.text }}>{a.msg}</li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ────────── Tabla styles ──────────
+// ────────── Estilos comunes ──────────
 const thLeft = { padding: '8px 12px', textAlign: 'left', fontWeight: 500, color: '#6B6A64', fontSize: 11, whiteSpace: 'nowrap' };
 const thRight = { padding: '8px 8px', textAlign: 'right', fontWeight: 500, color: '#6B6A64', fontSize: 11, whiteSpace: 'nowrap' };
 const tdLeft = { padding: '8px 12px', color: '#334155', fontSize: 12 };
-const tdRight = { padding: '8px 8px', textAlign: 'right', color: '#1E293B', fontSize: 12, fontVariantNumeric: 'tabular-nums' };
+const tdRight = { padding: '8px 8px', textAlign: 'right', color: '#1E293B', fontSize: 12, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' };
