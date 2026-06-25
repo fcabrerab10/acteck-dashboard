@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, ForecastCliente } from './modules/comercial';
 import EstadoResultados from './modules/general/EstadoResultados';
+import VisionGeneral from './modules/comercial/VisionGeneral';
 import ReporteTab from './modules/comercial/ReporteTab';
 import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
 import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
@@ -432,13 +433,7 @@ export default function App() {
           )}
           {paginaActiva === "visionGeneral" && (
             puedeVerPestanaGlobal(perfil, "vision_general")
-              ? (
-                <div className="p-12 text-center">
-                  <Activity className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold text-gray-700 mb-2">Visión General</h2>
-                  <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
-                </div>
-              )
+              ? <VisionGeneral />
               : <SinAcceso motivo="No tienes acceso a Visión General." />
           )}
           {paginaActiva === "analisisClientes" && (
