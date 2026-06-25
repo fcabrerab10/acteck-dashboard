@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
   Activity, TrendingUp, TrendingDown, ChevronRight, ChevronDown,
-  Wallet, Package, Receipt, Target,
+  Wallet, Package, Receipt, Target, ShoppingBag, Ship, X,
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip,
@@ -77,6 +77,7 @@ export default function VisionGeneral() {
   const [margenPrev2, setMargenPrev2] = useState([]);
   const [clientesDim, setClientesDim] = useState([]);
   const [inventario, setInventario] = useState(null);
+  const [inventarioMarca, setInventarioMarca] = useState([]);
   const [cartera, setCartera] = useState([]);
   const [cuotas, setCuotas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,12 +104,13 @@ export default function VisionGeneral() {
       // Fuente: facturacion_clientes (Excel "Venta Facturación" del ERP).
       // Por ahora solo soportamos dimension='canal' — marca/categoría
       // requieren ventas_erp completo con marca/familia.
-      const [a, p, p2, c, inv, cart, q] = await Promise.all([
+      const [a, p, p2, c, inv, invMarca, cart, q] = await Promise.all([
         supabase.from('v_vision_factura_canal').select('*').eq('anio', anio),
         supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 1),
         supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 2),
         supabase.from('v_vision_factura_clientes').select('*').eq('anio', anio),
         supabase.from('v_vision_inventario_global').select('*').single(),
+        supabase.from('v_vision_inventario_marca').select('*').order('valor', { ascending: false, nullsFirst: false }),
         supabase.from('v_vision_cartera_consolidada').select('*'),
         supabase.from('cuotas_canales').select('*').eq('anio', anio),
       ]);
@@ -117,6 +119,7 @@ export default function VisionGeneral() {
       setMargenPrev2(p2.data || []);
       setClientesDim(c.data || []);
       setInventario(inv.data || null);
+      setInventarioMarca(invMarca.data || []);
       setCartera(cart.data || []);
       setCuotas(q.data || []);
       setLoading(false);
@@ -294,16 +297,8 @@ export default function VisionGeneral() {
       {/* HERO */}
       <HeroCard kpis={kpis} anio={anio} mesMaxLabel={MESES_FULL[mesMax - 1]} />
 
-      {/* KPIs (clientes activos, inventario, cartera) — margen pendiente */}
+      {/* KPIs: Inventario + 2 placeholders Próximamente */}
       <div className="grid grid-cols-3 gap-2.5">
-        <BentoKpi palette={PALETTE.teal} icon={TrendingUp} label="Clientes activos YTD"
-          valor={fmtInt(kpis.nClientesActivos)}
-          delta={null}
-          subtitulo={
-            <span>
-              Distintos cliente_nombre con facturaci&oacute;n &gt; 0
-            </span>
-          } />
         <BentoKpi palette={PALETTE.purple} icon={Package} label="Inventario en stock"
           valor={fmtCompact(inventario?.valor_inventario)}
           delta={null}
@@ -315,17 +310,10 @@ export default function VisionGeneral() {
                 : ''}
             </span>
           } />
-        <BentoKpi palette={PALETTE.coral} icon={Receipt} label="Cartera por cobrar"
-          valor={fmtCompact(carteraResumen.total)}
-          delta={null}
-          subtitulo={
-            <span>
-              Vencido <strong style={{ color: PALETTE.coral.text }}>{fmtCompact(carteraResumen.vencido)}</strong>
-              {carteraResumen.pctVencido != null && (
-                <span> ({carteraResumen.pctVencido.toFixed(1)}%)</span>
-              )}
-            </span>
-          } />
+        <ProximamenteKpi icon={Receipt} label="Cartera por cobrar"
+          nota="En construcción" />
+        <ProximamenteKpi icon={ShoppingBag} label="Sell Out"
+          nota="En construcción" />
       </div>
 
       {/* Toggle dimensión */}
@@ -366,19 +354,22 @@ export default function VisionGeneral() {
       {/* Drill-down de clientes del bloque expandido (solo dimension=canal) */}
       {bloqueExpandido && dimension === 'canal' && (
         <ClientesPanel canal={bloqueExpandido} clientes={clientesDelBloque}
+          mensualAct={margenAct} mensualPrev={margenPrev}
+          anio={anio} mesMax={mesMax}
           onClose={() => setBloqueExpandido(null)} />
       )}
-
-      {/* Cartera con aging */}
-      <CarteraCard cartera={cartera} resumen={carteraResumen} />
 
       {/* Tendencia 3 años */}
       <TendenciaCard data={tendencia} anio={anio} mesMax={mesMax} />
 
+      {/* Sección de inventario */}
+      <InventarioSection inventario={inventario}
+        inventarioMarca={inventarioMarca}
+        ventaPromMes={mesMax > 0 ? kpis.ventaYTD / mesMax : 0} />
+
       <p className="text-[11px] text-gray-400 px-2">
-        Fuente: vistas SQL sobre ventas_erp · inventario_acteck · estados_cuenta.
-        Margen = monto_venta_pesos − costo_venta_pesos. Cuota: edita tabla{' '}
-        <code>cuotas_canales</code> en Supabase.
+        Fuente: facturacion_clientes (canal × cliente × SKU × mes), inventario_acteck
+        (almacenes comerciales). Margen y cartera pendientes de fuente.
       </p>
     </div>
   );
@@ -549,18 +540,80 @@ function BloqueBento({ item, expandido, onClick, puedeExpandir }) {
   );
 }
 
-// ────────── Drill-down: Clientes del canal ──────────
-function ClientesPanel({ canal, clientes, onClose }) {
-  if (clientes.length === 0) return null;
+// ────────── Drill-down: detalle del canal con chart y clientes ──────────
+function ClientesPanel({ canal, clientes, mensualAct, mensualPrev, anio, mesMax, onClose }) {
   const totalCanal = clientes.reduce((s, c) => s + (Number(c.venta) || 0), 0);
+  const palette = colorBloque(canal);
+
+  // KPIs del canal
+  const ytdAct  = mensualAct.filter((r) => r.canal === canal && Number(r.mes) <= mesMax)
+    .reduce((s, r) => s + (Number(r.venta) || 0), 0);
+  const ytdPrev = mensualPrev.filter((r) => r.canal === canal && Number(r.mes) <= mesMax)
+    .reduce((s, r) => s + (Number(r.venta) || 0), 0);
+  const delta = ytdPrev > 0 ? ((ytdAct - ytdPrev) / ytdPrev) * 100 : null;
+  const ventaMes  = mensualAct.filter((r) => r.canal === canal && Number(r.mes) === mesMax)
+    .reduce((s, r) => s + (Number(r.venta) || 0), 0);
+  const ventaMesPrev = mensualPrev.filter((r) => r.canal === canal && Number(r.mes) === mesMax)
+    .reduce((s, r) => s + (Number(r.venta) || 0), 0);
+  const deltaMes = ventaMesPrev > 0 ? ((ventaMes - ventaMesPrev) / ventaMesPrev) * 100 : null;
+
+  // Data mensual para barras lado a lado
+  const trendData = Array.from({ length: 12 }, (_, i) => {
+    const m = i + 1;
+    const a = mensualAct.filter((r) => r.canal === canal && Number(r.mes) === m).reduce((s, r) => s + (Number(r.venta) || 0), 0);
+    const p = mensualPrev.filter((r) => r.canal === canal && Number(r.mes) === m).reduce((s, r) => s + (Number(r.venta) || 0), 0);
+    return { mes: MESES_LBL[i], anioPrev: p || null, anioAct: m <= mesMax ? (a || null) : null };
+  });
+
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <div className="flex items-baseline justify-between mb-3">
-        <p className="text-sm font-medium text-gray-800">
-          Clientes en <span style={{ color: colorBloque(canal).mid }}>{canal}</span>
-        </p>
-        <button onClick={onClose} className="text-[11px] text-gray-500 hover:text-gray-800">cerrar ✕</button>
+    <div className="bg-white rounded-xl p-4" style={{ border: `1px solid ${palette.mid}` }}>
+      <div className="flex items-start justify-between mb-3 flex-wrap gap-3">
+        <div>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 12, height: 12, borderRadius: 6, background: palette.mid, display: 'inline-block' }} />
+            <span className="text-lg font-medium text-gray-800">{canal}</span>
+          </span>
+          <p className="text-[11px] text-gray-500 mt-0.5">
+            {clientes.length} clientes · {((ytdAct / (mensualAct.reduce((s, r) => s + (Number(r.venta) || 0), 0) || 1)) * 100).toFixed(1)}% del negocio total
+          </p>
+        </div>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-700" title="Cerrar">
+          <X className="w-4 h-4" />
+        </button>
       </div>
+
+      {/* 4 mini-KPIs del canal */}
+      <div className="grid grid-cols-4 gap-2 mb-4">
+        <MiniKpi palette={palette} label={`YTD ${anio}`}      valor={fmtCompact(ytdAct)} />
+        <MiniKpi palette={PALETTE.gray} label={`YTD ${anio - 1}`} valor={fmtCompact(ytdPrev)} />
+        <MiniKpi palette={delta == null ? PALETTE.gray : delta >= 0 ? PALETTE.teal : PALETTE.red}
+          label="Δ YoY"
+          valor={delta == null ? '—' : fmtPctDelta(delta)} />
+        <MiniKpi palette={PALETTE.amber}
+          label={`${MESES_FULL[mesMax - 1]} ${anio}`}
+          valor={fmtCompact(ventaMes)}
+          sub={deltaMes != null ? fmtPctDelta(deltaMes) + ' YoY' : ''} />
+      </div>
+
+      {/* Bar chart 2025 vs 2026 */}
+      <p className="text-[11px] uppercase tracking-widest text-gray-500 mb-1">Facturación mensual · {anio - 1} vs {anio}</p>
+      <div style={{ width: '100%', height: 220, marginBottom: 16 }}>
+        <ResponsiveContainer>
+          <BarChart data={trendData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke="#F1F5F9" vertical={false} />
+            <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
+            <YAxis tickFormatter={(v) => '$' + (v / 1e6).toFixed(0) + 'M'} tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={false} tickLine={false} />
+            <Tooltip formatter={(v) => fmtMoney(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+            <Legend wrapperStyle={{ fontSize: 11 }} iconType="square" />
+            <Bar dataKey="anioPrev" name={`${anio - 1}`} fill={palette.bg} stroke={palette.mid} strokeWidth={1} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+            <Bar dataKey="anioAct"  name={`${anio}`}     fill={palette.mid} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {clientes.length === 0 ? null : (
+        <>
+      <p className="text-[11px] uppercase tracking-widest text-gray-500 mb-1">Top clientes del canal · YTD</p>
       <table className="w-full" style={{ fontSize: 12 }}>
         <thead>
           <tr style={{ background: '#FAFBFC', borderBottom: '1px solid #E2E8F0' }}>
@@ -599,11 +652,43 @@ function ClientesPanel({ canal, clientes, onClose }) {
           })}
         </tbody>
       </table>
+      </>
+      )}
     </div>
   );
 }
 
-// ────────── Cartera con aging ──────────
+// ────────── Mini KPI tile (drill-down del canal) ──────────
+function MiniKpi({ palette, label, valor, sub }) {
+  return (
+    <div style={{ background: palette.bg, borderRadius: 8, padding: '8px 12px' }}>
+      <p style={{ fontSize: 10, margin: 0, color: palette.mid, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</p>
+      <p style={{ fontSize: 18, fontWeight: 500, margin: '2px 0 0', color: palette.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+        {valor}
+      </p>
+      {sub && <p style={{ fontSize: 10, color: palette.mid, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>{sub}</p>}
+    </div>
+  );
+}
+
+// ────────── Tile "Próximamente" ──────────
+function ProximamenteKpi({ icon: Icon, label, nota }) {
+  return (
+    <div style={{
+      background: '#F8FAFC', borderRadius: 12, padding: '14px 16px',
+      border: '1px dashed #CBD5E1', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 84,
+    }}>
+      <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+        {Icon && <Icon className="w-3.5 h-3.5" style={{ color: '#94A3B8' }} />}
+        <p style={{ fontSize: 11, margin: 0, color: '#94A3B8', letterSpacing: '0.03em' }}>{label}</p>
+      </div>
+      <p style={{ fontSize: 16, fontWeight: 500, margin: 0, color: '#64748B' }}>Próximamente</p>
+      {nota && <p style={{ fontSize: 10, color: '#94A3B8', margin: '2px 0 0', fontStyle: 'italic' }}>{nota}</p>}
+    </div>
+  );
+}
+
+// ────────── Cartera con aging (legacy — no se usa por ahora) ──────────
 function CarteraCard({ cartera, resumen }) {
   if (cartera.length === 0) return null;
   return (
@@ -690,6 +775,150 @@ function TendenciaCard({ data, anio, mesMax }) {
             <Line type="monotone" dataKey={`${anio}`}     stroke={PALETTE.purple.mid} strokeWidth={2.2} dot={{ r: 3, fill: PALETTE.purple.mid }} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ────────── Sección de Inventario ──────────
+function InventarioSection({ inventario, inventarioMarca, ventaPromMes }) {
+  // KPIs strip
+  const valorInv = Number(inventario?.valor_inventario) || 0;
+  const piezas   = Number(inventario?.piezas_disponibles) || 0;
+  const skus     = Number(inventario?.skus_con_stock) || 0;
+  const agotados = Number(inventario?.skus_agotados) || 0;
+  const diasCob  = ventaPromMes > 0 ? Math.round(valorInv / ventaPromMes * 30) : null;
+  const cobLbl   = diasCob == null ? '—'
+                  : diasCob < 60  ? 'Bajo'
+                  : diasCob > 120 ? 'Alto'
+                  : 'Sano';
+
+  // Filtra marcas y agrupa pequeñas en "Otros"
+  const totalMarca = inventarioMarca.reduce((s, m) => s + (Number(m.valor) || 0), 0);
+  const marcasTop = inventarioMarca
+    .filter((m) => (Number(m.valor) || 0) > 0)
+    .slice(0, 5);
+  const otrasMarcasVal = inventarioMarca
+    .slice(5)
+    .reduce((s, m) => s + (Number(m.valor) || 0), 0);
+  const marcasParaDonut = otrasMarcasVal > 0
+    ? [...marcasTop, { marca: 'Otras marcas', valor: otrasMarcasVal, skus: 0 }]
+    : marcasTop;
+  const MARCA_COLOR = {
+    'ACTECK': PALETTE.purple.mid,
+    'BALAM RUSH': PALETTE.coral.strong,
+    'MOBIFREE': PALETTE.blue.mid,
+    'SWANN': PALETTE.teal.mid,
+    'EVOROK': PALETTE.amber.mid,
+    'Sin marca': PALETTE.gray.mid,
+    'Otras marcas': PALETTE.gray.strong,
+  };
+  const colorMarca = (m) => MARCA_COLOR[String(m).toUpperCase()] || MARCA_COLOR[m] || PALETTE.pink.mid;
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-baseline justify-between px-1">
+        <p className="text-[11px] uppercase tracking-widest text-gray-500">
+          <Package className="inline w-3 h-3 mr-1" style={{ verticalAlign: -1 }} />
+          Inventario
+        </p>
+        <p className="text-[11px] text-gray-400">
+          Almacenes comerciales · al {inventario?.ultima_carga ? new Date(inventario.ultima_carga).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+        </p>
+      </div>
+
+      {/* 4 KPI tiles */}
+      <div className="grid grid-cols-4 gap-2">
+        <div style={{ background: PALETTE.purple.bg, borderRadius: 12, padding: '12px 14px' }}>
+          <p style={{ fontSize: 10, color: PALETTE.purple.mid, margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Valor en stock</p>
+          <p style={{ fontSize: 22, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.purple.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+            {fmtCompact(valorInv)}
+          </p>
+          <p style={{ fontSize: 11, color: PALETTE.purple.mid, margin: 0 }}>
+            {fmtInt(piezas)} piezas · {fmtInt(skus)} SKUs
+          </p>
+        </div>
+        <div style={{ background: PALETTE.teal.bg, borderRadius: 12, padding: '12px 14px' }}>
+          <p style={{ fontSize: 10, color: PALETTE.teal.mid, margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Días cobertura</p>
+          <p style={{ fontSize: 22, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.teal.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+            {diasCob != null ? `~${diasCob} días` : '—'}
+          </p>
+          <p style={{ fontSize: 11, color: PALETTE.teal.mid, margin: 0 }}>{cobLbl}</p>
+        </div>
+        <div style={{ background: PALETTE.amber.bg, borderRadius: 12, padding: '12px 14px' }}>
+          <p style={{ fontSize: 10, color: PALETTE.amber.mid, margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>SKUs agotados</p>
+          <p style={{ fontSize: 22, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.amber.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+            {fmtInt(agotados)}
+          </p>
+          <p style={{ fontSize: 11, color: PALETTE.amber.mid, margin: 0 }}>Con venta reciente</p>
+        </div>
+        <ProximamenteKpi icon={Ship} label="Valor en camino" nota="Esperando tabla real" />
+      </div>
+
+      {/* Composición: marca + categoría pendiente */}
+      <div className="grid gap-2.5" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-sm font-medium text-gray-800 mb-2">Composición por marca</p>
+          {marcasParaDonut.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">Sin datos de marca</p>
+          ) : (
+            <>
+              <div style={{ width: '100%', height: 180 }}>
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie data={marcasParaDonut} dataKey="valor" nameKey="marca"
+                      innerRadius={48} outerRadius={80} stroke="#fff" strokeWidth={2}
+                      isAnimationActive={false}>
+                      {marcasParaDonut.map((m, i) => <Cell key={i} fill={colorMarca(m.marca)} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => fmtMoney(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-3 flex flex-col gap-1">
+                {marcasParaDonut.map((m) => {
+                  const share = totalMarca > 0 ? ((Number(m.valor) || 0) / totalMarca) * 100 : 0;
+                  return (
+                    <div key={m.marca} className="flex items-center justify-between text-[11px]">
+                      <span className="flex items-center gap-1.5">
+                        <span style={{ width: 8, height: 8, background: colorMarca(m.marca), display: 'inline-block' }} />
+                        {m.marca}
+                      </span>
+                      <span style={{ fontVariantNumeric: 'tabular-nums', color: '#64748B' }}>
+                        {fmtCompact(m.valor)} · {share.toFixed(1)}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div style={{
+          background: '#F8FAFC', borderRadius: 12, padding: 16, border: '1px dashed #CBD5E1',
+          display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: 320,
+        }}>
+          <Package className="w-7 h-7 mb-2" style={{ color: '#94A3B8' }} />
+          <p className="text-[13px] text-gray-600 font-medium m-0">Composición por categoría</p>
+          <p className="text-[14px] text-gray-800 font-medium mt-1">Próximamente</p>
+          <p className="text-[11px] text-gray-400 mt-2 italic text-center" style={{ maxWidth: 280 }}>
+            Pendiente confirmar fuente de categorías
+          </p>
+        </div>
+      </div>
+
+      {/* Inventario en camino: pendiente */}
+      <div style={{
+        background: '#F8FAFC', borderRadius: 12, padding: '28px 16px', border: '1px dashed #CBD5E1',
+        display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+      }}>
+        <Ship className="w-8 h-8 mb-2" style={{ color: '#94A3B8' }} />
+        <p className="text-[13px] text-gray-600 font-medium m-0">Inventario en camino</p>
+        <p className="text-[16px] text-gray-800 font-medium mt-1">Próximamente</p>
+        <p className="text-[11px] text-gray-400 mt-2 italic text-center" style={{ maxWidth: 420 }}>
+          Layout listo (tiles por estatus + calendario por mes + tabla de PO con valor MXN). Pendiente la tabla fuente real.
+        </p>
       </div>
     </div>
   );
