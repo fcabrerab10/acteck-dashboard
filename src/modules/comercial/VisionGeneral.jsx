@@ -5,8 +5,8 @@ import {
   Wallet, Package, Receipt, Target, ShoppingBag, Ship, X,
 } from 'lucide-react';
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip,
-  CartesianGrid, ResponsiveContainer, Legend,
+  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
 } from 'recharts';
 
 // ────────── Constantes ──────────
