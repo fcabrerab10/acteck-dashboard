@@ -78,6 +78,9 @@ export default function VisionGeneral() {
   const [clientesDim, setClientesDim] = useState([]);
   const [inventario, setInventario] = useState(null);
   const [inventarioMarca, setInventarioMarca] = useState([]);
+  const [caminoResumen, setCaminoResumen] = useState([]);
+  const [caminoCalendario, setCaminoCalendario] = useState([]);
+  const [caminoProximas, setCaminoProximas] = useState([]);
   const [cartera, setCartera] = useState([]);
   const [cuotas, setCuotas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -104,7 +107,7 @@ export default function VisionGeneral() {
       // Fuente: facturacion_clientes (Excel "Venta Facturación" del ERP).
       // Por ahora solo soportamos dimension='canal' — marca/categoría
       // requieren ventas_erp completo con marca/familia.
-      const [a, p, p2, c, inv, invMarca, cart, q] = await Promise.all([
+      const [a, p, p2, c, inv, invMarca, cart, q, cRes, cCal, cProx] = await Promise.all([
         supabase.from('v_vision_factura_canal').select('*').eq('anio', anio),
         supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 1),
         supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 2),
@@ -113,6 +116,9 @@ export default function VisionGeneral() {
         supabase.from('v_vision_inventario_marca').select('*').order('valor', { ascending: false, nullsFirst: false }),
         supabase.from('v_vision_cartera_consolidada').select('*'),
         supabase.from('cuotas_canales').select('*').eq('anio', anio),
+        supabase.from('v_vision_camino_resumen').select('*'),
+        supabase.from('v_vision_camino_calendario').select('*'),
+        supabase.from('v_vision_camino_proximas').select('*').limit(10),
       ]);
       setMargenAct(a.data || []);
       setMargenPrev(p.data || []);
@@ -122,6 +128,9 @@ export default function VisionGeneral() {
       setInventarioMarca(invMarca.data || []);
       setCartera(cart.data || []);
       setCuotas(q.data || []);
+      setCaminoResumen(cRes.data || []);
+      setCaminoCalendario(cCal.data || []);
+      setCaminoProximas(cProx.data || []);
       setLoading(false);
     })();
   }, [anio, dimension]);
@@ -365,6 +374,9 @@ export default function VisionGeneral() {
       {/* Sección de inventario */}
       <InventarioSection inventario={inventario}
         inventarioMarca={inventarioMarca}
+        caminoResumen={caminoResumen}
+        caminoCalendario={caminoCalendario}
+        caminoProximas={caminoProximas}
         ventaPromMes={mesMax > 0 ? kpis.ventaYTD / mesMax : 0} />
 
       <p className="text-[11px] text-gray-400 px-2">
@@ -781,7 +793,31 @@ function TendenciaCard({ data, anio, mesMax }) {
 }
 
 // ────────── Sección de Inventario ──────────
-function InventarioSection({ inventario, inventarioMarca, ventaPromMes }) {
+function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoCalendario, caminoProximas, ventaPromMes }) {
+  // Buckets de estatus en orden de pipeline + total agregado
+  const BUCKET_LABELS = {
+    produccion:        { label: 'En producción',      palette: PALETTE.amber },
+    transito:          { label: 'Tránsito marítimo',  palette: PALETTE.blue },
+    pendiente_modular: { label: 'Pendiente modular',  palette: PALETTE.purple },
+    por_zarpar:        { label: 'Por zarpar',         palette: PALETTE.coral },
+    por_consolidar:    { label: 'Por consolidar',     palette: PALETTE.gray },
+    sin_embarque:      { label: 'Sin embarque',       palette: PALETTE.gray },
+    otro:              { label: 'Otro',               palette: PALETTE.gray },
+  };
+  const BUCKET_ORDER = ['produccion', 'transito', 'pendiente_modular', 'por_zarpar', 'por_consolidar'];
+  const resumenMap = new Map(caminoResumen.map((r) => [r.bucket_estatus, r]));
+  const totalEnCamino = caminoResumen
+    .filter((r) => ['produccion','transito','pendiente_modular','por_zarpar','por_consolidar'].includes(r.bucket_estatus))
+    .reduce((s, r) => s + (Number(r.valor_mxn) || 0), 0);
+  const totalPiezasEnCamino = caminoResumen
+    .filter((r) => ['produccion','transito','pendiente_modular','por_zarpar','por_consolidar'].includes(r.bucket_estatus))
+    .reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+  const totalPosEnCamino = caminoResumen
+    .filter((r) => ['produccion','transito','pendiente_modular','por_zarpar','por_consolidar'].includes(r.bucket_estatus))
+    .reduce((s, r) => s + (Number(r.pos) || 0), 0);
+  const sinEmbarque = resumenMap.get('sin_embarque');
+  const tieneCamino = totalEnCamino > 0 || totalPosEnCamino > 0;
+
   // KPIs strip
   const valorInv = Number(inventario?.valor_inventario) || 0;
   const piezas   = Number(inventario?.piezas_disponibles) || 0;
@@ -852,7 +888,22 @@ function InventarioSection({ inventario, inventarioMarca, ventaPromMes }) {
           </p>
           <p style={{ fontSize: 11, color: PALETTE.amber.mid, margin: 0 }}>Con venta reciente</p>
         </div>
-        <ProximamenteKpi icon={Ship} label="Valor en camino" nota="Esperando tabla real" />
+        {tieneCamino ? (
+          <div style={{ background: PALETTE.blue.bg, borderRadius: 12, padding: '12px 14px' }}>
+            <div className="flex items-center justify-between" style={{ marginBottom: 2 }}>
+              <p style={{ fontSize: 10, color: PALETTE.blue.mid, margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Valor en camino</p>
+              <Ship className="w-3.5 h-3.5" style={{ color: PALETTE.blue.mid }} />
+            </div>
+            <p style={{ fontSize: 22, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.blue.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+              {fmtCompact(totalEnCamino)}
+            </p>
+            <p style={{ fontSize: 11, color: PALETTE.blue.mid, margin: 0 }}>
+              {fmtInt(totalPosEnCamino)} PO · {fmtInt(totalPiezasEnCamino)} pzs
+            </p>
+          </div>
+        ) : (
+          <ProximamenteKpi icon={Ship} label="Valor en camino" nota="Sube ERP con Vw_TablaH_Compras" />
+        )}
       </div>
 
       {/* Composición: marca + categoría pendiente */}
@@ -908,18 +959,146 @@ function InventarioSection({ inventario, inventarioMarca, ventaPromMes }) {
         </div>
       </div>
 
-      {/* Inventario en camino: pendiente */}
-      <div style={{
-        background: '#F8FAFC', borderRadius: 12, padding: '28px 16px', border: '1px dashed #CBD5E1',
-        display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-      }}>
-        <Ship className="w-8 h-8 mb-2" style={{ color: '#94A3B8' }} />
-        <p className="text-[13px] text-gray-600 font-medium m-0">Inventario en camino</p>
-        <p className="text-[16px] text-gray-800 font-medium mt-1">Próximamente</p>
-        <p className="text-[11px] text-gray-400 mt-2 italic text-center" style={{ maxWidth: 420 }}>
-          Layout listo (tiles por estatus + calendario por mes + tabla de PO con valor MXN). Pendiente la tabla fuente real.
-        </p>
-      </div>
+      {/* Inventario en camino */}
+      {!tieneCamino ? (
+        <div style={{
+          background: '#F8FAFC', borderRadius: 12, padding: '28px 16px', border: '1px dashed #CBD5E1',
+          display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+        }}>
+          <Ship className="w-8 h-8 mb-2" style={{ color: '#94A3B8' }} />
+          <p className="text-[13px] text-gray-600 font-medium m-0">Inventario en camino</p>
+          <p className="text-[16px] text-gray-800 font-medium mt-1">Sin datos cargados</p>
+          <p className="text-[11px] text-gray-400 mt-2 italic text-center" style={{ maxWidth: 420 }}>
+            Sube el ERP con la hoja Vw_TablaH_Compras para ver órdenes pendientes con valor MXN.
+          </p>
+        </div>
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+            <p className="text-sm font-medium text-gray-800">
+              <Ship className="inline w-4 h-4 mr-1" style={{ verticalAlign: -2 }} />
+              Inventario en camino · Vw_TablaH_Compras × Master Embarques
+            </p>
+            <p className="text-[11px] text-gray-400">
+              {fmtInt(totalPosEnCamino)} órdenes activas · {fmtCompact(totalEnCamino)} MXN · TC contable de cada OC
+            </p>
+          </div>
+
+          {/* Tiles por estatus */}
+          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">Por estatus actual</p>
+          <div className="grid gap-1.5 mb-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+            {BUCKET_ORDER.map((k) => {
+              const cfg = BUCKET_LABELS[k];
+              const r = resumenMap.get(k);
+              const val = Number(r?.valor_mxn) || 0;
+              const piezas = Number(r?.piezas) || 0;
+              const pos = Number(r?.pos) || 0;
+              return (
+                <div key={k} style={{ background: cfg.palette.bg, borderRadius: 10, padding: '10px 12px' }}>
+                  <p style={{ fontSize: 9, color: cfg.palette.mid, margin: 0, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{cfg.label}</p>
+                  <p style={{ fontSize: 18, fontWeight: 500, margin: '2px 0 0', color: cfg.palette.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+                    {val > 0 ? fmtCompact(val) : '—'}
+                  </p>
+                  <p style={{ fontSize: 10, color: cfg.palette.mid, margin: '1px 0 0', fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtInt(piezas)} pzs · {pos} PO
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Calendario de llegadas */}
+          {caminoCalendario.length > 0 && (
+            <>
+              <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">Calendario de llegadas (ETA puerto)</p>
+              <div style={{ width: '100%', height: 200, marginBottom: 16 }}>
+                <ResponsiveContainer>
+                  <BarChart data={caminoCalendario.map((r) => ({
+                    mes: new Date(r.mes).toLocaleDateString('es-MX', { month: 'short', year: '2-digit' }),
+                    valor: Number(r.valor_mxn) || 0,
+                    pos: Number(r.pos) || 0,
+                    piezas: Number(r.piezas) || 0,
+                    skus: Number(r.skus) || 0,
+                  }))} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid stroke="#F1F5F9" vertical={false} />
+                    <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
+                    <YAxis tickFormatter={(v) => '$' + (v / 1e6).toFixed(0) + 'M'} tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v, name, p) => {
+                      if (name !== 'valor') return null;
+                      const d = p.payload;
+                      return [fmtMoney(v), `${d.pos} PO · ${fmtInt(d.skus)} SKUs · ${fmtInt(d.piezas)} pzs`];
+                    }} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                    <Bar dataKey="valor" fill={PALETTE.blue.mid} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          )}
+
+          {/* Próximas PO */}
+          {caminoProximas.length > 0 && (
+            <>
+              <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">Próximas {Math.min(caminoProximas.length, 10)} órdenes en llegar</p>
+              <div className="overflow-x-auto">
+                <table className="w-full" style={{ fontSize: 11 }}>
+                  <thead>
+                    <tr style={{ background: '#FAFBFC', borderBottom: '1px solid #E2E8F0' }}>
+                      <th style={thLeft}>PO</th>
+                      <th style={thLeft}>Proveedor</th>
+                      <th style={thRight}>ETA CEDIS</th>
+                      <th style={thRight}>SKUs</th>
+                      <th style={thRight}>Piezas</th>
+                      <th style={thRight}>Valor MXN</th>
+                      <th style={thLeft}>Estatus</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {caminoProximas.slice(0, 10).map((r) => {
+                      const cfg = BUCKET_LABELS[r.bucket_estatus] || BUCKET_LABELS.otro;
+                      const eta = r.eta_cedis || r.eta_puerto;
+                      return (
+                        <tr key={r.movid} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <td style={tdLeft}>{r.movid}</td>
+                          <td style={{ ...tdLeft, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.proveedor}>
+                            {r.proveedor}
+                          </td>
+                          <td style={tdRight}>{eta ? new Date(eta).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '—'}</td>
+                          <td style={tdRight}>{fmtInt(r.skus)}</td>
+                          <td style={tdRight}>{fmtInt(r.piezas)}</td>
+                          <td style={{ ...tdRight, fontWeight: 500 }}>{fmtCompact(r.valor_mxn)}</td>
+                          <td style={tdLeft}>
+                            <span style={{
+                              fontSize: 10, padding: '1px 6px', borderRadius: 8,
+                              background: cfg.palette.bg, color: cfg.palette.text,
+                            }}>{cfg.label}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {/* Sin embarque asignado */}
+          {sinEmbarque && Number(sinEmbarque.valor_mxn) > 0 && (
+            <div className="mt-4 p-3 rounded-lg flex items-center justify-between gap-3" style={{ background: PALETTE.gray.bg, border: `1px dashed ${PALETTE.gray.mid}` }}>
+              <div>
+                <p className="text-[11px] m-0 font-medium" style={{ color: PALETTE.gray.text }}>
+                  {fmtInt(sinEmbarque.pos)} OCs sin embarque asignado en Master
+                </p>
+                <p className="text-[10px] mt-0.5" style={{ color: PALETTE.gray.mid }}>
+                  Probablemente compras nacionales o aún sin mapear en Master Embarques.
+                </p>
+              </div>
+              <span className="font-medium" style={{ fontSize: 14, color: PALETTE.gray.text, fontVariantNumeric: 'tabular-nums' }}>
+                {fmtCompact(sinEmbarque.valor_mxn)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

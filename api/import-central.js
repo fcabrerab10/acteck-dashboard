@@ -29,6 +29,7 @@ const ALLOWED = {
   embarques_compras:     'po,codigo',
   facturacion_clientes:  'cliente_nombre,sku,anio,mes',
   estados_resultados:    'razon_social,anio,mes,cuenta_norm',
+  compras_oc:            'movid,articulo',
 };
 
 export default async function handler(req, res) {

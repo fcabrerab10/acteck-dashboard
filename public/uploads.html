@@ -69,11 +69,12 @@ const GRUPOS = [
 
 const SOURCES = [
   // ── Globales ──
-  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación, Inventario & Detalle', desc:'Archivo único con 4 hojas: Venta Facturación (monto pivot) + Venta Piezas (piezas pivot) + Vw_TablaH_Ventas (detalle granular cliente×canal×SKU×fecha, incluye Admin_Interna con desglose ML/Amazon/Sitio Web/etc) + Vw_TablaH_Inventario. Reemplaza años 2025+2026 en facturacion_clientes y ventas_erp, replace total de inventario.', file:'Actualizaciones ERP.xlsx',
+  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación, Inventario, Detalle & Compras', desc:'Archivo único con 5 hojas: Venta Facturación (monto pivot) + Venta Piezas (piezas pivot) + Vw_TablaH_Ventas (detalle granular) + Vw_TablaH_Inventario + Vw_TablaH_Compras (OCs con costo USD y TC, link por MovID a Master Embarques).', file:'Actualizaciones ERP.xlsx',
     combined: [
       { table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', label:'Facturación (sell-in canónico)', replaceAnios:[2025,2026] },
       { table:'ventas_erp', onConflict:'venta_id,venta_renglon', parser:'erpVentas', label:'Detalle granular (Vw_TablaH_Ventas)', replaceAnios:[2025,2026] },
-      { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true }
+      { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true },
+      { table:'compras_oc', onConflict:'movid,articulo', parser:'comprasOC', label:'Compras OC (Vw_TablaH_Compras)', replace:true }
     ]
   },
   { id:'roadmap-precios', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
@@ -148,6 +149,50 @@ const PARSERS = {
       costodisponible: toNum(r.CostoDisponible ?? r.costodisponible),
       costoinventario: toNum(r.CostoInventario ?? r.costoinventario),
     })).filter(r => r.articulo && r.no_almacen != null);
+  },
+  // Vw_TablaH_Compras — órdenes de compra con costo USD + TC contable.
+  // Solo cargamos filas con CantidadPendiente > 0 (lo que falta por llegar).
+  // MovID hace match con embarques_compras.po para enriquecer con estatus
+  // de logística y ETAs.
+  comprasOC(wb){
+    const sh = wb.Sheets['Vw_TablaH_Compras'];
+    if (!sh) throw new Error('No se encontró la hoja "Vw_TablaH_Compras" en el Excel');
+    const rows = XLSX.utils.sheet_to_json(sh, { defval: null });
+    return rows.map(r => {
+      const obj = {};
+      for (const k of Object.keys(r)) obj[snake(k)] = r[k];
+      const articulo = toStr(obj.articulo);
+      const movid    = toStr(obj.movid);
+      if (!articulo || !movid) return null;
+      const cantPend = toNum(obj.cantidad_pendiente ?? obj.cantidadpendiente);
+      if (cantPend == null || cantPend <= 0) return null;
+      // FechaEmision viene como Date object o número Excel
+      let fecha = null;
+      const rawF = obj.fecha_emision ?? obj.fechaemision;
+      if (rawF instanceof Date) fecha = rawF.toISOString().slice(0, 10);
+      else if (typeof rawF === 'number') {
+        // Serial Excel: días desde 1900-01-01 (con bug de 1900 = bisiesto)
+        const d = new Date(Date.UTC(1899, 11, 30) + rawF * 86400000);
+        fecha = d.toISOString().slice(0, 10);
+      } else if (typeof rawF === 'string') {
+        const d = new Date(rawF);
+        if (!isNaN(d.getTime())) fecha = d.toISOString().slice(0, 10);
+      }
+      return {
+        articulo, movid,
+        fabricante:         toStr(obj.fabricante),
+        prov_id:            toStr(obj.prov_id),
+        proveedor:          toStr(obj.nombre),
+        estatus:            toStr(obj.estatus),
+        descripcion:        toStr(obj.descripcion1 ?? obj.descripcion),
+        mov_tipo:           toStr(obj.mov),
+        cantidad_orden:     toNum(obj.cantidad_orden),
+        cantidad_pendiente: cantPend,
+        costo_usd:          toNum(obj.costo),
+        tipocambio:         toNum(obj.tipocambio),
+        fecha_emision:      fecha,
+      };
+    }).filter(Boolean);
   },
   digitalifeSellout(wb){
     const sh = wb.Sheets['Sellout Digitalife'] || wb.Sheets['Hoja40'] || wb.Sheets[wb.SheetNames[0]];
