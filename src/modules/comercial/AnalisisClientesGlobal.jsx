@@ -34,17 +34,45 @@ const CANAL_COLOR = {
 };
 const colorCanal = (k) => CANAL_COLOR[String(k || '').toUpperCase()] || PALETTE.gray;
 
-// Canales donde cada venta crea un "cliente" distinto en facturación
-// pero realmente son una sola entidad (marketplace/sitio/mostrador).
-const CANALES_AGREGADOS = new Set([
-  'MERCADO LIBRE',
-  'AMAZON',
-  'SITIO WEB',
-  'MOSTRADOR',
-]);
-const nombreEfectivo = (clienteNombre, canal) => {
+// Reglas de canonización: muchos canales (MOSTRADOR, E-COMMERCE) tienen
+// un cliente_nombre distinto por venta. Se colapsan a entidades reales.
+//   - MOSTRADOR  → todo el canal a "Mostrador"
+//   - E-COMMERCE → match por substring del nombre a 4 marketplaces conocidos
+//                  (Mercado Libre / Amazon / Sitio Web / Cyberpuerta), resto → "Otros e-commerce"
+//   - Resto      → cliente_nombre tal cual
+const ECOM_RULES = [
+  { match: ['MERCADO LIBRE', 'MERCADOLIBRE', 'MELI'], nombre: 'MERCADO LIBRE' },
+  { match: ['AMAZON'], nombre: 'AMAZON' },
+  { match: ['CYBERPU'], nombre: 'CYBERPUERTA' },
+  { match: ['SITIO WEB', 'SITIOWEB', 'PAGINA WEB', 'PÁGINA WEB', 'TIENDA EN LINEA', 'TIENDA EN LÍNEA'], nombre: 'SITIO WEB' },
+];
+const clienteCanonico = (clienteNombre, canal) => {
   const c = String(canal || '').toUpperCase();
-  return CANALES_AGREGADOS.has(c) ? c : (clienteNombre || '');
+  const n = String(clienteNombre || '').toUpperCase();
+  if (c === 'MOSTRADOR') return 'MOSTRADOR';
+  if (c === 'E-COMMERCE') {
+    for (const r of ECOM_RULES) {
+      if (r.match.some((m) => n.includes(m))) return r.nombre;
+    }
+    return 'OTROS E-COMMERCE';
+  }
+  return clienteNombre || '';
+};
+const esColapsado = (nombre, canal) => {
+  const c = String(canal || '').toUpperCase();
+  return c === 'MOSTRADOR' || c === 'E-COMMERCE';
+};
+// Para la query del modal: dado el cliente canónico, devuelve los predicados
+// que matchean a las filas raw de facturacion_clientes.
+const filtroRawParaCanonico = (nombreCanonico, canal) => {
+  const c = String(canal || '').toUpperCase();
+  if (c === 'MOSTRADOR') return { canal: 'MOSTRADOR' };
+  if (c === 'E-COMMERCE') {
+    const regla = ECOM_RULES.find((r) => r.nombre === nombreCanonico);
+    if (regla) return { canal: 'E-COMMERCE', ilike: regla.match };
+    return { canal: 'E-COMMERCE', excludeIlike: ECOM_RULES.flatMap((r) => r.match) };
+  }
+  return { clienteExacto: nombreCanonico };
 };
 const chipCanal = (canal) => {
   const s = String(canal || '').toUpperCase();
@@ -154,7 +182,7 @@ export default function AnalisisClientesGlobal() {
     const ventaMes = canalAct.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.venta) || 0), 0);
     const ventaMesPrev = canalPrev.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.venta) || 0), 0);
     const activos = new Set(
-      clientesAct.map((c) => nombreEfectivo(c.cliente_nombre, c.canal)).filter(Boolean)
+      clientesAct.map((c) => clienteCanonico(c.cliente_nombre, c.canal)).filter(Boolean)
     ).size;
     const total = activos;
     const cuotaTotal = cuotas.find((c) => c.dimension_tipo === 'TOTAL')?.meta_facturacion;
@@ -215,7 +243,7 @@ export default function AnalisisClientesGlobal() {
   const mesPorCliente = useMemo(() => {
     const m = new Map();
     clientesMes.forEach((r) => {
-      const k = nombreEfectivo(r.cliente_nombre, r.canal);
+      const k = clienteCanonico(r.cliente_nombre, r.canal);
       if (!k) return;
       m.set(k, (m.get(k) || 0) + (Number(r.importe) || 0));
     });
@@ -229,7 +257,7 @@ export default function AnalisisClientesGlobal() {
     // Agregar año actual: si el canal está en CANALES_AGREGADOS, todos colapsan a un solo "cliente"
     const actMap = new Map();
     clientesAct.forEach((c) => {
-      const nombre = nombreEfectivo(c.cliente_nombre, c.canal);
+      const nombre = clienteCanonico(c.cliente_nombre, c.canal);
       if (!nombre || nombre === 'Sin nombre') return;
       const k = nombre;
       if (!actMap.has(k)) actMap.set(k, { cliente: nombre, canal: c.canal || 'Otros', ytd: 0 });
@@ -237,7 +265,7 @@ export default function AnalisisClientesGlobal() {
     });
     const prevMap = new Map();
     clientesPrev.forEach((c) => {
-      const nombre = nombreEfectivo(c.cliente_nombre, c.canal);
+      const nombre = clienteCanonico(c.cliente_nombre, c.canal);
       if (!nombre) return;
       prevMap.set(nombre, (prevMap.get(nombre) || 0) + (Number(c.venta) || 0));
     });
@@ -453,7 +481,7 @@ export default function AnalisisClientesGlobal() {
             key={c.cliente}
             ranking={i + 1}
             cliente={c}
-            onClick={() => setClienteAbierto(c.cliente)}
+            onClick={() => setClienteAbierto({ cliente: c.cliente, canal: c.canal })}
           />
         ))}
       </div>
@@ -471,7 +499,8 @@ export default function AnalisisClientesGlobal() {
 
       {clienteAbierto && (
         <ModalCliente
-          clienteNombre={clienteAbierto}
+          clienteNombre={clienteAbierto.cliente}
+          canalCliente={clienteAbierto.canal}
           anio={anio}
           mesMax={mesMax}
           onClose={() => setClienteAbierto(null)}
@@ -554,37 +583,50 @@ function TarjetaCliente({ ranking, cliente, onClick }) {
   );
 }
 
-function ModalCliente({ clienteNombre, anio, mesMax, onClose }) {
+function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
     (async () => {
       setCargando(true);
-      const esAgregado = CANALES_AGREGADOS.has(String(clienteNombre).toUpperCase());
+      const filtro = filtroRawParaCanonico(clienteNombre, canalCliente);
       let acc = [];
       let from = 0;
       const PAGE = 1000;
       while (true) {
         let query = supabase
           .from('facturacion_clientes')
-          .select('anio, mes, sku, importe, cantidad, canal')
+          .select('anio, mes, sku, importe, cantidad, canal, cliente_nombre')
           .gte('anio', anio - 1)
           .lte('anio', anio)
           .range(from, from + PAGE - 1);
-        query = esAgregado
-          ? query.eq('canal', clienteNombre)
-          : query.eq('cliente_nombre', clienteNombre);
+        if (filtro.clienteExacto) {
+          query = query.eq('cliente_nombre', filtro.clienteExacto);
+        } else if (filtro.canal) {
+          query = query.eq('canal', filtro.canal);
+          if (filtro.ilike && filtro.ilike.length) {
+            const or = filtro.ilike.map((p) => `cliente_nombre.ilike.%${p}%`).join(',');
+            query = query.or(or);
+          }
+        }
         const { data: page, error } = await query;
         if (error || !page || page.length === 0) break;
-        acc = acc.concat(page);
+        let filtered = page;
+        if (filtro.excludeIlike && filtro.excludeIlike.length) {
+          filtered = page.filter((r) => {
+            const n = String(r.cliente_nombre || '').toUpperCase();
+            return !filtro.excludeIlike.some((p) => n.includes(p));
+          });
+        }
+        acc = acc.concat(filtered);
         if (page.length < PAGE) break;
         from += PAGE;
       }
       setDatos(acc);
       setCargando(false);
     })();
-  }, [clienteNombre, anio]);
+  }, [clienteNombre, canalCliente, anio]);
 
   const detalle = useMemo(() => {
     if (!datos) return null;
