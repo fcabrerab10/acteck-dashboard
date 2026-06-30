@@ -46,9 +46,15 @@ const ECOM_RULES = [
   { match: ['CYBERPU'], nombre: 'CYBERPUERTA' },
   { match: ['SITIO WEB', 'SITIOWEB', 'PAGINA WEB', 'PÁGINA WEB', 'TIENDA EN LINEA', 'TIENDA EN LÍNEA'], nombre: 'SITIO WEB' },
 ];
+// Alias de ERP → nombre comercial conocido (no son canales agregados, solo display)
+const ALIAS_ERP = {
+  'PC ONLINE': 'PCEL',
+  'API GLOBAL': 'DIGITALIFE',
+  'PUBLICO GENERAL ML': 'MERCADO LIBRE',
+};
 const clienteCanonico = (clienteNombre, canal) => {
   const c = String(canal || '').toUpperCase();
-  const n = String(clienteNombre || '').toUpperCase();
+  const n = String(clienteNombre || '').toUpperCase().trim();
   if (c === 'MOSTRADOR') return 'MOSTRADOR';
   if (c === 'E-COMMERCE') {
     for (const r of ECOM_RULES) {
@@ -56,6 +62,7 @@ const clienteCanonico = (clienteNombre, canal) => {
     }
     return 'OTROS E-COMMERCE';
   }
+  if (ALIAS_ERP[n]) return ALIAS_ERP[n];
   return clienteNombre || '';
 };
 const esColapsado = (nombre, canal) => {
@@ -72,7 +79,9 @@ const filtroRawParaCanonico = (nombreCanonico, canal) => {
     if (regla) return { canal: 'E-COMMERCE', ilike: regla.match };
     return { canal: 'E-COMMERCE', excludeIlike: ECOM_RULES.flatMap((r) => r.match) };
   }
-  return { clienteExacto: nombreCanonico };
+  // Revertir alias: si el canónico vino de un alias, busca el nombre ERP original
+  const inverso = Object.entries(ALIAS_ERP).find(([, v]) => v === nombreCanonico);
+  return { clienteExacto: inverso ? inverso[0] : nombreCanonico };
 };
 const chipCanal = (canal) => {
   const s = String(canal || '').toUpperCase();
