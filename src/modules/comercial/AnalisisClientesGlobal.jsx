@@ -587,6 +587,7 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [descripciones, setDescripciones] = useState(new Map());
+  const [costoPorSku, setCostoPorSku] = useState(new Map());
 
   useEffect(() => {
     (async () => {
@@ -627,20 +628,41 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
       setDatos(acc);
       setCargando(false);
 
-      // Traer descripciones de SKUs desde compras_oc + embarques_compras
+      // Traer descripciones (compras_oc + embarques_compras) y costo (inventario_acteck)
       const skus = Array.from(new Set(acc.map((r) => r.sku).filter(Boolean)));
       if (skus.length === 0) return;
-      const map = new Map();
+      const mapDesc = new Map();
+      const mapCosto = new Map();
       const chunkBy = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, (i + 1) * n));
       for (const chunk of chunkBy(skus, 200)) {
-        const [oc, emb] = await Promise.all([
+        const [oc, emb, inv] = await Promise.all([
           supabase.from('compras_oc').select('articulo, descripcion').in('articulo', chunk),
           supabase.from('embarques_compras').select('codigo, descripcion').in('codigo', chunk),
+          supabase.from('inventario_acteck').select('articulo, costopromedio, disponible').in('articulo', chunk),
         ]);
-        (oc.data || []).forEach((r) => { if (r.descripcion && !map.has(r.articulo)) map.set(r.articulo, r.descripcion); });
-        (emb.data || []).forEach((r) => { if (r.descripcion && !map.has(r.codigo)) map.set(r.codigo, r.descripcion); });
+        (oc.data || []).forEach((r) => { if (r.descripcion && !mapDesc.has(r.articulo)) mapDesc.set(r.articulo, r.descripcion); });
+        (emb.data || []).forEach((r) => { if (r.descripcion && !mapDesc.has(r.codigo)) mapDesc.set(r.codigo, r.descripcion); });
+        // Costo promedio ponderado por disponible (si no hay disponible, simple avg)
+        const tmp = new Map();
+        (inv.data || []).forEach((r) => {
+          const sku = r.articulo;
+          const c = Number(r.costopromedio) || 0;
+          const d = Number(r.disponible) || 0;
+          if (!sku || c <= 0) return;
+          if (!tmp.has(sku)) tmp.set(sku, { sumWC: 0, sumW: 0, sumC: 0, n: 0 });
+          const t = tmp.get(sku);
+          t.sumWC += c * d;
+          t.sumW  += d;
+          t.sumC  += c;
+          t.n     += 1;
+        });
+        tmp.forEach((t, sku) => {
+          const costo = t.sumW > 0 ? t.sumWC / t.sumW : t.sumC / t.n;
+          mapCosto.set(sku, costo);
+        });
       }
-      setDescripciones(map);
+      setDescripciones(mapDesc);
+      setCostoPorSku(mapCosto);
     })();
   }, [clienteNombre, canalCliente, anio]);
 
@@ -654,16 +676,27 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
     const skuUlt3m = new Set();
     const mesesActivos = new Set();
     const ult3mDesde = Math.max(1, mesMax - 2);
+    let costoYTD = 0;     // sum(piezas × costo[sku]) año actual hasta mesMax
+    let ventaCubierta = 0; // sum(monto) del año actual hasta mesMax donde existe costo
     datos.forEach((r) => {
       const m = Number(r.mes) - 1;
       if (m < 0 || m > 11) return;
       const imp = Number(r.monto) || 0;
+      const piezas = Number(r.piezas) || 0;
       if (Number(r.anio) === anio) {
         sumMensual[m] += imp;
         if (imp > 0) mesesActivos.add(m + 1);
         if (r.sku) {
           skuAct.set(r.sku, (skuAct.get(r.sku) || 0) + imp);
           if (m + 1 >= ult3mDesde && m + 1 <= mesMax && imp > 0) skuUlt3m.add(r.sku);
+          // Margen
+          if (m + 1 <= mesMax) {
+            const costoU = costoPorSku.get(r.sku);
+            if (costoU != null && costoU > 0 && piezas > 0) {
+              costoYTD += costoU * piezas;
+              ventaCubierta += imp;
+            }
+          }
         }
       } else {
         sumMensualPrev[m] += imp;
@@ -703,6 +736,11 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
       actActivo: i + 1 <= mesMax && sumMensual[i] > 0,
       prevActivo: sumMensualPrev[i] > 0,
     }));
+    // Margen: solo válido si tenemos costo para ≥50% de la venta YTD
+    const coberturaCosto = ytd > 0 ? ventaCubierta / ytd : 0;
+    const margenMonto = ventaCubierta - costoYTD;
+    const margenPct = ventaCubierta > 0 ? (margenMonto / ventaCubierta) * 100 : null;
+
     return {
       canal, ytd, ytdPrev,
       mesActual, mesActualPrev,
@@ -712,11 +750,12 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
       skusDistintos: skuAct.size,
       skusUlt3m: skuUlt3m.size,
       serie, heatmap,
+      margenPct, margenMonto, coberturaCosto,
       deltaYTD: ytdPrev > 0 ? ((ytd - ytdPrev) / ytdPrev) * 100 : null,
       deltaMes: mesActualPrev > 0 ? ((mesActual - mesActualPrev) / mesActualPrev) * 100 : null,
       deltaCierre: cierreMesAnteriorPrev > 0 ? ((cierreMesAnterior - cierreMesAnteriorPrev) / cierreMesAnteriorPrev) * 100 : null,
     };
-  }, [datos, anio, mesMax]);
+  }, [datos, anio, mesMax, costoPorSku]);
 
   const pal = detalle ? colorCanal(detalle.canal) : PALETTE.gray;
 
@@ -812,22 +851,32 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
                 delta={null}
                 subtitulo={`${MESES_LBL[Math.max(0, mesMax - 3)]}–${MESES_LBL[mesMax - 1]} ${anio}`}
               />
-              <ProximoKpi label="Margen promedio" nota="Pendiente fórmula" />
+              {detalle.margenPct != null && detalle.coberturaCosto >= 0.2 ? (
+                <KpiTile
+                  label="Margen promedio"
+                  valor={fmtPct(detalle.margenPct)}
+                  delta={null}
+                  subtitulo={`${fmtCompact(detalle.margenMonto)} · cobertura ${fmtPct(detalle.coberturaCosto * 100)}`}
+                />
+              ) : (
+                <ProximoKpi label="Margen promedio" nota={
+                  detalle.coberturaCosto > 0
+                    ? `Cobertura costo muy baja (${fmtPct(detalle.coberturaCosto * 100)})`
+                    : 'Sin costo en inventario_acteck'
+                } />
+              )}
               <ProximoKpi label="Categorías más fuertes" nota="Pendiente catálogo SKU→categoría" />
             </div>
 
-            {/* Heatmap de frecuencia mensual */}
+            {/* Frecuencia mensual — calendario simple con monto visible */}
             <div className="bg-gray-50 rounded-xl p-4">
               <div className="flex items-baseline justify-between mb-3">
                 <div className="text-sm font-medium text-gray-800">Frecuencia mensual</div>
                 <div className="text-[11px] text-gray-500">
-                  {detalle.mesesActivos}/{mesMax} meses activos {anio}
+                  Compró {detalle.mesesActivos} de {mesMax} meses transcurridos {anio}
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <HeatmapFila label={`${anio}`} datos={detalle.heatmap.map((h, i) => ({ act: h.act, esfuturo: i + 1 > mesMax }))} max={Math.max(...detalle.heatmap.map((h) => Math.max(h.act, h.prev) || 0)) || 1} pal={pal} />
-                <HeatmapFila label={`${anio - 1}`} datos={detalle.heatmap.map((h) => ({ act: h.prev, esfuturo: false }))} max={Math.max(...detalle.heatmap.map((h) => Math.max(h.act, h.prev) || 0)) || 1} pal={pal} esPrev />
-              </div>
+              <FrecuenciaCalendario heatmap={detalle.heatmap} mesMax={mesMax} anio={anio} pal={pal} />
             </div>
 
             {/* SKUs que crecen y caen */}
@@ -854,6 +903,18 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
               </div>
             </div>
 
+            {/* Pestañas próximamente: Inventario del cliente y Sell Out */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <ProximoBloque
+                titulo="Inventario del cliente"
+                nota="Stock que el cliente tiene en piso de venta — pendiente carga de datos por cliente."
+              />
+              <ProximoBloque
+                titulo="Sell Out del cliente"
+                nota="Ventas del cliente al consumidor final — pendiente integración por cliente."
+              />
+            </div>
+
             {/* Nota cuota */}
             <div className="text-[11px] text-gray-500 px-1">
               Cuota anual por cliente: pendiente de cargar.
@@ -875,31 +936,46 @@ function ProximoKpi({ label, nota }) {
   );
 }
 
-function HeatmapFila({ label, datos, max, pal, esPrev }) {
-  const color = esPrev ? pal.soft : pal.mid;
+function FrecuenciaCalendario({ heatmap, mesMax, anio, pal }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className="text-[10px] text-gray-500 w-10 shrink-0">{label}</div>
-      <div className="flex-1 grid grid-cols-12 gap-0.5">
-        {datos.map((d, i) => {
-          const intensidad = d.esfuturo ? 0 : (max > 0 ? Math.min(1, d.act / max) : 0);
-          const opacity = d.esfuturo ? 0 : (d.act > 0 ? 0.18 + intensidad * 0.82 : 0);
-          return (
+    <div className="grid grid-cols-12 gap-1.5">
+      {heatmap.map((h, i) => {
+        const esFuturo = i + 1 > mesMax;
+        const compro = h.act > 0;
+        const comproPrev = h.prev > 0;
+        return (
+          <div key={i} className="flex flex-col items-center text-center">
+            <div className="text-[10px] text-gray-500 mb-1">{MESES_LBL[i]}</div>
             <div
-              key={i}
-              className="h-7 rounded text-[9px] text-center flex items-end justify-center pb-0.5"
+              className="w-full rounded-lg py-1.5 px-1 text-[10px] font-medium"
               style={{
-                background: d.esfuturo ? '#F8F8F6' : (d.act > 0 ? color : '#F1EFE8'),
-                opacity: d.esfuturo ? 1 : (d.act > 0 ? opacity : 1),
-                color: intensidad > 0.5 ? '#fff' : '#666',
+                background: esFuturo ? '#F8F8F6' : compro ? pal.bg : '#F1EFE8',
+                color: esFuturo ? '#B4B2A9' : compro ? pal.text : '#888780',
+                border: esFuturo ? '1px dashed #D3D1C7' : 'none',
               }}
-              title={d.esfuturo ? '—' : fmtCompact(d.act)}
+              title={esFuturo ? 'No transcurrido' : compro ? `${anio}: ${fmtMoney(h.act)}` : 'Sin compra'}
             >
-              {MESES_LBL[i][0]}
+              {esFuturo ? '—' : compro ? fmtCompact(h.act) : '·'}
             </div>
-          );
-        })}
-      </div>
+            <div
+              className="text-[9px] mt-0.5 text-gray-500"
+              title={`${anio - 1}: ${fmtMoney(h.prev)}`}
+            >
+              {comproPrev ? fmtCompact(h.prev) : '·'}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProximoBloque({ titulo, nota }) {
+  return (
+    <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4">
+      <div className="text-sm font-medium text-gray-500">{titulo}</div>
+      <div className="text-xs text-gray-400 mt-1.5">Próximamente</div>
+      <div className="text-[11px] text-gray-400 mt-2 leading-relaxed">{nota}</div>
     </div>
   );
 }
