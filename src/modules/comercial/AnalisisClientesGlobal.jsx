@@ -174,19 +174,18 @@ export default function AnalisisClientesGlobal() {
 
       const mesMaxCanal = Math.max(...(a.map((r) => Number(r.mes)).filter(Boolean)), 0) || mesActualAprox;
       let acc = [];
-      let from = 0;
-      const PAGE = 1000;
+      let fromMes = 0;
       while (true) {
         const { data: page, error } = await supabase
           .from('facturacion_clientes')
           .select('cliente_nombre, monto, canal')
           .eq('anio', anio)
           .eq('mes', mesMaxCanal)
-          .range(from, from + PAGE - 1);
+          .range(fromMes, fromMes + PAGE - 1);
         if (error || !page || page.length === 0) break;
         acc = acc.concat(page);
         if (page.length < PAGE) break;
-        from += PAGE;
+        fromMes += PAGE;
       }
       setClientesMes(acc);
       setLoading(false);
