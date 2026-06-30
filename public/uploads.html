@@ -74,7 +74,7 @@ const SOURCES = [
       { table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', label:'Facturación (sell-in canónico)', replaceAnios:[2025,2026] },
       { table:'ventas_erp', onConflict:'venta_id,venta_renglon', parser:'erpVentas', label:'Detalle granular (Vw_TablaH_Ventas)', replaceAnios:[2025,2026] },
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true },
-      { table:'compras_oc', onConflict:'movid,articulo', parser:'comprasOC', label:'Compras OC (Vw_TablaH_Compras)', replace:true }
+      { table:'compras_oc', onConflict:'movid,articulo', parser:'comprasOC', label:'POs de Compras (Vw_TablaH_Compras)', replace:true }
     ]
   },
   { id:'roadmap-precios', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },

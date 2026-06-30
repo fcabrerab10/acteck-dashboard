@@ -81,6 +81,12 @@ export default function VisionGeneral() {
   const [caminoResumen, setCaminoResumen] = useState([]);
   const [caminoCalendario, setCaminoCalendario] = useState([]);
   const [caminoProximas, setCaminoProximas] = useState([]);
+  const [caminoSemanal, setCaminoSemanal] = useState([]);
+  const [caminoRetrasadas, setCaminoRetrasadas] = useState([]);
+  const [caminoProveedores, setCaminoProveedores] = useState([]);
+  const [caminoAgotados, setCaminoAgotados] = useState([]);
+  const [caminoLeadtime, setCaminoLeadtime] = useState(null);
+  const [comprasYTD, setComprasYTD] = useState([]);
   const [cartera, setCartera] = useState([]);
   const [cuotas, setCuotas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -107,7 +113,7 @@ export default function VisionGeneral() {
       // Fuente: facturacion_clientes (Excel "Venta Facturación" del ERP).
       // Por ahora solo soportamos dimension='canal' — marca/categoría
       // requieren ventas_erp completo con marca/familia.
-      const [a, p, p2, c, inv, invMarca, cart, q, cRes, cCal, cProx] = await Promise.all([
+      const [a, p, p2, c, inv, invMarca, cart, q, cRes, cCal, cProx, cSem, cRet, cProv, cAgo, cLT, cYTD] = await Promise.all([
         supabase.from('v_vision_factura_canal').select('*').eq('anio', anio),
         supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 1),
         supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 2),
@@ -119,6 +125,12 @@ export default function VisionGeneral() {
         supabase.from('v_vision_camino_resumen').select('*'),
         supabase.from('v_vision_camino_calendario').select('*'),
         supabase.from('v_vision_camino_proximas').select('*').limit(10),
+        supabase.from('v_vision_camino_semanal').select('*').limit(12),
+        supabase.from('v_vision_camino_retrasadas').select('*'),
+        supabase.from('v_vision_camino_proveedores').select('*').limit(8),
+        supabase.from('v_vision_camino_agotados').select('*').limit(10),
+        supabase.from('v_vision_camino_leadtime').select('*').single(),
+        supabase.from('v_vision_camino_compras_ytd').select('*'),
       ]);
       setMargenAct(a.data || []);
       setMargenPrev(p.data || []);
@@ -131,6 +143,12 @@ export default function VisionGeneral() {
       setCaminoResumen(cRes.data || []);
       setCaminoCalendario(cCal.data || []);
       setCaminoProximas(cProx.data || []);
+      setCaminoSemanal(cSem.data || []);
+      setCaminoRetrasadas(cRet.data || []);
+      setCaminoProveedores(cProv.data || []);
+      setCaminoAgotados(cAgo.data || []);
+      setCaminoLeadtime(cLT.data || null);
+      setComprasYTD(cYTD.data || []);
       setLoading(false);
     })();
   }, [anio, dimension]);
@@ -377,6 +395,13 @@ export default function VisionGeneral() {
         caminoResumen={caminoResumen}
         caminoCalendario={caminoCalendario}
         caminoProximas={caminoProximas}
+        caminoSemanal={caminoSemanal}
+        caminoRetrasadas={caminoRetrasadas}
+        caminoProveedores={caminoProveedores}
+        caminoAgotados={caminoAgotados}
+        caminoLeadtime={caminoLeadtime}
+        comprasYTD={comprasYTD}
+        anio={anio}
         ventaPromMes={mesMax > 0 ? kpis.ventaYTD / mesMax : 0} />
 
       <p className="text-[11px] text-gray-400 px-2">
@@ -793,7 +818,7 @@ function TendenciaCard({ data, anio, mesMax }) {
 }
 
 // ────────── Sección de Inventario ──────────
-function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoCalendario, caminoProximas, ventaPromMes }) {
+function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoCalendario, caminoProximas, caminoSemanal, caminoRetrasadas, caminoProveedores, caminoAgotados, caminoLeadtime, comprasYTD, anio, ventaPromMes }) {
   // Buckets de estatus en orden de pipeline + total agregado
   const BUCKET_LABELS = {
     produccion:        { label: 'En producción',      palette: PALETTE.amber },
@@ -969,7 +994,7 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
           <p className="text-[13px] text-gray-600 font-medium m-0">Inventario en camino</p>
           <p className="text-[16px] text-gray-800 font-medium mt-1">Sin datos cargados</p>
           <p className="text-[11px] text-gray-400 mt-2 italic text-center" style={{ maxWidth: 420 }}>
-            Sube el ERP con la hoja Vw_TablaH_Compras para ver órdenes pendientes con valor MXN.
+            Sube el ERP con la hoja Vw_TablaH_Compras para ver POs pendientes con valor MXN.
           </p>
         </div>
       ) : (
@@ -977,12 +1002,33 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
           <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
             <p className="text-sm font-medium text-gray-800">
               <Ship className="inline w-4 h-4 mr-1" style={{ verticalAlign: -2 }} />
-              Inventario en camino · Vw_TablaH_Compras × Master Embarques
+              Inventario en camino
             </p>
             <p className="text-[11px] text-gray-400">
-              {fmtInt(totalPosEnCamino)} órdenes activas · {fmtCompact(totalEnCamino)} MXN · TC contable de cada OC
+              Vw_TablaH_Compras × Master Embarques · {fmtInt(totalPosEnCamino)} POs activas
             </p>
           </div>
+
+          {/* Banner alerta PO en retraso */}
+          {caminoRetrasadas.length > 0 && (
+            <RetrasadasBanner retrasadas={caminoRetrasadas} />
+          )}
+
+          {/* Hero: 3 KPIs grandes (Valor / Lead time / Compras YTD vs prev) */}
+          <CaminoHero
+            valor={totalEnCamino}
+            piezas={totalPiezasEnCamino}
+            pos={totalPosEnCamino}
+            inventarioStock={Number(inventario?.valor_inventario) || 0}
+            leadtime={caminoLeadtime}
+            comprasYTD={comprasYTD}
+            anio={anio}
+          />
+
+          {/* Lead time por etapa */}
+          {caminoLeadtime && caminoLeadtime.lt_total > 0 && (
+            <LeadtimeEtapas lt={caminoLeadtime} />
+          )}
 
           {/* Tiles por estatus */}
           <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">Por estatus actual</p>
@@ -1007,38 +1053,27 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
             })}
           </div>
 
-          {/* Calendario de llegadas */}
-          {caminoCalendario.length > 0 && (
-            <>
-              <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">Calendario de llegadas (ETA puerto)</p>
-              <div style={{ width: '100%', height: 200, marginBottom: 16 }}>
-                <ResponsiveContainer>
-                  <BarChart data={caminoCalendario.map((r) => ({
-                    mes: new Date(r.mes).toLocaleDateString('es-MX', { month: 'short', year: '2-digit' }),
-                    valor: Number(r.valor_mxn) || 0,
-                    pos: Number(r.pos) || 0,
-                    piezas: Number(r.piezas) || 0,
-                    skus: Number(r.skus) || 0,
-                  }))} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke="#F1F5F9" vertical={false} />
-                    <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
-                    <YAxis tickFormatter={(v) => '$' + (v / 1e6).toFixed(0) + 'M'} tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(v, name, p) => {
-                      if (name !== 'valor') return null;
-                      const d = p.payload;
-                      return [fmtMoney(v), `${d.pos} PO · ${fmtInt(d.skus)} SKUs · ${fmtInt(d.piezas)} pzs`];
-                    }} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                    <Bar dataKey="valor" fill={PALETTE.blue.mid} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </>
+          {/* Concentración semanal (próximas semanas) */}
+          {caminoSemanal.length > 0 && (
+            <ConcentracionSemanal semanas={caminoSemanal} />
+          )}
+
+          {/* 2 columnas: Top proveedores + SKUs agotados con orden */}
+          {(caminoProveedores.length > 0 || caminoAgotados.length > 0) && (
+            <div className="grid gap-2.5 mb-4" style={{ gridTemplateColumns: '1.2fr 1fr' }}>
+              {caminoProveedores.length > 0 && (
+                <TopProveedores proveedores={caminoProveedores} totalCamino={totalEnCamino} />
+              )}
+              {caminoAgotados.length > 0 && (
+                <AgotadosConOrden agotados={caminoAgotados} />
+              )}
+            </div>
           )}
 
           {/* Próximas PO */}
           {caminoProximas.length > 0 && (
             <>
-              <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">Próximas {Math.min(caminoProximas.length, 10)} órdenes en llegar</p>
+              <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">Próximas {Math.min(caminoProximas.length, 10)} POs en llegar</p>
               <div className="overflow-x-auto">
                 <table className="w-full" style={{ fontSize: 11 }}>
                   <thead>
@@ -1086,7 +1121,7 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
             <div className="mt-4 p-3 rounded-lg flex items-center justify-between gap-3" style={{ background: PALETTE.gray.bg, border: `1px dashed ${PALETTE.gray.mid}` }}>
               <div>
                 <p className="text-[11px] m-0 font-medium" style={{ color: PALETTE.gray.text }}>
-                  {fmtInt(sinEmbarque.pos)} OCs sin embarque asignado en Master
+                  {fmtInt(sinEmbarque.pos)} POs sin embarque asignado en Master
                 </p>
                 <p className="text-[10px] mt-0.5" style={{ color: PALETTE.gray.mid }}>
                   Probablemente compras nacionales o aún sin mapear en Master Embarques.
@@ -1099,6 +1134,267 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ────────── Sub-componentes del bloque 'Inventario en camino' ──────────
+
+function RetrasadasBanner({ retrasadas }) {
+  const total = retrasadas.reduce((s, r) => s + (Number(r.valor_mxn) || 0), 0);
+  const top = retrasadas.slice(0, 2);
+  const restante = retrasadas.length - top.length;
+  return (
+    <div style={{
+      background: PALETTE.red.bg, border: `1px solid ${PALETTE.red.strong}`, borderRadius: 10,
+      padding: '12px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12,
+    }}>
+      <i className="ti ti-alert-triangle" style={{ fontSize: 22, color: PALETTE.red.mid, flex: 'none' }} aria-hidden="true" />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 12, margin: 0, color: PALETTE.red.text, fontWeight: 500 }}>
+          {retrasadas.length} {retrasadas.length === 1 ? 'PO' : 'POs'} en retraso · {fmtCompact(total)} atrapados
+        </p>
+        <p style={{ fontSize: 11, margin: '2px 0 0', color: PALETTE.red.mid }}>
+          {top.map((r, i) => (
+            <span key={r.movid}>
+              {i > 0 && ' · '}
+              <strong>{r.movid}</strong> {r.dias_retraso}d retraso ({r.dias_desde_emision}d desde emisión) {fmtCompact(r.valor_mxn)}
+            </span>
+          ))}
+          {restante > 0 && ` · y ${restante} más`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function CaminoHero({ valor, piezas, pos, inventarioStock, leadtime, comprasYTD, anio }) {
+  const ratioStock = inventarioStock > 0 ? Math.round((valor / inventarioStock) * 100) : null;
+  const ytdAct = comprasYTD.find((r) => r.anio === anio);
+  const ytdPrev = comprasYTD.find((r) => r.anio === anio - 1);
+  const valorYTD = Number(ytdAct?.valor_mxn) || 0;
+  const valorYTDPrev = Number(ytdPrev?.valor_mxn) || 0;
+  const deltaYoY = valorYTDPrev > 0 ? ((valorYTD - valorYTDPrev) / valorYTDPrev) * 100 : null;
+
+  return (
+    <div className="grid gap-2.5 mb-3.5" style={{ gridTemplateColumns: '1.6fr 1fr 1fr' }}>
+      <div style={{ background: PALETTE.blue.bg, borderRadius: 12, padding: '14px 18px' }}>
+        <p style={{ fontSize: 11, margin: 0, color: PALETTE.blue.mid, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Valor en tránsito</p>
+        <p style={{ fontSize: 34, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.blue.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+          {fmtCompact(valor)}
+        </p>
+        <p style={{ fontSize: 11, color: PALETTE.blue.mid, margin: 0 }}>
+          {fmtInt(piezas)} piezas · {pos} órdenes{ratioStock != null ? ` · ${ratioStock}% del stock actual` : ''}
+        </p>
+      </div>
+      <div style={{ background: PALETTE.amber.bg, borderRadius: 12, padding: '14px 18px' }}>
+        <div className="flex items-center gap-1" style={{ marginBottom: 2 }}>
+          <i className="ti ti-clock" style={{ fontSize: 12, color: PALETTE.amber.mid }} aria-hidden="true" />
+          <p style={{ fontSize: 11, margin: 0, color: PALETTE.amber.mid, letterSpacing: '0.03em' }}>Lead time promedio</p>
+        </div>
+        <p style={{ fontSize: 24, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.amber.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+          {leadtime?.lt_total != null ? `${leadtime.lt_total} días` : '—'}
+        </p>
+        <p style={{ fontSize: 11, color: PALETTE.amber.mid, margin: 0 }}>
+          Emisión → arribo CEDIS
+        </p>
+      </div>
+      <div style={{ background: PALETTE.purple.bg, borderRadius: 12, padding: '14px 18px' }}>
+        <div className="flex items-center gap-1" style={{ marginBottom: 2 }}>
+          <i className="ti ti-shopping-cart" style={{ fontSize: 12, color: PALETTE.purple.mid }} aria-hidden="true" />
+          <p style={{ fontSize: 11, margin: 0, color: PALETTE.purple.mid, letterSpacing: '0.03em' }}>Compras YTD {anio}</p>
+        </div>
+        <p style={{ fontSize: 24, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.purple.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+          {fmtCompact(valorYTD)}
+        </p>
+        <p style={{ fontSize: 11, margin: 0 }}>
+          {deltaYoY != null && (
+            <span style={{ color: deltaYoY >= 0 ? '#0F6E56' : '#A32D2D', fontWeight: 500 }}>
+              {fmtPctDelta(deltaYoY)} vs {anio - 1}
+            </span>
+          )}
+          {ytdAct && <span style={{ color: PALETTE.purple.mid }}> · {fmtInt(ytdAct.pos)} PO · {fmtInt(ytdAct.skus)} SKUs</span>}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function LeadtimeEtapas({ lt }) {
+  const total = lt.lt_total || 1;
+  const etapas = [
+    { label: '1. Producción',       dias: lt.lt_produccion, color: '#BA7517' },
+    { label: '2. Tránsito marítimo', dias: lt.lt_transito,   color: '#185FA5' },
+    { label: '3. Aduana → CEDIS',    dias: lt.lt_aduana,     color: '#1D9E75' },
+  ];
+  return (
+    <>
+      <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">Lead time desglosado por etapa</p>
+      <div className="grid gap-1.5 mb-4" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+        {etapas.map((e) => {
+          const pct = Math.round((e.dias / total) * 100);
+          return (
+            <div key={e.label} style={{ background: '#F8FAFC', borderRadius: 8, padding: '8px 12px' }}>
+              <div className="flex items-center justify-between">
+                <p style={{ fontSize: 10, margin: 0, color: '#6B6A64', textTransform: 'uppercase' }}>{e.label}</p>
+                <span style={{ fontSize: 10, color: '#94A3B8' }}>~{pct}%</span>
+              </div>
+              <p style={{ fontSize: 18, fontWeight: 500, margin: '2px 0 0', color: '#1E293B', fontVariantNumeric: 'tabular-nums' }}>
+                {e.dias} días
+              </p>
+              <div style={{ height: 4, background: '#E2E8F0', borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
+                <div style={{ width: pct + '%', height: '100%', background: e.color }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function ConcentracionSemanal({ semanas }) {
+  const data = semanas.map((r) => ({
+    semana: new Date(r.semana).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
+    valor: (Number(r.valor_mxn) || 0) / 1e6,
+    pos: Number(r.pos) || 0,
+    piezas: Number(r.piezas) || 0,
+    skus: Number(r.skus) || 0,
+  }));
+  const max = Math.max(...data.map((d) => d.valor), 0);
+  const colors = data.map((d) => d.valor === max && max > 0 ? PALETTE.coral.mid : PALETTE.blue.mid);
+  const picoLabel = max > 0 ? data.find((d) => d.valor === max) : null;
+  return (
+    <>
+      <div className="flex items-baseline justify-between mb-1.5">
+        <p className="text-[10px] uppercase tracking-widest text-gray-500 m-0">Concentración semanal de llegadas</p>
+        {picoLabel && (
+          <p className="text-[10px] text-gray-400 m-0 italic">
+            Pico: semana del {picoLabel.semana} · ${picoLabel.valor.toFixed(2)}M / {fmtInt(picoLabel.piezas)} pzs
+          </p>
+        )}
+      </div>
+      <div style={{ width: '100%', height: 200, marginBottom: 18 }}>
+        <ResponsiveContainer>
+          <BarChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke="#F1F5F9" vertical={false} />
+            <XAxis dataKey="semana" tick={{ fontSize: 9, fill: '#6B6A64' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
+            <YAxis tickFormatter={(v) => '$' + v + 'M'} tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={false} tickLine={false} />
+            <Tooltip
+              formatter={(v, name, p) => {
+                if (name !== 'valor') return null;
+                const d = p.payload;
+                return ['$' + v.toFixed(2) + 'M MXN', `${d.pos} PO · ${fmtInt(d.skus)} SKUs · ${fmtInt(d.piezas)} pzs`];
+              }}
+              contentStyle={{ fontSize: 12, borderRadius: 8 }}
+            />
+            <Bar dataKey="valor" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+              {data.map((_, i) => <Cell key={i} fill={colors[i]} />)}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </>
+  );
+}
+
+function TopProveedores({ proveedores, totalCamino }) {
+  const top5 = proveedores.slice(0, 5);
+  const restante = proveedores.slice(5);
+  const restanteVal = restante.reduce((s, p) => s + (Number(p.valor_mxn) || 0), 0);
+  const restantePos = restante.reduce((s, p) => s + (Number(p.pos) || 0), 0);
+  const topPct = totalCamino > 0 ? (top5.slice(0, 3).reduce((s, p) => s + (Number(p.valor_mxn) || 0), 0) / totalCamino) * 100 : 0;
+  const topProvPct = totalCamino > 0 && top5[0] ? (Number(top5[0].valor_mxn) / totalCamino) * 100 : 0;
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1.5">
+        <p className="text-[10px] uppercase tracking-widest text-gray-500 m-0">Top proveedores en tránsito</p>
+        <p className="text-[10px] text-gray-400 m-0 italic">Top 3 = {topPct.toFixed(0)}%</p>
+      </div>
+      <table className="w-full" style={{ fontSize: 11, borderCollapse: 'collapse' }}>
+        <tbody style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {top5.map((p, i) => {
+            const pct = totalCamino > 0 ? (Number(p.valor_mxn) / totalCamino) * 100 : 0;
+            const isTop = i === 0;
+            const barColor = isTop ? PALETTE.red.mid : PALETTE.blue.mid;
+            return (
+              <tr key={p.proveedor} style={{ borderBottom: '0.5px solid #E2E8F0' }}>
+                <td style={{ padding: '6px 8px', color: '#1E293B', fontWeight: isTop ? 500 : 400, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.proveedor}>
+                  {p.proveedor}
+                </td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', color: '#6B6A64' }}>{p.pos} PO</td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', width: '45%' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, width: '100%' }}>
+                    <span style={{ flex: 1, height: 6, background: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
+                      <span style={{ display: 'block', width: Math.min(pct, 100) + '%', height: '100%', background: barColor }} />
+                    </span>
+                    <span style={{ whiteSpace: 'nowrap', fontWeight: isTop ? 500 : 400 }}>
+                      {fmtCompact(p.valor_mxn)} · {pct.toFixed(1)}%
+                    </span>
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+          {restante.length > 0 && (
+            <tr>
+              <td style={{ padding: '6px 8px', color: '#1E293B' }}>Otros ({restante.length})</td>
+              <td style={{ padding: '6px 8px', textAlign: 'right', color: '#6B6A64' }}>{restantePos} PO</td>
+              <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, width: '100%' }}>
+                  <span style={{ flex: 1, height: 6, background: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
+                    <span style={{ display: 'block', width: Math.min(totalCamino > 0 ? (restanteVal / totalCamino) * 100 : 0, 100) + '%', height: '100%', background: '#888780' }} />
+                  </span>
+                  <span style={{ whiteSpace: 'nowrap' }}>{fmtCompact(restanteVal)} · {totalCamino > 0 ? ((restanteVal / totalCamino) * 100).toFixed(1) : 0}%</span>
+                </span>
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      {topProvPct >= 30 && (
+        <p style={{ fontSize: 10, color: PALETTE.red.mid, margin: '6px 0 0', fontStyle: 'italic' }}>
+          <i className="ti ti-alert-circle" style={{ fontSize: 11, verticalAlign: -1 }} aria-hidden="true" />{' '}
+          Riesgo: {topProvPct.toFixed(1)}% concentrado en 1 proveedor
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AgotadosConOrden({ agotados }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1.5">
+        <p className="text-[10px] uppercase tracking-widest text-gray-500 m-0">SKUs agotados con orden</p>
+        <p className="text-[10px] text-gray-400 m-0 italic">{agotados.length} agotados</p>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {agotados.map((a) => {
+          const sinOrden = a.dias_para_llegar === -1 || a.pzs_camino === 0;
+          const vencido = a.dias_para_llegar === 0;
+          const palette = sinOrden ? PALETTE.red : vencido ? PALETTE.amber : PALETTE.teal;
+          const etaLabel = sinOrden ? 'Sin orden'
+                          : vencido ? 'Vencido'
+                          : `Llega en ${a.dias_para_llegar} día${a.dias_para_llegar === 1 ? '' : 's'}`;
+          return (
+            <div key={a.articulo} style={{
+              background: palette.bg, borderLeft: `3px solid ${palette.mid}`, borderRadius: 6, padding: '8px 12px',
+            }}>
+              <div className="flex justify-between items-center" style={{ fontSize: 11 }}>
+                <span style={{ fontWeight: 500, color: palette.text }}>{a.articulo}</span>
+                <span style={{ color: palette.mid, fontWeight: 500 }}>{etaLabel}</span>
+              </div>
+              <p style={{ fontSize: 10, color: palette.mid, margin: '1px 0 0', fontVariantNumeric: 'tabular-nums' }}>
+                {sinOrden ? 'Agotado · acción: emitir PO'
+                          : `${fmtInt(a.pzs_camino)} piezas en camino${a.movid ? ` (${a.movid})` : ''}`}
+                {a.eta_estimada && !sinOrden && ` · ETA ${new Date(a.eta_estimada).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`}
+              </p>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
