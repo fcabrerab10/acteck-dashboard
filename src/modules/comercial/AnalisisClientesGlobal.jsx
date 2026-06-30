@@ -156,7 +156,7 @@ export default function AnalisisClientesGlobal() {
       while (true) {
         const { data: page, error } = await supabase
           .from('facturacion_clientes')
-          .select('cliente_nombre, importe, canal')
+          .select('cliente_nombre, monto, canal')
           .eq('anio', anio)
           .eq('mes', mesMaxCanal)
           .range(from, from + PAGE - 1);
@@ -245,7 +245,7 @@ export default function AnalisisClientesGlobal() {
     clientesMes.forEach((r) => {
       const k = clienteCanonico(r.cliente_nombre, r.canal);
       if (!k) return;
-      m.set(k, (m.get(k) || 0) + (Number(r.importe) || 0));
+      m.set(k, (m.get(k) || 0) + (Number(r.monto) || 0));
     });
     return m;
   }, [clientesMes]);
@@ -597,7 +597,7 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
       while (true) {
         let query = supabase
           .from('facturacion_clientes')
-          .select('anio, mes, sku, importe, cantidad, canal, cliente_nombre')
+          .select('anio, mes, sku, monto, piezas, canal, cliente_nombre')
           .gte('anio', anio - 1)
           .lte('anio', anio)
           .range(from, from + PAGE - 1);
@@ -638,7 +638,7 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
     datos.forEach((r) => {
       const m = Number(r.mes) - 1;
       if (m < 0 || m > 11) return;
-      const imp = Number(r.importe) || 0;
+      const imp = Number(r.monto) || 0;
       if (Number(r.anio) === anio) {
         sumMensual[m] += imp;
         if (imp > 0) mesesActivos.add(m + 1);
