@@ -4,4 +4,5 @@ export { default as PagosCliente } from './PagosCliente';
 export { default as EstrategiaProducto } from './EstrategiaProducto';
 export { default as MarketingCliente } from './MarketingCliente';
 export { default as AnalisisCliente } from './AnalisisCliente';
+export { default as AnalisisClientesGlobal } from './AnalisisClientesGlobal';
 export { default as ForecastCliente } from './ForecastCliente';
