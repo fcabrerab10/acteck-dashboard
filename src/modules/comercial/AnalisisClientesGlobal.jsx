@@ -33,6 +33,19 @@ const CANAL_COLOR = {
   'RETAIL':               PALETTE.purple,
 };
 const colorCanal = (k) => CANAL_COLOR[String(k || '').toUpperCase()] || PALETTE.gray;
+
+// Canales donde cada venta crea un "cliente" distinto en facturación
+// pero realmente son una sola entidad (marketplace/sitio/mostrador).
+const CANALES_AGREGADOS = new Set([
+  'MERCADO LIBRE',
+  'AMAZON',
+  'SITIO WEB',
+  'MOSTRADOR',
+]);
+const nombreEfectivo = (clienteNombre, canal) => {
+  const c = String(canal || '').toUpperCase();
+  return CANALES_AGREGADOS.has(c) ? c : (clienteNombre || '');
+};
 const chipCanal = (canal) => {
   const s = String(canal || '').toUpperCase();
   if (s.startsWith('DISTRIBU')) return 'DIST';
@@ -140,8 +153,10 @@ export default function AnalisisClientesGlobal() {
     const ventaYTDPrev = canalPrev.filter((r) => Number(r.mes) <= mesMax).reduce((s, r) => s + (Number(r.venta) || 0), 0);
     const ventaMes = canalAct.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.venta) || 0), 0);
     const ventaMesPrev = canalPrev.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.venta) || 0), 0);
-    const activos = new Set(clientesAct.map((c) => c.cliente_nombre)).size;
-    const total = clientesAct.length ? 5121 : 0;
+    const activos = new Set(
+      clientesAct.map((c) => nombreEfectivo(c.cliente_nombre, c.canal)).filter(Boolean)
+    ).size;
+    const total = activos;
     const cuotaTotal = cuotas.find((c) => c.dimension_tipo === 'TOTAL')?.meta_facturacion;
     const cumpl = cuotaTotal > 0 ? (ventaYTD / cuotaTotal) * 100 : null;
     const gap = cuotaTotal > 0 ? cuotaTotal - ventaYTD : null;
@@ -200,7 +215,7 @@ export default function AnalisisClientesGlobal() {
   const mesPorCliente = useMemo(() => {
     const m = new Map();
     clientesMes.forEach((r) => {
-      const k = r.cliente_nombre || '';
+      const k = nombreEfectivo(r.cliente_nombre, r.canal);
       if (!k) return;
       m.set(k, (m.get(k) || 0) + (Number(r.importe) || 0));
     });
@@ -211,23 +226,33 @@ export default function AnalisisClientesGlobal() {
     clientesAct.reduce((s, c) => s + (Number(c.venta) || 0), 0), [clientesAct]);
 
   const clientesRanking = useMemo(() => {
+    // Agregar año actual: si el canal está en CANALES_AGREGADOS, todos colapsan a un solo "cliente"
+    const actMap = new Map();
+    clientesAct.forEach((c) => {
+      const nombre = nombreEfectivo(c.cliente_nombre, c.canal);
+      if (!nombre || nombre === 'Sin nombre') return;
+      const k = nombre;
+      if (!actMap.has(k)) actMap.set(k, { cliente: nombre, canal: c.canal || 'Otros', ytd: 0 });
+      actMap.get(k).ytd += Number(c.venta) || 0;
+    });
     const prevMap = new Map();
-    clientesPrev.forEach((r) => prevMap.set(r.cliente_nombre, Number(r.venta) || 0));
-    let lista = clientesAct
-      .filter((c) => c.cliente_nombre && c.cliente_nombre !== 'Sin nombre')
-      .map((c) => {
-        const ytd = Number(c.venta) || 0;
-        const ytdPrev = prevMap.get(c.cliente_nombre) || 0;
-        return {
-          cliente: c.cliente_nombre,
-          canal: c.canal || 'Otros',
-          ytd,
-          mes: mesPorCliente.get(c.cliente_nombre) || 0,
-          ytdPrev,
-          deltaYoY: ytdPrev > 0 ? ((ytd - ytdPrev) / ytdPrev) * 100 : null,
-          share: ventaTotalAct > 0 ? (ytd / ventaTotalAct) * 100 : 0,
-        };
-      });
+    clientesPrev.forEach((c) => {
+      const nombre = nombreEfectivo(c.cliente_nombre, c.canal);
+      if (!nombre) return;
+      prevMap.set(nombre, (prevMap.get(nombre) || 0) + (Number(c.venta) || 0));
+    });
+    let lista = Array.from(actMap.values()).map((c) => {
+      const ytdPrev = prevMap.get(c.cliente) || 0;
+      return {
+        cliente: c.cliente,
+        canal: c.canal,
+        ytd: c.ytd,
+        mes: mesPorCliente.get(c.cliente) || 0,
+        ytdPrev,
+        deltaYoY: ytdPrev > 0 ? ((c.ytd - ytdPrev) / ytdPrev) * 100 : null,
+        share: ventaTotalAct > 0 ? (c.ytd / ventaTotalAct) * 100 : 0,
+      };
+    });
     if (canalFiltro !== 'TODOS') {
       lista = lista.filter((c) => c.canal === canalFiltro);
     }
@@ -536,17 +561,21 @@ function ModalCliente({ clienteNombre, anio, mesMax, onClose }) {
   useEffect(() => {
     (async () => {
       setCargando(true);
+      const esAgregado = CANALES_AGREGADOS.has(String(clienteNombre).toUpperCase());
       let acc = [];
       let from = 0;
       const PAGE = 1000;
       while (true) {
-        const { data: page, error } = await supabase
+        let query = supabase
           .from('facturacion_clientes')
           .select('anio, mes, sku, importe, cantidad, canal')
-          .eq('cliente_nombre', clienteNombre)
           .gte('anio', anio - 1)
           .lte('anio', anio)
           .range(from, from + PAGE - 1);
+        query = esAgregado
+          ? query.eq('canal', clienteNombre)
+          : query.eq('cliente_nombre', clienteNombre);
+        const { data: page, error } = await query;
         if (error || !page || page.length === 0) break;
         acc = acc.concat(page);
         if (page.length < PAGE) break;
