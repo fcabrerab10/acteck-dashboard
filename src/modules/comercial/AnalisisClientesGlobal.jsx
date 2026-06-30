@@ -586,6 +586,7 @@ function TarjetaCliente({ ranking, cliente, onClick }) {
 function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
+  const [descripciones, setDescripciones] = useState(new Map());
 
   useEffect(() => {
     (async () => {
@@ -625,6 +626,21 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
       }
       setDatos(acc);
       setCargando(false);
+
+      // Traer descripciones de SKUs desde compras_oc + embarques_compras
+      const skus = Array.from(new Set(acc.map((r) => r.sku).filter(Boolean)));
+      if (skus.length === 0) return;
+      const map = new Map();
+      const chunkBy = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, (i + 1) * n));
+      for (const chunk of chunkBy(skus, 200)) {
+        const [oc, emb] = await Promise.all([
+          supabase.from('compras_oc').select('articulo, descripcion').in('articulo', chunk),
+          supabase.from('embarques_compras').select('codigo, descripcion').in('codigo', chunk),
+        ]);
+        (oc.data || []).forEach((r) => { if (r.descripcion && !map.has(r.articulo)) map.set(r.articulo, r.descripcion); });
+        (emb.data || []).forEach((r) => { if (r.descripcion && !map.has(r.codigo)) map.set(r.codigo, r.descripcion); });
+      }
+      setDescripciones(map);
     })();
   }, [clienteNombre, canalCliente, anio]);
 
@@ -633,8 +649,11 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
     const sumMensual = Array(12).fill(0);
     const sumMensualPrev = Array(12).fill(0);
     let canal = 'Otros';
-    const skuMap = new Map();
+    const skuAct = new Map();
+    const skuPrev = new Map();
+    const skuUlt3m = new Set();
     const mesesActivos = new Set();
+    const ult3mDesde = Math.max(1, mesMax - 2);
     datos.forEach((r) => {
       const m = Number(r.mes) - 1;
       if (m < 0 || m > 11) return;
@@ -642,38 +661,57 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
       if (Number(r.anio) === anio) {
         sumMensual[m] += imp;
         if (imp > 0) mesesActivos.add(m + 1);
+        if (r.sku) {
+          skuAct.set(r.sku, (skuAct.get(r.sku) || 0) + imp);
+          if (m + 1 >= ult3mDesde && m + 1 <= mesMax && imp > 0) skuUlt3m.add(r.sku);
+        }
       } else {
         sumMensualPrev[m] += imp;
+        if (r.sku) skuPrev.set(r.sku, (skuPrev.get(r.sku) || 0) + imp);
       }
       if (r.canal) canal = r.canal;
-      if (r.sku && Number(r.anio) === anio) {
-        skuMap.set(r.sku, (skuMap.get(r.sku) || 0) + imp);
-      }
     });
     const ytd = sumMensual.slice(0, mesMax).reduce((s, v) => s + v, 0);
     const ytdPrev = sumMensualPrev.slice(0, mesMax).reduce((s, v) => s + v, 0);
     const mesActual = sumMensual[mesMax - 1] || 0;
-    const mesAnterior = mesMax >= 2 ? sumMensual[mesMax - 2] : 0;
     const mesActualPrev = sumMensualPrev[mesMax - 1] || 0;
     const cierreMesAnterior = mesMax >= 2 ? sumMensual[mesMax - 2] : null;
     const cierreMesAnteriorPrev = mesMax >= 2 ? sumMensualPrev[mesMax - 2] : null;
-    const topSkus = Array.from(skuMap.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([sku, importe]) => ({ sku, importe }));
+
+    // Movimiento por SKU (crecen / caen)
+    const todosSkus = new Set([...skuAct.keys(), ...skuPrev.keys()]);
+    const movs = [];
+    todosSkus.forEach((sku) => {
+      const a = skuAct.get(sku) || 0;
+      const p = skuPrev.get(sku) || 0;
+      const delta = a - p;
+      const deltaPct = p > 0 ? ((a - p) / p) * 100 : (a > 0 ? null : null);
+      movs.push({ sku, act: a, prev: p, delta, deltaPct });
+    });
+    const crecen = movs.filter((m) => m.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5);
+    const caen = movs.filter((m) => m.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 5);
+
     const serie = Array.from({ length: 12 }, (_, i) => ({
       mes: MESES_LBL[i],
       [`${anio}`]: sumMensual[i],
       [`${anio - 1}`]: sumMensualPrev[i],
     }));
+    const heatmap = Array.from({ length: 12 }, (_, i) => ({
+      mes: MESES_LBL[i],
+      act: sumMensual[i],
+      prev: sumMensualPrev[i],
+      actActivo: i + 1 <= mesMax && sumMensual[i] > 0,
+      prevActivo: sumMensualPrev[i] > 0,
+    }));
     return {
       canal, ytd, ytdPrev,
-      mesActual, mesActualPrev, mesAnterior,
+      mesActual, mesActualPrev,
       cierreMesAnterior, cierreMesAnteriorPrev,
-      topSkus,
+      crecen, caen,
       mesesActivos: mesesActivos.size,
-      skusDistintos: skuMap.size,
-      serie,
+      skusDistintos: skuAct.size,
+      skusUlt3m: skuUlt3m.size,
+      serie, heatmap,
       deltaYTD: ytdPrev > 0 ? ((ytd - ytdPrev) / ytdPrev) * 100 : null,
       deltaMes: mesActualPrev > 0 ? ((mesActual - mesActualPrev) / mesActualPrev) * 100 : null,
       deltaCierre: cierreMesAnteriorPrev > 0 ? ((cierreMesAnterior - cierreMesAnteriorPrev) / cierreMesAnteriorPrev) * 100 : null,
@@ -766,29 +804,54 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
               </ResponsiveContainer>
             </div>
 
-            {/* Top SKUs */}
+            {/* KPIs extras: SKUs últimos 3m + Margen + Categorías */}
+            <div className="grid grid-cols-3 gap-2.5">
+              <KpiTile
+                label="SKUs facturados últimos 3 meses"
+                valor={fmtInt(detalle.skusUlt3m)}
+                delta={null}
+                subtitulo={`${MESES_LBL[Math.max(0, mesMax - 3)]}–${MESES_LBL[mesMax - 1]} ${anio}`}
+              />
+              <ProximoKpi label="Margen promedio" nota="Pendiente fórmula" />
+              <ProximoKpi label="Categorías más fuertes" nota="Pendiente catálogo SKU→categoría" />
+            </div>
+
+            {/* Heatmap de frecuencia mensual */}
             <div className="bg-gray-50 rounded-xl p-4">
-              <div className="text-sm font-medium text-gray-800 mb-3">Top SKUs facturados ({anio})</div>
-              {detalle.topSkus.length === 0 ? (
-                <div className="text-xs text-gray-500">Sin SKUs este año.</div>
-              ) : (
-                <div className="space-y-1.5">
-                  {detalle.topSkus.map((s, i) => {
-                    const pct = detalle.ytd > 0 ? (s.importe / detalle.ytd) * 100 : 0;
-                    return (
-                      <div key={s.sku} className="flex items-center gap-2.5 text-xs">
-                        <span className="text-gray-400 w-5">#{i + 1}</span>
-                        <span className="font-mono w-28 truncate text-gray-700">{s.sku}</span>
-                        <div className="flex-1 bg-gray-200 h-1.5 rounded-full overflow-hidden">
-                          <div className="h-full" style={{ background: pal.mid, width: `${Math.max(2, pct)}%` }} />
-                        </div>
-                        <span className="w-20 text-right font-medium text-gray-800">{fmtCompact(s.importe)}</span>
-                        <span className="w-12 text-right text-gray-500">{fmtPct(pct)}</span>
-                      </div>
-                    );
-                  })}
+              <div className="flex items-baseline justify-between mb-3">
+                <div className="text-sm font-medium text-gray-800">Frecuencia mensual</div>
+                <div className="text-[11px] text-gray-500">
+                  {detalle.mesesActivos}/{mesMax} meses activos {anio}
                 </div>
-              )}
+              </div>
+              <div className="space-y-1.5">
+                <HeatmapFila label={`${anio}`} datos={detalle.heatmap.map((h, i) => ({ act: h.act, esfuturo: i + 1 > mesMax }))} max={Math.max(...detalle.heatmap.map((h) => Math.max(h.act, h.prev) || 0)) || 1} pal={pal} />
+                <HeatmapFila label={`${anio - 1}`} datos={detalle.heatmap.map((h) => ({ act: h.prev, esfuturo: false }))} max={Math.max(...detalle.heatmap.map((h) => Math.max(h.act, h.prev) || 0)) || 1} pal={pal} esPrev />
+              </div>
+            </div>
+
+            {/* SKUs que crecen y caen */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="text-sm font-medium text-emerald-700 mb-3 flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4" /> Top SKUs que más crecen
+                </div>
+                {detalle.crecen.length === 0 ? (
+                  <div className="text-xs text-gray-500">Sin movimiento positivo este año.</div>
+                ) : (
+                  <SkuList items={detalle.crecen} descripciones={descripciones} positivo />
+                )}
+              </div>
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="text-sm font-medium text-rose-700 mb-3 flex items-center gap-1.5">
+                  <TrendingDown className="w-4 h-4" /> Top SKUs que más caen
+                </div>
+                {detalle.caen.length === 0 ? (
+                  <div className="text-xs text-gray-500">Sin caídas este año.</div>
+                ) : (
+                  <SkuList items={detalle.caen} descripciones={descripciones} positivo={false} />
+                )}
+              </div>
             </div>
 
             {/* Nota cuota */}
@@ -798,6 +861,73 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ProximoKpi({ label, nota }) {
+  return (
+    <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-3">
+      <div className="text-[11px] text-gray-500">{label}</div>
+      <div className="text-base font-medium mt-0.5 text-gray-400">Próximamente</div>
+      <div className="text-[11px] text-gray-400 mt-1">{nota}</div>
+    </div>
+  );
+}
+
+function HeatmapFila({ label, datos, max, pal, esPrev }) {
+  const color = esPrev ? pal.soft : pal.mid;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="text-[10px] text-gray-500 w-10 shrink-0">{label}</div>
+      <div className="flex-1 grid grid-cols-12 gap-0.5">
+        {datos.map((d, i) => {
+          const intensidad = d.esfuturo ? 0 : (max > 0 ? Math.min(1, d.act / max) : 0);
+          const opacity = d.esfuturo ? 0 : (d.act > 0 ? 0.18 + intensidad * 0.82 : 0);
+          return (
+            <div
+              key={i}
+              className="h-7 rounded text-[9px] text-center flex items-end justify-center pb-0.5"
+              style={{
+                background: d.esfuturo ? '#F8F8F6' : (d.act > 0 ? color : '#F1EFE8'),
+                opacity: d.esfuturo ? 1 : (d.act > 0 ? opacity : 1),
+                color: intensidad > 0.5 ? '#fff' : '#666',
+              }}
+              title={d.esfuturo ? '—' : fmtCompact(d.act)}
+            >
+              {MESES_LBL[i][0]}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SkuList({ items, descripciones, positivo }) {
+  return (
+    <div className="space-y-2">
+      {items.map((s) => {
+        const desc = descripciones.get(s.sku);
+        const sign = positivo ? '+' : '';
+        return (
+          <div key={s.sku} className="text-xs">
+            <div className="flex items-center justify-between gap-2 mb-0.5">
+              <span className="font-mono text-gray-700 truncate">{s.sku}</span>
+              <span className={`font-medium shrink-0 ${positivo ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {sign}{fmtCompact(s.delta)}
+              </span>
+            </div>
+            {desc && (
+              <div className="text-[10px] text-gray-500 truncate" title={desc}>{desc}</div>
+            )}
+            <div className="text-[10px] text-gray-400 flex justify-between">
+              <span>{fmtCompact(s.act)} este año</span>
+              <span>{fmtCompact(s.prev)} año anterior</span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
