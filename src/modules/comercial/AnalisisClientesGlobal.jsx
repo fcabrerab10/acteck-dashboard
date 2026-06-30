@@ -41,8 +41,8 @@ const colorCanal = (k) => CANAL_COLOR[String(k || '').toUpperCase()] || PALETTE.
 //                  (Mercado Libre / Amazon / Sitio Web / Cyberpuerta), resto → "Otros e-commerce"
 //   - Resto      → cliente_nombre tal cual
 const ECOM_RULES = [
-  { match: ['MERCADO LIBRE', 'MERCADOLIBRE', 'MELI'], nombre: 'MERCADO LIBRE' },
-  { match: ['AMAZON'], nombre: 'AMAZON' },
+  { match: ['MERCADO LIBRE', 'MERCADOLIBRE', 'MELI', 'PUBLICO GENERAL MERCADO LIBRE'], nombre: 'MERCADO LIBRE' },
+  { match: ['AMAZON', 'VENTA EN LINEA AMAZON'], nombre: 'AMAZON' },
   { match: ['CYBERPU'], nombre: 'CYBERPUERTA' },
   { match: ['SITIO WEB', 'SITIOWEB', 'PAGINA WEB', 'PÁGINA WEB', 'TIENDA EN LINEA', 'TIENDA EN LÍNEA'], nombre: 'SITIO WEB' },
 ];
@@ -50,7 +50,6 @@ const ECOM_RULES = [
 const ALIAS_ERP = {
   'PC ONLINE': 'PCEL',
   'API GLOBAL': 'DIGITALIFE',
-  'PUBLICO GENERAL ML': 'MERCADO LIBRE',
 };
 const clienteCanonico = (clienteNombre, canal) => {
   const c = String(canal || '').toUpperCase();
@@ -145,20 +144,35 @@ export default function AnalisisClientesGlobal() {
     setClienteAbierto(null);
     (async () => {
       const mesActualAprox = new Date().getMonth() + 1;
+      const PAGE = 1000;
+      const pageAll = async (table, anioVal) => {
+        let acc = [];
+        let from = 0;
+        while (true) {
+          const { data, error } = await supabase
+            .from(table).select('*').eq('anio', anioVal)
+            .range(from, from + PAGE - 1);
+          if (error || !data || data.length === 0) break;
+          acc = acc.concat(data);
+          if (data.length < PAGE) break;
+          from += PAGE;
+        }
+        return acc;
+      };
       const [a, p, c, cp, q] = await Promise.all([
-        supabase.from('v_vision_factura_canal').select('*').eq('anio', anio),
-        supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 1),
-        supabase.from('v_vision_factura_clientes').select('*').eq('anio', anio),
-        supabase.from('v_vision_factura_clientes').select('*').eq('anio', anio - 1),
-        supabase.from('cuotas_canales').select('*').eq('anio', anio),
+        pageAll('v_vision_factura_canal', anio),
+        pageAll('v_vision_factura_canal', anio - 1),
+        pageAll('v_vision_factura_clientes', anio),
+        pageAll('v_vision_factura_clientes', anio - 1),
+        supabase.from('cuotas_canales').select('*').eq('anio', anio).then((r) => r.data || []),
       ]);
-      setCanalAct(a.data || []);
-      setCanalPrev(p.data || []);
-      setClientesAct(c.data || []);
-      setClientesPrev(cp.data || []);
-      setCuotas(q.data || []);
+      setCanalAct(a);
+      setCanalPrev(p);
+      setClientesAct(c);
+      setClientesPrev(cp);
+      setCuotas(q);
 
-      const mesMaxCanal = Math.max(...((a.data || []).map((r) => Number(r.mes)).filter(Boolean)), 0) || mesActualAprox;
+      const mesMaxCanal = Math.max(...(a.map((r) => Number(r.mes)).filter(Boolean)), 0) || mesActualAprox;
       let acc = [];
       let from = 0;
       const PAGE = 1000;
