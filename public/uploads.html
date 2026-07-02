@@ -78,8 +78,14 @@ const SOURCES = [
     ]
   },
   { id:'roadmap', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Roadmap', desc:'Archivo Roadmap.xlsx (Hoja1). 6 columnas: Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2. Replace completo — fuente única de marca/categoría/familia por SKU para todo el dashboard.', file:'Roadmap.xlsx', table:'roadmap_sku', onConflict:'sku', parser:'roadmap', replace:true },
-  { id:'precios', grupo:'globales', tipo:'updated', statusKey:'precios', title:'Lista de Precios', desc:'Archivo mensual (ej. "Lista de Precios Mayoreo AAA 2026 Julio.xlsx"). Hoja "Lista", headers en fila 5. Guarda histórico por mes: precio_aaa, promo_sell_in y precio_neto (= AAA × (1 − promo)). El año/mes se extraen del nombre del archivo. MSRP se ignora.', file:'Lista de Precios Mayoreo AAA <AÑO> <MES>.xlsx', table:'precios_sku', onConflict:'sku,anio,mes', parser:'precios' },
-  { id:'promos-temporada', grupo:'globales', tipo:'updated', statusKey:'promos_temporada', title:'Promociones por temporada', desc:'Archivo con descuento extra de una campaña (ej. "Promociones Exclusivas Back to School Jul2026.xlsx"). Se aplica ENCIMA de la promo sell in: precio final = Mayoreo AAA × (1 − promo_sell_in) × (1 − promo_temporada). Campaña, año y mes se extraen del nombre. Al reprocesar el mismo mes se reemplazan todas sus promos.', file:'Promociones Exclusivas <CAMPAÑA> <MES><AÑO>.xlsx', table:'promos_temporada', onConflict:'sku,anio,mes', parser:'promosTemporada' },
+  { id:'precios', grupo:'globales', tipo:'updated', statusKey:'precios', title:'Lista de Precios', desc:'Archivo mensual (ej. "Lista de Precios Mayoreo AAA 2026 Julio.xlsx"). Hoja "Lista", headers en fila 5. Guarda histórico por mes: precio_aaa, promo_sell_in y precio_neto (= AAA × (1 − promo)). El año/mes se extraen del nombre del archivo. MSRP se ignora.', file:'Lista de Precios Mayoreo AAA <AÑO> <MES>.xlsx', table:'precios_sku', onConflict:'sku,anio,mes', parser:'precios',
+    extraSlot: {
+      id:'promos-temporada', title:'Promociones por temporada (opcional)',
+      desc:'Solo si hay campaña vigente (ej. "Promociones Exclusivas Back to School Jul2026.xlsx"). Se aplica encima: precio final = AAA × (1 − sell_in) × (1 − promo_temporada).',
+      file:'Promociones Exclusivas <CAMPAÑA> <MES><AÑO>.xlsx',
+      table:'promos_temporada', onConflict:'sku,anio,mes', parser:'promosTemporada',
+    }
+  },
   { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
   { id:'estados-resultados', grupo:'globales', tipo:'mes', statusKey:'estados_resultados', title:'Estado de Resultados (P&L)', desc:'Cierres mensuales/trimestrales del P&L (ej. "Cierre 1Q 2026.xlsx", "Cierre Diciembre 2025.xlsx"). Lee la hoja "Estado de Resultados" y carga sólo los meses con valores. No borra meses previos; upsert por (razón social, año, mes, cuenta).', file:'Cierre <período>.xlsx', table:'estados_resultados', onConflict:'razon_social,anio,mes,cuenta_norm', parser:'estadosResultados' },
   // ── Digitalife ──
@@ -1580,6 +1586,24 @@ function buildSourceCard(src){
   // Estado de los datos en Supabase (lo llena `pintarEstadoFuente`)
   const dataStatus = el('div', { class:'fuente-status empty', id:`fstatus-${src.id}` },
     el('span', {class:'dot'}), 'Cargando…');
+  // Slot extra opcional (ej. Promociones por temporada dentro de Lista de Precios)
+  let extraSection = null;
+  if (src.extraSlot) {
+    const ex = src.extraSlot;
+    const exFile = el('input', {type:'file', accept:'.xlsx,.xls,.csv', id:`file-${ex.id}`});
+    const exBtn = el('button', {class:'btn', onclick: () => handleUploadExtra(src, ex)}, 'Subir');
+    const exStatus = el('div', {class:'status-line', id:`status-${ex.id}`}, el('span', {class:'badge b-idle'}, 'Sin archivo (opcional)'));
+    const exLog = el('pre', {class:'log', id:`log-${ex.id}`});
+    extraSection = el('div', {style:'margin-top:16px; padding-top:14px; border-top:1px dashed #CBD5E1;'},
+      el('div', {style:'font-weight:600; font-size:13px; color:#334155; margin-bottom:4px;'}, ex.title),
+      el('div', {class:'desc', style:'font-size:12px;'}, ex.desc),
+      el('div', {class:'meta', style:'font-size:11px;'}, `📄 ${ex.file} · 🎯 ${ex.table}`),
+      exStatus,
+      el('div', {class:'actions'}, exFile, exBtn),
+      exLog,
+    );
+  }
+
   return el('div', {class:'card'},
     el('h3', {}, src.title),
     el('div', {class:'desc'}, src.desc),
@@ -1590,8 +1614,47 @@ function buildSourceCard(src){
     updBadge,
     status,
     el('div', {class:'actions'}, file, btn, cronBtn),
-    log
+    log,
+    extraSection,
   );
+}
+
+// Sube el archivo del slot extra (independiente del principal)
+async function handleUploadExtra(src, ex){
+  const input = document.getElementById(`file-${ex.id}`);
+  const statusLine = document.getElementById(`status-${ex.id}`);
+  const log = document.getElementById(`log-${ex.id}`);
+  const setExStatus = (cls, text) => {
+    statusLine.innerHTML = '';
+    statusLine.append(el('span', {class:`badge ${cls}`}, text));
+  };
+  const appendExLog = (msg) => {
+    log.classList.add('open');
+    log.textContent += msg + '\n';
+    log.scrollTop = log.scrollHeight;
+  };
+  const f = input.files?.[0];
+  if (!f) { setExStatus('b-err','Selecciona un archivo'); return; }
+  setExStatus('b-warn','Parseando...');
+  try {
+    const buf = await f.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    appendExLog(`Hojas: ${wb.SheetNames.join(', ')}`);
+    const rows = PARSERS[ex.parser](wb, f.name);
+    appendExLog(`Filas parseadas: ${rows.length}`);
+    if (rows.length > 0) {
+      appendExLog(`Período detectado: ${rows[0].anio}-${String(rows[0].mes).padStart(2,'0')}${rows[0].campania ? ' · ' + rows[0].campania : ''}`);
+    }
+    const deletePeriodos = rows.length > 0 ? [{anio: rows[0].anio, mes: rows[0].mes}] : null;
+    // Reusa postChunks pero con un "src" ficticio para que los logs vayan al log del slot
+    const exSrc = { id: ex.id };
+    await postChunks(exSrc, ex.table, ex.onConflict, rows, null, deletePeriodos);
+    setExStatus('b-ok', `✓ ${rows.length} filas`);
+  } catch (e) {
+    console.error(e);
+    setExStatus('b-err','Error');
+    appendExLog('ERROR: ' + e.message);
+  }
 }
 
 function renderGrupoSection(grupo, fuentesG){
