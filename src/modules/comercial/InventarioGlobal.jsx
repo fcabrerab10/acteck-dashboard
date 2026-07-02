@@ -1,12 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
-  Activity, TrendingUp, TrendingDown, Package, Boxes, MapPin, AlertTriangle,
-  ArrowRightLeft, Search, X,
+  Activity, Boxes, MapPin, AlertTriangle, ArrowRightLeft, FileText,
 } from 'lucide-react';
-import {
-  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
-} from 'recharts';
 
 const PALETTE = {
   blue:   { bg: '#E6F1FB', text: '#042C53', mid: '#185FA5', strong: '#3B82F6', soft: '#B5D4F4' },
@@ -123,11 +119,9 @@ const fmtPct = (n) => n == null || isNaN(n) ? '—' : n.toFixed(1) + '%';
 
 export default function InventarioGlobal() {
   const [filas, setFilas] = useState([]);
-  const [descripciones, setDescripciones] = useState(new Map());
   const [loading, setLoading] = useState(true);
   const [soloComerciales, setSoloComerciales] = useState(true);
   const [cedisFiltro, setCedisFiltro] = useState('TODOS');
-  const [busqueda, setBusqueda] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -146,27 +140,6 @@ export default function InventarioGlobal() {
         from += PAGE;
       }
       setFilas(acc);
-
-      // Descripciones desde compras_oc + embarques_compras (in chunks)
-      const skus = Array.from(new Set(acc.map((r) => r.articulo).filter(Boolean)));
-      const map = new Map();
-      const chunkBy = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, (i + 1) * n));
-      for (const chunk of chunkBy(skus, 300)) {
-        const [oc, emb] = await Promise.all([
-          supabase.from('compras_oc').select('articulo, descripcion, fabricante').in('articulo', chunk),
-          supabase.from('embarques_compras').select('codigo, descripcion, familia').in('codigo', chunk),
-        ]);
-        (oc.data || []).forEach((r) => {
-          if (!map.has(r.articulo)) map.set(r.articulo, { desc: r.descripcion || '', marca: r.fabricante || '', familia: '' });
-        });
-        (emb.data || []).forEach((r) => {
-          const prev = map.get(r.codigo) || { desc: '', marca: '', familia: '' };
-          if (!prev.desc && r.descripcion) prev.desc = r.descripcion;
-          if (!prev.familia && r.familia) prev.familia = r.familia;
-          map.set(r.codigo, prev);
-        });
-      }
-      setDescripciones(map);
       setLoading(false);
     })();
   }, []);
@@ -228,69 +201,7 @@ export default function InventarioGlobal() {
       .sort((a, b) => b.valor - a.valor);
   }, [filasEfectivas]);
 
-  const porAlmacen = useMemo(() => {
-    const m = new Map();
-    filasEfectivas.forEach((r) => {
-      const k = Number(r.no_almacen);
-      if (!m.has(k)) m.set(k, { no_almacen: k, cedis: r.cedis, valor: 0, piezas: 0, skus: new Set() });
-      const it = m.get(k);
-      it.valor  += Number(r.costoinventario) || 0;
-      it.piezas += Number(r.inventario) || 0;
-      if (r.articulo) it.skus.add(r.articulo);
-    });
-    const total = Array.from(m.values()).reduce((s, x) => s + x.valor, 0);
-    return Array.from(m.values())
-      .map((it) => ({
-        ...it,
-        skus: it.skus.size,
-        nombre: NOMBRES_ALMACEN[it.no_almacen] || `Almacén ${it.no_almacen}`,
-        tipo: tipoDe(it.no_almacen),
-        share: total > 0 ? (it.valor / total) * 100 : 0,
-      }))
-      .sort((a, b) => b.valor - a.valor);
-  }, [filasEfectivas]);
-
-  // Concentración geográfica: en cuántos CEDIS vive cada SKU
-  const concentracion = useMemo(() => {
-    const skuCedis = new Map();
-    filasEfectivas.forEach((r) => {
-      if (!r.articulo) return;
-      if ((Number(r.inventario) || 0) <= 0) return;
-      if (!skuCedis.has(r.articulo)) skuCedis.set(r.articulo, new Set());
-      skuCedis.get(r.articulo).add(r.cedis);
-    });
-    const buckets = { '1 CEDIS': 0, '2 CEDIS': 0, '3 CEDIS': 0 };
-    skuCedis.forEach((set) => {
-      const n = set.size;
-      if (n === 1) buckets['1 CEDIS']++;
-      else if (n === 2) buckets['2 CEDIS']++;
-      else if (n >= 3) buckets['3 CEDIS']++;
-    });
-    const total = Object.values(buckets).reduce((s, v) => s + v, 0) || 1;
-    return Object.entries(buckets).map(([lbl, n]) => ({ lbl, n, pct: (n / total) * 100 }));
-  }, [filasEfectivas]);
-
-  // Top SKUs por valor de inventario
-  const topSkus = useMemo(() => {
-    const m = new Map();
-    filasEfectivas.forEach((r) => {
-      if (!r.articulo) return;
-      const k = r.articulo;
-      if (!m.has(k)) m.set(k, { sku: k, valor: 0, piezas: 0, cedis: new Set() });
-      const it = m.get(k);
-      it.valor  += Number(r.costoinventario) || 0;
-      it.piezas += Number(r.inventario) || 0;
-      if ((Number(r.inventario) || 0) > 0) it.cedis.add(r.cedis);
-    });
-    let lista = Array.from(m.values())
-      .map((it) => ({ ...it, cedis: it.cedis.size, info: descripciones.get(it.sku) }))
-      .sort((a, b) => b.valor - a.valor);
-    if (busqueda.trim()) {
-      const q = busqueda.trim().toUpperCase();
-      lista = lista.filter((s) => s.sku.toUpperCase().includes(q) || (s.info?.desc || '').toUpperCase().includes(q));
-    }
-    return lista;
-  }, [filasEfectivas, descripciones, busqueda]);
+  // (Se quitaron: porAlmacen, concentración y topSkus a petición del usuario)
 
   if (loading) {
     return (
@@ -353,10 +264,9 @@ export default function InventarioGlobal() {
         <KpiTile label="SKUs con inventario" valor={fmtInt(kpis.skus)} subtitulo="referencias distintas" />
         <KpiTile label="Almacenes activos" valor={String(kpis.almacenes)} subtitulo={`en ${kpis.nCEDIS} CEDIS`} />
         <KpiTile
-          label="Concentración"
-          valor={concentracion.length ? fmtPct(concentracion[0].pct) : '—'}
-          subtitulo={concentracion.length ? `SKUs solo en 1 CEDIS (${fmtInt(concentracion[0].n)})` : ''}
-          esWarning={concentracion.length && concentracion[0].pct > 60}
+          label="CEDIS principal"
+          valor={porCedis[0] ? (CEDIS_CORTO[porCedis[0].cedis] || porCedis[0].cedis) : '—'}
+          subtitulo={porCedis[0] ? `${fmtPct(porCedis[0].share)} del valor` : ''}
         />
       </div>
 
@@ -425,145 +335,22 @@ export default function InventarioGlobal() {
         </div>
       </div>
 
-      {/* Concentración geográfica */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <div className="flex items-baseline justify-between mb-3">
-          <h3 className="text-sm font-medium text-gray-800">Concentración geográfica de SKUs</h3>
-          <span className="text-xs text-gray-500">¿En cuántos CEDIS vive cada SKU?</span>
-        </div>
-        <div className="grid grid-cols-3 gap-2.5">
-          {concentracion.map((c, i) => {
-            const pal = i === 0 ? PALETTE.amber : i === 1 ? PALETTE.blue : PALETTE.teal;
-            return (
-              <div key={c.lbl} className="rounded-xl p-3" style={{ background: pal.bg }}>
-                <div className="text-[11px] font-medium" style={{ color: pal.mid }}>{c.lbl}</div>
-                <div className="text-xl font-medium mt-0.5" style={{ color: pal.text }}>
-                  {fmtInt(c.n)} <span className="text-sm font-normal">SKUs</span>
-                </div>
-                <div className="text-[11px] mt-0.5" style={{ color: pal.mid }}>{fmtPct(c.pct)} del total</div>
-              </div>
-            );
-          })}
-        </div>
-        {concentracion[0]?.pct > 60 && (
-          <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>
-              Más del 60% de tus SKUs vive en un solo CEDIS. Riesgo de quiebre por zona geográfica y sobrecarga logística.
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Tabla de almacenes */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <h3 className="text-sm font-medium text-gray-800 mb-3">Almacenes</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-gray-500 border-b border-gray-200">
-                <th className="text-left py-2 pr-2">#</th>
-                <th className="text-left py-2 pr-2">Nombre</th>
-                <th className="text-left py-2 pr-2">CEDIS</th>
-                <th className="text-left py-2 pr-2">Tipo</th>
-                <th className="text-right py-2 pr-2">SKUs</th>
-                <th className="text-right py-2 pr-2">Piezas</th>
-                <th className="text-right py-2 pr-2">Valor</th>
-                <th className="text-right py-2">% del total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {porAlmacen.map((a) => {
-                const pal = COLOR_TIPO[a.tipo] || PALETTE.gray;
-                const cpal = CEDIS_COLOR[a.cedis] || PALETTE.gray;
-                return (
-                  <tr key={a.no_almacen} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-2 pr-2 font-mono text-gray-500">{a.no_almacen}</td>
-                    <td className="py-2 pr-2 text-gray-800">{a.nombre}</td>
-                    <td className="py-2 pr-2">
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: cpal.bg, color: cpal.text }}>
-                        {CEDIS_CORTO[a.cedis] || a.cedis}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-2">
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: pal.bg, color: pal.text }}>
-                        {a.tipo}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-2 text-right text-gray-800">{fmtInt(a.skus)}</td>
-                    <td className="py-2 pr-2 text-right text-gray-600">{fmtInt(a.piezas)}</td>
-                    <td className="py-2 pr-2 text-right font-medium text-gray-800">{fmtCompact(a.valor)}</td>
-                    <td className="py-2 text-right text-gray-600">{fmtPct(a.share)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Top SKUs por valor */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <div className="flex items-baseline justify-between mb-3 gap-3">
-          <h3 className="text-sm font-medium text-gray-800">Top SKUs por valor de inventario</h3>
-          <div className="flex items-center gap-2 flex-1 max-w-sm">
-            <div className="flex-1 flex items-center gap-2 px-2 bg-white border border-gray-200 rounded-lg h-8">
-              <Search className="w-3.5 h-3.5 text-gray-400" />
-              <input
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar SKU o descripción…"
-                className="flex-1 outline-none text-xs bg-transparent"
-              />
-              {busqueda && <button onClick={() => setBusqueda('')}><X className="w-3.5 h-3.5 text-gray-400" /></button>}
-            </div>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-gray-500 border-b border-gray-200">
-                <th className="text-left py-2 pr-2 w-8">#</th>
-                <th className="text-left py-2 pr-2">SKU</th>
-                <th className="text-left py-2 pr-2">Descripción</th>
-                <th className="text-right py-2 pr-2">Piezas</th>
-                <th className="text-right py-2 pr-2">CEDIS</th>
-                <th className="text-right py-2">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topSkus.slice(0, 40).map((s, i) => (
-                <tr key={s.sku} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-2 pr-2 text-gray-400">{i + 1}</td>
-                  <td className="py-2 pr-2 font-mono text-gray-700">{s.sku}</td>
-                  <td className="py-2 pr-2 text-gray-600 truncate max-w-md" title={s.info?.desc || ''}>
-                    {s.info?.desc || '—'}
-                    {s.info?.marca && <span className="text-gray-400 ml-1.5">· {s.info.marca}</span>}
-                  </td>
-                  <td className="py-2 pr-2 text-right text-gray-600">{fmtInt(s.piezas)}</td>
-                  <td className="py-2 pr-2 text-right text-gray-600">{s.cedis}/3</td>
-                  <td className="py-2 text-right font-medium text-gray-800">{fmtCompact(s.valor)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="text-[11px] text-gray-500 mt-2">
-          Mostrando {Math.min(40, topSkus.length)} de {fmtInt(topSkus.length)}
-        </div>
-      </div>
-
-      {/* Placeholders: stock muerto + transferencias */}
-      <div className="grid grid-cols-2 gap-2.5">
+      {/* Placeholders: stock muerto + transferencias + reporte */}
+      <div className="grid grid-cols-3 gap-2.5">
         <ProximoBloque
           icon={AlertTriangle}
           titulo="Stock muerto"
-          nota="SKUs con valor alto y sin movimiento en +90 días. Requiere ventas por SKU × CEDIS para calcularse."
+          nota="SKUs con valor alto y sin movimiento en +90 días. Requiere ventas por SKU × CEDIS."
         />
         <ProximoBloque
           icon={ArrowRightLeft}
           titulo="Transferencias sugeridas"
           nota="CEDIS con exceso vs otro agotado del mismo SKU. Requiere venta por CEDIS para priorizar."
+        />
+        <ProximoBloque
+          icon={FileText}
+          titulo="Reporte"
+          nota="Exportable a Excel/PDF con el detalle por almacén, CEDIS y SKU."
         />
       </div>
     </div>
