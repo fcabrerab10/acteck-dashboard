@@ -78,7 +78,8 @@ const SOURCES = [
     ]
   },
   { id:'roadmap', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Roadmap', desc:'Archivo Roadmap.xlsx (Hoja1). 6 columnas: Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2. Replace completo — fuente única de marca/categoría/familia por SKU para todo el dashboard.', file:'Roadmap.xlsx', table:'roadmap_sku', onConflict:'sku', parser:'roadmap', replace:true },
-  { id:'precios', grupo:'globales', tipo:'updated', statusKey:'precios', title:'Lista de Precios', desc:'Archivo mensual (ej. "Lista de Precios Mayoreo AAA 2026 Julio.xlsx"). Hoja "Lista", headers en fila 5. Guarda histórico por mes: precio_aaa, promo_sell_in y precio_neto (= AAA × (1 − promo)). El año/mes se extraen del nombre del archivo. MSRP se ignora.', file:'Lista de Precios <AÑO> <MES>.xlsx', table:'precios_sku', onConflict:'sku,anio,mes', parser:'precios' },
+  { id:'precios', grupo:'globales', tipo:'updated', statusKey:'precios', title:'Lista de Precios', desc:'Archivo mensual (ej. "Lista de Precios Mayoreo AAA 2026 Julio.xlsx"). Hoja "Lista", headers en fila 5. Guarda histórico por mes: precio_aaa, promo_sell_in y precio_neto (= AAA × (1 − promo)). El año/mes se extraen del nombre del archivo. MSRP se ignora.', file:'Lista de Precios Mayoreo AAA <AÑO> <MES>.xlsx', table:'precios_sku', onConflict:'sku,anio,mes', parser:'precios' },
+  { id:'promos-temporada', grupo:'globales', tipo:'updated', statusKey:'promos_temporada', title:'Promociones por temporada', desc:'Archivo con descuento extra de una campaña (ej. "Promociones Exclusivas Back to School Jul2026.xlsx"). Se aplica ENCIMA de la promo sell in: precio final = Mayoreo AAA × (1 − promo_sell_in) × (1 − promo_temporada). Campaña, año y mes se extraen del nombre. Al reprocesar el mismo mes se reemplazan todas sus promos.', file:'Promociones Exclusivas <CAMPAÑA> <MES><AÑO>.xlsx', table:'promos_temporada', onConflict:'sku,anio,mes', parser:'promosTemporada' },
   { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
   { id:'estados-resultados', grupo:'globales', tipo:'mes', statusKey:'estados_resultados', title:'Estado de Resultados (P&L)', desc:'Cierres mensuales/trimestrales del P&L (ej. "Cierre 1Q 2026.xlsx", "Cierre Diciembre 2025.xlsx"). Lee la hoja "Estado de Resultados" y carga sólo los meses con valores. No borra meses previos; upsert por (razón social, año, mes, cuenta).', file:'Cierre <período>.xlsx', table:'estados_resultados', onConflict:'razon_social,anio,mes,cuenta_norm', parser:'estadosResultados' },
   // ── Digitalife ──
@@ -1048,6 +1049,63 @@ const PARSERS = {
     }).filter(Boolean);
   },
 
+  // Promociones por temporada — archivo "Promociones Exclusivas <CAMPAÑA> <MES><AÑO>.xlsx"
+  // Hoja 'Hoja1', headers en fila 2 (col 1=Articulo, col 2=Descripcion 2, col 3=Desc extra).
+  // Cada archivo trae 1 sola campaña vigente en 1 mes. Al reprocesar el mismo mes se
+  // reemplazan todas las filas de ese periodo (deletePeriodos).
+  // Precio final = Mayoreo AAA × (1 − promo_sell_in) × (1 − promo_temporada).
+  promosTemporada(wb, filename){
+    const MESES_ES = {
+      enero:1, ene:1, febrero:2, feb:2, marzo:3, mar:3, abril:4, abr:4, mayo:5, may:5, junio:6, jun:6,
+      julio:7, jul:7, agosto:8, ago:8, septiembre:9, setiembre:9, sep:9, sept:9,
+      octubre:10, oct:10, noviembre:11, nov:11, diciembre:12, dic:12,
+    };
+    const detectarPeriodo = (name) => {
+      const s = String(name || '').toLowerCase();
+      let mes = null, anio = null;
+      for (const [nm, n] of Object.entries(MESES_ES)) {
+        const re = new RegExp('\\b' + nm + '\\b|' + nm + '(?=\\d)', 'i');
+        if (re.test(s)) { mes = n; break; }
+      }
+      const my = s.match(/\b(20\d{2})\b/) || s.match(/(20\d{2})/);
+      if (my) anio = parseInt(my[1], 10);
+      if (!mes || !anio) {
+        const now = new Date();
+        if (!mes)  mes  = now.getMonth() + 1;
+        if (!anio) anio = now.getFullYear();
+      }
+      return { anio, mes };
+    };
+    const detectarCampania = (name) => {
+      const raw = String(name || '').replace(/\.xlsx?$/i, '');
+      const s = raw.replace(/^Promociones\s+Exclusivas\s+/i, '');
+      const limpio = s.replace(/\s*(20\d{2}|Ene|Feb|Mar|Abr|May|Jun|Jul|Ago|Sep|Sept|Oct|Nov|Dic|Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)[\s\d]*$/i, '').trim();
+      return limpio || 'Sin nombre';
+    };
+    const { anio, mes } = detectarPeriodo(filename);
+    const campania = detectarCampania(filename);
+    const sh = wb.Sheets['Hoja1'] || wb.Sheets[wb.SheetNames[0]];
+    const arr = XLSX.utils.sheet_to_json(sh, {header:1, defval:null});
+    const out = [];
+    for (let i = 2; i < arr.length; i++) {
+      const row = arr[i];
+      if (!row) continue;
+      const sku = toStr(row[1]);
+      if (!sku) continue;
+      const desc = toStr(row[2]);
+      const promo = toNum(row[3]);
+      if (promo == null) continue;
+      out.push({
+        sku, anio, mes,
+        campania,
+        promo_pct: promo,
+        descripcion: desc,
+        sort_order: i,
+      });
+    }
+    return out;
+  },
+
   // Hojas "Venta Facturación" (monto) + "Venta Piezas" (piezas) — dos pivots
   // separados del nuevo Excel ERP. Cada pivot tiene cliente padre + SKUs hijos
   // en filas y años/meses en columnas (un valor por celda, no pares). Las
@@ -1601,9 +1659,16 @@ async function handleUpload(src){
     if (src.combined) {
       for (const sub of src.combined) {
         appendLog(src, `--- ${sub.label} (${sub.table}) ---`);
-        const rows = PARSERS[sub.parser](wb);
+        const rows = PARSERS[sub.parser](wb, f.name);
         appendLog(src, `Filas parseadas: ${rows.length}`);
-        await postChunks(src, sub.table, sub.onConflict, rows, sub.replaceAnios);
+        if ((sub.parser === 'precios' || sub.parser === 'promosTemporada') && rows.length > 0) {
+          appendLog(src, `Período detectado: ${rows[0].anio}-${String(rows[0].mes).padStart(2,'0')}${rows[0].campania ? ' · ' + rows[0].campania : ''}`);
+        }
+        // Replace por (año, mes) para tablas con histórico mensual
+        const deletePeriodos = rows.length > 0 && (sub.parser === 'precios' || sub.parser === 'promosTemporada')
+          ? [{anio: rows[0].anio, mes: rows[0].mes}]
+          : null;
+        await postChunks(src, sub.table, sub.onConflict, rows, sub.replaceAnios, deletePeriodos);
       }
     // Estados de cuenta and Roadmap+Precios have special handling
     } else if (src.parser === 'estadoCuenta') {
@@ -1623,13 +1688,18 @@ async function handleUpload(src){
     } else {
       const rows = PARSERS[src.parser](wb, f.name);
       appendLog(src, `Filas parseadas: ${rows.length}`);
-      if (src.parser === 'precios' && rows.length > 0) {
-        appendLog(src, `Período detectado: ${rows[0].anio}-${String(rows[0].mes).padStart(2,'0')}`);
+      if ((src.parser === 'precios' || src.parser === 'promosTemporada') && rows.length > 0) {
+        appendLog(src, `Período detectado: ${rows[0].anio}-${String(rows[0].mes).padStart(2,'0')}${rows[0].campania ? ' · ' + rows[0].campania : ''}`);
       }
+
+      // Replace por (año, mes) para tablas con histórico mensual (precios, promos)
+      const deletePeriodos = rows.length > 0 && (src.parser === 'precios' || src.parser === 'promosTemporada')
+        ? [{anio: rows[0].anio, mes: rows[0].mes}]
+        : null;
 
       // Replace por años: el servidor borra esos años antes del primer chunk
       // (para que desaparezcan los SKUs que ya no estén en el Excel).
-      await postChunks(src, src.table, src.onConflict, rows, src.replaceAnios);
+      await postChunks(src, src.table, src.onConflict, rows, src.replaceAnios, deletePeriodos);
     }
 
     // Auto-recalculate intermediate tables after certain uploads
@@ -1741,7 +1811,7 @@ async function handleSync(src){
   }
 }
 
-async function postChunks(src, table, onConflict, rows, deleteAnios){
+async function postChunks(src, table, onConflict, rows, deleteAnios, deletePeriodos){
   // Deduplicate: keep last occurrence per conflict key to avoid
   // "ON CONFLICT cannot affect row a second time" errors
   const keys = onConflict.split(',').map(k => k.trim());
@@ -1764,6 +1834,11 @@ async function postChunks(src, table, onConflict, rows, deleteAnios){
     if (i === 0 && Array.isArray(deleteAnios) && deleteAnios.length > 0) {
       payload.deleteAnios = deleteAnios;
       appendLog(src, `  Replace anios: ${deleteAnios.join(', ')} (borrando antes del primer chunk)`);
+    }
+    if (i === 0 && Array.isArray(deletePeriodos) && deletePeriodos.length > 0) {
+      payload.deletePeriodos = deletePeriodos;
+      const lbl = deletePeriodos.map(p => `${p.anio}-${String(p.mes).padStart(2,'0')}`).join(', ');
+      appendLog(src, `  Replace periodos: ${lbl} (borrando antes del primer chunk)`);
     }
     const r = await fetch('/api/import-central', {
       method:'POST',

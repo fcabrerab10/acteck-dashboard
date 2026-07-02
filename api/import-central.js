@@ -30,6 +30,7 @@ const ALLOWED = {
   facturacion_clientes:  'cliente_nombre,sku,anio,mes',
   estados_resultados:    'razon_social,anio,mes,cuenta_norm',
   compras_oc:            'movid,articulo',
+  promos_temporada:      'sku,anio,mes',
 };
 
 export default async function handler(req, res) {
@@ -37,7 +38,7 @@ export default async function handler(req, res) {
   if (!SRK) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
 
   try {
-    const { table, rows, deleteAnios } = req.body || {};
+    const { table, rows, deleteAnios, deletePeriodos } = req.body || {};
     if (!table || !ALLOWED[table]) return res.status(400).json({ error: 'invalid table. allowed: ' + Object.keys(ALLOWED).join(', ') });
     if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'rows[] required' });
 
@@ -55,6 +56,25 @@ export default async function handler(req, res) {
         if (!dr.ok) {
           const txt = await dr.text();
           return res.status(dr.status).json({ error: 'delete failed', detail: txt.slice(0, 500), anio });
+        }
+      }
+    }
+
+    // deletePeriodos: [{anio, mes}, ...] — borra por (anio, mes) antes del upsert.
+    // Útil para replace por mes (ej. promos_temporada, precios mensuales).
+    if (Array.isArray(deletePeriodos) && deletePeriodos.length > 0) {
+      for (const p of deletePeriodos) {
+        const anio = parseInt(p?.anio);
+        const mes  = parseInt(p?.mes);
+        if (!anio || !mes) continue;
+        const delUrl = `${SB_URL}/rest/v1/${table}?anio=eq.${anio}&mes=eq.${mes}`;
+        const dr = await fetch(delUrl, {
+          method: 'DELETE',
+          headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, Prefer: 'return=minimal' },
+        });
+        if (!dr.ok) {
+          const txt = await dr.text();
+          return res.status(dr.status).json({ error: 'delete failed', detail: txt.slice(0, 500), anio, mes });
         }
       }
     }
