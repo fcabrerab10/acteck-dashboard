@@ -77,7 +77,8 @@ const SOURCES = [
       { table:'compras_oc', onConflict:'movid,articulo', parser:'comprasOC', label:'POs de Compras (Vw_TablaH_Compras)', replace:true }
     ]
   },
-  { id:'roadmap-precios', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Catálogo · Roadmap y Precios', desc:'Archivo Roadmap y Precios.xlsx (2 hojas). Replace completo.', file:'Roadmap y Precios.xlsx', table:'roadmap_sku+precios_sku', parser:'roadmapPrecios', replace:true },
+  { id:'roadmap', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Roadmap (catálogo maestro)', desc:'Archivo Roadmap.xlsx (Hoja1). 6 columnas: Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2. Replace completo — fuente única de marca/categoría/familia por SKU para todo el dashboard.', file:'Roadmap.xlsx', table:'roadmap_sku', onConflict:'sku', parser:'roadmap', replace:true },
+  { id:'precios', grupo:'globales', tipo:'updated', statusKey:'precios', title:'Lista de Precios', desc:'Archivo Lista de Precios.xlsx. Layout pendiente — se ajusta cuando lo entregues.', file:'Lista de Precios.xlsx', table:'precios_sku', onConflict:'sku', parser:'precios', replace:true },
   { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
   { id:'estados-resultados', grupo:'globales', tipo:'mes', statusKey:'estados_resultados', title:'Estado de Resultados (P&L)', desc:'Cierres mensuales/trimestrales del P&L (ej. "Cierre 1Q 2026.xlsx", "Cierre Diciembre 2025.xlsx"). Lee la hoja "Estado de Resultados" y carga sólo los meses con valores. No borra meses previos; upsert por (razón social, año, mes, cuenta).', file:'Cierre <período>.xlsx', table:'estados_resultados', onConflict:'razon_social,anio,mes,cuenta_norm', parser:'estadosResultados' },
   // ── Digitalife ──
@@ -968,19 +969,35 @@ const PARSERS = {
       };
     }).filter(Boolean);
   },
-  roadmapPrecios(wb){
-    const shR = wb.Sheets['Roadmap Q2 2026'] || wb.Sheets[wb.SheetNames[0]];
-    const shP = wb.Sheets['BD Lista de Precios'] || wb.Sheets[wb.SheetNames[1]];
-    const roadmap = XLSX.utils.sheet_to_json(shR, {defval:null, range:12}).map((r,i) => {
+  // Roadmap (catálogo maestro) — Roadmap.xlsx / Hoja1
+  // Layout: headers en fila 1, datos desde fila 2.
+  // Columnas: Marca | Categoria | Familia | Articulo | Roadmap | Descripcion 2
+  // Es la fuente única de marca/categoría/familia por SKU para todo el dashboard.
+  roadmap(wb){
+    const sh = wb.Sheets['Hoja1'] || wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
+    return rows.map((r,i) => {
       const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
+      const sku = toStr(obj.articulo ?? obj.sku);
+      if (!sku) return null;
       return {
-        sku: toStr(obj.sku),
+        sku,
+        marca: toStr(obj.marca).toUpperCase(),
+        categoria: toStr(obj.categoria ?? obj.categoría),
+        familia: toStr(obj.familia),
         rdmp: toStr(obj.roadmap ?? obj.rdmp),
         descripcion: toStr(obj.descripcion_2 ?? obj.descripcion ?? obj.descripcion_1),
-        sort_order: i
+        sort_order: i,
       };
-    }).filter(r => r.sku);
-    const precios = XLSX.utils.sheet_to_json(shP, {defval:null, range:4}).map((r,i) => {
+    }).filter(Boolean);
+  },
+
+  // Lista de Precios — Lista de Precios.xlsx
+  // Layout pendiente — se ajusta cuando el usuario entregue el archivo nuevo.
+  // Por ahora mantiene el layout viejo (hoja 'BD Lista de Precios', headers en fila 5).
+  precios(wb){
+    const sh = wb.Sheets['BD Lista de Precios'] || wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(sh, {defval:null, range:4}).map((r,i) => {
       const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
       const pd = obj.precio_c_descuento ?? obj.precio_descuento;
       return {
@@ -988,10 +1005,9 @@ const PARSERS = {
         precio_aaa: toNum(obj.aaa ?? obj.precio_aaa),
         descuento: toNum(obj.descuento),
         precio_descuento: pd==='Consultar' ? null : toNum(pd),
-        sort_order: i
+        sort_order: i,
       };
     }).filter(r => r.sku);
-    return { roadmap, precios };
   },
 
   // Hojas "Venta Facturación" (monto) + "Venta Piezas" (piezas) — dos pivots
@@ -1566,11 +1582,6 @@ async function handleUpload(src){
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(`HTTP ${r.status}: ${JSON.stringify(j).slice(0, 300)}`);
       appendLog(src, `✓ estado_cuenta id=${j.id} · TC día: ${j.tipo_cambio ?? '—'} · ${j.detalle_insertado} facturas insertadas`);
-    } else if (src.parser === 'roadmapPrecios') {
-      const {roadmap, precios} = PARSERS.roadmapPrecios(wb);
-      appendLog(src, `Roadmap: ${roadmap.length} SKUs, Precios: ${precios.length} SKUs`);
-      await postChunks(src, 'roadmap_sku', 'sku', roadmap);
-      await postChunks(src, 'precios_sku', 'sku', precios);
     } else {
       const rows = PARSERS[src.parser](wb);
       appendLog(src, `Filas parseadas: ${rows.length}`);
