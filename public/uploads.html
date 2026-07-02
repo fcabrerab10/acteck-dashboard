@@ -78,7 +78,7 @@ const SOURCES = [
     ]
   },
   { id:'roadmap', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Roadmap', desc:'Archivo Roadmap.xlsx (Hoja1). 6 columnas: Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2. Replace completo — fuente única de marca/categoría/familia por SKU para todo el dashboard.', file:'Roadmap.xlsx', table:'roadmap_sku', onConflict:'sku', parser:'roadmap', replace:true },
-  { id:'precios', grupo:'globales', tipo:'updated', statusKey:'precios', title:'Lista de Precios', desc:'Archivo Lista de Precios.xlsx. Layout pendiente — se ajusta cuando lo entregues.', file:'Lista de Precios.xlsx', table:'precios_sku', onConflict:'sku', parser:'precios', replace:true },
+  { id:'precios', grupo:'globales', tipo:'updated', statusKey:'precios', title:'Lista de Precios', desc:'Archivo mensual (ej. "Lista de Precios Mayoreo AAA 2026 Julio.xlsx"). Hoja "Lista", headers en fila 5. Guarda histórico por mes: precio_aaa, promo_sell_in y precio_neto (= AAA × (1 − promo)). El año/mes se extraen del nombre del archivo. MSRP se ignora.', file:'Lista de Precios <AÑO> <MES>.xlsx', table:'precios_sku', onConflict:'sku,anio,mes', parser:'precios' },
   { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
   { id:'estados-resultados', grupo:'globales', tipo:'mes', statusKey:'estados_resultados', title:'Estado de Resultados (P&L)', desc:'Cierres mensuales/trimestrales del P&L (ej. "Cierre 1Q 2026.xlsx", "Cierre Diciembre 2025.xlsx"). Lee la hoja "Estado de Resultados" y carga sólo los meses con valores. No borra meses previos; upsert por (razón social, año, mes, cuenta).', file:'Cierre <período>.xlsx', table:'estados_resultados', onConflict:'razon_social,anio,mes,cuenta_norm', parser:'estadosResultados' },
   // ── Digitalife ──
@@ -992,22 +992,60 @@ const PARSERS = {
     }).filter(Boolean);
   },
 
-  // Lista de Precios — Lista de Precios.xlsx
-  // Layout pendiente — se ajusta cuando el usuario entregue el archivo nuevo.
-  // Por ahora mantiene el layout viejo (hoja 'BD Lista de Precios', headers en fila 5).
-  precios(wb){
-    const sh = wb.Sheets['BD Lista de Precios'] || wb.Sheets[wb.SheetNames[0]];
+  // Lista de Precios — archivo mensual (ej. "Lista de Precios Mayoreo AAA 2026 Julio.xlsx")
+  // Hoja 'Lista', headers en fila 5 (range: 4), datos desde fila 6.
+  // Columnas usadas:
+  //   Marca | Nivel-1 | Familia | Artículo | Columna1 | Descripción
+  //   PRECIOS: Mayoreo AAA | MSRP Distribuidor (ignora) | MSRP Usuario Final (ignora)
+  //   PROMOCIONES: Sell Out  ← es realmente Promo Sell In (%, ej. 0.05 = 5%)
+  //   UNIDADES: Piezas por Inner | Piezas por Pallet
+  //   CÓDIGOS: EAN 13 | Código SAT
+  // Precio neto = Mayoreo AAA × (1 − Promo Sell In)
+  // Se guarda histórico por (sku, anio, mes) — año y mes se extraen del nombre del archivo.
+  precios(wb, filename){
+    const MESES_ES = {
+      enero:1, febrero:2, marzo:3, abril:4, mayo:5, junio:6,
+      julio:7, agosto:8, septiembre:9, setiembre:9, octubre:10, noviembre:11, diciembre:12,
+    };
+    const detectarPeriodo = (name) => {
+      const s = String(name || '').toLowerCase();
+      let mes = null, anio = null;
+      for (const [nm, n] of Object.entries(MESES_ES)) {
+        if (s.includes(nm)) { mes = n; break; }
+      }
+      const my = s.match(/\b(20\d{2})\b/);
+      if (my) anio = parseInt(my[1], 10);
+      if (!mes || !anio) {
+        const now = new Date();
+        if (!mes)  mes  = now.getMonth() + 1;
+        if (!anio) anio = now.getFullYear();
+      }
+      return { anio, mes };
+    };
+    const { anio, mes } = detectarPeriodo(filename);
+    const sh = wb.Sheets['Lista'] || wb.Sheets[wb.SheetNames[0]];
     return XLSX.utils.sheet_to_json(sh, {defval:null, range:4}).map((r,i) => {
       const obj={}; for(const k of Object.keys(r)) obj[snake(k)]=r[k];
-      const pd = obj.precio_c_descuento ?? obj.precio_descuento;
+      const sku = toStr(obj.articulo ?? obj.sku);
+      if (!sku) return null;
+      const precioAAA = toNum(obj.mayoreo_aaa ?? obj.aaa ?? obj.precio_aaa);
+      const promo = toNum(obj.sell_out ?? obj.promo_sell_in);
+      const precioNeto = precioAAA != null && promo != null
+        ? Number((precioAAA * (1 - promo)).toFixed(4))
+        : precioAAA;
       return {
-        sku: toStr(obj.sku),
-        precio_aaa: toNum(obj.aaa ?? obj.precio_aaa),
-        descuento: toNum(obj.descuento),
-        precio_descuento: pd==='Consultar' ? null : toNum(pd),
+        sku,
+        anio, mes,
+        precio_aaa: precioAAA,
+        promo_sell_in: promo,
+        precio_neto: precioNeto,
+        piezas_inner: toInt(obj.piezas_por_inner),
+        piezas_pallet: toInt(obj.piezas_por_pallet),
+        ean13: toStr(obj.ean_13 ?? obj.ean13),
+        codigo_sat: toStr(obj.codigo_sat),
         sort_order: i,
       };
-    }).filter(r => r.sku);
+    }).filter(Boolean);
   },
 
   // Hojas "Venta Facturación" (monto) + "Venta Piezas" (piezas) — dos pivots
@@ -1583,8 +1621,11 @@ async function handleUpload(src){
       if (!r.ok) throw new Error(`HTTP ${r.status}: ${JSON.stringify(j).slice(0, 300)}`);
       appendLog(src, `✓ estado_cuenta id=${j.id} · TC día: ${j.tipo_cambio ?? '—'} · ${j.detalle_insertado} facturas insertadas`);
     } else {
-      const rows = PARSERS[src.parser](wb);
+      const rows = PARSERS[src.parser](wb, f.name);
       appendLog(src, `Filas parseadas: ${rows.length}`);
+      if (src.parser === 'precios' && rows.length > 0) {
+        appendLog(src, `Período detectado: ${rows[0].anio}-${String(rows[0].mes).padStart(2,'0')}`);
+      }
 
       // Replace por años: el servidor borra esos años antes del primer chunk
       // (para que desaparezcan los SKUs que ya no estén en el Excel).
