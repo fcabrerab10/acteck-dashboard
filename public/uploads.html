@@ -88,6 +88,7 @@ const SOURCES = [
   },
   { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
   { id:'estados-resultados', grupo:'globales', tipo:'mes', statusKey:'estados_resultados', title:'Estado de Resultados (P&L)', desc:'Cierres mensuales/trimestrales del P&L (ej. "Cierre 1Q 2026.xlsx", "Cierre Diciembre 2025.xlsx"). Lee la hoja "Estado de Resultados" y carga sólo los meses con valores. No borra meses previos; upsert por (razón social, año, mes, cuenta).', file:'Cierre <período>.xlsx', table:'estados_resultados', onConflict:'razon_social,anio,mes,cuenta_norm', parser:'estadosResultados' },
+  { id:'sellout-general', grupo:'globales', tipo:'semana', statusKey:'sellout_general', title:'Sellout General (mayoristas)', desc:'Archivo semanal "Sellout General.xlsx" (hoja "Hoja1") con el detalle de ventas de nuestros mayoristas hacia sus clientes finales. 357K+ filas históricas (2025-en adelante). Upsert por id de transacción — solo actualiza filas nuevas. Mapeo idcliente→mayorista canónico: CT, CVA, Ingram, Arroba, Dicotech, Techs Mart, Grupo Unidades de Cómputo, DC, Exel, PCH, Grupo Loma, Group NSSTORE, Kabik.', file:'Sellout General.xlsx', table:'sellout_general', onConflict:'id', parser:'selloutGeneral' },
   // ── Digitalife ──
   { id:'digitalife-sellout', grupo:'digitalife', tipo:'sellout', statusKey:'sellout_digitalife', title:'Digitalife · Sellout histórico', desc:'Historico Sellout Digitalife (hoja "Sellout Digitalife"). Append con dedup por fecha+parte+cantidad+total.', file:'Historico Sellout Digitalife.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
   { id:'digitalife-inv', grupo:'digitalife', tipo:'semana', statusKey:'inv_digitalife', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Snapshot semanal por (cliente, sku, anio, semana).', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv' },
@@ -1053,6 +1054,73 @@ const PARSERS = {
         sort_order: i,
       };
     }).filter(Boolean);
+  },
+
+  // Sellout General — reporte semanal con detalle de ventas de mayoristas
+  // (CT, CVA, Ingram, Dicotech, Techs Mart, Arroba, DC, PCH, Exel, Grupo Loma, etc.)
+  // hacia sus clientes finales. 357K+ filas históricas.
+  // Hoja1 con headers en fila 1. Mapeo idcliente → mayorista canónico basado en
+  // análisis de correlación mensual sell-in vs sell-out.
+  selloutGeneral(wb){
+    const MAYORISTAS = {
+      183: 'CT INTERNACIONAL',
+      417: 'CVA',
+      335: 'GRUPO UNIDADES DE COMPUTO',
+      683: 'INGRAM MICRO',
+      1145: 'ARROBA COMPUTERS',
+      514: 'TECHS MART',
+      708: 'DICOTECH',
+      226: 'EXEL DEL NORTE',
+      662: 'DC MAYORISTA',
+      870: 'GROUP NSSTORE',
+      676: 'GRUPO LOMA DEL NORTE',
+      106: 'PCH MAYOREO',
+      7424: 'INTEGRADORA KABIK',
+    };
+    const sh = wb.Sheets['Hoja1'] || wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
+    const out = [];
+    for (const r of rows) {
+      const obj = {};
+      for (const k of Object.keys(r)) obj[snake(k)] = r[k];
+      const id = toInt(obj.id);
+      if (!id) continue;
+      const idcli = toInt(obj.idcliente);
+      const fecha = toISODate(obj.fecha);
+      let anio = null, mes = null;
+      if (fecha) {
+        const [y, m] = fecha.split('-');
+        anio = parseInt(y, 10);
+        mes  = parseInt(m, 10);
+      }
+      out.push({
+        id,
+        idcliente: idcli,
+        mayorista: MAYORISTAS[idcli] || `MAYORISTA ${idcli}`,
+        fecha, anio, mes,
+        sku: toStr(obj.sku),
+        sku_cliente: toStr(obj.sku_cliente),
+        descripcion: toStr(obj.descripcion),
+        cliente_codigo: toStr(obj.cliente),
+        cliente_nombre: toStr(obj.clientenombre),
+        cliente_rfc: toStr(obj.clienterfc),
+        vendedor: toStr(obj.vendedor),
+        vendedor_nombre: toStr(obj.vendedornombre),
+        almacen: toStr(obj.almacen),
+        sucursal: toStr(obj.sucursal),
+        cantidad: toNum(obj.cantidad),
+        precio_unitario: toNum(obj.preciounitario),
+        importe: toNum(obj.importe),
+        factura: toStr(obj.factura),
+        marca: toStr(obj.marca),
+        estado: toStr(obj.estado),
+        linea: toStr(obj.linea),
+        moneda: toStr(obj.moneda),
+        importe_usd: toNum(obj.importeusd),
+        tipocambio: toNum(obj.tipocambio),
+      });
+    }
+    return out;
   },
 
   // Promociones por temporada — archivo "Promociones Exclusivas <CAMPAÑA> <MES><AÑO>.xlsx"
