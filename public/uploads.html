@@ -31,6 +31,11 @@
   .log.open{display:block}
   .status-line{font-size:12px;min-height:18px}
   .last-updated{font-size:11px;color:#059669;background:#dcfce7;padding:2px 8px;border-radius:12px;display:inline-block;margin-top:2px}
+  .updated-wrap{position:relative;display:inline-flex;align-items:center;gap:6px}
+  .hist-toggle{background:transparent;border:none;color:#059669;cursor:pointer;font-size:9px;padding:0 2px;line-height:1}
+  .hist-toggle:hover{color:#047857}
+  .hist-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:280px;max-width:360px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #E2E8F0;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.08);z-index:20;color:#1e293b}
+  .hist-panel.open{display:block}
   .grupo-section{grid-column:1 / -1;display:flex;flex-direction:column;gap:14px}
   .grupo-header{cursor:pointer;display:flex;align-items:baseline;gap:14px;padding:18px 4px 8px;margin:10px 0 0;user-select:none;transition:opacity .15s}
   .grupo-header:hover{opacity:.75}
@@ -1507,6 +1512,52 @@ function getLastUpdated(srcId){
 function saveLastUpdated(srcId){
   try { const d = JSON.parse(localStorage.getItem(LS_UPDATED_KEY)||'{}'); d[srcId]=new Date().toISOString(); localStorage.setItem(LS_UPDATED_KEY,JSON.stringify(d)); } catch{}
 }
+
+// ===== Historial de actualizaciones (últimas N por srcId) =====
+const LS_HISTORIAL_KEY = 'uploads_history_v1';
+const HISTORIAL_MAX = 30;
+function getHistorial(srcId){
+  try { const d = JSON.parse(localStorage.getItem(LS_HISTORIAL_KEY)||'{}'); return Array.isArray(d[srcId]) ? d[srcId] : []; } catch{ return []; }
+}
+function pushHistorial(srcId, meta){
+  try {
+    const d = JSON.parse(localStorage.getItem(LS_HISTORIAL_KEY)||'{}');
+    const arr = Array.isArray(d[srcId]) ? d[srcId] : [];
+    arr.unshift({ fecha: new Date().toISOString(), ...meta });
+    d[srcId] = arr.slice(0, HISTORIAL_MAX);
+    localStorage.setItem(LS_HISTORIAL_KEY, JSON.stringify(d));
+    // Refrescar UI si el dropdown existe
+    const cont = document.getElementById(`hist-${srcId}`);
+    if (cont) renderHistorialInto(cont, srcId);
+  } catch{}
+}
+function renderHistorialInto(cont, srcId){
+  const arr = getHistorial(srcId);
+  cont.innerHTML = '';
+  if (arr.length === 0) {
+    cont.append(el('div', {style:'padding:10px; color:#94A3B8; font-size:11px;'}, 'Sin cargas registradas todavía'));
+    return;
+  }
+  const TIPO_LBL = { upload:'Archivo', sync:'Sync manual', cron:'Auto-sync', extra:'Slot extra' };
+  const header = el('div', {style:'padding:6px 10px; font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#64748B; border-bottom:1px solid #E2E8F0; background:#F8FAFC;'}, `Últimas ${arr.length} cargas`);
+  cont.append(header);
+  for (const it of arr) {
+    const colorEstado = it.estado === 'error' ? '#DC2626' : (it.estado === 'ok' ? '#059669' : '#64748B');
+    const iconEstado = it.estado === 'error' ? '✗' : (it.estado === 'ok' ? '✓' : '·');
+    const tipoLabel = TIPO_LBL[it.tipo] || 'Carga';
+    const meta = it.filas ? `${it.filas.toLocaleString()} filas` : (it.mensaje ? it.mensaje.slice(0, 60) : '');
+    const archivo = it.archivo ? ` · ${it.archivo}` : '';
+    const slot = it.slot ? ` · ${it.slot}` : '';
+    const line = el('div', {style:'padding:8px 10px; font-size:11px; border-bottom:1px solid #F1F5F9;'},
+      el('div', {style:'display:flex; justify-content:space-between; gap:8px; align-items:baseline;'},
+        el('span', {style:`color:${colorEstado}; font-weight:500;`}, `${iconEstado} ${fmtDate(it.fecha)}`),
+        el('span', {style:'color:#94A3B8; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;'}, tipoLabel + slot)
+      ),
+      meta ? el('div', {style:'color:#64748B; margin-top:2px; font-size:10.5px;'}, meta + archivo) : null,
+    );
+    cont.append(line);
+  }
+}
 function fmtDate(iso){
   if(!iso) return null;
   const d=new Date(iso);
@@ -1648,9 +1699,22 @@ function buildSourceCard(src){
     }, '⚡ Auto-sync ahora');
   }
   const lastUp = getLastUpdated(src.id);
-  const updBadge = el('div', {class:'last-updated', id:`updated-${src.id}`},
-    lastUp ? `🕐 Última actualización: ${fmtDate(lastUp)}` : '');
-  if (!lastUp) updBadge.style.display = 'none';
+  const updText = el('span', {id:`updated-${src.id}`}, lastUp ? `🕐 Última actualización: ${fmtDate(lastUp)}` : '');
+  const histBtn = el('button', {
+    class:'hist-toggle',
+    'aria-label':'Ver historial de actualizaciones',
+    onclick: (ev) => {
+      ev.stopPropagation();
+      const panel = document.getElementById(`hist-${src.id}`);
+      const opened = panel.classList.toggle('open');
+      histBtn.textContent = opened ? '▲' : '▼';
+      if (opened) renderHistorialInto(panel, src.id);
+    }
+  }, '▼');
+  const histPanel = el('div', { class:'hist-panel', id:`hist-${src.id}` });
+  const updBadge = el('div', {class:'last-updated updated-wrap', id:`updated-wrap-${src.id}`},
+    updText, histBtn, histPanel);
+  if (!lastUp && getHistorial(src.id).length === 0) updBadge.style.display = 'none';
   // Estado de los datos en Supabase (lo llena `pintarEstadoFuente`)
   const dataStatus = el('div', { class:'fuente-status empty', id:`fstatus-${src.id}` },
     el('span', {class:'dot'}), 'Cargando…');
@@ -1718,10 +1782,14 @@ async function handleUploadExtra(src, ex){
     const exSrc = { id: ex.id };
     await postChunks(exSrc, ex.table, ex.onConflict, rows, null, deletePeriodos);
     setExStatus('b-ok', `✓ ${rows.length} filas`);
+    // El slot extra registra su historial bajo el mismo src padre para
+    // que aparezca en el desplegable principal.
+    pushHistorial(src.id, { estado:'ok', tipo:'extra', slot: ex.id, filas: rows.length });
   } catch (e) {
     console.error(e);
     setExStatus('b-err','Error');
     appendExLog('ERROR: ' + e.message);
+    pushHistorial(src.id, { estado:'error', tipo:'extra', slot: ex.id, mensaje: e.message });
   }
 }
 
@@ -1781,6 +1849,7 @@ async function handleUpload(src){
   const f = input.files?.[0];
   if (!f) { setStatus(src,'b-err','Selecciona un archivo'); return; }
   setStatus(src,'b-warn','Parseando...');
+  let filasTotales = 0;
   try {
     const buf = await f.arrayBuffer();
     const wb = XLSX.read(buf, {type:'array', cellDates:true});
@@ -1791,6 +1860,7 @@ async function handleUpload(src){
       for (const sub of src.combined) {
         appendLog(src, `--- ${sub.label} (${sub.table}) ---`);
         const rows = PARSERS[sub.parser](wb, f.name);
+        filasTotales += rows.length;
         appendLog(src, `Filas parseadas: ${rows.length}`);
         if ((sub.parser === 'precios' || sub.parser === 'promosTemporada') && rows.length > 0) {
           appendLog(src, `Período detectado: ${rows[0].anio}-${String(rows[0].mes).padStart(2,'0')}${rows[0].campania ? ' · ' + rows[0].campania : ''}`);
@@ -1818,6 +1888,7 @@ async function handleUpload(src){
       appendLog(src, `✓ estado_cuenta id=${j.id} · TC día: ${j.tipo_cambio ?? '—'} · ${j.detalle_insertado} facturas insertadas`);
     } else {
       const rows = PARSERS[src.parser](wb, f.name);
+      filasTotales = rows.length;
       appendLog(src, `Filas parseadas: ${rows.length}`);
       if ((src.parser === 'precios' || src.parser === 'promosTemporada') && rows.length > 0) {
         appendLog(src, `Período detectado: ${rows[0].anio}-${String(rows[0].mes).padStart(2,'0')}${rows[0].campania ? ' · ' + rows[0].campania : ''}`);
@@ -1864,14 +1935,19 @@ async function handleUpload(src){
     }
 
     saveLastUpdated(src.id);
-    const badge = document.getElementById(`updated-${src.id}`);
-    badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
-    badge.style.display = '';
+    pushHistorial(src.id, { estado:'ok', tipo:'upload', filas: filasTotales, archivo: f.name });
+    const text = document.getElementById(`updated-${src.id}`);
+    if (text) text.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
+    const wrap = document.getElementById(`updated-wrap-${src.id}`);
+    if (wrap) wrap.style.display = '';
     setStatus(src,'b-ok',`✓ Completado`);
   } catch (e) {
     console.error(e);
     setStatus(src,'b-err','Error');
     appendLog(src, 'ERROR: ' + e.message);
+    pushHistorial(src.id, { estado:'error', tipo:'upload', mensaje: e.message });
+    const wrap = document.getElementById(`updated-wrap-${src.id}`);
+    if (wrap) wrap.style.display = '';
   }
 }
 
@@ -1895,13 +1971,18 @@ async function handleCronSync(src){
     appendLog(src, `✓ Procesadas ${parsed} filas · Upserteadas ${up} · Sheet: ${data.sheet || '?'}`);
     if (data.errors?.length) appendLog(src, 'Errores: ' + JSON.stringify(data.errors).slice(0, 400));
     saveLastUpdated(src.id);
-    const badge = document.getElementById(`updated-${src.id}`);
-    badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
-    badge.style.display = '';
+    pushHistorial(src.id, { estado:'ok', tipo:'cron', filas: up });
+    const text = document.getElementById(`updated-${src.id}`);
+    if (text) text.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
+    const wrap = document.getElementById(`updated-wrap-${src.id}`);
+    if (wrap) wrap.style.display = '';
     setStatus(src,'b-ok',`✓ ${up} filas sincronizadas`);
   } catch (e) {
     appendLog(src, 'ERROR de red: ' + e.message);
     setStatus(src,'b-err','Error');
+    pushHistorial(src.id, { estado:'error', tipo:'cron', mensaje: e.message });
+    const wrap = document.getElementById(`updated-wrap-${src.id}`);
+    if (wrap) wrap.style.display = '';
   }
 }
 
@@ -1931,14 +2012,19 @@ async function handleSync(src){
     await postChunks(src, 'embarques_compras', 'po,codigo', rows);
 
     saveLastUpdated(src.id);
-    const badge = document.getElementById(`updated-${src.id}`);
-    badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
-    badge.style.display = '';
+    pushHistorial(src.id, { estado:'ok', tipo:'sync', filas: rows.length });
+    const text = document.getElementById(`updated-${src.id}`);
+    if (text) text.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
+    const wrap = document.getElementById(`updated-wrap-${src.id}`);
+    if (wrap) wrap.style.display = '';
     setStatus(src,'b-ok','✓ Sincronizado');
   } catch(e) {
     console.error(e);
     appendLog(src, 'ERROR: ' + e.message);
     setStatus(src,'b-err','Error');
+    pushHistorial(src.id, { estado:'error', tipo:'sync', mensaje: e.message });
+    const wrap = document.getElementById(`updated-wrap-${src.id}`);
+    if (wrap) wrap.style.display = '';
   }
 }
 
