@@ -91,6 +91,17 @@ export default function VisionGeneral() {
   const [cuotas, setCuotas] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [sellCanal, setSellCanal] = useState([]);
+  const [sellCanalPrev, setSellCanalPrev] = useState([]);
+  const [sellMayoristas, setSellMayoristas] = useState([]);
+  const [sellRotacion, setSellRotacion] = useState([]);
+  const [sellMensual, setSellMensual] = useState([]);
+  const [sellMensualPrev, setSellMensualPrev] = useState([]);
+  const [sellTopSkus, setSellTopSkus] = useState([]);
+  const [sellTopClientes, setSellTopClientes] = useState([]);
+  const [sellPromosResumen, setSellPromosResumen] = useState(null);
+  const [sellPromosSkus, setSellPromosSkus] = useState([]);
+
   const [bloqueExpandido, setBloqueExpandido] = useState(null);
 
   // ── Años disponibles
@@ -113,7 +124,8 @@ export default function VisionGeneral() {
       // Fuente: facturacion_clientes (Excel "Venta Facturación" del ERP).
       // Por ahora solo soportamos dimension='canal' — marca/categoría
       // requieren ventas_erp completo con marca/familia.
-      const [a, p, p2, c, inv, invMarca, cart, q, cRes, cCal, cProx, cSem, cRet, cProv, cAgo, cLT, cYTD] = await Promise.all([
+      const [a, p, p2, c, inv, invMarca, cart, q, cRes, cCal, cProx, cSem, cRet, cProv, cAgo, cLT, cYTD,
+             sCan, sCanPrev, sMay, sRot, sMen, sMenPrev, sSkus, sCli, sPromo, sPromoSkus] = await Promise.all([
         supabase.from('v_vision_factura_canal').select('*').eq('anio', anio),
         supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 1),
         supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 2),
@@ -131,6 +143,16 @@ export default function VisionGeneral() {
         supabase.from('v_vision_camino_agotados').select('*').limit(10),
         supabase.from('v_vision_camino_leadtime').select('*').single(),
         supabase.from('v_vision_camino_compras_ytd').select('*'),
+        supabase.from('v_vision_sellout_canal').select('*').eq('anio', anio),
+        supabase.from('v_vision_sellout_canal').select('*').eq('anio', anio - 1),
+        supabase.from('v_vision_sellout_mayoristas').select('*').eq('anio', anio).order('importe', { ascending: false }),
+        supabase.from('v_vision_sellout_rotacion').select('*').order('rotacion_pct', { ascending: true, nullsFirst: false }),
+        supabase.from('v_vision_sellout_mensual').select('*').eq('anio', anio),
+        supabase.from('v_vision_sellout_mensual').select('*').eq('anio', anio - 1),
+        supabase.from('v_vision_sellout_top_skus').select('*').eq('anio', anio).order('importe', { ascending: false }).limit(10),
+        supabase.from('v_vision_sellout_top_clientes').select('*').eq('anio', anio).order('importe', { ascending: false }).limit(10),
+        supabase.from('v_vision_sellout_promos').select('*').single(),
+        supabase.from('v_vision_sellout_promos_top_skus').select('*').order('importe', { ascending: false }).limit(5),
       ]);
       setMargenAct(a.data || []);
       setMargenPrev(p.data || []);
@@ -149,6 +171,16 @@ export default function VisionGeneral() {
       setCaminoAgotados(cAgo.data || []);
       setCaminoLeadtime(cLT.data || null);
       setComprasYTD(cYTD.data || []);
+      setSellCanal(sCan.data || []);
+      setSellCanalPrev(sCanPrev.data || []);
+      setSellMayoristas(sMay.data || []);
+      setSellRotacion(sRot.data || []);
+      setSellMensual(sMen.data || []);
+      setSellMensualPrev(sMenPrev.data || []);
+      setSellTopSkus(sSkus.data || []);
+      setSellTopClientes(sCli.data || []);
+      setSellPromosResumen(sPromo.data || null);
+      setSellPromosSkus(sPromoSkus.data || []);
       setLoading(false);
     })();
   }, [anio, dimension]);
@@ -284,6 +316,24 @@ export default function VisionGeneral() {
              pctVencido: total > 0 ? (vencido / total) * 100 : null };
   }, [cartera]);
 
+  // ── Sell-out del mes actual + comparativo mismo mes año anterior
+  const sellOutMes = useMemo(() => {
+    const total    = sellMensual.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.importe) || 0), 0);
+    const prev     = sellMensualPrev.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.importe) || 0), 0);
+    const ytd      = sellMensual.filter((r) => Number(r.mes) <= mesMax).reduce((s, r) => s + (Number(r.importe) || 0), 0);
+    const ytdPrev  = sellMensualPrev.filter((r) => Number(r.mes) <= mesMax).reduce((s, r) => s + (Number(r.importe) || 0), 0);
+    // Rotación agregada YTD = sellout ytd / sell-in con lag 90d agregado
+    const sellinLag = sellRotacion.reduce((s, r) => s + (Number(r.sellin_lag_90d) || 0), 0);
+    const sellOutYtdMayoreo = sellRotacion.reduce((s, r) => s + (Number(r.sellout_ytd) || 0), 0);
+    return {
+      total, prev, ytd, ytdPrev,
+      deltaYoY: prev > 0 ? ((total - prev) / prev) * 100 : null,
+      deltaYTD: ytdPrev > 0 ? ((ytd - ytdPrev) / ytdPrev) * 100 : null,
+      rotacionYTD: sellinLag > 0 ? (sellOutYtdMayoreo / sellinLag) * 100 : null,
+      sellinLag, sellOutYtdMayoreo,
+    };
+  }, [sellMensual, sellMensualPrev, sellRotacion, mesMax]);
+
   if (loading) {
     return (
       <div className="p-12 text-center text-gray-400">
@@ -339,8 +389,15 @@ export default function VisionGeneral() {
           } />
         <ProximamenteKpi icon={Receipt} label="Cartera por cobrar"
           nota="En construcción" />
-        <ProximamenteKpi icon={ShoppingBag} label="Sell Out"
-          nota="En construcción" />
+        <BentoKpi palette={PALETTE.coral} icon={ShoppingBag} label="Sell Out del canal"
+          valor={fmtCompact(sellOutMes.total)}
+          delta={sellOutMes.deltaYoY}
+          deltaLabel={`vs ${MESES_LBL[mesMax - 1]} ${anio - 1}`}
+          subtitulo={
+            <span>
+              YTD {fmtCompact(sellOutMes.ytd)} · rotación {sellOutMes.rotacionYTD != null ? fmtPct(sellOutMes.rotacionYTD) : '—'}
+            </span>
+          } />
       </div>
 
       {/* Toggle dimensión */}
@@ -388,6 +445,17 @@ export default function VisionGeneral() {
 
       {/* Tendencia 3 años */}
       <TendenciaCard data={tendencia} anio={anio} mesMax={mesMax} />
+
+      {/* Bloque Sell Out */}
+      <SellOutBloque
+        sellCanal={sellCanal} sellCanalPrev={sellCanalPrev}
+        sellMayoristas={sellMayoristas} sellRotacion={sellRotacion}
+        sellMensual={sellMensual} sellMensualPrev={sellMensualPrev}
+        sellTopSkus={sellTopSkus} sellTopClientes={sellTopClientes}
+        sellPromosResumen={sellPromosResumen} sellPromosSkus={sellPromosSkus}
+        sellOutMes={sellOutMes}
+        anio={anio} mesMax={mesMax}
+      />
 
       {/* Sección de inventario */}
       <InventarioSection inventario={inventario}
@@ -1396,6 +1464,369 @@ function AgotadosConOrden({ agotados }) {
         })}
       </div>
     </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// Bloque Sell Out
+// ══════════════════════════════════════════════════
+const CANAL_SELLOUT_META = {
+  mayoreo:      { label: 'Mayoreo',       palette: PALETTE.blue,  nota: 'Con lag 90d · 13 mayoristas' },
+  distribuidor: { label: 'Distribuidor',  palette: PALETTE.teal,  nota: 'Con lag 90d · Digitalife · PCEL · Dicotech' },
+  directo:      { label: 'Venta directa', palette: PALETTE.coral, nota: 'Sin lag · Mostrador · E-com · Marketplaces' },
+};
+
+function SellOutBloque({
+  sellCanal, sellCanalPrev, sellMayoristas, sellRotacion,
+  sellMensual, sellMensualPrev, sellTopSkus, sellTopClientes,
+  sellPromosResumen, sellPromosSkus, sellOutMes,
+  anio, mesMax,
+}) {
+  const canalRows = useMemo(() => {
+    const total = sellCanal.reduce((s, r) => s + (Number(r.importe) || 0), 0);
+    const prevMap = new Map(sellCanalPrev.map((r) => [r.canal_sellout, Number(r.importe) || 0]));
+    return ['mayoreo', 'distribuidor', 'directo'].map((k) => {
+      const cur = sellCanal.find((r) => r.canal_sellout === k);
+      const importe = Number(cur?.importe) || 0;
+      const prev    = prevMap.get(k) || 0;
+      return {
+        key: k,
+        importe, prev,
+        share: total > 0 ? (importe / total) * 100 : 0,
+        deltaYoY: prev > 0 ? ((importe - prev) / prev) * 100 : null,
+        clientes: Number(cur?.clientes_finales) || 0,
+        skus: Number(cur?.skus) || 0,
+      };
+    });
+  }, [sellCanal, sellCanalPrev]);
+
+  const totalYTD = canalRows.reduce((s, r) => s + r.importe, 0);
+
+  const rotacionAlertas = useMemo(() => {
+    return sellRotacion
+      .filter((r) => Number(r.sellin_lag_90d) > 0 && Number(r.rotacion_pct) < 70)
+      .sort((a, b) => Number(a.rotacion_pct) - Number(b.rotacion_pct))
+      .slice(0, 5);
+  }, [sellRotacion]);
+
+  const serie12m = useMemo(() => {
+    const sumar = (rows) => {
+      const arr = Array(12).fill(0);
+      rows.forEach((r) => {
+        const m = Number(r.mes);
+        if (m >= 1 && m <= 12) arr[m - 1] += Number(r.importe) || 0;
+      });
+      return arr;
+    };
+    const act = sumar(sellMensual);
+    const prv = sumar(sellMensualPrev);
+    return Array.from({ length: 12 }, (_, i) => ({
+      mes: MESES_LBL[i],
+      [`${anio}`]: act[i] || null,
+      [`${anio - 1}`]: prv[i] || null,
+    }));
+  }, [sellMensual, sellMensualPrev, anio]);
+
+  const mayoristaMax = Math.max(...sellMayoristas.map((m) => Number(m.importe) || 0), 1);
+
+  const hayDatos = totalYTD > 0 || sellMayoristas.length > 0;
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-baseline justify-between px-1">
+        <div>
+          <p className="text-[11px] uppercase tracking-widest text-gray-500 mb-1">Bloque · Sell Out</p>
+          <h3 className="text-lg font-medium text-gray-800">Sell out del canal</h3>
+        </div>
+        <span className="text-xs text-gray-500">Ajustado por 90 días de crédito · {anio}</span>
+      </div>
+
+      {!hayDatos && (
+        <div className="rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 p-4 text-sm">
+          Aún no hay datos de <code>sellout_general</code> en Supabase.
+          Sube el archivo Sellout General.xlsx en <code>/uploads.html</code> para activar este bloque.
+        </div>
+      )}
+
+      {/* ① KPIs globales */}
+      <div className="grid grid-cols-4 gap-2.5">
+        <BentoKpi palette={PALETTE.coral} icon={ShoppingBag} label={`Sell-out ${MESES_LBL[mesMax - 1]}`}
+          valor={fmtCompact(sellOutMes.total)}
+          delta={sellOutMes.deltaYoY}
+          deltaLabel={`vs ${MESES_LBL[mesMax - 1]} ${anio - 1}`}
+          subtitulo={<span>{fmtCompact(sellOutMes.prev)} en {anio - 1}</span>} />
+        <BentoKpi palette={PALETTE.blue} icon={TrendingUp} label="Sell-out YTD"
+          valor={fmtCompact(sellOutMes.ytd)}
+          delta={sellOutMes.deltaYTD}
+          deltaLabel="YoY"
+          subtitulo={<span>{fmtCompact(sellOutMes.ytdPrev)} en {anio - 1}</span>} />
+        <BentoKpi palette={PALETTE.teal} icon={Activity} label="Rotación del canal"
+          valor={sellOutMes.rotacionYTD != null ? fmtPct(sellOutMes.rotacionYTD) : '—'}
+          delta={null}
+          subtitulo={<span>{fmtCompact(sellOutMes.sellOutYtdMayoreo)} / {fmtCompact(sellOutMes.sellinLag)} sell-in Q1</span>} />
+        <BentoKpi palette={PALETTE.purple} icon={ShoppingBag} label="Clientes finales activos"
+          valor={fmtInt(sellTopClientes.length > 0
+            ? canalRows.reduce((s, r) => s + r.clientes, 0)
+            : 0)}
+          delta={null}
+          subtitulo={<span>en {sellMayoristas.length || '—'} mayoristas</span>} />
+      </div>
+
+      {/* ② Sell-out por canal */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-4">
+        <div className="flex items-baseline justify-between mb-3">
+          <h4 className="text-sm font-medium text-gray-800">Sell-out por canal</h4>
+          <span className="text-xs text-gray-500">YTD {anio}</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2.5">
+          {canalRows.map((c) => {
+            const meta = CANAL_SELLOUT_META[c.key];
+            const pal = meta.palette;
+            const rotCanal = c.key === 'directo' ? 100 : null;
+            return (
+              <div key={c.key} className="rounded-xl p-3" style={{ background: pal.bg }}>
+                <div className="text-[10px] font-medium uppercase tracking-wider" style={{ color: pal.mid }}>
+                  {meta.label}
+                </div>
+                <div className="text-2xl font-medium mt-1" style={{ color: pal.text }}>
+                  {fmtCompact(c.importe)}
+                </div>
+                <div className="text-[11px] mt-0.5" style={{ color: pal.mid }}>
+                  {fmtPct(c.share)} del total{c.deltaYoY != null && ` · ${fmtPctDelta(c.deltaYoY)} YoY`}
+                </div>
+                <div className="text-[10px] mt-2 pt-2 border-t" style={{ borderColor: pal.soft || pal.mid + '30', color: pal.text }}>
+                  {rotCanal != null ? `Rotación ${fmtPct(rotCanal)} · sin lag` : meta.nota}
+                </div>
+                <div className="text-[10px] mt-1" style={{ color: pal.mid }}>
+                  {fmtInt(c.clientes)} clientes · {fmtInt(c.skus)} SKUs
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ③ Ranking mayoristas */}
+      {sellMayoristas.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-2xl p-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-800">Ranking de mayoristas</h4>
+            <span className="text-xs text-gray-500">{sellMayoristas.length} activos</span>
+          </div>
+          <div className="space-y-2">
+            {sellMayoristas.slice(0, 13).map((m, i) => {
+              const w = mayoristaMax > 0 ? (Number(m.importe) / mayoristaMax) * 100 : 0;
+              return (
+                <div key={m.mayorista} className="grid items-center gap-2 text-xs"
+                  style={{ gridTemplateColumns: '24px 180px 1fr auto' }}>
+                  <span className="text-gray-400">#{i + 1}</span>
+                  <span className="text-gray-800 truncate">{m.mayorista}</span>
+                  <div className="bg-gray-100 rounded h-3 relative">
+                    <div className="absolute left-0 top-0 h-3 rounded"
+                      style={{ background: PALETTE.blue.mid, width: `${Math.max(2, w)}%` }} />
+                  </div>
+                  <span className="text-gray-800 font-medium text-right whitespace-nowrap">
+                    {fmtCompact(m.importe)}
+                    <span className="ml-1 text-gray-400">
+                      · {totalYTD > 0 ? fmtPct((Number(m.importe) / totalYTD) * 100) : '—'}
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ④ Alerta rotación baja */}
+      {rotacionAlertas.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-2xl p-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-800">Rotación &lt; 70% (con 90 días de crédito)</h4>
+            <span className="text-xs text-rose-700">{rotacionAlertas.length} con riesgo</span>
+          </div>
+          <div className="space-y-1.5">
+            {rotacionAlertas.map((r) => {
+              const rot = Number(r.rotacion_pct);
+              const critico = rot < 60;
+              return (
+                <div key={r.mayorista}
+                  className={`rounded-lg p-2.5 flex justify-between items-center ${
+                    critico ? 'bg-rose-50 border border-rose-200' : 'bg-amber-50 border border-amber-200'
+                  }`}>
+                  <div>
+                    <div className={`text-xs font-medium ${critico ? 'text-rose-800' : 'text-amber-800'}`}>{r.mayorista}</div>
+                    <div className={`text-[10px] ${critico ? 'text-rose-700' : 'text-amber-700'}`}>
+                      Sell-in Q1 {fmtCompact(r.sellin_lag_90d)} · Sell-out YTD {fmtCompact(r.sellout_ytd)} · Rotación {fmtPct(rot)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`text-sm font-medium ${critico ? 'text-rose-800' : 'text-amber-800'}`}>
+                      {fmtCompact(r.sin_rotar)}
+                    </div>
+                    <div className={`text-[10px] ${critico ? 'text-rose-700' : 'text-amber-700'}`}>sin rotar</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ⑤ Tendencia mensual */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-4">
+        <div className="flex items-baseline justify-between mb-3">
+          <h4 className="text-sm font-medium text-gray-800">Sell-out mensual {anio} vs {anio - 1}</h4>
+          <div className="text-[11px] text-gray-500">
+            <span className="inline-block w-2.5 h-2.5 mr-1 align-middle rounded-sm" style={{ background: PALETTE.coral.mid }} /> {anio}
+            <span className="ml-2 inline-block w-2.5 h-2.5 mr-1 align-middle rounded-sm" style={{ background: PALETTE.coral.soft || PALETTE.coral.mid + '60' }} /> {anio - 1}
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={200}>
+          <LineChart data={serie12m} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+            <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#888' }} />
+            <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 11, fill: '#888' }} width={50} />
+            <Tooltip formatter={(v) => v == null ? '—' : fmtMoney(v)} />
+            <Line type="monotone" dataKey={`${anio - 1}`} stroke={PALETTE.coral.soft || '#F5C4B3'} strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey={`${anio}`} stroke={PALETTE.coral.mid} strokeWidth={2.5} dot={{ r: 3, fill: PALETTE.coral.mid }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* ⑥ + ⑦ Top SKUs + Top clientes finales */}
+      <div className="grid grid-cols-2 gap-2.5">
+        <div className="bg-white border border-gray-200 rounded-2xl p-4">
+          <h4 className="text-sm font-medium text-gray-800 mb-3">Top 10 SKUs por sell-out YTD</h4>
+          {sellTopSkus.length === 0 ? (
+            <div className="text-xs text-gray-500">Sin datos.</div>
+          ) : (
+            <div className="space-y-1">
+              {sellTopSkus.map((s, i) => (
+                <div key={s.sku} className="flex items-baseline gap-2 text-xs">
+                  <span className="text-gray-400 w-5">{i + 1}</span>
+                  <span className="font-mono text-gray-700 flex-1 truncate">{s.sku}</span>
+                  <span className="text-gray-400 tabular-nums">{fmtInt(s.clientes)} cli</span>
+                  <span className="text-gray-800 font-medium tabular-nums w-16 text-right">{fmtCompact(s.importe)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="bg-white border border-gray-200 rounded-2xl p-4">
+          <h4 className="text-sm font-medium text-gray-800 mb-3">Top 10 clientes finales</h4>
+          {sellTopClientes.length === 0 ? (
+            <div className="text-xs text-gray-500">Sin datos.</div>
+          ) : (
+            <div className="space-y-1">
+              {sellTopClientes.map((c, i) => (
+                <div key={c.cliente_final} className="flex items-baseline gap-2 text-xs">
+                  <span className="text-gray-400 w-5">{i + 1}</span>
+                  <span className="text-gray-700 flex-1 truncate" title={c.cliente_final}>{c.cliente_final}</span>
+                  <span className="text-gray-400 tabular-nums text-[10px]">{fmtInt(c.mayoristas_o_canales)} vía</span>
+                  <span className="text-gray-800 font-medium tabular-nums w-16 text-right">{fmtCompact(c.importe)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ⑧ Mes actual vs mismo mes año pasado */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-4">
+        <div className="flex items-baseline justify-between mb-3">
+          <h4 className="text-sm font-medium text-gray-800">
+            {MESES_FULL[mesMax - 1]} {anio} vs {MESES_FULL[mesMax - 1]} {anio - 1}
+          </h4>
+          <span className="text-xs text-gray-500">estacional</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="text-center py-3 rounded-lg" style={{ background: PALETTE.blue.bg }}>
+            <div className="text-[10px] tracking-widest" style={{ color: PALETTE.blue.mid }}>
+              {MESES_LBL[mesMax - 1].toUpperCase()} {anio - 1}
+            </div>
+            <div className="text-2xl font-medium mt-1" style={{ color: PALETTE.blue.text }}>{fmtCompact(sellOutMes.prev)}</div>
+          </div>
+          <div className={`text-center py-3 rounded-lg ${sellOutMes.deltaYoY != null && sellOutMes.deltaYoY >= 0 ? 'bg-emerald-50' : 'bg-rose-50'}`}>
+            <div className={`text-[10px] tracking-widest ${sellOutMes.deltaYoY != null && sellOutMes.deltaYoY >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+              {MESES_LBL[mesMax - 1].toUpperCase()} {anio}
+            </div>
+            <div className={`text-2xl font-medium mt-1 ${sellOutMes.deltaYoY != null && sellOutMes.deltaYoY >= 0 ? 'text-emerald-900' : 'text-rose-900'}`}>
+              {fmtCompact(sellOutMes.total)}
+            </div>
+            {sellOutMes.deltaYoY != null && (
+              <div className={`text-[11px] mt-1 ${sellOutMes.deltaYoY >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {fmtCompact(sellOutMes.total - sellOutMes.prev)} ({fmtPctDelta(sellOutMes.deltaYoY)})
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ⑨ Efectividad de promos por temporada */}
+      {sellPromosResumen && sellPromosResumen.campania && (
+        <div className="bg-white border border-gray-200 rounded-2xl p-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-800">Efectividad de promos por temporada</h4>
+            <span className="text-xs text-gray-500">{MESES_FULL[mesMax - 1]} {anio}</span>
+          </div>
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            <div className="rounded-lg p-3" style={{ background: PALETTE.amber.bg }}>
+              <div className="text-[10px] tracking-widest" style={{ color: PALETTE.amber.mid }}>CAMPAÑA</div>
+              <div className="text-sm font-medium mt-1" style={{ color: PALETTE.amber.text }}>{sellPromosResumen.campania}</div>
+              <div className="text-[11px] mt-1" style={{ color: PALETTE.amber.mid }}>
+                {fmtInt(sellPromosResumen.skus_campania)} SKUs
+              </div>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: PALETTE.gray.bg }}>
+              <div className="text-[10px] tracking-widest" style={{ color: PALETTE.gray.mid }}>SELLOUT EN PROMO</div>
+              <div className="text-base font-medium mt-1" style={{ color: PALETTE.gray.text }}>{fmtCompact(sellPromosResumen.sellout_en_promo)}</div>
+              <div className="text-[11px] mt-1" style={{ color: PALETTE.gray.mid }}>
+                {(() => {
+                  const total = (Number(sellPromosResumen.sellout_en_promo) || 0) + (Number(sellPromosResumen.sellout_fuera_promo) || 0);
+                  return total > 0 ? fmtPct((Number(sellPromosResumen.sellout_en_promo) / total) * 100) : '—';
+                })()} del total
+              </div>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: PALETTE.gray.bg }}>
+              <div className="text-[10px] tracking-widest" style={{ color: PALETTE.gray.mid }}>SELLOUT FUERA</div>
+              <div className="text-base font-medium mt-1" style={{ color: PALETTE.gray.text }}>{fmtCompact(sellPromosResumen.sellout_fuera_promo)}</div>
+            </div>
+            <div className="rounded-lg p-3 bg-emerald-50">
+              <div className="text-[10px] tracking-widest text-emerald-700">LIFT VS MES ANTERIOR</div>
+              {(() => {
+                const cur = Number(sellPromosResumen.sellout_en_promo) || 0;
+                const prev = Number(sellPromosResumen.sellout_promo_mes_prev) || 0;
+                const lift = prev > 0 ? ((cur - prev) / prev) * 100 : null;
+                return (
+                  <>
+                    <div className="text-base font-medium mt-1 text-emerald-900">{lift != null ? fmtPctDelta(lift) : '—'}</div>
+                    <div className="text-[11px] mt-1 text-emerald-700">{fmtCompact(prev)} → {fmtCompact(cur)}</div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+          {sellPromosSkus.length > 0 && (
+            <>
+              <div className="text-[11px] text-gray-600 font-medium mb-2">Top 5 SKUs de la campaña</div>
+              <div className="space-y-1">
+                {sellPromosSkus.map((s, i) => (
+                  <div key={s.sku} className="grid gap-2 items-baseline text-xs"
+                    style={{ gridTemplateColumns: '24px 1fr auto auto auto' }}>
+                    <span className="text-gray-400">{i + 1}</span>
+                    <span className="font-mono text-gray-700">{s.sku}</span>
+                    <span className="text-gray-500 text-right">{s.promo_pct != null ? `${(Number(s.promo_pct) * 100).toFixed(0)}% off` : '—'}</span>
+                    <span className="text-gray-500 text-right">{fmtInt(s.piezas)} pz</span>
+                    <span className="text-gray-800 font-medium text-right w-16">{fmtCompact(s.importe)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
