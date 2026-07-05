@@ -1872,8 +1872,17 @@ async function handleUpload(src){
   let filasTotal = 0;
   try {
     const buf = await f.arrayBuffer();
-    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    appendLog(src, `Archivo: ${(f.size / (1024 * 1024)).toFixed(1)} MB`);
+    // Para archivos grandes (Sellout General 100MB+), limitar hojas leídas
+    // ahorra memoria del navegador. Otras hojas del archivo (pivots) causan OOM.
+    const readOpts = { type: 'array', cellDates: true };
+    if (src.id === 'sellout-general') readOpts.sheets = ['Hoja1'];
+    const wb = XLSX.read(buf, readOpts);
     appendLog(src, `Hojas: ${wb.SheetNames.join(', ')}`);
+    for (const nm of wb.SheetNames) {
+      const s = wb.Sheets[nm];
+      if (s && s['!ref']) appendLog(src, `  · ${nm} → ${s['!ref']}`);
+    }
 
     // Combined ERP: run multiple parsers from the same workbook
     if (src.combined) {
