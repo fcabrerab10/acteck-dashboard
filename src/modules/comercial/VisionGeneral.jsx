@@ -316,23 +316,32 @@ export default function VisionGeneral() {
              pctVencido: total > 0 ? (vencido / total) * 100 : null };
   }, [cartera]);
 
-  // ── Sell-out del mes actual + comparativo mismo mes año anterior
+  // ── Sell-out del último mes cerrado + comparativo mismo mes año anterior
+  //   - Si mesMax coincide con el mes calendario actual, usamos mesMax-1
+  //     para evitar mostrar un "mes en curso" incompleto contra el mismo mes
+  //     del año pasado ya cerrado (daba falsos -80%+ en YoY).
   const sellOutMes = useMemo(() => {
-    const total    = sellMensual.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.importe) || 0), 0);
-    const prev     = sellMensualPrev.filter((r) => Number(r.mes) === mesMax).reduce((s, r) => s + (Number(r.importe) || 0), 0);
-    const ytd      = sellMensual.filter((r) => Number(r.mes) <= mesMax).reduce((s, r) => s + (Number(r.importe) || 0), 0);
-    const ytdPrev  = sellMensualPrev.filter((r) => Number(r.mes) <= mesMax).reduce((s, r) => s + (Number(r.importe) || 0), 0);
-    // Rotación agregada YTD = sellout ytd / sell-in con lag 90d agregado
+    const mesCalendario = new Date().getMonth() + 1;
+    const anioCalendario = new Date().getFullYear();
+    const mesEfectivo = (anio === anioCalendario && mesMax === mesCalendario && mesMax > 1)
+      ? mesMax - 1
+      : mesMax;
+    const total    = sellMensual.filter((r) => Number(r.mes) === mesEfectivo).reduce((s, r) => s + (Number(r.importe) || 0), 0);
+    const prev     = sellMensualPrev.filter((r) => Number(r.mes) === mesEfectivo).reduce((s, r) => s + (Number(r.importe) || 0), 0);
+    const ytd      = sellMensual.filter((r) => Number(r.mes) <= mesEfectivo).reduce((s, r) => s + (Number(r.importe) || 0), 0);
+    const ytdPrev  = sellMensualPrev.filter((r) => Number(r.mes) <= mesEfectivo).reduce((s, r) => s + (Number(r.importe) || 0), 0);
     const sellinLag = sellRotacion.reduce((s, r) => s + (Number(r.sellin_lag_90d) || 0), 0);
     const sellOutYtdMayoreo = sellRotacion.reduce((s, r) => s + (Number(r.sellout_ytd) || 0), 0);
     return {
       total, prev, ytd, ytdPrev,
+      mesEfectivo,
+      esEnCurso: mesEfectivo !== mesMax,
       deltaYoY: prev > 0 ? ((total - prev) / prev) * 100 : null,
       deltaYTD: ytdPrev > 0 ? ((ytd - ytdPrev) / ytdPrev) * 100 : null,
       rotacionYTD: sellinLag > 0 ? (sellOutYtdMayoreo / sellinLag) * 100 : null,
       sellinLag, sellOutYtdMayoreo,
     };
-  }, [sellMensual, sellMensualPrev, sellRotacion, mesMax]);
+  }, [sellMensual, sellMensualPrev, sellRotacion, mesMax, anio]);
 
   if (loading) {
     return (
@@ -389,10 +398,11 @@ export default function VisionGeneral() {
           } />
         <ProximamenteKpi icon={Receipt} label="Cartera por cobrar"
           nota="En construcción" />
-        <BentoKpi palette={PALETTE.coral} icon={ShoppingBag} label="Sell Out del canal"
+        <BentoKpi palette={PALETTE.coral} icon={ShoppingBag}
+          label={`Sell Out ${MESES_LBL[sellOutMes.mesEfectivo - 1]}${sellOutMes.esEnCurso ? ' (último cerrado)' : ''}`}
           valor={fmtCompact(sellOutMes.total)}
           delta={sellOutMes.deltaYoY}
-          deltaLabel={`vs ${MESES_LBL[mesMax - 1]} ${anio - 1}`}
+          deltaLabel={`vs ${MESES_LBL[sellOutMes.mesEfectivo - 1]} ${anio - 1}`}
           subtitulo={<span>YTD {fmtCompact(sellOutMes.ytd)}</span>} />
       </div>
 
@@ -1546,10 +1556,11 @@ function SellOutBloque({
 
       {/* ① KPIs globales */}
       <div className="grid grid-cols-3 gap-2.5">
-        <BentoKpi palette={PALETTE.coral} icon={ShoppingBag} label={`Sell-out ${MESES_LBL[mesMax - 1]}`}
+        <BentoKpi palette={PALETTE.coral} icon={ShoppingBag}
+          label={`Sell-out ${MESES_LBL[sellOutMes.mesEfectivo - 1]}${sellOutMes.esEnCurso ? ' (último cerrado)' : ''}`}
           valor={fmtCompact(sellOutMes.total)}
           delta={sellOutMes.deltaYoY}
-          deltaLabel={`vs ${MESES_LBL[mesMax - 1]} ${anio - 1}`}
+          deltaLabel={`vs ${MESES_LBL[sellOutMes.mesEfectivo - 1]} ${anio - 1}`}
           subtitulo={<span>{fmtCompact(sellOutMes.prev)} en {anio - 1}</span>} />
         <BentoKpi palette={PALETTE.blue} icon={TrendingUp} label="Sell-out YTD"
           valor={fmtCompact(sellOutMes.ytd)}
