@@ -393,11 +393,7 @@ export default function VisionGeneral() {
           valor={fmtCompact(sellOutMes.total)}
           delta={sellOutMes.deltaYoY}
           deltaLabel={`vs ${MESES_LBL[mesMax - 1]} ${anio - 1}`}
-          subtitulo={
-            <span>
-              YTD {fmtCompact(sellOutMes.ytd)} · rotación {sellOutMes.rotacionYTD != null ? fmtPct(sellOutMes.rotacionYTD) : '—'}
-            </span>
-          } />
+          subtitulo={<span>YTD {fmtCompact(sellOutMes.ytd)}</span>} />
       </div>
 
       {/* Toggle dimensión */}
@@ -1549,7 +1545,7 @@ function SellOutBloque({
       )}
 
       {/* ① KPIs globales */}
-      <div className="grid grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-3 gap-2.5">
         <BentoKpi palette={PALETTE.coral} icon={ShoppingBag} label={`Sell-out ${MESES_LBL[mesMax - 1]}`}
           valor={fmtCompact(sellOutMes.total)}
           delta={sellOutMes.deltaYoY}
@@ -1560,10 +1556,6 @@ function SellOutBloque({
           delta={sellOutMes.deltaYTD}
           deltaLabel="YoY"
           subtitulo={<span>{fmtCompact(sellOutMes.ytdPrev)} en {anio - 1}</span>} />
-        <BentoKpi palette={PALETTE.teal} icon={Activity} label="Rotación del canal"
-          valor={sellOutMes.rotacionYTD != null ? fmtPct(sellOutMes.rotacionYTD) : '—'}
-          delta={null}
-          subtitulo={<span>{fmtCompact(sellOutMes.sellOutYtdMayoreo)} / {fmtCompact(sellOutMes.sellinLag)} sell-in Q1</span>} />
         <BentoKpi palette={PALETTE.purple} icon={ShoppingBag} label="Clientes finales activos"
           valor={fmtInt(sellTopClientes.length > 0
             ? canalRows.reduce((s, r) => s + r.clientes, 0)
@@ -1582,7 +1574,6 @@ function SellOutBloque({
           {canalRows.map((c) => {
             const meta = CANAL_SELLOUT_META[c.key];
             const pal = meta.palette;
-            const rotCanal = c.key === 'directo' ? 100 : null;
             return (
               <div key={c.key} className="rounded-xl p-3" style={{ background: pal.bg }}>
                 <div className="text-[10px] font-medium uppercase tracking-wider" style={{ color: pal.mid }}>
@@ -1594,10 +1585,7 @@ function SellOutBloque({
                 <div className="text-[11px] mt-0.5" style={{ color: pal.mid }}>
                   {fmtPct(c.share)} del total{c.deltaYoY != null && ` · ${fmtPctDelta(c.deltaYoY)} YoY`}
                 </div>
-                <div className="text-[10px] mt-2 pt-2 border-t" style={{ borderColor: pal.soft || pal.mid + '30', color: pal.text }}>
-                  {rotCanal != null ? `Rotación ${fmtPct(rotCanal)} · sin lag` : meta.nota}
-                </div>
-                <div className="text-[10px] mt-1" style={{ color: pal.mid }}>
+                <div className="text-[10px] mt-2 pt-2 border-t" style={{ borderColor: pal.soft || pal.mid + '30', color: pal.mid }}>
                   {fmtInt(c.clientes)} clientes · {fmtInt(c.skus)} SKUs
                 </div>
               </div>
@@ -1631,41 +1619,6 @@ function SellOutBloque({
                       · {totalYTD > 0 ? fmtPct((Number(m.importe) / totalYTD) * 100) : '—'}
                     </span>
                   </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ④ Alerta rotación baja */}
-      {rotacionAlertas.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-2xl p-4">
-          <div className="flex items-baseline justify-between mb-3">
-            <h4 className="text-sm font-medium text-gray-800">Rotación &lt; 70% (con 90 días de crédito)</h4>
-            <span className="text-xs text-rose-700">{rotacionAlertas.length} con riesgo</span>
-          </div>
-          <div className="space-y-1.5">
-            {rotacionAlertas.map((r) => {
-              const rot = Number(r.rotacion_pct);
-              const critico = rot < 60;
-              return (
-                <div key={r.mayorista}
-                  className={`rounded-lg p-2.5 flex justify-between items-center ${
-                    critico ? 'bg-rose-50 border border-rose-200' : 'bg-amber-50 border border-amber-200'
-                  }`}>
-                  <div>
-                    <div className={`text-xs font-medium ${critico ? 'text-rose-800' : 'text-amber-800'}`}>{r.mayorista}</div>
-                    <div className={`text-[10px] ${critico ? 'text-rose-700' : 'text-amber-700'}`}>
-                      Sell-in Q1 {fmtCompact(r.sellin_lag_90d)} · Sell-out YTD {fmtCompact(r.sellout_ytd)} · Rotación {fmtPct(rot)}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className={`text-sm font-medium ${critico ? 'text-rose-800' : 'text-amber-800'}`}>
-                      {fmtCompact(r.sin_rotar)}
-                    </div>
-                    <div className={`text-[10px] ${critico ? 'text-rose-700' : 'text-amber-700'}`}>sin rotar</div>
-                  </div>
                 </div>
               );
             })}
@@ -1729,37 +1682,6 @@ function SellOutBloque({
               ))}
             </div>
           )}
-        </div>
-      </div>
-
-      {/* ⑧ Mes actual vs mismo mes año pasado */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <div className="flex items-baseline justify-between mb-3">
-          <h4 className="text-sm font-medium text-gray-800">
-            {MESES_FULL[mesMax - 1]} {anio} vs {MESES_FULL[mesMax - 1]} {anio - 1}
-          </h4>
-          <span className="text-xs text-gray-500">estacional</span>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="text-center py-3 rounded-lg" style={{ background: PALETTE.blue.bg }}>
-            <div className="text-[10px] tracking-widest" style={{ color: PALETTE.blue.mid }}>
-              {MESES_LBL[mesMax - 1].toUpperCase()} {anio - 1}
-            </div>
-            <div className="text-2xl font-medium mt-1" style={{ color: PALETTE.blue.text }}>{fmtCompact(sellOutMes.prev)}</div>
-          </div>
-          <div className={`text-center py-3 rounded-lg ${sellOutMes.deltaYoY != null && sellOutMes.deltaYoY >= 0 ? 'bg-emerald-50' : 'bg-rose-50'}`}>
-            <div className={`text-[10px] tracking-widest ${sellOutMes.deltaYoY != null && sellOutMes.deltaYoY >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-              {MESES_LBL[mesMax - 1].toUpperCase()} {anio}
-            </div>
-            <div className={`text-2xl font-medium mt-1 ${sellOutMes.deltaYoY != null && sellOutMes.deltaYoY >= 0 ? 'text-emerald-900' : 'text-rose-900'}`}>
-              {fmtCompact(sellOutMes.total)}
-            </div>
-            {sellOutMes.deltaYoY != null && (
-              <div className={`text-[11px] mt-1 ${sellOutMes.deltaYoY >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                {fmtCompact(sellOutMes.total - sellOutMes.prev)} ({fmtPctDelta(sellOutMes.deltaYoY)})
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
