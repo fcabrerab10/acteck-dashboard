@@ -1138,9 +1138,8 @@ const PARSERS = {
     const detectarPeriodo = (name) => {
       const s = String(name || '').toLowerCase();
       let mes = null, anio = null;
-      for (const [nm, n] of Object.entries(MESES_ES)) {
-        if (s.includes(nm)) { mes = n; break; }
-      }
+      const mm = s.match(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/);
+      if (mm) mes = MESES_ES[mm[1]];
       const my = s.match(/\b(20\d{2})\b/);
       if (my) anio = parseInt(my[1], 10);
       if (!mes || !anio) {
@@ -1188,9 +1187,8 @@ const PARSERS = {
     const detectarPeriodo = (name) => {
       const s = String(name || '').toLowerCase();
       let mes = null, anio = null;
-      for (const [nm, n] of Object.entries(MESES_ES)) {
-        if (s.includes(nm)) { mes = n; break; }
-      }
+      const mm = s.match(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/);
+      if (mm) mes = MESES_ES[mm[1]];
       const my = s.match(/\b(20\d{2})\b/);
       if (my) anio = parseInt(my[1], 10);
       if (!mes || !anio) {
