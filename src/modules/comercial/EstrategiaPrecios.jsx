@@ -413,8 +413,17 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
       ...promosLista,
     ].sort((a, b) => (b.anio - a.anio) || (b.mes - a.mes));
 
+    const primerMesConDato = serieMens.findIndex((r) => (r.piezas > 0) || r.precio != null);
+    let ultimoMesConDato = -1;
+    for (let i = 11; i >= 0; i--) {
+      if (serieMens[i].piezas > 0 || serieMens[i].precio != null) { ultimoMesConDato = i; break; }
+    }
+    const serieMensRecortada = primerMesConDato >= 0 && ultimoMesConDato >= 0
+      ? serieMens.slice(primerMesConDato, ultimoMesConDato + 1)
+      : [];
+
     return {
-      serieMens, clientes, clientesRestantes, clienteVolumen,
+      serieMens: serieMensRecortada, clientes, clientesRestantes, clienteVolumen,
       mesMax,
       piezasMesActual, promPrev3m,
       deltaVsPrev3m: promPrev3m > 0 ? ((piezasMesActual - promPrev3m) / promPrev3m) * 100 : null,
@@ -444,29 +453,46 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
         </div>
 
         <div className="p-3 space-y-2">
-          <div className="grid grid-cols-6 gap-1.5">
-            <div className="rounded p-1.5" style={{ background: PALETTE.red.bg }}>
-              <div className="text-[8px] tracking-wide" style={{ color: PALETTE.red.mid }}>BAJO FACT</div>
-              <div className="text-[13px] font-medium" style={{ color: PALETTE.red.text }}>
-                {bajo ? fmtMoney(bajo.precio_bajo) : '—'}
-              </div>
-            </div>
-            <div className="rounded p-1.5 bg-gray-100">
-              <div className="text-[8px] tracking-wide text-gray-600">MAYOREO AAA</div>
-              <div className="text-[13px] font-medium">{precioAAAneto != null ? fmtMoney(precioAAAneto) : '—'}</div>
-              {promo && precioAAA != null && (
-                <div className="text-[8px] text-gray-400 line-through leading-none">{fmtMoney(precioAAA)}</div>
-              )}
-            </div>
-            {['DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'].map((l) => (
-              <div key={l} className="rounded p-1.5 bg-gray-100">
-                <div className="text-[8px] tracking-wide text-gray-600">{LISTAS_LBL[l]}</div>
-                <div className="text-[13px] font-medium">
-                  {precios[l] != null ? fmtMoney(precios[l]) : <span className="text-gray-400">—</span>}
+          {(() => {
+            const tiles = [];
+            if (bajo) {
+              tiles.push(
+                <div key="bajo" className="rounded p-1.5" style={{ background: PALETTE.red.bg }}>
+                  <div className="text-[8px] tracking-wide" style={{ color: PALETTE.red.mid }}>BAJO FACT</div>
+                  <div className="text-[13px] font-medium" style={{ color: PALETTE.red.text }}>
+                    {fmtMoney(bajo.precio_bajo)}
+                  </div>
                 </div>
+              );
+            }
+            if (precioAAA != null) {
+              tiles.push(
+                <div key="AAA" className="rounded p-1.5 bg-gray-100">
+                  <div className="text-[8px] tracking-wide text-gray-600">MAYOREO AAA</div>
+                  <div className="text-[13px] font-medium">{fmtMoney(precioAAAneto)}</div>
+                  {promo && (
+                    <div className="text-[8px] text-gray-400 line-through leading-none">{fmtMoney(precioAAA)}</div>
+                  )}
+                </div>
+              );
+            }
+            for (const l of ['DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL']) {
+              if (precios[l] != null) {
+                tiles.push(
+                  <div key={l} className="rounded p-1.5 bg-gray-100">
+                    <div className="text-[8px] tracking-wide text-gray-600">{LISTAS_LBL[l]}</div>
+                    <div className="text-[13px] font-medium">{fmtMoney(precios[l])}</div>
+                  </div>
+                );
+              }
+            }
+            if (tiles.length === 0) return null;
+            return (
+              <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(tiles.length, 6)}, minmax(0, 1fr))` }}>
+                {tiles}
               </div>
-            ))}
-          </div>
+            );
+          })()}
 
           {promo && (
             <div className="rounded px-2 py-1 flex items-center gap-1.5" style={{ background: PALETTE.amber.bg, color: PALETTE.amber.text }}>
@@ -504,33 +530,28 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
                 </div>
                 <div className="bg-white border border-gray-200 rounded p-1.5 col-span-4">
                   <div className="flex items-center justify-between mb-0.5">
-                    <div className="text-[8px] tracking-wide text-gray-500">PRECIO Y SELLOUT · {anio}</div>
-                    <div className="flex items-center gap-2 text-[9px]">
-                      <span style={{ color: PALETTE.blue.mid }}>
-                        <span style={{ display:'inline-block', width:8, height:2, background: PALETTE.blue.mid, verticalAlign:'middle', marginRight:3 }} />
-                        Precio $
-                      </span>
-                      <span style={{ color: PALETTE.amber.mid }}>
-                        <span style={{ display:'inline-block', width:8, height:8, background: PALETTE.amber.soft, verticalAlign:'middle', marginRight:3 }} />
-                        Piezas
-                      </span>
+                    <div className="text-[8px] tracking-wide text-gray-500">PRECIO Y SELLOUT</div>
+                    <div className="flex items-center gap-2 text-[9px] text-gray-500">
+                      <span><span style={{ display:'inline-block', width:8, height:2, background: PALETTE.blue.mid, verticalAlign:'middle', marginRight:3 }} />Precio</span>
+                      <span><span style={{ display:'inline-block', width:8, height:8, background: PALETTE.amber.soft, verticalAlign:'middle', marginRight:3 }} />Piezas</span>
                     </div>
                   </div>
-                  <ResponsiveContainer width="100%" height={110}>
-                    <ComposedChart data={analisis.serieMens} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                      <XAxis dataKey="mes" tick={{ fontSize: 8, fill: '#888' }} interval={0} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="left" tick={{ fontSize: 8, fill: PALETTE.blue.mid }} width={50}
-                        tickFormatter={fmtMoney} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 8, fill: PALETTE.amber.mid }} width={35}
-                        tickFormatter={(v) => fmtInt(v)} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(v, name) => name === 'Precio' ? fmtMoney(v) : `${fmtInt(v)} pz`}
-                        labelStyle={{ fontSize: 10 }} contentStyle={{ fontSize: 10, padding: 6 }} />
-                      <Bar yAxisId="right" dataKey="piezas" name="Piezas" fill={PALETTE.amber.soft} radius={[2, 2, 0, 0]} />
-                      <Line yAxisId="left" type="monotone" dataKey="precio" name="Precio"
-                        stroke={PALETTE.blue.mid} strokeWidth={2} dot={{ r: 2, fill: PALETTE.blue.mid }} connectNulls />
-                    </ComposedChart>
-                  </ResponsiveContainer>
+                  {analisis.serieMens.length === 0 ? (
+                    <div className="text-[9px] text-gray-400 text-center py-4">Sin datos históricos</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={80}>
+                      <ComposedChart data={analisis.serieMens} margin={{ top: 4, right: 2, left: -28, bottom: 0 }}>
+                        <XAxis dataKey="mes" tick={{ fontSize: 8, fill: '#888' }} interval={0} axisLine={false} tickLine={false} />
+                        <YAxis yAxisId="left" hide domain={['dataMin - 50', 'dataMax + 50']} />
+                        <YAxis yAxisId="right" orientation="right" hide />
+                        <Tooltip formatter={(v, name) => name === 'Precio' ? fmtMoney(v) : `${fmtInt(v)} pz`}
+                          labelStyle={{ fontSize: 10 }} contentStyle={{ fontSize: 10, padding: 6 }} />
+                        <Bar yAxisId="right" dataKey="piezas" name="Piezas" fill={PALETTE.amber.soft} radius={[2, 2, 0, 0]} />
+                        <Line yAxisId="left" type="monotone" dataKey="precio" name="Precio"
+                          stroke={PALETTE.blue.mid} strokeWidth={2} dot={{ r: 2.5, fill: PALETTE.blue.mid }} connectNulls />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
               </div>
 
