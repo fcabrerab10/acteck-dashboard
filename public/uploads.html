@@ -1083,14 +1083,16 @@ const PARSERS = {
       7424: 'INTEGRADORA KABIK',
     };
     const sh = wb.Sheets['Hoja1'] || wb.Sheets[wb.SheetNames[0]];
+    // Inicializar diag SIEMPRE, incluso si no hay Hoja1
+    if (typeof window !== 'undefined') {
+      window.__selloutGeneralDiag = { rowsCrudas: 0, descartadosSinId: 0, generados: 0, primerRowKeys: [], primerRowSample: null, sheetRef: sh && sh['!ref'] || null };
+    }
     if (!sh) { console.warn('[selloutGeneral] Sin Hoja1'); return []; }
-    console.log('[selloutGeneral] sheet ref:', sh['!ref']);
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
-    console.log('[selloutGeneral] sheet_to_json rows:', rows.length);
-    if (rows.length > 0) {
-      const keys = Object.keys(rows[0]);
-      console.log('[selloutGeneral] keys row 0:', keys);
-      console.log('[selloutGeneral] row 0:', rows[0]);
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null, raw:false});
+    if (typeof window !== 'undefined') window.__selloutGeneralDiag.rowsCrudas = rows.length;
+    if (rows.length > 0 && typeof window !== 'undefined') {
+      window.__selloutGeneralDiag.primerRowKeys = Object.keys(rows[0]);
+      window.__selloutGeneralDiag.primerRowSample = rows[0];
     }
     const out = [];
     let descartadosSinId = 0, primerDescarte = null;
@@ -1138,19 +1140,9 @@ const PARSERS = {
         tipocambio: toNum(obj.tipocambio),
       });
     }
-    console.log('[selloutGeneral] descartados sin id:', descartadosSinId, ' generados:', out.length);
-    if (out.length === 0 && descartadosSinId > 0 && primerDescarte) {
-      console.warn('[selloutGeneral] Ejemplo de fila descartada:', primerDescarte);
-    }
-    // Guardar diagnóstico global para que el UI pueda mostrarlo
     if (typeof window !== 'undefined') {
-      window.__selloutGeneralDiag = {
-        rowsCrudas: rows.length,
-        descartadosSinId,
-        generados: out.length,
-        primerRowKeys: rows.length > 0 ? Object.keys(rows[0]) : [],
-        primerRowSample: rows.length > 0 ? rows[0] : null,
-      };
+      window.__selloutGeneralDiag.descartadosSinId = descartadosSinId;
+      window.__selloutGeneralDiag.generados = out.length;
     }
     return out;
   },
@@ -1900,15 +1892,14 @@ async function handleUpload(src){
   try {
     const buf = await f.arrayBuffer();
     appendLog(src, `Archivo: ${(f.size / (1024 * 1024)).toFixed(1)} MB`);
-    // Para archivos grandes (Sellout General 100MB+), limitar hojas leídas
-    // ahorra memoria del navegador. Otras hojas del archivo (pivots) causan OOM.
-    const readOpts = { type: 'array', cellDates: true };
-    if (src.id === 'sellout-general') readOpts.sheets = ['Hoja1'];
+    // Para archivos grandes, minimizar el uso de memoria del navegador.
+    // No usar sheets:[] (rompe silenciosamente en XLSX 0.18.5 con algunos archivos).
+    const readOpts = { type: 'array', cellDates: true, dense: true, cellStyles: false, cellHTML: false, cellFormula: false, bookVBA: false };
     const wb = XLSX.read(buf, readOpts);
     appendLog(src, `Hojas: ${wb.SheetNames.join(', ')}`);
     for (const nm of wb.SheetNames) {
       const s = wb.Sheets[nm];
-      if (s && s['!ref']) appendLog(src, `  · ${nm} → ${s['!ref']}`);
+      appendLog(src, `  · ${nm} → ref=${s && s['!ref'] ? s['!ref'] : '(sin ref)'}`);
     }
 
     // Combined ERP: run multiple parsers from the same workbook
@@ -1946,14 +1937,15 @@ async function handleUpload(src){
       const rows = PARSERS[src.parser](wb, f.name);
       filasTotal = rows.length;
       appendLog(src, `Filas parseadas: ${rows.length}`);
-      // Diagnóstico específico para sellout-general cuando parsea 0 filas
-      if (src.parser === 'selloutGeneral' && rows.length === 0 && window.__selloutGeneralDiag) {
+      // Diagnóstico específico para sellout-general (siempre, no solo cuando rows=0)
+      if (src.parser === 'selloutGeneral' && window.__selloutGeneralDiag) {
         const d = window.__selloutGeneralDiag;
-        appendLog(src, `⚠ DIAG: rows crudas de sheet_to_json: ${d.rowsCrudas}`);
-        appendLog(src, `⚠ DIAG: descartadas por no tener id: ${d.descartadosSinId}`);
-        appendLog(src, `⚠ DIAG: keys del primer row: ${JSON.stringify(d.primerRowKeys).slice(0, 500)}`);
-        if (d.primerRowSample) {
-          appendLog(src, `⚠ DIAG: primer row (json): ${JSON.stringify(d.primerRowSample).slice(0, 800)}`);
+        appendLog(src, `DIAG rows_crudas=${d.rowsCrudas} descartadas_sin_id=${d.descartadosSinId} generadas=${d.generados}`);
+        if (rows.length === 0) {
+          appendLog(src, `DIAG keys row 0: ${JSON.stringify(d.primerRowKeys).slice(0, 500)}`);
+          if (d.primerRowSample) {
+            appendLog(src, `DIAG row 0: ${JSON.stringify(d.primerRowSample).slice(0, 800)}`);
+          }
         }
       }
       if ((src.parser === 'precios' || src.parser === 'promosTemporada') && rows.length > 0) {
