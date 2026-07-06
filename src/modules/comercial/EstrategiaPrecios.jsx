@@ -210,42 +210,35 @@ export default function EstrategiaPrecios() {
 
   const exportarExcel = () => {
     const incluyeAAA = listasVisibles.includes('Mayoreo AAA');
-    const otrasListas = listasVisibles.filter((l) => l !== 'Mayoreo AAA');
+    const incluyeDico = listasVisibles.includes('DICOTECH');
 
-    const HEADERS_BASE = ['Marca', 'SKU', 'Descripción', 'Categoría', 'Roadmap'];
-    const HEADERS_BAJO = verPrecioBajo
-      ? ['Precio Bajo Facturado', 'Cliente Precio Bajo', 'Piezas Precio Bajo']
-      : [];
-    const HEADERS_AAA = incluyeAAA
-      ? ['Mayoreo AAA (lista)', 'Descuento %', 'Campañas activas', 'Mayoreo AAA (neto)']
-      : [];
-    const HEADERS_OTRAS = otrasListas.map((l) => LISTAS_LBL[l]);
-    const HEADERS = [...HEADERS_BASE, ...HEADERS_BAJO, ...HEADERS_AAA, ...HEADERS_OTRAS];
+    const cols = [];
+    cols.push({ header: 'Marca',       get: (r) => r.marca || '',       width: 12 });
+    cols.push({ header: 'SKU',         get: (r) => r.sku || '',         width: 14 });
+    cols.push({ header: 'Descripción', get: (r) => r.descripcion || '', width: 50 });
+    cols.push({ header: 'Roadmap',     get: (r) => r.rdmp || '',        width: 10 });
+    if (verPrecioBajo) {
+      cols.push({ header: 'Precio Bajo Facturado', get: (r) => r.bajo?.precio_bajo ?? null, width: 16, money: true });
+      cols.push({ header: 'Piezas Precio Bajo',    get: (r) => r.bajo?.piezas_bajo ?? null, width: 12, int: true });
+    }
+    if (incluyeAAA) {
+      cols.push({
+        header: 'Mayoreo AAA',
+        get: (r) => {
+          const precio = r.precios?.['Mayoreo AAA'] ?? null;
+          if (precio == null) return null;
+          return r.promo ? precio * (1 - Number(r.promo.promo_pct)) : precio;
+        },
+        width: 14, money: true, highlight: 'FEF3C7',
+      });
+    }
+    if (incluyeDico) {
+      cols.push({ header: 'DICOTECH', get: (r) => r.precios?.['DICOTECH'] ?? null, width: 12, money: true });
+    }
+
+    const HEADERS = cols.map((c) => c.header);
     const nCols = HEADERS.length;
-
-    const iBajoPrecio = verPrecioBajo ? HEADERS_BASE.length : -1;
-    const iBajoCliente = verPrecioBajo ? HEADERS_BASE.length + 1 : -1;
-    const iBajoPiezas = verPrecioBajo ? HEADERS_BASE.length + 2 : -1;
-    const aaaStart = HEADERS_BASE.length + HEADERS_BAJO.length;
-    const iAAAlista  = incluyeAAA ? aaaStart : -1;
-    const iDctoPct   = incluyeAAA ? aaaStart + 1 : -1;
-    const iCampanias = incluyeAAA ? aaaStart + 2 : -1;
-    const iAAANeto   = incluyeAAA ? aaaStart + 3 : -1;
-    const iOtrasInicio = aaaStart + HEADERS_AAA.length;
-
-    const rowsData = filas.map((r) => {
-      const p = r.precios || {};
-      const promo = r.promo;
-      const precioAAA = p['Mayoreo AAA'] ?? null;
-      const dctoPct = promo ? Number(promo.promo_pct) : null;
-      const precioAAAneto = promo && precioAAA != null ? precioAAA * (1 - dctoPct) : precioAAA;
-      const campanias = promo ? (promo.promos || []).map((x) => `${x.campania} (${(Number(x.promo_pct) * 100).toFixed(1)}%)`).join(' + ') : '';
-      const base = [r.marca || '', r.sku || '', r.descripcion || '', r.categoria || '', r.rdmp || ''];
-      const bajo = verPrecioBajo ? [r.bajo?.precio_bajo ?? null, r.bajo?.cliente_bajo ?? '', r.bajo?.piezas_bajo ?? null] : [];
-      const aaa = incluyeAAA ? [precioAAA, dctoPct, campanias, precioAAAneto] : [];
-      const otras = otrasListas.map((l) => p[l] ?? null);
-      return [...base, ...bajo, ...aaa, ...otras];
-    });
+    const rowsData = filas.map((r) => cols.map((c) => c.get(r)));
 
     const hoy = new Date();
     const tituloExcel = `Lista de Precios ${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`;
@@ -262,10 +255,7 @@ export default function EstrategiaPrecios() {
       fill: { patternType: 'solid', fgColor: { rgb: '000000' } },
       alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
     };
-    const titleStyle = {
-      ...blackHeader,
-      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 14 },
-    };
+    const titleStyle = { ...blackHeader, font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 14 } };
 
     for (let c = 0; c < nCols; c++) {
       const titleAddr = XLSX.utils.encode_cell({ r: 0, c });
@@ -278,42 +268,35 @@ export default function EstrategiaPrecios() {
     ws['!rows'] = [{ hpt: 26 }, { hpt: 32 }];
 
     const moneyFmt = '"$"#,##0';
-    const pctFmt = '0.0%';
-    const moneyCols = new Set();
-    if (verPrecioBajo) moneyCols.add(iBajoPrecio);
-    if (incluyeAAA) { moneyCols.add(iAAAlista); moneyCols.add(iAAANeto); }
-    for (let k = 0; k < otrasListas.length; k++) moneyCols.add(iOtrasInicio + k);
 
     for (let i = 0; i < rowsData.length; i++) {
       const rowIdx = i + 2;
-      const hasPromo = incluyeAAA && rowsData[i][iCampanias] !== '';
       for (let c = 0; c < nCols; c++) {
         const addr = XLSX.utils.encode_cell({ r: rowIdx, c });
         const cell = ws[addr];
-        if (!cell) continue;
+        const col = cols[c];
+        if (!cell) {
+          if (col.highlight) {
+            ws[addr] = { t: 's', v: '', s: { fill: { patternType: 'solid', fgColor: { rgb: col.highlight } } } };
+          }
+          continue;
+        }
         cell.s = cell.s || {};
-        if (moneyCols.has(c)) cell.z = moneyFmt;
-        if (c === iDctoPct) cell.z = pctFmt;
-        if (c === iBajoPiezas && cell.v != null) cell.z = '#,##0';
-        if (hasPromo && incluyeAAA && (c === iAAAlista || c === iDctoPct || c === iCampanias || c === iAAANeto)) {
-          cell.s.fill = { patternType: 'solid', fgColor: { rgb: 'DCFCE7' } };
-          if (c === iAAANeto) cell.s.font = { bold: true, color: { rgb: '14532D' } };
+        if (col.money) cell.z = moneyFmt;
+        if (col.int && cell.v != null) cell.z = '#,##0';
+        if (col.highlight) {
+          cell.s.fill = { patternType: 'solid', fgColor: { rgb: col.highlight } };
         }
       }
     }
 
-    const baseWidths = [10, 12, 45, 14, 9];
-    const bajoWidths = verPrecioBajo ? [14, 22, 10] : [];
-    const aaaWidths = incluyeAAA ? [14, 10, 40, 16] : [];
-    const otrasWidths = otrasListas.map(() => 10);
-    ws['!cols'] = [...baseWidths, ...bajoWidths, ...aaaWidths, ...otrasWidths].map((w) => ({ wch: w }));
+    ws['!cols'] = cols.map((c) => ({ wch: c.width }));
     ws['!freeze'] = { xSplit: 0, ySplit: 2 };
     ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 1, c: 0 }, e: { r: rowsData.length + 1, c: nCols - 1 } }) };
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Lista de Precios');
-    const nombreArchivo = `${tituloExcel}.xlsx`;
-    XLSX.writeFile(wb, nombreArchivo);
+    XLSX.writeFile(wb, `${tituloExcel}.xlsx`);
   };
 
   if (loading) {
