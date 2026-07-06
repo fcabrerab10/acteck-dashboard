@@ -95,6 +95,20 @@ export default async function handler(req, res) {
       const txt = await r.text();
       return res.status(r.status).json({ error: 'upsert failed', detail: txt.slice(0, 500), table, count: rows.length });
     }
+
+    // Refrescar la vista materializada mv_sellout_unificado cuando se
+    // actualiza cualquiera de las tablas que la alimentan. Se hace
+    // fire-and-forget para no bloquear la respuesta del cliente.
+    const AFECTA_SELLOUT_MV = new Set(['sellout_general', 'sellout_detalle', 'sellout_pcel', 'facturacion_clientes']);
+    if (AFECTA_SELLOUT_MV.has(table)) {
+      // No await — dispara y sigue
+      fetch(`${SB_URL}/rest/v1/rpc/refresh_mv_sellout_unificado`, {
+        method: 'POST',
+        headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, 'Content-Type': 'application/json', Prefer: 'params=single-object' },
+        body: '{}',
+      }).catch(() => {});
+    }
+
     res.status(200).json({ ok: true, table, count: rows.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
