@@ -306,24 +306,31 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
   useEffect(() => {
     (async () => {
       setCargando(true);
-      const fact = await fetchAll(
-        'facturacion_clientes',
-        'anio,mes,cliente_nombre,piezas,monto,canal',
-        (q) => q.eq('sku', sku.sku).in('anio', [anio, anio - 1])
-      );
-      const preciosHist = await fetchAll(
-        'precios_sku',
-        'anio,mes,lista,precio',
-        (q) => q.eq('sku', sku.sku).eq('lista', 'Mayoreo AAA').gte('anio', anio - 1)
-      );
-      setDatos({ fact, preciosHist });
+      const [fact, preciosHist, promosHist] = await Promise.all([
+        fetchAll(
+          'facturacion_clientes',
+          'anio,mes,cliente_nombre,piezas,monto,canal',
+          (q) => q.eq('sku', sku.sku).in('anio', [anio, anio - 1])
+        ),
+        fetchAll(
+          'precios_sku',
+          'anio,mes,lista,precio',
+          (q) => q.eq('sku', sku.sku).eq('lista', 'Mayoreo AAA').gte('anio', anio - 1)
+        ),
+        fetchAll(
+          'promos_temporada',
+          'anio,mes,campania,promo_pct',
+          (q) => q.eq('sku', sku.sku).order('anio', { ascending: false }).order('mes', { ascending: false })
+        ),
+      ]);
+      setDatos({ fact, preciosHist, promosHist });
       setCargando(false);
     })();
   }, [sku.sku, anio]);
 
   const analisis = useMemo(() => {
     if (!datos) return null;
-    const { fact, preciosHist } = datos;
+    const { fact, preciosHist, promosHist } = datos;
 
     const serieMens = Array.from({ length: 12 }, (_, i) => ({ mes: MESES_LBL[i], piezas: 0, monto: 0, precio: null }));
     fact.filter((f) => Number(f.anio) === anio).forEach((f) => {
@@ -351,7 +358,7 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
       it.monto  += Number(f.monto) || 0;
     });
     const precioLista = precios['Mayoreo AAA'];
-    const clientes = Array.from(clientesMap.values())
+    const clientesAll = Array.from(clientesMap.values())
       .filter((c) => c.piezas > 0)
       .map((c) => {
         const precioProm = c.piezas > 0 ? c.monto / c.piezas : 0;
@@ -361,12 +368,30 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
           deltaLista: precioLista > 0 ? ((precioProm - precioLista) / precioLista) * 100 : null,
         };
       })
-      .sort((a, b) => b.piezas - a.piezas)
-      .slice(0, 10);
-
+      .sort((a, b) => b.piezas - a.piezas);
+    const clientes = clientesAll.slice(0, 5);
+    const clientesRestantes = clientesAll.slice(5);
     const clienteVolumen = clientes[0];
 
-    return { serieMens, clientes, clienteVolumen };
+    const mesActual = new Date().getMonth() + 1;
+    const anioActual = new Date().getFullYear();
+    const mesMax = (anio === anioActual && mesActual > 1) ? mesActual - 1 : (anio === anioActual ? 1 : 12);
+    const piezasMesActual = serieMens[mesMax - 1]?.piezas || 0;
+    const piezasPrev3m = [mesMax - 2, mesMax - 3, mesMax - 4]
+      .filter((i) => i >= 0)
+      .reduce((s, i) => s + (serieMens[i]?.piezas || 0), 0);
+    const promPrev3m = piezasPrev3m > 0 ? piezasPrev3m / 3 : 0;
+    const piezasYTD = serieMens.reduce((s, r) => s + r.piezas, 0);
+    const montoYTD = serieMens.reduce((s, r) => s + r.monto, 0);
+
+    return {
+      serieMens, clientes, clientesRestantes, clienteVolumen,
+      mesMax,
+      piezasMesActual, promPrev3m,
+      deltaVsPrev3m: promPrev3m > 0 ? ((piezasMesActual - promPrev3m) / promPrev3m) * 100 : null,
+      piezasYTD, montoYTD,
+      promosHist: promosHist.slice(0, 3),
+    };
   }, [datos, anio, precios]);
 
   const precioAAA = precios['Mayoreo AAA'];
@@ -431,69 +456,135 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
             </div>
           ) : analisis ? (
             <>
-              <div className="bg-gray-50 rounded-xl p-4">
-                <div className="text-sm font-medium text-gray-800 mb-3">
-                  Evolución del precio y sellout · {anio}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-white border border-gray-200 rounded-lg p-2.5">
+                  <div className="text-[9px] tracking-widest text-gray-500">
+                    SELLOUT {MESES_LBL[(analisis.mesMax - 1)].toUpperCase()}
+                  </div>
+                  <div className="text-base font-medium mt-0.5">{fmtInt(analisis.piezasMesActual)} pz</div>
+                  <div className={`text-[10px] mt-0.5 ${
+                    analisis.deltaVsPrev3m == null ? 'text-gray-400'
+                    : analisis.deltaVsPrev3m >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                  }`}>
+                    {analisis.deltaVsPrev3m == null ? 'sin base'
+                      : `${fmtPctDelta(analisis.deltaVsPrev3m)} vs prom 3m (${fmtInt(analisis.promPrev3m)} pz)`}
+                  </div>
                 </div>
-                <ResponsiveContainer width="100%" height={160}>
-                  <ComposedChart data={analisis.serieMens} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                    <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#888' }} />
-                    <YAxis yAxisId="left" tick={{ fontSize: 10, fill: PALETTE.blue.mid }} width={55}
-                      tickFormatter={fmtMoney} />
-                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: PALETTE.amber.mid }} width={40}
-                      tickFormatter={(v) => fmtInt(v)} />
-                    <Tooltip formatter={(v, name) => name === 'Precio' ? fmtMoney(v) : `${fmtInt(v)} pz`} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar yAxisId="right" dataKey="piezas" name="Sellout (pz)" fill={PALETTE.amber.soft} radius={[3, 3, 0, 0]} />
-                    <Line yAxisId="left" type="monotone" dataKey="precio" name="Precio" stroke={PALETTE.blue.mid} strokeWidth={2.5}
-                      dot={{ r: 3, fill: PALETTE.blue.mid }} connectNulls />
-                  </ComposedChart>
-                </ResponsiveContainer>
+                <div className="bg-white border border-gray-200 rounded-lg p-2.5">
+                  <div className="text-[9px] tracking-widest text-gray-500">SELLOUT YTD</div>
+                  <div className="text-base font-medium mt-0.5">{fmtInt(analisis.piezasYTD)} pz</div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">{fmtCompact(analisis.montoYTD)} facturado</div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded-lg p-2.5">
+                  <div className="text-[9px] tracking-widest text-gray-500">PROMOS APLICADAS</div>
+                  <div className="text-base font-medium mt-0.5">{analisis.promosHist.length}</div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">campañas históricas</div>
+                </div>
               </div>
 
-              <div>
-                <div className="text-sm font-medium text-gray-800 mb-2">
-                  Top clientes por volumen · YTD {anio}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white border border-gray-200 rounded-lg p-3">
+                  <div className="text-[11px] font-medium text-gray-700 mb-1">Precio Mayoreo AAA mensual · {anio}</div>
+                  <ResponsiveContainer width="100%" height={130}>
+                    <LineChart data={analisis.serieMens} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                      <XAxis dataKey="mes" tick={{ fontSize: 9, fill: '#888' }} interval={0} />
+                      <YAxis tick={{ fontSize: 9, fill: PALETTE.blue.mid }} width={55} tickFormatter={fmtMoney} />
+                      <Tooltip formatter={(v) => fmtMoney(v)} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }} />
+                      <Line type="monotone" dataKey="precio" stroke={PALETTE.blue.mid} strokeWidth={2.5}
+                        dot={{ r: 3, fill: PALETTE.blue.mid }} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
-                {analisis.clientes.length === 0 ? (
-                  <div className="text-xs text-gray-500">Sin facturación registrada este año.</div>
-                ) : (
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="grid grid-cols-[24px_1fr_60px_75px_85px_75px] gap-2 py-2 px-3 bg-gray-50 text-[10px] text-gray-500 uppercase tracking-wider">
-                      <span>#</span>
-                      <span>Cliente</span>
-                      <span className="text-right">Piezas</span>
-                      <span className="text-right">$ prom</span>
-                      <span className="text-right">Total $</span>
-                      <span className="text-right">Δ vs lista</span>
+                <div className="bg-white border border-gray-200 rounded-lg p-3">
+                  <div className="text-[11px] font-medium text-gray-700 mb-1">Sellout mensual · {anio} (piezas)</div>
+                  <ResponsiveContainer width="100%" height={130}>
+                    <BarChart data={analisis.serieMens} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                      <XAxis dataKey="mes" tick={{ fontSize: 9, fill: '#888' }} interval={0} />
+                      <YAxis tick={{ fontSize: 9, fill: PALETTE.amber.mid }} width={40} tickFormatter={(v) => fmtInt(v)} />
+                      <Tooltip formatter={(v) => `${fmtInt(v)} pz`} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="piezas" fill={PALETTE.amber.soft} radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-[11px] font-medium text-gray-700 mb-1.5">Top 5 clientes por volumen · YTD {anio}</div>
+                  {analisis.clientes.length === 0 ? (
+                    <div className="text-xs text-gray-500 bg-white border border-gray-200 rounded-lg p-3">
+                      Sin facturación registrada este año.
                     </div>
-                    {analisis.clientes.map((c, i) => {
-                      const negativo = c.deltaLista != null && c.deltaLista < 0;
-                      const critico  = c.deltaLista != null && c.deltaLista < -10;
-                      return (
-                        <div key={c.cliente}
-                          className="grid grid-cols-[24px_1fr_60px_75px_85px_75px] gap-2 py-2 px-3 text-xs border-t border-gray-100">
-                          <span className="text-gray-400">{i + 1}</span>
-                          <span className="text-gray-800 truncate" title={c.cliente}>{c.cliente}</span>
-                          <span className="text-right text-gray-700">{fmtInt(c.piezas)}</span>
-                          <span className={`text-right ${critico ? 'text-rose-700 font-medium' : 'text-gray-700'}`}>
-                            {fmtMoney(c.precioProm)}
-                          </span>
-                          <span className="text-right text-gray-700">{fmtCompact(c.monto)}</span>
-                          <span className={`text-right ${
-                            critico ? 'text-rose-700 font-medium'
-                            : negativo ? 'text-gray-600'
-                            : c.deltaLista != null && c.deltaLista > 0 ? 'text-emerald-700'
-                            : 'text-gray-400'
-                          }`}>
-                            {c.deltaLista != null ? fmtPctDelta(c.deltaLista) : '—'}
+                  ) : (
+                    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="grid grid-cols-[20px_1fr_50px_60px_60px] gap-1.5 py-1.5 px-2 bg-gray-50 text-[9px] text-gray-500 uppercase tracking-wider">
+                        <span>#</span>
+                        <span>Cliente</span>
+                        <span className="text-right">Pz</span>
+                        <span className="text-right">$ prom</span>
+                        <span className="text-right">Δ vs lista</span>
+                      </div>
+                      {analisis.clientes.map((c, i) => {
+                        const negativo = c.deltaLista != null && c.deltaLista < 0;
+                        const critico  = c.deltaLista != null && c.deltaLista < -10;
+                        return (
+                          <div key={c.cliente}
+                            className="grid grid-cols-[20px_1fr_50px_60px_60px] gap-1.5 py-1.5 px-2 text-[11px] border-t border-gray-100">
+                            <span className="text-gray-400">{i + 1}</span>
+                            <span className="text-gray-800 truncate" title={c.cliente}>{c.cliente}</span>
+                            <span className="text-right text-gray-700">{fmtInt(c.piezas)}</span>
+                            <span className={`text-right ${critico ? 'text-rose-700 font-medium' : 'text-gray-700'}`}>
+                              {fmtMoney(c.precioProm)}
+                            </span>
+                            <span className={`text-right ${
+                              critico ? 'text-rose-700 font-medium'
+                              : negativo ? 'text-gray-600'
+                              : c.deltaLista != null && c.deltaLista > 0 ? 'text-emerald-700'
+                              : 'text-gray-400'
+                            }`}>
+                              {c.deltaLista != null ? fmtPctDelta(c.deltaLista) : '—'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {analisis.clientesRestantes.length > 0 && (
+                        <div className="py-1.5 px-2 bg-gray-50 text-[10px] text-gray-500 text-center border-t border-gray-100">
+                          + {analisis.clientesRestantes.length} clientes más ·
+                          {' '}{fmtInt(analisis.clientesRestantes.reduce((s, c) => s + c.piezas, 0))} pz
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <div className="text-[11px] font-medium text-gray-700 mb-1.5">Histórico de promos</div>
+                  {analisis.promosHist.length === 0 ? (
+                    <div className="text-xs text-gray-500 bg-white border border-gray-200 rounded-lg p-3">
+                      Este SKU nunca ha estado en campaña de temporada.
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="grid grid-cols-[60px_1fr_50px] gap-1.5 py-1.5 px-2 bg-gray-50 text-[9px] text-gray-500 uppercase tracking-wider">
+                        <span>Período</span>
+                        <span>Campaña</span>
+                        <span className="text-right">Off</span>
+                      </div>
+                      {analisis.promosHist.map((p, i) => (
+                        <div key={i}
+                          className="grid grid-cols-[60px_1fr_50px] gap-1.5 py-1.5 px-2 text-[11px] border-t border-gray-100">
+                          <span className="text-gray-500">{MESES_LBL[Number(p.mes) - 1]} {p.anio}</span>
+                          <span className="text-gray-800 truncate" title={p.campania}>{p.campania}</span>
+                          <span className="text-right text-amber-800 font-medium">
+                            {Math.round(Number(p.promo_pct) * 100)}%
                           </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {analisis.clienteVolumen && analisis.clienteVolumen.deltaLista != null && analisis.clienteVolumen.deltaLista < -8 && (
