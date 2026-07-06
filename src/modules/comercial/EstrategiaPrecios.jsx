@@ -274,13 +274,14 @@ export default function EstrategiaPrecios() {
                           <>
                             <div className="font-medium text-gray-800">{fmtMoney(precioAAAneto)}</div>
                             {promo && (
-                              <>
-                                <div className="inline-block text-[9px] font-medium px-1 py-0.5 mt-0.5 rounded"
+                              <div className="flex flex-col items-end gap-0.5 mt-0.5"
+                                title={(promo.promos || []).map((p) => `${p.campania}: ${Math.round(Number(p.promo_pct) * 100)}%`).join('\n')}>
+                                <span className="inline-block text-[9px] font-semibold px-1 py-0.5 rounded"
                                   style={{ background: PALETTE.amber.bg, color: PALETTE.amber.mid }}>
-                                  {promo.campania.slice(0, 10)} · {Math.round(Number(promo.promo_pct) * 100)}%
-                                </div>
-                                <div className="text-[9px] text-gray-400 line-through">{fmtMoney(precioAAA)}</div>
-                              </>
+                                  −{(Number(promo.promo_pct) * 100).toFixed(1)}%
+                                </span>
+                                <span className="text-[9px] text-gray-400 line-through">{fmtMoney(precioAAA)}</span>
+                              </div>
                             )}
                           </>
                         ) : (
