@@ -74,23 +74,17 @@ const GRUPOS = [
 
 const SOURCES = [
   // ── Globales ──
-  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación, Inventario, Detalle & Compras', desc:'Archivo único con 5 hojas: Venta Facturación (monto pivot) + Venta Piezas (piezas pivot) + Vw_TablaH_Ventas (detalle granular) + Vw_TablaH_Inventario + Vw_TablaH_Compras (OCs con costo USD y TC, link por MovID a Master Embarques).', file:'Actualizaciones ERP.xlsx',
+  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación, Inventario, Detalle, Compras & Precios', desc:'Archivo único con 6 hojas: Venta Facturación + Venta Piezas + Vw_TablaH_Ventas + Vw_TablaH_Inventario + Vw_TablaH_Compras + Vw_TablaM_Precios (nueva: listas de precios por SKU).', file:'Actualizaciones ERP.xlsx',
     combined: [
       { table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', label:'Facturación (sell-in canónico)', replaceAnios:[2025,2026] },
       { table:'ventas_erp', onConflict:'venta_id,venta_renglon', parser:'erpVentas', label:'Detalle granular (Vw_TablaH_Ventas)', replaceAnios:[2025,2026] },
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true },
-      { table:'compras_oc', onConflict:'movid,articulo', parser:'comprasOC', label:'POs de Compras (Vw_TablaH_Compras)', replace:true }
+      { table:'compras_oc', onConflict:'movid,articulo', parser:'comprasOC', label:'POs de Compras (Vw_TablaH_Compras)', replace:true },
+      { table:'precios_sku', onConflict:'sku,lista,anio,mes', parser:'preciosERP', label:'Precios por lista (Vw_TablaM_Precios)', replace:true }
     ]
   },
   { id:'roadmap', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Roadmap', desc:'Archivo Roadmap.xlsx (Hoja1). 6 columnas: Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2. Replace completo — fuente única de marca/categoría/familia por SKU para todo el dashboard.', file:'Roadmap.xlsx', table:'roadmap_sku', onConflict:'sku', parser:'roadmap', replace:true },
-  { id:'precios', grupo:'globales', tipo:'updated', statusKey:'precios', title:'Lista de Precios', desc:'Archivo mensual (ej. "Lista de Precios Mayoreo AAA 2026 Julio.xlsx"). Hoja "Lista", headers en fila 5. Guarda histórico por mes: precio_aaa, promo_sell_in y precio_neto (= AAA × (1 − promo)). El año/mes se extraen del nombre del archivo. MSRP se ignora.', file:'Lista de Precios Mayoreo AAA <AÑO> <MES>.xlsx', table:'precios_sku', onConflict:'sku,anio,mes', parser:'precios',
-    extraSlot: {
-      id:'promos-temporada', title:'Promociones por temporada (opcional)',
-      desc:'Solo si hay campaña vigente (ej. "Promociones Exclusivas Back to School Jul2026.xlsx"). Se aplica encima: precio final = AAA × (1 − sell_in) × (1 − promo_temporada).',
-      file:'Promociones Exclusivas <CAMPAÑA> <MES><AÑO>.xlsx',
-      table:'promos_temporada', onConflict:'sku,anio,mes', parser:'promosTemporada',
-    }
-  },
+  { id:'promos-temporada', grupo:'globales', tipo:'updated', statusKey:'promos_temporada', title:'Promociones por temporada', desc:'Solo si hay campaña vigente (ej. "Promociones Exclusivas Back to School Jul2026.xlsx"). Se aplica encima del precio Mayoreo AAA que viene del ERP: precio final = precio × (1 − promo_temporada). Los precios base ya salen automáticamente del ERP.', file:'Promociones Exclusivas <CAMPAÑA> <MES><AÑO>.xlsx', table:'promos_temporada', onConflict:'sku,anio,mes', parser:'promosTemporada' },
   { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
   { id:'estados-resultados', grupo:'globales', tipo:'mes', statusKey:'estados_resultados', title:'Estado de Resultados (P&L)', desc:'Cierres mensuales/trimestrales del P&L (ej. "Cierre 1Q 2026.xlsx", "Cierre Diciembre 2025.xlsx"). Lee la hoja "Estado de Resultados" y carga sólo los meses con valores. No borra meses previos; upsert por (razón social, año, mes, cuenta).', file:'Cierre <período>.xlsx', table:'estados_resultados', onConflict:'razon_social,anio,mes,cuenta_norm', parser:'estadosResultados' },
   { id:'sellout-general', grupo:'globales', tipo:'semana', statusKey:'sellout_general', title:'Sellout General (mayoristas)', desc:'Archivo semanal "Sellout General.xlsx" (hoja "Hoja1") con el detalle de ventas de nuestros mayoristas hacia sus clientes finales. 357K+ filas históricas (2025-en adelante). Upsert por id de transacción — solo actualiza filas nuevas. Mapeo idcliente→mayorista canónico: CT, CVA, Ingram, Arroba, Dicotech, Techs Mart, Grupo Unidades de Cómputo, DC, Exel, PCH, Grupo Loma, Group NSSTORE, Kabik.', file:'Sellout General.xlsx', table:'sellout_general', onConflict:'id', parser:'selloutGeneral' },
@@ -148,6 +142,42 @@ const PARSERS = {
       return out;
     }).filter(Boolean);
   },
+  // Vw_TablaM_Precios — precios de venta por (Lista, Moneda, Artículo, Precio).
+  // Reemplaza al archivo manual "Lista de Precios Mayoreo AAA". Se cargan
+  // solo las listas comerciales (excluye Mayoreo A / AA / B1 que son legacy).
+  // El periodo (anio, mes) se toma del calendario al momento de la carga.
+  preciosERP(wb){
+    const LISTAS_INCLUIDAS = new Set([
+      'API PROVISIONAL',
+      'DECME PROVISIONAL',
+      'DICOTECH',
+      'Mayoreo AAA',
+      'Mayoreo PMM',
+      'PCEL PROVISIONAL',
+    ]);
+    const sh = wb.Sheets['Vw_TablaM_Precios'];
+    if (!sh) return [];
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null, raw:false});
+    const now = new Date();
+    const anio = now.getFullYear();
+    const mes = now.getMonth() + 1;
+    const out = [];
+    for (const r of rows) {
+      const lista = toStr(r.Lista ?? r.lista);
+      if (!LISTAS_INCLUIDAS.has(lista)) continue;
+      const sku = toStr(r.Articulo ?? r.articulo);
+      if (!sku) continue;
+      const precio = toNum(r.Precio ?? r.precio);
+      if (precio == null) continue;
+      out.push({
+        sku, lista,
+        moneda: toStr(r.Moneda ?? r.moneda) || 'PESOS',
+        anio, mes, precio,
+      });
+    }
+    return out;
+  },
+
   erpInventario(wb){
     const sh = wb.Sheets['Vw_TablaH_Inventario'] || wb.Sheets[wb.SheetNames[1]];
     const rows = XLSX.utils.sheet_to_json(sh, {defval:null});

@@ -98,7 +98,7 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
       fetchAllRows('inventario_acteck', 'articulo, no_almacen, disponible, inventario',
         (q) => q.neq('articulo', '__TEST__')),
       supabase.from('v_sku_metadata').select('*'),
-      supabase.from('precios_sku').select('sku, precio_aaa, descuento, precio_descuento'),
+      supabase.from('precios_sku_actual').select('sku, precio_aaa, descuento, precio_descuento'),
       supabase.from('roadmap_sku').select('sku, rdmp, descripcion'),
     ]);
     setData({

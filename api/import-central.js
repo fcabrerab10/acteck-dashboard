@@ -19,7 +19,7 @@ const ALLOWED = {
   sellout_detalle:    'cliente,fecha,no_parte,row_hash',
   inventario_cliente: 'cliente,sku,anio,semana',
   roadmap_sku:       'sku',
-  precios_sku:       'sku,anio,mes',
+  precios_sku:       'sku,lista,anio,mes',
   transito_sku:      'sku,row_hash',
   sellout_pcel:          'anio,semana,sku',
   sellout_pcel_mensual:  'anio,mes,sku',

@@ -1145,7 +1145,7 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         // Misma fuente que la pestaña Forecast Clientes para mantener consistencia.
         fetchAllPagesREST(`v_transito_sku?select=sku,cantidad,eta_mas_cercana,embarques_detalle`),
         fetchAllPagesREST(`roadmap_sku?select=sku,rdmp,descripcion,payload,sort_order&order=sort_order.asc`),
-        fetchAllPagesREST(`precios_sku?select=sku,precio_aaa,descuento,precio_descuento`),
+        fetchAllPagesREST(`precios_sku_actual?select=sku,precio_aaa,descuento,precio_descuento`),
         // Extras sólo para PCEL:
         esPcel ? fetchHistoricoComprasPcel(6) : Promise.resolve({}),
         esPcel ? fetchSnapshotPcel() : Promise.resolve([]),
