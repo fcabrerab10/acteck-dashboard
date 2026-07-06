@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
-  Activity, Search, X, TrendingUp, TrendingDown, AlertTriangle, Tag,
+  Activity, Search, X, TrendingUp, TrendingDown, AlertTriangle, Tag, Download,
 } from 'lucide-react';
+import * as XLSX from 'xlsx-js-style';
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, XAxis, YAxis, Tooltip,
   CartesianGrid, ResponsiveContainer, Legend,
@@ -150,6 +151,95 @@ export default function EstrategiaPrecios() {
       }));
   }, [roadmap, preciosMap, bajoMap, promoMap, busqueda, marcaFiltro, categoriaFiltro, roadmapFiltro]);
 
+  const exportarExcel = () => {
+    const HEADERS = [
+      'Marca', 'SKU', 'Descripción', 'Categoría', 'Roadmap',
+      'Precio Bajo Facturado', 'Cliente Precio Bajo', 'Piezas Precio Bajo',
+      'Mayoreo AAA (lista)', 'Descuento %', 'Campañas activas', 'Mayoreo AAA (neto)',
+      'DICOTECH', 'PCEL', 'API', 'DECME',
+    ];
+    const rows = filas.map((r) => {
+      const p = r.precios || {};
+      const promo = r.promo;
+      const precioAAA = p['Mayoreo AAA'] ?? null;
+      const dctoPct = promo ? Number(promo.promo_pct) : null;
+      const precioAAAneto = promo && precioAAA != null ? precioAAA * (1 - dctoPct) : precioAAA;
+      const campanias = promo ? (promo.promos || []).map((x) => `${x.campania} (${(Number(x.promo_pct) * 100).toFixed(1)}%)`).join(' + ') : '';
+      return [
+        r.marca || '',
+        r.sku || '',
+        r.descripcion || '',
+        r.categoria || '',
+        r.rdmp || '',
+        r.bajo?.precio_bajo ?? null,
+        r.bajo?.cliente_bajo ?? '',
+        r.bajo?.piezas_bajo ?? null,
+        precioAAA,
+        dctoPct,
+        campanias,
+        precioAAAneto,
+        p['DICOTECH'] ?? null,
+        p['PCEL PROVISIONAL'] ?? null,
+        p['API PROVISIONAL'] ?? null,
+        p['DECME PROVISIONAL'] ?? null,
+      ];
+    });
+
+    const aoa = [HEADERS, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    const headerStyle = {
+      font: { bold: true, color: { rgb: 'FFFFFF' } },
+      fill: { patternType: 'solid', fgColor: { rgb: '1F2937' } },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: {
+        bottom: { style: 'thin', color: { rgb: 'D1D5DB' } },
+      },
+    };
+    for (let c = 0; c < HEADERS.length; c++) {
+      const addr = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws[addr]) ws[addr].s = headerStyle;
+    }
+
+    const moneyFmt = '"$"#,##0';
+    const pctFmt = '0.0%';
+    const moneyCols = [5, 8, 11, 12, 13, 14, 15];
+    const intCols = [7];
+    const pctCol = 9;
+
+    for (let i = 0; i < rows.length; i++) {
+      const rowIdx = i + 1;
+      const hasPromo = rows[i][10] !== '';
+      for (let c = 0; c < HEADERS.length; c++) {
+        const addr = XLSX.utils.encode_cell({ r: rowIdx, c });
+        const cell = ws[addr];
+        if (!cell) continue;
+        cell.s = cell.s || {};
+        if (moneyCols.includes(c)) cell.z = moneyFmt;
+        if (c === pctCol) cell.z = pctFmt;
+        if (intCols.includes(c) && cell.v != null) cell.z = '#,##0';
+        if (hasPromo && (c === 8 || c === 9 || c === 10 || c === 11)) {
+          cell.s.fill = { patternType: 'solid', fgColor: { rgb: 'DCFCE7' } };
+          if (c === 11) cell.s.font = { bold: true, color: { rgb: '14532D' } };
+        }
+      }
+    }
+
+    ws['!cols'] = [
+      { wch: 10 }, { wch: 12 }, { wch: 45 }, { wch: 14 }, { wch: 9 },
+      { wch: 14 }, { wch: 22 }, { wch: 10 },
+      { wch: 14 }, { wch: 10 }, { wch: 40 }, { wch: 16 },
+      { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+    ];
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: HEADERS.length - 1 } }) };
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Estrategia de Precios');
+    const hoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Estrategia_Precios_${hoy}.xlsx`);
+  };
+
   if (loading) {
     return (
       <div className="p-12 text-center text-gray-400">
@@ -203,10 +293,17 @@ export default function EstrategiaPrecios() {
         </select>
       </div>
 
-      <div className="flex items-baseline justify-between px-1">
+      <div className="flex items-center justify-between px-1">
         <span className="text-xs text-gray-500">
           {fmtInt(filas.length)} SKUs en orden del roadmap
         </span>
+        <button
+          onClick={exportarExcel}
+          disabled={filas.length === 0}
+          className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed">
+          <Download className="w-3.5 h-3.5" />
+          Exportar Excel ({fmtInt(filas.length)} filas)
+        </button>
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
