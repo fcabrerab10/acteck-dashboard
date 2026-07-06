@@ -442,219 +442,176 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
     : precioAAA;
 
   return (
-    <div className="border-t border-b border-gray-200" style={{ background: '#F8FAFC' }}>
-      <div>
-        <div className="px-4 py-2 flex items-center justify-between" style={{ background: PALETTE.blue.bg }}>
-          <div className="min-w-0 text-[11px]" style={{ color: PALETTE.blue.text }}>
-            <span className="uppercase tracking-widest text-[9px]" style={{ color: PALETTE.blue.mid }}>
-              {sku.categoria || 'Sin categoría'} · {sku.familia || '—'}
-            </span>
-          </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-white/50">
-            <X className="w-4 h-4" style={{ color: PALETTE.blue.text }} />
-          </button>
+    <div className="border-t border-b border-gray-200 bg-white">
+      <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-100">
+        <div className="min-w-0 text-[10px]" style={{ color: PALETTE.blue.mid }}>
+          <span className="uppercase tracking-widest">{sku.categoria || 'Sin categoría'} · {sku.familia || '—'}</span>
         </div>
-
-        <div className="p-3 space-y-2">
-          {(() => {
-            const tiles = [];
-            if (bajo) {
-              tiles.push(
-                <div key="bajo" className="rounded p-1.5" style={{ background: PALETTE.red.bg }}>
-                  <div className="text-[8px] tracking-wide" style={{ color: PALETTE.red.mid }}>BAJO FACT</div>
-                  <div className="text-[13px] font-medium" style={{ color: PALETTE.red.text }}>
-                    {fmtMoney(bajo.precio_bajo)}
-                  </div>
-                </div>
-              );
-            }
-            if (precioAAA != null) {
-              tiles.push(
-                <div key="AAA" className="rounded p-1.5 bg-gray-100">
-                  <div className="text-[8px] tracking-wide text-gray-600">MAYOREO AAA</div>
-                  <div className="text-[13px] font-medium">{fmtMoney(precioAAAneto)}</div>
-                  {promo && (
-                    <div className="text-[8px] text-gray-400 line-through leading-none">{fmtMoney(precioAAA)}</div>
-                  )}
-                </div>
-              );
-            }
-            for (const l of ['DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL']) {
-              if (precios[l] != null) {
-                tiles.push(
-                  <div key={l} className="rounded p-1.5 bg-gray-100">
-                    <div className="text-[8px] tracking-wide text-gray-600">{LISTAS_LBL[l]}</div>
-                    <div className="text-[13px] font-medium">{fmtMoney(precios[l])}</div>
-                  </div>
-                );
-              }
-            }
-            if (tiles.length === 0) return null;
-            return (
-              <div className="flex gap-1.5 flex-wrap">
-                {tiles.map((t, i) => (
-                  <div key={i} style={{ width: 96 }}>{t}</div>
-                ))}
-              </div>
-            );
-          })()}
-
-          {promo && (
-            <div className="rounded px-2 py-1 flex items-center gap-1.5" style={{ background: PALETTE.amber.bg, color: PALETTE.amber.text }}>
-              <Tag className="w-3 h-3" style={{ color: PALETTE.amber.mid }} />
-              <span className="text-[11px]">
-                <span className="font-medium">{promo.campania}</span> · {Math.round(Number(promo.promo_pct) * 100)}% off en Mayoreo AAA
-              </span>
-            </div>
-          )}
-
-          {cargando ? (
-            <div className="p-8 text-center text-gray-400 text-sm">
-              <Activity className="w-6 h-6 mx-auto mb-2" /> Cargando histórico…
-            </div>
-          ) : analisis ? (
-            <>
-              <div className="grid grid-cols-3 gap-2 items-stretch">
-                <div className="flex flex-col gap-1.5">
-                  <div className="bg-white border border-gray-200 rounded p-1.5 flex-1">
-                    <div className="text-[8px] tracking-wide text-gray-500">
-                      SELLOUT {MESES_LBL[(analisis.mesMax - 1)].toUpperCase()}
-                    </div>
-                    <div className="text-[13px] font-medium leading-tight">{fmtInt(analisis.piezasMesActual)} pz</div>
-                    <div className={`text-[9px] leading-none ${
-                      analisis.deltaVsPrev3m == null ? 'text-gray-400'
-                      : analisis.deltaVsPrev3m >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                    }`}>
-                      {analisis.deltaVsPrev3m == null ? 'sin base'
-                        : `${fmtPctDelta(analisis.deltaVsPrev3m)} vs 3m`}
-                    </div>
-                  </div>
-                  <div className="bg-white border border-gray-200 rounded p-1.5 flex-1">
-                    <div className="text-[8px] tracking-wide text-gray-500">SELLOUT YTD</div>
-                    <div className="text-[13px] font-medium leading-tight">{fmtInt(analisis.piezasYTD)} pz</div>
-                    <div className="text-[9px] text-gray-500 leading-none">{fmtCompact(analisis.montoYTD)}</div>
-                  </div>
-                </div>
-                <div className="bg-white border border-gray-200 rounded p-1.5 col-span-2">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <div className="text-[8px] tracking-wide text-gray-500">PRECIO Y SELLOUT</div>
-                    <div className="flex items-center gap-2 text-[9px] text-gray-500">
-                      <span><span style={{ display:'inline-block', width:8, height:2, background: PALETTE.blue.mid, verticalAlign:'middle', marginRight:3 }} />Precio</span>
-                      <span><span style={{ display:'inline-block', width:8, height:8, background: PALETTE.amber.soft, verticalAlign:'middle', marginRight:3 }} />Piezas</span>
-                    </div>
-                  </div>
-                  {analisis.serieMens.length === 0 ? (
-                    <div className="text-[9px] text-gray-400 text-center py-4">Sin datos históricos</div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={110}>
-                      <ComposedChart data={analisis.serieMens} margin={{ top: 4, right: 2, left: -28, bottom: 0 }}>
-                        <XAxis dataKey="mes" tick={{ fontSize: 9, fill: '#888' }} interval={0} axisLine={false} tickLine={false} />
-                        <YAxis yAxisId="left" hide domain={['dataMin - 50', 'dataMax + 50']} />
-                        <YAxis yAxisId="right" orientation="right" hide />
-                        <Tooltip formatter={(v, name) => name === 'Precio' ? fmtMoney(v) : `${fmtInt(v)} pz`}
-                          labelStyle={{ fontSize: 10 }} contentStyle={{ fontSize: 10, padding: 6 }} />
-                        <Bar yAxisId="right" dataKey="piezas" name="Piezas" fill={PALETTE.amber.soft} radius={[2, 2, 0, 0]} />
-                        <Line yAxisId="left" type="monotone" dataKey="precio" name="Precio"
-                          stroke={PALETTE.blue.mid} strokeWidth={2} dot={{ r: 2.5, fill: PALETTE.blue.mid }} connectNulls />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <div className="text-[10px] font-medium text-gray-700 mb-1">Top 5 clientes · YTD {anio}</div>
-                  {analisis.clientes.length === 0 ? (
-                    <div className="text-[10px] text-gray-500 bg-white border border-gray-200 rounded p-2">
-                      Sin facturación este año.
-                    </div>
-                  ) : (
-                    <div className="bg-white border border-gray-200 rounded overflow-hidden">
-                      <div className="grid grid-cols-[16px_1fr_44px_54px_50px] gap-1 py-1 px-1.5 bg-gray-50 text-[8px] text-gray-500 uppercase tracking-wide">
-                        <span>#</span>
-                        <span>Cliente</span>
-                        <span className="text-right">Pz</span>
-                        <span className="text-right">$ prom</span>
-                        <span className="text-right">Δ lista</span>
-                      </div>
-                      {analisis.clientes.map((c, i) => {
-                        const negativo = c.deltaLista != null && c.deltaLista < 0;
-                        const critico  = c.deltaLista != null && c.deltaLista < -10;
-                        return (
-                          <div key={c.cliente}
-                            className="grid grid-cols-[16px_1fr_44px_54px_50px] gap-1 py-1 px-1.5 text-[10px] border-t border-gray-100">
-                            <span className="text-gray-400">{i + 1}</span>
-                            <span className="text-gray-800 truncate" title={c.cliente}>{c.cliente}</span>
-                            <span className="text-right text-gray-700">{fmtInt(c.piezas)}</span>
-                            <span className={`text-right ${critico ? 'text-rose-700 font-medium' : 'text-gray-700'}`}>
-                              {fmtMoney(c.precioProm)}
-                            </span>
-                            <span className={`text-right ${
-                              critico ? 'text-rose-700 font-medium'
-                              : negativo ? 'text-gray-600'
-                              : c.deltaLista != null && c.deltaLista > 0 ? 'text-emerald-700'
-                              : 'text-gray-400'
-                            }`}>
-                              {c.deltaLista != null ? fmtPctDelta(c.deltaLista) : '—'}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      {analisis.clientesRestantes.length > 0 && (
-                        <div className="py-1 px-1.5 bg-gray-50 text-[9px] text-gray-500 text-center border-t border-gray-100">
-                          + {analisis.clientesRestantes.length} más ·
-                          {' '}{fmtInt(analisis.clientesRestantes.reduce((s, c) => s + c.piezas, 0))} pz
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <div className="text-[10px] font-medium text-gray-700 mb-1">
-                    Histórico de promos {analisis.promosCount > 6 && <span className="text-gray-400">· {analisis.promosCount} totales</span>}
-                  </div>
-                  {analisis.promosHist.length === 0 ? (
-                    <div className="text-[10px] text-gray-500 bg-white border border-gray-200 rounded p-2">
-                      Sin promociones registradas.
-                    </div>
-                  ) : (
-                    <div className="bg-white border border-gray-200 rounded overflow-hidden">
-                      <div className="grid grid-cols-[50px_1fr_40px] gap-1 py-1 px-1.5 bg-gray-50 text-[8px] text-gray-500 uppercase tracking-wide">
-                        <span>Período</span>
-                        <span>Origen</span>
-                        <span className="text-right">Off</span>
-                      </div>
-                      {analisis.promosHist.map((p, i) => (
-                        <div key={i}
-                          className="grid grid-cols-[50px_1fr_40px] gap-1 py-1 px-1.5 text-[10px] border-t border-gray-100">
-                          <span className="text-gray-500">{MESES_LBL[Number(p.mes) - 1]} {String(p.anio).slice(-2)}</span>
-                          <span className={`truncate ${p.tipo === 'lista' ? 'text-blue-700' : 'text-gray-800'}`} title={p.campania}>
-                            {p.campania}
-                          </span>
-                          <span className="text-right text-amber-800 font-medium">
-                            {Math.round(Number(p.promo_pct) * 100)}%
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {analisis.clienteVolumen && analisis.clienteVolumen.deltaLista != null && analisis.clienteVolumen.deltaLista < -8 && (
-                <div className="rounded px-2 py-1 flex items-center gap-1.5" style={{ background: '#FEF3C7', color: '#78350F' }}>
-                  <AlertTriangle className="w-3 h-3 shrink-0" />
-                  <div className="text-[10px]">
-                    <span className="font-medium">{analisis.clienteVolumen.cliente}</span> pagó {Math.abs(analisis.clienteVolumen.deltaLista).toFixed(1)}% menos que Mayoreo AAA · {fmtInt(analisis.clienteVolumen.piezas)} pz.
-                  </div>
-                </div>
-              )}
-            </>
-          ) : null}
-        </div>
+        <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
+          <X className="w-3.5 h-3.5 text-gray-500" />
+        </button>
       </div>
+
+      {cargando ? (
+        <div className="p-6 text-center text-gray-400 text-xs">
+          <Activity className="w-5 h-5 mx-auto mb-1" /> Cargando…
+        </div>
+      ) : (
+        <div className="p-3 grid grid-cols-3 gap-4">
+
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-gray-500 mb-1.5">Precios</div>
+            {bajo && (
+              <div className="mb-1.5" style={{ borderLeft: `2px solid ${PALETTE.red.mid}`, paddingLeft: 8 }}>
+                <div className="text-[9px]" style={{ color: PALETTE.red.mid }}>BAJO FACTURADO</div>
+                <div className="text-[15px] font-medium leading-tight" style={{ color: PALETTE.red.text }}>
+                  {fmtMoney(bajo.precio_bajo)}
+                </div>
+                <div className="text-[9px] text-gray-500">{bajo.cliente_bajo} · {fmtInt(bajo.piezas_bajo)} pz</div>
+              </div>
+            )}
+            {precioAAA != null && (
+              <div className="mb-1.5" style={{ borderLeft: `2px solid ${PALETTE.blue.mid}`, paddingLeft: 8 }}>
+                <div className="text-[9px]" style={{ color: PALETTE.blue.mid }}>
+                  MAYOREO AAA
+                  {promo && (
+                    <span className="ml-1 px-1 py-0.5 rounded" style={{ background: PALETTE.amber.bg, color: PALETTE.amber.mid, fontSize: 8 }}>
+                      {promo.campania.slice(0, 12)} · {Math.round(Number(promo.promo_pct) * 100)}%
+                    </span>
+                  )}
+                </div>
+                <div className="text-[15px] font-medium leading-tight">
+                  {fmtMoney(precioAAAneto)}
+                  {promo && (
+                    <span className="ml-1.5 text-[10px] text-gray-400 line-through font-normal">{fmtMoney(precioAAA)}</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {['DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'].map((l) => (
+              precios[l] != null ? (
+                <div key={l} className="flex justify-between items-baseline py-0.5 border-b border-gray-50 text-[11px]">
+                  <span className="text-gray-600">{LISTAS_LBL[l]}</span>
+                  <span className="font-medium">{fmtMoney(precios[l])}</span>
+                </div>
+              ) : null
+            ))}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="text-[9px] uppercase tracking-wider text-gray-500">Evolución · {anio}</div>
+              <div className="flex items-center gap-1.5 text-[9px] text-gray-500">
+                <span><span style={{ display:'inline-block', width:8, height:2, background: PALETTE.blue.mid, verticalAlign:'middle', marginRight:2 }} />Precio</span>
+                <span><span style={{ display:'inline-block', width:8, height:8, background: PALETTE.amber.soft, verticalAlign:'middle', marginRight:2 }} />Piezas</span>
+              </div>
+            </div>
+            {analisis && analisis.serieMens.length > 0 ? (
+              <ResponsiveContainer width="100%" height={130}>
+                <ComposedChart data={analisis.serieMens} margin={{ top: 4, right: 2, left: -28, bottom: 0 }}>
+                  <XAxis dataKey="mes" tick={{ fontSize: 9, fill: '#888' }} interval={0} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="left" hide domain={['dataMin - 50', 'dataMax + 50']} />
+                  <YAxis yAxisId="right" orientation="right" hide />
+                  <Tooltip formatter={(v, name) => name === 'Precio' ? fmtMoney(v) : `${fmtInt(v)} pz`}
+                    labelStyle={{ fontSize: 10 }} contentStyle={{ fontSize: 10, padding: 6 }} />
+                  <Bar yAxisId="right" dataKey="piezas" name="Piezas" fill={PALETTE.amber.soft} radius={[2, 2, 0, 0]} />
+                  <Line yAxisId="left" type="monotone" dataKey="precio" name="Precio"
+                    stroke={PALETTE.blue.mid} strokeWidth={2} dot={{ r: 2.5, fill: PALETTE.blue.mid }} connectNulls />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-[10px] text-gray-400 text-center py-6">Sin datos históricos</div>
+            )}
+            {analisis && (
+              <div className="mt-2 pt-2 border-t border-gray-100 text-[11px] space-y-0.5">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Sellout {MESES_LBL[analisis.mesMax - 1]}</span>
+                  <span>
+                    <span className="font-medium">{fmtInt(analisis.piezasMesActual)} pz</span>
+                    {analisis.deltaVsPrev3m != null && (
+                      <span className={`ml-1.5 text-[10px] ${
+                        analisis.deltaVsPrev3m >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                      }`}>
+                        {fmtPctDelta(analisis.deltaVsPrev3m)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">YTD</span>
+                  <span className="font-medium">{fmtInt(analisis.piezasYTD)} pz · {fmtCompact(analisis.montoYTD)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-gray-500 mb-1.5">Top clientes · YTD</div>
+            {!analisis || analisis.clientes.length === 0 ? (
+              <div className="text-[10px] text-gray-400">Sin facturación este año.</div>
+            ) : (
+              <>
+                {analisis.clientes.map((c, i) => {
+                  const critico = c.deltaLista != null && c.deltaLista < -10;
+                  return (
+                    <div key={c.cliente} className="flex justify-between items-baseline text-[11px] py-0.5 border-b border-gray-50">
+                      <span className="text-gray-800 truncate" style={{ maxWidth: 130 }} title={c.cliente}>
+                        <span className="text-gray-400 mr-1">{i + 1}.</span>{c.cliente}
+                      </span>
+                      <span className="whitespace-nowrap">
+                        <span className="text-gray-700">{fmtInt(c.piezas)} pz</span>
+                        {c.deltaLista != null && (
+                          <span className={`ml-1.5 text-[10px] ${
+                            critico ? 'text-rose-700 font-medium'
+                            : c.deltaLista < 0 ? 'text-gray-500'
+                            : 'text-emerald-700'
+                          }`}>
+                            {fmtPctDelta(c.deltaLista)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+                {analisis.clientesRestantes.length > 0 && (
+                  <div className="text-[10px] text-gray-400 text-center py-1">
+                    + {analisis.clientesRestantes.length} más · {fmtInt(analisis.clientesRestantes.reduce((s, c) => s + c.piezas, 0))} pz
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="text-[9px] uppercase tracking-wider text-gray-500 mt-3 mb-1.5">
+              Promos aplicadas {analisis && analisis.promosCount > 0 && <span className="normal-case tracking-normal text-gray-400">· {analisis.promosCount}</span>}
+            </div>
+            {!analisis || analisis.promosHist.length === 0 ? (
+              <div className="text-[10px] text-gray-400">Sin promociones registradas.</div>
+            ) : (
+              analisis.promosHist.map((p, i) => (
+                <div key={i} className="flex justify-between items-baseline text-[11px] py-0.5 border-b border-gray-50">
+                  <span>
+                    <span className="text-gray-500 mr-1">{MESES_LBL[Number(p.mes) - 1]} {String(p.anio).slice(-2)}</span>
+                    <span className={p.tipo === 'lista' ? 'text-blue-700' : 'text-gray-800'}>
+                      {p.campania}
+                    </span>
+                  </span>
+                  <span className="text-amber-800 font-medium">{Math.round(Number(p.promo_pct) * 100)}%</span>
+                </div>
+              ))
+            )}
+
+            {analisis && analisis.clienteVolumen && analisis.clienteVolumen.deltaLista != null && analisis.clienteVolumen.deltaLista < -8 && (
+              <div className="mt-3 rounded px-2 py-1.5 flex items-center gap-1.5" style={{ background: '#FEF3C7', color: '#78350F' }}>
+                <AlertTriangle className="w-3 h-3 shrink-0" />
+                <div className="text-[10px]">
+                  <span className="font-medium">{analisis.clienteVolumen.cliente}</span> pagó {Math.abs(analisis.clienteVolumen.deltaLista).toFixed(1)}% menos que Mayoreo AAA
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
     </div>
   );
 }
