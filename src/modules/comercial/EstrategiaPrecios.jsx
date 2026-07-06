@@ -10,7 +10,10 @@ import {
 } from 'recharts';
 
 const MESES_LBL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const PRECIO_BAJO_KEY = 'Precio bajo facturado';
 const LISTAS_MOSTRAR = ['Mayoreo AAA', 'DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'];
+const OPCIONES_LISTAS = [PRECIO_BAJO_KEY, ...LISTAS_MOSTRAR];
 const LISTAS_LBL = {
   'Mayoreo AAA':       'Mayoreo AAA',
   'DICOTECH':          'DICOTECH',
@@ -122,7 +125,7 @@ export default function EstrategiaPrecios() {
   const [marcaSel, setMarcaSel] = useState(new Set());
   const [categoriaSel, setCategoriaSel] = useState(new Set());
   const [roadmapSel, setRoadmapSel] = useState(new Set());
-  const [listasSel, setListasSel] = useState(new Set(LISTAS_MOSTRAR));
+  const [listasSel, setListasSel] = useState(new Set(OPCIONES_LISTAS));
   const [skuAbierto, setSkuAbierto] = useState(null);
 
   useEffect(() => {
@@ -203,75 +206,95 @@ export default function EstrategiaPrecios() {
     () => LISTAS_MOSTRAR.filter((l) => listasSel.has(l)),
     [listasSel]
   );
+  const verPrecioBajo = listasSel.has(PRECIO_BAJO_KEY);
 
   const exportarExcel = () => {
     const incluyeAAA = listasVisibles.includes('Mayoreo AAA');
     const otrasListas = listasVisibles.filter((l) => l !== 'Mayoreo AAA');
 
-    const HEADERS_BASE = [
-      'Marca', 'SKU', 'Descripción', 'Categoría', 'Roadmap',
-      'Precio Bajo Facturado', 'Cliente Precio Bajo', 'Piezas Precio Bajo',
-    ];
+    const HEADERS_BASE = ['Marca', 'SKU', 'Descripción', 'Categoría', 'Roadmap'];
+    const HEADERS_BAJO = verPrecioBajo
+      ? ['Precio Bajo Facturado', 'Cliente Precio Bajo', 'Piezas Precio Bajo']
+      : [];
     const HEADERS_AAA = incluyeAAA
       ? ['Mayoreo AAA (lista)', 'Descuento %', 'Campañas activas', 'Mayoreo AAA (neto)']
       : [];
     const HEADERS_OTRAS = otrasListas.map((l) => LISTAS_LBL[l]);
-    const HEADERS = [...HEADERS_BASE, ...HEADERS_AAA, ...HEADERS_OTRAS];
+    const HEADERS = [...HEADERS_BASE, ...HEADERS_BAJO, ...HEADERS_AAA, ...HEADERS_OTRAS];
+    const nCols = HEADERS.length;
 
-    const iAAAlista   = incluyeAAA ? HEADERS_BASE.length : -1;
-    const iDctoPct    = incluyeAAA ? HEADERS_BASE.length + 1 : -1;
-    const iCampanias  = incluyeAAA ? HEADERS_BASE.length + 2 : -1;
-    const iAAANeto    = incluyeAAA ? HEADERS_BASE.length + 3 : -1;
-    const iOtrasInicio = HEADERS_BASE.length + HEADERS_AAA.length;
+    const iBajoPrecio = verPrecioBajo ? HEADERS_BASE.length : -1;
+    const iBajoCliente = verPrecioBajo ? HEADERS_BASE.length + 1 : -1;
+    const iBajoPiezas = verPrecioBajo ? HEADERS_BASE.length + 2 : -1;
+    const aaaStart = HEADERS_BASE.length + HEADERS_BAJO.length;
+    const iAAAlista  = incluyeAAA ? aaaStart : -1;
+    const iDctoPct   = incluyeAAA ? aaaStart + 1 : -1;
+    const iCampanias = incluyeAAA ? aaaStart + 2 : -1;
+    const iAAANeto   = incluyeAAA ? aaaStart + 3 : -1;
+    const iOtrasInicio = aaaStart + HEADERS_AAA.length;
 
-    const rows = filas.map((r) => {
+    const rowsData = filas.map((r) => {
       const p = r.precios || {};
       const promo = r.promo;
       const precioAAA = p['Mayoreo AAA'] ?? null;
       const dctoPct = promo ? Number(promo.promo_pct) : null;
       const precioAAAneto = promo && precioAAA != null ? precioAAA * (1 - dctoPct) : precioAAA;
       const campanias = promo ? (promo.promos || []).map((x) => `${x.campania} (${(Number(x.promo_pct) * 100).toFixed(1)}%)`).join(' + ') : '';
-      const base = [
-        r.marca || '', r.sku || '', r.descripcion || '', r.categoria || '', r.rdmp || '',
-        r.bajo?.precio_bajo ?? null, r.bajo?.cliente_bajo ?? '', r.bajo?.piezas_bajo ?? null,
-      ];
+      const base = [r.marca || '', r.sku || '', r.descripcion || '', r.categoria || '', r.rdmp || ''];
+      const bajo = verPrecioBajo ? [r.bajo?.precio_bajo ?? null, r.bajo?.cliente_bajo ?? '', r.bajo?.piezas_bajo ?? null] : [];
       const aaa = incluyeAAA ? [precioAAA, dctoPct, campanias, precioAAAneto] : [];
       const otras = otrasListas.map((l) => p[l] ?? null);
-      return [...base, ...aaa, ...otras];
+      return [...base, ...bajo, ...aaa, ...otras];
     });
 
-    const aoa = [HEADERS, ...rows];
+    const hoy = new Date();
+    const tituloExcel = `Lista de Precios ${MESES_LARGO[hoy.getMonth()]} ${hoy.getFullYear()}`;
+
+    const aoa = [
+      [tituloExcel, ...Array(nCols - 1).fill('')],
+      HEADERS,
+      ...rowsData,
+    ];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-    const headerStyle = {
+    const blackHeader = {
       font: { bold: true, color: { rgb: 'FFFFFF' } },
-      fill: { patternType: 'solid', fgColor: { rgb: '1F2937' } },
+      fill: { patternType: 'solid', fgColor: { rgb: '000000' } },
       alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      border: { bottom: { style: 'thin', color: { rgb: 'D1D5DB' } } },
     };
-    for (let c = 0; c < HEADERS.length; c++) {
-      const addr = XLSX.utils.encode_cell({ r: 0, c });
-      if (ws[addr]) ws[addr].s = headerStyle;
+    const titleStyle = {
+      ...blackHeader,
+      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 14 },
+    };
+
+    for (let c = 0; c < nCols; c++) {
+      const titleAddr = XLSX.utils.encode_cell({ r: 0, c });
+      if (!ws[titleAddr]) ws[titleAddr] = { v: '', t: 's' };
+      ws[titleAddr].s = titleStyle;
+      const headAddr = XLSX.utils.encode_cell({ r: 1, c });
+      if (ws[headAddr]) ws[headAddr].s = blackHeader;
     }
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: nCols - 1 } }];
+    ws['!rows'] = [{ hpt: 26 }, { hpt: 32 }];
 
     const moneyFmt = '"$"#,##0';
     const pctFmt = '0.0%';
-    const moneyCols = new Set([5]);
+    const moneyCols = new Set();
+    if (verPrecioBajo) moneyCols.add(iBajoPrecio);
     if (incluyeAAA) { moneyCols.add(iAAAlista); moneyCols.add(iAAANeto); }
     for (let k = 0; k < otrasListas.length; k++) moneyCols.add(iOtrasInicio + k);
-    const intCol = 7;
 
-    for (let i = 0; i < rows.length; i++) {
-      const rowIdx = i + 1;
-      const hasPromo = incluyeAAA && rows[i][iCampanias] !== '';
-      for (let c = 0; c < HEADERS.length; c++) {
+    for (let i = 0; i < rowsData.length; i++) {
+      const rowIdx = i + 2;
+      const hasPromo = incluyeAAA && rowsData[i][iCampanias] !== '';
+      for (let c = 0; c < nCols; c++) {
         const addr = XLSX.utils.encode_cell({ r: rowIdx, c });
         const cell = ws[addr];
         if (!cell) continue;
         cell.s = cell.s || {};
         if (moneyCols.has(c)) cell.z = moneyFmt;
         if (c === iDctoPct) cell.z = pctFmt;
-        if (c === intCol && cell.v != null) cell.z = '#,##0';
+        if (c === iBajoPiezas && cell.v != null) cell.z = '#,##0';
         if (hasPromo && incluyeAAA && (c === iAAAlista || c === iDctoPct || c === iCampanias || c === iAAANeto)) {
           cell.s.fill = { patternType: 'solid', fgColor: { rgb: 'DCFCE7' } };
           if (c === iAAANeto) cell.s.font = { bold: true, color: { rgb: '14532D' } };
@@ -279,17 +302,18 @@ export default function EstrategiaPrecios() {
       }
     }
 
-    const baseWidths = [10, 12, 45, 14, 9, 14, 22, 10];
+    const baseWidths = [10, 12, 45, 14, 9];
+    const bajoWidths = verPrecioBajo ? [14, 22, 10] : [];
     const aaaWidths = incluyeAAA ? [14, 10, 40, 16] : [];
     const otrasWidths = otrasListas.map(() => 10);
-    ws['!cols'] = [...baseWidths, ...aaaWidths, ...otrasWidths].map((w) => ({ wch: w }));
-    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
-    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: HEADERS.length - 1 } }) };
+    ws['!cols'] = [...baseWidths, ...bajoWidths, ...aaaWidths, ...otrasWidths].map((w) => ({ wch: w }));
+    ws['!freeze'] = { xSplit: 0, ySplit: 2 };
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 1, c: 0 }, e: { r: rowsData.length + 1, c: nCols - 1 } }) };
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Estrategia de Precios');
-    const hoy = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `Estrategia_Precios_${hoy}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, 'Lista de Precios');
+    const nombreArchivo = `${tituloExcel}.xlsx`;
+    XLSX.writeFile(wb, nombreArchivo);
   };
 
   if (loading) {
@@ -331,7 +355,7 @@ export default function EstrategiaPrecios() {
         <MultiSelect label="Marcas" options={marcasOpciones} selected={marcaSel} onChange={setMarcaSel} width={160} />
         <MultiSelect label="Categorías" options={categoriasOpciones} selected={categoriaSel} onChange={setCategoriaSel} width={180} />
         <MultiSelect label="Roadmap" options={roadmapOpciones} selected={roadmapSel} onChange={setRoadmapSel} width={140} />
-        <MultiSelect label="Listas" options={LISTAS_MOSTRAR} selected={listasSel} onChange={setListasSel} width={160} />
+        <MultiSelect label="Listas" options={OPCIONES_LISTAS} selected={listasSel} onChange={setListasSel} width={180} />
       </div>
 
       <div className="flex items-center justify-between px-1">
@@ -357,7 +381,7 @@ export default function EstrategiaPrecios() {
                   { label: 'SKU',          cls: 'text-left'  },
                   { label: 'Descripción',  cls: 'text-left'  },
                   { label: 'Roadmap',      cls: 'text-center' },
-                  { label: 'Precio bajo\nfacturado', cls: 'text-right' },
+                  ...(verPrecioBajo ? [{ label: 'Precio bajo\nfacturado', cls: 'text-right' }] : []),
                   ...listasVisibles.map((l) => ({ label: LISTAS_LBL[l], cls: 'text-right' })),
                 ].map((h, i) => (
                   <th key={i}
@@ -395,18 +419,20 @@ export default function EstrategiaPrecios() {
                           </span>
                         )}
                       </td>
-                      <td className="py-1.5 px-2 text-right whitespace-nowrap">
-                        {r.bajo ? (
-                          <>
-                            <div className="font-medium text-rose-800">{fmtMoney(r.bajo.precio_bajo)}</div>
-                            <div className="text-[9px] text-gray-500 truncate" style={{ maxWidth: 120 }} title={r.bajo.cliente_bajo}>
-                              {r.bajo.cliente_bajo} · {fmtInt(r.bajo.piezas_bajo)} pz
-                            </div>
-                          </>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
+                      {verPrecioBajo && (
+                        <td className="py-1.5 px-2 text-right whitespace-nowrap">
+                          {r.bajo ? (
+                            <>
+                              <div className="font-medium text-rose-800">{fmtMoney(r.bajo.precio_bajo)}</div>
+                              <div className="text-[9px] text-gray-500 truncate" style={{ maxWidth: 120 }} title={r.bajo.cliente_bajo}>
+                                {r.bajo.cliente_bajo} · {fmtInt(r.bajo.piezas_bajo)} pz
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                      )}
                       {listasVisibles.map((l) => {
                         if (l === 'Mayoreo AAA') {
                           return (
@@ -443,7 +469,7 @@ export default function EstrategiaPrecios() {
                     </tr>
                     {abierto && (
                       <tr>
-                        <td colSpan={5 + listasVisibles.length} style={{ padding: 0, background: '#F8FAFC' }}>
+                        <td colSpan={4 + (verPrecioBajo ? 1 : 0) + listasVisibles.length} style={{ padding: 0, background: '#F8FAFC' }}>
                           <DetalleSKU
                             sku={r}
                             promo={promo}
