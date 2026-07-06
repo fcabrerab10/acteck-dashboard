@@ -74,10 +74,9 @@ const GRUPOS = [
 
 const SOURCES = [
   // ── Globales ──
-  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación, Inventario, Detalle, Compras & Precios', desc:'Archivo único con 6 hojas: Venta Facturación + Venta Piezas + Vw_TablaH_Ventas + Vw_TablaH_Inventario + Vw_TablaH_Compras + Vw_TablaM_Precios (nueva: listas de precios por SKU).', file:'Actualizaciones ERP.xlsx',
+  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación, Inventario, Compras & Precios', desc:'Archivo único con las hojas relevantes: Venta Facturación + Venta Piezas (sell-in), Vw_TablaH_Inventario (stock), Vw_TablaH_Compras (POs) y Vw_TablaM_Precios (listas de precios por SKU). Nota: Vw_TablaH_Ventas ya no se carga (era 163K filas × 70 cols y era la fuente del 90% del peso del archivo).', file:'Actualizaciones ERP.xlsx',
     combined: [
       { table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', label:'Facturación (sell-in canónico)', replaceAnios:[2025,2026] },
-      { table:'ventas_erp', onConflict:'venta_id,venta_renglon', parser:'erpVentas', label:'Detalle granular (Vw_TablaH_Ventas)', replaceAnios:[2025,2026] },
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true },
       { table:'compras_oc', onConflict:'movid,articulo', parser:'comprasOC', label:'POs de Compras (Vw_TablaH_Compras)', replace:true },
       { table:'precios_sku', onConflict:'sku,lista,anio,mes', parser:'preciosERP', label:'Precios por lista (Vw_TablaM_Precios)', replace:true }
