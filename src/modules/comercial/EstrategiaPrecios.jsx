@@ -95,7 +95,26 @@ export default function EstrategiaPrecios() {
   }, []);
 
   const bajoMap = useMemo(() => new Map(preciosBajos.map((p) => [p.sku, p])), [preciosBajos]);
-  const promoMap = useMemo(() => new Map(promos.map((p) => [p.sku, p])), [promos]);
+  // Un SKU puede tener varias promos activas al mismo tiempo (Sell Out mensual
+  // + Back to School, etc.). Se combinan multiplicativamente: (1-p1)*(1-p2).
+  const promoMap = useMemo(() => {
+    const m = new Map();
+    for (const p of promos) {
+      if (!m.has(p.sku)) m.set(p.sku, { promos: [], factorNeto: 1 });
+      const it = m.get(p.sku);
+      it.promos.push(p);
+      it.factorNeto *= (1 - Number(p.promo_pct));
+    }
+    for (const [, it] of m) {
+      it.promo_pct_efectivo = 1 - it.factorNeto;
+      it.campania_principal = it.promos.map((p) => p.campania).join(' + ');
+      it.promo_pct = it.promo_pct_efectivo;
+      it.campania = it.promos.length === 1
+        ? it.promos[0].campania
+        : `${it.promos.length} promos activas`;
+    }
+    return m;
+  }, [promos]);
   const preciosMap = useMemo(() => {
     const m = new Map();
     for (const p of precios) {

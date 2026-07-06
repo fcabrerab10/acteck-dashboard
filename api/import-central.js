@@ -30,7 +30,7 @@ const ALLOWED = {
   facturacion_clientes:  'cliente_nombre,sku,anio,mes',
   estados_resultados:    'razon_social,anio,mes,cuenta_norm',
   compras_oc:            'movid,articulo',
-  promos_temporada:      'sku,anio,mes',
+  promos_temporada:      'sku,anio,mes,campania',
   sellout_general:       'id',
 };
 
@@ -61,21 +61,24 @@ export default async function handler(req, res) {
       }
     }
 
-    // deletePeriodos: [{anio, mes}, ...] — borra por (anio, mes) antes del upsert.
-    // Útil para replace por mes (ej. promos_temporada, precios mensuales).
+    // deletePeriodos: [{anio, mes, campania?}, ...] — borra por (anio, mes) o (anio, mes, campania)
+    // antes del upsert. Útil para replace por mes en promos_temporada / precios_sku.
     if (Array.isArray(deletePeriodos) && deletePeriodos.length > 0) {
       for (const p of deletePeriodos) {
         const anio = parseInt(p?.anio);
         const mes  = parseInt(p?.mes);
         if (!anio || !mes) continue;
-        const delUrl = `${SB_URL}/rest/v1/${table}?anio=eq.${anio}&mes=eq.${mes}`;
+        let delUrl = `${SB_URL}/rest/v1/${table}?anio=eq.${anio}&mes=eq.${mes}`;
+        if (p?.campania) {
+          delUrl += `&campania=eq.${encodeURIComponent(p.campania)}`;
+        }
         const dr = await fetch(delUrl, {
           method: 'DELETE',
           headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, Prefer: 'return=minimal' },
         });
         if (!dr.ok) {
           const txt = await dr.text();
-          return res.status(dr.status).json({ error: 'delete failed', detail: txt.slice(0, 500), anio, mes });
+          return res.status(dr.status).json({ error: 'delete failed', detail: txt.slice(0, 500), anio, mes, campania: p?.campania });
         }
       }
     }

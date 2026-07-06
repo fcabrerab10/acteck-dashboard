@@ -83,7 +83,14 @@ const SOURCES = [
     ]
   },
   { id:'roadmap', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Roadmap', desc:'Archivo Roadmap.xlsx (Hoja1). 6 columnas: Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2. Replace completo — fuente única de marca/categoría/familia por SKU para todo el dashboard.', file:'Roadmap.xlsx', table:'roadmap_sku', onConflict:'sku', parser:'roadmap', replace:true },
-  { id:'promos-temporada', grupo:'globales', tipo:'updated', statusKey:'promos_temporada', title:'Promociones por temporada', desc:'Solo si hay campaña vigente (ej. "Promociones Exclusivas Back to School Jul2026.xlsx"). Se aplica encima del precio Mayoreo AAA que viene del ERP: precio final = precio × (1 − promo_temporada). Los precios base ya salen automáticamente del ERP.', file:'Promociones Exclusivas <CAMPAÑA> <MES><AÑO>.xlsx', table:'promos_temporada', onConflict:'sku,anio,mes', parser:'promosTemporada' },
+  { id:'lista-precios-sellout', grupo:'globales', tipo:'updated', statusKey:'promos_temporada', title:'Lista de Precios · Promoción mensual', desc:'Archivo mensual "Lista de Precios Mayoreo AAA <AÑO> <MES>.xlsx". La columna "Sell Out" contiene el % de promoción del mes sobre Mayoreo AAA (ej. 0.05 = 5%). Se guarda como campaña "Sell Out · <MES> <AÑO>" en promos_temporada.', file:'Lista de Precios Mayoreo AAA <AÑO> <MES>.xlsx', table:'promos_temporada', onConflict:'sku,anio,mes,campania', parser:'sellOutMensual',
+    extraSlot: {
+      id:'promos-temporada-extra', title:'Promoción por temporada (extra, opcional)',
+      desc:'Solo si hay campaña adicional al Sell Out mensual (ej. "Promociones Exclusivas Back to School Jul2026.xlsx"). Se aplica encima del precio ya con Sell Out.',
+      file:'Promociones Exclusivas <CAMPAÑA> <MES><AÑO>.xlsx',
+      table:'promos_temporada', onConflict:'sku,anio,mes,campania', parser:'promosTemporada',
+    }
+  },
   { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
   { id:'estados-resultados', grupo:'globales', tipo:'mes', statusKey:'estados_resultados', title:'Estado de Resultados (P&L)', desc:'Cierres mensuales/trimestrales del P&L (ej. "Cierre 1Q 2026.xlsx", "Cierre Diciembre 2025.xlsx"). Lee la hoja "Estado de Resultados" y carga sólo los meses con valores. No borra meses previos; upsert por (razón social, año, mes, cuenta).', file:'Cierre <período>.xlsx', table:'estados_resultados', onConflict:'razon_social,anio,mes,cuenta_norm', parser:'estadosResultados' },
   { id:'sellout-general', grupo:'globales', tipo:'semana', statusKey:'sellout_general', title:'Sellout General (mayoristas)', desc:'Archivo semanal "Sellout General.xlsx" (hoja "Hoja1") con el detalle de ventas de nuestros mayoristas hacia sus clientes finales. 357K+ filas históricas (2025-en adelante). Upsert por id de transacción — solo actualiza filas nuevas. Mapeo idcliente→mayorista canónico: CT, CVA, Ingram, Arroba, Dicotech, Techs Mart, Grupo Unidades de Cómputo, DC, Exel, PCH, Grupo Loma, Group NSSTORE, Kabik.', file:'Sellout General.xlsx', table:'sellout_general', onConflict:'id', parser:'selloutGeneral' },
@@ -1118,6 +1125,51 @@ const PARSERS = {
     }).filter(Boolean);
   },
 
+  // Lista de Precios · Promoción mensual — mismo archivo mensual pero solo se extrae
+  // la columna "Sell Out" (col 9) como promoción del mes. Cada SKU con Sell Out > 0
+  // se guarda en promos_temporada con campania = "Sell Out · <MES> <AÑO>".
+  // Los precios (Mayoreo AAA) siguen saliendo del ERP, aquí NO se cargan.
+  sellOutMensual(wb, filename){
+    const MESES_ES = {
+      enero:1, febrero:2, marzo:3, abril:4, mayo:5, junio:6,
+      julio:7, agosto:8, septiembre:9, setiembre:9, octubre:10, noviembre:11, diciembre:12,
+    };
+    const MESES_LBL_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const detectarPeriodo = (name) => {
+      const s = String(name || '').toLowerCase();
+      let mes = null, anio = null;
+      for (const [nm, n] of Object.entries(MESES_ES)) {
+        if (s.includes(nm)) { mes = n; break; }
+      }
+      const my = s.match(/\b(20\d{2})\b/);
+      if (my) anio = parseInt(my[1], 10);
+      if (!mes || !anio) {
+        const now = new Date();
+        if (!mes)  mes  = now.getMonth() + 1;
+        if (!anio) anio = now.getFullYear();
+      }
+      return { anio, mes };
+    };
+    const { anio, mes } = detectarPeriodo(filename);
+    const campania = `Sell Out · ${MESES_LBL_ES[mes - 1]} ${anio}`;
+    const sh = wb.Sheets['Lista'] || wb.Sheets[wb.SheetNames[0]];
+    if (!sh) return [];
+    return XLSX.utils.sheet_to_json(sh, {defval:null, range:4}).map((r, i) => {
+      const obj = {};
+      for (const k of Object.keys(r)) obj[snake(k)] = r[k];
+      const sku = toStr(obj.articulo ?? obj.sku);
+      const promo = toNum(obj.sell_out ?? obj.promo_sell_in);
+      if (!sku || promo == null || promo <= 0) return null;
+      return {
+        sku, anio, mes,
+        campania,
+        promo_pct: promo,
+        descripcion: toStr(obj.descripcion),
+        sort_order: i,
+      };
+    }).filter(Boolean);
+  },
+
   // Lista de Precios — archivo mensual (ej. "Lista de Precios Mayoreo AAA 2026 Julio.xlsx")
   // Hoja 'Lista', headers en fila 5 (range: 4), datos desde fila 6.
   // Columnas usadas:
@@ -2022,12 +2074,15 @@ async function handleUpload(src){
         const rows = PARSERS[sub.parser](wb, f.name);
         filasTotal += rows.length;
         appendLog(src, `Filas parseadas: ${rows.length}`);
-        if ((sub.parser === 'precios' || sub.parser === 'promosTemporada') && rows.length > 0) {
+        if ((sub.parser === 'precios' || sub.parser === 'promosTemporada' || sub.parser === 'sellOutMensual') && rows.length > 0) {
           appendLog(src, `Período detectado: ${rows[0].anio}-${String(rows[0].mes).padStart(2,'0')}${rows[0].campania ? ' · ' + rows[0].campania : ''}`);
         }
-        // Replace por (año, mes) para tablas con histórico mensual
-        const deletePeriodos = rows.length > 0 && (sub.parser === 'precios' || sub.parser === 'promosTemporada')
-          ? [{anio: rows[0].anio, mes: rows[0].mes}]
+        // Replace por (año, mes) para precios y por (año, mes, campania) para promos
+        const deletePeriodos = rows.length > 0 && (sub.parser === 'precios' || sub.parser === 'promosTemporada' || sub.parser === 'sellOutMensual')
+          ? [{
+              anio: rows[0].anio, mes: rows[0].mes,
+              ...(rows[0].campania && (sub.parser === 'promosTemporada' || sub.parser === 'sellOutMensual') ? { campania: rows[0].campania } : {}),
+            }]
           : null;
         await postChunks(src, sub.table, sub.onConflict, rows, sub.replaceAnios, deletePeriodos);
       }
@@ -2061,13 +2116,16 @@ async function handleUpload(src){
           }
         }
       }
-      if ((src.parser === 'precios' || src.parser === 'promosTemporada') && rows.length > 0) {
+      if ((src.parser === 'precios' || src.parser === 'promosTemporada' || src.parser === 'sellOutMensual') && rows.length > 0) {
         appendLog(src, `Período detectado: ${rows[0].anio}-${String(rows[0].mes).padStart(2,'0')}${rows[0].campania ? ' · ' + rows[0].campania : ''}`);
       }
 
-      // Replace por (año, mes) para tablas con histórico mensual (precios, promos)
-      const deletePeriodos = rows.length > 0 && (src.parser === 'precios' || src.parser === 'promosTemporada')
-        ? [{anio: rows[0].anio, mes: rows[0].mes}]
+      // Replace por (año, mes) para precios y por (año, mes, campania) para promos
+      const deletePeriodos = rows.length > 0 && (src.parser === 'precios' || src.parser === 'promosTemporada' || src.parser === 'sellOutMensual')
+        ? [{
+            anio: rows[0].anio, mes: rows[0].mes,
+            ...(rows[0].campania && (src.parser === 'promosTemporada' || src.parser === 'sellOutMensual') ? { campania: rows[0].campania } : {}),
+          }]
         : null;
 
       // Replace por años: el servidor borra esos años antes del primer chunk
