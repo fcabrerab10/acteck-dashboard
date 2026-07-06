@@ -1346,16 +1346,32 @@ const PARSERS = {
     const { anio, mes } = detectarPeriodo(filename);
     const campania = detectarCampania(filename);
     const sh = wb.Sheets['Hoja1'] || wb.Sheets[wb.SheetNames[0]];
+    // Header dinámico: detecta la fila que contiene "articulo" o "sku" y usa
+    // esa como header. Permite columnas en cualquier orden y sin filas de
+    // padding arriba (típico en "Promociones Exclusivas Back to School …").
     const arr = XLSX.utils.sheet_to_json(sh, {header:1, defval:null});
+    let headerRow = -1;
+    for (let i = 0; i < Math.min(10, arr.length); i++) {
+      const row = arr[i] || [];
+      const norm = row.map((c) => snake(String(c || '')));
+      if (norm.some((c) => c === 'articulo' || c === 'sku' || c === 'no_parte')) {
+        headerRow = i; break;
+      }
+    }
+    if (headerRow < 0) return [];
+    const headers = (arr[headerRow] || []).map((c) => snake(String(c || '')));
+    const idx = (names) => headers.findIndex((h) => names.includes(h));
+    const iSku   = idx(['articulo','sku','no_parte']);
+    const iDesc  = idx(['descripcion','descripcion_2','desc','descripcion_1']);
+    const iPromo = headers.findIndex((h) => h && (h.includes('promo') || h.includes('desc_extra') || h.includes('descuento') || h.includes('sell_out')));
     const out = [];
-    for (let i = 2; i < arr.length; i++) {
-      const row = arr[i];
-      if (!row) continue;
-      const sku = toStr(row[1]);
+    for (let i = headerRow + 1; i < arr.length; i++) {
+      const row = arr[i]; if (!row) continue;
+      const sku = toStr(row[iSku]);
       if (!sku) continue;
-      const desc = toStr(row[2]);
-      const promo = toNum(row[3]);
-      if (promo == null) continue;
+      const desc = iDesc >= 0 ? toStr(row[iDesc]) : null;
+      const promo = iPromo >= 0 ? toNum(row[iPromo]) : null;
+      if (promo == null || promo <= 0) continue;
       out.push({
         sku, anio, mes,
         campania,
