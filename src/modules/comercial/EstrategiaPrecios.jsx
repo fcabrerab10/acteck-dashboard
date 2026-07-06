@@ -483,7 +483,7 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
             </div>
           ) : analisis ? (
             <>
-              <div className="grid grid-cols-5 gap-2 items-stretch">
+              <div className="grid grid-cols-6 gap-2 items-stretch">
                 <div className="bg-white border border-gray-200 rounded p-1.5">
                   <div className="text-[8px] tracking-wide text-gray-500">
                     SELLOUT {MESES_LBL[(analisis.mesMax - 1)].toUpperCase()}
@@ -502,29 +502,36 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
                   <div className="text-[13px] font-medium">{fmtInt(analisis.piezasYTD)} pz</div>
                   <div className="text-[9px] text-gray-500 leading-none">{fmtCompact(analisis.montoYTD)}</div>
                 </div>
-                <div className="bg-white border border-gray-200 rounded p-1.5 col-span-3">
-                  <div className="text-[8px] tracking-wide text-gray-500 mb-0.5">PRECIO MAYOREO AAA · {anio}</div>
-                  <ResponsiveContainer width="100%" height={50}>
-                    <LineChart data={analisis.serieMens} margin={{ top: 2, right: 4, left: -25, bottom: 0 }}>
+                <div className="bg-white border border-gray-200 rounded p-1.5 col-span-4">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <div className="text-[8px] tracking-wide text-gray-500">PRECIO Y SELLOUT · {anio}</div>
+                    <div className="flex items-center gap-2 text-[9px]">
+                      <span style={{ color: PALETTE.blue.mid }}>
+                        <span style={{ display:'inline-block', width:8, height:2, background: PALETTE.blue.mid, verticalAlign:'middle', marginRight:3 }} />
+                        Precio $
+                      </span>
+                      <span style={{ color: PALETTE.amber.mid }}>
+                        <span style={{ display:'inline-block', width:8, height:8, background: PALETTE.amber.soft, verticalAlign:'middle', marginRight:3 }} />
+                        Piezas
+                      </span>
+                    </div>
+                  </div>
+                  <ResponsiveContainer width="100%" height={110}>
+                    <ComposedChart data={analisis.serieMens} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
                       <XAxis dataKey="mes" tick={{ fontSize: 8, fill: '#888' }} interval={0} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 8, fill: PALETTE.blue.mid }} width={45} tickFormatter={fmtMoney} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(v) => fmtMoney(v)} labelStyle={{ fontSize: 10 }} contentStyle={{ fontSize: 10, padding: 4 }} />
-                      <Line type="monotone" dataKey="precio" stroke={PALETTE.blue.mid} strokeWidth={2} dot={{ r: 2, fill: PALETTE.blue.mid }} connectNulls />
-                    </LineChart>
+                      <YAxis yAxisId="left" tick={{ fontSize: 8, fill: PALETTE.blue.mid }} width={50}
+                        tickFormatter={fmtMoney} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 8, fill: PALETTE.amber.mid }} width={35}
+                        tickFormatter={(v) => fmtInt(v)} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(v, name) => name === 'Precio' ? fmtMoney(v) : `${fmtInt(v)} pz`}
+                        labelStyle={{ fontSize: 10 }} contentStyle={{ fontSize: 10, padding: 6 }} />
+                      <Bar yAxisId="right" dataKey="piezas" name="Piezas" fill={PALETTE.amber.soft} radius={[2, 2, 0, 0]} />
+                      <Line yAxisId="left" type="monotone" dataKey="precio" name="Precio"
+                        stroke={PALETTE.blue.mid} strokeWidth={2} dot={{ r: 2, fill: PALETTE.blue.mid }} connectNulls />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
-              </div>
-
-              <div className="bg-white border border-gray-200 rounded p-2">
-                <div className="text-[10px] font-medium text-gray-700 mb-0.5">Sellout mensual · {anio} (piezas)</div>
-                <ResponsiveContainer width="100%" height={70}>
-                  <BarChart data={analisis.serieMens} margin={{ top: 2, right: 4, left: -22, bottom: 0 }}>
-                    <XAxis dataKey="mes" tick={{ fontSize: 8, fill: '#888' }} interval={0} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 8, fill: PALETTE.amber.mid }} width={38} tickFormatter={(v) => fmtInt(v)} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(v) => `${fmtInt(v)} pz`} labelStyle={{ fontSize: 10 }} contentStyle={{ fontSize: 10, padding: 4 }} />
-                    <Bar dataKey="piezas" fill={PALETTE.amber.soft} radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
