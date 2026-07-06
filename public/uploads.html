@@ -141,10 +141,14 @@ const PARSERS = {
       return out;
     }).filter(Boolean);
   },
-  // Vw_TablaM_Precios — precios de venta por (Lista, Moneda, Artículo, Precio).
-  // Reemplaza al archivo manual "Lista de Precios Mayoreo AAA". Se cargan
-  // solo las listas comerciales (excluye Mayoreo A / AA / B1 que son legacy).
-  // El periodo (anio, mes) se toma del calendario al momento de la carga.
+  // "Listas de Precios" — pivot con SKU en filas y listas en columnas.
+  // Layout:
+  //   row 2: 'Suma de Precio' + 'Etiquetas de columna'
+  //   row 3: 'Etiquetas de fila' + [API PROVISIONAL, DECME PROVISIONAL, DICOTECH,
+  //          Mayoreo A, Mayoreo AA, Mayoreo AAA, MAYOREO B1, Mayoreo PMM,
+  //          PCEL PROVISIONAL, Total general]
+  //   row 4+: SKU en col 0, precios por lista en col 1-9
+  // Se filtran solo las 5 listas comerciales activas.
   preciosERP(wb){
     const LISTAS_INCLUIDAS = new Set([
       'API PROVISIONAL',
@@ -153,44 +157,125 @@ const PARSERS = {
       'Mayoreo AAA',
       'PCEL PROVISIONAL',
     ]);
-    const sh = wb.Sheets['Vw_TablaM_Precios'];
+    const sh = wb.Sheets['Listas de Precios'];
     if (!sh) return [];
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null, raw:false});
+    const arr = XLSX.utils.sheet_to_json(sh, {header:1, defval:null, raw:false});
+    if (arr.length < 5) return [];
+    const headerRow = arr[3] || [];
+    // Mapear índice de columna → nombre de lista (solo las incluidas)
+    const listaByCol = {};
+    for (let c = 1; c < headerRow.length; c++) {
+      const nm = toStr(headerRow[c]);
+      if (LISTAS_INCLUIDAS.has(nm)) listaByCol[c] = nm;
+    }
     const now = new Date();
     const anio = now.getFullYear();
     const mes = now.getMonth() + 1;
     const out = [];
-    for (const r of rows) {
-      const lista = toStr(r.Lista ?? r.lista);
-      if (!LISTAS_INCLUIDAS.has(lista)) continue;
-      const sku = toStr(r.Articulo ?? r.articulo);
-      if (!sku) continue;
-      const precio = toNum(r.Precio ?? r.precio);
-      if (precio == null) continue;
-      out.push({
-        sku, lista,
-        moneda: toStr(r.Moneda ?? r.moneda) || 'PESOS',
-        anio, mes, precio,
-      });
+    for (let r = 4; r < arr.length; r++) {
+      const row = arr[r];
+      if (!row) continue;
+      const sku = toStr(row[0]);
+      if (!sku || sku === 'Total general') continue;
+      for (const [colStr, lista] of Object.entries(listaByCol)) {
+        const precio = toNum(row[parseInt(colStr)]);
+        if (precio == null || precio <= 0) continue;
+        out.push({ sku, lista, moneda: 'PESOS', anio, mes, precio });
+      }
     }
     return out;
   },
 
+  // "Inventario" — pivot con SKU en filas y almacenes × 5 métricas en columnas.
+  // Layout:
+  //   row 3: números de almacén en cols 1, 6, 11, 16, ... (uno cada 5 cols)
+  //   row 4: métricas repetidas por almacén: [Suma de inventario, disponible,
+  //          costopromedio, CostoDisponible, CostoInventario]
+  //   row 5+: SKU en col 0, 5 valores por almacén
+  // Se emite una fila por cada (sku, no_almacen) con las 5 métricas.
+  // Se mapea no_almacen → almacen_nombre y CEDIS según catálogo Acteck 2026.
   erpInventario(wb){
-    const sh = wb.Sheets['Vw_TablaH_Inventario'] || wb.Sheets[wb.SheetNames[1]];
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
-    return rows.map(r => ({
-      articulo: toStr(r.articulo ?? r.Articulo),
-      no_almacen: toInt(r.No_Almacen ?? r.no_almacen),
-      no_cedis: toInt(r.No_Cedis ?? r.no_cedis),
-      almacen_nombre: toStr(r.Almacen_Nombre ?? r.almacen_nombre),
-      cedis: toStr(r.Cedis ?? r.cedis),
-      disponible: toNum(r.Disponible ?? r.disponible),
-      inventario: toNum(r.Inventario ?? r.inventario),
-      costopromedio: toNum(r.CostoPromedio ?? r.costopromedio),
-      costodisponible: toNum(r.CostoDisponible ?? r.costodisponible),
-      costoinventario: toNum(r.CostoInventario ?? r.costoinventario),
-    })).filter(r => r.articulo && r.no_almacen != null);
+    // Catálogo de almacenes Acteck (viene de Almacenes 2026.xlsx)
+    const ALM_META = {
+      1:  { nombre:'VENTAS GENERAL GUADALAJARA', cedis:'ALMACENES GUADALAJARA' },
+      2:  { nombre:'VENTAS GENERAL COLOTLAN',    cedis:'ALMACENES COLOTLAN' },
+      3:  { nombre:'VENTAS GENERAL MEXICO',      cedis:'ALMACENES MEXICO' },
+      4:  { nombre:'NO COMERCIAL',               cedis:'ALMACENES GUADALAJARA' },
+      5:  { nombre:'REFACTURACION',              cedis:'ALMACENES GUADALAJARA' },
+      6:  { nombre:'VENTAS DECME MEXICO',        cedis:'ALMACENES MEXICO' },
+      9:  { nombre:'VENTAS CONSIGNACION MERCADO LIBRE', cedis:'ALMACENES GUADALAJARA' },
+      10: { nombre:'ACTIVO FIJO',                cedis:'ALMACENES GUADALAJARA' },
+      11: { nombre:'NO COMERCIAL',               cedis:'ALMACENES MEXICO' },
+      12: { nombre:'VENTAS REFACCIONES',         cedis:'ALMACENES GUADALAJARA' },
+      13: { nombre:'NO COMERCIAL',               cedis:'ALMACENES GUADALAJARA' },
+      14: { nombre:'VENTAS PAGINA WEB DROSHIPPING', cedis:'ALMACENES GUADALAJARA' },
+      15: { nombre:'STOCK ROTATION TEMPORAL',    cedis:'ALMACENES GUADALAJARA' },
+      16: { nombre:'VENTAS RETAIL GUADALAJARA',  cedis:'ALMACENES GUADALAJARA' },
+      17: { nombre:'VENTAS RETAIL MEXICO',       cedis:'ALMACENES MEXICO' },
+      19: { nombre:'VENTAS DECME GUADALAJARA',   cedis:'ALMACENES GUADALAJARA' },
+      20: { nombre:'NO COMERCIAL',               cedis:'ALMACENES GUADALAJARA' },
+      25: { nombre:'VENTAS APARTADO ECOMMERCE',  cedis:'ALMACENES GUADALAJARA' },
+      30: { nombre:'NO COMERCIAL',               cedis:'ALMACENES MEXICO' },
+      41: { nombre:'NO COMERCIAL',               cedis:'ALMACENES GUADALAJARA' },
+      42: { nombre:'NO COMERCIAL',               cedis:'ALMACENES GUADALAJARA' },
+      43: { nombre:'NO COMERCIAL',               cedis:'ALMACENES GUADALAJARA' },
+      44: { nombre:'VENTAS EMPAQUE DANADO GUADALAJARA', cedis:'ALMACENES GUADALAJARA' },
+      50: { nombre:'ALMACEN MUESTRAS',           cedis:'ALMACENES GUADALAJARA' },
+      62: { nombre:'NO COMERCIAL',               cedis:'ALMACENES MEXICO' },
+      63: { nombre:'NO COMERCIAL',               cedis:'ALMACENES MEXICO' },
+      64: { nombre:'VENTAS EMPAQUE DANADO MEXICO', cedis:'ALMACENES MEXICO' },
+      70: { nombre:'NO COMERCIAL',               cedis:'ALMACENES GUADALAJARA' },
+      71: { nombre:'VENTAS APARTADO ECOMMERCE TULTITLAN', cedis:'ALMACENES MEXICO' },
+      90: { nombre:'NO COMERCIAL',               cedis:'ALMACENES GUADALAJARA' },
+      97: { nombre:'ALMACEN DE REMISIONES',      cedis:'ALMACENES GUADALAJARA' },
+      98: { nombre:'NO COMERCIAL',               cedis:'ALMACENES GUADALAJARA' },
+      99: { nombre:'NO COMERCIAL',               cedis:'ALMACENES MEXICO' },
+      100:{ nombre:'NO COMERCIAL',               cedis:'ALMACENES GUADALAJARA' },
+    };
+    const sh = wb.Sheets['Inventario'];
+    if (!sh) return [];
+    const arr = XLSX.utils.sheet_to_json(sh, {header:1, defval:null, raw:true});
+    if (arr.length < 6) return [];
+    const almacenesRow = arr[3] || [];  // row 3: números de almacén
+    // Detectar cols de cada almacén (uno cada 5 cols empezando col 1)
+    const almBlocks = [];  // { colBase, no_almacen }
+    for (let c = 1; c < almacenesRow.length; c++) {
+      const v = almacenesRow[c];
+      if (v == null || v === 'Total general') continue;
+      const n = toInt(v);
+      if (n == null) continue;
+      almBlocks.push({ colBase: c, no_almacen: n });
+    }
+    const out = [];
+    for (let r = 5; r < arr.length; r++) {
+      const row = arr[r];
+      if (!row) continue;
+      const articulo = toStr(row[0]);
+      if (!articulo || articulo === 'Total general') continue;
+      for (const b of almBlocks) {
+        const inventario     = toNum(row[b.colBase]);
+        const disponible     = toNum(row[b.colBase + 1]);
+        const costopromedio  = toNum(row[b.colBase + 2]);
+        const costodisponible= toNum(row[b.colBase + 3]);
+        const costoinventario= toNum(row[b.colBase + 4]);
+        // Solo emitir si hay stock o costo (evita fila fantasma cero)
+        if ((inventario ?? 0) === 0 && (disponible ?? 0) === 0 && (costoinventario ?? 0) === 0) continue;
+        const meta = ALM_META[b.no_almacen] || {};
+        out.push({
+          articulo,
+          no_almacen: b.no_almacen,
+          no_cedis: 0,
+          almacen_nombre: meta.nombre || `ALMACEN ${b.no_almacen}`,
+          cedis: meta.cedis || null,
+          disponible,
+          inventario,
+          costopromedio,
+          costodisponible,
+          costoinventario,
+        });
+      }
+    }
+    return out;
   },
   // Vw_TablaH_Compras — órdenes de compra con costo USD + TC contable.
   // Solo cargamos filas con CantidadPendiente > 0 (lo que falta por llegar).
