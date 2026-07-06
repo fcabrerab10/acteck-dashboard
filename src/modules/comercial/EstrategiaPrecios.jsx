@@ -315,7 +315,7 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
         fetchAll(
           'precios_sku',
           'anio,mes,lista,precio',
-          (q) => q.eq('sku', sku.sku).eq('lista', 'Mayoreo AAA').gte('anio', anio - 1)
+          (q) => q.eq('sku', sku.sku).gte('anio', anio - 1)
         ),
         fetchAll(
           'promos_temporada',
@@ -339,7 +339,7 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
       serieMens[m].piezas += Number(f.piezas) || 0;
       serieMens[m].monto  += Number(f.monto) || 0;
     });
-    preciosHist.filter((p) => Number(p.anio) === anio).forEach((p) => {
+    preciosHist.filter((p) => Number(p.anio) === anio && p.lista === 'Mayoreo AAA').forEach((p) => {
       const m = Number(p.mes) - 1;
       if (m >= 0 && m <= 11) serieMens[m].precio = Number(p.precio);
     });
@@ -384,13 +384,43 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
     const piezasYTD = serieMens.reduce((s, r) => s + r.piezas, 0);
     const montoYTD = serieMens.reduce((s, r) => s + r.monto, 0);
 
+    const promosLista = [];
+    const listasSet = new Set(preciosHist.map((p) => p.lista));
+    for (const listaNm of listasSet) {
+      const secuencia = preciosHist
+        .filter((p) => p.lista === listaNm)
+        .map((p) => ({ anio: Number(p.anio), mes: Number(p.mes), precio: Number(p.precio) }))
+        .sort((a, b) => a.anio - b.anio || a.mes - b.mes);
+      for (let i = 1; i < secuencia.length; i++) {
+        const prev = secuencia[i - 1];
+        const cur  = secuencia[i];
+        if (prev.precio > 0 && cur.precio < prev.precio) {
+          const dif = (prev.precio - cur.precio) / prev.precio;
+          if (dif >= 0.02) {
+            promosLista.push({
+              anio: cur.anio, mes: cur.mes,
+              campania: `Baja de lista · ${LISTAS_LBL[listaNm] || listaNm}`,
+              promo_pct: dif,
+              tipo: 'lista',
+            });
+          }
+        }
+      }
+    }
+
+    const promosUnificadas = [
+      ...promosHist.map((p) => ({ ...p, tipo: 'temporada' })),
+      ...promosLista,
+    ].sort((a, b) => (b.anio - a.anio) || (b.mes - a.mes));
+
     return {
       serieMens, clientes, clientesRestantes, clienteVolumen,
       mesMax,
       piezasMesActual, promPrev3m,
       deltaVsPrev3m: promPrev3m > 0 ? ((piezasMesActual - promPrev3m) / promPrev3m) * 100 : null,
       piezasYTD, montoYTD,
-      promosHist: promosHist.slice(0, 3),
+      promosHist: promosUnificadas.slice(0, 6),
+      promosCount: promosUnificadas.length,
     };
   }, [datos, anio, precios]);
 
@@ -413,39 +443,36 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
           </button>
         </div>
 
-        <div className="p-4 space-y-3">
-          <div>
-            <div className="text-xs text-gray-600 mb-2">Precio actual por lista + precio bajo facturado</div>
-            <div className="grid grid-cols-6 gap-2">
-              <div className="rounded-lg p-2.5" style={{ background: PALETTE.red.bg }}>
-                <div className="text-[9px] tracking-widest" style={{ color: PALETTE.red.mid }}>BAJO FACT</div>
-                <div className="text-base font-medium mt-1" style={{ color: PALETTE.red.text }}>
-                  {bajo ? fmtMoney(bajo.precio_bajo) : '—'}
-                </div>
+        <div className="p-3 space-y-2">
+          <div className="grid grid-cols-6 gap-1.5">
+            <div className="rounded p-1.5" style={{ background: PALETTE.red.bg }}>
+              <div className="text-[8px] tracking-wide" style={{ color: PALETTE.red.mid }}>BAJO FACT</div>
+              <div className="text-[13px] font-medium" style={{ color: PALETTE.red.text }}>
+                {bajo ? fmtMoney(bajo.precio_bajo) : '—'}
               </div>
-              <div className="rounded-lg p-2.5 bg-gray-100">
-                <div className="text-[9px] tracking-widest text-gray-600">MAYOREO AAA</div>
-                <div className="text-base font-medium mt-1">{precioAAAneto != null ? fmtMoney(precioAAAneto) : '—'}</div>
-                {promo && precioAAA != null && (
-                  <div className="text-[9px] text-gray-400 line-through">{fmtMoney(precioAAA)}</div>
-                )}
-              </div>
-              {['DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'].map((l) => (
-                <div key={l} className="rounded-lg p-2.5 bg-gray-100">
-                  <div className="text-[9px] tracking-widest text-gray-600">{LISTAS_LBL[l]}</div>
-                  <div className="text-base font-medium mt-1">
-                    {precios[l] != null ? fmtMoney(precios[l]) : <span className="text-gray-400">—</span>}
-                  </div>
-                </div>
-              ))}
             </div>
+            <div className="rounded p-1.5 bg-gray-100">
+              <div className="text-[8px] tracking-wide text-gray-600">MAYOREO AAA</div>
+              <div className="text-[13px] font-medium">{precioAAAneto != null ? fmtMoney(precioAAAneto) : '—'}</div>
+              {promo && precioAAA != null && (
+                <div className="text-[8px] text-gray-400 line-through leading-none">{fmtMoney(precioAAA)}</div>
+              )}
+            </div>
+            {['DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'].map((l) => (
+              <div key={l} className="rounded p-1.5 bg-gray-100">
+                <div className="text-[8px] tracking-wide text-gray-600">{LISTAS_LBL[l]}</div>
+                <div className="text-[13px] font-medium">
+                  {precios[l] != null ? fmtMoney(precios[l]) : <span className="text-gray-400">—</span>}
+                </div>
+              </div>
+            ))}
           </div>
 
           {promo && (
-            <div className="rounded-lg px-3 py-2 flex items-center gap-2" style={{ background: PALETTE.amber.bg, color: PALETTE.amber.text }}>
-              <Tag className="w-4 h-4" style={{ color: PALETTE.amber.mid }} />
-              <span className="text-xs">
-                <span className="font-medium">Promo activa: {promo.campania}</span> · {Math.round(Number(promo.promo_pct) * 100)}% off en Mayoreo AAA
+            <div className="rounded px-2 py-1 flex items-center gap-1.5" style={{ background: PALETTE.amber.bg, color: PALETTE.amber.text }}>
+              <Tag className="w-3 h-3" style={{ color: PALETTE.amber.mid }} />
+              <span className="text-[11px]">
+                <span className="font-medium">{promo.campania}</span> · {Math.round(Number(promo.promo_pct) * 100)}% off en Mayoreo AAA
               </span>
             </div>
           )}
@@ -456,82 +483,72 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
             </div>
           ) : analisis ? (
             <>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="bg-white border border-gray-200 rounded-lg p-2.5">
-                  <div className="text-[9px] tracking-widest text-gray-500">
+              <div className="grid grid-cols-5 gap-2 items-stretch">
+                <div className="bg-white border border-gray-200 rounded p-1.5">
+                  <div className="text-[8px] tracking-wide text-gray-500">
                     SELLOUT {MESES_LBL[(analisis.mesMax - 1)].toUpperCase()}
                   </div>
-                  <div className="text-base font-medium mt-0.5">{fmtInt(analisis.piezasMesActual)} pz</div>
-                  <div className={`text-[10px] mt-0.5 ${
+                  <div className="text-[13px] font-medium">{fmtInt(analisis.piezasMesActual)} pz</div>
+                  <div className={`text-[9px] leading-none ${
                     analisis.deltaVsPrev3m == null ? 'text-gray-400'
                     : analisis.deltaVsPrev3m >= 0 ? 'text-emerald-700' : 'text-rose-700'
                   }`}>
                     {analisis.deltaVsPrev3m == null ? 'sin base'
-                      : `${fmtPctDelta(analisis.deltaVsPrev3m)} vs prom 3m (${fmtInt(analisis.promPrev3m)} pz)`}
+                      : `${fmtPctDelta(analisis.deltaVsPrev3m)} vs 3m`}
                   </div>
                 </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-2.5">
-                  <div className="text-[9px] tracking-widest text-gray-500">SELLOUT YTD</div>
-                  <div className="text-base font-medium mt-0.5">{fmtInt(analisis.piezasYTD)} pz</div>
-                  <div className="text-[10px] text-gray-500 mt-0.5">{fmtCompact(analisis.montoYTD)} facturado</div>
+                <div className="bg-white border border-gray-200 rounded p-1.5">
+                  <div className="text-[8px] tracking-wide text-gray-500">SELLOUT YTD</div>
+                  <div className="text-[13px] font-medium">{fmtInt(analisis.piezasYTD)} pz</div>
+                  <div className="text-[9px] text-gray-500 leading-none">{fmtCompact(analisis.montoYTD)}</div>
                 </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-2.5">
-                  <div className="text-[9px] tracking-widest text-gray-500">PROMOS APLICADAS</div>
-                  <div className="text-base font-medium mt-0.5">{analisis.promosHist.length}</div>
-                  <div className="text-[10px] text-gray-500 mt-0.5">campañas históricas</div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white border border-gray-200 rounded-lg p-3">
-                  <div className="text-[11px] font-medium text-gray-700 mb-1">Precio Mayoreo AAA mensual · {anio}</div>
-                  <ResponsiveContainer width="100%" height={130}>
-                    <LineChart data={analisis.serieMens} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                      <XAxis dataKey="mes" tick={{ fontSize: 9, fill: '#888' }} interval={0} />
-                      <YAxis tick={{ fontSize: 9, fill: PALETTE.blue.mid }} width={55} tickFormatter={fmtMoney} />
-                      <Tooltip formatter={(v) => fmtMoney(v)} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }} />
-                      <Line type="monotone" dataKey="precio" stroke={PALETTE.blue.mid} strokeWidth={2.5}
-                        dot={{ r: 3, fill: PALETTE.blue.mid }} connectNulls />
+                <div className="bg-white border border-gray-200 rounded p-1.5 col-span-3">
+                  <div className="text-[8px] tracking-wide text-gray-500 mb-0.5">PRECIO MAYOREO AAA · {anio}</div>
+                  <ResponsiveContainer width="100%" height={50}>
+                    <LineChart data={analisis.serieMens} margin={{ top: 2, right: 4, left: -25, bottom: 0 }}>
+                      <XAxis dataKey="mes" tick={{ fontSize: 8, fill: '#888' }} interval={0} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 8, fill: PALETTE.blue.mid }} width={45} tickFormatter={fmtMoney} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(v) => fmtMoney(v)} labelStyle={{ fontSize: 10 }} contentStyle={{ fontSize: 10, padding: 4 }} />
+                      <Line type="monotone" dataKey="precio" stroke={PALETTE.blue.mid} strokeWidth={2} dot={{ r: 2, fill: PALETTE.blue.mid }} connectNulls />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-3">
-                  <div className="text-[11px] font-medium text-gray-700 mb-1">Sellout mensual · {anio} (piezas)</div>
-                  <ResponsiveContainer width="100%" height={130}>
-                    <BarChart data={analisis.serieMens} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                      <XAxis dataKey="mes" tick={{ fontSize: 9, fill: '#888' }} interval={0} />
-                      <YAxis tick={{ fontSize: 9, fill: PALETTE.amber.mid }} width={40} tickFormatter={(v) => fmtInt(v)} />
-                      <Tooltip formatter={(v) => `${fmtInt(v)} pz`} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="piezas" fill={PALETTE.amber.soft} radius={[3, 3, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white border border-gray-200 rounded p-2">
+                <div className="text-[10px] font-medium text-gray-700 mb-0.5">Sellout mensual · {anio} (piezas)</div>
+                <ResponsiveContainer width="100%" height={70}>
+                  <BarChart data={analisis.serieMens} margin={{ top: 2, right: 4, left: -22, bottom: 0 }}>
+                    <XAxis dataKey="mes" tick={{ fontSize: 8, fill: '#888' }} interval={0} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 8, fill: PALETTE.amber.mid }} width={38} tickFormatter={(v) => fmtInt(v)} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v) => `${fmtInt(v)} pz`} labelStyle={{ fontSize: 10 }} contentStyle={{ fontSize: 10, padding: 4 }} />
+                    <Bar dataKey="piezas" fill={PALETTE.amber.soft} radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <div className="text-[11px] font-medium text-gray-700 mb-1.5">Top 5 clientes por volumen · YTD {anio}</div>
+                  <div className="text-[10px] font-medium text-gray-700 mb-1">Top 5 clientes · YTD {anio}</div>
                   {analisis.clientes.length === 0 ? (
-                    <div className="text-xs text-gray-500 bg-white border border-gray-200 rounded-lg p-3">
-                      Sin facturación registrada este año.
+                    <div className="text-[10px] text-gray-500 bg-white border border-gray-200 rounded p-2">
+                      Sin facturación este año.
                     </div>
                   ) : (
-                    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                      <div className="grid grid-cols-[20px_1fr_50px_60px_60px] gap-1.5 py-1.5 px-2 bg-gray-50 text-[9px] text-gray-500 uppercase tracking-wider">
+                    <div className="bg-white border border-gray-200 rounded overflow-hidden">
+                      <div className="grid grid-cols-[16px_1fr_44px_54px_50px] gap-1 py-1 px-1.5 bg-gray-50 text-[8px] text-gray-500 uppercase tracking-wide">
                         <span>#</span>
                         <span>Cliente</span>
                         <span className="text-right">Pz</span>
                         <span className="text-right">$ prom</span>
-                        <span className="text-right">Δ vs lista</span>
+                        <span className="text-right">Δ lista</span>
                       </div>
                       {analisis.clientes.map((c, i) => {
                         const negativo = c.deltaLista != null && c.deltaLista < 0;
                         const critico  = c.deltaLista != null && c.deltaLista < -10;
                         return (
                           <div key={c.cliente}
-                            className="grid grid-cols-[20px_1fr_50px_60px_60px] gap-1.5 py-1.5 px-2 text-[11px] border-t border-gray-100">
+                            className="grid grid-cols-[16px_1fr_44px_54px_50px] gap-1 py-1 px-1.5 text-[10px] border-t border-gray-100">
                             <span className="text-gray-400">{i + 1}</span>
                             <span className="text-gray-800 truncate" title={c.cliente}>{c.cliente}</span>
                             <span className="text-right text-gray-700">{fmtInt(c.piezas)}</span>
@@ -550,8 +567,8 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
                         );
                       })}
                       {analisis.clientesRestantes.length > 0 && (
-                        <div className="py-1.5 px-2 bg-gray-50 text-[10px] text-gray-500 text-center border-t border-gray-100">
-                          + {analisis.clientesRestantes.length} clientes más ·
+                        <div className="py-1 px-1.5 bg-gray-50 text-[9px] text-gray-500 text-center border-t border-gray-100">
+                          + {analisis.clientesRestantes.length} más ·
                           {' '}{fmtInt(analisis.clientesRestantes.reduce((s, c) => s + c.piezas, 0))} pz
                         </div>
                       )}
@@ -560,23 +577,27 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
                 </div>
 
                 <div>
-                  <div className="text-[11px] font-medium text-gray-700 mb-1.5">Histórico de promos</div>
+                  <div className="text-[10px] font-medium text-gray-700 mb-1">
+                    Histórico de promos {analisis.promosCount > 6 && <span className="text-gray-400">· {analisis.promosCount} totales</span>}
+                  </div>
                   {analisis.promosHist.length === 0 ? (
-                    <div className="text-xs text-gray-500 bg-white border border-gray-200 rounded-lg p-3">
-                      Este SKU nunca ha estado en campaña de temporada.
+                    <div className="text-[10px] text-gray-500 bg-white border border-gray-200 rounded p-2">
+                      Sin promociones registradas.
                     </div>
                   ) : (
-                    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                      <div className="grid grid-cols-[60px_1fr_50px] gap-1.5 py-1.5 px-2 bg-gray-50 text-[9px] text-gray-500 uppercase tracking-wider">
+                    <div className="bg-white border border-gray-200 rounded overflow-hidden">
+                      <div className="grid grid-cols-[50px_1fr_40px] gap-1 py-1 px-1.5 bg-gray-50 text-[8px] text-gray-500 uppercase tracking-wide">
                         <span>Período</span>
-                        <span>Campaña</span>
+                        <span>Origen</span>
                         <span className="text-right">Off</span>
                       </div>
                       {analisis.promosHist.map((p, i) => (
                         <div key={i}
-                          className="grid grid-cols-[60px_1fr_50px] gap-1.5 py-1.5 px-2 text-[11px] border-t border-gray-100">
-                          <span className="text-gray-500">{MESES_LBL[Number(p.mes) - 1]} {p.anio}</span>
-                          <span className="text-gray-800 truncate" title={p.campania}>{p.campania}</span>
+                          className="grid grid-cols-[50px_1fr_40px] gap-1 py-1 px-1.5 text-[10px] border-t border-gray-100">
+                          <span className="text-gray-500">{MESES_LBL[Number(p.mes) - 1]} {String(p.anio).slice(-2)}</span>
+                          <span className={`truncate ${p.tipo === 'lista' ? 'text-blue-700' : 'text-gray-800'}`} title={p.campania}>
+                            {p.campania}
+                          </span>
                           <span className="text-right text-amber-800 font-medium">
                             {Math.round(Number(p.promo_pct) * 100)}%
                           </span>
@@ -588,10 +609,10 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
               </div>
 
               {analisis.clienteVolumen && analisis.clienteVolumen.deltaLista != null && analisis.clienteVolumen.deltaLista < -8 && (
-                <div className="rounded-lg px-3 py-2.5 flex items-start gap-2" style={{ background: '#FEF3C7', color: '#78350F' }}>
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div className="text-xs">
-                    <span className="font-medium">{analisis.clienteVolumen.cliente}</span> pagó {Math.abs(analisis.clienteVolumen.deltaLista).toFixed(1)}% menos que Mayoreo AAA con {fmtInt(analisis.clienteVolumen.piezas)} pz · el mayor volumen del SKU.
+                <div className="rounded px-2 py-1 flex items-center gap-1.5" style={{ background: '#FEF3C7', color: '#78350F' }}>
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  <div className="text-[10px]">
+                    <span className="font-medium">{analisis.clienteVolumen.cliente}</span> pagó {Math.abs(analisis.clienteVolumen.deltaLista).toFixed(1)}% menos que Mayoreo AAA · {fmtInt(analisis.clienteVolumen.piezas)} pz.
                   </div>
                 </div>
               )}
