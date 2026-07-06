@@ -75,7 +75,6 @@ export default function EstrategiaPrecios() {
   const [categoriaFiltro, setCategoriaFiltro] = useState('TODAS');
   const [roadmapFiltro, setRoadmapFiltro] = useState('TODOS');
   const [skuAbierto, setSkuAbierto] = useState(null);
-  const [limite, setLimite] = useState(80);
 
   useEffect(() => {
     setLoading(true);
@@ -187,114 +186,119 @@ export default function EstrategiaPrecios() {
 
       <div className="flex items-baseline justify-between px-1">
         <span className="text-xs text-gray-500">
-          {fmtInt(filas.length)} SKUs coinciden · mostrando {Math.min(limite, filas.length)}
+          {fmtInt(filas.length)} SKUs en orden del roadmap
         </span>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-gray-50">
-              <tr className="text-gray-500">
-                <th className="text-left py-2.5 px-3 font-medium uppercase tracking-wider text-[10px]">Marca</th>
-                <th className="text-left py-2.5 px-3 font-medium uppercase tracking-wider text-[10px]">SKU</th>
-                <th className="text-left py-2.5 px-3 font-medium uppercase tracking-wider text-[10px]">Descripción</th>
-                <th className="text-center py-2.5 px-3 font-medium uppercase tracking-wider text-[10px]">Roadmap</th>
-                <th className="text-right py-2.5 px-3 font-medium uppercase tracking-wider text-[10px]">Precio bajo<br/>facturado</th>
-                {LISTAS_MOSTRAR.map((l) => (
-                  <th key={l} className="text-right py-2.5 px-3 font-medium uppercase tracking-wider text-[10px]">
-                    {LISTAS_LBL[l]}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="overflow-auto" style={{ maxHeight: '70vh' }}>
+          <table className="w-full text-[11px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+            <thead>
+              <tr className="text-gray-500 bg-gray-50">
+                {[
+                  { label: 'Marca',        cls: 'text-left'  },
+                  { label: 'SKU',          cls: 'text-left'  },
+                  { label: 'Descripción',  cls: 'text-left'  },
+                  { label: 'Roadmap',      cls: 'text-center' },
+                  { label: 'Precio bajo\nfacturado', cls: 'text-right' },
+                  ...LISTAS_MOSTRAR.map((l) => ({ label: LISTAS_LBL[l], cls: 'text-right' })),
+                ].map((h, i) => (
+                  <th key={i}
+                    className={`${h.cls} py-1.5 px-2 font-medium uppercase tracking-wider text-[9px] whitespace-pre-line`}
+                    style={{ position: 'sticky', top: 0, background: '#F9FAFB', zIndex: 1, borderBottom: '1px solid #E5E7EB' }}>
+                    {h.label}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filas.slice(0, limite).map((r) => {
+              {filas.map((r) => {
                 const rmapPal = ROADMAP_COLOR[r.rdmp] || { bg:'#F1EFE8', text:'#2C2C2A' };
                 const promo = r.promo;
                 const precioAAA = r.precios['Mayoreo AAA'];
                 const precioAAAneto = promo && precioAAA != null
                   ? precioAAA * (1 - Number(promo.promo_pct))
                   : precioAAA;
+                const abierto = skuAbierto === r.sku;
                 return (
-                  <tr key={r.sku}
-                    onClick={() => setSkuAbierto(r)}
-                    className="border-t border-gray-100 hover:bg-blue-50/40 cursor-pointer">
-                    <td className="py-2.5 px-3 text-gray-600 whitespace-nowrap">{r.marca || '—'}</td>
-                    <td className="py-2.5 px-3 font-mono text-gray-700 whitespace-nowrap">{r.sku}</td>
-                    <td className="py-2.5 px-3 text-gray-800 max-w-md truncate" title={r.descripcion}>
-                      {r.descripcion || '—'}
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      {r.rdmp && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded"
-                          style={{ background: rmapPal.bg, color: rmapPal.text }}>
-                          {r.rdmp}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
-                      {r.bajo ? (
-                        <>
-                          <div className="font-medium text-rose-800">{fmtMoney(r.bajo.precio_bajo)}</div>
-                          <div className="text-[10px] text-gray-500 truncate max-w-[140px]" title={r.bajo.cliente_bajo}>
-                            {r.bajo.cliente_bajo} · {fmtInt(r.bajo.piezas_bajo)} pz
-                          </div>
-                        </>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
-                      {precioAAA != null ? (
-                        <>
-                          <div className="font-medium text-gray-800">{fmtMoney(precioAAAneto)}</div>
-                          {promo && (
-                            <>
-                              <div className="inline-block text-[9px] font-medium px-1 py-0.5 mt-0.5 rounded"
-                                style={{ background: PALETTE.amber.bg, color: PALETTE.amber.mid }}>
-                                {promo.campania.slice(0, 12)} · {Math.round(Number(promo.promo_pct) * 100)}%
-                              </div>
-                              <div className="text-[9px] text-gray-400 line-through">{fmtMoney(precioAAA)}</div>
-                            </>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </td>
-                    {['DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'].map((l) => (
-                      <td key={l} className="py-2.5 px-3 text-right text-gray-600 whitespace-nowrap">
-                        {r.precios[l] != null ? fmtMoney(r.precios[l]) : <span className="text-gray-400">—</span>}
+                  <React.Fragment key={r.sku}>
+                    <tr
+                      onClick={() => setSkuAbierto(abierto ? null : r.sku)}
+                      className={`border-t border-gray-100 cursor-pointer ${abierto ? 'bg-blue-50/60' : 'hover:bg-gray-50'}`}>
+                      <td className="py-1.5 px-2 text-gray-600 whitespace-nowrap">{r.marca || '—'}</td>
+                      <td className="py-1.5 px-2 font-mono text-gray-700 whitespace-nowrap">{r.sku}</td>
+                      <td className="py-1.5 px-2 text-gray-800 truncate" style={{ maxWidth: 320 }} title={r.descripcion}>
+                        {r.descripcion || '—'}
                       </td>
-                    ))}
-                  </tr>
+                      <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                        {r.rdmp && (
+                          <span className="text-[9px] font-medium px-1 py-0.5 rounded"
+                            style={{ background: rmapPal.bg, color: rmapPal.text }}>
+                            {r.rdmp}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1.5 px-2 text-right whitespace-nowrap">
+                        {r.bajo ? (
+                          <>
+                            <div className="font-medium text-rose-800">{fmtMoney(r.bajo.precio_bajo)}</div>
+                            <div className="text-[9px] text-gray-500 truncate" style={{ maxWidth: 120 }} title={r.bajo.cliente_bajo}>
+                              {r.bajo.cliente_bajo} · {fmtInt(r.bajo.piezas_bajo)} pz
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 px-2 text-right whitespace-nowrap">
+                        {precioAAA != null ? (
+                          <>
+                            <div className="font-medium text-gray-800">{fmtMoney(precioAAAneto)}</div>
+                            {promo && (
+                              <>
+                                <div className="inline-block text-[9px] font-medium px-1 py-0.5 mt-0.5 rounded"
+                                  style={{ background: PALETTE.amber.bg, color: PALETTE.amber.mid }}>
+                                  {promo.campania.slice(0, 10)} · {Math.round(Number(promo.promo_pct) * 100)}%
+                                </div>
+                                <div className="text-[9px] text-gray-400 line-through">{fmtMoney(precioAAA)}</div>
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      {['DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'].map((l) => (
+                        <td key={l} className="py-1.5 px-2 text-right text-gray-600 whitespace-nowrap">
+                          {r.precios[l] != null ? fmtMoney(r.precios[l]) : <span className="text-gray-400">—</span>}
+                        </td>
+                      ))}
+                    </tr>
+                    {abierto && (
+                      <tr>
+                        <td colSpan={5 + LISTAS_MOSTRAR.length} style={{ padding: 0, background: '#F8FAFC' }}>
+                          <DetalleSKU
+                            sku={r}
+                            promo={promo}
+                            bajo={r.bajo}
+                            precios={r.precios}
+                            onClose={() => setSkuAbierto(null)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
           </table>
         </div>
-
-        {filas.length > limite && (
-          <div className="text-center py-3 border-t border-gray-100">
-            <button onClick={() => setLimite((l) => l + 80)}
-              className="px-4 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50">
-              Ver más ({fmtInt(filas.length - limite)} restantes)
-            </button>
-          </div>
-        )}
       </div>
-
-      {skuAbierto && (
-        <ModalSKU sku={skuAbierto} promo={promoMap.get(skuAbierto.sku)} bajo={bajoMap.get(skuAbierto.sku)}
-          precios={preciosMap.get(skuAbierto.sku) || {}}
-          onClose={() => setSkuAbierto(null)} />
-      )}
     </div>
   );
 }
 
-function ModalSKU({ sku, promo, bajo, precios, onClose }) {
+function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
   const anio = new Date().getFullYear();
@@ -371,25 +375,20 @@ function ModalSKU({ sku, promo, bajo, precios, onClose }) {
     : precioAAA;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto"
-      onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-8" onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-4 flex items-center justify-between rounded-t-2xl"
-          style={{ background: PALETTE.blue.bg }}>
-          <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-widest" style={{ color: PALETTE.blue.mid }}>
-              {sku.marca || '—'} · {sku.rdmp || '—'} · {sku.categoria || '—'}
-            </div>
-            <h3 className="text-base font-medium truncate" style={{ color: PALETTE.blue.text }}>
-              {sku.sku} · {sku.descripcion || '—'}
-            </h3>
+    <div className="border-t border-b border-gray-200" style={{ background: '#F8FAFC' }}>
+      <div>
+        <div className="px-4 py-2 flex items-center justify-between" style={{ background: PALETTE.blue.bg }}>
+          <div className="min-w-0 text-[11px]" style={{ color: PALETTE.blue.text }}>
+            <span className="uppercase tracking-widest text-[9px]" style={{ color: PALETTE.blue.mid }}>
+              {sku.categoria || 'Sin categoría'} · {sku.familia || '—'}
+            </span>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/50">
-            <X className="w-5 h-5" style={{ color: PALETTE.blue.text }} />
+          <button onClick={onClose} className="p-1 rounded hover:bg-white/50">
+            <X className="w-4 h-4" style={{ color: PALETTE.blue.text }} />
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-4 space-y-3">
           <div>
             <div className="text-xs text-gray-600 mb-2">Precio actual por lista + precio bajo facturado</div>
             <div className="grid grid-cols-6 gap-2">
@@ -436,7 +435,7 @@ function ModalSKU({ sku, promo, bajo, precios, onClose }) {
                 <div className="text-sm font-medium text-gray-800 mb-3">
                   Evolución del precio y sellout · {anio}
                 </div>
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={160}>
                   <ComposedChart data={analisis.serieMens} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
                     <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#888' }} />
