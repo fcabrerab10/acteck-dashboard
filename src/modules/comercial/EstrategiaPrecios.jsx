@@ -413,9 +413,12 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
       ...promosLista,
     ].sort((a, b) => (b.anio - a.anio) || (b.mes - a.mes));
 
+    const anioActual2 = new Date().getFullYear();
+    const mesActual2  = new Date().getMonth() + 1;
+    const mesCorte = anio === anioActual2 ? mesActual2 : 12;
     const primerMesConDato = serieMens.findIndex((r) => (r.piezas > 0) || r.precio != null);
     let ultimoMesConDato = -1;
-    for (let i = 11; i >= 0; i--) {
+    for (let i = mesCorte - 1; i >= 0; i--) {
       if (serieMens[i].piezas > 0 || serieMens[i].precio != null) { ultimoMesConDato = i; break; }
     }
     const serieMensRecortada = primerMesConDato >= 0 && ultimoMesConDato >= 0
@@ -488,8 +491,10 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
             }
             if (tiles.length === 0) return null;
             return (
-              <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(tiles.length, 6)}, minmax(0, 1fr))` }}>
-                {tiles}
+              <div className="flex gap-1.5 flex-wrap">
+                {tiles.map((t, i) => (
+                  <div key={i} style={{ width: 96 }}>{t}</div>
+                ))}
               </div>
             );
           })()}
@@ -509,26 +514,28 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
             </div>
           ) : analisis ? (
             <>
-              <div className="grid grid-cols-6 gap-2 items-stretch">
-                <div className="bg-white border border-gray-200 rounded p-1.5">
-                  <div className="text-[8px] tracking-wide text-gray-500">
-                    SELLOUT {MESES_LBL[(analisis.mesMax - 1)].toUpperCase()}
+              <div className="grid grid-cols-3 gap-2 items-stretch">
+                <div className="flex flex-col gap-1.5">
+                  <div className="bg-white border border-gray-200 rounded p-1.5 flex-1">
+                    <div className="text-[8px] tracking-wide text-gray-500">
+                      SELLOUT {MESES_LBL[(analisis.mesMax - 1)].toUpperCase()}
+                    </div>
+                    <div className="text-[13px] font-medium leading-tight">{fmtInt(analisis.piezasMesActual)} pz</div>
+                    <div className={`text-[9px] leading-none ${
+                      analisis.deltaVsPrev3m == null ? 'text-gray-400'
+                      : analisis.deltaVsPrev3m >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                    }`}>
+                      {analisis.deltaVsPrev3m == null ? 'sin base'
+                        : `${fmtPctDelta(analisis.deltaVsPrev3m)} vs 3m`}
+                    </div>
                   </div>
-                  <div className="text-[13px] font-medium">{fmtInt(analisis.piezasMesActual)} pz</div>
-                  <div className={`text-[9px] leading-none ${
-                    analisis.deltaVsPrev3m == null ? 'text-gray-400'
-                    : analisis.deltaVsPrev3m >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                  }`}>
-                    {analisis.deltaVsPrev3m == null ? 'sin base'
-                      : `${fmtPctDelta(analisis.deltaVsPrev3m)} vs 3m`}
+                  <div className="bg-white border border-gray-200 rounded p-1.5 flex-1">
+                    <div className="text-[8px] tracking-wide text-gray-500">SELLOUT YTD</div>
+                    <div className="text-[13px] font-medium leading-tight">{fmtInt(analisis.piezasYTD)} pz</div>
+                    <div className="text-[9px] text-gray-500 leading-none">{fmtCompact(analisis.montoYTD)}</div>
                   </div>
                 </div>
-                <div className="bg-white border border-gray-200 rounded p-1.5">
-                  <div className="text-[8px] tracking-wide text-gray-500">SELLOUT YTD</div>
-                  <div className="text-[13px] font-medium">{fmtInt(analisis.piezasYTD)} pz</div>
-                  <div className="text-[9px] text-gray-500 leading-none">{fmtCompact(analisis.montoYTD)}</div>
-                </div>
-                <div className="bg-white border border-gray-200 rounded p-1.5 col-span-4">
+                <div className="bg-white border border-gray-200 rounded p-1.5 col-span-2">
                   <div className="flex items-center justify-between mb-0.5">
                     <div className="text-[8px] tracking-wide text-gray-500">PRECIO Y SELLOUT</div>
                     <div className="flex items-center gap-2 text-[9px] text-gray-500">
@@ -539,9 +546,9 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
                   {analisis.serieMens.length === 0 ? (
                     <div className="text-[9px] text-gray-400 text-center py-4">Sin datos históricos</div>
                   ) : (
-                    <ResponsiveContainer width="100%" height={80}>
+                    <ResponsiveContainer width="100%" height={110}>
                       <ComposedChart data={analisis.serieMens} margin={{ top: 4, right: 2, left: -28, bottom: 0 }}>
-                        <XAxis dataKey="mes" tick={{ fontSize: 8, fill: '#888' }} interval={0} axisLine={false} tickLine={false} />
+                        <XAxis dataKey="mes" tick={{ fontSize: 9, fill: '#888' }} interval={0} axisLine={false} tickLine={false} />
                         <YAxis yAxisId="left" hide domain={['dataMin - 50', 'dataMax + 50']} />
                         <YAxis yAxisId="right" orientation="right" hide />
                         <Tooltip formatter={(v, name) => name === 'Precio' ? fmtMoney(v) : `${fmtInt(v)} pz`}
