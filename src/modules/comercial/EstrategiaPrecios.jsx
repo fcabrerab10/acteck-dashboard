@@ -404,7 +404,7 @@ export default function EstrategiaPrecios() {
                         title={abierto ? undefined : r.descripcion}>
                         {r.descripcion || '—'}
                       </td>
-                      <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                      <td className="py-1 px-1.5 text-center whitespace-nowrap" style={{ width: 60 }}>
                         {r.rdmp && (
                           <span className="text-[9px] font-medium px-1 py-0.5 rounded"
                             style={{ background: rmapPal.bg, color: rmapPal.text }}>
@@ -413,11 +413,11 @@ export default function EstrategiaPrecios() {
                         )}
                       </td>
                       {verPrecioBajo && (
-                        <td className="py-1.5 px-2 text-right whitespace-nowrap">
+                        <td className="py-1 px-1.5 text-right whitespace-nowrap" style={{ width: 110 }}>
                           {r.bajo ? (
                             <>
-                              <div className="font-medium text-rose-800">{fmtMoney(r.bajo.precio_bajo)}</div>
-                              <div className="text-[9px] text-gray-500 truncate" style={{ maxWidth: 120 }} title={r.bajo.cliente_bajo}>
+                              <div className="font-medium text-rose-800 text-[10px]">{fmtMoney(r.bajo.precio_bajo)}</div>
+                              <div className="text-[9px] text-gray-500 truncate" style={{ maxWidth: 100 }} title={r.bajo.cliente_bajo}>
                                 {r.bajo.cliente_bajo} · {fmtInt(r.bajo.piezas_bajo)} pz
                               </div>
                             </>
