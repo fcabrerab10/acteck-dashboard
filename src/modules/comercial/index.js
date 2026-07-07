@@ -7,4 +7,5 @@ export { default as AnalisisCliente } from './AnalisisCliente';
 export { default as AnalisisClientesGlobal } from './AnalisisClientesGlobal';
 export { default as InventarioGlobal } from './InventarioGlobal';
 export { default as EstrategiaPrecios } from './EstrategiaPrecios';
+export { default as SellInDicotech } from './SellInDicotech';
 export { default as ForecastCliente } from './ForecastCliente';
