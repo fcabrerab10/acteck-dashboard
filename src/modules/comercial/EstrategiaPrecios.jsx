@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
-  Activity, Search, X, TrendingUp, TrendingDown, AlertTriangle, Tag, Download, ChevronDown, Check,
+  Activity, Search, X, TrendingUp, TrendingDown, AlertTriangle, Tag, Download, ChevronDown, ChevronRight, Check,
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import {
@@ -389,9 +389,19 @@ export default function EstrategiaPrecios() {
                     <tr
                       onClick={() => setSkuAbierto(abierto ? null : r.sku)}
                       className={`border-t border-gray-100 cursor-pointer ${abierto ? 'bg-blue-50/60' : 'hover:bg-gray-50'}`}>
-                      <td className="py-1.5 px-2 text-gray-600 whitespace-nowrap">{r.marca || '—'}</td>
-                      <td className="py-1.5 px-2 font-mono text-gray-700 whitespace-nowrap">{r.sku}</td>
-                      <td className="py-1.5 px-2 text-gray-800 truncate" style={{ maxWidth: 320 }} title={r.descripcion}>
+                      <td className="py-1 px-1.5 text-gray-600 whitespace-nowrap text-[10px]" style={{ width: 70 }}>{r.marca || '—'}</td>
+                      <td className="py-1 px-1.5 font-mono text-gray-700 whitespace-nowrap text-[10px]" style={{ width: 90 }}>
+                        <span className="inline-flex items-center gap-1">
+                          <ChevronRight
+                            className="w-3 h-3 text-gray-400 transition-transform flex-shrink-0"
+                            style={{ transform: abierto ? 'rotate(90deg)' : 'none' }}
+                          />
+                          {r.sku}
+                        </span>
+                      </td>
+                      <td className="py-1 px-1.5 text-gray-800"
+                        style={abierto ? { whiteSpace: 'normal' } : { maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={abierto ? undefined : r.descripcion}>
                         {r.descripcion || '—'}
                       </td>
                       <td className="py-1.5 px-2 text-center whitespace-nowrap">
