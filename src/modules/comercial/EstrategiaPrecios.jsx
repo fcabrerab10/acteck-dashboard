@@ -217,9 +217,23 @@ export default function EstrategiaPrecios() {
     cols.push({ header: 'SKU',         get: (r) => r.sku || '',         width: 14 });
     cols.push({ header: 'Descripción', get: (r) => r.descripcion || '', width: 50 });
     cols.push({ header: 'Roadmap',     get: (r) => r.rdmp || '',        width: 10 });
+    const bajoEsMenor = (r) => {
+      const bajo = r.bajo?.precio_bajo;
+      if (bajo == null) return false;
+      const p = r.precios || {};
+      const precioAAA = p['Mayoreo AAA'] ?? null;
+      const precioAAAefectivo = r.promo && precioAAA != null
+        ? precioAAA * (1 - Number(r.promo.promo_pct))
+        : precioAAA;
+      const lista = LISTAS_MOSTRAR
+        .map((l) => (l === 'Mayoreo AAA' ? precioAAAefectivo : p[l]))
+        .filter((v) => v != null && !isNaN(v));
+      if (!lista.length) return false;
+      return bajo < Math.min(...lista);
+    };
     if (verPrecioBajo) {
-      cols.push({ header: 'Precio Bajo Facturado', get: (r) => r.bajo?.precio_bajo ?? null, width: 16, money: true });
-      cols.push({ header: 'Piezas Precio Bajo',    get: (r) => r.bajo?.piezas_bajo ?? null, width: 12, int: true });
+      cols.push({ header: 'Precio Bajo Facturado', get: (r) => (bajoEsMenor(r) ? r.bajo.precio_bajo : null), width: 16, money: true });
+      cols.push({ header: 'Piezas Precio Bajo',    get: (r) => (bajoEsMenor(r) ? r.bajo.piezas_bajo : null), width: 12, int: true });
     }
     if (incluyeAAA) {
       cols.push({
@@ -384,6 +398,11 @@ export default function EstrategiaPrecios() {
                   ? precioAAA * (1 - Number(promo.promo_pct))
                   : precioAAA;
                 const abierto = skuAbierto === r.sku;
+                const preciosLista = LISTAS_MOSTRAR
+                  .map((l) => (l === 'Mayoreo AAA' ? precioAAAneto : r.precios[l]))
+                  .filter((v) => v != null && !isNaN(v));
+                const minLista = preciosLista.length ? Math.min(...preciosLista) : null;
+                const mostrarBajo = r.bajo?.precio_bajo != null && minLista != null && r.bajo.precio_bajo < minLista;
                 return (
                   <React.Fragment key={r.sku}>
                     <tr
@@ -414,7 +433,7 @@ export default function EstrategiaPrecios() {
                       </td>
                       {verPrecioBajo && (
                         <td className="py-1 px-1.5 text-right whitespace-nowrap" style={{ width: 110 }}>
-                          {r.bajo ? (
+                          {mostrarBajo ? (
                             <>
                               <div className="font-medium text-rose-800 text-[10px]">{fmtMoney(r.bajo.precio_bajo)}</div>
                               <div className="text-[9px] text-gray-500 truncate" style={{ maxWidth: 100 }} title={r.bajo.cliente_bajo}>
