@@ -115,7 +115,7 @@ export default function SellInDicotech() {
       const [fact, rdmp, ct] = await Promise.all([
         fetchAll('facturacion_clientes', 'sku,anio,mes,piezas,monto',
           (q) => q.eq('cliente_key', CLIENTE_KEY).in('anio', [anioPrev, anioActual])),
-        fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,rdmp,orden'),
+        fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,rdmp,sort_order'),
         fetchAll('cuotas_mensuales', 'mes,anio,cuota_min,cuota_ideal',
           (q) => q.eq('cliente', CLIENTE_KEY).eq('anio', anioActual)),
       ]);
