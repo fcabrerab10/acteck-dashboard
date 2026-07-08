@@ -255,7 +255,9 @@ export default function SellInDicotech() {
       }
       const piezas = matrizSku.get(r.sku) || Array(12).fill(0);
       const total = piezas.reduce((a, b) => a + b, 0);
-      const promedio = total / 12;
+      const cerrados = piezas.slice(0, mesActual - 1);
+      const conVenta = cerrados.filter((v) => v > 0);
+      const promedio = conVenta.length ? conVenta.reduce((a, b) => a + b, 0) / conVenta.length : 0;
       rows.push({ ...r, categoriaCap: catCap, piezas, total, promedio });
     }
     if (orden.col && orden.dir) {
@@ -270,8 +272,11 @@ export default function SellInDicotech() {
     const t = Array(12).fill(0);
     for (const r of filasTabla) for (let i = 0; i < 12; i++) t[i] += r.piezas[i];
     const total = t.reduce((a, b) => a + b, 0);
-    return { mes: t, total, promedio: total / 12 };
-  }, [filasTabla]);
+    const cerrados = t.slice(0, mesActual - 1);
+    const conVenta = cerrados.filter((v) => v > 0);
+    const promedio = conVenta.length ? conVenta.reduce((a, b) => a + b, 0) / conVenta.length : 0;
+    return { mes: t, total, promedio };
+  }, [filasTabla, mesActual]);
 
   const toggleOrden = (col) => {
     setOrden((prev) => {
