@@ -13,7 +13,11 @@ import * as XLSX from 'xlsx-js-style';
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-const ACCENT = '#0EA5E9';
+const CLIENTES_META = {
+  dicotech:   { nombre: 'Dicotech',   marca: 'Acteck',              accent: '#0EA5E9', badgeBg: 'bg-sky-50',  badgeText: 'text-sky-700',  dot: 'bg-sky-500'  },
+  pcel:       { nombre: 'PCEL',       marca: 'Acteck',              accent: '#EF4444', badgeBg: 'bg-rose-50', badgeText: 'text-rose-700', dot: 'bg-rose-500' },
+  digitalife: { nombre: 'Digitalife', marca: 'Acteck / Balam Rush', accent: '#EF4444', badgeBg: 'bg-rose-50', badgeText: 'text-rose-700', dot: 'bg-rose-500' },
+};
 const CAT_COLORS = ['#0EA5E9', '#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#94A3B8', '#F97316'];
 
 const ROADMAP_COLOR = {
@@ -93,8 +97,10 @@ function MultiSelect({ label, options, selected, onChange, width = 160 }) {
   );
 }
 
-export default function SellInDicotech() {
-  const CLIENTE_KEY = 'dicotech';
+export default function SellInCliente({ clienteKey }) {
+  const CLIENTE_KEY = clienteKey;
+  const meta = CLIENTES_META[CLIENTE_KEY] || CLIENTES_META.dicotech;
+  const ACCENT = meta.accent;
   const hoy = new Date();
   const anioActual = hoy.getFullYear();
   const anioPrev = anioActual - 1;
@@ -322,7 +328,7 @@ export default function SellInDicotech() {
       r.total,
     ]);
     const totRow = ['TOTAL', `${filasTabla.length} SKUs`, '', '', '', ...totalesFila.mes.map((v) => v || null), Math.round(totalesFila.promedio) || null, totalesFila.total];
-    const titulo = `Sell In Dicotech · ${anioActual}`;
+    const titulo = `Sell In ${meta.nombre} · ${anioActual}`;
     const aoa = [
       [titulo, ...Array(HEADERS.length - 1).fill('')],
       HEADERS, ...rows, totRow,
@@ -356,11 +362,11 @@ export default function SellInDicotech() {
     ws['!freeze'] = { xSplit: 5, ySplit: 2 };
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sell In');
-    XLSX.writeFile(wb, `Sell In Dicotech ${anioActual}.xlsx`);
+    XLSX.writeFile(wb, `Sell In ${meta.nombre} ${anioActual}.xlsx`);
   };
 
   if (loading) {
-    return <div className="p-12 text-center text-gray-400">Cargando Sell In de Dicotech…</div>;
+    return <div className="p-12 text-center text-gray-400">Cargando Sell In de {meta.nombre}…</div>;
   }
 
   const pctMTD = mesActualData.cuota?.ideal ? mesActualData.monto / mesActualData.cuota.ideal * 100 : null;
@@ -404,9 +410,9 @@ export default function SellInDicotech() {
       {/* Header */}
       <div className="flex items-end justify-between">
         <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-sky-50 text-sky-700 text-[11px] font-semibold mb-1.5">
+          <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full ${meta.badgeBg} ${meta.badgeText} text-[11px] font-semibold mb-1.5`}>
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
-            Dicotech · Acteck
+            {meta.nombre} · {meta.marca}
           </div>
           <h2 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
             <ShoppingCart className="w-6 h-6 text-gray-700" /> Sell In
