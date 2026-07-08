@@ -427,7 +427,7 @@ export default function SellInCliente({ clienteKey }) {
   };
 
   return (
-    <div className="max-w-none mx-auto p-6 space-y-4">
+    <div className="max-w-none mx-auto p-3 space-y-3">
       {/* Header */}
       <div className="flex items-end justify-between">
         <div>
@@ -614,10 +614,10 @@ export default function SellInCliente({ clienteKey }) {
                   <tr key={r.sku} className="border-t border-gray-100 hover:bg-gray-50">
                     <td className="py-1 px-1.5 text-gray-600 text-[10px] whitespace-nowrap" style={{ width: 70 }}>{r.marca || '—'}</td>
                     <td className="py-1 px-1.5 font-mono text-gray-700 text-[10px] whitespace-nowrap" style={{ width: 96 }}>{r.sku}</td>
-                    <td className="py-1 px-1.5 text-gray-800 truncate" style={{ maxWidth: 320 }} title={r.descripcion}>
+                    <td className="py-1 px-1.5 text-gray-800 truncate" style={{ maxWidth: 240 }} title={r.descripcion}>
                       {r.descripcion || '—'}
                     </td>
-                    <td className="py-1 px-1.5 text-center" style={{ width: 60 }}>
+                    <td className="py-1 px-1.5 text-center" style={{ width: 70 }}>
                       {r.rdmp && (
                         <span className="text-[9px] font-medium px-1 py-0.5 rounded"
                           style={{ background: rmp.bg, color: rmp.text }}>{r.rdmp}</span>
@@ -631,16 +631,16 @@ export default function SellInCliente({ clienteKey }) {
                             background: h?.bg,
                             color: h?.color || '#9CA3AF',
                             fontWeight: h?.weight || 400,
-                            width: 44,
+                            width: 56,
                           }}>
                           {v ? fmtInt(v) : '—'}
                         </td>
                       );
                     })}
-                    <td className="py-1 px-2 text-right tabular-nums text-gray-700 bg-gray-50/60" style={{ width: 60 }}>
+                    <td className="py-1 px-2 text-right tabular-nums text-gray-700 bg-gray-50/60" style={{ width: 70 }}>
                       {r.promedio ? fmtInt(r.promedio) : '—'}
                     </td>
-                    <td className="py-1 px-2 text-right tabular-nums font-semibold text-gray-800 bg-gray-50" style={{ width: 60 }}>
+                    <td className="py-1 px-2 text-right tabular-nums font-semibold text-gray-800 bg-gray-50" style={{ width: 70 }}>
                       {fmtInt(r.total)}
                     </td>
                   </tr>
