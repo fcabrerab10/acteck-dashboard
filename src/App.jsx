@@ -443,13 +443,7 @@ export default function App() {
           )}
           {!clienteActivo && paginaActiva === "sellIn" && (
             puedeVerPestanaGlobal(perfil, "sell_in")
-              ? (
-                <div className="p-12 text-center">
-                  <ShoppingCart className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold text-gray-700 mb-2">Sell In</h2>
-                  <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
-                </div>
-              )
+              ? <SellInCliente clienteKey={null} />
               : <SinAcceso motivo="No tienes acceso a Sell In." />
           )}
           {paginaActiva === "sellOut" && (

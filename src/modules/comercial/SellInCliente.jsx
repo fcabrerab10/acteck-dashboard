@@ -99,7 +99,10 @@ function MultiSelect({ label, options, selected, onChange, width = 160 }) {
 
 export default function SellInCliente({ clienteKey }) {
   const CLIENTE_KEY = clienteKey;
-  const meta = CLIENTES_META[CLIENTE_KEY] || CLIENTES_META.dicotech;
+  const esGlobal = !CLIENTE_KEY;
+  const meta = esGlobal
+    ? { nombre: 'Dirección Comercial', marca: 'Consolidado de todos los clientes', accent: '#0EA5E9', badgeBg: 'bg-sky-50', badgeText: 'text-sky-700', dot: 'bg-sky-500' }
+    : (CLIENTES_META[CLIENTE_KEY] || CLIENTES_META.dicotech);
   const ACCENT = meta.accent;
   const hoy = new Date();
   const anioActual = hoy.getFullYear();
@@ -119,19 +122,27 @@ export default function SellInCliente({ clienteKey }) {
   useEffect(() => {
     setLoading(true);
     (async () => {
+      const facturacionPromise = esGlobal
+        ? fetchAll('v_facturacion_global_sku_mes', 'sku,anio,mes,piezas,monto',
+            (q) => q.in('anio', [anioPrev, anioActual]))
+        : fetchAll('facturacion_clientes', 'sku,anio,mes,piezas,monto',
+            (q) => q.eq('cliente_key', CLIENTE_KEY).in('anio', [anioPrev, anioActual]));
+      const cuotasPromise = esGlobal
+        ? fetchAll('v_cuota_global_mensual', 'mes,anio,cuota_min,cuota_ideal',
+            (q) => q.eq('anio', anioActual))
+        : fetchAll('cuotas_mensuales', 'mes,anio,cuota_min,cuota_ideal',
+            (q) => q.eq('cliente', CLIENTE_KEY).eq('anio', anioActual));
       const [fact, rdmp, ct] = await Promise.all([
-        fetchAll('facturacion_clientes', 'sku,anio,mes,piezas,monto',
-          (q) => q.eq('cliente_key', CLIENTE_KEY).in('anio', [anioPrev, anioActual])),
+        facturacionPromise,
         fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp,sort_order'),
-        fetchAll('cuotas_mensuales', 'mes,anio,cuota_min,cuota_ideal',
-          (q) => q.eq('cliente', CLIENTE_KEY).eq('anio', anioActual)),
+        cuotasPromise,
       ]);
       setFacturacion(fact);
       setRoadmap(rdmp);
       setCuotas(ct);
       setLoading(false);
     })();
-  }, [anioActual, anioPrev]);
+  }, [anioActual, anioPrev, CLIENTE_KEY, esGlobal]);
 
   const roadmapMap = useMemo(() => {
     const m = new Map();
@@ -244,11 +255,21 @@ export default function SellInCliente({ clienteKey }) {
     return map;
   }, [facturacion, anioActual]);
 
+  const roadmapOrdenado = useMemo(() => {
+    if (!esGlobal) return roadmap;
+    return [...roadmap].sort((a, b) => {
+      const sa = a.sort_order == null ? Number.MAX_SAFE_INTEGER : Number(a.sort_order);
+      const sb = b.sort_order == null ? Number.MAX_SAFE_INTEGER : Number(b.sort_order);
+      if (sa !== sb) return sa - sb;
+      return String(a.sku || '').localeCompare(String(b.sku || ''));
+    });
+  }, [roadmap, esGlobal]);
+
   const filasTabla = useMemo(() => {
     const q = busqueda.trim().toUpperCase();
     const rows = [];
-    for (const r of roadmap) {
-      if (!skusFacturados.has(r.sku)) continue;
+    for (const r of roadmapOrdenado) {
+      if (!esGlobal && !skusFacturados.has(r.sku)) continue;
       if (marcaSel.size > 0 && !marcaSel.has(r.marca)) continue;
       if (roadmapSel.size > 0 && !roadmapSel.has(r.rdmp)) continue;
       const catNorm = ((r.categoria || '').trim());
@@ -272,7 +293,7 @@ export default function SellInCliente({ clienteKey }) {
       rows.sort((a, b) => (a[key] - b[key]) * factor);
     }
     return rows;
-  }, [roadmap, skusFacturados, busqueda, marcaSel, roadmapSel, categoriaSel, matrizSku, orden]);
+  }, [roadmapOrdenado, skusFacturados, busqueda, marcaSel, roadmapSel, categoriaSel, matrizSku, orden, esGlobal]);
 
   const totalesFila = useMemo(() => {
     const t = Array(12).fill(0);
@@ -418,7 +439,7 @@ export default function SellInCliente({ clienteKey }) {
             <ShoppingCart className="w-6 h-6 text-gray-700" /> Sell In
           </h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Facturación al cliente · Fuente ERP Acteck · {facturacion.length.toLocaleString('es-MX')} rows cargados
+            {esGlobal ? 'Facturación consolidada de todos los clientes' : 'Facturación al cliente'} · Fuente ERP Acteck · {facturacion.length.toLocaleString('es-MX')} rows cargados
           </p>
         </div>
       </div>
