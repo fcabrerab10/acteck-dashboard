@@ -32,6 +32,7 @@ const ALLOWED = {
   compras_oc:            'movid,articulo',
   promos_temporada:      'sku,anio,mes,campania',
   sellout_general:       'id',
+  cuotas_mensuales:      'cliente,mes,anio',
 };
 
 export default async function handler(req, res) {

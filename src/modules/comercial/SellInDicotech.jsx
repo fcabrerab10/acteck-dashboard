@@ -5,7 +5,7 @@ import {
   ShoppingCart, Search, Download, ChevronDown, Check, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ReferenceLine,
+  LineChart, Line, XAxis, YAxis, Tooltip,
   CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
 import * as XLSX from 'xlsx-js-style';
@@ -465,16 +465,16 @@ export default function SellInDicotech() {
           <div className="flex justify-between items-baseline mb-2">
             <h3 className="text-sm font-semibold text-gray-800">Evolución mensual · Sell In vs Cuota vs Año anterior</h3>
             <div className="text-[11px] text-gray-500 flex gap-3">
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded" style={{ background: '#CBD5E1' }} /> {anioPrev}</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5" style={{ background: '#94A3B8' }} /> {anioPrev}</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5" style={{ background: ACCENT }} /> {anioActual}</span>
               {cuotaAnual.ideal > 0 && <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-0.5" style={{ background: '#6B7280', borderTop: '1px dashed #6B7280' }} /> Cuota
+                <span className="inline-block w-3 h-0.5" style={{ background: '#F59E0B' }} /> Cuota
               </span>}
             </div>
           </div>
           <div style={{ height: 260 }}>
             <ResponsiveContainer>
-              <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="0" stroke="#F3F4F6" vertical={false} />
                 <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={(v) => fmtMoneyShort(v)} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={55} />
@@ -483,10 +483,10 @@ export default function SellInDicotech() {
                   labelStyle={{ color: '#374151', fontWeight: 600 }}
                   contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}
                 />
-                <Bar dataKey="monto2025" name={String(anioPrev)} fill="#CBD5E1" radius={[3, 3, 0, 0]} maxBarSize={32} />
+                <Line dataKey="monto2025" name={String(anioPrev)} stroke="#94A3B8" strokeWidth={2} dot={{ r: 3, fill: '#94A3B8' }} activeDot={{ r: 5 }} connectNulls={false} />
                 <Line dataKey="monto2026" name={String(anioActual)} stroke={ACCENT} strokeWidth={2.5} dot={{ r: 3.5, fill: ACCENT }} activeDot={{ r: 5 }} connectNulls={false} />
-                <Line dataKey="cuotaIdeal" name="Cuota ideal" stroke="#6B7280" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
-              </ComposedChart>
+                <Line dataKey="cuotaIdeal" name="Cuota" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3, fill: '#F59E0B' }} activeDot={{ r: 5 }} connectNulls={false} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </div>

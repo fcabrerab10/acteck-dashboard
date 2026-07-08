@@ -79,7 +79,8 @@ const SOURCES = [
       { table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', label:'Facturación (sell-in canónico)', replaceAnios:[2025,2026] },
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true },
       { table:'compras_oc', onConflict:'movid,articulo', parser:'comprasOC', label:'POs de Compras (Vw_TablaH_Compras)', replace:true },
-      { table:'precios_sku', onConflict:'sku,lista,anio,mes', parser:'preciosERP', label:'Precios por lista (Vw_TablaM_Precios)', replace:true }
+      { table:'precios_sku', onConflict:'sku,lista,anio,mes', parser:'preciosERP', label:'Precios por lista (Vw_TablaM_Precios)', replace:true },
+      { table:'cuotas_mensuales', onConflict:'cliente,mes,anio', parser:'cuotasClientes', label:'Cuotas mensuales por cliente (hoja Cuotas)', replaceAnios:[2025,2026] }
     ]
   },
   { id:'roadmap', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Roadmap', desc:'Archivo Roadmap.xlsx (Hoja1). 6 columnas: Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2. Replace completo — fuente única de marca/categoría/familia por SKU para todo el dashboard.', file:'Roadmap.xlsx', table:'roadmap_sku', onConflict:'sku', parser:'roadmap', replace:true },
@@ -188,6 +189,64 @@ const PARSERS = {
         const precio = toNum(row[parseInt(colStr)]);
         if (precio == null || precio <= 0) continue;
         out.push({ sku, lista, moneda: 'PESOS', anio, mes, precio });
+      }
+    }
+    return out;
+  },
+
+  // "Cuotas" — pivot con cliente en filas y meses × años en columnas.
+  // Layout:
+  //   row 1: header block — "<01/01/25", "2025" (span 12 cols), "Total 2025",
+  //          "2026" (span 12 cols), "Total 2026", "Total general"
+  //   row 2: labels de mes — null, null, ene..dic (2025), null, ene..dic (2026), ...
+  //   row 4+: cliente en col 0, valores mensuales en cols 2..13 (2025) y 15..26 (2026)
+  // Se emite una fila por (cliente, anio, mes) con cuota_min = cuota_ideal (misma
+  // fuente). Cliente name se normaliza a cliente_key lowercase para empatar con
+  // el resto de las tablas.
+  cuotasClientes(wb){
+    const NORM_CLIENTE = {
+      'DICOTECH':      'dicotech',
+      'DIGITAL LIFE':  'digitalife',
+      'DIGITALIFE':    'digitalife',
+      'PCEL':          'pcel',
+    };
+    const normalizar = (nm) => {
+      const up = String(nm || '').trim().toUpperCase();
+      if (NORM_CLIENTE[up]) return NORM_CLIENTE[up];
+      return up.toLowerCase().replace(/\s+/g, '_');
+    };
+    const sh = wb.Sheets['Cuotas'];
+    if (!sh) return [];
+    const arr = XLSX.utils.sheet_to_json(sh, {header:1, defval:null});
+    if (arr.length < 5) return [];
+    // Detectar bloque de años y sus rangos de columnas leyendo row 1.
+    // Cada año ocupa 12 columnas contiguas seguidas por "Total <año>".
+    const headerAnios = arr[1] || [];
+    const bloques = []; // { anio, colStart, colEnd }
+    for (let c = 0; c < headerAnios.length; c++) {
+      const v = String(headerAnios[c] || '').trim();
+      const m = v.match(/^(20\d{2})$/);
+      if (m) bloques.push({ anio: parseInt(m[1], 10), colStart: c, colEnd: c + 11 });
+    }
+    // Datos empiezan en row 4 (0=header, 1=años, 2=meses, 3=Etiquetas de fila).
+    const out = [];
+    for (let r = 4; r < arr.length; r++) {
+      const row = arr[r];
+      if (!row) continue;
+      const cliente = normalizar(row[0]);
+      if (!cliente || cliente === 'total_general' || cliente === '') continue;
+      for (const b of bloques) {
+        for (let mes = 1; mes <= 12; mes++) {
+          const val = toNum(row[b.colStart + (mes - 1)]);
+          if (val == null || val <= 0) continue;
+          out.push({
+            cliente,
+            anio: b.anio,
+            mes,
+            cuota_min: val,
+            cuota_ideal: val,
+          });
+        }
       }
     }
     return out;
