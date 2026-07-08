@@ -517,7 +517,7 @@ export default function App() {
         ) : (
           <>
         {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />}
-        {paginaActiva === "sellIn"  && <SellInCliente clienteKey={clienteActivo} />}
+        {clienteActivo && paginaActiva === "sellIn"  && <SellInCliente clienteKey={clienteActivo} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} clienteKey={clienteActivo} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
