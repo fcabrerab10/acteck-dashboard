@@ -169,7 +169,12 @@ export default function SellInDrillDown(props) {
   }
 
   // ── 5) Derivados solo cuando ya hay data ──
-  const topN = clientesAgregados.slice(0, 8);
+  // Solo mostrar clientes con share significativo (≥3%). Si ninguno pasa
+  // el umbral, mostrar los 3 primeros para no dejar el panel vacío.
+  const UMBRAL_SHARE = 3;
+  const clientesRelevantes = clientesAgregados.filter((c) => (c.pct || 0) >= UMBRAL_SHARE);
+  const topN = clientesRelevantes.length > 0 ? clientesRelevantes : clientesAgregados.slice(0, 3);
+  const clientesOcultos = clientesAgregados.length - topN.length;
   const maxPct = Math.max(1, ...topN.map((c) => c.pct || 0));
   const top3Pct = clientesAgregados.slice(0, 3).reduce((s, c) => s + (c.pct || 0), 0);
 
@@ -232,10 +237,12 @@ export default function SellInDrillDown(props) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 p-5 pt-2">
 
         {/* COL 1 — Quién compra */}
-        <div className="lg:pr-5 lg:border-r border-[#DBE5F0]">
+        <div className="lg:pr-5 lg:border-r border-gray-200">
           <div className="flex items-baseline justify-between mb-3">
             <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">Quién compra · YTD {anioActual}</span>
-            <span className="text-[10.5px] text-gray-400">{clientesAgregados.length} clientes distintos</span>
+            <span className="text-[10.5px] text-gray-400">
+              {clientesOcultos > 0 ? `${topN.length} de ${clientesAgregados.length} · share ≥ ${UMBRAL_SHARE}%` : `${clientesAgregados.length} clientes distintos`}
+            </span>
           </div>
           {topN.length === 0 ? (
             <div className="text-xs text-gray-400 italic">Sin facturación en {anioActual}.</div>
@@ -271,7 +278,7 @@ export default function SellInDrillDown(props) {
                   );
                 })}
               </div>
-              <div className="flex justify-between items-end mt-3 pt-2.5 border-t border-[#DBE5F0]">
+              <div className="flex justify-between items-end mt-3 pt-2.5 border-t border-gray-200">
                 <div>
                   <div className="text-[15px] font-semibold tabular-nums">{top3Pct.toFixed(1)}%</div>
                   <div className="text-[9.5px] uppercase tracking-widest text-gray-500">Top 3 concentran</div>
@@ -286,7 +293,7 @@ export default function SellInDrillDown(props) {
         </div>
 
         {/* COL 2 — Cuándo */}
-        <div className="lg:px-5 lg:border-r border-[#DBE5F0]">
+        <div className="lg:px-5 lg:border-r border-gray-200">
           <div className="flex items-baseline justify-between mb-3">
             <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">Cuándo lo compran · 24 meses</span>
             <span className="text-[10.5px] text-gray-400">Piezas / mes</span>
@@ -296,8 +303,8 @@ export default function SellInDrillDown(props) {
             <line x1="200" y1="4" x2="200" y2="75" stroke="#DBE5F0" strokeWidth="1" strokeDasharray="3 3" />
             <text x="98"  y="14" fontSize="8.5" fill="#9CA3AF" textAnchor="middle" fontFamily="inherit">{anioPrev}</text>
             <text x="298" y="14" fontSize="8.5" fill="#9CA3AF" textAnchor="middle" fontFamily="inherit">{anioActual}</text>
-            {path2025 && <path d={path2025} stroke="#94A3B8" strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
-            {serie2025.map((p, i) => <circle key={`a${i}`} cx={5 + i * 16} cy={svgY(p.piezas)} r="2" fill="#94A3B8" />)}
+            {path2025 && <path d={path2025} stroke="#F59E0B" strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
+            {serie2025.map((p, i) => <circle key={`a${i}`} cx={5 + i * 16} cy={svgY(p.piezas)} r="2" fill="#F59E0B" />)}
             {path2026 && <path d={path2026} stroke="#0EA5E9" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
             {serie2026.slice(0, Math.max(0, puntos2026Hasta - 1)).map((p, i) => <circle key={`b${i}`} cx={205 + i * 16} cy={svgY(p.piezas)} r="2.6" fill="#0EA5E9" />)}
             {puntos2026Hasta > 0 && serie2026[puntos2026Hasta - 1] && (
@@ -311,7 +318,7 @@ export default function SellInDrillDown(props) {
             <span>{MESES[Math.max(0, Math.min(11, mesActual - 1))]} {String(anioActual).slice(-2)}</span>
           </div>
           <div className="flex gap-3 text-[10.5px] text-gray-500 mt-2">
-            <span><span className="inline-block w-2 h-0.5 mr-1 align-middle rounded-sm" style={{ background: '#94A3B8' }} />{anioPrev}</span>
+            <span><span className="inline-block w-2 h-0.5 mr-1 align-middle rounded-sm" style={{ background: '#F59E0B' }} />{anioPrev}</span>
             <span><span className="inline-block w-2 h-0.5 mr-1 align-middle rounded-sm" style={{ background: '#0EA5E9' }} />{anioActual}</span>
           </div>
 
@@ -361,7 +368,7 @@ export default function SellInDrillDown(props) {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-2.5 mt-2.5 border-t border-[#DBE5F0]">
+          <div className="grid grid-cols-2 gap-3 pt-2.5 mt-2.5 border-t border-gray-200">
             <div>
               <div className="text-[9.5px] uppercase tracking-widest text-gray-500">Precio prom. real {anioActual}</div>
               <div className={`text-[16px] font-semibold tabular-nums ${yieldPct == null ? 'text-gray-400' : yieldPct >= 95 ? 'text-emerald-700' : yieldPct >= 85 ? 'text-amber-700' : 'text-rose-700'}`}>
@@ -380,7 +387,7 @@ export default function SellInDrillDown(props) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-2.5 mt-2.5 border-t border-[#DBE5F0]">
+          <div className="grid grid-cols-2 gap-3 pt-2.5 mt-2.5 border-t border-gray-200">
             <div>
               <div className="text-[9.5px] uppercase tracking-widest text-gray-500">Inventario Acteck</div>
               <div className={`text-[16px] font-semibold tabular-nums ${stockTotal <= 0 ? 'text-rose-700' : 'text-gray-800'}`}>

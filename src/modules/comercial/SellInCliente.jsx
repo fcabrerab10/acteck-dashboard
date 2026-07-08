@@ -658,7 +658,7 @@ export default function SellInCliente({ clienteKey }) {
                     </tr>
                     {abierto && (
                       <tr>
-                        <td colSpan={18} style={{ padding: 0, background: '#F1F5FB', borderTop: '1px solid #DBE5F0' }}>
+                        <td colSpan={18} style={{ padding: 0, background: '#FFFFFF', borderTop: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }}>
                           <DrillDownBoundary sku={r.sku}>
                             <SellInDrillDown
                               sku={r.sku}
