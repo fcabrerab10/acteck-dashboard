@@ -115,7 +115,7 @@ export default function SellInDicotech() {
       const [fact, rdmp, ct] = await Promise.all([
         fetchAll('facturacion_clientes', 'sku,anio,mes,piezas,monto',
           (q) => q.eq('cliente_key', CLIENTE_KEY).in('anio', [anioPrev, anioActual])),
-        fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,rdmp,sort_order'),
+        fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp,sort_order'),
         fetchAll('cuotas_mensuales', 'mes,anio,cuota_min,cuota_ideal',
           (q) => q.eq('cliente', CLIENTE_KEY).eq('anio', anioActual)),
       ]);
@@ -199,15 +199,14 @@ export default function SellInDicotech() {
     return set;
   }, [facturacion, anioActual]);
 
-  const categoriasYTD = useMemo(() => {
+  const familiasYTD = useMemo(() => {
     const map = new Map();
     for (const r of facturacion) {
       if (r.anio !== anioActual || r.mes > mesActual) continue;
-      const cat = (roadmapMap.get(r.sku)?.categoria || 'Sin catálogo').trim();
-      const norm = cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
-      const key = norm;
-      if (!map.has(key)) map.set(key, { name: key, monto: 0, piezas: 0, skus: new Set() });
-      const it = map.get(key);
+      const fam = (roadmapMap.get(r.sku)?.familia || 'Sin familia').trim();
+      const norm = fam.charAt(0).toUpperCase() + fam.slice(1).toLowerCase();
+      if (!map.has(norm)) map.set(norm, { name: norm, monto: 0, piezas: 0, skus: new Set() });
+      const it = map.get(norm);
       it.monto += Number(r.monto) || 0;
       it.piezas += Number(r.piezas) || 0;
       it.skus.add(r.sku);
@@ -459,26 +458,26 @@ export default function SellInDicotech() {
 
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="flex justify-between items-baseline mb-3">
-            <h3 className="text-sm font-semibold text-gray-800">Composición por categoría</h3>
+            <h3 className="text-sm font-semibold text-gray-800">Composición por familia</h3>
             <span className="text-[10.5px] text-gray-500">YTD {anioActual} · {formatMXN(totalYTD.monto)}</span>
           </div>
           <div className="grid grid-cols-[130px_1fr] gap-4 items-center">
             <div style={{ width: 130, height: 130, position: 'relative' }}>
               <ResponsiveContainer>
                 <PieChart>
-                  <Pie data={categoriasYTD} dataKey="monto" cx="50%" cy="50%" innerRadius={40} outerRadius={62} paddingAngle={1} stroke="none">
-                    {categoriasYTD.map((c, i) => <Cell key={i} fill={c.color} />)}
+                  <Pie data={familiasYTD} dataKey="monto" cx="50%" cy="50%" innerRadius={40} outerRadius={62} paddingAngle={1} stroke="none">
+                    {familiasYTD.map((c, i) => <Cell key={i} fill={c.color} />)}
                   </Pie>
                   <Tooltip formatter={(v) => formatMXN(v)} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
                 </PieChart>
               </ResponsiveContainer>
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                <div className="text-[15px] font-semibold text-gray-800 tabular-nums">{categoriasYTD.length}</div>
-                <div className="text-[9px] uppercase tracking-widest text-gray-500 mt-0.5">categorías</div>
+                <div className="text-[15px] font-semibold text-gray-800 tabular-nums">{familiasYTD.length}</div>
+                <div className="text-[9px] uppercase tracking-widest text-gray-500 mt-0.5">familias</div>
               </div>
             </div>
             <div className="flex flex-col gap-1.5 text-[11px]">
-              {categoriasYTD.slice(0, 8).map((c) => (
+              {familiasYTD.slice(0, 8).map((c) => (
                 <div key={c.name} className="grid grid-cols-[10px_1fr_auto] gap-2 items-center">
                   <span className="w-2 h-2 rounded-sm" style={{ background: c.color }} />
                   <span className="text-gray-700 truncate">{c.name}</span>
@@ -490,10 +489,10 @@ export default function SellInDicotech() {
               ))}
             </div>
           </div>
-          {categoriasYTD.length >= 2 && (
+          {familiasYTD.length >= 2 && (
             <div className="border-t border-gray-100 pt-2.5 mt-3 flex justify-between text-[11px] text-gray-500">
-              <span>Dominante: <span className="text-gray-800 font-semibold">{categoriasYTD[0].name}</span></span>
-              <span>Top 2 = <span className="text-gray-800 font-semibold tabular-nums">{(categoriasYTD[0].pct + (categoriasYTD[1]?.pct || 0)).toFixed(1)}%</span></span>
+              <span>Dominante: <span className="text-gray-800 font-semibold">{familiasYTD[0].name}</span></span>
+              <span>Top 2 = <span className="text-gray-800 font-semibold tabular-nums">{(familiasYTD[0].pct + (familiasYTD[1]?.pct || 0)).toFixed(1)}%</span></span>
             </div>
           )}
         </div>
