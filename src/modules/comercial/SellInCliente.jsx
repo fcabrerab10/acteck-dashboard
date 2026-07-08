@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, Component } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import {
@@ -658,17 +658,19 @@ export default function SellInCliente({ clienteKey }) {
                     {abierto && (
                       <tr className="drilldown-row">
                         <td colSpan={4 + 12 + 2} style={{ padding: 0, background: '#F1F5FB', borderTop: '1px solid #DBE5F0' }}>
-                          <DrillDownSKU
-                            sku={r.sku}
-                            marca={r.marca}
-                            descripcion={r.descripcion}
-                            categoria={r.categoriaCap}
-                            familia={r.familia}
-                            rdmp={r.rdmp}
-                            anioActual={anioActual}
-                            anioPrev={anioPrev}
-                            mesActual={mesActual}
-                          />
+                          <DrillDownBoundary sku={r.sku}>
+                            <DrillDownSKU
+                              sku={r.sku}
+                              marca={r.marca}
+                              descripcion={r.descripcion}
+                              categoria={r.categoriaCap}
+                              familia={r.familia}
+                              rdmp={r.rdmp}
+                              anioActual={anioActual}
+                              anioPrev={anioPrev}
+                              mesActual={mesActual}
+                            />
+                          </DrillDownBoundary>
                         </td>
                       </tr>
                     )}
@@ -691,6 +693,24 @@ export default function SellInCliente({ clienteKey }) {
       </div>
     </div>
   );
+}
+
+// ErrorBoundary aísla errores del drill-down para que no tumben la app.
+class DrillDownBoundary extends Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) { console.error('DrillDownSKU error:', err, info); }
+  componentDidUpdate(prev) { if (prev.sku !== this.props.sku && this.state.err) this.setState({ err: null }); }
+  render() {
+    if (this.state.err) {
+      return (
+        <div className="p-4 text-center text-xs text-rose-700 bg-rose-50 border-l-4 border-rose-500">
+          No se pudo cargar el detalle de este SKU · {String(this.state.err.message || this.state.err)}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 // ── Drill-down por SKU ─────────────────────────────────────────────────────
