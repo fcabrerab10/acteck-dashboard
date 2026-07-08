@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import {
-  ShoppingCart, Search, Download, ChevronDown, Check, ArrowUpDown, ArrowUp, ArrowDown,
+  ShoppingCart, Search, Download, ChevronDown, ChevronRight, Check, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
+import SellInDrillDown, { DrillDownBoundary } from './SellInDrillDown';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip,
   CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell,
@@ -118,6 +119,7 @@ export default function SellInCliente({ clienteKey }) {
   const [roadmapSel, setRoadmapSel] = useState(new Set());
   const [categoriaSel, setCategoriaSel] = useState(new Set());
   const [orden, setOrden] = useState({ col: null, dir: null }); // col: 'promedio' | 'total' | null
+  const [skuAbierto, setSkuAbierto] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -610,40 +612,70 @@ export default function SellInCliente({ clienteKey }) {
             <tbody>
               {filasTabla.map((r) => {
                 const rmp = ROADMAP_COLOR[r.rdmp] || { bg: '#F1EFE8', text: '#2C2C2A' };
+                const abierto = skuAbierto === r.sku;
                 return (
-                  <tr key={r.sku} className="border-t border-gray-100 hover:bg-gray-50">
-                    <td className="py-1 px-1.5 text-gray-600 text-[10px] whitespace-nowrap" style={{ width: 70 }}>{r.marca || '—'}</td>
-                    <td className="py-1 px-1.5 font-mono text-gray-700 text-[10px] whitespace-nowrap" style={{ width: 96 }}>{r.sku}</td>
-                    <td className="py-1 px-1.5 text-gray-800 truncate" style={{ maxWidth: 240 }} title={r.descripcion}>
-                      {r.descripcion || '—'}
-                    </td>
-                    <td className="py-1 px-1.5 text-center" style={{ width: 70 }}>
-                      {r.rdmp && (
-                        <span className="text-[9px] font-medium px-1 py-0.5 rounded"
-                          style={{ background: rmp.bg, color: rmp.text }}>{r.rdmp}</span>
-                      )}
-                    </td>
-                    {r.piezas.map((v, i) => {
-                      const h = heatClass(v);
-                      return (
-                        <td key={i} className="py-1 px-1.5 text-right tabular-nums whitespace-nowrap"
-                          style={{
-                            background: h?.bg,
-                            color: h?.color || '#9CA3AF',
-                            fontWeight: h?.weight || 400,
-                            width: 56,
-                          }}>
-                          {v ? fmtInt(v) : '—'}
+                  <React.Fragment key={r.sku}>
+                    <tr
+                      onClick={() => setSkuAbierto(abierto ? null : r.sku)}
+                      className={`border-t border-gray-100 cursor-pointer ${abierto ? 'bg-sky-50' : 'hover:bg-gray-50'}`}>
+                      <td className="py-1 px-1.5 text-gray-600 text-[10px] whitespace-nowrap" style={{ width: 70 }}>{r.marca || '—'}</td>
+                      <td className="py-1 px-1.5 font-mono text-gray-700 text-[10px] whitespace-nowrap" style={{ width: 96 }}>
+                        <span className="inline-flex items-center gap-1">
+                          <ChevronRight className="w-3 h-3 text-sky-500 flex-shrink-0 transition-transform"
+                            style={{ transform: abierto ? 'rotate(90deg)' : 'none' }} />
+                          {r.sku}
+                        </span>
+                      </td>
+                      <td className="py-1 px-1.5 text-gray-800 truncate" style={{ maxWidth: 240 }} title={r.descripcion}>
+                        {r.descripcion || '—'}
+                      </td>
+                      <td className="py-1 px-1.5 text-center" style={{ width: 70 }}>
+                        {r.rdmp && (
+                          <span className="text-[9px] font-medium px-1 py-0.5 rounded"
+                            style={{ background: rmp.bg, color: rmp.text }}>{r.rdmp}</span>
+                        )}
+                      </td>
+                      {r.piezas.map((v, i) => {
+                        const h = heatClass(v);
+                        return (
+                          <td key={i} className="py-1 px-1.5 text-right tabular-nums whitespace-nowrap"
+                            style={{
+                              background: h?.bg,
+                              color: h?.color || '#9CA3AF',
+                              fontWeight: h?.weight || 400,
+                              width: 56,
+                            }}>
+                            {v ? fmtInt(v) : '—'}
+                          </td>
+                        );
+                      })}
+                      <td className="py-1 px-2 text-right tabular-nums text-gray-700 bg-gray-50/60" style={{ width: 70 }}>
+                        {r.promedio ? fmtInt(r.promedio) : '—'}
+                      </td>
+                      <td className="py-1 px-2 text-right tabular-nums font-semibold text-gray-800 bg-gray-50" style={{ width: 70 }}>
+                        {fmtInt(r.total)}
+                      </td>
+                    </tr>
+                    {abierto && (
+                      <tr>
+                        <td colSpan={18} style={{ padding: 0, background: '#F1F5FB', borderTop: '1px solid #DBE5F0' }}>
+                          <DrillDownBoundary sku={r.sku}>
+                            <SellInDrillDown
+                              sku={r.sku}
+                              marca={r.marca}
+                              descripcion={r.descripcion}
+                              categoria={r.categoriaCap}
+                              familia={r.familia}
+                              rdmp={r.rdmp}
+                              anioActual={anioActual}
+                              anioPrev={anioPrev}
+                              mesActual={mesActual}
+                            />
+                          </DrillDownBoundary>
                         </td>
-                      );
-                    })}
-                    <td className="py-1 px-2 text-right tabular-nums text-gray-700 bg-gray-50/60" style={{ width: 70 }}>
-                      {r.promedio ? fmtInt(r.promedio) : '—'}
-                    </td>
-                    <td className="py-1 px-2 text-right tabular-nums font-semibold text-gray-800 bg-gray-50" style={{ width: 70 }}>
-                      {fmtInt(r.total)}
-                    </td>
-                  </tr>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
               <tr className="font-semibold text-gray-800 bg-gray-50" style={{ borderTop: '2px solid #E5E7EB' }}>
