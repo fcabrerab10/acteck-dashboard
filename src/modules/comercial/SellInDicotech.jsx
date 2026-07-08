@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import {
-  ShoppingCart, Search, Download, ChevronDown, Check,
+  ShoppingCart, Search, Download, ChevronDown, Check, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ReferenceLine,
@@ -108,6 +108,7 @@ export default function SellInDicotech() {
   const [marcaSel, setMarcaSel] = useState(new Set());
   const [roadmapSel, setRoadmapSel] = useState(new Set());
   const [categoriaSel, setCategoriaSel] = useState(new Set());
+  const [orden, setOrden] = useState({ col: null, dir: null }); // col: 'promedio' | 'total' | null
 
   useEffect(() => {
     setLoading(true);
@@ -254,16 +255,43 @@ export default function SellInDicotech() {
       }
       const piezas = matrizSku.get(r.sku) || Array(12).fill(0);
       const total = piezas.reduce((a, b) => a + b, 0);
-      rows.push({ ...r, categoriaCap: catCap, piezas, total });
+      const promedio = total / 12;
+      rows.push({ ...r, categoriaCap: catCap, piezas, total, promedio });
+    }
+    if (orden.col && orden.dir) {
+      const key = orden.col;
+      const factor = orden.dir === 'asc' ? 1 : -1;
+      rows.sort((a, b) => (a[key] - b[key]) * factor);
     }
     return rows;
-  }, [roadmap, skusFacturados, busqueda, marcaSel, roadmapSel, categoriaSel, matrizSku]);
+  }, [roadmap, skusFacturados, busqueda, marcaSel, roadmapSel, categoriaSel, matrizSku, orden]);
 
   const totalesFila = useMemo(() => {
     const t = Array(12).fill(0);
     for (const r of filasTabla) for (let i = 0; i < 12; i++) t[i] += r.piezas[i];
-    return { mes: t, total: t.reduce((a, b) => a + b, 0) };
+    const total = t.reduce((a, b) => a + b, 0);
+    return { mes: t, total, promedio: total / 12 };
   }, [filasTabla]);
+
+  const toggleOrden = (col) => {
+    setOrden((prev) => {
+      if (prev.col !== col) return { col, dir: 'desc' };
+      if (prev.dir === 'desc') return { col, dir: 'asc' };
+      return { col: null, dir: null };
+    });
+  };
+
+  const SortHeader = ({ col, label }) => {
+    const active = orden.col === col;
+    const Icon = !active ? ArrowUpDown : orden.dir === 'asc' ? ArrowUp : ArrowDown;
+    return (
+      <button onClick={() => toggleOrden(col)}
+        className={`inline-flex items-center gap-1 hover:text-gray-700 ${active ? 'text-sky-700' : 'text-gray-500'}`}>
+        {label}
+        <Icon className="w-3 h-3" />
+      </button>
+    );
+  };
 
   const maxCelda = useMemo(() => {
     let m = 0;
@@ -281,12 +309,14 @@ export default function SellInDicotech() {
   };
 
   const exportarExcel = () => {
-    const HEADERS = ['Marca', 'SKU', 'Descripción', 'Categoría', 'Roadmap', ...MESES, 'Total'];
+    const HEADERS = ['Marca', 'SKU', 'Descripción', 'Categoría', 'Roadmap', ...MESES, 'Promedio', 'Total'];
     const rows = filasTabla.map((r) => [
       r.marca || '', r.sku || '', r.descripcion || '', r.categoriaCap || '', r.rdmp || '',
-      ...r.piezas.map((v) => v || null), r.total,
+      ...r.piezas.map((v) => v || null),
+      Number(r.promedio.toFixed(1)) || null,
+      r.total,
     ]);
-    const totRow = ['TOTAL', `${filasTabla.length} SKUs`, '', '', '', ...totalesFila.mes.map((v) => v || null), totalesFila.total];
+    const totRow = ['TOTAL', `${filasTabla.length} SKUs`, '', '', '', ...totalesFila.mes.map((v) => v || null), Number(totalesFila.promedio.toFixed(1)) || null, totalesFila.total];
     const titulo = `Sell In Dicotech · ${anioActual}`;
     const aoa = [
       [titulo, ...Array(HEADERS.length - 1).fill('')],
@@ -316,7 +346,7 @@ export default function SellInDicotech() {
     }
     ws['!cols'] = [
       { wch: 10 }, { wch: 14 }, { wch: 50 }, { wch: 16 }, { wch: 9 },
-      ...MESES.map(() => ({ wch: 8 })), { wch: 10 },
+      ...MESES.map(() => ({ wch: 8 })), { wch: 10 }, { wch: 10 },
     ];
     ws['!freeze'] = { xSplit: 5, ySplit: 2 };
     const wb = XLSX.utils.book_new();
@@ -524,15 +554,23 @@ export default function SellInDicotech() {
           <table className="w-full text-[11px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
             <thead>
               <tr>
-                {['Marca','SKU','Descripción','Roadmap', ...MESES, 'Total'].map((h, i) => (
+                {[
+                  { label: 'Marca',       align: 'left'   },
+                  { label: 'SKU',         align: 'left'   },
+                  { label: 'Descripción', align: 'left'   },
+                  { label: 'Roadmap',     align: 'center' },
+                  ...MESES.map((m) => ({ label: m, align: 'right' })),
+                  { label: 'Promedio', align: 'right', sort: 'promedio' },
+                  { label: 'Total',    align: 'right', sort: 'total' },
+                ].map((h, i) => (
                   <th key={i}
                     className="py-1.5 px-2 font-medium uppercase tracking-wider text-[9px] text-gray-500"
                     style={{
-                      textAlign: i < 3 ? 'left' : i === 3 ? 'center' : 'right',
+                      textAlign: h.align,
                       position: 'sticky', top: 0, background: '#F9FAFB', zIndex: 1, borderBottom: '1px solid #E5E7EB',
                       whiteSpace: 'nowrap',
                     }}>
-                    {h}
+                    {h.sort ? <SortHeader col={h.sort} label={h.label} /> : h.label}
                   </th>
                 ))}
               </tr>
@@ -567,6 +605,9 @@ export default function SellInDicotech() {
                         </td>
                       );
                     })}
+                    <td className="py-1 px-2 text-right tabular-nums text-gray-700 bg-gray-50/60" style={{ width: 60 }}>
+                      {r.promedio ? r.promedio.toLocaleString('es-MX', { maximumFractionDigits: 1 }) : '—'}
+                    </td>
                     <td className="py-1 px-2 text-right tabular-nums font-semibold text-gray-800 bg-gray-50" style={{ width: 60 }}>
                       {fmtInt(r.total)}
                     </td>
@@ -578,6 +619,9 @@ export default function SellInDicotech() {
                 {totalesFila.mes.map((v, i) => (
                   <td key={i} className="py-1.5 px-1.5 text-right tabular-nums">{v ? fmtInt(v) : '—'}</td>
                 ))}
+                <td className="py-1.5 px-2 text-right tabular-nums">
+                  {totalesFila.promedio ? totalesFila.promedio.toLocaleString('es-MX', { maximumFractionDigits: 1 }) : '—'}
+                </td>
                 <td className="py-1.5 px-2 text-right tabular-nums">{fmtInt(totalesFila.total)}</td>
               </tr>
             </tbody>
