@@ -318,10 +318,10 @@ export default function SellInDicotech() {
     const rows = filasTabla.map((r) => [
       r.marca || '', r.sku || '', r.descripcion || '', r.categoriaCap || '', r.rdmp || '',
       ...r.piezas.map((v) => v || null),
-      Number(r.promedio.toFixed(1)) || null,
+      Math.round(r.promedio) || null,
       r.total,
     ]);
-    const totRow = ['TOTAL', `${filasTabla.length} SKUs`, '', '', '', ...totalesFila.mes.map((v) => v || null), Number(totalesFila.promedio.toFixed(1)) || null, totalesFila.total];
+    const totRow = ['TOTAL', `${filasTabla.length} SKUs`, '', '', '', ...totalesFila.mes.map((v) => v || null), Math.round(totalesFila.promedio) || null, totalesFila.total];
     const titulo = `Sell In Dicotech · ${anioActual}`;
     const aoa = [
       [titulo, ...Array(HEADERS.length - 1).fill('')],
@@ -611,7 +611,7 @@ export default function SellInDicotech() {
                       );
                     })}
                     <td className="py-1 px-2 text-right tabular-nums text-gray-700 bg-gray-50/60" style={{ width: 60 }}>
-                      {r.promedio ? r.promedio.toLocaleString('es-MX', { maximumFractionDigits: 1 }) : '—'}
+                      {r.promedio ? fmtInt(r.promedio) : '—'}
                     </td>
                     <td className="py-1 px-2 text-right tabular-nums font-semibold text-gray-800 bg-gray-50" style={{ width: 60 }}>
                       {fmtInt(r.total)}
@@ -625,7 +625,7 @@ export default function SellInDicotech() {
                   <td key={i} className="py-1.5 px-1.5 text-right tabular-nums">{v ? fmtInt(v) : '—'}</td>
                 ))}
                 <td className="py-1.5 px-2 text-right tabular-nums">
-                  {totalesFila.promedio ? totalesFila.promedio.toLocaleString('es-MX', { maximumFractionDigits: 1 }) : '—'}
+                  {totalesFila.promedio ? fmtInt(totalesFila.promedio) : '—'}
                 </td>
                 <td className="py-1.5 px-2 text-right tabular-nums">{fmtInt(totalesFila.total)}</td>
               </tr>
