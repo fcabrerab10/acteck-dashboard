@@ -477,7 +477,7 @@ export default function SellInDicotech() {
               <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="0" stroke="#F3F4F6" vertical={false} />
                 <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(v) => fmtMoneyShort(v)} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={55} />
+                <YAxis domain={[0, 'auto']} allowDataOverflow={false} tickFormatter={(v) => fmtMoneyShort(v)} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={55} />
                 <Tooltip
                   formatter={(v, name) => [formatMXN(v), name]}
                   labelStyle={{ color: '#374151', fontWeight: 600 }}
