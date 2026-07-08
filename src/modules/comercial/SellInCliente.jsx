@@ -14,9 +14,9 @@ const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov'
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 const CLIENTES_META = {
-  dicotech:   { nombre: 'Dicotech',   marca: 'Acteck',              accent: '#0EA5E9', badgeBg: 'bg-sky-50',  badgeText: 'text-sky-700',  dot: 'bg-sky-500'  },
-  pcel:       { nombre: 'PCEL',       marca: 'Acteck',              accent: '#EF4444', badgeBg: 'bg-rose-50', badgeText: 'text-rose-700', dot: 'bg-rose-500' },
-  digitalife: { nombre: 'Digitalife', marca: 'Acteck / Balam Rush', accent: '#EF4444', badgeBg: 'bg-rose-50', badgeText: 'text-rose-700', dot: 'bg-rose-500' },
+  dicotech:   { nombre: 'Dicotech',   marca: 'Acteck',              accent: '#0EA5E9', badgeBg: 'bg-sky-50', badgeText: 'text-sky-700', dot: 'bg-sky-500' },
+  pcel:       { nombre: 'PCEL',       marca: 'Acteck',              accent: '#0EA5E9', badgeBg: 'bg-sky-50', badgeText: 'text-sky-700', dot: 'bg-sky-500' },
+  digitalife: { nombre: 'Digitalife', marca: 'Acteck / Balam Rush', accent: '#0EA5E9', badgeBg: 'bg-sky-50', badgeText: 'text-sky-700', dot: 'bg-sky-500' },
 };
 const CAT_COLORS = ['#0EA5E9', '#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#94A3B8', '#F97316'];
 
