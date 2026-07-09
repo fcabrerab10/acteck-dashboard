@@ -12,13 +12,26 @@ const CLIENTES = [
 ];
 const NOMBRE_CLIENTE = Object.fromEntries(CLIENTES.map((c) => [c.key, c.nombre]));
 
-const ETAPAS = ['recibida', 'procesada', 'surtida', 'entregada'];
-const ETAPA_LABEL = { recibida: 'Recibida', procesada: 'Procesada', surtida: 'Surtida', entregada: 'Entregada' };
+const ETAPAS_BASE = ['recibida', 'procesada', 'surtida', 'entregada'];
+const ETAPAS_DICOTECH = ['cotizacion_solicitada', 'cotizacion_enviada', 'recibida', 'procesada', 'surtida', 'entregada'];
+const ETAPA_LABEL = {
+  cotizacion_solicitada: 'Cot. solicitada',
+  cotizacion_enviada:    'Cot. enviada',
+  recibida: 'Recibida', procesada: 'Procesada', surtida: 'Surtida', entregada: 'Entregada',
+};
 const ETAPA_TONE = {
+  cotizacion_solicitada: { bg: '#F5F3FF', text: '#5B21B6' },
+  cotizacion_enviada:    { bg: '#EDE9FE', text: '#4C1D95' },
   recibida:  { bg: '#F1F5F9', text: '#334155' },
   procesada: { bg: '#EEF2FF', text: '#3730A3' },
   surtida:   { bg: '#FEF3C7', text: '#92400E' },
   entregada: { bg: '#D1FAE5', text: '#065F46' },
+};
+const etapasPara = (clienteKey) => (clienteKey === 'dicotech' ? ETAPAS_DICOTECH : ETAPAS_BASE);
+const CAMPO_ETAPA = {
+  cotizacion_solicitada: 'fecha_cotizacion_solicitada',
+  cotizacion_enviada: 'fecha_cotizacion_enviada',
+  recibida: 'fecha_recibida', procesada: 'fecha_procesada',
 };
 
 const ALMACENES = ['GDL', 'CDMX'];
@@ -49,8 +62,14 @@ const nowIso = () => new Date().toISOString();
 const todayLocalIso = () => new Date().toISOString().slice(0, 16);
 const toIso = (v) => (v ? new Date(v).toISOString() : null);
 
-// Etapa derivada a nivel OC
+// Etapa derivada a nivel OC (respeta etapas de cotización para dicotech)
 function etapaDeOc(oc, envios, fillRate) {
+  const esDico = oc.cliente_key === 'dicotech';
+  if (esDico) {
+    if (!oc.fecha_cotizacion_solicitada && !oc.fecha_recibida) return null;
+    if (oc.fecha_cotizacion_solicitada && !oc.fecha_cotizacion_enviada && !oc.fecha_recibida) return 'cotizacion_solicitada';
+    if (oc.fecha_cotizacion_enviada && !oc.fecha_recibida) return 'cotizacion_enviada';
+  }
   if (!oc.fecha_recibida) return null;
   if (!oc.fecha_procesada) return 'recibida';
   const algunSurtido = envios.some((e) => e.fecha_surtida);
@@ -60,8 +79,7 @@ function etapaDeOc(oc, envios, fillRate) {
   return 'surtida';
 }
 function fechaEtapaOc(oc, envios, etapa) {
-  if (etapa === 'recibida') return oc.fecha_recibida;
-  if (etapa === 'procesada') return oc.fecha_procesada;
+  if (CAMPO_ETAPA[etapa]) return oc[CAMPO_ETAPA[etapa]];
   if (etapa === 'surtida') {
     const fechas = envios.map((e) => e.fecha_surtida).filter(Boolean).sort();
     return fechas[0] || null;
@@ -74,6 +92,7 @@ function fechaEtapaOc(oc, envios, etapa) {
 }
 function ultimaFechaOc(oc, envios) {
   const todas = [
+    oc.fecha_cotizacion_solicitada, oc.fecha_cotizacion_enviada,
     oc.fecha_recibida, oc.fecha_procesada,
     ...envios.flatMap((e) => [e.fecha_surtida, e.fecha_entregada]),
   ].filter(Boolean).sort();
@@ -208,16 +227,22 @@ export default function TrackingPedidos() {
 
   const tiemposPorCliente = useMemo(() => {
     const acc = {};
-    for (const c of CLIENTES) acc[c.key] = { rp: [], ps: [], se: [] };
+    for (const c of CLIENTES) acc[c.key] = { cot: [], cr: [], rp: [], ps: [], se: [] };
     for (const oc of enriquecidas) {
       if (oc.etapa !== 'entregada') continue;
       const fSur = fechaEtapaOc(oc, oc.envios, 'surtida');
       const fEnt = fechaEtapaOc(oc, oc.envios, 'entregada');
+      const b = acc[oc.cliente_key];
+      if (!b) continue;
+      if (oc.cliente_key === 'dicotech') {
+        const cot = dias(oc.fecha_cotizacion_solicitada, oc.fecha_cotizacion_enviada);
+        const cr  = dias(oc.fecha_cotizacion_enviada, oc.fecha_recibida);
+        if (cot != null) b.cot.push(cot);
+        if (cr != null) b.cr.push(cr);
+      }
       const rp = dias(oc.fecha_recibida, oc.fecha_procesada);
       const ps = dias(oc.fecha_procesada, fSur);
       const se = dias(fSur, fEnt);
-      const b = acc[oc.cliente_key];
-      if (!b) continue;
       if (rp != null) b.rp.push(rp);
       if (ps != null) b.ps.push(ps);
       if (se != null) b.se.push(se);
@@ -225,10 +250,10 @@ export default function TrackingPedidos() {
     const avg = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
     return CLIENTES.map((c) => {
       const b = acc[c.key];
-      const rp = avg(b.rp), ps = avg(b.ps), se = avg(b.se);
-      const total = [rp, ps, se].filter((n) => n != null).reduce((a, b) => a + b, 0);
-      const n = Math.max(b.rp.length, b.ps.length, b.se.length);
-      return { cliente: c.nombre, rp, ps, se, total, n };
+      const cot = avg(b.cot), cr = avg(b.cr), rp = avg(b.rp), ps = avg(b.ps), se = avg(b.se);
+      const total = [cot, cr, rp, ps, se].filter((n) => n != null).reduce((a, b) => a + b, 0);
+      const n = Math.max(b.rp.length, b.ps.length, b.se.length, b.cot.length, b.cr.length);
+      return { cliente: c.nombre, clienteKey: c.key, cot, cr, rp, ps, se, total, n };
     });
   }, [enriquecidas]);
 
@@ -328,7 +353,9 @@ export default function TrackingPedidos() {
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="flex justify-between items-baseline mb-3">
             <h3 className="text-sm font-semibold text-gray-800">Tiempo promedio por etapa</h3>
-            <div className="flex gap-3 text-[11px] text-gray-500">
+            <div className="flex gap-3 text-[11px] text-gray-500 flex-wrap">
+              <span className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-violet-500" />Cot. solic.→enviada</span>
+              <span className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-violet-400" />Cot. enviada→OC</span>
               <span className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-slate-500" />Recibida→Procesada</span>
               <span className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-indigo-500" />Procesada→1er envío</span>
               <span className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-amber-500" />Envío→Entrega final</span>
@@ -491,13 +518,20 @@ function KPICard({ label, badge, badgeTone, value, sub }) {
 
 function BarTiempos({ data, maxTotal }) {
   const pct = (v) => (v != null ? (v / maxTotal * 100) : 0);
+  const seg = (v, bg, tone = 'text-white') => v != null && (
+    <span className={`${bg} ${tone} flex items-center justify-center`} style={{ width: `${pct(v)}%` }}>
+      {v > 0.4 ? `${v.toFixed(1)}d` : ''}
+    </span>
+  );
   return (
     <div className="grid grid-cols-[100px_1fr_60px] gap-3 items-center">
       <span className="text-xs font-medium text-gray-700">{data.cliente}</span>
-      <div className="h-5 bg-gray-100 rounded overflow-hidden flex text-white text-[9px] font-semibold">
-        {data.rp != null && <span className="bg-slate-500 flex items-center justify-center" style={{ width: `${pct(data.rp)}%` }}>{data.rp > 0.4 ? `${data.rp.toFixed(1)}d` : ''}</span>}
-        {data.ps != null && <span className="bg-indigo-500 flex items-center justify-center" style={{ width: `${pct(data.ps)}%` }}>{data.ps > 0.4 ? `${data.ps.toFixed(1)}d` : ''}</span>}
-        {data.se != null && <span className="bg-amber-500 flex items-center justify-center text-amber-900" style={{ width: `${pct(data.se)}%` }}>{data.se > 0.4 ? `${data.se.toFixed(1)}d` : ''}</span>}
+      <div className="h-5 bg-gray-100 rounded overflow-hidden flex text-[9px] font-semibold">
+        {seg(data.cot, 'bg-violet-500')}
+        {seg(data.cr,  'bg-violet-400')}
+        {seg(data.rp,  'bg-slate-500')}
+        {seg(data.ps,  'bg-indigo-500')}
+        {seg(data.se,  'bg-amber-500', 'text-amber-900')}
       </div>
       <span className="text-xs font-semibold text-gray-800 tabular-nums text-right">{data.total > 0 ? `${data.total.toFixed(1)}d` : '—'}<span className="text-gray-400 font-normal"> ·n{data.n}</span></span>
     </div>
@@ -516,18 +550,23 @@ function FillCell({ oc }) {
 }
 
 function ProgresoEtapas({ oc }) {
-  const idx = oc.etapa ? ETAPAS.indexOf(oc.etapa) : -1;
+  const etapas = etapasPara(oc.cliente_key);
+  const idx = oc.etapa ? etapas.indexOf(oc.etapa) : -1;
   const stepColor = (i) => (idx === -1 ? '#E5E7EB' : i < idx ? '#10B981' : i === idx ? '#38BDF8' : '#E5E7EB');
+  const cols = etapas.length;
   return (
-    <div style={{ maxWidth: 220 }}>
-      <div className="grid grid-cols-4 gap-0.5">
-        {[0, 1, 2, 3].map((i) => (
+    <div style={{ maxWidth: cols === 6 ? 260 : 220 }}>
+      <div className="grid gap-0.5" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+        {etapas.map((_, i) => (
           <span key={i} className="h-1 rounded-full" style={{ background: stepColor(i) }} />
         ))}
       </div>
-      <div className="grid grid-cols-4 gap-0.5 mt-1 text-[9px] text-gray-400 uppercase tracking-wider text-center">
-        {ETAPAS.map((e, i) => (
-          <span key={e} className={i <= idx ? 'text-gray-600 font-semibold' : ''}>{ETAPA_LABEL[e]}</span>
+      <div className="grid gap-0.5 mt-1 text-[9px] text-gray-400 uppercase tracking-wider text-center"
+        style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+        {etapas.map((e, i) => (
+          <span key={e} className={i <= idx ? 'text-gray-600 font-semibold' : ''} style={{ fontSize: cols === 6 ? '8px' : '9px' }}>
+            {ETAPA_LABEL[e]}
+          </span>
         ))}
       </div>
     </div>
@@ -571,15 +610,25 @@ function DetalleOC({ oc, envioAbierto, setEnvioAbierto, envioSkusPorEnvio,
         </div>
       </div>
 
-      {/* Timeline OC (Recibida, Procesada, Surtida, Entregada — las 2 últimas derivadas de envíos) */}
-      <div className="grid grid-cols-4 gap-3 pt-3 border-t border-gray-200">
-        <TimelineEtapa label="Recibida" iso={oc.fecha_recibida} />
-        <TimelineEtapa label="Procesada" iso={oc.fecha_procesada} />
-        <TimelineEtapa label="Surtida" iso={fechaEtapaOc(oc, envios, 'surtida')}
-          nota={envios.length > 0 && oc.fillRate < 100 ? `${oc.fillRate.toFixed(1)}% surtido` : null} />
-        <TimelineEtapa label="Entregada" iso={fechaEtapaOc(oc, envios, 'entregada')}
-          nota={envios.length > 0 && !envios.every((e) => e.fecha_entregada) ? 'Falta último envío' : null} />
-      </div>
+      {/* Timeline OC — etapas dinámicas según cliente */}
+      {(() => {
+        const etapas = etapasPara(oc.cliente_key);
+        return (
+          <div className="grid gap-3 pt-3 border-t border-gray-200"
+            style={{ gridTemplateColumns: `repeat(${etapas.length}, 1fr)` }}>
+            {etapas.map((e) => (
+              <TimelineEtapa key={e}
+                label={ETAPA_LABEL[e]}
+                iso={fechaEtapaOc(oc, envios, e)}
+                nota={
+                  e === 'surtida' && envios.length > 0 && oc.fillRate < 100 ? `${oc.fillRate.toFixed(1)}% surtido` :
+                  e === 'entregada' && envios.length > 0 && !envios.every((x) => x.fecha_entregada) ? 'Falta último envío' :
+                  null
+                } />
+            ))}
+          </div>
+        );
+      })()}
 
       {/* SKUs agregado */}
       <div>
@@ -771,9 +820,12 @@ function ModalOC({ ocInicial, onClose, onSaved }) {
   const es = !!ocInicial;
   const [numero, setNumero] = useState(ocInicial?.numero_oc_cliente || '');
   const [cliente, setCliente] = useState(ocInicial?.cliente_key || 'digitalife');
+  const [fechaCotizacionSolic, setFechaCotizacionSolic] = useState(ocInicial?.fecha_cotizacion_solicitada ? ocInicial.fecha_cotizacion_solicitada.slice(0, 16) : '');
+  const [fechaCotizacionEnv, setFechaCotizacionEnv] = useState(ocInicial?.fecha_cotizacion_enviada ? ocInicial.fecha_cotizacion_enviada.slice(0, 16) : '');
   const [fechaRecibida, setFechaRecibida] = useState(ocInicial?.fecha_recibida ? ocInicial.fecha_recibida.slice(0, 16) : todayLocalIso());
   const [fechaProcesada, setFechaProcesada] = useState(ocInicial?.fecha_procesada ? ocInicial.fecha_procesada.slice(0, 16) : '');
   const [notas, setNotas] = useState(ocInicial?.notas || '');
+  const esDico = cliente === 'dicotech';
   const [skus, setSkus] = useState(() => {
     if (ocInicial?.skus?.length) {
       return ocInicial.skus.map((s) => ({
@@ -795,6 +847,8 @@ function ModalOC({ ocInicial, onClose, onSaved }) {
     const payload = {
       numero_oc_cliente: numero.trim(),
       cliente_key: cliente,
+      fecha_cotizacion_solicitada: cliente === 'dicotech' ? toIso(fechaCotizacionSolic) : null,
+      fecha_cotizacion_enviada: cliente === 'dicotech' ? toIso(fechaCotizacionEnv) : null,
       fecha_recibida: toIso(fechaRecibida),
       fecha_procesada: toIso(fechaProcesada),
       notas: notas.trim() || null,
@@ -859,6 +913,24 @@ function ModalOC({ ocInicial, onClose, onSaved }) {
           <input value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Observaciones internas…" className="input" />
         </Field>
       </div>
+
+      {esDico && (
+        <div className="border border-violet-200 bg-violet-50/40 rounded-lg p-3 space-y-2 mt-4">
+          <div className="text-[10px] uppercase tracking-widest font-semibold text-violet-700">
+            Cotización · previo a la OC (solo Dicotech)
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Fecha en que Dicotech solicitó cotización">
+              <input type="datetime-local" value={fechaCotizacionSolic}
+                onChange={(e) => setFechaCotizacionSolic(e.target.value)} className="input" />
+            </Field>
+            <Field label="Fecha en que Acteck envió cotización">
+              <input type="datetime-local" value={fechaCotizacionEnv}
+                onChange={(e) => setFechaCotizacionEnv(e.target.value)} className="input" />
+            </Field>
+          </div>
+        </div>
+      )}
 
       <div className="border border-gray-200 rounded-lg p-3 space-y-2 mt-4">
         <div className="flex items-center justify-between">
