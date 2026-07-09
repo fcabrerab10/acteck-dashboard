@@ -10,7 +10,7 @@ import {
   BarChart3, Target, ClipboardList, Settings as SettingsIcon, Building2,
   Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator,
 } from 'lucide-react';
-import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente, TrackingPedidos } from './modules/comercial';
+import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente, TrackingPedidos, SellOutCliente } from './modules/comercial';
 import EstadoResultados from './modules/general/EstadoResultados';
 import VisionGeneral from './modules/comercial/VisionGeneral';
 import ReporteTab from './modules/comercial/ReporteTab';
@@ -515,7 +515,11 @@ export default function App() {
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} clienteKey={clienteActivo} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
-            {paginaActiva === "estrategia" && <EstrategiaProducto cliente={c.nombre} clienteKey={clienteActivo} />}
+            {paginaActiva === "estrategia" && (
+              clienteActivo === 'dicotech'
+                ? <SellOutCliente clienteKey={clienteActivo} />
+                : <EstrategiaProducto cliente={c.nombre} clienteKey={clienteActivo} />
+            )}
         {paginaActiva === "marketing" && React.createElement(MarketingCliente, { cliente: clienteActivo })}
                     {paginaActiva === "forecast" && React.createElement(ForecastCliente, { cliente: c.nombre, clienteKey: clienteActivo })}
           </>

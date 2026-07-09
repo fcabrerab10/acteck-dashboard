@@ -9,4 +9,5 @@ export { default as InventarioGlobal } from './InventarioGlobal';
 export { default as EstrategiaPrecios } from './EstrategiaPrecios';
 export { default as SellInCliente } from './SellInCliente';
 export { default as TrackingPedidos } from './TrackingPedidos';
+export { default as SellOutCliente } from './SellOutCliente';
 export { default as ForecastCliente } from './ForecastCliente';
