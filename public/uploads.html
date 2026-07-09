@@ -229,12 +229,17 @@ const PARSERS = {
       if (m) bloques.push({ anio: parseInt(m[1], 10), colStart: c, colEnd: c + 11 });
     }
     // Datos empiezan en row 4 (0=header, 1=años, 2=meses, 3=Etiquetas de fila).
+    // Clientes con cuota manual (no se sobreescriben desde el pivot):
+    // - digitalife: usa cuota25M/cuota30M de DIGITALIFE_REAL (ver constants.js);
+    //   Fernando la maneja aparte porque tiene min y ideal distintos.
+    const CLIENTES_CUOTA_MANUAL = new Set(['digitalife']);
     const out = [];
     for (let r = 4; r < arr.length; r++) {
       const row = arr[r];
       if (!row) continue;
       const cliente = normalizar(row[0]);
       if (!cliente || cliente === 'total_general' || cliente === '') continue;
+      if (CLIENTES_CUOTA_MANUAL.has(cliente)) continue;
       for (const b of bloques) {
         for (let mes = 1; mes <= 12; mes++) {
           const val = toNum(row[b.colStart + (mes - 1)]);
