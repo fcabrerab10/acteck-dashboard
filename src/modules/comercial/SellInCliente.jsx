@@ -267,8 +267,13 @@ export default function SellInCliente({ clienteKey }) {
     });
   }, [roadmap, esGlobal]);
 
+  const normText = (s) => String(s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase();
+
   const filasTabla = useMemo(() => {
-    const q = busqueda.trim().toUpperCase();
+    const terms = normText(busqueda).split(/\s+/).filter(Boolean);
     const rows = [];
     for (const r of roadmapOrdenado) {
       if (!esGlobal && !skusFacturados.has(r.sku)) continue;
@@ -277,10 +282,9 @@ export default function SellInCliente({ clienteKey }) {
       const catNorm = ((r.categoria || '').trim());
       const catCap = catNorm ? catNorm.charAt(0).toUpperCase() + catNorm.slice(1).toLowerCase() : '';
       if (categoriaSel.size > 0 && !categoriaSel.has(catCap)) continue;
-      if (q) {
-        const hay = String(r.sku || '').toUpperCase().includes(q)
-                 || String(r.descripcion || '').toUpperCase().includes(q);
-        if (!hay) continue;
+      if (terms.length > 0) {
+        const hay = normText(`${r.sku} ${r.descripcion} ${r.marca} ${catCap} ${r.familia} ${r.rdmp}`);
+        if (!terms.every((t) => hay.includes(t))) continue;
       }
       const piezas = matrizSku.get(r.sku) || Array(12).fill(0);
       const total = piezas.reduce((a, b) => a + b, 0);
@@ -616,22 +620,29 @@ export default function SellInCliente({ clienteKey }) {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-gray-500">{filasTabla.length} SKUs</span>
+            {orden.col && (
+              <button onClick={() => setOrden({ col: null, dir: null })}
+                title="Restablecer el orden original del roadmap"
+                className="inline-flex items-center gap-1 h-8 px-2.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                Restablecer orden
+              </button>
+            )}
             <button onClick={exportarExcel} disabled={filasTabla.length === 0}
               className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-40">
               <Download className="w-3.5 h-3.5" /> Exportar Excel
             </button>
           </div>
         </div>
-        <div className="overflow-auto" style={{ maxHeight: '65vh' }}>
+        <div className="overflow-auto" style={{ maxHeight: '82vh' }}>
           <table className="w-full text-[11px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
             <thead>
               <tr>
                 {[
-                  { label: 'Marca',       align: 'left',   sort: 'marca' },
-                  { label: 'SKU',         align: 'left',   sort: 'sku' },
-                  { label: 'Descripción', align: 'left',   sort: 'descripcion' },
-                  { label: 'Roadmap',     align: 'center', sort: 'rdmp' },
-                  ...MESES.map((m, i) => ({ label: m, align: 'right', sort: `mes-${i}` })),
+                  { label: 'Marca',       align: 'left'   },
+                  { label: 'SKU',         align: 'left'   },
+                  { label: 'Descripción', align: 'left'   },
+                  { label: 'Roadmap',     align: 'center' },
+                  ...MESES.map((m) => ({ label: m, align: 'right' })),
                   { label: 'Trend', align: 'center' },
                   { label: 'Promedio', align: 'right', sort: 'promedio' },
                   { label: 'Total',    align: 'right', sort: 'total' },
