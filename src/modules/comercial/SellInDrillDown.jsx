@@ -183,8 +183,11 @@ export default function SellInDrillDown(props) {
   const serie2025 = serie.slice(0, 12);
   const serie2026 = serie.slice(12, 24);
   const puntos2026Hasta = Math.max(0, Math.min(12, mesActual));
-  const path2025 = serie2025.map((p, i) => `${i === 0 ? 'M' : 'L'} ${5 + i * 16},${svgY(p.piezas)}`).join(' ');
-  const path2026 = serie2026.slice(0, puntos2026Hasta).map((p, i) => `${i === 0 ? 'M' : 'L'} ${205 + i * 16},${svgY(p.piezas)}`).join(' ');
+  // Ambas líneas en el mismo eje X (12 meses). Espaciado: 12 pts a lo ancho
+  // de ~370px → step ≈ 32.7px, iniciando en x=15.
+  const svgX = (i) => 15 + i * 32.7;
+  const path2025 = serie2025.map((p, i) => `${i === 0 ? 'M' : 'L'} ${svgX(i).toFixed(1)},${svgY(p.piezas)}`).join(' ');
+  const path2026 = serie2026.slice(0, puntos2026Hasta).map((p, i) => `${i === 0 ? 'M' : 'L'} ${svgX(i).toFixed(1)},${svgY(p.piezas)}`).join(' ');
 
   const closedCount = Math.max(0, mesActual - 1);
   const p6mAct = serie2026.slice(0, closedCount).reduce((s, x) => s + (x?.piezas || 0), 0);
@@ -295,27 +298,21 @@ export default function SellInDrillDown(props) {
         {/* COL 2 — Cuándo */}
         <div className="lg:px-5 lg:border-r border-gray-200">
           <div className="flex items-baseline justify-between mb-3">
-            <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">Cuándo lo compran · 24 meses</span>
+            <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">Cuándo lo compran · 12 meses</span>
             <span className="text-[10.5px] text-gray-400">Piezas / mes</span>
           </div>
           <svg viewBox="0 0 400 88" preserveAspectRatio="none" style={{ width: '100%', height: 88, display: 'block' }}>
             <line x1="0" y1="65" x2="400" y2="65" stroke="#E5EAF2" strokeWidth="1" />
-            <line x1="200" y1="4" x2="200" y2="75" stroke="#DBE5F0" strokeWidth="1" strokeDasharray="3 3" />
-            <text x="98"  y="14" fontSize="8.5" fill="#9CA3AF" textAnchor="middle" fontFamily="inherit">{anioPrev}</text>
-            <text x="298" y="14" fontSize="8.5" fill="#9CA3AF" textAnchor="middle" fontFamily="inherit">{anioActual}</text>
             {path2025 && <path d={path2025} stroke="#F59E0B" strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
-            {serie2025.map((p, i) => <circle key={`a${i}`} cx={5 + i * 16} cy={svgY(p.piezas)} r="2" fill="#F59E0B" />)}
+            {serie2025.map((p, i) => <circle key={`a${i}`} cx={svgX(i).toFixed(1)} cy={svgY(p.piezas)} r="2" fill="#F59E0B" />)}
             {path2026 && <path d={path2026} stroke="#0EA5E9" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
-            {serie2026.slice(0, Math.max(0, puntos2026Hasta - 1)).map((p, i) => <circle key={`b${i}`} cx={205 + i * 16} cy={svgY(p.piezas)} r="2.6" fill="#0EA5E9" />)}
+            {serie2026.slice(0, Math.max(0, puntos2026Hasta - 1)).map((p, i) => <circle key={`b${i}`} cx={svgX(i).toFixed(1)} cy={svgY(p.piezas)} r="2.6" fill="#0EA5E9" />)}
             {puntos2026Hasta > 0 && serie2026[puntos2026Hasta - 1] && (
-              <circle cx={205 + (puntos2026Hasta - 1) * 16} cy={svgY(serie2026[puntos2026Hasta - 1].piezas)} r="3" fill="white" stroke="#0EA5E9" strokeWidth="2" />
+              <circle cx={svgX(puntos2026Hasta - 1).toFixed(1)} cy={svgY(serie2026[puntos2026Hasta - 1].piezas)} r="3" fill="white" stroke="#0EA5E9" strokeWidth="2" />
             )}
           </svg>
-          <div className="flex justify-between text-[9.5px] text-gray-400 mt-1 tabular-nums">
-            <span>Ene {String(anioPrev).slice(-2)}</span>
-            <span>Jul {String(anioPrev).slice(-2)}</span>
-            <span>Ene {String(anioActual).slice(-2)}</span>
-            <span>{MESES[Math.max(0, Math.min(11, mesActual - 1))]} {String(anioActual).slice(-2)}</span>
+          <div className="grid mt-1 text-[9px] text-gray-400 tabular-nums" style={{ gridTemplateColumns: 'repeat(12, 1fr)' }}>
+            {MESES.map((m) => <span key={m} className="text-center">{m}</span>)}
           </div>
           <div className="flex gap-3 text-[10.5px] text-gray-500 mt-2">
             <span><span className="inline-block w-2 h-0.5 mr-1 align-middle rounded-sm" style={{ background: '#F59E0B' }} />{anioPrev}</span>
