@@ -673,19 +673,21 @@ export default function SellInCliente({ clienteKey }) {
             <tbody>
               {filasTabla.map((r) => {
                 const rmp = ROADMAP_COLOR[r.rdmp] || { bg: '#F1EFE8', text: '#2C2C2A' };
-                const abierto = skuAbierto === r.sku;
+                const abierto = esGlobal && skuAbierto === r.sku;
                 return (
                   <React.Fragment key={r.sku}>
                     <tr
-                      onClick={() => setSkuAbierto(abierto ? null : r.sku)}
-                      className={`border-t border-gray-100 cursor-pointer ${abierto ? 'bg-sky-50' : 'hover:bg-gray-50'}`}>
+                      onClick={esGlobal ? () => setSkuAbierto(abierto ? null : r.sku) : undefined}
+                      className={`border-t border-gray-100 ${esGlobal ? `cursor-pointer ${abierto ? 'bg-sky-50' : 'hover:bg-gray-50'}` : 'hover:bg-gray-50'}`}>
                       <td className="py-1 px-1.5 text-gray-600 text-[10px] whitespace-nowrap" style={{ width: 70 }}>{r.marca || '—'}</td>
                       <td className="py-1 px-1.5 font-mono text-gray-700 text-[10px] whitespace-nowrap" style={{ width: 96 }}>
-                        <span className="inline-flex items-center gap-1">
-                          <ChevronRight className="w-3 h-3 text-sky-500 flex-shrink-0 transition-transform"
-                            style={{ transform: abierto ? 'rotate(90deg)' : 'none' }} />
-                          {r.sku}
-                        </span>
+                        {esGlobal ? (
+                          <span className="inline-flex items-center gap-1">
+                            <ChevronRight className="w-3 h-3 text-sky-500 flex-shrink-0 transition-transform"
+                              style={{ transform: abierto ? 'rotate(90deg)' : 'none' }} />
+                            {r.sku}
+                          </span>
+                        ) : r.sku}
                       </td>
                       <td className="py-1 px-1.5 text-gray-800 truncate" style={{ maxWidth: 240 }} title={r.descripcion}>
                         {r.descripcion || '—'}
