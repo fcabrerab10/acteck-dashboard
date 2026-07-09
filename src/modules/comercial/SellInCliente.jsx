@@ -290,9 +290,17 @@ export default function SellInCliente({ clienteKey }) {
       rows.push({ ...r, categoriaCap: catCap, piezas, total, promedio });
     }
     if (orden.col && orden.dir) {
-      const key = orden.col;
       const factor = orden.dir === 'asc' ? 1 : -1;
-      rows.sort((a, b) => (a[key] - b[key]) * factor);
+      const strCols = new Set(['marca', 'sku', 'descripcion', 'rdmp']);
+      const mesMatch = /^mes-(\d+)$/.exec(orden.col);
+      if (strCols.has(orden.col)) {
+        rows.sort((a, b) => String(a[orden.col] || '').localeCompare(String(b[orden.col] || '')) * factor);
+      } else if (mesMatch) {
+        const i = Number(mesMatch[1]);
+        rows.sort((a, b) => ((a.piezas[i] || 0) - (b.piezas[i] || 0)) * factor);
+      } else {
+        rows.sort((a, b) => ((a[orden.col] || 0) - (b[orden.col] || 0)) * factor);
+      }
     }
     return rows;
   }, [roadmapOrdenado, skusFacturados, busqueda, marcaSel, roadmapSel, categoriaSel, matrizSku, orden, esGlobal]);
@@ -397,6 +405,21 @@ export default function SellInCliente({ clienteKey }) {
   const yoyMonto = mesActualData.prevMonto ? ((mesActualData.monto - mesActualData.prevMonto) / mesActualData.prevMonto) * 100 : null;
   const yoyPiezas = mesActualData.prevPiezas ? mesActualData.piezas - mesActualData.prevPiezas : null;
 
+  // MoM: mes actual vs mes anterior del MISMO año (si mesActual === 1 usa dic anterior)
+  const momMesIdx = mesActual - 2; // 0-indexed
+  const usePrevYearForMoM = momMesIdx < 0;
+  const momMontoPrev = usePrevYearForMoM
+    ? mensualPorAnio.monto[anioPrev][11]
+    : mensualPorAnio.monto[anioActual][momMesIdx];
+  const momPiezasPrev = usePrevYearForMoM
+    ? mensualPorAnio.piezas[anioPrev][11]
+    : mensualPorAnio.piezas[anioActual][momMesIdx];
+  const momMontoPct = momMontoPrev ? ((mesActualData.monto - momMontoPrev) / momMontoPrev * 100) : null;
+  const momPiezasDelta = momPiezasPrev ? mesActualData.piezas - momPiezasPrev : null;
+  const momMesAnteriorLabel = usePrevYearForMoM
+    ? `${MESES_LARGO[11]} ${anioPrev}`
+    : `${MESES_LARGO[momMesIdx]} ${anioActual}`;
+
   const KPI = ({ label, badge, badgeTone, value, valueSub, sub, progress, progressTone, extra }) => {
     const tones = {
       good: 'bg-emerald-50 text-emerald-700',
@@ -447,7 +470,7 @@ export default function SellInCliente({ clienteKey }) {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
         <KPI
           label={`Facturación mes actual · ${MESES_LARGO[mesActual - 1]} ${anioActual} (MTD)`}
           badge={pctMTD != null ? `${pctMTD.toFixed(0)}% cuota` : 'Sin cuota'}
@@ -472,7 +495,7 @@ export default function SellInCliente({ clienteKey }) {
           sub={<span>{fmtInt(totalYTD.piezas)} piezas · {skusFacturados.size} SKUs distintos</span>}
         />
         <KPI
-          label={`${MESES_LARGO[mesActual - 1]} ${anioActual} vs ${MESES_LARGO[mesActual - 1]} ${anioPrev}`}
+          label={`${MESES_LARGO[mesActual - 1]} ${anioActual} vs ${MESES_LARGO[mesActual - 1]} ${anioPrev} (YoY)`}
           badge={yoyMonto != null ? `${yoyMonto >= 0 ? '+' : ''}${yoyMonto.toFixed(0)}%` : 'Sin comparativo'}
           badgeTone={yoyMonto == null ? 'neutral' : yoyMonto >= 0 ? 'good' : 'bad'}
           value={formatMXN(mesActualData.monto)}
@@ -482,6 +505,21 @@ export default function SellInCliente({ clienteKey }) {
             {yoyPiezas != null && (
               <span className={yoyPiezas >= 0 ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>
                 {yoyPiezas >= 0 ? '↑' : '↓'} {fmtInt(Math.abs(yoyPiezas))} pz
+              </span>
+            )}
+          </>}
+        />
+        <KPI
+          label={`${MESES_LARGO[mesActual - 1]} ${anioActual} vs ${momMesAnteriorLabel} (MoM)`}
+          badge={momMontoPct != null ? `${momMontoPct >= 0 ? '+' : ''}${momMontoPct.toFixed(0)}%` : 'Sin comparativo'}
+          badgeTone={momMontoPct == null ? 'neutral' : momMontoPct >= 0 ? 'good' : 'bad'}
+          value={formatMXN(mesActualData.monto)}
+          valueSub={`vs ${formatMXN(momMontoPrev)}`}
+          sub={<>
+            <span>Piezas {fmtInt(mesActualData.piezas)} <span className="text-gray-400">vs {fmtInt(momPiezasPrev)}</span></span>
+            {momPiezasDelta != null && (
+              <span className={momPiezasDelta >= 0 ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>
+                {momPiezasDelta >= 0 ? '↑' : '↓'} {fmtInt(Math.abs(momPiezasDelta))} pz
               </span>
             )}
           </>}
@@ -589,11 +627,12 @@ export default function SellInCliente({ clienteKey }) {
             <thead>
               <tr>
                 {[
-                  { label: 'Marca',       align: 'left'   },
-                  { label: 'SKU',         align: 'left'   },
-                  { label: 'Descripción', align: 'left'   },
-                  { label: 'Roadmap',     align: 'center' },
-                  ...MESES.map((m) => ({ label: m, align: 'right' })),
+                  { label: 'Marca',       align: 'left',   sort: 'marca' },
+                  { label: 'SKU',         align: 'left',   sort: 'sku' },
+                  { label: 'Descripción', align: 'left',   sort: 'descripcion' },
+                  { label: 'Roadmap',     align: 'center', sort: 'rdmp' },
+                  ...MESES.map((m, i) => ({ label: m, align: 'right', sort: `mes-${i}` })),
+                  { label: 'Trend', align: 'center' },
                   { label: 'Promedio', align: 'right', sort: 'promedio' },
                   { label: 'Total',    align: 'right', sort: 'total' },
                 ].map((h, i) => (
@@ -649,6 +688,9 @@ export default function SellInCliente({ clienteKey }) {
                           </td>
                         );
                       })}
+                      <td className="py-1 px-1 text-center" style={{ width: 80 }}>
+                        <RowSparkline piezas={r.piezas} mesActual={mesActual} />
+                      </td>
                       <td className="py-1 px-2 text-right tabular-nums text-gray-700 bg-gray-50/60" style={{ width: 70 }}>
                         {r.promedio ? fmtInt(r.promedio) : '—'}
                       </td>
@@ -658,7 +700,7 @@ export default function SellInCliente({ clienteKey }) {
                     </tr>
                     {abierto && (
                       <tr>
-                        <td colSpan={18} style={{ padding: 0, background: '#FFFFFF', borderTop: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }}>
+                        <td colSpan={19} style={{ padding: 0, background: '#FFFFFF', borderTop: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }}>
                           <DrillDownBoundary sku={r.sku}>
                             <SellInDrillDown
                               sku={r.sku}
@@ -683,6 +725,9 @@ export default function SellInCliente({ clienteKey }) {
                 {totalesFila.mes.map((v, i) => (
                   <td key={i} className="py-1.5 px-1.5 text-right tabular-nums">{v ? fmtInt(v) : '—'}</td>
                 ))}
+                <td className="py-1.5 px-1 text-center">
+                  <RowSparkline piezas={totalesFila.mes} mesActual={mesActual} />
+                </td>
                 <td className="py-1.5 px-2 text-right tabular-nums">
                   {totalesFila.promedio ? fmtInt(totalesFila.promedio) : '—'}
                 </td>
@@ -695,3 +740,25 @@ export default function SellInCliente({ clienteKey }) {
     </div>
   );
 }
+
+// Sparkline compacto por fila (12 meses). Marca los meses cerrados en cyan
+// y los futuros en gris. Punto en el último mes cerrado.
+function RowSparkline({ piezas, mesActual }) {
+  const closed = Math.max(0, mesActual - 1);
+  const max = Math.max(1, ...piezas);
+  const y = (v) => 18 - (v / max) * 16;
+  const x = (i) => 3 + i * 5.5;
+  const pts = piezas.map((v, i) => `${i === 0 ? "M" : "L"} ${x(i)},${y(v || 0)}`).join(" ");
+  const lastIdx = closed > 0 ? closed - 1 : 0;
+  return (
+    <svg viewBox="0 0 70 20" preserveAspectRatio="none"
+      style={{ width: 70, height: 20, display: "block", margin: "0 auto" }}>
+      {pts && <path d={pts} stroke="#0EA5E9" strokeWidth="1.4" fill="none"
+        strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />}
+      {piezas[lastIdx] > 0 && (
+        <circle cx={x(lastIdx)} cy={y(piezas[lastIdx] || 0)} r="1.6" fill="#0EA5E9" />
+      )}
+    </svg>
+  );
+}
+
