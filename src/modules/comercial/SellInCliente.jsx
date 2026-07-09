@@ -679,8 +679,8 @@ export default function SellInCliente({ clienteKey }) {
                     <tr
                       onClick={esGlobal ? () => setSkuAbierto(abierto ? null : r.sku) : undefined}
                       className={`border-t border-gray-100 ${esGlobal ? `cursor-pointer ${abierto ? 'bg-sky-50' : 'hover:bg-gray-50'}` : 'hover:bg-gray-50'}`}>
-                      <td className="py-1 px-1.5 text-gray-600 text-[10px] whitespace-nowrap" style={{ width: 70 }}>{r.marca || '—'}</td>
-                      <td className="py-1 px-1.5 font-mono text-gray-700 text-[10px] whitespace-nowrap" style={{ width: 96 }}>
+                      <td className="py-1 px-1.5 text-gray-600 text-[10px] whitespace-nowrap" style={{ width: esGlobal ? 60 : 70 }}>{r.marca || '—'}</td>
+                      <td className="py-1 px-1.5 font-mono text-gray-700 text-[10px] whitespace-nowrap" style={{ width: esGlobal ? 88 : 96 }}>
                         {esGlobal ? (
                           <span className="inline-flex items-center gap-1">
                             <ChevronRight className="w-3 h-3 text-sky-500 flex-shrink-0 transition-transform"
@@ -689,7 +689,7 @@ export default function SellInCliente({ clienteKey }) {
                           </span>
                         ) : r.sku}
                       </td>
-                      <td className="py-1 px-1.5 text-gray-800 truncate" style={{ maxWidth: 240 }} title={r.descripcion}>
+                      <td className="py-1 px-1.5 text-gray-800 truncate" style={{ maxWidth: esGlobal ? 180 : 240 }} title={r.descripcion}>
                         {r.descripcion || '—'}
                       </td>
                       <td className="py-1 px-1.5 text-center" style={{ width: 70 }}>
@@ -701,26 +701,26 @@ export default function SellInCliente({ clienteKey }) {
                       {r.piezas.map((v, i) => {
                         const h = heatClass(v);
                         return (
-                          <td key={i} className="py-1 px-1.5 text-right tabular-nums whitespace-nowrap"
+                          <td key={i} className={`py-1 ${esGlobal ? 'px-1' : 'px-1.5'} text-right tabular-nums whitespace-nowrap`}
                             style={{
                               background: h?.bg,
                               color: h?.color || '#9CA3AF',
                               fontWeight: h?.weight || 400,
-                              width: 56,
+                              width: esGlobal ? 44 : 56,
                             }}>
                             {v ? fmtInt(v) : '—'}
                           </td>
                         );
                       })}
                       {esGlobal && (
-                        <td className="py-1 px-1 text-center" style={{ width: 80 }}>
+                        <td className="py-1 px-0.5 text-center" style={{ width: 56 }}>
                           <RowSparkline piezas={r.piezas} mesActual={mesActual} />
                         </td>
                       )}
-                      <td className="py-1 px-2 text-right tabular-nums text-gray-700 bg-gray-50/60" style={{ width: 70 }}>
+                      <td className="py-1 px-1.5 text-right tabular-nums text-gray-700 bg-gray-50/60" style={{ width: esGlobal ? 60 : 70 }}>
                         {r.promedio ? fmtInt(r.promedio) : '—'}
                       </td>
-                      <td className="py-1 px-2 text-right tabular-nums font-semibold text-gray-800 bg-gray-50" style={{ width: 70 }}>
+                      <td className="py-1 px-1.5 text-right tabular-nums font-semibold text-gray-800 bg-gray-50" style={{ width: esGlobal ? 64 : 70 }}>
                         {fmtInt(r.total)}
                       </td>
                     </tr>
@@ -775,12 +775,12 @@ function RowSparkline({ piezas, mesActual }) {
   const closed = Math.max(0, mesActual - 1);
   const max = Math.max(1, ...piezas);
   const y = (v) => 18 - (v / max) * 16;
-  const x = (i) => 3 + i * 5.5;
+  const x = (i) => 2 + i * 4;
   const pts = piezas.map((v, i) => `${i === 0 ? "M" : "L"} ${x(i)},${y(v || 0)}`).join(" ");
   const lastIdx = closed > 0 ? closed - 1 : 0;
   return (
-    <svg viewBox="0 0 70 20" preserveAspectRatio="none"
-      style={{ width: 70, height: 20, display: "block", margin: "0 auto" }}>
+    <svg viewBox="0 0 50 20" preserveAspectRatio="none"
+      style={{ width: 50, height: 20, display: "block", margin: "0 auto" }}>
       {pts && <path d={pts} stroke="#0EA5E9" strokeWidth="1.4" fill="none"
         strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />}
       {piezas[lastIdx] > 0 && (
