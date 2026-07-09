@@ -10,7 +10,7 @@ import {
   BarChart3, Target, ClipboardList, Settings as SettingsIcon, Building2,
   Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator,
 } from 'lucide-react';
-import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente } from './modules/comercial';
+import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente, TrackingPedidos } from './modules/comercial';
 import EstadoResultados from './modules/general/EstadoResultados';
 import VisionGeneral from './modules/comercial/VisionGeneral';
 import ReporteTab from './modules/comercial/ReporteTab';
@@ -481,13 +481,7 @@ export default function App() {
           )}
           {paginaActiva === "ordenesCompra" && (
             puedeVerPestanaGlobal(perfil, "ordenes_compra")
-              ? (
-                <div className="p-12 text-center">
-                  <Target className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold text-gray-700 mb-2">Tracking Pedidos</h2>
-                  <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
-                </div>
-              )
+              ? <TrackingPedidos />
               : <SinAcceso motivo="No tienes acceso a Tracking Pedidos." />
           )}
           {paginaActiva === "adminInterna" && (

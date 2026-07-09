@@ -8,4 +8,5 @@ export { default as AnalisisClientesGlobal } from './AnalisisClientesGlobal';
 export { default as InventarioGlobal } from './InventarioGlobal';
 export { default as EstrategiaPrecios } from './EstrategiaPrecios';
 export { default as SellInCliente } from './SellInCliente';
+export { default as TrackingPedidos } from './TrackingPedidos';
 export { default as ForecastCliente } from './ForecastCliente';
