@@ -282,9 +282,18 @@ export default function SellInCliente({ clienteKey }) {
       const catNorm = ((r.categoria || '').trim());
       const catCap = catNorm ? catNorm.charAt(0).toUpperCase() + catNorm.slice(1).toLowerCase() : '';
       if (categoriaSel.size > 0 && !categoriaSel.has(catCap)) continue;
-      if (terms.length > 0) {
-        const hay = normText(`${r.sku} ${r.descripcion} ${r.marca} ${catCap} ${r.familia} ${r.rdmp}`);
-        if (!terms.every((t) => hay.includes(t))) continue;
+      if (esGlobal) {
+        if (terms.length > 0) {
+          const hay = normText(`${r.sku} ${r.descripcion} ${r.marca} ${catCap} ${r.familia} ${r.rdmp}`);
+          if (!terms.every((t) => hay.includes(t))) continue;
+        }
+      } else {
+        const q = busqueda.trim().toUpperCase();
+        if (q) {
+          const hay = String(r.sku || '').toUpperCase().includes(q)
+                   || String(r.descripcion || '').toUpperCase().includes(q);
+          if (!hay) continue;
+        }
       }
       const piezas = matrizSku.get(r.sku) || Array(12).fill(0);
       const total = piezas.reduce((a, b) => a + b, 0);
@@ -474,7 +483,7 @@ export default function SellInCliente({ clienteKey }) {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className={`grid grid-cols-1 ${esGlobal ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-3'} gap-3`}>
         <KPI
           label={`Facturación mes actual · ${MESES_LARGO[mesActual - 1]} ${anioActual} (MTD)`}
           badge={pctMTD != null ? `${pctMTD.toFixed(0)}% cuota` : 'Sin cuota'}
@@ -513,21 +522,23 @@ export default function SellInCliente({ clienteKey }) {
             )}
           </>}
         />
-        <KPI
-          label={`${MESES_LARGO[mesActual - 1]} ${anioActual} vs ${momMesAnteriorLabel} (MoM)`}
-          badge={momMontoPct != null ? `${momMontoPct >= 0 ? '+' : ''}${momMontoPct.toFixed(0)}%` : 'Sin comparativo'}
-          badgeTone={momMontoPct == null ? 'neutral' : momMontoPct >= 0 ? 'good' : 'bad'}
-          value={formatMXN(mesActualData.monto)}
-          valueSub={`vs ${formatMXN(momMontoPrev)}`}
-          sub={<>
-            <span>Piezas {fmtInt(mesActualData.piezas)} <span className="text-gray-400">vs {fmtInt(momPiezasPrev)}</span></span>
-            {momPiezasDelta != null && (
-              <span className={momPiezasDelta >= 0 ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>
-                {momPiezasDelta >= 0 ? '↑' : '↓'} {fmtInt(Math.abs(momPiezasDelta))} pz
-              </span>
-            )}
-          </>}
-        />
+        {esGlobal && (
+          <KPI
+            label={`${MESES_LARGO[mesActual - 1]} ${anioActual} vs ${momMesAnteriorLabel} (MoM)`}
+            badge={momMontoPct != null ? `${momMontoPct >= 0 ? '+' : ''}${momMontoPct.toFixed(0)}%` : 'Sin comparativo'}
+            badgeTone={momMontoPct == null ? 'neutral' : momMontoPct >= 0 ? 'good' : 'bad'}
+            value={formatMXN(mesActualData.monto)}
+            valueSub={`vs ${formatMXN(momMontoPrev)}`}
+            sub={<>
+              <span>Piezas {fmtInt(mesActualData.piezas)} <span className="text-gray-400">vs {fmtInt(momPiezasPrev)}</span></span>
+              {momPiezasDelta != null && (
+                <span className={momPiezasDelta >= 0 ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>
+                  {momPiezasDelta >= 0 ? '↑' : '↓'} {fmtInt(Math.abs(momPiezasDelta))} pz
+                </span>
+              )}
+            </>}
+          />
+        )}
       </div>
 
       {/* Chart + Categorías */}
@@ -620,7 +631,7 @@ export default function SellInCliente({ clienteKey }) {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-gray-500">{filasTabla.length} SKUs</span>
-            {orden.col && (
+            {esGlobal && orden.col && (
               <button onClick={() => setOrden({ col: null, dir: null })}
                 title="Restablecer el orden original del roadmap"
                 className="inline-flex items-center gap-1 h-8 px-2.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
@@ -633,7 +644,7 @@ export default function SellInCliente({ clienteKey }) {
             </button>
           </div>
         </div>
-        <div className="overflow-auto" style={{ maxHeight: '82vh' }}>
+        <div className="overflow-auto" style={{ maxHeight: esGlobal ? '82vh' : '65vh' }}>
           <table className="w-full text-[11px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
             <thead>
               <tr>
@@ -643,7 +654,7 @@ export default function SellInCliente({ clienteKey }) {
                   { label: 'Descripción', align: 'left'   },
                   { label: 'Roadmap',     align: 'center' },
                   ...MESES.map((m) => ({ label: m, align: 'right' })),
-                  { label: 'Trend', align: 'center' },
+                  ...(esGlobal ? [{ label: 'Trend', align: 'center' }] : []),
                   { label: 'Promedio', align: 'right', sort: 'promedio' },
                   { label: 'Total',    align: 'right', sort: 'total' },
                 ].map((h, i) => (
@@ -699,9 +710,11 @@ export default function SellInCliente({ clienteKey }) {
                           </td>
                         );
                       })}
-                      <td className="py-1 px-1 text-center" style={{ width: 80 }}>
-                        <RowSparkline piezas={r.piezas} mesActual={mesActual} />
-                      </td>
+                      {esGlobal && (
+                        <td className="py-1 px-1 text-center" style={{ width: 80 }}>
+                          <RowSparkline piezas={r.piezas} mesActual={mesActual} />
+                        </td>
+                      )}
                       <td className="py-1 px-2 text-right tabular-nums text-gray-700 bg-gray-50/60" style={{ width: 70 }}>
                         {r.promedio ? fmtInt(r.promedio) : '—'}
                       </td>
@@ -711,7 +724,7 @@ export default function SellInCliente({ clienteKey }) {
                     </tr>
                     {abierto && (
                       <tr>
-                        <td colSpan={19} style={{ padding: 0, background: '#FFFFFF', borderTop: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }}>
+                        <td colSpan={esGlobal ? 19 : 18} style={{ padding: 0, background: '#FFFFFF', borderTop: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }}>
                           <DrillDownBoundary sku={r.sku}>
                             <SellInDrillDown
                               sku={r.sku}
@@ -736,9 +749,11 @@ export default function SellInCliente({ clienteKey }) {
                 {totalesFila.mes.map((v, i) => (
                   <td key={i} className="py-1.5 px-1.5 text-right tabular-nums">{v ? fmtInt(v) : '—'}</td>
                 ))}
-                <td className="py-1.5 px-1 text-center">
-                  <RowSparkline piezas={totalesFila.mes} mesActual={mesActual} />
-                </td>
+                {esGlobal && (
+                  <td className="py-1.5 px-1 text-center">
+                    <RowSparkline piezas={totalesFila.mes} mesActual={mesActual} />
+                  </td>
+                )}
                 <td className="py-1.5 px-2 text-right tabular-nums">
                   {totalesFila.promedio ? fmtInt(totalesFila.promedio) : '—'}
                 </td>
