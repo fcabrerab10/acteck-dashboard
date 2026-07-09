@@ -56,6 +56,7 @@ export default function SellInDrillDown(props) {
   const [precios, setPrecios] = useState([]);
   const [inv, setInv] = useState([]);
   const [promos, setPromos] = useState([]);
+  const [hoverMes, setHoverMes] = useState(null); // 0-11 or null
 
   // ── 2) Fetch on-demand con try/catch ──
   useEffect(() => {
@@ -301,16 +302,76 @@ export default function SellInDrillDown(props) {
             <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">Cuándo lo compran · 12 meses</span>
             <span className="text-[10.5px] text-gray-400">Piezas / mes</span>
           </div>
-          <svg viewBox="0 0 400 88" preserveAspectRatio="none" style={{ width: '100%', height: 88, display: 'block' }}>
-            <line x1="0" y1="65" x2="400" y2="65" stroke="#E5EAF2" strokeWidth="1" />
-            {path2025 && <path d={path2025} stroke="#F59E0B" strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
-            {serie2025.map((p, i) => <circle key={`a${i}`} cx={svgX(i).toFixed(1)} cy={svgY(p.piezas)} r="2" fill="#F59E0B" />)}
-            {path2026 && <path d={path2026} stroke="#0EA5E9" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
-            {serie2026.slice(0, Math.max(0, puntos2026Hasta - 1)).map((p, i) => <circle key={`b${i}`} cx={svgX(i).toFixed(1)} cy={svgY(p.piezas)} r="2.6" fill="#0EA5E9" />)}
-            {puntos2026Hasta > 0 && serie2026[puntos2026Hasta - 1] && (
-              <circle cx={svgX(puntos2026Hasta - 1).toFixed(1)} cy={svgY(serie2026[puntos2026Hasta - 1].piezas)} r="3" fill="white" stroke="#0EA5E9" strokeWidth="2" />
-            )}
-          </svg>
+          <div className="relative">
+            <svg viewBox="0 0 400 88" preserveAspectRatio="none"
+              onMouseLeave={() => setHoverMes(null)}
+              onMouseMove={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                const xVb = ((e.clientX - r.left) / r.width) * 400;
+                const i = Math.round((xVb - 15) / 32.7);
+                if (i >= 0 && i < 12) setHoverMes(i); else setHoverMes(null);
+              }}
+              style={{ width: '100%', height: 88, display: 'block', cursor: 'crosshair' }}>
+              <line x1="0" y1="65" x2="400" y2="65" stroke="#E5EAF2" strokeWidth="1" />
+              {hoverMes != null && (
+                <line x1={svgX(hoverMes).toFixed(1)} y1="4" x2={svgX(hoverMes).toFixed(1)} y2="75"
+                  stroke="#94A3B8" strokeWidth="1" strokeDasharray="2 2" />
+              )}
+              {path2025 && <path d={path2025} stroke="#F59E0B" strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
+              {serie2025.map((p, i) => (
+                <circle key={`a${i}`} cx={svgX(i).toFixed(1)} cy={svgY(p.piezas)}
+                  r={hoverMes === i ? 3.5 : 2} fill="#F59E0B" />
+              ))}
+              {path2026 && <path d={path2026} stroke="#0EA5E9" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
+              {serie2026.slice(0, Math.max(0, puntos2026Hasta - 1)).map((p, i) => (
+                <circle key={`b${i}`} cx={svgX(i).toFixed(1)} cy={svgY(p.piezas)}
+                  r={hoverMes === i ? 4 : 2.6} fill="#0EA5E9" />
+              ))}
+              {puntos2026Hasta > 0 && serie2026[puntos2026Hasta - 1] && (
+                <circle cx={svgX(puntos2026Hasta - 1).toFixed(1)} cy={svgY(serie2026[puntos2026Hasta - 1].piezas)}
+                  r={hoverMes === puntos2026Hasta - 1 ? 4.5 : 3}
+                  fill="white" stroke="#0EA5E9" strokeWidth="2" />
+              )}
+            </svg>
+            {hoverMes != null && (() => {
+              const v25 = serie2025[hoverMes]?.piezas || 0;
+              const hasV26 = hoverMes < puntos2026Hasta;
+              const v26 = hasV26 ? (serie2026[hoverMes]?.piezas || 0) : null;
+              const delta = hasV26 && v25 > 0 ? ((v26 - v25) / v25 * 100) : null;
+              const leftPct = ((svgX(hoverMes) / 400) * 100).toFixed(1);
+              const alignRight = hoverMes >= 8;
+              return (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: `${leftPct}%`,
+                  transform: alignRight ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)',
+                  pointerEvents: 'none',
+                }}>
+                  <div className="bg-white border border-gray-200 rounded-md shadow-md px-2.5 py-1.5 text-[10.5px] whitespace-nowrap">
+                    <div className="font-semibold text-gray-800 mb-1">{MESES[hoverMes]}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-sm" style={{ background: '#F59E0B' }} />
+                      <span className="text-gray-600">{anioPrev}</span>
+                      <span className="tabular-nums font-semibold text-gray-800 ml-auto">{fmtInt(v25)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="inline-block w-2 h-2 rounded-sm" style={{ background: '#0EA5E9' }} />
+                      <span className="text-gray-600">{anioActual}</span>
+                      <span className="tabular-nums font-semibold text-gray-800 ml-auto">
+                        {hasV26 ? fmtInt(v26) : '—'}
+                      </span>
+                    </div>
+                    {delta != null && (
+                      <div className={`mt-1 pt-1 border-t border-gray-100 text-[10px] tabular-nums font-semibold ${delta >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        {delta >= 0 ? '+' : ''}{delta.toFixed(1)}% YoY
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
           <div className="grid mt-1 text-[9px] text-gray-400 tabular-nums" style={{ gridTemplateColumns: 'repeat(12, 1fr)' }}>
             {MESES.map((m) => <span key={m} className="text-center">{m}</span>)}
           </div>
