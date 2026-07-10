@@ -1485,6 +1485,14 @@ const PARSERS = {
       const venta = toStr(r['Venta']) || '';
       const clave = toStr(r['Clave']) || '';
       const cantidad = toNum(r['Cantidad']);
+      // Normalizar case: Revko envía 'amazon', 'gdl', 'Zacatecas' pero el resto
+      // de los meses vive con 'AMAZON', 'GDL', 'ZACATECAS' — mantener consistencia
+      const normalizarSucursal = (s) => {
+        if (!s) return s;
+        const u = s.toUpperCase();
+        if (u === 'AMAZON' || u === 'GDL' || u === 'ZACATECAS') return u;
+        return s;
+      };
       // Hash content: venta|sku|fecha|cantidad — estable entre re-uploads
       let id = hashRevko(`REVKO|${venta}|${clave}|${fecha}|${cantidad ?? ''}`);
       // Colisión intra-archivo (raro): perturba con contador
@@ -1495,8 +1503,8 @@ const PARSERS = {
         colisiones++;
       }
       idsVistos.add(id);
-      const sucursal = toStr(r['Sucursal que genera venta']);
-      const almacen  = toStr(r['Sucursal que despacha el inventario']);
+      const sucursal = normalizarSucursal(toStr(r['Sucursal que genera venta']));
+      const almacen  = normalizarSucursal(toStr(r['Sucursal que despacha el inventario']));
       const precioUnit = toNum(r['precio_venta_antes_IVA']) || toNum(r['precio_venta']);
       const importe    = toNum(r['total_venta_antes_IVA']) || toNum(r['total_venta']);
       out.push({
