@@ -95,6 +95,7 @@ const SOURCES = [
   { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
   { id:'estados-resultados', grupo:'globales', tipo:'mes', statusKey:'estados_resultados', title:'Estado de Resultados (P&L)', desc:'Cierres mensuales/trimestrales del P&L (ej. "Cierre 1Q 2026.xlsx", "Cierre Diciembre 2025.xlsx"). Lee la hoja "Estado de Resultados" y carga sólo los meses con valores. No borra meses previos; upsert por (razón social, año, mes, cuenta).', file:'Cierre <período>.xlsx', table:'estados_resultados', onConflict:'razon_social,anio,mes,cuenta_norm', parser:'estadosResultados' },
   { id:'sellout-general', grupo:'globales', tipo:'semana', statusKey:'sellout_general', title:'Sellout General (mayoristas)', desc:'Archivo semanal "Sellout General.xlsx" (hoja "Hoja1") con el detalle de ventas de nuestros mayoristas hacia sus clientes finales. 357K+ filas históricas (2025-en adelante). Upsert por id de transacción — solo actualiza filas nuevas. Mapeo idcliente→mayorista canónico: CT, CVA, Ingram, Arroba, Dicotech, Techs Mart, Grupo Unidades de Cómputo, DC, Exel, PCH, Grupo Loma, Group NSSTORE, Kabik.', file:'Sellout General.xlsx', table:'sellout_general', onConflict:'id', parser:'selloutGeneral' },
+  { id:'revko-sellout', grupo:'globales', tipo:'mes', statusKey:'revko_sellout', title:'Sellout Acteck (Revko)', desc:'Reporte mensual desde ERP Revko: "Reporte-SellOut_Ventas Mensual Acteck_Revko.csv". Incluye venta a clientes finales por sucursal Acteck/Dicotech (dicoags2, leon2, Arboledas, GDL, ZACATECAS, santafe, DC, AMAZON, Internet, dropship). Cada archivo trae 1 mes. Al reprocesar el mismo mes se reemplazan todas las filas de DICOTECH en ese periodo (deletePeriodos con mayorista=DICOTECH). IDs sintéticos negativos por fila.', file:'Reporte-SellOut_...Revko.csv', table:'sellout_general', onConflict:'id', parser:'revkoSellout' },
   // ── Digitalife ──
   { id:'digitalife-sellout', grupo:'digitalife', tipo:'sellout', statusKey:'sellout_digitalife', title:'Digitalife · Sellout histórico', desc:'Historico Sellout Digitalife (hoja "Sellout Digitalife"). Append con dedup por fecha+parte+cantidad+total.', file:'Historico Sellout Digitalife.xlsx', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'digitalifeSellout' },
   { id:'digitalife-inv', grupo:'digitalife', tipo:'semana', statusKey:'inv_digitalife', title:'Digitalife · Inventario semanal', desc:'Archivo Acteck_BalamRush_Inventario (Hoja39). Snapshot semanal por (cliente, sku, anio, semana).', file:'Acteck_BalamRush_Inventario.xlsx', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'digitalifeInv' },
@@ -1429,6 +1430,83 @@ const PARSERS = {
     return out;
   },
 
+  // Revko Sellout — reporte mensual del ERP Revko de Acteck con la venta a
+  // clientes finales por sucursal Dicotech/Acteck. Formato CSV con columnas:
+  // Fecha, Venta, Clave, Cantidad, Descripcion, Familia, "Sucursal que genera venta",
+  // Cliente, "Sucursal que despacha el inventario", Vendedor, Marca,
+  // costo_compra_antes_IVA, Distribuidor, costo_total_venta, Moneda, precio_venta,
+  // precio_venta_antes_IVA, total_venta, total_venta_antes_IVA, tipo_cliente,
+  // "Numero de parte", Tabulador.
+  //
+  // Todas las filas se mapean a mayorista='DICOTECH', idcliente=708.
+  // IDs sintéticos negativos deterministas por (anio, mes, rowIndex) para permitir
+  // reprocesar el mismo mes sin colisionar con IDs positivos del selloutGeneral.
+  // El uploader gatilla deletePeriodos({anio, mes, mayorista:'DICOTECH'}) por cada
+  // mes distinto en el archivo antes del upsert.
+  revkoSellout(wb){
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    if (typeof window !== 'undefined') {
+      window.__revkoSelloutDiag = { rowsCrudas: 0, generados: 0, mesesDetectados: [], primerRowKeys: [], primerRowSample: null };
+    }
+    if (!sh) { console.warn('[revkoSellout] Sin hoja'); return []; }
+    const rows = XLSX.utils.sheet_to_json(sh, { defval: null, raw: false });
+    if (typeof window !== 'undefined') window.__revkoSelloutDiag.rowsCrudas = rows.length;
+    if (rows.length > 0 && typeof window !== 'undefined') {
+      window.__revkoSelloutDiag.primerRowKeys = Object.keys(rows[0]);
+      window.__revkoSelloutDiag.primerRowSample = rows[0];
+    }
+    const out = [];
+    const mesesSet = new Set();
+    rows.forEach((r, idx) => {
+      const fecha = toISODate(r['Fecha']);
+      if (!fecha) return;
+      const [y, m] = fecha.split('-');
+      const anio = parseInt(y, 10);
+      const mes  = parseInt(m, 10);
+      if (!anio || !mes) return;
+      mesesSet.add(`${anio}-${mes}`);
+      // Sintético: bigint negativo determinista → -(anio*1e8 + mes*1e6 + idx)
+      // Ej: 2026-06-idx=100 → -(202600000000 + 6000000 + 100) = -202606000100
+      const id = -(anio * 100000000 + mes * 1000000 + idx);
+      const sucursal = toStr(r['Sucursal que genera venta']);
+      const almacen  = toStr(r['Sucursal que despacha el inventario']);
+      const cantidad = toNum(r['Cantidad']);
+      const precioUnit = toNum(r['precio_venta_antes_IVA']) || toNum(r['precio_venta']);
+      const importe    = toNum(r['total_venta_antes_IVA']) || toNum(r['total_venta']);
+      out.push({
+        id,
+        idcliente: 708, // DICOTECH
+        mayorista: 'DICOTECH',
+        fecha, anio, mes,
+        sku: toStr(r['Clave']),
+        sku_cliente: toStr(r['Numero de parte']),
+        descripcion: toStr(r['Descripcion']),
+        cliente_codigo: null,
+        cliente_nombre: toStr(r['Cliente']),
+        cliente_rfc: null,
+        vendedor: null,
+        vendedor_nombre: toStr(r['Vendedor']),
+        almacen,
+        sucursal,
+        cantidad,
+        precio_unitario: precioUnit,
+        importe,
+        factura: toStr(r['Venta']),
+        marca: toStr(r['Marca']),
+        estado: null,
+        linea: toStr(r['Familia']),
+        moneda: toStr(r['Moneda']),
+        importe_usd: null,
+        tipocambio: null,
+      });
+    });
+    if (typeof window !== 'undefined') {
+      window.__revkoSelloutDiag.generados = out.length;
+      window.__revkoSelloutDiag.mesesDetectados = Array.from(mesesSet);
+    }
+    return out;
+  },
+
   // Promociones por temporada — archivo "Promociones Exclusivas <CAMPAÑA> <MES><AÑO>.xlsx"
   // Hoja 'Hoja1', headers en fila 2 (col 1=Articulo, col 2=Descripcion 2, col 3=Desc extra).
   // Cada archivo trae 1 sola campaña vigente en 1 mes. Al reprocesar el mismo mes se
@@ -2252,14 +2330,33 @@ async function handleUpload(src){
       if ((src.parser === 'precios' || src.parser === 'promosTemporada' || src.parser === 'sellOutMensual') && rows.length > 0) {
         appendLog(src, `Período detectado: ${rows[0].anio}-${String(rows[0].mes).padStart(2,'0')}${rows[0].campania ? ' · ' + rows[0].campania : ''}`);
       }
+      if (src.parser === 'revkoSellout' && window.__revkoSelloutDiag) {
+        const d = window.__revkoSelloutDiag;
+        appendLog(src, `DIAG revko rows_crudas=${d.rowsCrudas} generadas=${d.generados} meses=${d.mesesDetectados.join(', ')}`);
+        if (rows.length === 0) {
+          appendLog(src, `DIAG keys row 0: ${JSON.stringify(d.primerRowKeys).slice(0, 500)}`);
+          if (d.primerRowSample) appendLog(src, `DIAG row 0: ${JSON.stringify(d.primerRowSample).slice(0, 800)}`);
+        }
+      }
 
-      // Replace por (año, mes) para precios y por (año, mes, campania) para promos
-      const deletePeriodos = rows.length > 0 && (src.parser === 'precios' || src.parser === 'promosTemporada' || src.parser === 'sellOutMensual')
-        ? [{
-            anio: rows[0].anio, mes: rows[0].mes,
-            ...(rows[0].campania && (src.parser === 'promosTemporada' || src.parser === 'sellOutMensual') ? { campania: rows[0].campania } : {}),
-          }]
-        : null;
+      // Replace por (año, mes) para precios / (año, mes, campania) para promos /
+      // (año, mes, mayorista='DICOTECH') para Revko (todos los meses del archivo).
+      let deletePeriodos = null;
+      if (rows.length > 0 && (src.parser === 'precios' || src.parser === 'promosTemporada' || src.parser === 'sellOutMensual')) {
+        deletePeriodos = [{
+          anio: rows[0].anio, mes: rows[0].mes,
+          ...(rows[0].campania && (src.parser === 'promosTemporada' || src.parser === 'sellOutMensual') ? { campania: rows[0].campania } : {}),
+        }];
+      } else if (rows.length > 0 && src.parser === 'revkoSellout') {
+        const seen = new Set();
+        deletePeriodos = [];
+        for (const r of rows) {
+          const k = `${r.anio}-${r.mes}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          deletePeriodos.push({ anio: r.anio, mes: r.mes, mayorista: 'DICOTECH' });
+        }
+      }
 
       // Replace por años: el servidor borra esos años antes del primer chunk
       // (para que desaparezcan los SKUs que ya no estén en el Excel).

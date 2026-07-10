@@ -63,8 +63,9 @@ export default async function handler(req, res) {
       }
     }
 
-    // deletePeriodos: [{anio, mes, campania?}, ...] — borra por (anio, mes) o (anio, mes, campania)
-    // antes del upsert. Útil para replace por mes en promos_temporada / precios_sku.
+    // deletePeriodos: [{anio, mes, campania?, mayorista?}, ...] — borra por (anio, mes)
+    // opcionalmente filtrado por campania o mayorista. Útil para replace por periodo
+    // scoped a un mayorista (Revko sellout) sin afectar otros mayoristas.
     if (Array.isArray(deletePeriodos) && deletePeriodos.length > 0) {
       for (const p of deletePeriodos) {
         const anio = parseInt(p?.anio);
@@ -74,13 +75,16 @@ export default async function handler(req, res) {
         if (p?.campania) {
           delUrl += `&campania=eq.${encodeURIComponent(p.campania)}`;
         }
+        if (p?.mayorista) {
+          delUrl += `&mayorista=eq.${encodeURIComponent(p.mayorista)}`;
+        }
         const dr = await fetch(delUrl, {
           method: 'DELETE',
           headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, Prefer: 'return=minimal' },
         });
         if (!dr.ok) {
           const txt = await dr.text();
-          return res.status(dr.status).json({ error: 'delete failed', detail: txt.slice(0, 500), anio, mes, campania: p?.campania });
+          return res.status(dr.status).json({ error: 'delete failed', detail: txt.slice(0, 500), anio, mes, campania: p?.campania, mayorista: p?.mayorista });
         }
       }
     }
