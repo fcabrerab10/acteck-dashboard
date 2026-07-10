@@ -31,19 +31,23 @@ const CLIENTES_META = {
   },
 };
 
-// Sucursales de Dicotech con label bonito
-const SUCURSAL_LABEL = {
-  'dicoags2': 'Aguascalientes',
-  'leon2': 'León',
-  'Arboledas': 'Arboledas',
-  'GDL': 'Guadalajara',
-  'dropship': 'Dropship',
-  'ZACATECAS': 'Zacatecas',
-  'AMAZON': 'Amazon',
-  'Internet': 'Internet',
-  'santafe': 'Santa Fe',
+// Meta de sucursales Dicotech: label bonito, tipo (fisica/virtual), color, código,
+// y coordenadas para posicionar burbuja en el mapa SVG (viewBox 0 0 640 420).
+const SUCURSAL_META = {
+  'dicoags2':  { label: 'Aguascalientes', tipo: 'fisica', codigo: 'AG', color: '#0EA5E9', mapX: 273, mapY: 230 },
+  'leon2':     { label: 'León',           tipo: 'fisica', codigo: 'LE', color: '#6366F1', mapX: 325, mapY: 256 },
+  'Arboledas': { label: 'Arboledas',      tipo: 'fisica', codigo: 'AR', color: '#10B981', mapX: 358, mapY: 278, subtitle: 'Naucalpan' },
+  'GDL':       { label: 'Guadalajara',    tipo: 'fisica', codigo: 'GL', color: '#F59E0B', mapX: 234, mapY: 270 },
+  'ZACATECAS': { label: 'Zacatecas',      tipo: 'fisica', codigo: 'ZA', color: '#EC4899', mapX: 297, mapY: 207 },
+  'santafe':   { label: 'Santa Fe',       tipo: 'fisica', codigo: 'SF', color: '#8B5CF6', mapX: 368, mapY: 288, subtitle: 'CDMX' },
+  'DC':        { label: 'DC',             tipo: 'fisica', codigo: 'DC', color: '#F97316', mapX: 350, mapY: 292 },
+  'AMAZON':    { label: 'Amazon',         tipo: 'virtual', icon: '🛒', color: '#F97316' },
+  'Internet':  { label: 'Internet',       tipo: 'virtual', icon: '🌐', color: '#94A3B8' },
+  'dropship':  { label: 'Dropship',       tipo: 'virtual', icon: '📦', color: '#14B8A6' },
 };
-const SUCURSAL_COLOR = ['#0EA5E9', '#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#F97316', '#14B8A6', '#94A3B8'];
+const SUCURSAL_LABEL = Object.fromEntries(Object.entries(SUCURSAL_META).map(([k, v]) => [k, v.label]));
+const SUCURSAL_COLOR = Object.values(SUCURSAL_META).map((v) => v.color);
+const metaSuc = (name) => SUCURSAL_META[name] || { label: name, tipo: 'virtual', codigo: name?.slice(0, 2).toUpperCase() || '?', color: '#94A3B8' };
 
 const CAT_COLORS = ['#0EA5E9', '#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#94A3B8', '#F97316'];
 const ROADMAP_COLOR = {
@@ -816,105 +820,343 @@ function KPI({ label, badge, badgeTone, value, sub }) {
 
 // ── Bloque de sucursales ──
 function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev, inventarioSucursales = [] }) {
-  // Mapeo sucursal → inventario
-  const invBySuc = new Map();
-  for (const iv of inventarioSucursales) invBySuc.set(iv.sucursal, iv);
-  const totalYTD = sucursales.reduce((s, x) => s + x.monto, 0);
-  const maxPct = sucursales[0]?.pct || 1;
+  const [metrica, setMetrica] = useState('monto'); // 'monto' | 'piezas' | 'tx' | 'inventario'
+  const [selKey, setSelKey] = useState(null);
 
-  // Data para chart apilado por mes: cada sucursal es una serie
-  const chartData = MESES.map((m, i) => {
-    const row = { mes: m };
-    if (i >= mesActual) return row;
-    for (const s of sucursales) {
-      const serie = matriz.get(s.name);
-      row[s.name] = serie ? Math.round(serie[i]) : 0;
-    }
-    return row;
-  });
+  // Inventario indexado por sucursal
+  const invBySuc = useMemo(() => {
+    const m = new Map();
+    for (const iv of inventarioSucursales) m.set(iv.sucursal, iv);
+    return m;
+  }, [inventarioSucursales]);
+
+  // Combina venta + inventario y aplica meta (tipo, color, coords).
+  // Incluye sucursales que están en ventas O en inventario aunque solo tengan una.
+  const items = useMemo(() => {
+    const keys = new Set([...sucursales.map((s) => s.name), ...inventarioSucursales.map((s) => s.sucursal)]);
+    const arr = Array.from(keys).map((name) => {
+      const s = sucursales.find((x) => x.name === name) || { name, monto: 0, piezas: 0, tx: 0, yoy: null };
+      const inv = invBySuc.get(name) || { stock: 0, valor: 0 };
+      const meta = metaSuc(name);
+      return {
+        key: name,
+        label: meta.label,
+        subtitle: meta.subtitle || null,
+        tipo: meta.tipo,
+        codigo: meta.codigo,
+        icon: meta.icon || null,
+        color: meta.color,
+        mapX: meta.mapX,
+        mapY: meta.mapY,
+        monto: s.monto || 0,
+        piezas: s.piezas || 0,
+        tx: s.tx || 0,
+        yoy: s.yoy,
+        prevMonto: s.prevMonto || 0,
+        invStock: inv.stock || 0,
+        invValor: inv.valor || 0,
+      };
+    });
+    return arr;
+  }, [sucursales, inventarioSucursales, invBySuc]);
+
+  const valorMetrica = (it) => {
+    if (metrica === 'monto') return it.monto;
+    if (metrica === 'piezas') return it.piezas;
+    if (metrica === 'tx') return it.tx;
+    if (metrica === 'inventario') return it.invValor;
+    return 0;
+  };
+  const fmtMetrica = (v) => {
+    if (metrica === 'monto' || metrica === 'inventario') return formatMXN(v);
+    return fmtInt(v);
+  };
+
+  const fisicas = useMemo(() => items.filter((x) => x.tipo === 'fisica').sort((a, b) => valorMetrica(b) - valorMetrica(a)), [items, metrica]);
+  const virtuales = useMemo(() => items.filter((x) => x.tipo === 'virtual').sort((a, b) => valorMetrica(b) - valorMetrica(a)), [items, metrica]);
+  const totalVis = items.reduce((s, x) => s + valorMetrica(x), 0);
+  const totalFisicas = fisicas.reduce((s, x) => s + valorMetrica(x), 0);
+  const totalVirtuales = virtuales.reduce((s, x) => s + valorMetrica(x), 0);
+  const maxFisica = fisicas.length ? valorMetrica(fisicas[0]) : 1;
+  const topSuc = items.reduce((a, b) => (valorMetrica(a) >= valorMetrica(b) ? a : b), items[0] || null);
+
+  const seleccionada = selKey ? items.find((x) => x.key === selKey) : null;
+  const serieSel = seleccionada ? matriz.get(seleccionada.key) : null;
+  const maxSerie = serieSel ? Math.max(1, ...serieSel.slice(0, mesActual)) : 1;
+
+  const totalPzFisicas = fisicas.reduce((s, x) => s + x.invStock, 0);
+  const totalValFisicas = fisicas.reduce((s, x) => s + x.invValor, 0);
+
+  const metricaLabel = { monto: 'Venta $', piezas: 'Piezas', tx: 'Tickets', inventario: 'Inventario $' }[metrica];
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <div className="flex justify-between items-baseline mb-3">
-        <h3 className="text-sm font-semibold text-gray-800">
-          Ventas por sucursal · YTD {anioActual}
-        </h3>
-        <span className="text-[11px] text-gray-500">
-          {sucursales.length} sucursales · {formatMXN(totalYTD)}
-        </span>
+      {/* Header + toggle */}
+      <div className="flex justify-between items-start gap-4 mb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800">Ventas por sucursal · YTD {anioActual}</h3>
+          <div className="text-[11.5px] text-gray-500 mt-0.5">
+            {fisicas.length} sucursales físicas + {virtuales.length} canales virtuales · Ene – {MESES[mesActual - 1]} {anioActual} · Total {fmtMetrica(totalVis)}
+          </div>
+        </div>
+        <div className="inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+          {[
+            { k: 'monto', l: 'Venta $' },
+            { k: 'piezas', l: 'Piezas' },
+            { k: 'tx', l: 'Tickets' },
+            { k: 'inventario', l: 'Inventario $' },
+          ].map((m) => (
+            <button key={m.k} onClick={() => setMetrica(m.k)}
+              className={`px-2.5 py-1 text-[11.5px] rounded-md font-medium transition ${metrica === m.k ? 'bg-white text-gray-800 shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}>
+              {m.l}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr] gap-4">
-        {/* Ranking sucursales YTD */}
-        <div className="flex flex-col gap-2">
-          {sucursales.map((s) => {
-            const yoyClass = s.yoy == null ? 'text-gray-400' : s.yoy >= 0 ? 'text-emerald-700' : 'text-rose-700';
-            return (
-              <div key={s.name} className="text-[12px]">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="flex items-center gap-1.5 min-w-0">
-                    <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: s.color }} />
-                    <span className="font-medium text-gray-800 truncate">{s.label}</span>
-                  </span>
-                  <span className="text-gray-500 tabular-nums font-medium">{s.pct.toFixed(1)}%</span>
-                </div>
-                <div className="h-[4px] bg-gray-100 rounded-full overflow-hidden mt-1">
-                  <span className="block h-full rounded-full" style={{ width: `${(s.pct / maxPct * 100).toFixed(1)}%`, background: s.color }} />
-                </div>
-                <div className="flex justify-between text-[10.5px] text-gray-500 mt-1 tabular-nums">
-                  <span>{fmtInt(s.piezas)} pz · {formatMXN(s.monto)} · {fmtInt(s.tx)} tx</span>
-                  {s.yoy != null ? (
-                    <span className={`font-semibold ${yoyClass}`}>{s.yoy >= 0 ? '+' : ''}{s.yoy.toFixed(0)}% YoY</span>
-                  ) : s.prevMonto === 0 && s.monto > 0 ? (
-                    <span className="text-emerald-700 font-semibold">nueva</span>
-                  ) : null}
-                </div>
-                {invBySuc.has(s.name) && (
-                  <div className="mt-1 text-[10px] text-indigo-700 tabular-nums bg-indigo-50 rounded px-1.5 py-0.5">
-                    Inv. actual: {fmtInt(invBySuc.get(s.name).stock)} pz · {formatMXN(invBySuc.get(s.name).valor)}
-                  </div>
+      {/* Main grid: Map + Ranking */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-5">
+        {/* Mapa */}
+        <div className="relative bg-slate-50 border border-slate-200 rounded-xl p-3" style={{ minHeight: 380 }}>
+          <div className="absolute top-2 left-3 text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">
+            Sucursales físicas · burbuja proporcional a {metricaLabel}
+          </div>
+          <MapaSucursales fisicas={fisicas} valorMetrica={valorMetrica} fmtMetrica={fmtMetrica}
+            maxFisica={maxFisica} selKey={selKey} setSelKey={setSelKey} metricaLabel={metricaLabel} />
+          <div className="absolute bottom-2 right-3 bg-white border border-gray-200 rounded-md px-2 py-1 text-[10px] text-gray-500 flex items-center gap-2">
+            <span>Tamaño ~ {metricaLabel}</span>
+            <span className="inline-flex items-end gap-1">
+              <span className="inline-block rounded-full bg-sky-500 opacity-70" style={{ width: 4, height: 4 }} />
+              <span className="inline-block rounded-full bg-sky-500 opacity-70" style={{ width: 8, height: 8 }} />
+              <span className="inline-block rounded-full bg-sky-500 opacity-70" style={{ width: 12, height: 12 }} />
+              <span className="inline-block rounded-full bg-sky-500 opacity-70" style={{ width: 18, height: 18 }} />
+            </span>
+          </div>
+        </div>
+
+        {/* Panel ranking */}
+        <div className="flex flex-col gap-2 min-w-0">
+          <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold flex justify-between items-baseline">
+            <span>Sucursales físicas</span>
+            <span className="text-gray-400 text-[10.5px] font-medium normal-case tracking-normal">{fisicas.length} · {formatMXN(totalFisicas > 0 && (metrica === 'monto' || metrica === 'inventario') ? totalFisicas : totalFisicas)}</span>
+          </div>
+          {fisicas.map((s) => (
+            <RankRow key={s.key} it={s} metrica={metrica} valorMetrica={valorMetrica} fmtMetrica={fmtMetrica}
+              max={maxFisica} selected={selKey === s.key} onClick={() => setSelKey(selKey === s.key ? null : s.key)} />
+          ))}
+
+          {virtuales.length > 0 && (
+            <>
+              <div className="h-px bg-gray-200 my-1" />
+              <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold flex justify-between items-baseline">
+                <span>Canales virtuales</span>
+                <span className="text-gray-400 text-[10.5px] font-medium normal-case tracking-normal">{virtuales.length} · sin ubicación física</span>
+              </div>
+              {virtuales.map((s) => (
+                <RankRow key={s.key} it={s} metrica={metrica} valorMetrica={valorMetrica} fmtMetrica={fmtMetrica}
+                  max={maxFisica} selected={selKey === s.key} onClick={() => setSelKey(selKey === s.key ? null : s.key)} />
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Detalle sucursal seleccionada */}
+      {seleccionada && (
+        <div className="mt-4 p-4 bg-sky-50 border border-sky-200 rounded-xl">
+          <div className="flex justify-between items-baseline mb-3">
+            <h4 className="text-[13px] font-bold text-sky-900">
+              {seleccionada.label}
+              {seleccionada.subtitle && <span className="text-[11px] font-medium text-sky-700 ml-2">· {seleccionada.subtitle}</span>}
+              <span className="text-[10.5px] font-medium text-sky-600 ml-3 uppercase tracking-wider">{seleccionada.tipo}</span>
+            </h4>
+            <button onClick={() => setSelKey(null)} className="text-[11px] text-sky-700 hover:underline">Cerrar</button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+            <div className="bg-white border border-sky-200 rounded-md p-2.5">
+              <div className="text-[9.5px] uppercase tracking-widest text-sky-600 font-bold">Venta YTD</div>
+              <div className="text-[15px] font-bold tabular-nums">{formatMXN(seleccionada.monto)}</div>
+              <div className="text-[10px] text-gray-500">
+                {totalVis > 0 ? `${(seleccionada.monto / (sucursales.reduce((s, x) => s + x.monto, 0)) * 100).toFixed(1)}% del total` : '—'}
+              </div>
+            </div>
+            <div className="bg-white border border-sky-200 rounded-md p-2.5">
+              <div className="text-[9.5px] uppercase tracking-widest text-sky-600 font-bold">Piezas · Tickets</div>
+              <div className="text-[15px] font-bold tabular-nums">{fmtInt(seleccionada.piezas)}</div>
+              <div className="text-[10px] text-gray-500 tabular-nums">
+                {fmtInt(seleccionada.tx)} tx · ticket prom {seleccionada.tx > 0 ? formatMXN(seleccionada.monto / seleccionada.tx) : '—'}
+              </div>
+            </div>
+            <div className="bg-white border border-sky-200 rounded-md p-2.5">
+              <div className="text-[9.5px] uppercase tracking-widest text-sky-600 font-bold">Inventario actual</div>
+              <div className="text-[15px] font-bold tabular-nums">{fmtInt(seleccionada.invStock)} pz</div>
+              <div className="text-[10px] text-gray-500 tabular-nums">
+                {formatMXN(seleccionada.invValor)}
+                {seleccionada.monto > 0 && seleccionada.invValor > 0 && mesActual > 0 && (
+                  <span> · rota ~{(seleccionada.monto / mesActual / seleccionada.invValor).toFixed(1)}x/mes</span>
                 )}
               </div>
-            );
-          })}
-        </div>
-
-        {/* Chart apilado mensual */}
-        <div>
-          <div className="text-[10.5px] uppercase tracking-widest font-semibold text-gray-500 mb-2">
-            Evolución mensual · $ apilado por sucursal
+            </div>
+            <div className="bg-white border border-sky-200 rounded-md p-2.5">
+              <div className="text-[9.5px] uppercase tracking-widest text-sky-600 font-bold">YoY vs {anioPrev}</div>
+              <div className={`text-[15px] font-bold tabular-nums ${seleccionada.yoy == null ? 'text-gray-400' : seleccionada.yoy >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {seleccionada.yoy != null ? `${seleccionada.yoy >= 0 ? '+' : ''}${seleccionada.yoy.toFixed(0)}%` : (seleccionada.prevMonto === 0 && seleccionada.monto > 0 ? 'nueva' : '—')}
+              </div>
+              <div className="text-[10px] text-gray-500 tabular-nums">
+                {seleccionada.prevMonto > 0 ? `vs ${formatMXN(seleccionada.prevMonto)}` : (seleccionada.monto > 0 ? 'primer año' : '—')}
+              </div>
+            </div>
           </div>
-          <div style={{ height: 260 }}>
-            <ResponsiveContainer>
-              <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="#F3F4F6" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(v) => fmtMoneyShort(v)}
-                  tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={55} />
-                <Tooltip formatter={(v) => formatMXN(v)}
-                  labelFormatter={(l) => `${l} ${anioActual}`}
-                  contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #E5E7EB' }} />
-                {sucursales.map((s) => (
-                  <Bar key={s.name} dataKey={s.name} name={s.label} stackId="s"
-                    fill={s.color} maxBarSize={40} />
+
+          {/* Sparkline mensual */}
+          {serieSel && (
+            <div className="bg-white border border-sky-200 rounded-md p-3">
+              <div className="text-[9.5px] uppercase tracking-widest text-sky-600 font-bold mb-1">Evolución mensual · venta $</div>
+              <svg viewBox="0 0 500 90" preserveAspectRatio="none" style={{ width: '100%', height: 90 }}>
+                <line x1="0" y1="72" x2="500" y2="72" stroke="#E5E7EB" strokeDasharray="2 3"/>
+                {serieSel.slice(0, mesActual).length > 1 && (
+                  <polyline
+                    points={serieSel.slice(0, mesActual).map((v, i) => `${20 + i * (460 / Math.max(1, mesActual - 1))},${72 - (v / maxSerie * 60)}`).join(' ')}
+                    stroke={seleccionada.color} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                )}
+                {serieSel.slice(0, mesActual).map((v, i) => (
+                  <circle key={i} cx={20 + i * (460 / Math.max(1, mesActual - 1))} cy={72 - (v / maxSerie * 60)}
+                    r={i === mesActual - 1 ? 4 : 3.2}
+                    fill={i === mesActual - 1 ? 'white' : seleccionada.color}
+                    stroke={seleccionada.color} strokeWidth={i === mesActual - 1 ? 2 : 0} />
                 ))}
-              </ComposedChart>
-            </ResponsiveContainer>
+                {MESES.slice(0, mesActual).map((m, i) => (
+                  <text key={i} x={20 + i * (460 / Math.max(1, mesActual - 1))} y="86"
+                    fontSize="9" fill="#6B7280" textAnchor="middle">{m}</text>
+                ))}
+              </svg>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Footer 4 KPIs */}
+      <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-gray-50 rounded-md p-3">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-bold">Venta física YTD</div>
+          <div className="text-[16px] font-bold tabular-nums">{formatMXN(fisicas.reduce((s, x) => s + x.monto, 0))}</div>
+          <div className="text-[10.5px] text-gray-500">
+            {(fisicas.reduce((s, x) => s + x.monto, 0) / (sucursales.reduce((s, x) => s + x.monto, 0) || 1) * 100).toFixed(0)}% del total
+          </div>
+        </div>
+        <div className="bg-gray-50 rounded-md p-3">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-bold">Venta virtual YTD</div>
+          <div className="text-[16px] font-bold tabular-nums">{formatMXN(virtuales.reduce((s, x) => s + x.monto, 0))}</div>
+          <div className="text-[10.5px] text-gray-500">
+            {(virtuales.reduce((s, x) => s + x.monto, 0) / (sucursales.reduce((s, x) => s + x.monto, 0) || 1) * 100).toFixed(0)}% · dropship + retail
+          </div>
+        </div>
+        <div className="bg-gray-50 rounded-md p-3">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-bold">Sucursal top</div>
+          <div className="text-[14px] font-bold">{topSuc?.label || '—'}</div>
+          <div className="text-[10.5px] text-gray-500">
+            {topSuc ? `${((topSuc.monto / (sucursales.reduce((s, x) => s + x.monto, 0) || 1)) * 100).toFixed(1)}% del total` : ''}
+            {topSuc?.yoy != null && ` · ${topSuc.yoy >= 0 ? '+' : ''}${topSuc.yoy.toFixed(0)}% YoY`}
+          </div>
+        </div>
+        <div className="bg-gray-50 rounded-md p-3">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-bold">Inventario total físico</div>
+          <div className="text-[16px] font-bold tabular-nums">{fmtInt(totalPzFisicas)} pz</div>
+          <div className="text-[10.5px] text-gray-500 tabular-nums">
+            {formatMXN(totalValFisicas)} · {fisicas.filter((x) => x.invStock > 0).length} sucursales
           </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {sucursales.length >= 2 && (
-        <div className="border-t border-gray-200 mt-3 pt-3 flex justify-between text-[11.5px] text-gray-500">
-          <span>
-            Dominante: <strong className="text-gray-800">{sucursales[0].label}</strong> ({sucursales[0].pct.toFixed(1)}%)
+// ── Mapa SVG de México con burbujas por sucursal ─────────────────────────
+function MapaSucursales({ fisicas, valorMetrica, fmtMetrica, maxFisica, selKey, setSelKey, metricaLabel }) {
+  return (
+    <svg viewBox="0 0 640 420" preserveAspectRatio="xMidYMid meet"
+      style={{ width: '100%', height: '100%', minHeight: 340, maxHeight: 380, display: 'block' }}>
+      {/* Contorno México simplificado */}
+      <path d="M 60 190 L 55 165 L 68 150 L 90 152 L 100 140 L 105 145 L 118 152 L 130 145 L 145 150 L 150 158 L 155 172 L 162 175 L 168 165 L 175 158 L 185 155 L 195 158 L 202 165 L 210 160 L 218 165 L 222 170 L 220 175 L 225 180 L 232 175 L 240 172 L 248 165 L 254 168 L 258 162 L 265 158 L 272 152 L 280 148 L 288 145 L 295 148 L 300 155 L 302 165 L 308 170 L 316 178 L 320 182 L 325 176 L 330 172 L 340 168 L 348 165 L 356 168 L 362 174 L 368 178 L 374 175 L 380 170 L 385 165 L 390 158 L 395 154 L 402 152 L 410 150 L 418 145 L 425 145 L 432 142 L 440 138 L 448 135 L 456 132 L 464 128 L 470 128 L 478 128 L 486 132 L 494 138 L 500 145 L 504 152 L 506 160 L 505 168 L 500 175 L 496 182 L 500 190 L 508 200 L 512 210 L 520 220 L 528 230 L 538 240 L 545 250 L 548 260 L 550 268 L 552 278 L 550 285 L 548 292 L 545 295 L 540 292 L 535 288 L 528 285 L 522 282 L 515 278 L 510 275 L 502 270 L 494 268 L 486 268 L 478 272 L 470 278 L 462 285 L 458 290 L 452 298 L 445 305 L 438 308 L 432 312 L 425 315 L 418 320 L 412 325 L 405 328 L 398 332 L 390 335 L 385 340 L 378 342 L 370 345 L 362 348 L 355 350 L 348 350 L 342 350 L 338 355 L 335 362 L 330 368 L 325 372 L 320 375 L 314 378 L 308 382 L 300 385 L 292 388 L 285 392 L 280 388 L 275 385 L 268 380 L 262 378 L 255 375 L 248 372 L 240 368 L 232 362 L 228 358 L 222 350 L 216 342 L 210 335 L 205 328 L 202 322 L 198 316 L 195 310 L 190 305 L 186 298 L 182 292 L 178 285 L 175 278 L 172 272 L 168 265 L 164 258 L 160 252 L 155 245 L 148 240 L 140 235 L 132 232 L 125 230 L 120 225 L 118 218 L 115 210 L 110 202 L 105 195 L 98 190 L 92 188 L 86 192 L 78 195 L 72 198 L 66 196 L 62 192 Z"
+        fill="#E7EDF2" stroke="#CBD5E1" strokeWidth="0.6" />
+      <path d="M 30 148 L 42 145 L 48 158 L 52 175 L 55 190 L 52 205 L 50 215 L 45 218 L 42 210 L 40 200 L 36 190 L 32 180 L 30 168 Z"
+        fill="#E7EDF2" stroke="#CBD5E1" strokeWidth="0.6" />
+      <path d="M 540 240 L 570 232 L 590 240 L 600 255 L 605 270 L 600 282 L 590 288 L 578 285 L 568 278 L 562 272 L 555 265 L 550 258 Z"
+        fill="#E7EDF2" stroke="#CBD5E1" strokeWidth="0.6" />
+
+      {/* Etiquetas estados */}
+      <g fill="#94A3B8" fontWeight="500" fontFamily="inherit">
+        <text x="80" y="185" fontSize="8">B.C.</text>
+        <text x="220" y="252" fontSize="9" fill="#64748B" fontWeight="600">JAL</text>
+        <text x="270" y="252" fontSize="9" fill="#64748B" fontWeight="600">AGS</text>
+        <text x="300" y="200" fontSize="9" fill="#64748B" fontWeight="600">ZAC</text>
+        <text x="325" y="248" fontSize="9" fill="#64748B" fontWeight="600">GTO</text>
+        <text x="350" y="285" fontSize="8" fill="#64748B" fontWeight="600">CDMX</text>
+      </g>
+
+      {/* Burbujas */}
+      {fisicas.filter((s) => s.mapX != null).map((s) => {
+        const val = valorMetrica(s);
+        const r = maxFisica > 0 ? Math.max(4, Math.sqrt(val / maxFisica) * 28) : 4;
+        const isSel = selKey === s.key;
+        return (
+          <g key={s.key} onClick={() => setSelKey(isSel ? null : s.key)} style={{ cursor: 'pointer' }}>
+            <text x={s.mapX} y={s.mapY - r - 3} textAnchor="middle" fontSize="8.5" fill="#374151" fontWeight="600" fontFamily="inherit">
+              {s.label}
+            </text>
+            <circle cx={s.mapX} cy={s.mapY} r={r} fill={s.color} opacity={isSel ? 0.95 : 0.72}
+              stroke={isSel ? s.color : 'transparent'} strokeWidth={isSel ? 3 : 0} />
+            {r >= 12 && (
+              <text x={s.mapX} y={s.mapY + 3} textAnchor="middle" fontSize={Math.min(9, r * 0.4)} fill="white" fontWeight="700" fontFamily="inherit">
+                {fmtMetrica(val).replace('$', '')}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ── Row del ranking ────────────────────────────────────────────────────────
+function RankRow({ it, metrica, valorMetrica, fmtMetrica, max, selected, onClick }) {
+  const yoyClass = it.yoy == null ? 'bg-gray-100 text-gray-500' : it.yoy >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
+  const val = valorMetrica(it);
+  const pct = max > 0 ? (val / max * 100) : 0;
+  return (
+    <button onClick={onClick}
+      className={`text-left rounded-lg border p-2.5 transition ${selected ? 'bg-sky-50 border-sky-300' : 'bg-gray-50 border-gray-100 hover:bg-gray-100'}`}>
+      <div className="grid grid-cols-[auto_1fr_auto] gap-2 items-baseline">
+        <span className="w-[22px] h-[22px] rounded flex items-center justify-center text-white text-[10px] font-bold tracking-wide"
+          style={{ background: it.color, color: it.icon ? undefined : 'white' }}>
+          {it.icon || it.codigo}
+        </span>
+        <span className="font-semibold text-[12px] text-gray-800 truncate">
+          {it.label}
+          {it.subtitle && <span className="ml-1.5 text-[10px] font-medium text-gray-500">· {it.subtitle}</span>}
+        </span>
+        <span className="text-[12.5px] font-bold tabular-nums text-gray-900">{fmtMetrica(val)}</span>
+      </div>
+      <div className="mt-1.5 h-[3px] bg-gray-200 rounded-full overflow-hidden">
+        <span className="block h-full rounded-full" style={{ width: `${Math.min(100, pct).toFixed(1)}%`, background: it.color }} />
+      </div>
+      <div className="mt-1.5 flex justify-between items-baseline text-[10.5px] text-gray-500">
+        <span className="tabular-nums">{fmtInt(it.piezas)} pz · {fmtInt(it.tx)} tx</span>
+        {it.yoy != null && (
+          <span className={`px-1.5 py-0.5 rounded-full text-[9.5px] font-semibold ${yoyClass}`}>
+            {it.yoy >= 0 ? '+' : ''}{it.yoy.toFixed(0)}% YoY
           </span>
-          <span>
-            Top 3 = <strong className="text-gray-800 tabular-nums">{sucursales.slice(0, 3).reduce((s, x) => s + x.pct, 0).toFixed(1)}%</strong> del total
-          </span>
+        )}
+        {it.yoy == null && it.prevMonto === 0 && it.monto > 0 && (
+          <span className="px-1.5 py-0.5 rounded-full text-[9.5px] font-semibold bg-gray-100 text-gray-500">nueva</span>
+        )}
+      </div>
+      {it.invStock > 0 && (
+        <div className="mt-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-800 rounded text-[10px] font-semibold tabular-nums">
+          📦 Inv: {fmtInt(it.invStock)} pz · {formatMXN(it.invValor)}
         </div>
       )}
-    </div>
+    </button>
   );
 }
 
