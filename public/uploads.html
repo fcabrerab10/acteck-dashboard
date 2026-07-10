@@ -1483,7 +1483,12 @@ const PARSERS = {
       if (!anio || !mes) return;
       mesesSet.add(`${anio}-${mes}`);
       const venta = toStr(r['Venta']) || '';
-      const clave = toStr(r['Clave']) || '';
+      // IMPORTANTE: el "SKU" que usa el roadmap y el resto del dashboard es el
+      // "Numero de parte" (AC-936248, BR-937689), NO la "Clave" interna del ERP
+      // (TCTCIAKCVIRTUOSN). Se normaliza a UPPERCASE para consolidar con datos
+      // históricos que vienen en mayúsculas.
+      const numParte = (toStr(r['Numero de parte']) || '').toUpperCase();
+      const claveInterna = toStr(r['Clave']) || '';
       const cantidad = toNum(r['Cantidad']);
       // Normalizar case: Revko envía 'amazon', 'gdl', 'Zacatecas' pero el resto
       // de los meses vive con 'AMAZON', 'GDL', 'ZACATECAS' — mantener consistencia
@@ -1493,13 +1498,13 @@ const PARSERS = {
         if (u === 'AMAZON' || u === 'GDL' || u === 'ZACATECAS') return u;
         return s;
       };
-      // Hash content: venta|sku|fecha|cantidad — estable entre re-uploads
-      let id = hashRevko(`REVKO|${venta}|${clave}|${fecha}|${cantidad ?? ''}`);
+      // Hash content: venta|numParte|fecha|cantidad — estable entre re-uploads
+      let id = hashRevko(`REVKO|${venta}|${numParte}|${fecha}|${cantidad ?? ''}`);
       // Colisión intra-archivo (raro): perturba con contador
       let bump = 0;
       while (idsVistos.has(id)) {
         bump++;
-        id = hashRevko(`REVKO|${venta}|${clave}|${fecha}|${cantidad ?? ''}|${bump}`);
+        id = hashRevko(`REVKO|${venta}|${numParte}|${fecha}|${cantidad ?? ''}|${bump}`);
         colisiones++;
       }
       idsVistos.add(id);
@@ -1512,8 +1517,8 @@ const PARSERS = {
         idcliente: 708, // DICOTECH
         mayorista: 'DICOTECH',
         fecha, anio, mes,
-        sku: clave,
-        sku_cliente: toStr(r['Numero de parte']),
+        sku: numParte,        // AC-XXX/BR-XXX (matches roadmap)
+        sku_cliente: claveInterna, // Clave interna Revko (TCTCIAKCVIRTUOSN)
         descripcion: toStr(r['Descripcion']),
         cliente_codigo: null,
         cliente_nombre: toStr(r['Cliente']),
