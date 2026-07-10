@@ -256,12 +256,21 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
     return Array.from(set).sort();
   }, [roadmap]);
 
-  // ── Filas tabla ──
+  // ── Roadmap ordenado por sort_order (nulls al final) ──
+  const roadmapOrdenado = useMemo(() => {
+    return [...roadmap].sort((a, b) => {
+      const sa = a.sort_order == null ? Number.MAX_SAFE_INTEGER : Number(a.sort_order);
+      const sb = b.sort_order == null ? Number.MAX_SAFE_INTEGER : Number(b.sort_order);
+      if (sa !== sb) return sa - sb;
+      return String(a.sku || '').localeCompare(String(b.sku || ''));
+    });
+  }, [roadmap]);
+
+  // ── Filas tabla — muestra TODO el roadmap en orden sort_order ──
   const filas = useMemo(() => {
     const q = busqueda.trim().toUpperCase();
     const rows = [];
-    for (const r of roadmap) {
-      if (!skusVendidos.has(r.sku)) continue;
+    for (const r of roadmapOrdenado) {
       if (marcaSel.size > 0 && !marcaSel.has(r.marca)) continue;
       if (roadmapSel.size > 0 && !roadmapSel.has(r.rdmp)) continue;
       const famNorm = ((r.familia || '').trim());
@@ -276,14 +285,14 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
       const cerrados = piezas.slice(0, mesActual);
       const conVenta = cerrados.filter((v) => v > 0);
       const promedio = conVenta.length ? conVenta.reduce((a, b) => a + b, 0) / conVenta.length : 0;
-      rows.push({ ...r, familiaCap: famCap, piezas, total, promedio });
+      rows.push({ ...r, familiaCap: famCap, piezas, total, promedio, vendido: skusVendidos.has(r.sku) });
     }
     if (orden.col && orden.dir) {
       const factor = orden.dir === 'asc' ? 1 : -1;
       rows.sort((a, b) => ((a[orden.col] || 0) - (b[orden.col] || 0)) * factor);
     }
     return rows;
-  }, [roadmap, skusVendidos, matrizSku, busqueda, marcaSel, roadmapSel, familiaSel, orden, mesActual]);
+  }, [roadmapOrdenado, skusVendidos, matrizSku, busqueda, marcaSel, roadmapSel, familiaSel, orden, mesActual]);
 
   const totalesFila = useMemo(() => {
     const t = Array(12).fill(0);
@@ -531,7 +540,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
             <MultiSelect label="Roadmap" options={roadmapOpciones} selected={roadmapSel} onChange={setRoadmapSel} width={130} />
             <MultiSelect label="Familia" options={familiaOpciones} selected={familiaSel} onChange={setFamiliaSel} width={160} />
           </div>
-          <span className="text-[11px] text-gray-500">{filas.length} SKUs con venta {anioActual}</span>
+          <span className="text-[11px] text-gray-500">{filas.length} SKUs · {filas.filter((r) => r.vendido).length} con venta {anioActual}</span>
         </div>
         <div className="overflow-auto" style={{ maxHeight: '70vh' }}>
           <table className="w-full text-[11px]">
