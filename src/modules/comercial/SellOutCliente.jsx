@@ -120,6 +120,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   const [skuMesRaw, setSkuMesRaw] = useState([]);
   const [roadmap, setRoadmap] = useState([]);
   const [facturacion, setFacturacion] = useState([]); // sell-in del mismo cliente para bloque conversión
+  const [inventarioCliente, setInventarioCliente] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [marcaSel, setMarcaSel] = useState(new Set());
   const [roadmapSel, setRoadmapSel] = useState(new Set());
@@ -130,18 +131,21 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      const [mes, skuMes, rdmp, fact] = await Promise.all([
+      const [mes, skuMes, rdmp, fact, inv] = await Promise.all([
         fetchAll(meta.vistaMensual, 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
         fetchAll(meta.vistaSkuMes, 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anioActual])),
         fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp,sort_order'),
         fetchAll('facturacion_clientes', 'sku,anio,mes,piezas,monto',
           (q) => q.eq('cliente_key', meta.sellInClienteKey).in('anio', [anioPrev, anioActual])),
+        fetchAll('inventario_cliente', 'sku,stock,valor,precio_venta,costo_convenio,anio,semana,fecha_ultima_venta,dias_sin_venta',
+          (q) => q.eq('cliente', meta.sellInClienteKey)),
       ]);
       setMensualDico(mes);
       setSkuMesRaw(skuMes);
       setRoadmap(rdmp);
       setFacturacion(fact);
+      setInventarioCliente(inv);
       setLoading(false);
     })();
   }, [anioActual, anioPrev, meta.vistaMensual, meta.vistaSkuMes, meta.sellInClienteKey]);
@@ -227,6 +231,49 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
     return s;
   }, [skuMesRaw, anioActual]);
 
+  // ── Inventario cliente: último snapshot por SKU ──
+  const inventarioMap = useMemo(() => {
+    const m = new Map();
+    for (const r of inventarioCliente) {
+      const key = (Number(r.anio) || 0) * 100 + (Number(r.semana) || 0);
+      const prev = m.get(r.sku);
+      if (!prev || key > prev._key) {
+        m.set(r.sku, {
+          stock: Number(r.stock) || 0,
+          valor: Number(r.valor) || 0,
+          precio_venta: Number(r.precio_venta) || 0,
+          costo_convenio: Number(r.costo_convenio) || 0,
+          fecha_ultima_venta: r.fecha_ultima_venta,
+          dias_sin_venta: Number(r.dias_sin_venta) || null,
+          anio: r.anio, semana: r.semana,
+          _key: key,
+        });
+      }
+    }
+    return m;
+  }, [inventarioCliente]);
+
+  const invSemanaMax = useMemo(() => {
+    let key = 0, anio = null, semana = null;
+    for (const r of inventarioCliente) {
+      const k = (Number(r.anio) || 0) * 100 + (Number(r.semana) || 0);
+      if (k > key) { key = k; anio = r.anio; semana = r.semana; }
+    }
+    return { anio, semana };
+  }, [inventarioCliente]);
+
+  const invTotales = useMemo(() => {
+    let stock = 0, valor = 0;
+    for (const [, v] of inventarioMap) { stock += v.stock; valor += v.valor; }
+    return { stock, valor };
+  }, [inventarioMap]);
+
+  const skusConInventario = useMemo(() => {
+    const s = new Set();
+    for (const [sku, v] of inventarioMap) if (v.stock > 0) s.add(sku);
+    return s;
+  }, [inventarioMap]);
+
   // ── Composición por familia YTD ──
   const familiasYTD = useMemo(() => {
     const map = new Map();
@@ -271,6 +318,10 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
     const q = busqueda.trim().toUpperCase();
     const rows = [];
     for (const r of roadmapOrdenado) {
+      // Solo SKUs con venta 2026 O con inventario > 0 en el cliente
+      const tieneVenta = skusVendidos.has(r.sku);
+      const tieneInv = skusConInventario.has(r.sku);
+      if (!tieneVenta && !tieneInv) continue;
       if (marcaSel.size > 0 && !marcaSel.has(r.marca)) continue;
       if (roadmapSel.size > 0 && !roadmapSel.has(r.rdmp)) continue;
       const famNorm = ((r.familia || '').trim());
@@ -285,14 +336,21 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
       const cerrados = piezas.slice(0, mesActual);
       const conVenta = cerrados.filter((v) => v > 0);
       const promedio = conVenta.length ? conVenta.reduce((a, b) => a + b, 0) / conVenta.length : 0;
-      rows.push({ ...r, familiaCap: famCap, piezas, total, promedio, vendido: skusVendidos.has(r.sku) });
+      const inv = inventarioMap.get(r.sku);
+      rows.push({
+        ...r, familiaCap: famCap, piezas, total, promedio,
+        vendido: tieneVenta,
+        invStock: inv?.stock || 0,
+        invValor: inv?.valor || 0,
+        invDiasSinVenta: inv?.dias_sin_venta || null,
+      });
     }
     if (orden.col && orden.dir) {
       const factor = orden.dir === 'asc' ? 1 : -1;
       rows.sort((a, b) => ((a[orden.col] || 0) - (b[orden.col] || 0)) * factor);
     }
     return rows;
-  }, [roadmapOrdenado, skusVendidos, matrizSku, busqueda, marcaSel, roadmapSel, familiaSel, orden, mesActual]);
+  }, [roadmapOrdenado, skusVendidos, skusConInventario, inventarioMap, matrizSku, busqueda, marcaSel, roadmapSel, familiaSel, orden, mesActual]);
 
   const totalesFila = useMemo(() => {
     const t = Array(12).fill(0);
@@ -371,14 +429,16 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   }, [facturacion, mensualPorAnio, anioActual, mesActual]);
 
   const exportarExcel = () => {
-    const HEADERS = ['Marca', 'SKU', 'Descripción', 'Familia', 'Roadmap', ...MESES, 'Promedio', 'Total'];
+    const HEADERS = ['Marca', 'SKU', 'Descripción', 'Familia', 'Roadmap', ...MESES, 'Promedio', 'Total', `Inv. ${meta.nombre} (pz)`, `Inv. ${meta.nombre} ($)`];
     const rows = filas.map((r) => [
       r.marca || '', r.sku || '', r.descripcion || '', r.familiaCap || '', r.rdmp || '',
       ...r.piezas.map((v) => v || null),
       Math.round(r.promedio) || null,
       r.total,
+      r.invStock || null,
+      r.invValor || null,
     ]);
-    const totalRow = ['TOTAL', `${filas.length} SKUs`, '', '', '', ...totalesFila.mes.map((v) => v || null), Math.round(totalesFila.promedio) || null, totalesFila.total];
+    const totalRow = ['TOTAL', `${filas.length} SKUs`, '', '', '', ...totalesFila.mes.map((v) => v || null), Math.round(totalesFila.promedio) || null, totalesFila.total, invTotales.stock, invTotales.valor];
     const titulo = `Sell Out ${meta.nombre} · ${anioActual}`;
     const aoa = [[titulo, ...Array(HEADERS.length - 1).fill('')], HEADERS, ...rows, totalRow];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -393,7 +453,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
     }
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: HEADERS.length - 1 } }];
     ws['!rows'] = [{ hpt: 26 }, { hpt: 24 }];
-    ws['!cols'] = [{ wch: 10 }, { wch: 14 }, { wch: 50 }, { wch: 18 }, { wch: 9 }, ...MESES.map(() => ({ wch: 8 })), { wch: 10 }, { wch: 10 }];
+    ws['!cols'] = [{ wch: 10 }, { wch: 14 }, { wch: 50 }, { wch: 18 }, { wch: 9 }, ...MESES.map(() => ({ wch: 8 })), { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }];
     ws['!freeze'] = { xSplit: 5, ySplit: 2 };
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sell Out');
@@ -417,7 +477,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
             <ShoppingBag className="w-6 h-6 text-gray-700" /> Sell Out
           </h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Ventas de {meta.nombre} a sus clientes finales · Fuente Sellout General · {skuMesRaw.length.toLocaleString('es-MX')} rows agregados
+            Ventas de {meta.nombre} a sus clientes finales · Fuente Sellout General{invSemanaMax.semana ? ` · Inventario snapshot semana ${invSemanaMax.semana} ${invSemanaMax.anio}` : ''}
           </p>
         </div>
         <button onClick={exportarExcel}
@@ -540,7 +600,9 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
             <MultiSelect label="Roadmap" options={roadmapOpciones} selected={roadmapSel} onChange={setRoadmapSel} width={130} />
             <MultiSelect label="Familia" options={familiaOpciones} selected={familiaSel} onChange={setFamiliaSel} width={160} />
           </div>
-          <span className="text-[11px] text-gray-500">{filas.length} SKUs · {filas.filter((r) => r.vendido).length} con venta {anioActual}</span>
+          <span className="text-[11px] text-gray-500">
+            {filas.length} SKUs · {filas.filter((r) => r.vendido).length} con venta {anioActual} · {filas.filter((r) => r.invStock > 0).length} con inventario
+          </span>
         </div>
         <div className="overflow-auto" style={{ maxHeight: '70vh' }}>
           <table className="w-full text-[11px]">
@@ -555,6 +617,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
                   ...MESES.map((m) => ({ l: m, a: 'right', w: 44 })),
                   { l: 'Promedio', a: 'right', sort: 'promedio', w: 60 },
                   { l: 'Total',    a: 'right', sort: 'total', w: 64 },
+                  { l: `Inv. ${meta.nombre}`, a: 'right', sort: 'invStock', w: 90 },
                 ].map((h, i) => (
                   <th key={i} className="py-1.5 px-1.5 font-medium uppercase tracking-wider text-[9px] text-gray-500 border-b border-gray-200 bg-gray-50"
                     style={{ textAlign: h.a || 'left', width: h.w, whiteSpace: 'nowrap' }}>
@@ -599,10 +662,20 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
                       <td className="py-1 px-1.5 text-right tabular-nums font-semibold text-gray-800 bg-gray-50">
                         {fmtInt(r.total)}
                       </td>
+                      <td className="py-1 px-1.5 text-right whitespace-nowrap" style={{ background: '#EEF2FF' }}>
+                        {r.invStock > 0 ? (
+                          <>
+                            <div className="text-[11px] font-semibold text-indigo-800 tabular-nums">{fmtInt(r.invStock)} pz</div>
+                            <div className="text-[10px] text-indigo-500 tabular-nums">{formatMXN(r.invValor)}</div>
+                          </>
+                        ) : (
+                          <span className="text-gray-400 text-[10px]">—</span>
+                        )}
+                      </td>
                     </tr>
                     {abierta && (
                       <tr>
-                        <td colSpan={19} style={{ padding: 0, background: '#FFFFFF', borderTop: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }}>
+                        <td colSpan={20} style={{ padding: 0, background: '#FFFFFF', borderTop: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }}>
                           <SkuDrillDownBoundary sku={r.sku}>
                             <SkuDrillDown sku={r.sku} skuInfo={r} meta={meta}
                               anioActual={anioActual} anioPrev={anioPrev} mesActual={mesActual}
@@ -622,6 +695,10 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
                 ))}
                 <td className="py-1.5 px-1.5 text-right tabular-nums">{totalesFila.promedio ? fmtInt(totalesFila.promedio) : '—'}</td>
                 <td className="py-1.5 px-1.5 text-right tabular-nums">{fmtInt(totalesFila.total)}</td>
+                <td className="py-1.5 px-1.5 text-right whitespace-nowrap" style={{ background: '#E0E7FF' }}>
+                  <div className="text-[11px] font-semibold text-indigo-800 tabular-nums">{fmtInt(invTotales.stock)} pz</div>
+                  <div className="text-[10px] text-indigo-600 tabular-nums">{formatMXN(invTotales.valor)}</div>
+                </td>
               </tr>
             </tbody>
           </table>
