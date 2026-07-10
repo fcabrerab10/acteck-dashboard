@@ -21,15 +21,29 @@ const CLIENTES_META = {
     accent: '#0EA5E9',
     vistaMensual: 'v_sellout_dicotech_mensual',
     vistaSkuMes: 'v_sellout_dicotech_sku_mes',
-    // Para drill-down: query raw sellout_general filtrando por sku + mayorista
+    vistaSucursalMes: 'v_sellout_dicotech_sucursal_mes',
     mayoristaKey: 'DICOTECH',
     sellInClienteKey: 'dicotech',
     listaPrecio: 'DICOTECH',
-    // Info que sí trae Dicotech en su sellout
     drillClientesFinales: true,
     drillVendedores: true,
+    drillSucursales: true,
   },
 };
+
+// Sucursales de Dicotech con label bonito
+const SUCURSAL_LABEL = {
+  'dicoags2': 'Aguascalientes',
+  'leon2': 'León',
+  'Arboledas': 'Arboledas',
+  'GDL': 'Guadalajara',
+  'dropship': 'Dropship',
+  'ZACATECAS': 'Zacatecas',
+  'AMAZON': 'Amazon',
+  'Internet': 'Internet',
+  'santafe': 'Santa Fe',
+};
+const SUCURSAL_COLOR = ['#0EA5E9', '#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#F97316', '#14B8A6', '#94A3B8'];
 
 const CAT_COLORS = ['#0EA5E9', '#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#94A3B8', '#F97316'];
 const ROADMAP_COLOR = {
@@ -121,6 +135,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   const [roadmap, setRoadmap] = useState([]);
   const [facturacion, setFacturacion] = useState([]); // sell-in del mismo cliente para bloque conversión
   const [inventarioCliente, setInventarioCliente] = useState([]);
+  const [sucursalMes, setSucursalMes] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [marcaSel, setMarcaSel] = useState(new Set());
   const [roadmapSel, setRoadmapSel] = useState(new Set());
@@ -131,7 +146,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      const [mes, skuMes, rdmp, fact, inv] = await Promise.all([
+      const [mes, skuMes, rdmp, fact, inv, sucMes] = await Promise.all([
         fetchAll(meta.vistaMensual, 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
         fetchAll(meta.vistaSkuMes, 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anioActual])),
@@ -140,12 +155,17 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
           (q) => q.eq('cliente_key', meta.sellInClienteKey).in('anio', [anioPrev, anioActual])),
         fetchAll('inventario_cliente', 'sku,stock,valor,precio_venta,costo_convenio,anio,semana,fecha_ultima_venta,dias_sin_venta',
           (q) => q.eq('cliente', meta.sellInClienteKey)),
+        meta.vistaSucursalMes
+          ? fetchAll(meta.vistaSucursalMes, 'sucursal,anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos',
+              (q) => q.in('anio', [anioPrev, anioActual]))
+          : Promise.resolve([]),
       ]);
       setMensualDico(mes);
       setSkuMesRaw(skuMes);
       setRoadmap(rdmp);
       setFacturacion(fact);
       setInventarioCliente(inv);
+      setSucursalMes(sucMes);
       setLoading(false);
     })();
   }, [anioActual, anioPrev, meta.vistaMensual, meta.vistaSkuMes, meta.sellInClienteKey]);
@@ -274,6 +294,50 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
     return s;
   }, [inventarioMap]);
 
+  // ── Ventas por sucursal ──
+  const sucursalesYTD = useMemo(() => {
+    const map = new Map();
+    const mapPrev = new Map();
+    for (const r of sucursalMes) {
+      const key = r.sucursal || '(sin sucursal)';
+      const tgt = r.anio === anioActual ? map : r.anio === anioPrev ? mapPrev : null;
+      if (!tgt) continue;
+      if (tgt === map && r.mes > mesActual) continue;
+      if (tgt === mapPrev && r.mes > mesActual) continue;
+      if (!tgt.has(key)) tgt.set(key, { name: key, monto: 0, piezas: 0, tx: 0, skus: 0 });
+      const it = tgt.get(key);
+      it.monto += Number(r.monto) || 0;
+      it.piezas += Number(r.piezas) || 0;
+      it.tx += Number(r.tx) || 0;
+      it.skus = Math.max(it.skus, Number(r.skus_distintos) || 0);
+    }
+    const arr = Array.from(map.values()).sort((a, b) => b.monto - a.monto);
+    const tot = arr.reduce((s, x) => s + x.monto, 0);
+    return arr.map((v, i) => {
+      const prev = mapPrev.get(v.name);
+      return {
+        ...v,
+        label: SUCURSAL_LABEL[v.name] || v.name,
+        pct: tot ? (v.monto / tot * 100) : 0,
+        color: SUCURSAL_COLOR[i % SUCURSAL_COLOR.length],
+        prevMonto: prev?.monto || 0,
+        yoy: prev?.monto > 0 ? ((v.monto - prev.monto) / prev.monto * 100) : null,
+      };
+    });
+  }, [sucursalMes, anioActual, anioPrev, mesActual]);
+
+  const sucursalesMensual = useMemo(() => {
+    // matriz sucursal × mes para 2026 (monto y piezas)
+    const skToMes = new Map();
+    for (const r of sucursalMes) {
+      if (r.anio !== anioActual) continue;
+      const key = r.sucursal || '(sin sucursal)';
+      if (!skToMes.has(key)) skToMes.set(key, Array(12).fill(0));
+      skToMes.get(key)[r.mes - 1] = Number(r.monto) || 0;
+    }
+    return skToMes;
+  }, [sucursalMes, anioActual]);
+
   // ── Composición por familia YTD ──
   const familiasYTD = useMemo(() => {
     const map = new Map();
@@ -394,39 +458,6 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
       </button>
     );
   };
-
-  // ── Bloque Sell in vs Sell out ──
-  const conversionMensual = useMemo(() => {
-    const si = Array(12).fill(0);
-    for (const r of facturacion) {
-      if (r.anio !== anioActual) continue;
-      si[r.mes - 1] += Number(r.monto) || 0;
-    }
-    const so = mensualPorAnio.monto[anioActual];
-    return MESES.map((mes, i) => {
-      const ratio = si[i] > 0 ? (so[i] / si[i] * 100) : null;
-      return {
-        mes,
-        sellIn: i < mesActual ? Math.round(si[i]) : null,
-        sellOut: i < mesActual && so[i] > 0 ? Math.round(so[i]) : null,
-        ratio: i < mesActual ? ratio : null,
-      };
-    });
-  }, [facturacion, mensualPorAnio, anioActual, mesActual]);
-
-  const conversionYTD = useMemo(() => {
-    let si = 0, so = 0, siPz = 0, soPz = 0;
-    for (const r of facturacion) if (r.anio === anioActual && r.mes <= mesActual) {
-      si += Number(r.monto) || 0; siPz += Number(r.piezas) || 0;
-    }
-    for (let i = 0; i < mesActual; i++) {
-      so += mensualPorAnio.monto[anioActual][i];
-      soPz += mensualPorAnio.piezas[anioActual][i];
-    }
-    const ratio = si > 0 ? (so / si * 100) : null;
-    const remanente = siPz - soPz;
-    return { si, so, siPz, soPz, ratio, remanente };
-  }, [facturacion, mensualPorAnio, anioActual, mesActual]);
 
   const exportarExcel = () => {
     const HEADERS = ['Marca', 'SKU', 'Descripción', 'Familia', 'Roadmap', ...MESES, 'Promedio', 'Total', `Inv. ${meta.nombre} (pz)`, `Inv. ${meta.nombre} ($)`];
@@ -705,8 +736,10 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
         </div>
       </div>
 
-      {/* Bloque conversión */}
-      <BloqueConversion data={conversionMensual} ytd={conversionYTD} mesActual={mesActual} anioActual={anioActual} accent={ACCENT} />
+      {/* Ventas por sucursal */}
+      {sucursalesYTD.length > 0 && (
+        <BloqueSucursales sucursales={sucursalesYTD} matriz={sucursalesMensual} mesActual={mesActual} anioActual={anioActual} anioPrev={anioPrev} />
+      )}
     </div>
   );
 }
@@ -730,62 +763,98 @@ function KPI({ label, badge, badgeTone, value, sub }) {
   );
 }
 
-// ── Bloque conversion Sell in vs Sell out ──
-function BloqueConversion({ data, ytd, mesActual, anioActual, accent }) {
+// ── Bloque de sucursales ──
+function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev }) {
+  const totalYTD = sucursales.reduce((s, x) => s + x.monto, 0);
+  const maxPct = sucursales[0]?.pct || 1;
+
+  // Data para chart apilado por mes: cada sucursal es una serie
+  const chartData = MESES.map((m, i) => {
+    const row = { mes: m };
+    if (i >= mesActual) return row;
+    for (const s of sucursales) {
+      const serie = matriz.get(s.name);
+      row[s.name] = serie ? Math.round(serie[i]) : 0;
+    }
+    return row;
+  });
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <div className="flex justify-between items-baseline mb-2">
-        <h3 className="text-sm font-semibold text-gray-800">Sell in vs Sell out · conversión mensual {anioActual}</h3>
-        <div className="text-[11px] text-gray-500 flex gap-3">
-          <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-rose-300" /> Sell in (Acteck→Dico)</span>
-          <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm" style={{ background: accent }} /> Sell out</span>
-          <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-amber-500" /> Ratio</span>
-        </div>
+      <div className="flex justify-between items-baseline mb-3">
+        <h3 className="text-sm font-semibold text-gray-800">
+          Ventas por sucursal · YTD {anioActual}
+        </h3>
+        <span className="text-[11px] text-gray-500">
+          {sucursales.length} sucursales · {formatMXN(totalYTD)}
+        </span>
       </div>
-      <div style={{ height: 220 }}>
-        <ResponsiveContainer>
-          <ComposedChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="0" stroke="#F3F4F6" vertical={false} />
-            <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-            <YAxis yAxisId="left" domain={[0, 'auto']} tickFormatter={(v) => fmtMoneyShort(v)}
-              tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={55} />
-            <YAxis yAxisId="right" orientation="right" domain={[0, 250]} tickFormatter={(v) => `${v}%`}
-              tick={{ fontSize: 10, fill: '#F59E0B' }} axisLine={false} tickLine={false} width={45} />
-            <Tooltip formatter={(v, name) => name === 'Ratio' ? [`${v?.toFixed?.(0)}%`, name] : [formatMXN(v), name]}
-              contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }} />
-            <Bar yAxisId="left" dataKey="sellIn" name="Sell in" fill="#FCA5A5" radius={[3, 3, 0, 0]} maxBarSize={22} />
-            <Bar yAxisId="left" dataKey="sellOut" name="Sell out" fill={accent} radius={[3, 3, 0, 0]} maxBarSize={22} />
-            <Line yAxisId="right" dataKey="ratio" name="Ratio" stroke="#F59E0B" strokeWidth={2}
-              strokeDasharray="5 4" dot={{ r: 3, fill: '#F59E0B' }} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="grid grid-cols-4 gap-2 mt-3">
-        <div className="bg-gray-50 rounded-md p-3">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell in YTD</div>
-          <div className="text-[15px] font-semibold tabular-nums">{formatMXN(ytd.si)}</div>
-          <div className="text-[10px] text-gray-500">{fmtInt(ytd.siPz)} pz facturadas</div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr] gap-4">
+        {/* Ranking sucursales YTD */}
+        <div className="flex flex-col gap-2">
+          {sucursales.map((s) => {
+            const yoyClass = s.yoy == null ? 'text-gray-400' : s.yoy >= 0 ? 'text-emerald-700' : 'text-rose-700';
+            return (
+              <div key={s.name} className="text-[12px]">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: s.color }} />
+                    <span className="font-medium text-gray-800 truncate">{s.label}</span>
+                  </span>
+                  <span className="text-gray-500 tabular-nums font-medium">{s.pct.toFixed(1)}%</span>
+                </div>
+                <div className="h-[4px] bg-gray-100 rounded-full overflow-hidden mt-1">
+                  <span className="block h-full rounded-full" style={{ width: `${(s.pct / maxPct * 100).toFixed(1)}%`, background: s.color }} />
+                </div>
+                <div className="flex justify-between text-[10.5px] text-gray-500 mt-1 tabular-nums">
+                  <span>{fmtInt(s.piezas)} pz · {formatMXN(s.monto)} · {fmtInt(s.tx)} tx</span>
+                  {s.yoy != null ? (
+                    <span className={`font-semibold ${yoyClass}`}>{s.yoy >= 0 ? '+' : ''}{s.yoy.toFixed(0)}% YoY</span>
+                  ) : s.prevMonto === 0 && s.monto > 0 ? (
+                    <span className="text-emerald-700 font-semibold">nueva</span>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <div className="bg-gray-50 rounded-md p-3">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell out YTD</div>
-          <div className="text-[15px] font-semibold tabular-nums">{formatMXN(ytd.so)}</div>
-          <div className="text-[10px] text-gray-500">{fmtInt(ytd.soPz)} pz vendidas</div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-3">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Ratio conversión</div>
-          <div className={`text-[15px] font-semibold tabular-nums ${ytd.ratio == null ? 'text-gray-400' : ytd.ratio >= 100 ? 'text-emerald-700' : ytd.ratio >= 80 ? 'text-amber-700' : 'text-rose-700'}`}>
-            {ytd.ratio != null ? `${ytd.ratio.toFixed(0)}%` : '—'}
+
+        {/* Chart apilado mensual */}
+        <div>
+          <div className="text-[10.5px] uppercase tracking-widest font-semibold text-gray-500 mb-2">
+            Evolución mensual · $ apilado por sucursal
           </div>
-          <div className="text-[10px] text-gray-500">{ytd.ratio >= 100 ? 'Desplazando inventario 2025' : 'Aún queda stock'}</div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-3">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Δ inventario estimado</div>
-          <div className={`text-[15px] font-semibold tabular-nums ${ytd.remanente > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
-            {ytd.remanente > 0 ? '+' : ''}{fmtInt(ytd.remanente)} pz
+          <div style={{ height: 260 }}>
+            <ResponsiveContainer>
+              <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="#F3F4F6" vertical={false} />
+                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v) => fmtMoneyShort(v)}
+                  tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={55} />
+                <Tooltip formatter={(v) => formatMXN(v)}
+                  labelFormatter={(l) => `${l} ${anioActual}`}
+                  contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #E5E7EB' }} />
+                {sucursales.map((s) => (
+                  <Bar key={s.name} dataKey={s.name} name={s.label} stackId="s"
+                    fill={s.color} maxBarSize={40} />
+                ))}
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
-          <div className="text-[10px] text-gray-500">{ytd.remanente > 0 ? 'En almacén cliente' : 'Vendiendo stock anterior'}</div>
         </div>
       </div>
+
+      {sucursales.length >= 2 && (
+        <div className="border-t border-gray-200 mt-3 pt-3 flex justify-between text-[11.5px] text-gray-500">
+          <span>
+            Dominante: <strong className="text-gray-800">{sucursales[0].label}</strong> ({sucursales[0].pct.toFixed(1)}%)
+          </span>
+          <span>
+            Top 3 = <strong className="text-gray-800 tabular-nums">{sucursales.slice(0, 3).reduce((s, x) => s + x.pct, 0).toFixed(1)}%</strong> del total
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -818,7 +887,7 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
       try {
         const [txRes, precioRes] = await Promise.all([
           supabase.from('sellout_general')
-            .select('anio,mes,cliente_nombre,vendedor_nombre,cantidad,precio_unitario,importe')
+            .select('anio,mes,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe')
             .eq('mayorista', meta.mayoristaKey).eq('sku', sku)
             .in('anio', [anioPrev, anioActual]),
           supabase.from('precios_sku')
@@ -838,14 +907,15 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
     return () => { cancelled = true; };
   }, [sku, meta.mayoristaKey, meta.listaPrecio, anioActual, anioPrev, mesActual]);
 
-  const { topClientes, topVendedores, precioReal, piezasYTD, montoYTD, clientesTotal, vendedoresTotal } = useMemo(() => {
-    const cli = new Map(); const ven = new Map();
+  const { topClientes, topVendedores, topSucursales, precioReal, piezasYTD, montoYTD, clientesTotal, vendedoresTotal, sucursalesTotal } = useMemo(() => {
+    const cli = new Map(); const ven = new Map(); const suc = new Map();
     let pzYTD = 0, montoYTDacc = 0, precioAcum = 0, precioN = 0;
-    const cliPrev = new Map();
+    const cliPrev = new Map(); const sucPrev = new Map();
     for (const r of rows) {
       const y = r.anio; const cnt = Number(r.cantidad) || 0; const imp = Number(r.importe) || 0;
       const cn = r.cliente_nombre || '(sin nombre)';
       const vn = r.vendedor_nombre || '(sin nombre)';
+      const sn = r.sucursal || '(sin sucursal)';
       if (y === anioActual) {
         pzYTD += cnt; montoYTDacc += imp;
         if (Number(r.precio_unitario) > 0) { precioAcum += Number(r.precio_unitario) * cnt; precioN += cnt; }
@@ -853,28 +923,36 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
         cli.get(cn).pz += cnt; cli.get(cn).monto += imp;
         if (!ven.has(vn)) ven.set(vn, { name: vn, pz: 0, monto: 0 });
         ven.get(vn).pz += cnt; ven.get(vn).monto += imp;
+        if (!suc.has(sn)) suc.set(sn, { name: sn, pz: 0, monto: 0 });
+        suc.get(sn).pz += cnt; suc.get(sn).monto += imp;
       } else if (y === anioPrev) {
         if (!cliPrev.has(cn)) cliPrev.set(cn, 0);
         cliPrev.set(cn, cliPrev.get(cn) + imp);
+        if (!sucPrev.has(sn)) sucPrev.set(sn, 0);
+        sucPrev.set(sn, sucPrev.get(sn) + imp);
       }
     }
     const totCli = Array.from(cli.values()).reduce((s, x) => s + x.monto, 0);
     const totVen = Array.from(ven.values()).reduce((s, x) => s + x.monto, 0);
+    const totSuc = Array.from(suc.values()).reduce((s, x) => s + x.monto, 0);
     const topC = Array.from(cli.values()).sort((a, b) => b.monto - a.monto).map((v) => ({
-      ...v,
-      pct: totCli > 0 ? (v.monto / totCli * 100) : 0,
+      ...v, pct: totCli > 0 ? (v.monto / totCli * 100) : 0,
       prev: cliPrev.get(v.name) || 0,
       yoy: cliPrev.get(v.name) > 0 ? ((v.monto - cliPrev.get(v.name)) / cliPrev.get(v.name) * 100) : null,
     }));
     const topV = Array.from(ven.values()).sort((a, b) => b.monto - a.monto).map((v) => ({
-      ...v,
-      pct: totVen > 0 ? (v.monto / totVen * 100) : 0,
+      ...v, pct: totVen > 0 ? (v.monto / totVen * 100) : 0,
+    }));
+    const topS = Array.from(suc.values()).sort((a, b) => b.monto - a.monto).map((v) => ({
+      ...v, label: SUCURSAL_LABEL[v.name] || v.name,
+      pct: totSuc > 0 ? (v.monto / totSuc * 100) : 0,
+      yoy: sucPrev.get(v.name) > 0 ? ((v.monto - sucPrev.get(v.name)) / sucPrev.get(v.name) * 100) : null,
     }));
     const pr = precioN > 0 ? precioAcum / precioN : null;
     return {
-      topClientes: topC, topVendedores: topV,
+      topClientes: topC, topVendedores: topV, topSucursales: topS,
       precioReal: pr, piezasYTD: pzYTD, montoYTD: montoYTDacc,
-      clientesTotal: cli.size, vendedoresTotal: ven.size,
+      clientesTotal: cli.size, vendedoresTotal: ven.size, sucursalesTotal: suc.size,
     };
   }, [rows, anioActual, anioPrev]);
 
@@ -949,50 +1027,63 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
           )}
         </div>
 
-        {/* Col 3 Precio + Conversión */}
+        {/* Col 3 Sucursales */}
         <div>
           <div className="flex items-baseline justify-between mb-3">
-            <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">Precio & flujo</span>
+            <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">Sucursales · YTD {anioActual}</span>
+            <span className="text-[10.5px] text-gray-400">Top 6 de {sucursalesTotal}</span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-gray-50 rounded-md p-2.5">
-              <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Precio prom. real</div>
-              <div className="text-[15px] font-semibold tabular-nums">{precioReal ? formatMXN(precioReal) : '—'}</div>
-              {precioLista && <div className="text-[10px] text-gray-500">vs {formatMXN(precioLista)} lista</div>}
-            </div>
-            <div className="bg-gray-50 rounded-md p-2.5">
-              <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Yield real</div>
-              <div className={`text-[15px] font-semibold tabular-nums ${yieldPct == null ? 'text-gray-400' : yieldPct >= 95 ? 'text-emerald-700' : yieldPct >= 85 ? 'text-amber-700' : 'text-rose-700'}`}>
-                {yieldPct != null ? `${yieldPct.toFixed(1)}%` : '—'}
-              </div>
-              <div className="text-[10px] text-gray-500">Desc. efectivo</div>
-            </div>
+          <div className="flex flex-col gap-2">
+            {topSucursales.slice(0, 6).map((v, i) => {
+              const yoyClass = v.yoy == null ? 'text-emerald-700' : v.yoy >= 0 ? 'text-emerald-700' : 'text-rose-700';
+              const color = SUCURSAL_COLOR[i % SUCURSAL_COLOR.length];
+              return (
+                <div key={v.name} className="pb-1.5 border-b border-dashed border-[#E5EAF0] last:border-b-0 last:pb-0">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: color }} />
+                    <span className="text-[11.5px] font-medium text-gray-800 truncate flex-1">{v.label}</span>
+                    <span className="text-[11px] text-gray-500 font-medium tabular-nums">{v.pct.toFixed(1)}%</span>
+                  </div>
+                  <div className="h-[3px] bg-[#E4EAF2] rounded-full overflow-hidden mt-1">
+                    <span className="block h-full rounded-full" style={{ width: `${Math.min(100, v.pct)}%`, background: color }} />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-gray-500 mt-1 tabular-nums">
+                    <span>{fmtInt(v.pz)} pz · {formatMXN(v.monto)}</span>
+                    {v.yoy != null && <span className={`font-semibold ${yoyClass}`}>{v.yoy >= 0 ? '+' : ''}{v.yoy.toFixed(0)}% YoY</span>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div className="mt-3">
-            <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold mb-1.5">Sell in vs Sell out · YTD {anioActual}</div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-gray-50 rounded-md p-2.5">
-                <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell-in (Acteck)</div>
-                <div className="text-[15px] font-semibold tabular-nums">{fmtInt(siPzYTD)} pz</div>
-                <div className="text-[10px] text-gray-500">Facturado a {meta.nombre}</div>
-              </div>
-              <div className="bg-gray-50 rounded-md p-2.5">
-                <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell-out ({meta.nombre})</div>
-                <div className="text-[15px] font-semibold tabular-nums">{fmtInt(piezasYTD)} pz</div>
-                <div className="text-[10px] text-gray-500">Vendido a cliente final</div>
-              </div>
-            </div>
-            {ratioConv != null && (
-              <div className="bg-gray-50 rounded-md p-2.5 mt-2">
-                <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Ratio conversión</div>
-                <div className={`text-[15px] font-semibold tabular-nums ${ratioConv >= 90 ? 'text-emerald-700' : ratioConv >= 70 ? 'text-amber-700' : 'text-rose-700'}`}>
-                  {ratioConv.toFixed(0)}%
-                </div>
-                <div className="text-[10px] text-gray-500">
-                  {siPzYTD - piezasYTD > 0 ? `${fmtInt(siPzYTD - piezasYTD)} pz podrían estar en almacén ${meta.nombre}` : 'Vendiendo stock anterior'}
-                </div>
-              </div>
-            )}
+        </div>
+      </div>
+
+      {/* Fila inferior: precio real vs lista */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 border-t border-gray-200 pt-4 mt-4">
+        <div className="bg-gray-50 rounded-md p-2.5">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Precio prom. real</div>
+          <div className="text-[15px] font-semibold tabular-nums">{precioReal ? formatMXN(precioReal) : '—'}</div>
+          {precioLista && <div className="text-[10px] text-gray-500">vs {formatMXN(precioLista)} lista {meta.listaPrecio}</div>}
+        </div>
+        <div className="bg-gray-50 rounded-md p-2.5">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Yield real</div>
+          <div className={`text-[15px] font-semibold tabular-nums ${yieldPct == null ? 'text-gray-400' : yieldPct >= 95 ? 'text-emerald-700' : yieldPct >= 85 ? 'text-amber-700' : 'text-rose-700'}`}>
+            {yieldPct != null ? `${yieldPct.toFixed(1)}%` : '—'}
+          </div>
+          <div className="text-[10px] text-gray-500">Descuento efectivo</div>
+        </div>
+        <div className="bg-gray-50 rounded-md p-2.5">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell in Acteck→{meta.nombre}</div>
+          <div className="text-[15px] font-semibold tabular-nums">{fmtInt(siPzYTD)} pz</div>
+          <div className="text-[10px] text-gray-500">YTD {anioActual}</div>
+        </div>
+        <div className="bg-gray-50 rounded-md p-2.5">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Ratio conversión</div>
+          <div className={`text-[15px] font-semibold tabular-nums ${ratioConv == null ? 'text-gray-400' : ratioConv >= 90 ? 'text-emerald-700' : ratioConv >= 70 ? 'text-amber-700' : 'text-rose-700'}`}>
+            {ratioConv != null ? `${ratioConv.toFixed(0)}%` : '—'}
+          </div>
+          <div className="text-[10px] text-gray-500">
+            {siPzYTD - piezasYTD > 0 ? `${fmtInt(siPzYTD - piezasYTD)} pz posible almacén` : 'Vendiendo stock previo'}
           </div>
         </div>
       </div>
