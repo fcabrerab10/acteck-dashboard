@@ -34,13 +34,13 @@ const CLIENTES_META = {
 // Meta de sucursales Dicotech: label bonito, tipo (fisica/virtual), color, código,
 // y coordenadas para posicionar burbuja en el mapa SVG (viewBox 0 0 640 420).
 const SUCURSAL_META = {
-  'dicoags2':  { label: 'Aguascalientes', tipo: 'fisica', codigo: 'AG', color: '#0EA5E9', mapX: 273, mapY: 230 },
-  'leon2':     { label: 'León',           tipo: 'fisica', codigo: 'LE', color: '#6366F1', mapX: 325, mapY: 256 },
-  'Arboledas': { label: 'Arboledas',      tipo: 'fisica', codigo: 'AR', color: '#10B981', mapX: 358, mapY: 278, subtitle: 'Naucalpan' },
-  'GDL':       { label: 'Guadalajara',    tipo: 'fisica', codigo: 'GL', color: '#F59E0B', mapX: 234, mapY: 270 },
-  'ZACATECAS': { label: 'Zacatecas',      tipo: 'fisica', codigo: 'ZA', color: '#EC4899', mapX: 297, mapY: 207 },
-  'santafe':   { label: 'Santa Fe',       tipo: 'fisica', codigo: 'SF', color: '#8B5CF6', mapX: 368, mapY: 288, subtitle: 'CDMX' },
-  'DC':        { label: 'DC',             tipo: 'fisica', codigo: 'DC', color: '#F97316', mapX: 350, mapY: 292 },
+  'dicoags2':  { label: 'Aguascalientes', tipo: 'fisica', codigo: 'AG', color: '#0EA5E9' },
+  'leon2':     { label: 'León',           tipo: 'fisica', codigo: 'LE', color: '#6366F1' },
+  'Arboledas': { label: 'Arboledas',      tipo: 'fisica', codigo: 'AR', color: '#10B981', subtitle: 'Naucalpan' },
+  'GDL':       { label: 'Guadalajara',    tipo: 'fisica', codigo: 'GL', color: '#F59E0B' },
+  'ZACATECAS': { label: 'Zacatecas',      tipo: 'fisica', codigo: 'ZA', color: '#EC4899' },
+  'santafe':   { label: 'Santa Fe',       tipo: 'fisica', codigo: 'SF', color: '#8B5CF6', subtitle: 'CDMX' },
+  'DC':        { label: 'DC',             tipo: 'fisica', codigo: 'DC', color: '#F97316' },
   'AMAZON':    { label: 'Amazon',         tipo: 'virtual', icon: '🛒', color: '#F97316' },
   'Internet':  { label: 'Internet',       tipo: 'virtual', icon: '🌐', color: '#94A3B8' },
   'dropship':  { label: 'Dropship',       tipo: 'virtual', icon: '📦', color: '#14B8A6' },
@@ -846,8 +846,6 @@ function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev,
         codigo: meta.codigo,
         icon: meta.icon || null,
         color: meta.color,
-        mapX: meta.mapX,
-        mapY: meta.mapY,
         monto: s.monto || 0,
         piezas: s.piezas || 0,
         tx: s.tx || 0,
@@ -914,52 +912,13 @@ function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev,
         </div>
       </div>
 
-      {/* Main grid: Map + Ranking */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-5">
-        {/* Mapa */}
-        <div className="relative bg-slate-50 border border-slate-200 rounded-xl p-3" style={{ minHeight: 380 }}>
-          <div className="absolute top-2 left-3 text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">
-            Sucursales físicas · burbuja proporcional a {metricaLabel}
-          </div>
-          <MapaSucursales fisicas={fisicas} valorMetrica={valorMetrica} fmtMetrica={fmtMetrica}
-            maxFisica={maxFisica} selKey={selKey} setSelKey={setSelKey} metricaLabel={metricaLabel} />
-          <div className="absolute bottom-2 right-3 bg-white border border-gray-200 rounded-md px-2 py-1 text-[10px] text-gray-500 flex items-center gap-2">
-            <span>Tamaño ~ {metricaLabel}</span>
-            <span className="inline-flex items-end gap-1">
-              <span className="inline-block rounded-full bg-sky-500 opacity-70" style={{ width: 4, height: 4 }} />
-              <span className="inline-block rounded-full bg-sky-500 opacity-70" style={{ width: 8, height: 8 }} />
-              <span className="inline-block rounded-full bg-sky-500 opacity-70" style={{ width: 12, height: 12 }} />
-              <span className="inline-block rounded-full bg-sky-500 opacity-70" style={{ width: 18, height: 18 }} />
-            </span>
-          </div>
-        </div>
+      {/* Bento: Hero (top sucursal) + satélites + strip virtuales */}
+      <BentoSucursales
+        fisicas={fisicas} virtuales={virtuales}
+        matriz={matriz} mesActual={mesActual}
+        metrica={metrica} valorMetrica={valorMetrica} fmtMetrica={fmtMetrica}
+        totalVis={totalVis} selKey={selKey} setSelKey={setSelKey} />
 
-        {/* Panel ranking */}
-        <div className="flex flex-col gap-2 min-w-0">
-          <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold flex justify-between items-baseline">
-            <span>Sucursales físicas</span>
-            <span className="text-gray-400 text-[10.5px] font-medium normal-case tracking-normal">{fisicas.length} · {formatMXN(totalFisicas > 0 && (metrica === 'monto' || metrica === 'inventario') ? totalFisicas : totalFisicas)}</span>
-          </div>
-          {fisicas.map((s) => (
-            <RankRow key={s.key} it={s} metrica={metrica} valorMetrica={valorMetrica} fmtMetrica={fmtMetrica}
-              max={maxFisica} selected={selKey === s.key} onClick={() => setSelKey(selKey === s.key ? null : s.key)} />
-          ))}
-
-          {virtuales.length > 0 && (
-            <>
-              <div className="h-px bg-gray-200 my-1" />
-              <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold flex justify-between items-baseline">
-                <span>Canales virtuales</span>
-                <span className="text-gray-400 text-[10.5px] font-medium normal-case tracking-normal">{virtuales.length} · sin ubicación física</span>
-              </div>
-              {virtuales.map((s) => (
-                <RankRow key={s.key} it={s} metrica={metrica} valorMetrica={valorMetrica} fmtMetrica={fmtMetrica}
-                  max={maxFisica} selected={selKey === s.key} onClick={() => setSelKey(selKey === s.key ? null : s.key)} />
-              ))}
-            </>
-          )}
-        </div>
-      </div>
 
       {/* Detalle sucursal seleccionada */}
       {seleccionada && (
@@ -1071,92 +1030,191 @@ function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev,
   );
 }
 
-// ── Mapa SVG de México con burbujas por sucursal ─────────────────────────
-function MapaSucursales({ fisicas, valorMetrica, fmtMetrica, maxFisica, selKey, setSelKey, metricaLabel }) {
-  return (
-    <svg viewBox="0 0 640 420" preserveAspectRatio="xMidYMid meet"
-      style={{ width: '100%', height: '100%', minHeight: 340, maxHeight: 380, display: 'block' }}>
-      {/* Contorno México simplificado */}
-      <path d="M 60 190 L 55 165 L 68 150 L 90 152 L 100 140 L 105 145 L 118 152 L 130 145 L 145 150 L 150 158 L 155 172 L 162 175 L 168 165 L 175 158 L 185 155 L 195 158 L 202 165 L 210 160 L 218 165 L 222 170 L 220 175 L 225 180 L 232 175 L 240 172 L 248 165 L 254 168 L 258 162 L 265 158 L 272 152 L 280 148 L 288 145 L 295 148 L 300 155 L 302 165 L 308 170 L 316 178 L 320 182 L 325 176 L 330 172 L 340 168 L 348 165 L 356 168 L 362 174 L 368 178 L 374 175 L 380 170 L 385 165 L 390 158 L 395 154 L 402 152 L 410 150 L 418 145 L 425 145 L 432 142 L 440 138 L 448 135 L 456 132 L 464 128 L 470 128 L 478 128 L 486 132 L 494 138 L 500 145 L 504 152 L 506 160 L 505 168 L 500 175 L 496 182 L 500 190 L 508 200 L 512 210 L 520 220 L 528 230 L 538 240 L 545 250 L 548 260 L 550 268 L 552 278 L 550 285 L 548 292 L 545 295 L 540 292 L 535 288 L 528 285 L 522 282 L 515 278 L 510 275 L 502 270 L 494 268 L 486 268 L 478 272 L 470 278 L 462 285 L 458 290 L 452 298 L 445 305 L 438 308 L 432 312 L 425 315 L 418 320 L 412 325 L 405 328 L 398 332 L 390 335 L 385 340 L 378 342 L 370 345 L 362 348 L 355 350 L 348 350 L 342 350 L 338 355 L 335 362 L 330 368 L 325 372 L 320 375 L 314 378 L 308 382 L 300 385 L 292 388 L 285 392 L 280 388 L 275 385 L 268 380 L 262 378 L 255 375 L 248 372 L 240 368 L 232 362 L 228 358 L 222 350 L 216 342 L 210 335 L 205 328 L 202 322 L 198 316 L 195 310 L 190 305 L 186 298 L 182 292 L 178 285 L 175 278 L 172 272 L 168 265 L 164 258 L 160 252 L 155 245 L 148 240 L 140 235 L 132 232 L 125 230 L 120 225 L 118 218 L 115 210 L 110 202 L 105 195 L 98 190 L 92 188 L 86 192 L 78 195 L 72 198 L 66 196 L 62 192 Z"
-        fill="#E7EDF2" stroke="#CBD5E1" strokeWidth="0.6" />
-      <path d="M 30 148 L 42 145 L 48 158 L 52 175 L 55 190 L 52 205 L 50 215 L 45 218 L 42 210 L 40 200 L 36 190 L 32 180 L 30 168 Z"
-        fill="#E7EDF2" stroke="#CBD5E1" strokeWidth="0.6" />
-      <path d="M 540 240 L 570 232 L 590 240 L 600 255 L 605 270 L 600 282 L 590 288 L 578 285 L 568 278 L 562 272 L 555 265 L 550 258 Z"
-        fill="#E7EDF2" stroke="#CBD5E1" strokeWidth="0.6" />
+// ── Bento asimétrico: hero (top sucursal) + satélites + strip virtuales ──
+function BentoSucursales({ fisicas, virtuales, matriz, mesActual, metrica, valorMetrica, fmtMetrica, totalVis, selKey, setSelKey }) {
+  if (fisicas.length === 0 && virtuales.length === 0) {
+    return <div className="p-6 text-center text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">Sin datos de sucursales en el periodo.</div>;
+  }
 
-      {/* Etiquetas estados */}
-      <g fill="#94A3B8" fontWeight="500" fontFamily="inherit">
-        <text x="80" y="185" fontSize="8">B.C.</text>
-        <text x="220" y="252" fontSize="9" fill="#64748B" fontWeight="600">JAL</text>
-        <text x="270" y="252" fontSize="9" fill="#64748B" fontWeight="600">AGS</text>
-        <text x="300" y="200" fontSize="9" fill="#64748B" fontWeight="600">ZAC</text>
-        <text x="325" y="248" fontSize="9" fill="#64748B" fontWeight="600">GTO</text>
-        <text x="350" y="285" fontSize="8" fill="#64748B" fontWeight="600">CDMX</text>
-      </g>
+  const [hero, ...restoFisicas] = fisicas;
+  const heroVal = hero ? valorMetrica(hero) : 0;
+  const heroPct = totalVis > 0 ? (heroVal / totalVis * 100) : 0;
+  const heroSerie = hero ? (matriz.get(hero.key) || []) : [];
+  const heroSerieVis = heroSerie.slice(0, mesActual);
+  const heroMaxSerie = Math.max(1, ...heroSerieVis);
 
-      {/* Burbujas */}
-      {fisicas.filter((s) => s.mapX != null).map((s) => {
-        const val = valorMetrica(s);
-        const r = maxFisica > 0 ? Math.max(4, Math.sqrt(val / maxFisica) * 28) : 4;
-        const isSel = selKey === s.key;
-        return (
-          <g key={s.key} onClick={() => setSelKey(isSel ? null : s.key)} style={{ cursor: 'pointer' }}>
-            <text x={s.mapX} y={s.mapY - r - 3} textAnchor="middle" fontSize="8.5" fill="#374151" fontWeight="600" fontFamily="inherit">
-              {s.label}
-            </text>
-            <circle cx={s.mapX} cy={s.mapY} r={r} fill={s.color} opacity={isSel ? 0.95 : 0.72}
-              stroke={isSel ? s.color : 'transparent'} strokeWidth={isSel ? 3 : 0} />
-            {r >= 12 && (
-              <text x={s.mapX} y={s.mapY + 3} textAnchor="middle" fontSize={Math.min(9, r * 0.4)} fill="white" fontWeight="700" fontFamily="inherit">
-                {fmtMetrica(val).replace('$', '')}
-              </text>
-            )}
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
+  const HeroCard = () => {
+    if (!hero) return null;
+    const isSel = selKey === hero.key;
+    return (
+      <button onClick={() => setSelKey(isSel ? null : hero.key)}
+        className={`text-left rounded-xl p-4 relative transition ${isSel ? 'ring-2 ring-sky-400' : ''}`}
+        style={{ background: `linear-gradient(135deg, ${hero.color}18 0%, ${hero.color}08 100%)`, border: `1px solid ${hero.color}55` }}>
+        <span className="absolute top-2.5 right-2.5 text-[9px] font-bold uppercase tracking-wider text-white px-2 py-0.5 rounded-full"
+          style={{ background: hero.color }}>🏆 Top</span>
+        <div className="text-[19px] font-bold leading-tight" style={{ color: hero.color, filter: 'brightness(0.7)' }}>
+          {hero.label}
+        </div>
+        {hero.subtitle && <div className="text-[11px] mt-0.5" style={{ color: hero.color, filter: 'brightness(0.85)' }}>{hero.subtitle}</div>}
+        <div className="text-[11px] text-gray-600 mt-0.5">
+          {heroPct.toFixed(1)}% del total · {fmtInt(hero.piezas)} pz · {fmtInt(hero.tx)} tx
+        </div>
 
-// ── Row del ranking ────────────────────────────────────────────────────────
-function RankRow({ it, metrica, valorMetrica, fmtMetrica, max, selected, onClick }) {
-  const yoyClass = it.yoy == null ? 'bg-gray-100 text-gray-500' : it.yoy >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
-  const val = valorMetrica(it);
-  const pct = max > 0 ? (val / max * 100) : 0;
-  return (
-    <button onClick={onClick}
-      className={`text-left rounded-lg border p-2.5 transition ${selected ? 'bg-sky-50 border-sky-300' : 'bg-gray-50 border-gray-100 hover:bg-gray-100'}`}>
-      <div className="grid grid-cols-[auto_1fr_auto] gap-2 items-baseline">
-        <span className="w-[22px] h-[22px] rounded flex items-center justify-center text-white text-[10px] font-bold tracking-wide"
-          style={{ background: it.color, color: it.icon ? undefined : 'white' }}>
-          {it.icon || it.codigo}
-        </span>
-        <span className="font-semibold text-[12px] text-gray-800 truncate">
-          {it.label}
-          {it.subtitle && <span className="ml-1.5 text-[10px] font-medium text-gray-500">· {it.subtitle}</span>}
-        </span>
-        <span className="text-[12.5px] font-bold tabular-nums text-gray-900">{fmtMetrica(val)}</span>
-      </div>
-      <div className="mt-1.5 h-[3px] bg-gray-200 rounded-full overflow-hidden">
-        <span className="block h-full rounded-full" style={{ width: `${Math.min(100, pct).toFixed(1)}%`, background: it.color }} />
-      </div>
-      <div className="mt-1.5 flex justify-between items-baseline text-[10.5px] text-gray-500">
-        <span className="tabular-nums">{fmtInt(it.piezas)} pz · {fmtInt(it.tx)} tx</span>
-        {it.yoy != null && (
-          <span className={`px-1.5 py-0.5 rounded-full text-[9.5px] font-semibold ${yoyClass}`}>
-            {it.yoy >= 0 ? '+' : ''}{it.yoy.toFixed(0)}% YoY
-          </span>
+        <div className="text-[32px] font-extrabold tabular-nums mt-3 leading-none" style={{ color: hero.color, filter: 'brightness(0.6)' }}>
+          {fmtMetrica(heroVal)}
+        </div>
+        <div className="text-[10.5px] text-gray-500 mt-0.5">YTD {metrica === 'monto' ? 'venta $' : metrica === 'piezas' ? 'piezas' : metrica === 'tx' ? 'tickets' : 'inventario $'}</div>
+
+        <div className="grid grid-cols-3 gap-2 mt-3">
+          <div className="bg-white/70 rounded-md p-2">
+            <div className="text-[9px] uppercase tracking-wider font-bold text-gray-600">Ticket prom.</div>
+            <div className="text-[13px] font-bold tabular-nums text-gray-800">{hero.tx > 0 ? formatMXN(hero.monto / hero.tx) : '—'}</div>
+          </div>
+          <div className="bg-white/70 rounded-md p-2">
+            <div className="text-[9px] uppercase tracking-wider font-bold text-gray-600">YoY</div>
+            <div className={`text-[13px] font-bold tabular-nums ${hero.yoy == null ? 'text-gray-400' : hero.yoy >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+              {hero.yoy != null ? `${hero.yoy >= 0 ? '+' : ''}${hero.yoy.toFixed(0)}%` : '—'}
+            </div>
+          </div>
+          <div className="bg-white/70 rounded-md p-2">
+            <div className="text-[9px] uppercase tracking-wider font-bold text-gray-600">Inv. actual</div>
+            <div className="text-[13px] font-bold tabular-nums text-gray-800">{fmtInt(hero.invStock)} pz</div>
+          </div>
+        </div>
+
+        {heroSerieVis.length > 1 && (
+          <div className="bg-white/80 rounded-md p-2.5 mt-3 border border-white/50">
+            <div className="text-[9px] uppercase tracking-wider font-bold text-gray-500 mb-1">Evolución mensual · venta $</div>
+            <svg viewBox="0 0 400 70" preserveAspectRatio="none" style={{ width: '100%', height: 70, display: 'block' }}>
+              <line x1="0" y1="56" x2="400" y2="56" stroke="#E5E7EB" strokeDasharray="2 3" />
+              <defs>
+                <linearGradient id={`hero-grad-${hero.key}`} x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor={hero.color} stopOpacity="0.28" />
+                  <stop offset="100%" stopColor={hero.color} stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {(() => {
+                const pts = heroSerieVis.map((v, i) => {
+                  const x = 20 + i * (360 / Math.max(1, heroSerieVis.length - 1));
+                  const y = 56 - (v / heroMaxSerie * 44);
+                  return { x, y, v };
+                });
+                const areaPath = `M ${pts[0].x} ${pts[0].y} ` + pts.slice(1).map((p) => `L ${p.x} ${p.y}`).join(' ') + ` L ${pts[pts.length - 1].x} 56 L ${pts[0].x} 56 Z`;
+                return (
+                  <>
+                    <path d={areaPath} fill={`url(#hero-grad-${hero.key})`} />
+                    <polyline points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                      stroke={hero.color} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                    {pts.map((p, i) => (
+                      <circle key={i} cx={p.x} cy={p.y} r={i === pts.length - 1 ? 3.8 : 3}
+                        fill={i === pts.length - 1 ? 'white' : hero.color}
+                        stroke={hero.color} strokeWidth={i === pts.length - 1 ? 2 : 0} />
+                    ))}
+                    {MESES.slice(0, heroSerieVis.length).map((m, i) => (
+                      <text key={i} x={pts[i].x} y="68" fontSize="9" fill="#9CA3AF" textAnchor="middle" fontFamily="inherit">{m}</text>
+                    ))}
+                  </>
+                );
+              })()}
+            </svg>
+          </div>
         )}
-        {it.yoy == null && it.prevMonto === 0 && it.monto > 0 && (
-          <span className="px-1.5 py-0.5 rounded-full text-[9.5px] font-semibold bg-gray-100 text-gray-500">nueva</span>
+      </button>
+    );
+  };
+
+  const SatCell = ({ s, rank }) => {
+    const val = valorMetrica(s);
+    const isSel = selKey === s.key;
+    const yoyClass = s.yoy == null ? 'bg-gray-100 text-gray-500' : s.yoy >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
+    return (
+      <button onClick={() => setSelKey(isSel ? null : s.key)}
+        className={`text-left bg-white rounded-lg p-3 border transition flex flex-col gap-1.5 hover:shadow-sm ${isSel ? 'ring-2 ring-sky-400 border-sky-300' : 'border-gray-200'}`}>
+        <div className="flex justify-between items-baseline gap-2">
+          <div className="text-[13px] font-bold text-gray-800 truncate">
+            {s.label}
+            {s.subtitle && <span className="ml-1 text-[10.5px] font-medium text-gray-500">· {s.subtitle}</span>}
+          </div>
+          <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded">#{rank}</span>
+        </div>
+        <div className="text-[19px] font-bold tabular-nums text-gray-900 leading-none">{fmtMetrica(val)}</div>
+        <div className="flex justify-between items-baseline text-[10.5px] text-gray-500 tabular-nums">
+          <span>{totalVis > 0 ? (val / totalVis * 100).toFixed(1) : '0.0'}% · {fmtInt(s.piezas)} pz</span>
+          {s.yoy != null && (
+            <span className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-full ${yoyClass}`}>
+              {s.yoy >= 0 ? '+' : ''}{s.yoy.toFixed(0)}%
+            </span>
+          )}
+        </div>
+        {/* Sparkline mini */}
+        {(() => {
+          const serie = (matriz.get(s.key) || []).slice(0, mesActual);
+          if (serie.length < 2) return null;
+          const mx = Math.max(1, ...serie);
+          const pts = serie.map((v, i) => `${(i / (serie.length - 1)) * 200},${20 - (v / mx * 16)}`).join(' ');
+          return (
+            <svg viewBox="0 0 200 22" preserveAspectRatio="none" style={{ width: '100%', height: 22, display: 'block' }}>
+              <polyline points={pts} stroke={s.color} strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          );
+        })()}
+        {s.invStock > 0 && (
+          <div className="text-[10px] text-indigo-800 bg-indigo-50 px-1.5 py-0.5 rounded font-semibold tabular-nums self-start">
+            📦 {fmtInt(s.invStock)} pz · {formatMXN(s.invValor)}
+          </div>
+        )}
+      </button>
+    );
+  };
+
+  const VirtualCell = ({ s }) => {
+    const val = valorMetrica(s);
+    const isSel = selKey === s.key;
+    return (
+      <button onClick={() => setSelKey(isSel ? null : s.key)}
+        className={`text-left bg-white rounded-lg p-2.5 border transition grid grid-cols-[auto_1fr_auto] gap-2 items-center hover:shadow-sm ${isSel ? 'ring-2 ring-sky-400 border-sky-300' : 'border-gray-200'}`}>
+        <span className="w-7 h-7 rounded-md flex items-center justify-center text-[15px]"
+          style={{ background: `${s.color}22` }}>{s.icon || '•'}</span>
+        <div className="min-w-0">
+          <div className="font-bold text-[12.5px] text-gray-800 truncate">{s.label}</div>
+          <div className="text-[10.5px] text-gray-500 tabular-nums">{fmtInt(s.piezas)} pz</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[14px] font-bold tabular-nums text-gray-900">{fmtMetrica(val)}</div>
+          {s.yoy != null && (
+            <div className={`text-[9.5px] font-bold ${s.yoy >= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {s.yoy >= 0 ? '+' : ''}{s.yoy.toFixed(0)}%
+            </div>
+          )}
+        </div>
+      </button>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Bento principal: hero + satélites */}
+      <div className={`grid gap-3 ${hero ? 'grid-cols-1 lg:grid-cols-[1.4fr_2.6fr]' : ''}`}>
+        {hero && <HeroCard />}
+        {restoFisicas.length > 0 && (
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 content-start">
+            {restoFisicas.map((s, i) => <SatCell key={s.key} s={s} rank={i + 2} />)}
+          </div>
         )}
       </div>
-      {it.invStock > 0 && (
-        <div className="mt-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-800 rounded text-[10px] font-semibold tabular-nums">
-          📦 Inv: {fmtInt(it.invStock)} pz · {formatMXN(it.invValor)}
+
+      {/* Strip virtuales */}
+      {virtuales.length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-bold mb-2">
+            Canales virtuales · sin ubicación física · {virtuales.length}
+          </div>
+          <div className={`grid gap-2 ${virtuales.length === 1 ? 'grid-cols-1' : virtuales.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-3'}`}>
+            {virtuales.map((s) => <VirtualCell key={s.key} s={s} />)}
+          </div>
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
