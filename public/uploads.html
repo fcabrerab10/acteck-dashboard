@@ -108,7 +108,12 @@ const SOURCES = [
   },
   // ── Dicotech ──
   { id:'dicotech-sellout', grupo:'dicotech', tipo:'sellout', statusKey:'sellout_dicotech', title:'Dicotech · Sellout semanal (CSV)', desc:'Reporte semanal del correo: Reporte-SellOut_Ventas Semanal Acteck_Revko.csv. Append a sellout_detalle (dedup por Venta+Clave+Cantidad). Tras subir, se recalcula sellout_sku automáticamente.', file:'Reporte-SellOut_Ventas Semanal Acteck_Revko.csv', table:'sellout_detalle', onConflict:'cliente,fecha,no_parte,row_hash', parser:'dicotechSelloutSemanal' },
-  { id:'dicotech-inv', grupo:'dicotech', tipo:'semana', statusKey:'inv_dicotech', title:'Dicotech · Inventario semanal', desc:'Archivo "Reporte-Inventario_Inventario Acteck Semanal.csv". Stock distribuido en 8 almacenes (DC, Arboledas, Amazon, Dicoags2, Guadalajara, Zacatecas, santafe, leon2) → se suman para el stock total por SKU. Snapshot semanal por (cliente, sku, anio, semana).', file:'Reporte-Inventario_Inventario Acteck Semanal.csv', table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'dicotechInv' },
+  { id:'dicotech-inv', grupo:'dicotech', tipo:'semana', statusKey:'inv_dicotech', title:'Dicotech · Inventario semanal', desc:'Archivo "Reporte-Inventario_Inventario Acteck Semanal.csv". Stock distribuido en 8 almacenes (DC, Arboledas, Amazon, Dicoags2, Guadalajara, Zacatecas, santafe, leon2). Se guarda TANTO el agregado por SKU (inventario_cliente) COMO el desglose por sucursal (inventario_cliente_sucursal) en un mismo upload.', file:'Reporte-Inventario_Inventario Acteck Semanal.csv',
+    combined: [
+      { table:'inventario_cliente', onConflict:'cliente,sku,anio,semana', parser:'dicotechInv', label:'Agregado por SKU' },
+      { table:'inventario_cliente_sucursal', onConflict:'cliente,sku,sucursal,anio,semana', parser:'dicotechInvSucursal', label:'Desglose por sucursal' },
+    ]
+  },
   // ── Estados de Cuenta ──
   { id:'ec-digitalife', grupo:'estados_cuenta', tipo:'semana', statusKey:'ec_digitalife', title:'Digitalife · Estado de cuenta', desc:'Archivo 00764SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00764SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'digitalife' },
   { id:'ec-pcel', grupo:'estados_cuenta', tipo:'semana', statusKey:'ec_pcel', title:'PCEL · Estado de cuenta', desc:'Archivo 00473SemanaNN. Upsert (cliente, anio, semana) + aging en detalle.', file:'00473SemanaNN.xlsx', table:'estados_cuenta', onConflict:'cliente,anio,semana', parser:'estadoCuenta', cliente:'pcel' },
@@ -518,6 +523,56 @@ const PARSERS = {
         valor: costo != null ? Math.round(stockTotal * costo * 100) / 100 : null,
       };
     }).filter(Boolean);
+  },
+  // Desglose por sucursal del mismo archivo: emite 1 row por (SKU, sucursal)
+  // con stock > 0. Se mapea el nombre del almacén al mismo formato que aparece
+  // en sellout_general.sucursal para que se pueda cruzar visualmente
+  // (dc→DC, arboledas→Arboledas, amazon→AMAZON, dicoags2→dicoags2,
+  //  guadalajara→GDL, zacatecas→ZACATECAS, santafe→santafe, leon2→leon2).
+  dicotechInvSucursal(wb){
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
+    const now = new Date();
+    const anio = now.getFullYear();
+    const jan1 = new Date(anio, 0, 1);
+    const days = Math.floor((now - jan1) / 86400000);
+    const semana = Math.ceil((days + jan1.getDay() + 1) / 7);
+    const MAP_SUCURSAL = {
+      'dc': 'DC',
+      'arboledas': 'Arboledas',
+      'amazon': 'AMAZON',
+      'dicoags2': 'dicoags2',
+      'guadalajara': 'GDL',
+      'zacatecas': 'ZACATECAS',
+      'santafe': 'santafe',
+      'leon2': 'leon2',
+    };
+    const out = [];
+    for (const r of rows) {
+      const obj = {}; for (const k of Object.keys(r)) obj[snake(k)] = r[k];
+      const sku = toStr(obj.numero_de_parte ?? obj.no_de_parte ?? obj.parte ?? obj.sku);
+      if (!sku) continue;
+      const costo = toNum(obj.costo_compra_antes_iva ?? obj.costo);
+      const marca = toStr(obj.marca);
+      const titulo = toStr(obj.descripcion ?? obj.titulo);
+      for (const [alm, sucLabel] of Object.entries(MAP_SUCURSAL)) {
+        const stock = toInt(obj[alm]) || 0;
+        if (stock <= 0) continue;
+        out.push({
+          cliente: 'dicotech',
+          sku,
+          sucursal: sucLabel,
+          anio,
+          semana,
+          marca,
+          titulo,
+          stock,
+          costo_convenio: costo,
+          valor: costo != null ? Math.round(stock * costo * 100) / 100 : null,
+        });
+      }
+    }
+    return out;
   },
   pcelVentaMarca(wb){
     const sh = wb.Sheets['Ventas por Fabricante'] || wb.Sheets[wb.SheetNames[0]];

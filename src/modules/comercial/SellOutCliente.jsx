@@ -135,6 +135,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   const [roadmap, setRoadmap] = useState([]);
   const [facturacion, setFacturacion] = useState([]); // sell-in del mismo cliente para bloque conversión
   const [inventarioCliente, setInventarioCliente] = useState([]);
+  const [inventarioSucursal, setInventarioSucursal] = useState([]);
   const [sucursalMes, setSucursalMes] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [marcaSel, setMarcaSel] = useState(new Set());
@@ -146,7 +147,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      const [mes, skuMes, rdmp, fact, inv, sucMes] = await Promise.all([
+      const [mes, skuMes, rdmp, fact, inv, sucMes, invSuc] = await Promise.all([
         fetchAll(meta.vistaMensual, 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
         fetchAll(meta.vistaSkuMes, 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anioActual])),
@@ -159,6 +160,8 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
           ? fetchAll(meta.vistaSucursalMes, 'sucursal,anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos',
               (q) => q.in('anio', [anioPrev, anioActual]))
           : Promise.resolve([]),
+        fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
+          (q) => q.eq('cliente', meta.sellInClienteKey)),
       ]);
       setMensualDico(mes);
       setSkuMesRaw(skuMes);
@@ -166,6 +169,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
       setFacturacion(fact);
       setInventarioCliente(inv);
       setSucursalMes(sucMes);
+      setInventarioSucursal(invSuc);
       setLoading(false);
     })();
   }, [anioActual, anioPrev, meta.vistaMensual, meta.vistaSkuMes, meta.sellInClienteKey]);
@@ -293,6 +297,51 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
     for (const [sku, v] of inventarioMap) if (v.stock > 0) s.add(sku);
     return s;
   }, [inventarioMap]);
+
+  // ── Inventario por sucursal: último snapshot por (sku, sucursal) ──
+  const inventarioSucursalMap = useMemo(() => {
+    // sku → array de {sucursal, stock, valor, anio, semana}
+    const bySku = new Map();
+    for (const r of inventarioSucursal) {
+      const key = (Number(r.anio) || 0) * 100 + (Number(r.semana) || 0);
+      if (!bySku.has(r.sku)) bySku.set(r.sku, new Map());
+      const bySuc = bySku.get(r.sku);
+      const prev = bySuc.get(r.sucursal);
+      if (!prev || key > prev._key) {
+        bySuc.set(r.sucursal, {
+          sucursal: r.sucursal,
+          stock: Number(r.stock) || 0,
+          valor: Number(r.valor) || 0,
+          costo_convenio: Number(r.costo_convenio) || 0,
+          anio: r.anio, semana: r.semana, _key: key,
+        });
+      }
+    }
+    // Convertir Map interior a array sorted por stock desc
+    const out = new Map();
+    for (const [sku, bySuc] of bySku) {
+      const arr = Array.from(bySuc.values())
+        .filter((x) => x.stock > 0)
+        .sort((a, b) => b.stock - a.stock);
+      if (arr.length > 0) out.set(sku, arr);
+    }
+    return out;
+  }, [inventarioSucursal]);
+
+  // Agregado por sucursal (todos los SKUs) para bloque global
+  const inventarioSucursalTotales = useMemo(() => {
+    const map = new Map();
+    for (const [, arr] of inventarioSucursalMap) {
+      for (const s of arr) {
+        if (!map.has(s.sucursal)) map.set(s.sucursal, { sucursal: s.sucursal, stock: 0, valor: 0, skus: 0 });
+        const it = map.get(s.sucursal);
+        it.stock += s.stock;
+        it.valor += s.valor;
+        it.skus += 1;
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.valor - a.valor);
+  }, [inventarioSucursalMap]);
 
   // ── Ventas por sucursal ──
   const sucursalesYTD = useMemo(() => {
@@ -710,7 +759,8 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
                           <SkuDrillDownBoundary sku={r.sku}>
                             <SkuDrillDown sku={r.sku} skuInfo={r} meta={meta}
                               anioActual={anioActual} anioPrev={anioPrev} mesActual={mesActual}
-                              sellInAcumulado={facturacion} />
+                              sellInAcumulado={facturacion}
+                              inventarioSucursales={inventarioSucursalMap.get(r.sku) || []} />
                           </SkuDrillDownBoundary>
                         </td>
                       </tr>
@@ -738,7 +788,8 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
 
       {/* Ventas por sucursal */}
       {sucursalesYTD.length > 0 && (
-        <BloqueSucursales sucursales={sucursalesYTD} matriz={sucursalesMensual} mesActual={mesActual} anioActual={anioActual} anioPrev={anioPrev} />
+        <BloqueSucursales sucursales={sucursalesYTD} matriz={sucursalesMensual} mesActual={mesActual} anioActual={anioActual} anioPrev={anioPrev}
+          inventarioSucursales={inventarioSucursalTotales} />
       )}
     </div>
   );
@@ -764,7 +815,10 @@ function KPI({ label, badge, badgeTone, value, sub }) {
 }
 
 // ── Bloque de sucursales ──
-function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev }) {
+function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev, inventarioSucursales = [] }) {
+  // Mapeo sucursal → inventario
+  const invBySuc = new Map();
+  for (const iv of inventarioSucursales) invBySuc.set(iv.sucursal, iv);
   const totalYTD = sucursales.reduce((s, x) => s + x.monto, 0);
   const maxPct = sucursales[0]?.pct || 1;
 
@@ -815,6 +869,11 @@ function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev 
                     <span className="text-emerald-700 font-semibold">nueva</span>
                   ) : null}
                 </div>
+                {invBySuc.has(s.name) && (
+                  <div className="mt-1 text-[10px] text-indigo-700 tabular-nums bg-indigo-50 rounded px-1.5 py-0.5">
+                    Inv. actual: {fmtInt(invBySuc.get(s.name).stock)} pz · {formatMXN(invBySuc.get(s.name).valor)}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -875,7 +934,7 @@ class SkuDrillDownBoundary extends React.Component {
   }
 }
 
-function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sellInAcumulado }) {
+function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sellInAcumulado, inventarioSucursales = [] }) {
   const [cargando, setCargando] = useState(true);
   const [rows, setRows] = useState([]);
   const [precioLista, setPrecioLista] = useState(null);
@@ -1087,6 +1146,33 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
           </div>
         </div>
       </div>
+
+      {/* Inventario por sucursal (último snapshot) */}
+      {inventarioSucursales.length > 0 && (
+        <div className="border-t border-gray-200 pt-4 mt-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">
+              Inventario por sucursal · snapshot semana {inventarioSucursales[0]?.semana} {inventarioSucursales[0]?.anio}
+            </span>
+            <span className="text-[10.5px] text-gray-500 tabular-nums">
+              Total: {fmtInt(inventarioSucursales.reduce((s, x) => s + x.stock, 0))} pz · {formatMXN(inventarioSucursales.reduce((s, x) => s + x.valor, 0))}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+            {inventarioSucursales.map((s, i) => {
+              const label = SUCURSAL_LABEL[s.sucursal] || s.sucursal;
+              const color = SUCURSAL_COLOR[i % SUCURSAL_COLOR.length];
+              return (
+                <div key={s.sucursal} className="rounded-md p-2.5 border" style={{ borderColor: color + '40', background: color + '10' }}>
+                  <div className="text-[9px] uppercase tracking-widest font-semibold truncate" style={{ color }}>{label}</div>
+                  <div className="text-[15px] font-semibold tabular-nums text-gray-800 mt-0.5">{fmtInt(s.stock)} pz</div>
+                  <div className="text-[10px] tabular-nums text-gray-500">{formatMXN(s.valor)}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

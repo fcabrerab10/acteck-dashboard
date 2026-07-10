@@ -33,6 +33,7 @@ const ALLOWED = {
   promos_temporada:      'sku,anio,mes,campania',
   sellout_general:       'id',
   cuotas_mensuales:      'cliente,mes,anio',
+  inventario_cliente_sucursal: 'cliente,sku,sucursal,anio,semana',
 };
 
 export default async function handler(req, res) {
