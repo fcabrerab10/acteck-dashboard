@@ -793,7 +793,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
       {/* Ventas por sucursal */}
       {sucursalesYTD.length > 0 && (
         <BloqueSucursales sucursales={sucursalesYTD} matriz={sucursalesMensual} mesActual={mesActual} anioActual={anioActual} anioPrev={anioPrev}
-          inventarioSucursales={inventarioSucursalTotales} />
+          inventarioSucursales={inventarioSucursalTotales} meta={meta} />
       )}
     </div>
   );
@@ -819,7 +819,7 @@ function KPI({ label, badge, badgeTone, value, sub }) {
 }
 
 // ── Bloque de sucursales ──
-function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev, inventarioSucursales = [] }) {
+function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev, inventarioSucursales = [], meta }) {
   const [metrica, setMetrica] = useState('monto'); // 'monto' | 'piezas' | 'tx' | 'inventario'
   const [selKey, setSelKey] = useState(null);
 
@@ -991,6 +991,13 @@ function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev,
               </svg>
             </div>
           )}
+
+          {/* Top clientes + Top vendedores de la sucursal */}
+          {meta && (
+            <SucursalDrillDown
+              sucursal={seleccionada.key} sucursalLabel={seleccionada.label} color={seleccionada.color}
+              meta={meta} anioActual={anioActual} anioPrev={anioPrev} mesActual={mesActual} />
+          )}
         </div>
       )}
 
@@ -1024,6 +1031,140 @@ function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev,
           <div className="text-[10.5px] text-gray-500 tabular-nums">
             {formatMXN(totalValFisicas)} · {fisicas.filter((x) => x.invStock > 0).length} sucursales
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Drill-down por sucursal: top clientes + top vendedores ────────────────
+function SucursalDrillDown({ sucursal, sucursalLabel, color, meta, anioActual, anioPrev, mesActual }) {
+  const [cargando, setCargando] = useState(true);
+  const [rows, setRows] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCargando(true);
+    (async () => {
+      try {
+        const { data, error } = await supabase.from('sellout_general')
+          .select('anio,mes,cliente_nombre,vendedor_nombre,cantidad,importe')
+          .eq('mayorista', meta.mayoristaKey)
+          .eq('sucursal', sucursal)
+          .in('anio', [anioPrev, anioActual]);
+        if (cancelled) return;
+        if (error) { console.error('[SucursalDrillDown]', error); setRows([]); }
+        else setRows(data || []);
+        setCargando(false);
+      } catch (e) {
+        if (cancelled) return;
+        console.error(e);
+        setCargando(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sucursal, meta.mayoristaKey, anioActual, anioPrev]);
+
+  const { topClientes, topVendedores, clientesTotal, vendedoresTotal, montoYTD } = useMemo(() => {
+    const cli = new Map(); const ven = new Map(); const cliPrev = new Map(); const venPrev = new Map();
+    let mYTD = 0;
+    for (const r of rows) {
+      const y = r.anio; const cnt = Number(r.cantidad) || 0; const imp = Number(r.importe) || 0;
+      const cn = (r.cliente_nombre || '(sin nombre)').trim();
+      const vn = (r.vendedor_nombre || '(sin nombre)').trim();
+      if (y === anioActual) {
+        mYTD += imp;
+        if (!cli.has(cn)) cli.set(cn, { name: cn, pz: 0, monto: 0 });
+        const c = cli.get(cn); c.pz += cnt; c.monto += imp;
+        if (!ven.has(vn)) ven.set(vn, { name: vn, pz: 0, monto: 0 });
+        const v = ven.get(vn); v.pz += cnt; v.monto += imp;
+      } else if (y === anioPrev) {
+        cliPrev.set(cn, (cliPrev.get(cn) || 0) + imp);
+        venPrev.set(vn, (venPrev.get(vn) || 0) + imp);
+      }
+    }
+    const totCli = Array.from(cli.values()).reduce((s, x) => s + x.monto, 0) || 1;
+    const totVen = Array.from(ven.values()).reduce((s, x) => s + x.monto, 0) || 1;
+    const topC = Array.from(cli.values()).sort((a, b) => b.monto - a.monto).slice(0, 8).map((v) => ({
+      ...v, pct: v.monto / totCli * 100,
+      prev: cliPrev.get(v.name) || 0,
+      yoy: cliPrev.get(v.name) > 0 ? ((v.monto - cliPrev.get(v.name)) / cliPrev.get(v.name) * 100) : null,
+    }));
+    const topV = Array.from(ven.values()).sort((a, b) => b.monto - a.monto).slice(0, 8).map((v) => ({
+      ...v, pct: v.monto / totVen * 100,
+      prev: venPrev.get(v.name) || 0,
+      yoy: venPrev.get(v.name) > 0 ? ((v.monto - venPrev.get(v.name)) / venPrev.get(v.name) * 100) : null,
+    }));
+    return { topClientes: topC, topVendedores: topV, clientesTotal: cli.size, vendedoresTotal: ven.size, montoYTD: mYTD };
+  }, [rows, anioActual, anioPrev]);
+
+  if (cargando) {
+    return (
+      <div className="mt-3 p-3 bg-white border border-sky-200 rounded-md text-center text-[11px] text-gray-500">
+        Cargando clientes y vendedores de {sucursalLabel}…
+      </div>
+    );
+  }
+
+  if (topClientes.length === 0 && topVendedores.length === 0) {
+    return (
+      <div className="mt-3 p-3 bg-white border border-sky-200 rounded-md text-center text-[11px] text-gray-500">
+        Sin transacciones en {sucursalLabel} en el periodo.
+      </div>
+    );
+  }
+
+  const Row = ({ v, maxMonto }) => {
+    const pctBarra = maxMonto > 0 ? Math.min(100, v.monto / maxMonto * 100) : 0;
+    return (
+      <div className="pb-1.5 border-b border-dashed border-gray-200 last:border-b-0 last:pb-0">
+        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-baseline">
+          <span className="text-[11.5px] font-semibold text-gray-800 truncate" title={v.name}>{v.name}</span>
+          <span className="text-[11.5px] font-bold tabular-nums text-gray-900">{formatMXN(v.monto)}</span>
+          <span className="text-[10px] text-gray-500 tabular-nums w-[38px] text-right">{v.pct.toFixed(1)}%</span>
+        </div>
+        <div className="mt-1 h-[2.5px] bg-gray-100 rounded-full overflow-hidden">
+          <span className="block h-full rounded-full" style={{ width: `${pctBarra.toFixed(1)}%`, background: color }} />
+        </div>
+        <div className="mt-0.5 flex justify-between items-baseline text-[10px] text-gray-500 tabular-nums">
+          <span>{fmtInt(v.pz)} pz</span>
+          {v.yoy != null && (
+            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${v.yoy >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+              {v.yoy >= 0 ? '+' : ''}{v.yoy.toFixed(0)}% YoY
+            </span>
+          )}
+          {v.yoy == null && v.prev === 0 && v.monto > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-gray-100 text-gray-500">nuevo</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const maxMontoCli = topClientes[0]?.monto || 0;
+  const maxMontoVen = topVendedores[0]?.monto || 0;
+
+  return (
+    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+      {/* Top clientes */}
+      <div className="bg-white border border-sky-200 rounded-md p-3">
+        <div className="flex justify-between items-baseline mb-2">
+          <div className="text-[10.5px] uppercase tracking-widest text-sky-700 font-bold">Top clientes</div>
+          <span className="text-[10px] text-gray-500">{clientesTotal} totales</span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {topClientes.map((v) => <Row key={v.name} v={v} maxMonto={maxMontoCli} />)}
+        </div>
+      </div>
+
+      {/* Top vendedores */}
+      <div className="bg-white border border-sky-200 rounded-md p-3">
+        <div className="flex justify-between items-baseline mb-2">
+          <div className="text-[10.5px] uppercase tracking-widest text-sky-700 font-bold">Top vendedores</div>
+          <span className="text-[10px] text-gray-500">{vendedoresTotal} totales</span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {topVendedores.map((v) => <Row key={v.name} v={v} maxMonto={maxMontoVen} />)}
         </div>
       </div>
     </div>
