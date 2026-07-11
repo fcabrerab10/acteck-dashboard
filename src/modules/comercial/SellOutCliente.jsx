@@ -1537,6 +1537,7 @@ function BentoSucursales({ fisicas, virtuales, matriz, mesActual, metrica, valor
 //    × piezas vendidas, mes a mes. Deriva margen unitario y absoluto por mes.
 function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, accent, precioReal, precioLista, yieldPct, siPzYTD, clienteNombre, listaPrecio }) {
   const [hoverIdx, setHoverIdx] = useState(null);
+  const svgRef = React.useRef(null);
   const data = useMemo(() => {
     // Sellout por mes: piezas y monto
     const soPz = Array(12).fill(0); const soMonto = Array(12).fill(0);
@@ -1640,7 +1641,19 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
             </div>
           );
         })()}
-        <svg viewBox="0 0 720 220" preserveAspectRatio="none" style={{ width: '100%', height: 220, display: 'block' }} fontFamily="inherit">
+        <svg ref={svgRef} viewBox="0 0 720 220" preserveAspectRatio="none" style={{ width: '100%', height: 220, display: 'block' }} fontFamily="inherit"
+          onMouseMove={(e) => {
+            if (!svgRef.current || data.length === 0) return;
+            const rect = svgRef.current.getBoundingClientRect();
+            // viewBox X 0..720 se mapea linealmente al ancho del SVG (preserveAspectRatio="none")
+            const vbX = (e.clientX - rect.left) / rect.width * 720;
+            const colW = 640 / data.length;
+            const idx = Math.floor((vbX - 55) / colW);
+            if (idx >= 0 && idx < data.length) {
+              if (idx !== hoverIdx) setHoverIdx(idx);
+            } else if (hoverIdx != null) setHoverIdx(null);
+          }}
+          onMouseLeave={() => setHoverIdx(null)}>
           {/* Grid horizontal */}
           {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
             <line key={i} x1="45" y1={30 + f * 140} x2="700" y2={30 + f * 140} stroke="#E5E7EB" strokeDasharray="2 3" />
@@ -1659,12 +1672,15 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
           ))}
           {/* Bars piezas */}
           {data.map((d, i) => {
-            const barX = 55 + i * (640 / Math.max(1, data.length));
-            const barW = (640 / Math.max(1, data.length)) * 0.55;
+            const colW = 640 / Math.max(1, data.length);
+            const barX = 55 + i * colW;
+            const barW = colW * 0.55;
             const barH = d.piezasVend > 0 ? (d.piezasVend / maxPz) * 140 : 0;
+            const isHover = hoverIdx === i;
             return (
               <rect key={i} x={barX} y={170 - barH} width={barW} height={barH}
-                fill="#CBD5E1" opacity="0.85" rx="1.5" />
+                fill={isHover ? '#64748B' : '#CBD5E1'} opacity={isHover ? 1 : 0.85} rx="1.5"
+                pointerEvents="none" style={{ transition: 'fill 120ms' }} />
             );
           })}
           {/* Line precio venta */}
@@ -1715,24 +1731,14 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
             <circle cx="227.5" cy="-4" r="2.5" fill="white" stroke="#F59E0B" strokeWidth="1.5" />
             <text x="240" y="0">Costo (sell-in / pz)</text>
           </g>
-          {/* Línea guía vertical en la posición hovereada */}
+          {/* Línea guía vertical en la posición hovereada (renderizada al final para estar encima) */}
           {hoverIdx != null && (() => {
             const colW = 640 / Math.max(1, data.length);
             const x = 55 + hoverIdx * colW + colW * 0.5;
             return (
-              <line x1={x} y1="30" x2={x} y2="170" stroke="#64748B" strokeWidth="1" strokeDasharray="3 2" opacity="0.6" pointerEvents="none" />
+              <line x1={x} y1="30" x2={x} y2="170" stroke="#475569" strokeWidth="1.2" strokeDasharray="3 2" opacity="0.7" pointerEvents="none" />
             );
           })()}
-          {/* Rects invisibles como triggers de hover (renderizados al final para captar los eventos) */}
-          {data.map((d, i) => {
-            const colW = 640 / Math.max(1, data.length);
-            return (
-              <rect key={`hov-${i}`} x={55 + i * colW} y="20" width={colW} height="160"
-                fill="transparent" style={{ cursor: 'pointer' }}
-                onMouseEnter={() => setHoverIdx(i)}
-                onMouseLeave={() => setHoverIdx((h) => h === i ? null : h)} />
-            );
-          })}
         </svg>
       </div>
 
