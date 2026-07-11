@@ -1536,6 +1536,7 @@ function BentoSucursales({ fisicas, virtuales, matriz, mesActual, metrica, valor
 // ── Análisis de margen: costo (sell-in Acteck→cliente) × precio venta (sellout)
 //    × piezas vendidas, mes a mes. Deriva margen unitario y absoluto por mes.
 function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, accent, precioReal, precioLista, yieldPct, siPzYTD, clienteNombre, listaPrecio }) {
+  const [hoverIdx, setHoverIdx] = useState(null);
   const data = useMemo(() => {
     // Sellout por mes: piezas y monto
     const soPz = Array(12).fill(0); const soMonto = Array(12).fill(0);
@@ -1605,13 +1606,40 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
       {/* Row 1: Chart (2/3) + KPI stack (1/3) */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.8fr_1fr] gap-4 mb-3">
       {/* Combo chart: bars piezas + lines costo & precio */}
-      <div className="bg-white border border-gray-200 rounded-md p-3">
+      <div className="bg-white border border-gray-200 rounded-md p-3 relative">
         <div className="flex justify-between items-baseline mb-1">
           <div>
             <div className="text-[12.5px] font-bold text-gray-800">Costo × Precio × Piezas · YTD {anioActual}</div>
-            <div className="text-[10px] text-gray-500">Barras piezas vendidas · líneas precio y costo unitario</div>
+            <div className="text-[10px] text-gray-500">Hover un mes para ver el desglose</div>
           </div>
         </div>
+        {hoverIdx != null && data[hoverIdx] && (() => {
+          const d = data[hoverIdx];
+          return (
+            <div className="absolute top-2 right-2 bg-white border border-gray-200 rounded-md p-2.5 shadow-lg text-[11px] tabular-nums min-w-[190px] z-10 pointer-events-none">
+              <div className="font-bold text-gray-800 mb-1.5 pb-1 border-b border-gray-100 flex justify-between items-baseline">
+                <span>{d.mes} {anioActual}</span>
+                <span className="text-[10px] font-normal text-gray-500">{fmtInt(d.piezasVend)} pz vend</span>
+              </div>
+              <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-gray-600">
+                <span>Pz comp</span>
+                <span className="text-right text-gray-800">{d.piezasComp > 0 ? fmtInt(d.piezasComp) : '—'}</span>
+                <span>Pz vend</span>
+                <span className="text-right text-gray-800">{d.piezasVend > 0 ? fmtInt(d.piezasVend) : '—'}</span>
+                <span style={{ color: '#F59E0B' }}>Costo unit</span>
+                <span className="text-right" style={{ color: '#B45309' }}>{d.costoUnit != null ? formatMXN(d.costoUnit) : '—'}</span>
+                <span style={{ color: accent }}>Precio unit</span>
+                <span className="text-right font-semibold" style={{ color: accent, filter: 'brightness(0.7)' }}>{d.precioUnit != null ? formatMXN(d.precioUnit) : '—'}</span>
+                <span>Margen unit</span>
+                <span className="text-right text-gray-800">{d.margenUnit != null ? formatMXN(d.margenUnit) : '—'}</span>
+                <span>% margen</span>
+                <span className="text-right text-gray-800">{d.margenPct != null ? `${d.margenPct.toFixed(1)}%` : '—'}</span>
+                <span className="pt-1 border-t border-gray-100">Margen $</span>
+                <span className="text-right font-bold text-gray-900 pt-1 border-t border-gray-100">{d.margenAbs != null ? formatMXN(d.margenAbs) : '—'}</span>
+              </div>
+            </div>
+          );
+        })()}
         <svg viewBox="0 0 720 220" preserveAspectRatio="none" style={{ width: '100%', height: 220, display: 'block' }} fontFamily="inherit">
           {/* Grid horizontal */}
           {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
@@ -1687,6 +1715,24 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
             <circle cx="227.5" cy="-4" r="2.5" fill="white" stroke="#F59E0B" strokeWidth="1.5" />
             <text x="240" y="0">Costo (sell-in / pz)</text>
           </g>
+          {/* Línea guía vertical en la posición hovereada */}
+          {hoverIdx != null && (() => {
+            const colW = 640 / Math.max(1, data.length);
+            const x = 55 + hoverIdx * colW + colW * 0.5;
+            return (
+              <line x1={x} y1="30" x2={x} y2="170" stroke="#64748B" strokeWidth="1" strokeDasharray="3 2" opacity="0.6" pointerEvents="none" />
+            );
+          })()}
+          {/* Rects invisibles como triggers de hover (renderizados al final para captar los eventos) */}
+          {data.map((d, i) => {
+            const colW = 640 / Math.max(1, data.length);
+            return (
+              <rect key={`hov-${i}`} x={55 + i * colW} y="20" width={colW} height="160"
+                fill="transparent" style={{ cursor: 'pointer' }}
+                onMouseEnter={() => setHoverIdx(i)}
+                onMouseLeave={() => setHoverIdx((h) => h === i ? null : h)} />
+            );
+          })}
         </svg>
       </div>
 
