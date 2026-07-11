@@ -516,7 +516,7 @@ export default function App() {
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
             {paginaActiva === "estrategia" && (
-              clienteActivo === 'dicotech'
+              (clienteActivo === 'dicotech' || clienteActivo === 'digitalife')
                 ? <SellOutCliente clienteKey={clienteActivo} />
                 : <EstrategiaProducto cliente={c.nombre} clienteKey={clienteActivo} />
             )}

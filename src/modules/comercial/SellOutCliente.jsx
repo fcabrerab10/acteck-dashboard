@@ -22,12 +22,32 @@ const CLIENTES_META = {
     vistaMensual: 'v_sellout_dicotech_mensual',
     vistaSkuMes: 'v_sellout_dicotech_sku_mes',
     vistaSucursalMes: 'v_sellout_dicotech_sucursal_mes',
+    vistaMarcaMes: null,
     mayoristaKey: 'DICOTECH',
     sellInClienteKey: 'dicotech',
     listaPrecio: 'DICOTECH',
+    tablaSellOut: 'sellout_general',
     drillClientesFinales: true,
     drillVendedores: true,
     drillSucursales: true,
+    drillMarca: false,
+  },
+  digitalife: {
+    nombre: 'Digitalife',
+    marca: 'Acteck / Balam Rush',
+    accent: '#8B5CF6',
+    vistaMensual: 'v_sellout_digitalife_mensual',
+    vistaSkuMes: 'v_sellout_digitalife_sku_mes',
+    vistaSucursalMes: null,
+    vistaMarcaMes: 'v_sellout_digitalife_marca_mes',
+    mayoristaKey: null,
+    sellInClienteKey: 'digitalife',
+    listaPrecio: 'DIGITALIFE',
+    tablaSellOut: 'sellout_detalle',
+    drillClientesFinales: false,
+    drillVendedores: false,
+    drillSucursales: false,
+    drillMarca: true,
   },
 };
 
@@ -141,6 +161,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   const [inventarioCliente, setInventarioCliente] = useState([]);
   const [inventarioSucursal, setInventarioSucursal] = useState([]);
   const [sucursalMes, setSucursalMes] = useState([]);
+  const [marcaMes, setMarcaMes] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [marcaSel, setMarcaSel] = useState(new Set());
   const [roadmapSel, setRoadmapSel] = useState(new Set());
@@ -151,7 +172,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      const [mes, skuMes, rdmp, fact, inv, sucMes, invSuc] = await Promise.all([
+      const [mes, skuMes, rdmp, fact, inv, sucMes, invSuc, mrcMes] = await Promise.all([
         fetchAll(meta.vistaMensual, 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
         fetchAll(meta.vistaSkuMes, 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anioActual])),
@@ -166,6 +187,10 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
           : Promise.resolve([]),
         fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
           (q) => q.eq('cliente', meta.sellInClienteKey)),
+        meta.vistaMarcaMes
+          ? fetchAll(meta.vistaMarcaMes, 'marca,anio,mes,piezas,monto,tx,skus_distintos',
+              (q) => q.in('anio', [anioPrev, anioActual]))
+          : Promise.resolve([]),
       ]);
       setMensualDico(mes);
       setSkuMesRaw(skuMes);
@@ -174,9 +199,10 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
       setInventarioCliente(inv);
       setSucursalMes(sucMes);
       setInventarioSucursal(invSuc);
+      setMarcaMes(mrcMes);
       setLoading(false);
     })();
-  }, [anioActual, anioPrev, meta.vistaMensual, meta.vistaSkuMes, meta.sellInClienteKey]);
+  }, [anioActual, anioPrev, meta.vistaMensual, meta.vistaSkuMes, meta.vistaMarcaMes, meta.sellInClienteKey]);
 
   // ── Determinar mes actual real (último mes con data) ──
   const mesActual = useMemo(() => {
@@ -390,6 +416,46 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
     }
     return skToMes;
   }, [sucursalMes, anioActual]);
+
+  // ── Marca YTD y matriz mensual (para clientes con mezcla de marcas: Digitalife) ──
+  const marcaYTD = useMemo(() => {
+    if (!meta.drillMarca) return [];
+    const map = new Map(); const mapPrev = new Map();
+    for (const r of marcaMes) {
+      const key = r.marca || '(sin marca)';
+      const tgt = r.anio === anioActual ? map : (r.anio === anioPrev ? mapPrev : null);
+      if (!tgt) continue;
+      if (tgt === map && r.mes > mesActual) continue;
+      if (tgt === mapPrev && r.mes > mesActual) continue;
+      const acc = tgt.get(key) || { name: key, monto: 0, piezas: 0, tx: 0, skus: 0 };
+      acc.monto += Number(r.monto) || 0;
+      acc.piezas += Number(r.piezas) || 0;
+      acc.tx += Number(r.tx) || 0;
+      acc.skus = Math.max(acc.skus, Number(r.skus_distintos) || 0);
+      tgt.set(key, acc);
+    }
+    const out = [];
+    for (const [k, v] of map) {
+      const prev = mapPrev.get(k);
+      out.push({
+        ...v,
+        prevMonto: prev?.monto || 0,
+        yoy: prev && prev.monto > 0 ? ((v.monto - prev.monto) / prev.monto * 100) : null,
+      });
+    }
+    return out.sort((a, b) => b.monto - a.monto);
+  }, [marcaMes, anioActual, anioPrev, mesActual, meta.drillMarca]);
+
+  const marcaMensual = useMemo(() => {
+    const map = new Map();
+    for (const r of marcaMes) {
+      if (r.anio !== anioActual) continue;
+      const key = r.marca || '(sin marca)';
+      if (!map.has(key)) map.set(key, Array(12).fill(0));
+      map.get(key)[r.mes - 1] = Number(r.monto) || 0;
+    }
+    return map;
+  }, [marcaMes, anioActual]);
 
   // ── Composición por familia YTD ──
   const familiasYTD = useMemo(() => {
@@ -790,10 +856,15 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
         </div>
       </div>
 
-      {/* Ventas por sucursal */}
-      {sucursalesYTD.length > 0 && (
+      {/* Ventas por sucursal — sólo si el cliente tiene datos de sucursal */}
+      {meta.drillSucursales && sucursalesYTD.length > 0 && (
         <BloqueSucursales sucursales={sucursalesYTD} matriz={sucursalesMensual} mesActual={mesActual} anioActual={anioActual} anioPrev={anioPrev}
           inventarioSucursales={inventarioSucursalTotales} meta={meta} />
+      )}
+
+      {/* Breakdown por marca — sólo si el cliente tiene mezcla de marcas (Digitalife) */}
+      {meta.drillMarca && marcaYTD.length > 0 && (
+        <BloqueMarca marcas={marcaYTD} matriz={marcaMensual} mesActual={mesActual} anioActual={anioActual} anioPrev={anioPrev} meta={meta} />
       )}
     </div>
   );
@@ -819,6 +890,105 @@ function KPI({ label, badge, badgeTone, value, sub }) {
 }
 
 // ── Bloque de sucursales ──
+// ── Bloque de marcas: dos tarjetas grandes (Acteck / Balam Rush) con % share,
+//    YoY y sparkline. Se usa en clientes que venden mezcla de marcas (Digitalife).
+function BloqueMarca({ marcas, matriz, mesActual, anioActual, anioPrev, meta }) {
+  const MARCA_COLOR = {
+    'ACTECK': '#0EA5E9',
+    'BALAM RUSH': '#DC2626',
+  };
+  const MARCA_ACCENT = (m) => MARCA_COLOR[m] || meta.accent || '#6366F1';
+
+  const totalMonto = marcas.reduce((s, m) => s + m.monto, 0);
+  const totalPz    = marcas.reduce((s, m) => s + m.piezas, 0);
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold text-gray-800">Composición por marca · YTD {anioActual}</h3>
+        <div className="text-[11.5px] text-gray-500 mt-0.5">
+          {marcas.length} marcas · Ene – {MESES[mesActual - 1]} {anioActual} · Total {formatMXN(totalMonto)}
+        </div>
+      </div>
+
+      <div className={`grid gap-3 ${marcas.length === 1 ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}>
+        {marcas.map((m) => {
+          const color = MARCA_ACCENT(m.name);
+          const share = totalMonto > 0 ? (m.monto / totalMonto * 100) : 0;
+          const shareP = totalPz > 0 ? (m.piezas / totalPz * 100) : 0;
+          const serie = (matriz.get(m.name) || []).slice(0, mesActual);
+          const maxSerie = Math.max(1, ...serie);
+          return (
+            <div key={m.name} className="rounded-xl p-4 border relative"
+              style={{ background: `linear-gradient(135deg, ${color}18 0%, ${color}08 100%)`, borderColor: `${color}55` }}>
+              <div className="flex justify-between items-baseline gap-2 mb-1">
+                <div>
+                  <div className="text-[16px] font-bold" style={{ color, filter: 'brightness(0.7)' }}>{m.name}</div>
+                  <div className="text-[10.5px] text-gray-500">{fmtInt(m.skus)} SKUs distintos · {fmtInt(m.tx)} líneas de venta</div>
+                </div>
+                {m.yoy != null && (
+                  <span className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full ${m.yoy >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                    {m.yoy >= 0 ? '+' : ''}{m.yoy.toFixed(0)}% YoY
+                  </span>
+                )}
+              </div>
+              <div className="text-[28px] font-extrabold tabular-nums leading-none mt-2" style={{ color, filter: 'brightness(0.6)' }}>
+                {formatMXN(m.monto)}
+              </div>
+              <div className="text-[11px] text-gray-600 mt-1 tabular-nums">
+                {share.toFixed(1)}% del total · {fmtInt(m.piezas)} pz ({shareP.toFixed(1)}%)
+              </div>
+
+              {/* barra share */}
+              <div className="mt-2 h-[6px] bg-white/60 rounded-full overflow-hidden">
+                <span className="block h-full rounded-full" style={{ width: `${share.toFixed(1)}%`, background: color }} />
+              </div>
+
+              {/* sparkline mensual */}
+              {serie.length > 1 && (
+                <div className="bg-white/80 rounded-md p-2.5 mt-3 border border-white/50">
+                  <div className="text-[9px] uppercase tracking-wider font-bold text-gray-500 mb-1">Evolución mensual · venta $</div>
+                  <svg viewBox="0 0 400 60" preserveAspectRatio="none" style={{ width: '100%', height: 60, display: 'block' }}>
+                    <line x1="0" y1="48" x2="400" y2="48" stroke="#E5E7EB" strokeDasharray="2 3" />
+                    <defs>
+                      <linearGradient id={`mrc-grad-${m.name.replace(/\s/g,'')}`} x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+                        <stop offset="100%" stopColor={color} stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    {(() => {
+                      const pts = serie.map((v, i) => ({
+                        x: 20 + i * (360 / Math.max(1, serie.length - 1)),
+                        y: 48 - (v / maxSerie * 38),
+                      }));
+                      const areaPath = `M ${pts[0].x} ${pts[0].y} ` + pts.slice(1).map((p) => `L ${p.x} ${p.y}`).join(' ') + ` L ${pts[pts.length - 1].x} 48 L ${pts[0].x} 48 Z`;
+                      return (
+                        <>
+                          <path d={areaPath} fill={`url(#mrc-grad-${m.name.replace(/\s/g,'')})`} />
+                          <polyline points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                            stroke={color} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                          {pts.map((p, i) => (
+                            <circle key={i} cx={p.x} cy={p.y} r={i === pts.length - 1 ? 3.5 : 2.8}
+                              fill={i === pts.length - 1 ? 'white' : color}
+                              stroke={color} strokeWidth={i === pts.length - 1 ? 2 : 0} />
+                          ))}
+                          {MESES.slice(0, serie.length).map((n, i) => (
+                            <text key={i} x={pts[i].x} y="58" fontSize="8.5" fill="#9CA3AF" textAnchor="middle" fontFamily="inherit">{n}</text>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </svg>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function BloqueSucursales({ sucursales, matriz, mesActual, anioActual, anioPrev, inventarioSucursales = [], meta }) {
   const [metrica, setMetrica] = useState('monto'); // 'monto' | 'piezas' | 'tx' | 'inventario'
   const [selKey, setSelKey] = useState(null);
@@ -1385,17 +1555,43 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
     setCargando(true);
     (async () => {
       try {
+        // sellout_general (Dicotech) trae detalle transaccional con clientes/vendedores/sucursales.
+        // sellout_detalle (Digitalife) sólo trae fecha/marca/no_parte/cantidad/precio/total.
+        const esGeneral = meta.tablaSellOut === 'sellout_general';
+        const txPromise = esGeneral
+          ? supabase.from('sellout_general')
+              .select('anio,mes,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe')
+              .eq('mayorista', meta.mayoristaKey).eq('sku', sku)
+              .in('anio', [anioPrev, anioActual])
+          : supabase.from('sellout_detalle')
+              .select('fecha,marca,cantidad,precio,total')
+              .eq('cliente', meta.sellInClienteKey).eq('no_parte', sku)
+              .gte('fecha', `${anioPrev}-01-01`);
         const [txRes, precioRes] = await Promise.all([
-          supabase.from('sellout_general')
-            .select('anio,mes,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe')
-            .eq('mayorista', meta.mayoristaKey).eq('sku', sku)
-            .in('anio', [anioPrev, anioActual]),
+          txPromise,
           supabase.from('precios_sku')
             .select('precio').eq('sku', sku).eq('lista', meta.listaPrecio)
             .eq('anio', anioActual).eq('mes', mesActual).maybeSingle(),
         ]);
         if (cancelled) return;
-        setRows(txRes.data || []);
+        let rows = txRes.data || [];
+        if (!esGeneral) {
+          // Normaliza al mismo shape que sellout_general para reutilizar el resto del código.
+          rows = rows.map((r) => {
+            const [y, m] = (r.fecha || '').split('-');
+            return {
+              anio: parseInt(y, 10),
+              mes: parseInt(m, 10),
+              cliente_nombre: null,
+              vendedor_nombre: null,
+              sucursal: null,
+              cantidad: r.cantidad,
+              precio_unitario: r.precio,
+              importe: r.total,
+            };
+          });
+        }
+        setRows(rows);
         setPrecioLista(precioRes.data?.precio ? Number(precioRes.data.precio) : null);
         setCargando(false);
       } catch (e) {
@@ -1405,7 +1601,7 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
       }
     })();
     return () => { cancelled = true; };
-  }, [sku, meta.mayoristaKey, meta.listaPrecio, anioActual, anioPrev, mesActual]);
+  }, [sku, meta.mayoristaKey, meta.tablaSellOut, meta.sellInClienteKey, meta.listaPrecio, anioActual, anioPrev, mesActual]);
 
   const { topClientes, topVendedores, topSucursales, precioReal, piezasYTD, montoYTD, clientesTotal, vendedoresTotal, sucursalesTotal } = useMemo(() => {
     const cli = new Map(); const ven = new Map(); const suc = new Map();
@@ -1492,8 +1688,9 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
       <div className="text-[10px] uppercase tracking-wider font-semibold text-gray-500 mb-3">
         Detalle · <span className="text-gray-800 font-bold">{sku}</span> · {skuInfo?.descripcion || ''} · Sell-out YTD {anioActual}: <span className="text-gray-800 font-bold tabular-nums">{fmtInt(piezasYTD)} pz / {formatMXN(montoYTD)}</span>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className={`grid grid-cols-1 gap-5 ${meta.drillClientesFinales || meta.drillVendedores || meta.drillSucursales ? 'lg:grid-cols-3' : ''}`}>
         {/* Col 1 Clientes finales */}
+        {meta.drillClientesFinales && (
         <div>
           <div className="flex items-baseline justify-between mb-3">
             <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">Clientes finales · YTD {anioActual}</span>
@@ -1503,8 +1700,10 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
             {topClientes.slice(0, 6).map((v) => showRow(v, meta.accent))}
           </div>
         </div>
+        )}
 
         {/* Col 2 Vendedores */}
+        {meta.drillVendedores && (
         <div className="lg:border-l lg:border-r border-gray-200 lg:px-5">
           <div className="flex items-baseline justify-between mb-3">
             <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">Vendedores · YTD {anioActual}</span>
@@ -1526,8 +1725,10 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
             </div>
           )}
         </div>
+        )}
 
         {/* Col 3 Sucursales */}
+        {meta.drillSucursales && (
         <div>
           <div className="flex items-baseline justify-between mb-3">
             <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">Sucursales · YTD {anioActual}</span>
@@ -1556,6 +1757,7 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
             })}
           </div>
         </div>
+        )}
       </div>
 
       {/* Fila inferior: precio real vs lista */}
