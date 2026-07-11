@@ -1614,21 +1614,21 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
           <div className="text-[15px] font-semibold tabular-nums text-gray-800">{kpis.precioProm != null ? formatMXN(kpis.precioProm) : '—'}</div>
           <div className="text-[10px] text-gray-500 tabular-nums">Total venta: {formatMXN(kpis.totalVenta)}</div>
         </div>
-        <div className="bg-emerald-50 rounded-md p-2.5 border border-emerald-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-emerald-700 font-semibold">Margen unit. prom.</div>
-          <div className={`text-[15px] font-semibold tabular-nums ${kpis.margenProm == null ? 'text-gray-400' : kpis.margenProm > 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Margen unit. prom.</div>
+          <div className="text-[15px] font-semibold tabular-nums text-gray-800">
             {kpis.margenProm != null ? formatMXN(kpis.margenProm) : '—'}
           </div>
-          <div className="text-[10px] text-emerald-700 tabular-nums">
+          <div className="text-[10px] text-gray-500 tabular-nums">
             {kpis.margenPctProm != null ? `${kpis.margenPctProm.toFixed(1)}% margen` : '—'}
           </div>
         </div>
-        <div className="bg-emerald-50 rounded-md p-2.5 border border-emerald-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-emerald-700 font-semibold">Margen total YTD</div>
-          <div className={`text-[15px] font-semibold tabular-nums ${kpis.totalMargen == null ? 'text-gray-400' : kpis.totalMargen > 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Margen total YTD</div>
+          <div className="text-[15px] font-semibold tabular-nums text-gray-800">
             {formatMXN(kpis.totalMargen)}
           </div>
-          <div className="text-[10px] text-emerald-700 tabular-nums">
+          <div className="text-[10px] text-gray-500 tabular-nums">
             {kpis.totalVenta > 0 ? `${(kpis.totalMargen / kpis.totalVenta * 100).toFixed(1)}% de la venta` : '—'}
           </div>
         </div>
@@ -1737,13 +1737,13 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
                 <td className="py-1 px-2 text-right text-gray-800">{d.piezasVend > 0 ? fmtInt(d.piezasVend) : '—'}</td>
                 <td className="py-1 px-2 text-right text-amber-700">{d.costoUnit != null ? formatMXN(d.costoUnit) : '—'}</td>
                 <td className="py-1 px-2 text-right" style={{ color: accent }}>{d.precioUnit != null ? formatMXN(d.precioUnit) : '—'}</td>
-                <td className={`py-1 px-2 text-right ${d.margenUnit == null ? 'text-gray-400' : d.margenUnit > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                <td className="py-1 px-2 text-right text-gray-800">
                   {d.margenUnit != null ? formatMXN(d.margenUnit) : '—'}
                 </td>
-                <td className={`py-1 px-2 text-right ${d.margenPct == null ? 'text-gray-400' : d.margenPct > 20 ? 'text-emerald-700' : d.margenPct > 0 ? 'text-amber-700' : 'text-rose-700'}`}>
+                <td className="py-1 px-2 text-right text-gray-800">
                   {d.margenPct != null ? `${d.margenPct.toFixed(1)}%` : '—'}
                 </td>
-                <td className={`py-1 px-2 text-right font-semibold ${d.margenAbs == null ? 'text-gray-400' : d.margenAbs > 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
+                <td className="py-1 px-2 text-right font-semibold text-gray-800">
                   {d.margenAbs != null ? formatMXN(d.margenAbs) : '—'}
                 </td>
               </tr>
