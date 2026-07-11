@@ -1535,7 +1535,7 @@ function BentoSucursales({ fisicas, virtuales, matriz, mesActual, metrica, valor
 // ── Drill-down por SKU: clientes finales / vendedores / precio ─────────────
 // ── Análisis de margen: costo (sell-in Acteck→cliente) × precio venta (sellout)
 //    × piezas vendidas, mes a mes. Deriva margen unitario y absoluto por mes.
-function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, accent }) {
+function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, accent, precioReal, precioLista, yieldPct, siPzYTD, clienteNombre, listaPrecio }) {
   const data = useMemo(() => {
     // Sellout por mes: piezas y monto
     const soPz = Array(12).fill(0); const soMonto = Array(12).fill(0);
@@ -1602,40 +1602,16 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
         </span>
       </div>
 
-      {/* 4 KPIs de margen */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Costo prom. unit.</div>
-          <div className="text-[15px] font-semibold tabular-nums text-gray-800">{kpis.costoProm != null ? formatMXN(kpis.costoProm) : '—'}</div>
-          <div className="text-[10px] text-gray-500 tabular-nums">Total costo: {formatMXN(kpis.totalCosto)}</div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Precio venta prom.</div>
-          <div className="text-[15px] font-semibold tabular-nums text-gray-800">{kpis.precioProm != null ? formatMXN(kpis.precioProm) : '—'}</div>
-          <div className="text-[10px] text-gray-500 tabular-nums">Total venta: {formatMXN(kpis.totalVenta)}</div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Margen unit. prom.</div>
-          <div className="text-[15px] font-semibold tabular-nums text-gray-800">
-            {kpis.margenProm != null ? formatMXN(kpis.margenProm) : '—'}
-          </div>
-          <div className="text-[10px] text-gray-500 tabular-nums">
-            {kpis.margenPctProm != null ? `${kpis.margenPctProm.toFixed(1)}% margen` : '—'}
-          </div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Margen total YTD</div>
-          <div className="text-[15px] font-semibold tabular-nums text-gray-800">
-            {formatMXN(kpis.totalMargen)}
-          </div>
-          <div className="text-[10px] text-gray-500 tabular-nums">
-            {kpis.totalVenta > 0 ? `${(kpis.totalMargen / kpis.totalVenta * 100).toFixed(1)}% de la venta` : '—'}
-          </div>
-        </div>
-      </div>
-
+      {/* Row 1: Chart (2/3) + KPI stack (1/3) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1.8fr_1fr] gap-4 mb-3">
       {/* Combo chart: bars piezas + lines costo & precio */}
       <div className="bg-white border border-gray-200 rounded-md p-3">
+        <div className="flex justify-between items-baseline mb-1">
+          <div>
+            <div className="text-[12.5px] font-bold text-gray-800">Costo × Precio × Piezas · YTD {anioActual}</div>
+            <div className="text-[10px] text-gray-500">Barras piezas vendidas · líneas precio y costo unitario</div>
+          </div>
+        </div>
         <svg viewBox="0 0 720 220" preserveAspectRatio="none" style={{ width: '100%', height: 220, display: 'block' }} fontFamily="inherit">
           {/* Grid horizontal */}
           {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
@@ -1714,8 +1690,42 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
         </svg>
       </div>
 
+      {/* KPI stack derecho */}
+      <div className="flex flex-col gap-2">
+        {/* Hero: Margen total YTD */}
+        <div className="rounded-md p-2.5 border" style={{ background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)`, borderColor: `${accent}55` }}>
+          <div className="text-[9.5px] uppercase tracking-widest font-bold" style={{ color: accent, filter: 'brightness(0.7)' }}>Margen total YTD</div>
+          <div className="text-[20px] font-bold tabular-nums" style={{ color: accent, filter: 'brightness(0.6)' }}>{formatMXN(kpis.totalMargen)}</div>
+          <div className="text-[10px] tabular-nums" style={{ color: accent, filter: 'brightness(0.7)' }}>
+            {kpis.totalVenta > 0 ? `${(kpis.totalMargen / kpis.totalVenta * 100).toFixed(1)}% de la venta` : '—'}
+          </div>
+        </div>
+        {/* Row 2: Costo prom + Precio venta */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+            <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Costo prom.</div>
+            <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.costoProm != null ? formatMXN(kpis.costoProm) : '—'}</div>
+          </div>
+          <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+            <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Precio venta</div>
+            <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.precioProm != null ? formatMXN(kpis.precioProm) : '—'}</div>
+          </div>
+        </div>
+        {/* Margen unit prom */}
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Margen unit. prom.</div>
+          <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.margenProm != null ? formatMXN(kpis.margenProm) : '—'}</div>
+          <div className="text-[10px] text-gray-500 tabular-nums">
+            {kpis.margenPctProm != null ? `${kpis.margenPctProm.toFixed(1)}% del precio` : '—'}
+          </div>
+        </div>
+      </div>
+      </div>
+
       {/* Tabla mensual */}
-      <div className="mt-3 overflow-x-auto">
+      <div className="bg-white border border-gray-200 rounded-md p-3">
+        <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2">Detalle mensual · Costo × Precio × Piezas</div>
+        <div className="overflow-x-auto">
         <table className="w-full text-[11px] tabular-nums">
           <thead className="bg-gray-50 text-gray-600">
             <tr className="text-[10px] uppercase tracking-wider">
@@ -1750,6 +1760,26 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
             ))}
           </tbody>
         </table>
+        </div>
+      </div>
+
+      {/* Footer: Precio real vs lista + Sell-in YTD */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <div className="bg-gray-50 rounded-md p-3 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Precio real vs lista</div>
+          <div className="text-[15px] font-semibold tabular-nums text-gray-800">
+            {precioReal ? formatMXN(precioReal) : '—'}
+            {precioLista ? <span className="text-gray-400 font-normal"> / {formatMXN(precioLista)}</span> : null}
+          </div>
+          <div className="text-[10px] text-gray-500">
+            {yieldPct != null ? `Yield ${yieldPct.toFixed(1)}% · descuento ${(100 - yieldPct).toFixed(1)}%` : (precioLista ? `Lista ${listaPrecio}` : 'Sin lista')}
+          </div>
+        </div>
+        <div className="bg-gray-50 rounded-md p-3 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell-in Acteck→{clienteNombre}</div>
+          <div className="text-[15px] font-semibold tabular-nums text-gray-800">{fmtInt(siPzYTD)} pz</div>
+          <div className="text-[10px] text-gray-500">YTD {anioActual} · {formatMXN(kpis.totalCosto)} al costo</div>
+        </div>
       </div>
     </div>
   );
@@ -1985,39 +2015,11 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
         )}
       </div>
 
-      {/* Fila inferior: precio real vs lista */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 border-t border-gray-200 pt-4 mt-4">
-        <div className="bg-gray-50 rounded-md p-2.5">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Precio prom. real</div>
-          <div className="text-[15px] font-semibold tabular-nums">{precioReal ? formatMXN(precioReal) : '—'}</div>
-          {precioLista && <div className="text-[10px] text-gray-500">vs {formatMXN(precioLista)} lista {meta.listaPrecio}</div>}
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Yield real</div>
-          <div className={`text-[15px] font-semibold tabular-nums ${yieldPct == null ? 'text-gray-400' : yieldPct >= 95 ? 'text-emerald-700' : yieldPct >= 85 ? 'text-amber-700' : 'text-rose-700'}`}>
-            {yieldPct != null ? `${yieldPct.toFixed(1)}%` : '—'}
-          </div>
-          <div className="text-[10px] text-gray-500">Descuento efectivo</div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell in Acteck→{meta.nombre}</div>
-          <div className="text-[15px] font-semibold tabular-nums">{fmtInt(siPzYTD)} pz</div>
-          <div className="text-[10px] text-gray-500">YTD {anioActual}</div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Ratio conversión</div>
-          <div className={`text-[15px] font-semibold tabular-nums ${ratioConv == null ? 'text-gray-400' : ratioConv >= 90 ? 'text-emerald-700' : ratioConv >= 70 ? 'text-amber-700' : 'text-rose-700'}`}>
-            {ratioConv != null ? `${ratioConv.toFixed(0)}%` : '—'}
-          </div>
-          <div className="text-[10px] text-gray-500">
-            {siPzYTD - piezasYTD > 0 ? `${fmtInt(siPzYTD - piezasYTD)} pz posible almacén` : 'Vendiendo stock previo'}
-          </div>
-        </div>
-      </div>
-
-      {/* Cruce mensual costo × precio × piezas */}
+      {/* Cruce mensual costo × precio × piezas + KPIs de precio y sell-in */}
       <AnalisisMargenSku sku={sku} rows={rows} sellInAcumulado={sellInAcumulado}
-        anioActual={anioActual} mesActual={mesActual} accent={meta.accent} />
+        anioActual={anioActual} mesActual={mesActual} accent={meta.accent}
+        precioReal={precioReal} precioLista={precioLista} yieldPct={yieldPct}
+        siPzYTD={siPzYTD} clienteNombre={meta.nombre} listaPrecio={meta.listaPrecio} />
 
       {/* Inventario por sucursal (último snapshot) */}
       {inventarioSucursales.length > 0 && (
