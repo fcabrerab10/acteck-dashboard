@@ -1533,6 +1533,228 @@ function BentoSucursales({ fisicas, virtuales, matriz, mesActual, metrica, valor
 }
 
 // ── Drill-down por SKU: clientes finales / vendedores / precio ─────────────
+// ── Análisis de margen: costo (sell-in Acteck→cliente) × precio venta (sellout)
+//    × piezas vendidas, mes a mes. Deriva margen unitario y absoluto por mes.
+function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, accent }) {
+  const data = useMemo(() => {
+    // Sellout por mes: piezas y monto
+    const soPz = Array(12).fill(0); const soMonto = Array(12).fill(0);
+    for (const r of rows) {
+      if (r.anio !== anioActual) continue;
+      const i = (r.mes || 0) - 1;
+      if (i < 0 || i > 11) continue;
+      soPz[i]    += Number(r.cantidad) || 0;
+      soMonto[i] += Number(r.importe)  || 0;
+    }
+    // Sell-in por mes (facturacion): piezas y monto para este SKU
+    const siPz = Array(12).fill(0); const siMonto = Array(12).fill(0);
+    for (const r of sellInAcumulado) {
+      if (r.anio !== anioActual || r.sku !== sku) continue;
+      const i = r.mes - 1;
+      if (i < 0 || i > 11) continue;
+      siPz[i]    += Number(r.piezas) || 0;
+      siMonto[i] += Number(r.monto)  || 0;
+    }
+    const out = [];
+    for (let i = 0; i < mesActual; i++) {
+      const costoUnit  = siPz[i] > 0 ? siMonto[i] / siPz[i] : null;
+      const precioUnit = soPz[i] > 0 ? soMonto[i] / soPz[i] : null;
+      const margenUnit = costoUnit != null && precioUnit != null ? precioUnit - costoUnit : null;
+      const margenPct  = margenUnit != null && precioUnit > 0 ? (margenUnit / precioUnit * 100) : null;
+      const margenAbs  = margenUnit != null ? margenUnit * soPz[i] : null;
+      out.push({
+        mes: MESES[i],
+        piezasVend: soPz[i],
+        piezasComp: siPz[i],
+        costoUnit, precioUnit, margenUnit, margenPct, margenAbs,
+      });
+    }
+    return out;
+  }, [rows, sellInAcumulado, sku, anioActual, mesActual]);
+
+  const kpis = useMemo(() => {
+    const conCosto = data.filter((d) => d.costoUnit != null && d.piezasVend > 0);
+    const conPrecio = data.filter((d) => d.precioUnit != null && d.piezasVend > 0);
+    const totalPz = data.reduce((s, d) => s + d.piezasVend, 0);
+    const totalVenta = data.reduce((s, d) => s + (d.precioUnit || 0) * d.piezasVend, 0);
+    const totalCosto = data.reduce((s, d) => s + (d.costoUnit != null ? d.costoUnit * d.piezasVend : 0), 0);
+    const totalMargen = data.reduce((s, d) => s + (d.margenAbs || 0), 0);
+    const costoProm  = conCosto.length ? conCosto.reduce((s, d) => s + d.costoUnit * d.piezasVend, 0) / conCosto.reduce((s, d) => s + d.piezasVend, 0) : null;
+    const precioProm = conPrecio.length ? conPrecio.reduce((s, d) => s + d.precioUnit * d.piezasVend, 0) / conPrecio.reduce((s, d) => s + d.piezasVend, 0) : null;
+    const margenProm = costoProm != null && precioProm != null ? precioProm - costoProm : null;
+    const margenPctProm = margenProm != null && precioProm > 0 ? (margenProm / precioProm * 100) : null;
+    return { totalPz, totalVenta, totalCosto, totalMargen, costoProm, precioProm, margenProm, margenPctProm };
+  }, [data]);
+
+  if (kpis.totalPz === 0 && kpis.totalCosto === 0) return null;
+
+  const maxPz = Math.max(1, ...data.map((d) => d.piezasVend));
+  const maxPrecio = Math.max(1, ...data.map((d) => Math.max(d.precioUnit || 0, d.costoUnit || 0)));
+
+  return (
+    <div className="border-t border-gray-200 pt-4 mt-4">
+      <div className="flex items-baseline justify-between mb-3">
+        <span className="text-[10.5px] uppercase tracking-widest font-bold text-gray-700">
+          Margen mes a mes · costo × precio × piezas
+        </span>
+        <span className="text-[10.5px] text-gray-500 tabular-nums">
+          YTD {anioActual}: {fmtInt(kpis.totalPz)} pz vendidas · margen total {formatMXN(kpis.totalMargen)}
+        </span>
+      </div>
+
+      {/* 4 KPIs de margen */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Costo prom. unit.</div>
+          <div className="text-[15px] font-semibold tabular-nums text-gray-800">{kpis.costoProm != null ? formatMXN(kpis.costoProm) : '—'}</div>
+          <div className="text-[10px] text-gray-500 tabular-nums">Total costo: {formatMXN(kpis.totalCosto)}</div>
+        </div>
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Precio venta prom.</div>
+          <div className="text-[15px] font-semibold tabular-nums text-gray-800">{kpis.precioProm != null ? formatMXN(kpis.precioProm) : '—'}</div>
+          <div className="text-[10px] text-gray-500 tabular-nums">Total venta: {formatMXN(kpis.totalVenta)}</div>
+        </div>
+        <div className="bg-emerald-50 rounded-md p-2.5 border border-emerald-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-emerald-700 font-semibold">Margen unit. prom.</div>
+          <div className={`text-[15px] font-semibold tabular-nums ${kpis.margenProm == null ? 'text-gray-400' : kpis.margenProm > 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
+            {kpis.margenProm != null ? formatMXN(kpis.margenProm) : '—'}
+          </div>
+          <div className="text-[10px] text-emerald-700 tabular-nums">
+            {kpis.margenPctProm != null ? `${kpis.margenPctProm.toFixed(1)}% margen` : '—'}
+          </div>
+        </div>
+        <div className="bg-emerald-50 rounded-md p-2.5 border border-emerald-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-emerald-700 font-semibold">Margen total YTD</div>
+          <div className={`text-[15px] font-semibold tabular-nums ${kpis.totalMargen == null ? 'text-gray-400' : kpis.totalMargen > 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
+            {formatMXN(kpis.totalMargen)}
+          </div>
+          <div className="text-[10px] text-emerald-700 tabular-nums">
+            {kpis.totalVenta > 0 ? `${(kpis.totalMargen / kpis.totalVenta * 100).toFixed(1)}% de la venta` : '—'}
+          </div>
+        </div>
+      </div>
+
+      {/* Combo chart: bars piezas + lines costo & precio */}
+      <div className="bg-white border border-gray-200 rounded-md p-3">
+        <svg viewBox="0 0 720 220" preserveAspectRatio="none" style={{ width: '100%', height: 220, display: 'block' }} fontFamily="inherit">
+          {/* Grid horizontal */}
+          {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
+            <line key={i} x1="45" y1={30 + f * 140} x2="700" y2={30 + f * 140} stroke="#E5E7EB" strokeDasharray="2 3" />
+          ))}
+          {/* Eje Y izquierdo (precio) */}
+          {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
+            <text key={i} x="42" y={30 + (1 - f) * 140 + 3} fontSize="9" fill="#6B7280" textAnchor="end">
+              {formatMXN(maxPrecio * f).replace('$', '$')}
+            </text>
+          ))}
+          {/* Eje Y derecho (piezas) */}
+          {[0, 0.5, 1].map((f, i) => (
+            <text key={i} x="703" y={30 + (1 - f) * 140 + 3} fontSize="9" fill="#9CA3AF" textAnchor="start">
+              {fmtInt(maxPz * f)}pz
+            </text>
+          ))}
+          {/* Bars piezas */}
+          {data.map((d, i) => {
+            const barX = 55 + i * (640 / Math.max(1, data.length));
+            const barW = (640 / Math.max(1, data.length)) * 0.55;
+            const barH = d.piezasVend > 0 ? (d.piezasVend / maxPz) * 140 : 0;
+            return (
+              <rect key={i} x={barX} y={170 - barH} width={barW} height={barH}
+                fill="#CBD5E1" opacity="0.85" rx="1.5" />
+            );
+          })}
+          {/* Line precio venta */}
+          {(() => {
+            const pts = data.map((d, i) => {
+              const x = 55 + i * (640 / Math.max(1, data.length)) + (640 / Math.max(1, data.length)) * 0.275;
+              const y = d.precioUnit != null ? 170 - (d.precioUnit / maxPrecio) * 140 : null;
+              return { x, y, v: d.precioUnit };
+            }).filter((p) => p.y != null);
+            if (pts.length < 2) return null;
+            return (
+              <>
+                <polyline points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                  stroke={accent} strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="3.5" fill={accent} stroke="white" strokeWidth="1.5" />)}
+              </>
+            );
+          })()}
+          {/* Line costo */}
+          {(() => {
+            const pts = data.map((d, i) => {
+              const x = 55 + i * (640 / Math.max(1, data.length)) + (640 / Math.max(1, data.length)) * 0.275;
+              const y = d.costoUnit != null ? 170 - (d.costoUnit / maxPrecio) * 140 : null;
+              return { x, y, v: d.costoUnit };
+            }).filter((p) => p.y != null);
+            if (pts.length < 2) return null;
+            return (
+              <>
+                <polyline points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                  stroke="#F59E0B" strokeWidth="2" fill="none" strokeDasharray="4 3" strokeLinecap="round" strokeLinejoin="round" />
+                {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="3" fill="white" stroke="#F59E0B" strokeWidth="1.8" />)}
+              </>
+            );
+          })()}
+          {/* Etiquetas mes */}
+          {data.map((d, i) => (
+            <text key={i} x={55 + i * (640 / Math.max(1, data.length)) + (640 / Math.max(1, data.length)) * 0.275}
+              y="188" fontSize="10" fill="#6B7280" textAnchor="middle">{d.mes}</text>
+          ))}
+          {/* Leyenda */}
+          <g transform="translate(55, 208)" fontSize="10" fill="#6B7280">
+            <rect x="0" y="-8" width="10" height="8" fill="#CBD5E1" rx="1" />
+            <text x="14" y="0">Piezas vendidas</text>
+            <line x1="115" y1="-4" x2="130" y2="-4" stroke={accent} strokeWidth="2.2" />
+            <circle cx="122.5" cy="-4" r="3" fill={accent} stroke="white" strokeWidth="1.2" />
+            <text x="135" y="0">Precio venta</text>
+            <line x1="220" y1="-4" x2="235" y2="-4" stroke="#F59E0B" strokeWidth="2" strokeDasharray="3 2" />
+            <circle cx="227.5" cy="-4" r="2.5" fill="white" stroke="#F59E0B" strokeWidth="1.5" />
+            <text x="240" y="0">Costo (sell-in / pz)</text>
+          </g>
+        </svg>
+      </div>
+
+      {/* Tabla mensual */}
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full text-[11px] tabular-nums">
+          <thead className="bg-gray-50 text-gray-600">
+            <tr className="text-[10px] uppercase tracking-wider">
+              <th className="text-left py-1.5 px-2 font-semibold">Mes</th>
+              <th className="text-right py-1.5 px-2 font-semibold">Pz comp</th>
+              <th className="text-right py-1.5 px-2 font-semibold">Pz vend</th>
+              <th className="text-right py-1.5 px-2 font-semibold">Costo unit</th>
+              <th className="text-right py-1.5 px-2 font-semibold">Precio unit</th>
+              <th className="text-right py-1.5 px-2 font-semibold">Margen unit</th>
+              <th className="text-right py-1.5 px-2 font-semibold">% margen</th>
+              <th className="text-right py-1.5 px-2 font-semibold">Margen $</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((d, i) => (
+              <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                <td className="py-1 px-2 font-semibold text-gray-800">{d.mes}</td>
+                <td className="py-1 px-2 text-right text-gray-600">{d.piezasComp > 0 ? fmtInt(d.piezasComp) : '—'}</td>
+                <td className="py-1 px-2 text-right text-gray-800">{d.piezasVend > 0 ? fmtInt(d.piezasVend) : '—'}</td>
+                <td className="py-1 px-2 text-right text-amber-700">{d.costoUnit != null ? formatMXN(d.costoUnit) : '—'}</td>
+                <td className="py-1 px-2 text-right" style={{ color: accent }}>{d.precioUnit != null ? formatMXN(d.precioUnit) : '—'}</td>
+                <td className={`py-1 px-2 text-right ${d.margenUnit == null ? 'text-gray-400' : d.margenUnit > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  {d.margenUnit != null ? formatMXN(d.margenUnit) : '—'}
+                </td>
+                <td className={`py-1 px-2 text-right ${d.margenPct == null ? 'text-gray-400' : d.margenPct > 20 ? 'text-emerald-700' : d.margenPct > 0 ? 'text-amber-700' : 'text-rose-700'}`}>
+                  {d.margenPct != null ? `${d.margenPct.toFixed(1)}%` : '—'}
+                </td>
+                <td className={`py-1 px-2 text-right font-semibold ${d.margenAbs == null ? 'text-gray-400' : d.margenAbs > 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
+                  {d.margenAbs != null ? formatMXN(d.margenAbs) : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 class SkuDrillDownBoundary extends React.Component {
   constructor(props) { super(props); this.state = { err: null }; }
   static getDerivedStateFromError(err) { return { err }; }
@@ -1792,6 +2014,10 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
           </div>
         </div>
       </div>
+
+      {/* Cruce mensual costo × precio × piezas */}
+      <AnalisisMargenSku sku={sku} rows={rows} sellInAcumulado={sellInAcumulado}
+        anioActual={anioActual} mesActual={mesActual} accent={meta.accent} />
 
       {/* Inventario por sucursal (último snapshot) */}
       {inventarioSucursales.length > 0 && (
