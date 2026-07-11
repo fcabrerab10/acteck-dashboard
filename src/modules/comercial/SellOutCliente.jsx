@@ -627,7 +627,10 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
             <ShoppingBag className="w-6 h-6 text-gray-700" /> Sell Out
           </h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Ventas de {meta.nombre} a sus clientes finales · Fuente Sellout General{invSemanaMax.semana ? ` · Inventario snapshot semana ${invSemanaMax.semana} ${invSemanaMax.anio}` : ''}
+            {meta.tablaSellOut === 'sellout_general'
+              ? `Ventas de ${meta.nombre} a sus clientes finales · Fuente Sellout General`
+              : `Ventas de ${meta.nombre} desde su tienda física y online · Fuente Histórico Sellout ${meta.nombre}`}
+            {invSemanaMax.semana ? ` · Inventario snapshot semana ${invSemanaMax.semana} ${invSemanaMax.anio}` : ''}
           </p>
         </div>
         <button onClick={exportarExcel}
