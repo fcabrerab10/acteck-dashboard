@@ -1557,9 +1557,18 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
       siPz[i]    += Number(r.piezas) || 0;
       siMonto[i] += Number(r.monto)  || 0;
     }
+    // Costo promedio YTD ponderado por piezas compradas — se usa como fallback
+    // cuando en un mes no hay compra pero sí hay ventas.
+    let siTotPz = 0, siTotMonto = 0;
+    for (let i = 0; i < 12; i++) { siTotPz += siPz[i]; siTotMonto += siMonto[i]; }
+    const costoPromYTD = siTotPz > 0 ? siTotMonto / siTotPz : null;
     const out = [];
     for (let i = 0; i < mesActual; i++) {
-      const costoUnit  = siPz[i] > 0 ? siMonto[i] / siPz[i] : null;
+      const costoReal  = siPz[i] > 0 ? siMonto[i] / siPz[i] : null;
+      // Fallback: si no hay compra ese mes pero hay ventas, usa el costo prom YTD
+      const costoUnit  = costoReal != null ? costoReal
+                        : (soPz[i] > 0 && costoPromYTD != null ? costoPromYTD : null);
+      const costoFallback = costoReal == null && costoUnit != null;
       const precioUnit = soPz[i] > 0 ? soMonto[i] / soPz[i] : null;
       const margenUnit = costoUnit != null && precioUnit != null ? precioUnit - costoUnit : null;
       const margenPct  = margenUnit != null && precioUnit > 0 ? (margenUnit / precioUnit * 100) : null;
@@ -1568,7 +1577,7 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
         mes: MESES[i],
         piezasVend: soPz[i],
         piezasComp: siPz[i],
-        costoUnit, precioUnit, margenUnit, margenPct, margenAbs,
+        costoUnit, costoFallback, precioUnit, margenUnit, margenPct, margenAbs,
       });
     }
     return out;
@@ -1604,14 +1613,68 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
         </span>
       </div>
 
-      {/* Row 1: Chart (2/3) + KPI stack (1/3) */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.8fr_1fr] gap-4 mb-3">
-      {/* Combo chart: bars piezas + lines costo & precio */}
+      {/* 3 columnas iguales: Tabla · Chart · Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+
+      {/* COL 1: Tabla detalle mensual */}
+      <div className="bg-white border border-gray-200 rounded-md p-3 flex flex-col">
+        <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2 flex justify-between items-baseline">
+          <span>Detalle mensual</span>
+          <span className="font-medium text-gray-400 normal-case tracking-normal">{data.length} meses</span>
+        </div>
+        <div className="overflow-x-auto flex-1">
+        <table className="w-full text-[10.5px] tabular-nums">
+          <thead className="bg-gray-50 text-gray-600">
+            <tr className="text-[9px] uppercase tracking-wide">
+              <th className="text-left py-1.5 px-1.5 font-semibold">Mes</th>
+              <th className="text-right py-1.5 px-1.5 font-semibold">Comp</th>
+              <th className="text-right py-1.5 px-1.5 font-semibold">Vend</th>
+              <th className="text-right py-1.5 px-1.5 font-semibold">Costo</th>
+              <th className="text-right py-1.5 px-1.5 font-semibold">Precio</th>
+              <th className="text-right py-1.5 px-1.5 font-semibold">Marg</th>
+              <th className="text-right py-1.5 px-1.5 font-semibold">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((d, i) => (
+              <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                <td className="py-1 px-1.5 font-semibold text-gray-800">{d.mes}</td>
+                <td className="py-1 px-1.5 text-right text-gray-600">{d.piezasComp > 0 ? fmtInt(d.piezasComp) : '—'}</td>
+                <td className="py-1 px-1.5 text-right text-gray-800">{d.piezasVend > 0 ? fmtInt(d.piezasVend) : '—'}</td>
+                <td className="py-1 px-1.5 text-right text-amber-700">
+                  {d.costoUnit != null ? formatMXN(d.costoUnit) : '—'}
+                  {d.costoFallback ? <span className="text-amber-500">*</span> : null}
+                </td>
+                <td className="py-1 px-1.5 text-right" style={{ color: accent }}>{d.precioUnit != null ? formatMXN(d.precioUnit) : '—'}</td>
+                <td className="py-1 px-1.5 text-right text-gray-800">{d.margenUnit != null ? formatMXN(d.margenUnit) : '—'}</td>
+                <td className="py-1 px-1.5 text-right text-gray-800">{d.margenPct != null ? `${d.margenPct.toFixed(1)}%` : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold text-gray-800">
+              <td className="py-1.5 px-1.5">Total</td>
+              <td className="py-1.5 px-1.5 text-right">{fmtInt(data.reduce((s, d) => s + d.piezasComp, 0))}</td>
+              <td className="py-1.5 px-1.5 text-right">{fmtInt(kpis.totalPz)}</td>
+              <td className="py-1.5 px-1.5 text-right text-amber-700">{kpis.costoProm != null ? formatMXN(kpis.costoProm) : '—'}</td>
+              <td className="py-1.5 px-1.5 text-right" style={{ color: accent }}>{kpis.precioProm != null ? formatMXN(kpis.precioProm) : '—'}</td>
+              <td className="py-1.5 px-1.5 text-right">{kpis.margenProm != null ? formatMXN(kpis.margenProm) : '—'}</td>
+              <td className="py-1.5 px-1.5 text-right">{kpis.margenPctProm != null ? `${kpis.margenPctProm.toFixed(1)}%` : '—'}</td>
+            </tr>
+          </tfoot>
+        </table>
+        </div>
+        {data.some((d) => d.costoFallback) && (
+          <div className="text-[9.5px] text-amber-600 mt-2">* Mes sin compra: se usa costo promedio YTD como fallback</div>
+        )}
+      </div>
+
+      {/* COL 2: Chart */}
       <div className="bg-white border border-gray-200 rounded-md p-3 relative">
         <div className="flex justify-between items-baseline mb-1">
           <div>
-            <div className="text-[12.5px] font-bold text-gray-800">Costo × Precio × Piezas · YTD {anioActual}</div>
-            <div className="text-[10px] text-gray-500">Hover un mes para ver el desglose</div>
+            <div className="text-[12.5px] font-bold text-gray-800">Costo × Precio × Piezas</div>
+            <div className="text-[10px] text-gray-500">Hover un mes para desglose</div>
           </div>
         </div>
         {hoverIdx != null && data[hoverIdx] && (() => {
@@ -1742,28 +1805,26 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
         </svg>
       </div>
 
-      {/* KPI stack derecho */}
+      {/* COL 3: Cards apiladas */}
       <div className="flex flex-col gap-2">
         {/* Hero: Margen total YTD */}
-        <div className="rounded-md p-2.5 border" style={{ background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)`, borderColor: `${accent}55` }}>
+        <div className="rounded-md p-3 border" style={{ background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)`, borderColor: `${accent}55` }}>
           <div className="text-[9.5px] uppercase tracking-widest font-bold" style={{ color: accent, filter: 'brightness(0.7)' }}>Margen total YTD</div>
           <div className="text-[20px] font-bold tabular-nums" style={{ color: accent, filter: 'brightness(0.6)' }}>{formatMXN(kpis.totalMargen)}</div>
           <div className="text-[10px] tabular-nums" style={{ color: accent, filter: 'brightness(0.7)' }}>
             {kpis.totalVenta > 0 ? `${(kpis.totalMargen / kpis.totalVenta * 100).toFixed(1)}% de la venta` : '—'}
           </div>
         </div>
-        {/* Row 2: Costo prom + Precio venta */}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-            <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Costo prom.</div>
-            <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.costoProm != null ? formatMXN(kpis.costoProm) : '—'}</div>
-          </div>
-          <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-            <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Precio venta</div>
-            <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.precioProm != null ? formatMXN(kpis.precioProm) : '—'}</div>
-          </div>
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Costo prom.</div>
+          <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.costoProm != null ? formatMXN(kpis.costoProm) : '—'}</div>
+          <div className="text-[10px] text-gray-500 tabular-nums">Total costo {formatMXN(kpis.totalCosto)}</div>
         </div>
-        {/* Margen unit prom */}
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Precio venta prom.</div>
+          <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.precioProm != null ? formatMXN(kpis.precioProm) : '—'}</div>
+          <div className="text-[10px] text-gray-500 tabular-nums">Total venta {formatMXN(kpis.totalVenta)}</div>
+        </div>
         <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
           <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Margen unit. prom.</div>
           <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.margenProm != null ? formatMXN(kpis.margenProm) : '—'}</div>
@@ -1771,67 +1832,22 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
             {kpis.margenPctProm != null ? `${kpis.margenPctProm.toFixed(1)}% del precio` : '—'}
           </div>
         </div>
-      </div>
-      </div>
-
-      {/* Tabla mensual */}
-      <div className="bg-white border border-gray-200 rounded-md p-3">
-        <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2">Detalle mensual · Costo × Precio × Piezas</div>
-        <div className="overflow-x-auto">
-        <table className="w-full text-[11px] tabular-nums">
-          <thead className="bg-gray-50 text-gray-600">
-            <tr className="text-[10px] uppercase tracking-wider">
-              <th className="text-left py-1.5 px-2 font-semibold">Mes</th>
-              <th className="text-right py-1.5 px-2 font-semibold">Pz comp</th>
-              <th className="text-right py-1.5 px-2 font-semibold">Pz vend</th>
-              <th className="text-right py-1.5 px-2 font-semibold">Costo unit</th>
-              <th className="text-right py-1.5 px-2 font-semibold">Precio unit</th>
-              <th className="text-right py-1.5 px-2 font-semibold">Margen unit</th>
-              <th className="text-right py-1.5 px-2 font-semibold">% margen</th>
-              <th className="text-right py-1.5 px-2 font-semibold">Margen $</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((d, i) => (
-              <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="py-1 px-2 font-semibold text-gray-800">{d.mes}</td>
-                <td className="py-1 px-2 text-right text-gray-600">{d.piezasComp > 0 ? fmtInt(d.piezasComp) : '—'}</td>
-                <td className="py-1 px-2 text-right text-gray-800">{d.piezasVend > 0 ? fmtInt(d.piezasVend) : '—'}</td>
-                <td className="py-1 px-2 text-right text-amber-700">{d.costoUnit != null ? formatMXN(d.costoUnit) : '—'}</td>
-                <td className="py-1 px-2 text-right" style={{ color: accent }}>{d.precioUnit != null ? formatMXN(d.precioUnit) : '—'}</td>
-                <td className="py-1 px-2 text-right text-gray-800">
-                  {d.margenUnit != null ? formatMXN(d.margenUnit) : '—'}
-                </td>
-                <td className="py-1 px-2 text-right text-gray-800">
-                  {d.margenPct != null ? `${d.margenPct.toFixed(1)}%` : '—'}
-                </td>
-                <td className="py-1 px-2 text-right font-semibold text-gray-800">
-                  {d.margenAbs != null ? formatMXN(d.margenAbs) : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
-      </div>
-
-      {/* Footer: Precio real vs lista + Sell-in YTD */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-        <div className="bg-gray-50 rounded-md p-3 border border-gray-100">
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
           <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Precio real vs lista</div>
-          <div className="text-[15px] font-semibold tabular-nums text-gray-800">
+          <div className="text-[14px] font-bold tabular-nums text-gray-800">
             {precioReal ? formatMXN(precioReal) : '—'}
             {precioLista ? <span className="text-gray-400 font-normal"> / {formatMXN(precioLista)}</span> : null}
           </div>
           <div className="text-[10px] text-gray-500">
-            {yieldPct != null ? `Yield ${yieldPct.toFixed(1)}% · descuento ${(100 - yieldPct).toFixed(1)}%` : (precioLista ? `Lista ${listaPrecio}` : 'Sin lista')}
+            {yieldPct != null ? `Yield ${yieldPct.toFixed(1)}%` : (precioLista ? `Lista ${listaPrecio}` : 'Sin lista')}
           </div>
         </div>
-        <div className="bg-gray-50 rounded-md p-3 border border-gray-100">
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
           <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell-in Acteck→{clienteNombre}</div>
-          <div className="text-[15px] font-semibold tabular-nums text-gray-800">{fmtInt(siPzYTD)} pz</div>
-          <div className="text-[10px] text-gray-500">YTD {anioActual} · {formatMXN(kpis.totalCosto)} al costo</div>
+          <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(siPzYTD)} pz</div>
+          <div className="text-[10px] text-gray-500">YTD {anioActual}</div>
         </div>
+      </div>
       </div>
     </div>
   );
