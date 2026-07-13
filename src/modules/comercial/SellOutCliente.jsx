@@ -1803,36 +1803,38 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
             );
           })()}
         </svg>
+
+        {/* Strip debajo del chart: 3 promedios que resumen las líneas */}
+        <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-100">
+          <div>
+            <div className="text-[9px] uppercase tracking-widest font-semibold" style={{ color: '#B45309' }}>Costo prom.</div>
+            <div className="text-[13px] font-bold tabular-nums" style={{ color: '#92400E' }}>{kpis.costoProm != null ? formatMXN(kpis.costoProm) : '—'}</div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-widest font-semibold" style={{ color: accent, filter: 'brightness(0.75)' }}>Precio venta prom.</div>
+            <div className="text-[13px] font-bold tabular-nums" style={{ color: accent, filter: 'brightness(0.6)' }}>{kpis.precioProm != null ? formatMXN(kpis.precioProm) : '—'}</div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-widest text-gray-500 font-semibold">Margen unit. prom.</div>
+            <div className="text-[13px] font-bold tabular-nums text-gray-800">
+              {kpis.margenProm != null ? formatMXN(kpis.margenProm) : '—'}
+              {kpis.margenPctProm != null && <span className="text-[10px] font-medium text-gray-500 ml-1">· {kpis.margenPctProm.toFixed(1)}%</span>}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* COL 3: Cards apiladas */}
+      {/* COL 3: Cards apiladas — sólo métricas que no están en el chart */}
       <div className="flex flex-col gap-2">
         {/* Hero: Margen total YTD */}
         <div className="rounded-md p-3 border" style={{ background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)`, borderColor: `${accent}55` }}>
           <div className="text-[9.5px] uppercase tracking-widest font-bold" style={{ color: accent, filter: 'brightness(0.7)' }}>Margen total YTD</div>
-          <div className="text-[20px] font-bold tabular-nums" style={{ color: accent, filter: 'brightness(0.6)' }}>{formatMXN(kpis.totalMargen)}</div>
+          <div className="text-[22px] font-bold tabular-nums" style={{ color: accent, filter: 'brightness(0.6)' }}>{formatMXN(kpis.totalMargen)}</div>
           <div className="text-[10px] tabular-nums" style={{ color: accent, filter: 'brightness(0.7)' }}>
-            {kpis.totalVenta > 0 ? `${(kpis.totalMargen / kpis.totalVenta * 100).toFixed(1)}% de la venta` : '—'}
+            {kpis.totalVenta > 0 ? `${(kpis.totalMargen / kpis.totalVenta * 100).toFixed(1)}% de la venta · sobre ${formatMXN(kpis.totalVenta)}` : '—'}
           </div>
         </div>
-        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Costo prom.</div>
-          <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.costoProm != null ? formatMXN(kpis.costoProm) : '—'}</div>
-          <div className="text-[10px] text-gray-500 tabular-nums">Total costo {formatMXN(kpis.totalCosto)}</div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Precio venta prom.</div>
-          <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.precioProm != null ? formatMXN(kpis.precioProm) : '—'}</div>
-          <div className="text-[10px] text-gray-500 tabular-nums">Total venta {formatMXN(kpis.totalVenta)}</div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Margen unit. prom.</div>
-          <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.margenProm != null ? formatMXN(kpis.margenProm) : '—'}</div>
-          <div className="text-[10px] text-gray-500 tabular-nums">
-            {kpis.margenPctProm != null ? `${kpis.margenPctProm.toFixed(1)}% del precio` : '—'}
-          </div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+        <div className="bg-gray-50 rounded-md p-3 border border-gray-100">
           <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Precio real vs lista</div>
           <div className="text-[14px] font-bold tabular-nums text-gray-800">
             {precioReal ? formatMXN(precioReal) : '—'}
