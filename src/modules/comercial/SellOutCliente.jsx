@@ -1880,17 +1880,18 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
   );
 }
 
-// ── PCEL "Vida del SKU": supply chain semanal ───────────────────────────
-//    Fuente: v_sellout_pcel_semanal (derivada de venta-marca-ACTECK semanal).
-//    KPI hero: Weeks of Supply (semanas de stock al ritmo actual).
-//    Timeline: área inventario + barras venta + marcadores de reposición y
-//    cambio de costo.
-function PcelSupplyChain({ sku, anioActual, accent }) {
-  const [rows, setRows] = useState([]);
+// ── PCEL · Análisis mensual + minimap semanal (Propuesta 3) ─────────────
+//    Sigue la estructura 3-cols de AnalisisMargenSku pero adaptado a PCEL:
+//    - Sin precio de venta ni margen (no aplica)
+//    - Foco en: rotación, Weeks of Supply, inventario, tránsito, reposición
+//    - Chart mensual arriba + minimap semanal comprimido abajo
+function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, accent, siPzYTD, clienteNombre }) {
+  const [semanal, setSemanal] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [hoverIdx, setHoverIdx] = useState(null);
   const svgRef = React.useRef(null);
 
+  // Fetch semanal para minimap y cálculo de WoS / reposiciones
   useEffect(() => {
     let cancelled = false;
     setCargando(true);
@@ -1899,12 +1900,9 @@ function PcelSupplyChain({ sku, anioActual, accent }) {
         const { data, error } = await supabase
           .from('v_sellout_pcel_semanal')
           .select('anio,semana,piezas,inventario,antiguedad,transito,backorder,costo')
-          .eq('sku', sku)
-          .eq('anio', anioActual)
-          .order('semana');
+          .eq('sku', sku).eq('anio', anioActual).order('semana');
         if (cancelled) return;
-        if (error) { console.error('[PcelSupplyChain]', error); setRows([]); }
-        else setRows(data || []);
+        setSemanal(error ? [] : (data || []));
         setCargando(false);
       } catch (e) {
         if (cancelled) return;
@@ -1914,290 +1912,363 @@ function PcelSupplyChain({ sku, anioActual, accent }) {
     return () => { cancelled = true; };
   }, [sku, anioActual]);
 
-  const { data, kpis, reposiciones, cambiosCosto } = useMemo(() => {
-    if (!rows.length) return { data: [], kpis: null, reposiciones: [], cambiosCosto: [] };
-    // Detecta reposiciones: salto positivo de inventario > +30 pz (o inventario duplicó)
-    // y baja de antigüedad ≥ 20 días.
-    const rp = [];
-    const cc = [];
-    for (let i = 1; i < rows.length; i++) {
-      const prev = rows[i - 1]; const cur = rows[i];
-      const dInv = Number(cur.inventario) - Number(prev.inventario);
-      const dAnt = Number(cur.antiguedad) - Number(prev.antiguedad);
+  // Agregado mensual desde rows (v_sellout_pcel_sku_mes) + sellIn + inventario mensual (última sem del mes)
+  const data = useMemo(() => {
+    const soPz = Array(12).fill(0);
+    for (const r of rows) {
+      if (r.anio !== anioActual) continue;
+      const i = (r.mes || 0) - 1;
+      if (i < 0 || i > 11) continue;
+      soPz[i] += Number(r.cantidad) || 0;
+    }
+    const siPz = Array(12).fill(0); const siMonto = Array(12).fill(0);
+    for (const r of sellInAcumulado) {
+      if (r.anio !== anioActual || r.sku !== sku) continue;
+      const i = r.mes - 1;
+      if (i < 0 || i > 11) continue;
+      siPz[i] += Number(r.piezas) || 0;
+      siMonto[i] += Number(r.monto) || 0;
+    }
+    // Costo prom del mes: si hay compra ese mes se usa el precio real; si no, se usa
+    // el costo YTD ponderado como fallback (consistente con el patrón de AnalisisMargenSku).
+    let siTotPz = 0, siTotMonto = 0;
+    for (let i = 0; i < 12; i++) { siTotPz += siPz[i]; siTotMonto += siMonto[i]; }
+    const costoPromYTD = siTotPz > 0 ? siTotMonto / siTotPz : null;
+    // Inventario fin de mes: última semana disponible del mes en el semanal
+    const invFinMes = Array(12).fill(null);
+    const semanaAMesAprox = (sem) => {
+      // ISO week aprox: mes ≈ ((sem - 1) * 12 / 52) + 1 → floor
+      return Math.min(12, Math.max(1, Math.floor((sem - 1) / 4.4) + 1));
+    };
+    for (const r of semanal) {
+      const m = semanaAMesAprox(Number(r.semana));
+      // Guarda el inventario de la ÚLTIMA semana observada de ese mes
+      invFinMes[m - 1] = Number(r.inventario) || 0;
+    }
+    const out = [];
+    for (let i = 0; i < mesActual; i++) {
+      const costoReal = siPz[i] > 0 ? siMonto[i] / siPz[i] : null;
+      const costoUnit = costoReal != null ? costoReal
+                      : (soPz[i] > 0 && costoPromYTD != null ? costoPromYTD : null);
+      const costoFallback = costoReal == null && costoUnit != null;
+      const valorMovido = costoUnit != null ? costoUnit * soPz[i] : null;
+      out.push({
+        mes: MESES[i],
+        piezasComp: siPz[i], piezasVend: soPz[i],
+        costoUnit, costoFallback,
+        valorMovido,
+        invFin: invFinMes[i],
+      });
+    }
+    return out;
+  }, [rows, sellInAcumulado, semanal, sku, anioActual, mesActual]);
+
+  // KPIs derivados (WoS, rotación, última reposición, nivel óptimo)
+  const kpis = useMemo(() => {
+    if (!semanal.length) {
+      return { wos: null, vtaProm4Sem: 0, stock: 0, antiguedad: 0, transito: 0, backorder: 0,
+               costoActual: 0, nivelOptimo: null, ultimaRep: null, rotacionMes: null,
+               costoProm: null, valorMovidoYTD: 0, piezasVendYTD: 0 };
+    }
+    const last = semanal[semanal.length - 1];
+    const ult4 = semanal.slice(-4).map((r) => Number(r.piezas) || 0);
+    const vtaProm4Sem = ult4.reduce((a, b) => a + b, 0) / Math.max(1, ult4.length);
+    const stock = Number(last.inventario) || 0;
+    const wos = vtaProm4Sem > 0 ? stock / vtaProm4Sem : null;
+    const nivelOptimo = vtaProm4Sem > 0 ? Math.round(vtaProm4Sem * 8) : null; // meta ~ 2 meses
+    // Reposiciones: salto de inventario > 30 pz AND antigüedad baja ≥ 20 días
+    let ultimaRep = null;
+    for (let i = 1; i < semanal.length; i++) {
+      const p = semanal[i - 1]; const c = semanal[i];
+      const dInv = Number(c.inventario) - Number(p.inventario);
+      const dAnt = Number(c.antiguedad) - Number(p.antiguedad);
       if (dInv > 30 && dAnt <= -20) {
-        rp.push({ idx: i, semana: cur.semana, cantidad: dInv + Number(cur.piezas) });
-      }
-      const dCosto = Number(cur.costo) - Number(prev.costo);
-      if (Math.abs(dCosto) >= 1 && Number(prev.costo) > 0) {
-        cc.push({ idx: i, semana: cur.semana, costo: Number(cur.costo), delta: dCosto });
+        ultimaRep = { semana: c.semana, cantidad: dInv + Number(c.piezas), costoAntes: Number(p.costo), costoDespues: Number(c.costo) };
       }
     }
-    const last = rows[rows.length - 1];
-    // Weeks of Supply: inventario actual / promedio venta últimas 4 semanas
-    const ult4 = rows.slice(-4).map((r) => Number(r.piezas) || 0);
-    const vtaProm4 = ult4.length > 0 ? ult4.reduce((a, b) => a + b, 0) / ult4.length : 0;
-    const wos = vtaProm4 > 0 ? Number(last.inventario) / vtaProm4 : null;
-    // Última reposición
-    const ultimaRep = rp.length > 0 ? rp[rp.length - 1] : null;
+    const piezasVendYTD = data.reduce((s, d) => s + d.piezasVend, 0);
+    const valorMovidoYTD = data.reduce((s, d) => s + (d.valorMovido || 0), 0);
+    const costoProm = piezasVendYTD > 0 ? valorMovidoYTD / piezasVendYTD : null;
+    // Rotación mensual aprox: piezas vendidas del último mes cerrado / stock actual
+    const ultMes = data[data.length - 1];
+    const rotacionMes = stock > 0 && ultMes && ultMes.piezasVend > 0 ? ultMes.piezasVend / stock : null;
     return {
-      data: rows,
-      kpis: {
-        stock: Number(last.inventario) || 0,
-        antiguedad: Number(last.antiguedad) || 0,
-        transito: Number(last.transito) || 0,
-        backorder: Number(last.backorder) || 0,
-        costo: Number(last.costo) || 0,
-        wos,
-        vtaProm4,
-        ultimaRep,
-        semanaUlt: last.semana,
-      },
-      reposiciones: rp,
-      cambiosCosto: cc,
+      wos, vtaProm4Sem, stock,
+      antiguedad: Number(last.antiguedad) || 0,
+      transito: Number(last.transito) || 0,
+      backorder: Number(last.backorder) || 0,
+      costoActual: Number(last.costo) || 0,
+      nivelOptimo, ultimaRep, rotacionMes,
+      costoProm, valorMovidoYTD, piezasVendYTD,
+      semanaUlt: last.semana,
     };
-  }, [rows]);
+  }, [semanal, data]);
 
   if (cargando) {
-    return (
-      <div className="border-t border-gray-200 pt-4 mt-4 p-4 text-center text-xs text-gray-500">
-        Cargando operación semanal PCEL…
-      </div>
-    );
+    return <div className="border-t border-gray-200 pt-4 mt-4 p-4 text-center text-xs text-gray-500">Cargando análisis mensual y semanal de PCEL…</div>;
   }
   if (!data.length) return null;
 
-  const maxInv = Math.max(1, ...data.map((d) => Number(d.inventario) || 0));
-  const maxPz  = Math.max(1, ...data.map((d) => Number(d.piezas) || 0));
+  const maxPz = Math.max(1, ...data.map((d) => d.piezasVend));
+  const maxInv = Math.max(1, ...data.map((d) => d.invFin || 0));
+  const maxAmbos = Math.max(maxPz, ...data.map((d) => d.piezasComp));
+
+  // Índice de la semana de reposición dentro del semanal (para marcador en minimap)
+  const repIdx = kpis.ultimaRep ? semanal.findIndex((r) => r.semana === kpis.ultimaRep.semana) : -1;
+  const maxInvSem = Math.max(1, ...semanal.map((r) => Number(r.inventario) || 0));
+  const maxPzSem  = Math.max(1, ...semanal.map((r) => Number(r.piezas) || 0));
 
   return (
     <div className="border-t border-gray-200 pt-4 mt-4">
       <div className="flex items-baseline justify-between mb-3">
         <span className="text-[10.5px] uppercase tracking-widest font-bold text-gray-700">
-          Operación semanal PCEL · vida del SKU
+          Rotación mensual · Inventario · Costo
         </span>
         <span className="text-[10.5px] text-gray-500 tabular-nums">
-          {data.length} semanas cargadas · última: semana {kpis.semanaUlt} {anioActual}
+          YTD {anioActual}: {fmtInt(kpis.piezasVendYTD)} pz vendidas · valor {formatMXN(kpis.valorMovidoYTD)}
         </span>
       </div>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-3">
-        {/* WoS hero */}
-        <div className="rounded-md p-3 border md:col-span-2" style={{ background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)`, borderColor: `${accent}55` }}>
-          <div className="text-[9.5px] uppercase tracking-widest font-bold" style={{ color: accent, filter: 'brightness(0.7)' }}>Weeks of Supply</div>
-          <div className="text-[22px] font-bold tabular-nums" style={{ color: accent, filter: 'brightness(0.6)' }}>
-            {kpis.wos != null ? `${kpis.wos.toFixed(1)} sem` : '—'}
-          </div>
-          <div className="text-[10px] tabular-nums" style={{ color: accent, filter: 'brightness(0.7)' }}>
-            Al ritmo actual de {kpis.vtaProm4.toFixed(0)} pz/sem
-          </div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Stock actual</div>
-          <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(kpis.stock)} pz</div>
-          <div className="text-[10px] text-gray-500 tabular-nums">{formatMXN(kpis.stock * kpis.costo)} a costo</div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Antigüedad</div>
-          <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(kpis.antiguedad)} días</div>
-          <div className="text-[10px] text-gray-500">Desde última reposición</div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">En tránsito</div>
-          <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(kpis.transito)} pz</div>
-          <div className="text-[10px] text-gray-500">{kpis.transito > 0 ? 'Llegando' : 'Sin compras activas'}</div>
-        </div>
-        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Backorder</div>
-          <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(kpis.backorder)} pz</div>
-          <div className="text-[10px] text-gray-500">{kpis.backorder > 0 ? 'Pedidos sin surtir' : 'Sin pendientes'}</div>
-        </div>
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
 
-      {/* Timeline chart */}
-      <div className="bg-white border border-gray-200 rounded-md p-3 relative mb-3">
-        <div className="flex justify-between items-baseline mb-2">
-          <div>
-            <div className="text-[12.5px] font-bold text-gray-800">Timeline semanal · Inventario vs Venta</div>
-            <div className="text-[10px] text-gray-500">Hover una semana para desglose · marcadores 🚚 indican reposiciones</div>
+        {/* COL 1: Tabla mensual */}
+        <div className="bg-white border border-gray-200 rounded-md p-3 flex flex-col">
+          <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2 flex justify-between items-baseline">
+            <span>Detalle mensual</span>
+            <span className="font-medium text-gray-400 normal-case tracking-normal">{data.length} meses</span>
           </div>
-          <div className="flex gap-3 text-[10px] text-gray-500">
-            <span><span className="inline-block w-3 h-2 mr-1 align-middle" style={{ background: accent, opacity: 0.35 }}></span>Inventario</span>
-            <span><span className="inline-block w-3 h-2 mr-1 align-middle" style={{ background: '#CBD5E1' }}></span>Venta semanal</span>
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full text-[10.5px] tabular-nums">
+              <thead className="bg-gray-50 text-gray-600">
+                <tr className="text-[9px] uppercase tracking-wide">
+                  <th className="text-left py-1.5 px-1.5 font-semibold">Mes</th>
+                  <th className="text-right py-1.5 px-1.5 font-semibold">Comp</th>
+                  <th className="text-right py-1.5 px-1.5 font-semibold">Vend</th>
+                  <th className="text-right py-1.5 px-1.5 font-semibold">Costo</th>
+                  <th className="text-right py-1.5 px-1.5 font-semibold">Valor</th>
+                  <th className="text-right py-1.5 px-1.5 font-semibold">Inv fin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((d, i) => (
+                  <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-1 px-1.5 font-semibold text-gray-800">{d.mes}</td>
+                    <td className="py-1 px-1.5 text-right text-gray-600">{d.piezasComp > 0 ? fmtInt(d.piezasComp) : '—'}</td>
+                    <td className="py-1 px-1.5 text-right text-emerald-700 font-semibold">{d.piezasVend > 0 ? fmtInt(d.piezasVend) : '—'}</td>
+                    <td className="py-1 px-1.5 text-right text-amber-700">
+                      {d.costoUnit != null ? formatMXN(d.costoUnit) : '—'}
+                      {d.costoFallback ? <span className="text-amber-500">*</span> : null}
+                    </td>
+                    <td className="py-1 px-1.5 text-right text-gray-800">{d.valorMovido != null ? formatMXN(d.valorMovido) : '—'}</td>
+                    <td className="py-1 px-1.5 text-right" style={{ color: accent }}>{d.invFin != null ? fmtInt(d.invFin) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold text-gray-800">
+                  <td className="py-1.5 px-1.5">Total</td>
+                  <td className="py-1.5 px-1.5 text-right">{fmtInt(data.reduce((s, d) => s + d.piezasComp, 0))}</td>
+                  <td className="py-1.5 px-1.5 text-right text-emerald-700">{fmtInt(kpis.piezasVendYTD)}</td>
+                  <td className="py-1.5 px-1.5 text-right text-amber-700">{kpis.costoProm != null ? formatMXN(kpis.costoProm) : '—'}</td>
+                  <td className="py-1.5 px-1.5 text-right">{formatMXN(kpis.valorMovidoYTD)}</td>
+                  <td className="py-1.5 px-1.5 text-right" style={{ color: accent }}>—</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
+          {data.some((d) => d.costoFallback) && (
+            <div className="text-[9.5px] text-amber-600 mt-2">* Mes sin compra: se usa costo promedio YTD como fallback</div>
+          )}
         </div>
-        {hoverIdx != null && data[hoverIdx] && (() => {
-          const d = data[hoverIdx];
-          return (
-            <div className="absolute top-2 right-2 bg-white border border-gray-200 rounded-md p-2.5 shadow-lg text-[11px] tabular-nums min-w-[200px] z-10 pointer-events-none">
-              <div className="font-bold text-gray-800 mb-1.5 pb-1 border-b border-gray-100 flex justify-between items-baseline">
-                <span>Semana {d.semana} · {anioActual}</span>
-              </div>
-              <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-gray-600">
-                <span>Venta</span><span className="text-right font-semibold text-gray-800">{fmtInt(Number(d.piezas))} pz</span>
-                <span style={{ color: accent, filter: 'brightness(0.7)' }}>Inventario</span>
-                <span className="text-right font-semibold" style={{ color: accent, filter: 'brightness(0.6)' }}>{fmtInt(Number(d.inventario))} pz</span>
-                <span>Antigüedad</span><span className="text-right text-gray-800">{fmtInt(Number(d.antiguedad))} días</span>
-                <span>Tránsito</span><span className="text-right text-gray-800">{fmtInt(Number(d.transito))} pz</span>
-                <span>Backorder</span><span className="text-right text-gray-800">{fmtInt(Number(d.backorder))} pz</span>
-                <span>Costo unit</span><span className="text-right text-gray-800">{formatMXN(Number(d.costo))}</span>
-              </div>
+
+        {/* COL 2: Chart mensual arriba + minimap semanal abajo */}
+        <div className="bg-white border border-gray-200 rounded-md p-3 relative flex flex-col">
+          <div className="flex justify-between items-baseline mb-1">
+            <div>
+              <div className="text-[12.5px] font-bold text-gray-800">Ciclo mensual</div>
+              <div className="text-[10px] text-gray-500">Barras piezas vendidas · línea inventario fin de mes</div>
             </div>
-          );
-        })()}
-        <svg ref={svgRef} viewBox="0 0 900 260" preserveAspectRatio="none" style={{ width: '100%', height: 260, display: 'block' }} fontFamily="inherit"
-          onMouseMove={(e) => {
-            if (!svgRef.current || data.length === 0) return;
-            const rect = svgRef.current.getBoundingClientRect();
-            const vbX = (e.clientX - rect.left) / rect.width * 900;
-            const colW = 800 / data.length;
-            const idx = Math.floor((vbX - 60) / colW);
-            if (idx >= 0 && idx < data.length) { if (idx !== hoverIdx) setHoverIdx(idx); }
-            else if (hoverIdx != null) setHoverIdx(null);
-          }}
-          onMouseLeave={() => setHoverIdx(null)}>
-          {/* Grid */}
-          {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
-            <line key={i} x1="55" y1={30 + f * 170} x2="875" y2={30 + f * 170} stroke="#EEF2F7" strokeDasharray="2 3" />
-          ))}
-          {/* Y left (inventario) */}
-          {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
-            <text key={i} x="52" y={30 + (1 - f) * 170 + 3} fontSize="9" fill="#9CA3AF" textAnchor="end">
-              {fmtInt(maxInv * f)}
-            </text>
-          ))}
-          {/* Y right (piezas) */}
-          {[0, 0.5, 1].map((f, i) => (
-            <text key={i} x="878" y={30 + (1 - f) * 170 + 3} fontSize="9" fill="#9CA3AF" textAnchor="start">
-              {fmtInt(maxPz * f)}pz
-            </text>
-          ))}
-          {/* Área inventario */}
-          {(() => {
-            const colW = 800 / data.length;
-            const pts = data.map((d, i) => ({
-              x: 60 + i * colW + colW * 0.5,
-              y: 200 - (Number(d.inventario) / maxInv) * 170,
-            }));
-            const areaPath = `M ${pts[0].x} 200 ` + pts.map((p) => `L ${p.x} ${p.y}`).join(' ') + ` L ${pts[pts.length - 1].x} 200 Z`;
+          </div>
+          {hoverIdx != null && data[hoverIdx] && (() => {
+            const d = data[hoverIdx];
             return (
-              <>
+              <div className="absolute top-2 right-2 bg-white border border-gray-200 rounded-md p-2.5 shadow-lg text-[11px] tabular-nums min-w-[180px] z-10 pointer-events-none">
+                <div className="font-bold text-gray-800 mb-1.5 pb-1 border-b border-gray-100">{d.mes} {anioActual}</div>
+                <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-gray-600">
+                  <span>Comp</span><span className="text-right text-gray-800">{d.piezasComp > 0 ? fmtInt(d.piezasComp) : '—'}</span>
+                  <span>Vend</span><span className="text-right text-emerald-700 font-semibold">{d.piezasVend > 0 ? fmtInt(d.piezasVend) : '—'}</span>
+                  <span style={{ color: '#B45309' }}>Costo unit</span>
+                  <span className="text-right" style={{ color: '#92400E' }}>{d.costoUnit != null ? formatMXN(d.costoUnit) : '—'}</span>
+                  <span>Valor</span><span className="text-right text-gray-800">{d.valorMovido != null ? formatMXN(d.valorMovido) : '—'}</span>
+                  <span style={{ color: accent }}>Inv fin mes</span>
+                  <span className="text-right" style={{ color: accent, filter: 'brightness(0.7)' }}>{d.invFin != null ? fmtInt(d.invFin) + ' pz' : '—'}</span>
+                </div>
+              </div>
+            );
+          })()}
+          <svg ref={svgRef} viewBox="0 0 400 200" preserveAspectRatio="none" style={{ width: '100%', height: 200, display: 'block' }} fontFamily="inherit"
+            onMouseMove={(e) => {
+              if (!svgRef.current || data.length === 0) return;
+              const rect = svgRef.current.getBoundingClientRect();
+              const vbX = (e.clientX - rect.left) / rect.width * 400;
+              const colW = 340 / data.length;
+              const idx = Math.floor((vbX - 40) / colW);
+              if (idx >= 0 && idx < data.length) { if (idx !== hoverIdx) setHoverIdx(idx); }
+              else if (hoverIdx != null) setHoverIdx(null);
+            }}
+            onMouseLeave={() => setHoverIdx(null)}>
+            {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
+              <line key={i} x1="35" y1={20 + f * 130} x2="395" y2={20 + f * 130} stroke="#EEF2F7" strokeDasharray="2 3" />
+            ))}
+            {[0, 0.5, 1].map((f, i) => (
+              <text key={i} x="32" y={20 + (1 - f) * 130 + 3} fontSize="9" fill="#9CA3AF" textAnchor="end">
+                {fmtInt(maxAmbos * f)}
+              </text>
+            ))}
+            {data.map((d, i) => {
+              const colW = 340 / Math.max(1, data.length);
+              const barX = 40 + i * colW;
+              const barW = colW * 0.55;
+              const barH = d.piezasVend > 0 ? (d.piezasVend / maxAmbos) * 130 : 0;
+              const isHover = hoverIdx === i;
+              return (
+                <rect key={i} x={barX} y={150 - barH} width={barW} height={barH}
+                  fill={isHover ? '#64748B' : '#CBD5E1'} opacity={isHover ? 1 : 0.85} rx="1.5"
+                  pointerEvents="none" style={{ transition: 'fill 120ms' }} />
+              );
+            })}
+            {(() => {
+              const colW = 340 / Math.max(1, data.length);
+              const pts = data.map((d, i) => ({
+                x: 40 + i * colW + colW * 0.275,
+                y: d.invFin != null ? 150 - (d.invFin / maxInv) * 130 : null,
+              })).filter((p) => p.y != null);
+              if (pts.length < 2) return null;
+              return (
+                <>
+                  <polyline points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                    stroke={accent} strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="3" fill={accent} stroke="white" strokeWidth="1.3" />)}
+                </>
+              );
+            })()}
+            {data.map((d, i) => {
+              const colW = 340 / Math.max(1, data.length);
+              return <text key={i} x={40 + i * colW + colW * 0.275} y="168" fontSize="9.5" fill="#6B7280" textAnchor="middle" fontFamily="inherit">{d.mes}</text>;
+            })}
+            {hoverIdx != null && (() => {
+              const colW = 340 / Math.max(1, data.length);
+              const x = 40 + hoverIdx * colW + colW * 0.275;
+              return <line x1={x} y1="20" x2={x} y2="150" stroke="#475569" strokeWidth="1.2" strokeDasharray="3 2" opacity="0.7" pointerEvents="none" />;
+            })()}
+          </svg>
+
+          {/* Minimap semanal */}
+          {semanal.length > 0 && (
+            <div className="border-t border-dashed border-gray-200 mt-2 pt-2">
+              <div className="flex justify-between items-baseline mb-1">
+                <div className="text-[9.5px] uppercase tracking-widest font-bold text-gray-500">Minimap semanal</div>
+                <div className="text-[9.5px] text-gray-500">{semanal.length} semanas (S{semanal[0].semana}..S{semanal[semanal.length - 1].semana})</div>
+              </div>
+              <svg viewBox="0 0 400 60" preserveAspectRatio="none" style={{ width: '100%', height: 60, display: 'block' }}>
                 <defs>
-                  <linearGradient id="inv-grad" x1="0" x2="0" y1="0" y2="1">
+                  <linearGradient id={`mm-grad-${sku.replace(/[^A-Z0-9]/gi, '')}`} x1="0" x2="0" y1="0" y2="1">
                     <stop offset="0%" stopColor={accent} stopOpacity="0.35" />
                     <stop offset="100%" stopColor={accent} stopOpacity="0.05" />
                   </linearGradient>
                 </defs>
-                <path d={areaPath} fill="url(#inv-grad)" />
-                <polyline points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
-                  stroke={accent} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                {(() => {
+                  const N = semanal.length;
+                  const step = 380 / Math.max(1, N);
+                  const invPts = semanal.map((r, i) => ({
+                    x: 15 + i * step + step * 0.5,
+                    y: 45 - (Number(r.inventario) / maxInvSem) * 40,
+                  }));
+                  const area = `M ${invPts[0].x} 45 ` + invPts.map((p) => `L ${p.x} ${p.y}`).join(' ') + ` L ${invPts[N-1].x} 45 Z`;
+                  return (
+                    <>
+                      <path d={area} fill={`url(#mm-grad-${sku.replace(/[^A-Z0-9]/gi, '')})`} />
+                      <polyline points={invPts.map((p) => `${p.x},${p.y}`).join(' ')}
+                        stroke={accent} strokeWidth="1.5" fill="none" />
+                      {semanal.map((r, i) => {
+                        const barW = step * 0.5;
+                        const bx = 15 + i * step + (step - barW) / 2;
+                        const bh = Number(r.piezas) > 0 ? (Number(r.piezas) / maxPzSem) * 15 : 0;
+                        return <rect key={i} x={bx} y={45 - bh} width={barW} height={bh} fill="#CBD5E1" opacity="0.85" />;
+                      })}
+                      {repIdx >= 0 && (() => {
+                        const x = 15 + repIdx * step + step * 0.5;
+                        return (
+                          <g pointerEvents="none">
+                            <line x1={x} y1="8" x2={x} y2="48" stroke={accent} strokeWidth="1" strokeDasharray="2 2" opacity="0.8" />
+                            <text x={x} y="8" textAnchor="middle" fontSize="10">🚚</text>
+                          </g>
+                        );
+                      })()}
+                      <text x="15" y="56" fontSize="8" fill="#9CA3AF">S{semanal[0].semana}</text>
+                      <text x={15 + (N - 1) * step + step * 0.5} y="56" fontSize="8" fill="#9CA3AF" textAnchor="middle">S{semanal[N - 1].semana}</text>
+                    </>
+                  );
+                })()}
+              </svg>
+            </div>
+          )}
+        </div>
+
+        {/* COL 3: Cards de decisión */}
+        <div className="flex flex-col gap-2">
+          <div className="rounded-md p-3 border" style={{ background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)`, borderColor: `${accent}55` }}>
+            <div className="text-[9.5px] uppercase tracking-widest font-bold" style={{ color: accent, filter: 'brightness(0.7)' }}>Weeks of Supply</div>
+            <div className="text-[22px] font-bold tabular-nums" style={{ color: accent, filter: 'brightness(0.6)' }}>
+              {kpis.wos != null ? `${kpis.wos.toFixed(1)} sem` : '—'}
+            </div>
+            <div className="text-[10px] tabular-nums" style={{ color: accent, filter: 'brightness(0.7)' }}>
+              Al ritmo actual de {kpis.vtaProm4Sem.toFixed(0)} pz/sem
+            </div>
+          </div>
+          <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+            <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Stock actual · rotación</div>
+            <div className="text-[14px] font-bold tabular-nums text-gray-800">
+              {fmtInt(kpis.stock)} pz
+              {kpis.rotacionMes != null && <span className="text-gray-500 font-medium"> · {kpis.rotacionMes.toFixed(1)}× mes</span>}
+            </div>
+            <div className="text-[10px] text-gray-500 tabular-nums">{formatMXN(kpis.stock * kpis.costoActual)} a costo</div>
+          </div>
+          <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+            <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Nivel óptimo estimado</div>
+            <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.nivelOptimo != null ? `~${fmtInt(kpis.nivelOptimo)} pz` : '—'}</div>
+            <div className="text-[10px] text-gray-500 tabular-nums">2 meses de stock a ritmo actual</div>
+          </div>
+          <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+            <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell-in Acteck→{clienteNombre}</div>
+            <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(siPzYTD)} pz</div>
+            <div className="text-[10px] text-gray-500 tabular-nums">YTD {anioActual} · {kpis.piezasVendYTD > 0 ? `${(kpis.piezasVendYTD / Math.max(1, siPzYTD) * 100).toFixed(0)}% sell-thru` : '—'}</div>
+          </div>
+          <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+            <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Última reposición</div>
+            {kpis.ultimaRep ? (
+              <>
+                <div className="text-[14px] font-bold tabular-nums text-gray-800">Sem {kpis.ultimaRep.semana} · +{fmtInt(kpis.ultimaRep.cantidad)} pz</div>
+                <div className="text-[10px] text-gray-500 tabular-nums">
+                  {kpis.ultimaRep.costoAntes !== kpis.ultimaRep.costoDespues
+                    ? <>Costo {formatMXN(kpis.ultimaRep.costoAntes)} → {formatMXN(kpis.ultimaRep.costoDespues)}</>
+                    : 'Costo sin cambios'}
+                </div>
               </>
-            );
-          })()}
-          {/* Bars venta */}
-          {data.map((d, i) => {
-            const colW = 800 / data.length;
-            const barX = 60 + i * colW + colW * 0.25;
-            const barW = colW * 0.5;
-            const barH = Number(d.piezas) > 0 ? (Number(d.piezas) / maxPz) * 170 : 0;
-            const isHover = hoverIdx === i;
-            return (
-              <rect key={i} x={barX} y={200 - barH} width={barW} height={barH}
-                fill={isHover ? '#64748B' : '#CBD5E1'} opacity={isHover ? 1 : 0.85} rx="1.5"
-                pointerEvents="none" style={{ transition: 'fill 120ms' }} />
-            );
-          })}
-          {/* Marcadores reposición */}
-          {reposiciones.map((r, k) => {
-            const colW = 800 / data.length;
-            const x = 60 + r.idx * colW + colW * 0.5;
-            return (
-              <g key={k} pointerEvents="none">
-                <line x1={x} y1="15" x2={x} y2="200" stroke="#10B981" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.7" />
-                <text x={x} y="12" textAnchor="middle" fontSize="12">🚚</text>
-                <text x={x} y="25" textAnchor="middle" fontSize="8.5" fill="#065F46" fontWeight="700">+{fmtInt(r.cantidad)}</text>
-              </g>
-            );
-          })}
-          {/* Etiquetas de semana */}
-          {data.map((d, i) => {
-            const colW = 800 / data.length;
-            const showLabel = data.length <= 20 || i % Math.ceil(data.length / 18) === 0 || i === data.length - 1;
-            if (!showLabel) return null;
-            return (
-              <text key={i} x={60 + i * colW + colW * 0.5} y="218" fontSize="9.5" fill="#6B7280" textAnchor="middle" fontFamily="inherit">
-                S{d.semana}
-              </text>
-            );
-          })}
-          {/* Línea guía vertical hover */}
-          {hoverIdx != null && (() => {
-            const colW = 800 / data.length;
-            const x = 60 + hoverIdx * colW + colW * 0.5;
-            return (
-              <line x1={x} y1="20" x2={x} y2="200" stroke="#475569" strokeWidth="1.2" strokeDasharray="3 2" opacity="0.7" pointerEvents="none" />
-            );
-          })()}
-        </svg>
-        {/* Última reposición callout */}
-        {kpis.ultimaRep && (
-          <div className="mt-2 text-[10.5px] text-gray-600 flex items-center gap-1.5">
-            <span className="inline-block px-1.5 py-0.5 bg-emerald-50 text-emerald-800 rounded font-semibold">🚚 Última reposición: semana {kpis.ultimaRep.semana} · +{fmtInt(kpis.ultimaRep.cantidad)} pz</span>
-            {cambiosCosto.length > 0 && (
-              <span className="inline-block px-1.5 py-0.5 bg-amber-50 text-amber-800 rounded font-semibold">💲 {cambiosCosto.length} {cambiosCosto.length === 1 ? 'cambio de costo' : 'cambios de costo'} · última {formatMXN(cambiosCosto[cambiosCosto.length - 1].costo)}</span>
+            ) : (
+              <>
+                <div className="text-[14px] font-bold tabular-nums text-gray-400">Sin reposición</div>
+                <div className="text-[10px] text-gray-500">No detectada este año</div>
+              </>
             )}
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* Tabla semanal compacta */}
-      <div className="bg-white border border-gray-200 rounded-md p-3">
-        <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2 flex justify-between items-baseline">
-          <span>Detalle semanal</span>
-          <span className="font-medium text-gray-400 normal-case tracking-normal">últimas {Math.min(data.length, 12)} semanas</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[10.5px] tabular-nums">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr className="text-[9px] uppercase tracking-wide">
-                <th className="text-left py-1.5 px-2 font-semibold">Sem</th>
-                <th className="text-right py-1.5 px-2 font-semibold">Venta</th>
-                <th className="text-right py-1.5 px-2 font-semibold">Inv.</th>
-                <th className="text-right py-1.5 px-2 font-semibold">Antig.</th>
-                <th className="text-right py-1.5 px-2 font-semibold">Tránsito</th>
-                <th className="text-right py-1.5 px-2 font-semibold">BO</th>
-                <th className="text-right py-1.5 px-2 font-semibold">Costo</th>
-                <th className="text-right py-1.5 px-2 font-semibold">Evento</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.slice(-12).map((d, i) => {
-                const idxReal = data.length - Math.min(data.length, 12) + i;
-                const esRepo = reposiciones.some((r) => r.idx === idxReal);
-                const esCostoChg = cambiosCosto.some((c) => c.idx === idxReal);
-                return (
-                  <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-1 px-2 font-semibold text-gray-800">S{d.semana}</td>
-                    <td className="py-1 px-2 text-right text-gray-800">{fmtInt(Number(d.piezas))}</td>
-                    <td className="py-1 px-2 text-right" style={{ color: accent, filter: 'brightness(0.7)' }}>{fmtInt(Number(d.inventario))}</td>
-                    <td className="py-1 px-2 text-right text-gray-600">{fmtInt(Number(d.antiguedad))} d</td>
-                    <td className="py-1 px-2 text-right text-gray-600">{Number(d.transito) > 0 ? fmtInt(Number(d.transito)) : '—'}</td>
-                    <td className="py-1 px-2 text-right text-gray-600">{Number(d.backorder) > 0 ? fmtInt(Number(d.backorder)) : '—'}</td>
-                    <td className="py-1 px-2 text-right text-amber-700">{formatMXN(Number(d.costo))}</td>
-                    <td className="py-1 px-2 text-right">
-                      {esRepo && <span className="text-emerald-700">🚚 Reposición</span>}
-                      {esCostoChg && !esRepo && <span className="text-amber-700">💲 Costo</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
       </div>
     </div>
   );
 }
+
 
 class SkuDrillDownBoundary extends React.Component {
   constructor(props) { super(props); this.state = { err: null }; }
@@ -2446,15 +2517,18 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
         )}
       </div>
 
-      {/* Cruce mensual costo × precio × piezas + KPIs de precio y sell-in */}
-      <AnalisisMargenSku sku={sku} rows={rows} sellInAcumulado={sellInAcumulado}
-        anioActual={anioActual} mesActual={mesActual} accent={meta.accent}
-        precioReal={precioReal} precioLista={precioLista} yieldPct={yieldPct}
-        siPzYTD={siPzYTD} clienteNombre={meta.nombre} listaPrecio={meta.listaPrecio} />
-
-      {/* PCEL: vida del SKU (supply chain semanal) */}
-      {meta.tablaSellOut === 'v_sellout_pcel_sku_mes' && (
-        <PcelSupplyChain sku={sku} anioActual={anioActual} accent={meta.accent} />
+      {/* Análisis mensual — cambia según el cliente:
+          · Dicotech/Digitalife: costo × precio × piezas (AnalisisMargenSku)
+          · PCEL: rotación × inventario × costo (AnalisisPcelSku) — sin precio de venta */}
+      {meta.tablaSellOut === 'v_sellout_pcel_sku_mes' ? (
+        <AnalisisPcelSku sku={sku} rows={rows} sellInAcumulado={sellInAcumulado}
+          anioActual={anioActual} mesActual={mesActual} accent={meta.accent}
+          siPzYTD={siPzYTD} clienteNombre={meta.nombre} />
+      ) : (
+        <AnalisisMargenSku sku={sku} rows={rows} sellInAcumulado={sellInAcumulado}
+          anioActual={anioActual} mesActual={mesActual} accent={meta.accent}
+          precioReal={precioReal} precioLista={precioLista} yieldPct={yieldPct}
+          siPzYTD={siPzYTD} clienteNombre={meta.nombre} listaPrecio={meta.listaPrecio} />
       )}
 
       {/* Inventario por sucursal (último snapshot) */}
