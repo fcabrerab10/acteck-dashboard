@@ -2375,20 +2375,6 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
             );
           })()}
 
-          {/* 5) Sell-in Acteck→cliente YTD */}
-          <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-            <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell-in Acteck→{clienteNombre}</div>
-            <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(siPzYTD)} pz</div>
-            <div className="text-[10px] text-gray-500 tabular-nums">YTD {anioActual} · {kpis.piezasVendYTD > 0 && siPzYTD > 0 ? `${(kpis.piezasVendYTD / siPzYTD * 100).toFixed(0)}% sell-through` : '—'}</div>
-          </div>
-
-          {/* 6) Nivel óptimo estimado (meta) */}
-          <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-            <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Nivel óptimo estimado</div>
-            <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.nivelOptimo != null ? `~${fmtInt(kpis.nivelOptimo)} pz` : '—'}</div>
-            <div className="text-[10px] text-gray-500 tabular-nums">Meta ~60 días de stock a ritmo actual</div>
-          </div>
-
         </div>
 
       </div>
