@@ -2290,90 +2290,108 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
           )}
         </div>
 
-        {/* COL 3: Cards de decisión — orden narrativo:
-            (1) Hero días · (2) Inv PCEL · (3) Inv Acteck · (4) Arribo · (5) Sell-in · (6) Meta */}
+        {/* COL 3: Cards de decisión — hero arriba + 2x2 abajo */}
         <div className="flex flex-col gap-2">
 
-          {/* 1) Hero: Días de inventario */}
+          {/* 1) Hero: Días de inventario (full width) */}
           <div className="rounded-md p-3 border" style={{ background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)`, borderColor: `${accent}55` }}>
-            <div className="text-[9.5px] uppercase tracking-widest font-bold" style={{ color: accent, filter: 'brightness(0.7)' }}>Días de inventario</div>
-            <div className="text-[22px] font-bold tabular-nums" style={{ color: accent, filter: 'brightness(0.6)' }}>
-              {kpis.diasInv != null ? `${kpis.diasInv.toFixed(0)} días` : '—'}
-            </div>
-            <div className="text-[10px] tabular-nums" style={{ color: accent, filter: 'brightness(0.7)' }}>
-              Al ritmo actual de {kpis.vtaDiaria.toFixed(1)} pz/día
-            </div>
-          </div>
-
-          {/* 2) Inventario en PCEL (stock del cliente, ya vendido a él) */}
-          <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-            <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Inventario en PCEL</div>
-            <div className="text-[14px] font-bold tabular-nums text-gray-800">
-              {fmtInt(kpis.stock)} pz
-              {kpis.rotacionMes != null && <span className="text-gray-500 font-medium"> · rota {kpis.rotacionMes.toFixed(1)}×/mes</span>}
-            </div>
-            <div className="text-[10px] text-gray-500 tabular-nums">{formatMXN(kpis.stock * kpis.costoActual)} a costo</div>
-          </div>
-
-          {/* 3) Inventario en Acteck (disponible para vender a PCEL) */}
-          {invActeck ? (
-            <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-              <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Inventario en Acteck</div>
-              <div className="text-[14px] font-bold tabular-nums text-gray-800">
-                {fmtInt(Number(invActeck.disponible) || 0)} pz
-                <span className="text-gray-500 font-medium"> disponibles</span>
+            <div className="flex justify-between items-baseline">
+              <div>
+                <div className="text-[9.5px] uppercase tracking-widest font-bold" style={{ color: accent, filter: 'brightness(0.7)' }}>Días de inventario</div>
+                <div className="text-[22px] font-bold tabular-nums leading-tight" style={{ color: accent, filter: 'brightness(0.6)' }}>
+                  {kpis.diasInv != null ? `${kpis.diasInv.toFixed(0)} días` : '—'}
+                </div>
               </div>
+              <div className="text-right">
+                <div className="text-[10px] tabular-nums" style={{ color: accent, filter: 'brightness(0.7)' }}>Ritmo actual</div>
+                <div className="text-[13px] font-bold tabular-nums" style={{ color: accent, filter: 'brightness(0.6)' }}>{kpis.vtaDiaria.toFixed(1)} pz/día</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Grid 2x2 para el resto de la info */}
+          <div className="grid grid-cols-2 gap-2">
+
+            {/* Inventario en PCEL */}
+            <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+              <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Inventario en PCEL</div>
+              <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(kpis.stock)} pz</div>
               <div className="text-[10px] text-gray-500 tabular-nums">
-                {formatMXN(Number(invActeck.costo_disponible) || 0)} a costo
-                {invActeck.almacenes_con_stock ? ` · ${invActeck.almacenes_con_stock} almacenes` : ''}
+                {formatMXN(kpis.stock * kpis.costoActual)} a costo
+                {kpis.rotacionMes != null && ` · rota ${kpis.rotacionMes.toFixed(1)}×/mes`}
               </div>
             </div>
-          ) : (
-            <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-              <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Inventario en Acteck</div>
-              <div className="text-[14px] font-bold tabular-nums text-gray-400">Sin stock</div>
-              <div className="text-[10px] text-gray-500">Sin disponibilidad para surtir</div>
-            </div>
-          )}
 
-          {/* 4) Próximo arribo (con fallback a último si no hay pendiente) */}
-          {(() => {
-            const pa = proximoArribo;
-            const ua = ultimoArribo;
-            if (pa && pa.arribo_cedis) {
-              const dias = Math.max(0, Math.ceil((new Date(pa.arribo_cedis) - new Date()) / 86400000));
-              return (
-                <div className="rounded-md p-2.5 border" style={{ background: '#EFF6FF', borderColor: '#BFDBFE' }}>
-                  <div className="text-[9.5px] uppercase tracking-widest font-semibold" style={{ color: '#1D4ED8' }}>Próximo arribo · CEDIS</div>
-                  <div className="text-[14px] font-bold tabular-nums text-gray-800">
-                    {formatFechaCorta(pa.arribo_cedis)} · +{fmtInt(pa.shp_qty || 0)} pz
-                  </div>
-                  <div className="text-[10px] tabular-nums" style={{ color: '#1E40AF' }}>
-                    En {dias} días · PO {pa.po} · {pa.estatus}
-                  </div>
-                </div>
-              );
-            }
-            if (ua && ua.arribo_cedis) {
-              const diasDesde = Math.max(0, Math.floor((new Date() - new Date(ua.arribo_cedis)) / 86400000));
-              return (
-                <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-                  <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Último arribo · CEDIS</div>
-                  <div className="text-[14px] font-bold tabular-nums text-gray-800">
-                    {formatFechaCorta(ua.arribo_cedis)} · +{fmtInt(ua.shp_qty || 0)} pz
-                  </div>
-                  <div className="text-[10px] text-gray-500 tabular-nums">Hace {diasDesde} días · PO {ua.po} · sin nuevos pedidos activos</div>
-                </div>
-              );
-            }
-            return (
+            {/* Inventario en Acteck */}
+            {invActeck ? (
               <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-                <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Próximo arribo · CEDIS</div>
-                <div className="text-[14px] font-bold tabular-nums text-gray-400">Sin embarques</div>
-                <div className="text-[10px] text-gray-500">No hay POs registradas para este SKU</div>
+                <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Inventario en Acteck</div>
+                <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(Number(invActeck.disponible) || 0)} pz</div>
+                <div className="text-[10px] text-gray-500 tabular-nums">
+                  {formatMXN(Number(invActeck.costo_disponible) || 0)} a costo
+                  {invActeck.almacenes_con_stock ? ` · ${invActeck.almacenes_con_stock} almacenes` : ''}
+                </div>
               </div>
-            );
-          })()}
+            ) : (
+              <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+                <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Inventario en Acteck</div>
+                <div className="text-[14px] font-bold tabular-nums text-gray-400">Sin stock</div>
+                <div className="text-[10px] text-gray-500">Sin disponibilidad para surtir</div>
+              </div>
+            )}
+
+            {/* Próximo arribo (span 2 columnas para dar aire a la info larga) */}
+            {(() => {
+              const pa = proximoArribo;
+              const ua = ultimoArribo;
+              if (pa && pa.arribo_cedis) {
+                const dias = Math.max(0, Math.ceil((new Date(pa.arribo_cedis) - new Date()) / 86400000));
+                return (
+                  <div className="col-span-2 rounded-md p-2.5 border" style={{ background: '#EFF6FF', borderColor: '#BFDBFE' }}>
+                    <div className="flex justify-between items-baseline">
+                      <div>
+                        <div className="text-[9.5px] uppercase tracking-widest font-semibold" style={{ color: '#1D4ED8' }}>Próximo arribo · CEDIS</div>
+                        <div className="text-[14px] font-bold tabular-nums text-gray-800">
+                          {formatFechaCorta(pa.arribo_cedis)} · +{fmtInt(pa.shp_qty || 0)} pz
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] tabular-nums" style={{ color: '#1D4ED8' }}>En {dias} días</div>
+                        <div className="text-[10px] tabular-nums" style={{ color: '#1E40AF' }}>PO {pa.po} · {pa.estatus}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              if (ua && ua.arribo_cedis) {
+                const diasDesde = Math.max(0, Math.floor((new Date() - new Date(ua.arribo_cedis)) / 86400000));
+                return (
+                  <div className="col-span-2 bg-gray-50 rounded-md p-2.5 border border-gray-100">
+                    <div className="flex justify-between items-baseline">
+                      <div>
+                        <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Último arribo · CEDIS</div>
+                        <div className="text-[14px] font-bold tabular-nums text-gray-800">
+                          {formatFechaCorta(ua.arribo_cedis)} · +{fmtInt(ua.shp_qty || 0)} pz
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] text-gray-500 tabular-nums">Hace {diasDesde} días</div>
+                        <div className="text-[10px] text-gray-500 tabular-nums">PO {ua.po} · sin POs activas</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <div className="col-span-2 bg-gray-50 rounded-md p-2.5 border border-gray-100">
+                  <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Próximo arribo · CEDIS</div>
+                  <div className="text-[14px] font-bold tabular-nums text-gray-400">Sin embarques</div>
+                  <div className="text-[10px] text-gray-500">No hay POs registradas para este SKU</div>
+                </div>
+              );
+            })()}
+
+          </div>
 
         </div>
 
