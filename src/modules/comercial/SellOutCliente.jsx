@@ -54,19 +54,19 @@ const CLIENTES_META = {
     marca: 'Acteck / Balam Rush',
     accent: '#10B981',
     vistaMensual: 'v_sellout_pcel_mensual',
-    vistaSkuMes: 'v_sellout_pcel_sku_mes',
+    vistaSkuMes: 'v_sellout_pcel_sku_mes',   // ya traduce PCEL sku → Acteck via modelo
     vistaSucursalMes: null,
     vistaMarcaMes: 'v_sellout_pcel_marca_mes',
-    roadmapTabla: 'roadmap_sku_pcel', // PCEL usa SKUs numéricos, roadmap propio
+    // roadmap_sku estándar: las vistas de PCEL ya emiten SKU Acteck
     mayoristaKey: null,
     sellInClienteKey: 'pcel',
     listaPrecio: 'PCEL',
-    tablaSellOut: 'sellout_pcel_mensual',
+    tablaSellOut: 'v_sellout_pcel_sku_mes',   // drill-down consulta la misma vista
     drillClientesFinales: false,
     drillVendedores: false,
     drillSucursales: false,
     drillMarca: true,
-    valorACosto: true, // el "monto" es piezas × costo_promedio, no venta real
+    valorACosto: true,
   },
 };
 
@@ -1905,14 +1905,14 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
         // sellout_detalle (Digitalife) sólo trae fecha/marca/no_parte/cantidad/precio/total.
         // sellout_pcel_mensual (PCEL) trae agregado mensual sin precio: sólo piezas.
         const esGeneral = meta.tablaSellOut === 'sellout_general';
-        const esPCEL    = meta.tablaSellOut === 'sellout_pcel_mensual';
+        const esPCEL    = meta.tablaSellOut === 'v_sellout_pcel_sku_mes';
         const txPromise = esGeneral
           ? supabase.from('sellout_general')
               .select('anio,mes,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe')
               .eq('mayorista', meta.mayoristaKey).eq('sku', sku)
               .in('anio', [anioPrev, anioActual])
           : esPCEL
-            ? supabase.from('sellout_pcel_mensual')
+            ? supabase.from('v_sellout_pcel_sku_mes')
                 .select('anio,mes,piezas')
                 .eq('sku', sku)
                 .in('anio', [anioPrev, anioActual])
