@@ -2334,22 +2334,12 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
             </div>
 
             {/* Inventario en Acteck */}
-            {invActeck ? (
-              <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-                <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Inventario en Acteck</div>
-                <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(Number(invActeck.disponible) || 0)} pz</div>
-                <div className="text-[10px] text-gray-500 tabular-nums">
-                  {formatMXN(Number(invActeck.costo_disponible) || 0)} a costo
-                  {invActeck.almacenes_con_stock ? ` · ${invActeck.almacenes_con_stock} almacenes` : ''}
-                </div>
+            <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+              <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Inventario en Acteck</div>
+              <div className="text-[14px] font-bold tabular-nums text-gray-800">
+                {invActeck ? `${fmtInt(Number(invActeck.disponible) || 0)} pz` : <span className="text-gray-400">Sin stock</span>}
               </div>
-            ) : (
-              <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
-                <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Inventario en Acteck</div>
-                <div className="text-[14px] font-bold tabular-nums text-gray-400">Sin stock</div>
-                <div className="text-[10px] text-gray-500">Sin disponibilidad para surtir</div>
-              </div>
-            )}
+            </div>
 
             {/* Rotación promedio últimos 90 días (a mes cerrado) */}
             <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
@@ -2366,10 +2356,7 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
             <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
               <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell-in Acteck→{clienteNombre}</div>
               <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(siPzYTD)} pz</div>
-              <div className="text-[10px] text-gray-500 tabular-nums">
-                YTD {anioActual}
-                {kpis.piezasVendYTD > 0 && siPzYTD > 0 ? ` · ${(kpis.piezasVendYTD / siPzYTD * 100).toFixed(0)}% sell-through` : ''}
-              </div>
+              <div className="text-[10px] text-gray-500 tabular-nums">YTD {anioActual}</div>
             </div>
 
             {/* Próximo arribo (span 2 columnas para dar aire a la info larga) */}
