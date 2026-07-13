@@ -1880,6 +1880,325 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
   );
 }
 
+// ── PCEL "Vida del SKU": supply chain semanal ───────────────────────────
+//    Fuente: v_sellout_pcel_semanal (derivada de venta-marca-ACTECK semanal).
+//    KPI hero: Weeks of Supply (semanas de stock al ritmo actual).
+//    Timeline: área inventario + barras venta + marcadores de reposición y
+//    cambio de costo.
+function PcelSupplyChain({ sku, anioActual, accent }) {
+  const [rows, setRows] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const svgRef = React.useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCargando(true);
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('v_sellout_pcel_semanal')
+          .select('anio,semana,piezas,inventario,antiguedad,transito,backorder,costo')
+          .eq('sku', sku)
+          .eq('anio', anioActual)
+          .order('semana');
+        if (cancelled) return;
+        if (error) { console.error('[PcelSupplyChain]', error); setRows([]); }
+        else setRows(data || []);
+        setCargando(false);
+      } catch (e) {
+        if (cancelled) return;
+        console.error(e); setCargando(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sku, anioActual]);
+
+  const { data, kpis, reposiciones, cambiosCosto } = useMemo(() => {
+    if (!rows.length) return { data: [], kpis: null, reposiciones: [], cambiosCosto: [] };
+    // Detecta reposiciones: salto positivo de inventario > +30 pz (o inventario duplicó)
+    // y baja de antigüedad ≥ 20 días.
+    const rp = [];
+    const cc = [];
+    for (let i = 1; i < rows.length; i++) {
+      const prev = rows[i - 1]; const cur = rows[i];
+      const dInv = Number(cur.inventario) - Number(prev.inventario);
+      const dAnt = Number(cur.antiguedad) - Number(prev.antiguedad);
+      if (dInv > 30 && dAnt <= -20) {
+        rp.push({ idx: i, semana: cur.semana, cantidad: dInv + Number(cur.piezas) });
+      }
+      const dCosto = Number(cur.costo) - Number(prev.costo);
+      if (Math.abs(dCosto) >= 1 && Number(prev.costo) > 0) {
+        cc.push({ idx: i, semana: cur.semana, costo: Number(cur.costo), delta: dCosto });
+      }
+    }
+    const last = rows[rows.length - 1];
+    // Weeks of Supply: inventario actual / promedio venta últimas 4 semanas
+    const ult4 = rows.slice(-4).map((r) => Number(r.piezas) || 0);
+    const vtaProm4 = ult4.length > 0 ? ult4.reduce((a, b) => a + b, 0) / ult4.length : 0;
+    const wos = vtaProm4 > 0 ? Number(last.inventario) / vtaProm4 : null;
+    // Última reposición
+    const ultimaRep = rp.length > 0 ? rp[rp.length - 1] : null;
+    return {
+      data: rows,
+      kpis: {
+        stock: Number(last.inventario) || 0,
+        antiguedad: Number(last.antiguedad) || 0,
+        transito: Number(last.transito) || 0,
+        backorder: Number(last.backorder) || 0,
+        costo: Number(last.costo) || 0,
+        wos,
+        vtaProm4,
+        ultimaRep,
+        semanaUlt: last.semana,
+      },
+      reposiciones: rp,
+      cambiosCosto: cc,
+    };
+  }, [rows]);
+
+  if (cargando) {
+    return (
+      <div className="border-t border-gray-200 pt-4 mt-4 p-4 text-center text-xs text-gray-500">
+        Cargando operación semanal PCEL…
+      </div>
+    );
+  }
+  if (!data.length) return null;
+
+  const maxInv = Math.max(1, ...data.map((d) => Number(d.inventario) || 0));
+  const maxPz  = Math.max(1, ...data.map((d) => Number(d.piezas) || 0));
+
+  return (
+    <div className="border-t border-gray-200 pt-4 mt-4">
+      <div className="flex items-baseline justify-between mb-3">
+        <span className="text-[10.5px] uppercase tracking-widest font-bold text-gray-700">
+          Operación semanal PCEL · vida del SKU
+        </span>
+        <span className="text-[10.5px] text-gray-500 tabular-nums">
+          {data.length} semanas cargadas · última: semana {kpis.semanaUlt} {anioActual}
+        </span>
+      </div>
+
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-3">
+        {/* WoS hero */}
+        <div className="rounded-md p-3 border md:col-span-2" style={{ background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)`, borderColor: `${accent}55` }}>
+          <div className="text-[9.5px] uppercase tracking-widest font-bold" style={{ color: accent, filter: 'brightness(0.7)' }}>Weeks of Supply</div>
+          <div className="text-[22px] font-bold tabular-nums" style={{ color: accent, filter: 'brightness(0.6)' }}>
+            {kpis.wos != null ? `${kpis.wos.toFixed(1)} sem` : '—'}
+          </div>
+          <div className="text-[10px] tabular-nums" style={{ color: accent, filter: 'brightness(0.7)' }}>
+            Al ritmo actual de {kpis.vtaProm4.toFixed(0)} pz/sem
+          </div>
+        </div>
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Stock actual</div>
+          <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(kpis.stock)} pz</div>
+          <div className="text-[10px] text-gray-500 tabular-nums">{formatMXN(kpis.stock * kpis.costo)} a costo</div>
+        </div>
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Antigüedad</div>
+          <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(kpis.antiguedad)} días</div>
+          <div className="text-[10px] text-gray-500">Desde última reposición</div>
+        </div>
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">En tránsito</div>
+          <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(kpis.transito)} pz</div>
+          <div className="text-[10px] text-gray-500">{kpis.transito > 0 ? 'Llegando' : 'Sin compras activas'}</div>
+        </div>
+        <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+          <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Backorder</div>
+          <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(kpis.backorder)} pz</div>
+          <div className="text-[10px] text-gray-500">{kpis.backorder > 0 ? 'Pedidos sin surtir' : 'Sin pendientes'}</div>
+        </div>
+      </div>
+
+      {/* Timeline chart */}
+      <div className="bg-white border border-gray-200 rounded-md p-3 relative mb-3">
+        <div className="flex justify-between items-baseline mb-2">
+          <div>
+            <div className="text-[12.5px] font-bold text-gray-800">Timeline semanal · Inventario vs Venta</div>
+            <div className="text-[10px] text-gray-500">Hover una semana para desglose · marcadores 🚚 indican reposiciones</div>
+          </div>
+          <div className="flex gap-3 text-[10px] text-gray-500">
+            <span><span className="inline-block w-3 h-2 mr-1 align-middle" style={{ background: accent, opacity: 0.35 }}></span>Inventario</span>
+            <span><span className="inline-block w-3 h-2 mr-1 align-middle" style={{ background: '#CBD5E1' }}></span>Venta semanal</span>
+          </div>
+        </div>
+        {hoverIdx != null && data[hoverIdx] && (() => {
+          const d = data[hoverIdx];
+          return (
+            <div className="absolute top-2 right-2 bg-white border border-gray-200 rounded-md p-2.5 shadow-lg text-[11px] tabular-nums min-w-[200px] z-10 pointer-events-none">
+              <div className="font-bold text-gray-800 mb-1.5 pb-1 border-b border-gray-100 flex justify-between items-baseline">
+                <span>Semana {d.semana} · {anioActual}</span>
+              </div>
+              <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-gray-600">
+                <span>Venta</span><span className="text-right font-semibold text-gray-800">{fmtInt(Number(d.piezas))} pz</span>
+                <span style={{ color: accent, filter: 'brightness(0.7)' }}>Inventario</span>
+                <span className="text-right font-semibold" style={{ color: accent, filter: 'brightness(0.6)' }}>{fmtInt(Number(d.inventario))} pz</span>
+                <span>Antigüedad</span><span className="text-right text-gray-800">{fmtInt(Number(d.antiguedad))} días</span>
+                <span>Tránsito</span><span className="text-right text-gray-800">{fmtInt(Number(d.transito))} pz</span>
+                <span>Backorder</span><span className="text-right text-gray-800">{fmtInt(Number(d.backorder))} pz</span>
+                <span>Costo unit</span><span className="text-right text-gray-800">{formatMXN(Number(d.costo))}</span>
+              </div>
+            </div>
+          );
+        })()}
+        <svg ref={svgRef} viewBox="0 0 900 260" preserveAspectRatio="none" style={{ width: '100%', height: 260, display: 'block' }} fontFamily="inherit"
+          onMouseMove={(e) => {
+            if (!svgRef.current || data.length === 0) return;
+            const rect = svgRef.current.getBoundingClientRect();
+            const vbX = (e.clientX - rect.left) / rect.width * 900;
+            const colW = 800 / data.length;
+            const idx = Math.floor((vbX - 60) / colW);
+            if (idx >= 0 && idx < data.length) { if (idx !== hoverIdx) setHoverIdx(idx); }
+            else if (hoverIdx != null) setHoverIdx(null);
+          }}
+          onMouseLeave={() => setHoverIdx(null)}>
+          {/* Grid */}
+          {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
+            <line key={i} x1="55" y1={30 + f * 170} x2="875" y2={30 + f * 170} stroke="#EEF2F7" strokeDasharray="2 3" />
+          ))}
+          {/* Y left (inventario) */}
+          {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
+            <text key={i} x="52" y={30 + (1 - f) * 170 + 3} fontSize="9" fill="#9CA3AF" textAnchor="end">
+              {fmtInt(maxInv * f)}
+            </text>
+          ))}
+          {/* Y right (piezas) */}
+          {[0, 0.5, 1].map((f, i) => (
+            <text key={i} x="878" y={30 + (1 - f) * 170 + 3} fontSize="9" fill="#9CA3AF" textAnchor="start">
+              {fmtInt(maxPz * f)}pz
+            </text>
+          ))}
+          {/* Área inventario */}
+          {(() => {
+            const colW = 800 / data.length;
+            const pts = data.map((d, i) => ({
+              x: 60 + i * colW + colW * 0.5,
+              y: 200 - (Number(d.inventario) / maxInv) * 170,
+            }));
+            const areaPath = `M ${pts[0].x} 200 ` + pts.map((p) => `L ${p.x} ${p.y}`).join(' ') + ` L ${pts[pts.length - 1].x} 200 Z`;
+            return (
+              <>
+                <defs>
+                  <linearGradient id="inv-grad" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor={accent} stopOpacity="0.35" />
+                    <stop offset="100%" stopColor={accent} stopOpacity="0.05" />
+                  </linearGradient>
+                </defs>
+                <path d={areaPath} fill="url(#inv-grad)" />
+                <polyline points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                  stroke={accent} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </>
+            );
+          })()}
+          {/* Bars venta */}
+          {data.map((d, i) => {
+            const colW = 800 / data.length;
+            const barX = 60 + i * colW + colW * 0.25;
+            const barW = colW * 0.5;
+            const barH = Number(d.piezas) > 0 ? (Number(d.piezas) / maxPz) * 170 : 0;
+            const isHover = hoverIdx === i;
+            return (
+              <rect key={i} x={barX} y={200 - barH} width={barW} height={barH}
+                fill={isHover ? '#64748B' : '#CBD5E1'} opacity={isHover ? 1 : 0.85} rx="1.5"
+                pointerEvents="none" style={{ transition: 'fill 120ms' }} />
+            );
+          })}
+          {/* Marcadores reposición */}
+          {reposiciones.map((r, k) => {
+            const colW = 800 / data.length;
+            const x = 60 + r.idx * colW + colW * 0.5;
+            return (
+              <g key={k} pointerEvents="none">
+                <line x1={x} y1="15" x2={x} y2="200" stroke="#10B981" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.7" />
+                <text x={x} y="12" textAnchor="middle" fontSize="12">🚚</text>
+                <text x={x} y="25" textAnchor="middle" fontSize="8.5" fill="#065F46" fontWeight="700">+{fmtInt(r.cantidad)}</text>
+              </g>
+            );
+          })}
+          {/* Etiquetas de semana */}
+          {data.map((d, i) => {
+            const colW = 800 / data.length;
+            const showLabel = data.length <= 20 || i % Math.ceil(data.length / 18) === 0 || i === data.length - 1;
+            if (!showLabel) return null;
+            return (
+              <text key={i} x={60 + i * colW + colW * 0.5} y="218" fontSize="9.5" fill="#6B7280" textAnchor="middle" fontFamily="inherit">
+                S{d.semana}
+              </text>
+            );
+          })}
+          {/* Línea guía vertical hover */}
+          {hoverIdx != null && (() => {
+            const colW = 800 / data.length;
+            const x = 60 + hoverIdx * colW + colW * 0.5;
+            return (
+              <line x1={x} y1="20" x2={x} y2="200" stroke="#475569" strokeWidth="1.2" strokeDasharray="3 2" opacity="0.7" pointerEvents="none" />
+            );
+          })()}
+        </svg>
+        {/* Última reposición callout */}
+        {kpis.ultimaRep && (
+          <div className="mt-2 text-[10.5px] text-gray-600 flex items-center gap-1.5">
+            <span className="inline-block px-1.5 py-0.5 bg-emerald-50 text-emerald-800 rounded font-semibold">🚚 Última reposición: semana {kpis.ultimaRep.semana} · +{fmtInt(kpis.ultimaRep.cantidad)} pz</span>
+            {cambiosCosto.length > 0 && (
+              <span className="inline-block px-1.5 py-0.5 bg-amber-50 text-amber-800 rounded font-semibold">💲 {cambiosCosto.length} {cambiosCosto.length === 1 ? 'cambio de costo' : 'cambios de costo'} · última {formatMXN(cambiosCosto[cambiosCosto.length - 1].costo)}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Tabla semanal compacta */}
+      <div className="bg-white border border-gray-200 rounded-md p-3">
+        <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2 flex justify-between items-baseline">
+          <span>Detalle semanal</span>
+          <span className="font-medium text-gray-400 normal-case tracking-normal">últimas {Math.min(data.length, 12)} semanas</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[10.5px] tabular-nums">
+            <thead className="bg-gray-50 text-gray-600">
+              <tr className="text-[9px] uppercase tracking-wide">
+                <th className="text-left py-1.5 px-2 font-semibold">Sem</th>
+                <th className="text-right py-1.5 px-2 font-semibold">Venta</th>
+                <th className="text-right py-1.5 px-2 font-semibold">Inv.</th>
+                <th className="text-right py-1.5 px-2 font-semibold">Antig.</th>
+                <th className="text-right py-1.5 px-2 font-semibold">Tránsito</th>
+                <th className="text-right py-1.5 px-2 font-semibold">BO</th>
+                <th className="text-right py-1.5 px-2 font-semibold">Costo</th>
+                <th className="text-right py-1.5 px-2 font-semibold">Evento</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.slice(-12).map((d, i) => {
+                const idxReal = data.length - Math.min(data.length, 12) + i;
+                const esRepo = reposiciones.some((r) => r.idx === idxReal);
+                const esCostoChg = cambiosCosto.some((c) => c.idx === idxReal);
+                return (
+                  <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-1 px-2 font-semibold text-gray-800">S{d.semana}</td>
+                    <td className="py-1 px-2 text-right text-gray-800">{fmtInt(Number(d.piezas))}</td>
+                    <td className="py-1 px-2 text-right" style={{ color: accent, filter: 'brightness(0.7)' }}>{fmtInt(Number(d.inventario))}</td>
+                    <td className="py-1 px-2 text-right text-gray-600">{fmtInt(Number(d.antiguedad))} d</td>
+                    <td className="py-1 px-2 text-right text-gray-600">{Number(d.transito) > 0 ? fmtInt(Number(d.transito)) : '—'}</td>
+                    <td className="py-1 px-2 text-right text-gray-600">{Number(d.backorder) > 0 ? fmtInt(Number(d.backorder)) : '—'}</td>
+                    <td className="py-1 px-2 text-right text-amber-700">{formatMXN(Number(d.costo))}</td>
+                    <td className="py-1 px-2 text-right">
+                      {esRepo && <span className="text-emerald-700">🚚 Reposición</span>}
+                      {esCostoChg && !esRepo && <span className="text-amber-700">💲 Costo</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 class SkuDrillDownBoundary extends React.Component {
   constructor(props) { super(props); this.state = { err: null }; }
   static getDerivedStateFromError(err) { return { err }; }
@@ -2132,6 +2451,11 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
         anioActual={anioActual} mesActual={mesActual} accent={meta.accent}
         precioReal={precioReal} precioLista={precioLista} yieldPct={yieldPct}
         siPzYTD={siPzYTD} clienteNombre={meta.nombre} listaPrecio={meta.listaPrecio} />
+
+      {/* PCEL: vida del SKU (supply chain semanal) */}
+      {meta.tablaSellOut === 'v_sellout_pcel_sku_mes' && (
+        <PcelSupplyChain sku={sku} anioActual={anioActual} accent={meta.accent} />
+      )}
 
       {/* Inventario por sucursal (último snapshot) */}
       {inventarioSucursales.length > 0 && (
