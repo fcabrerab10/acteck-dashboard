@@ -300,7 +300,11 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
 
   const skusVendidos = useMemo(() => {
     const s = new Set();
-    for (const r of skuMesRaw) if (r.anio === anioActual) s.add(r.sku);
+    for (const r of skuMesRaw) {
+      if (r.anio !== anioActual) continue;
+      if (!(Number(r.piezas) > 0)) continue;
+      s.add(r.sku);
+    }
     return s;
   }, [skuMesRaw, anioActual]);
 
