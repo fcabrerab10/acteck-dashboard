@@ -49,6 +49,24 @@ const CLIENTES_META = {
     drillSucursales: false,
     drillMarca: true,
   },
+  pcel: {
+    nombre: 'PCEL',
+    marca: 'Acteck / Balam Rush',
+    accent: '#10B981',
+    vistaMensual: 'v_sellout_pcel_mensual',
+    vistaSkuMes: 'v_sellout_pcel_sku_mes',
+    vistaSucursalMes: null,
+    vistaMarcaMes: 'v_sellout_pcel_marca_mes',
+    mayoristaKey: null,
+    sellInClienteKey: 'pcel',
+    listaPrecio: 'PCEL',
+    tablaSellOut: 'sellout_pcel_mensual',
+    drillClientesFinales: false,
+    drillVendedores: false,
+    drillSucursales: false,
+    drillMarca: true,
+    valorACosto: true, // el "monto" es piezas × costo_promedio, no venta real
+  },
 };
 
 // Meta de sucursales Dicotech: label bonito, tipo (fisica/virtual), color, código,
@@ -629,7 +647,9 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
           <p className="text-xs text-gray-500 mt-0.5">
             {meta.tablaSellOut === 'sellout_general'
               ? `Ventas de ${meta.nombre} a sus clientes finales · Fuente Sellout General`
-              : `Ventas de ${meta.nombre} desde su tienda física y online · Fuente Histórico Sellout ${meta.nombre}`}
+              : meta.valorACosto
+                ? `Sellout semanal PCEL · Fuente venta-marca-ACTECK · Monto estimado a costo (piezas × costo promedio)`
+                : `Ventas de ${meta.nombre} desde su tienda física y online · Fuente Histórico Sellout ${meta.nombre}`}
             {invSemanaMax.semana ? ` · Inventario snapshot semana ${invSemanaMax.semana} ${invSemanaMax.anio}` : ''}
           </p>
         </div>
@@ -1882,16 +1902,23 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
       try {
         // sellout_general (Dicotech) trae detalle transaccional con clientes/vendedores/sucursales.
         // sellout_detalle (Digitalife) sólo trae fecha/marca/no_parte/cantidad/precio/total.
+        // sellout_pcel_mensual (PCEL) trae agregado mensual sin precio: sólo piezas.
         const esGeneral = meta.tablaSellOut === 'sellout_general';
+        const esPCEL    = meta.tablaSellOut === 'sellout_pcel_mensual';
         const txPromise = esGeneral
           ? supabase.from('sellout_general')
               .select('anio,mes,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe')
               .eq('mayorista', meta.mayoristaKey).eq('sku', sku)
               .in('anio', [anioPrev, anioActual])
-          : supabase.from('sellout_detalle')
-              .select('fecha,marca,cantidad,precio,total')
-              .eq('cliente', meta.sellInClienteKey).eq('no_parte', sku)
-              .gte('fecha', `${anioPrev}-01-01`);
+          : esPCEL
+            ? supabase.from('sellout_pcel_mensual')
+                .select('anio,mes,piezas')
+                .eq('sku', sku)
+                .in('anio', [anioPrev, anioActual])
+            : supabase.from('sellout_detalle')
+                .select('fecha,marca,cantidad,precio,total')
+                .eq('cliente', meta.sellInClienteKey).eq('no_parte', sku)
+                .gte('fecha', `${anioPrev}-01-01`);
         const [txRes, precioRes] = await Promise.all([
           txPromise,
           supabase.from('precios_sku')
@@ -1900,8 +1927,18 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
         ]);
         if (cancelled) return;
         let rows = txRes.data || [];
-        if (!esGeneral) {
-          // Normaliza al mismo shape que sellout_general para reutilizar el resto del código.
+        if (esPCEL) {
+          // PCEL: agregado mensual sin precio de venta. Piezas → cantidad, sin importe.
+          rows = rows.map((r) => ({
+            anio: r.anio,
+            mes: r.mes,
+            cliente_nombre: null, vendedor_nombre: null, sucursal: null,
+            cantidad: Number(r.piezas) || 0,
+            precio_unitario: null, // no hay precio de venta en PCEL
+            importe: null,
+          }));
+        } else if (!esGeneral) {
+          // Digitalife (sellout_detalle): transacciones diarias → normaliza a anio/mes.
           rows = rows.map((r) => {
             const [y, m] = (r.fecha || '').split('-');
             return {
