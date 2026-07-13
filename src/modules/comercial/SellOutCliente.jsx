@@ -2032,6 +2032,19 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
     // Rotación mensual aprox: piezas vendidas del último mes cerrado / stock actual
     const ultMes = data[data.length - 1];
     const rotacionMes = stock > 0 && ultMes && ultMes.piezasVend > 0 ? ultMes.piezasVend / stock : null;
+    // Rotación promedio 90 días a mes cerrado: promedio piezas mensuales de los 3
+    // últimos meses cerrados (excluye el mes actual en curso) / stock actual.
+    // Si el data tiene <3 meses cerrados usa los que haya (mínimo 1).
+    const mesesCerrados = data.slice(-4, -1); // 3 meses previos al actual
+    const rotacion90d = (() => {
+      if (stock <= 0 || mesesCerrados.length === 0) return null;
+      const totalPz = mesesCerrados.reduce((s, m) => s + (m.piezasVend || 0), 0);
+      const promMensual = totalPz / mesesCerrados.length;
+      return promMensual > 0 ? promMensual / stock : null;
+    })();
+    const rotacion90dPromPz = mesesCerrados.length > 0
+      ? mesesCerrados.reduce((s, m) => s + (m.piezasVend || 0), 0) / mesesCerrados.length
+      : 0;
     return {
       diasInv, vtaProm4Sem, vtaDiaria, stock,
       antiguedad: Number(last.antiguedad) || 0,
@@ -2039,6 +2052,7 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
       backorder: Number(last.backorder) || 0,
       costoActual: Number(last.costo) || 0,
       nivelOptimo, ultimaRep, rotacionMes,
+      rotacion90d, rotacion90dPromPz, rotacion90dNMeses: mesesCerrados.length,
       costoProm, valorMovidoYTD, piezasVendYTD,
       semanaUlt: last.semana,
     };
@@ -2316,10 +2330,7 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
             <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
               <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Inventario en PCEL</div>
               <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(kpis.stock)} pz</div>
-              <div className="text-[10px] text-gray-500 tabular-nums">
-                {formatMXN(kpis.stock * kpis.costoActual)} a costo
-                {kpis.rotacionMes != null && ` · rota ${kpis.rotacionMes.toFixed(1)}×/mes`}
-              </div>
+              <div className="text-[10px] text-gray-500 tabular-nums">{formatMXN(kpis.stock * kpis.costoActual)} a costo</div>
             </div>
 
             {/* Inventario en Acteck */}
@@ -2339,6 +2350,27 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
                 <div className="text-[10px] text-gray-500">Sin disponibilidad para surtir</div>
               </div>
             )}
+
+            {/* Rotación promedio últimos 90 días (a mes cerrado) */}
+            <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+              <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Rotación 90 días</div>
+              <div className="text-[14px] font-bold tabular-nums text-gray-800">
+                {kpis.rotacion90d != null ? `${kpis.rotacion90d.toFixed(2)}×/mes` : '—'}
+              </div>
+              <div className="text-[10px] text-gray-500 tabular-nums">
+                {kpis.rotacion90dNMeses > 0 ? `${fmtInt(kpis.rotacion90dPromPz)} pz/mes prom · ${kpis.rotacion90dNMeses} meses cerrados` : 'Sin meses cerrados'}
+              </div>
+            </div>
+
+            {/* Sell-in Acteck→PCEL YTD */}
+            <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
+              <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell-in Acteck→{clienteNombre}</div>
+              <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(siPzYTD)} pz</div>
+              <div className="text-[10px] text-gray-500 tabular-nums">
+                YTD {anioActual}
+                {kpis.piezasVendYTD > 0 && siPzYTD > 0 ? ` · ${(kpis.piezasVendYTD / siPzYTD * 100).toFixed(0)}% sell-through` : ''}
+              </div>
+            </div>
 
             {/* Próximo arribo (span 2 columnas para dar aire a la info larga) */}
             {(() => {
