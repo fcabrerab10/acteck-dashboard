@@ -97,6 +97,12 @@ const ROADMAP_COLOR = {
 };
 
 const fmtInt = (n) => (n == null || !isFinite(n) ? '—' : Math.round(n).toLocaleString('es-MX'));
+const formatFechaCorta = (iso) => {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return `${parseInt(d, 10)}-${meses[parseInt(m, 10) - 1]}-${y.slice(2)}`;
+};
 const fmtMoneyShort = (n) => {
   if (n == null || !isFinite(n)) return '—';
   const a = Math.abs(n);
@@ -1887,24 +1893,36 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
 //    - Chart mensual arriba + minimap semanal comprimido abajo
 function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, accent, siPzYTD, clienteNombre }) {
   const [semanal, setSemanal] = useState([]);
+  const [proximoArribo, setProximoArribo] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [hoverIdx, setHoverIdx] = useState(null);
   const [hoverSem, setHoverSem] = useState(null);
   const svgRef = React.useRef(null);
   const miniRef = React.useRef(null);
 
-  // Fetch semanal para minimap y cálculo de WoS / reposiciones
+  // Fetch semanal para minimap + próximo arribo desde Master Embarques
   useEffect(() => {
     let cancelled = false;
     setCargando(true);
     (async () => {
       try {
-        const { data, error } = await supabase
-          .from('v_sellout_pcel_semanal')
-          .select('anio,semana,piezas,inventario,antiguedad,transito,backorder,costo')
-          .eq('sku', sku).eq('anio', anioActual).order('semana');
+        const hoyISO = new Date().toISOString().slice(0, 10);
+        const [semRes, arriRes] = await Promise.all([
+          supabase.from('v_sellout_pcel_semanal')
+            .select('anio,semana,piezas,inventario,antiguedad,transito,backorder,costo')
+            .eq('sku', sku).eq('anio', anioActual).order('semana'),
+          supabase.from('embarques_compras')
+            .select('arribo_cedis,shp_qty,po,supplier,cedis')
+            .eq('codigo', sku)
+            .neq('estatus', 'CONCLUIDO')
+            .gt('arribo_cedis', hoyISO)
+            .order('arribo_cedis', { ascending: true })
+            .limit(1)
+            .maybeSingle(),
+        ]);
         if (cancelled) return;
-        setSemanal(error ? [] : (data || []));
+        setSemanal(semRes.error ? [] : (semRes.data || []));
+        setProximoArribo(arriRes.error ? null : (arriRes.data || null));
         setCargando(false);
       } catch (e) {
         if (cancelled) return;
@@ -2282,6 +2300,32 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
             <div className="text-[14px] font-bold tabular-nums text-gray-800">{fmtInt(siPzYTD)} pz</div>
             <div className="text-[10px] text-gray-500 tabular-nums">YTD {anioActual} · {kpis.piezasVendYTD > 0 ? `${(kpis.piezasVendYTD / Math.max(1, siPzYTD) * 100).toFixed(0)}% sell-thru` : '—'}</div>
           </div>
+          {/* Próximo arribo desde Master Embarques */}
+          {(() => {
+            const pa = proximoArribo;
+            const hasArribo = pa && pa.arribo_cedis;
+            const diasParaLlegar = hasArribo ? Math.max(0, Math.ceil((new Date(pa.arribo_cedis) - new Date()) / 86400000)) : null;
+            return (
+              <div className="rounded-md p-2.5 border" style={{ background: hasArribo ? '#EFF6FF' : '#F9FAFB', borderColor: hasArribo ? '#BFDBFE' : 'var(--gray-100, #F3F4F6)' }}>
+                <div className="text-[9.5px] uppercase tracking-widest font-semibold" style={{ color: hasArribo ? '#1D4ED8' : '#6B7280' }}>Próximo arribo · CEDIS</div>
+                {hasArribo ? (
+                  <>
+                    <div className="text-[14px] font-bold tabular-nums text-gray-800">
+                      {formatFechaCorta(pa.arribo_cedis)} · +{fmtInt(pa.shp_qty || 0)} pz
+                    </div>
+                    <div className="text-[10px] tabular-nums" style={{ color: '#1E40AF' }}>
+                      En {diasParaLlegar} días · PO {pa.po}{pa.cedis ? ` → ${pa.cedis}` : ''}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-[14px] font-bold tabular-nums text-gray-400">Sin embarques</div>
+                    <div className="text-[10px] text-gray-500">No hay POs activas para este SKU</div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
           <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
             <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Última reposición</div>
             {kpis.ultimaRep ? (
