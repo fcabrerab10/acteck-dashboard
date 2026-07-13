@@ -1889,7 +1889,9 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
   const [semanal, setSemanal] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [hoverIdx, setHoverIdx] = useState(null);
+  const [hoverSem, setHoverSem] = useState(null);
   const svgRef = React.useRef(null);
+  const miniRef = React.useRef(null);
 
   // Fetch semanal para minimap y cálculo de WoS / reposiciones
   useEffect(() => {
@@ -1973,9 +1975,10 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
     const last = semanal[semanal.length - 1];
     const ult4 = semanal.slice(-4).map((r) => Number(r.piezas) || 0);
     const vtaProm4Sem = ult4.reduce((a, b) => a + b, 0) / Math.max(1, ult4.length);
+    const vtaDiaria = vtaProm4Sem / 7;
     const stock = Number(last.inventario) || 0;
-    const wos = vtaProm4Sem > 0 ? stock / vtaProm4Sem : null;
-    const nivelOptimo = vtaProm4Sem > 0 ? Math.round(vtaProm4Sem * 8) : null; // meta ~ 2 meses
+    const diasInv = vtaDiaria > 0 ? stock / vtaDiaria : null;
+    const nivelOptimo = vtaDiaria > 0 ? Math.round(vtaDiaria * 60) : null; // meta ~ 60 días
     // Reposiciones: salto de inventario > 30 pz AND antigüedad baja ≥ 20 días
     let ultimaRep = null;
     for (let i = 1; i < semanal.length; i++) {
@@ -1993,7 +1996,7 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
     const ultMes = data[data.length - 1];
     const rotacionMes = stock > 0 && ultMes && ultMes.piezasVend > 0 ? ultMes.piezasVend / stock : null;
     return {
-      wos, vtaProm4Sem, stock,
+      diasInv, vtaProm4Sem, vtaDiaria, stock,
       antiguedad: Number(last.antiguedad) || 0,
       transito: Number(last.transito) || 0,
       backorder: Number(last.backorder) || 0,
@@ -2163,14 +2166,42 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
             })()}
           </svg>
 
-          {/* Minimap semanal */}
+          {/* Minimap semanal — interactivo */}
           {semanal.length > 0 && (
-            <div className="border-t border-dashed border-gray-200 mt-2 pt-2">
+            <div className="border-t border-dashed border-gray-200 mt-2 pt-2 relative">
               <div className="flex justify-between items-baseline mb-1">
-                <div className="text-[9.5px] uppercase tracking-widest font-bold text-gray-500">Minimap semanal</div>
+                <div className="text-[9.5px] uppercase tracking-widest font-bold text-gray-500">Minimap semanal · hover</div>
                 <div className="text-[9.5px] text-gray-500">{semanal.length} semanas (S{semanal[0].semana}..S{semanal[semanal.length - 1].semana})</div>
               </div>
-              <svg viewBox="0 0 400 60" preserveAspectRatio="none" style={{ width: '100%', height: 60, display: 'block' }}>
+              {hoverSem != null && semanal[hoverSem] && (() => {
+                const s = semanal[hoverSem];
+                return (
+                  <div className="absolute top-6 right-2 bg-white border border-gray-200 rounded-md p-2.5 shadow-lg text-[10.5px] tabular-nums min-w-[170px] z-10 pointer-events-none">
+                    <div className="font-bold text-gray-800 mb-1 pb-1 border-b border-gray-100">Semana {s.semana}</div>
+                    <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-gray-600">
+                      <span>Venta</span><span className="text-right font-semibold text-gray-800">{fmtInt(Number(s.piezas))} pz</span>
+                      <span style={{ color: accent, filter: 'brightness(0.7)' }}>Inventario</span>
+                      <span className="text-right font-semibold" style={{ color: accent, filter: 'brightness(0.6)' }}>{fmtInt(Number(s.inventario))} pz</span>
+                      <span>Antigüedad</span><span className="text-right text-gray-800">{fmtInt(Number(s.antiguedad))} d</span>
+                      <span>Tránsito</span><span className="text-right text-gray-800">{Number(s.transito) > 0 ? fmtInt(Number(s.transito)) : '—'}</span>
+                      <span>Backorder</span><span className="text-right text-gray-800">{Number(s.backorder) > 0 ? fmtInt(Number(s.backorder)) : '—'}</span>
+                      <span style={{ color: '#B45309' }}>Costo</span>
+                      <span className="text-right" style={{ color: '#92400E' }}>{formatMXN(Number(s.costo))}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              <svg ref={miniRef} viewBox="0 0 400 60" preserveAspectRatio="none" style={{ width: '100%', height: 60, display: 'block' }}
+                onMouseMove={(e) => {
+                  if (!miniRef.current || semanal.length === 0) return;
+                  const rect = miniRef.current.getBoundingClientRect();
+                  const vbX = (e.clientX - rect.left) / rect.width * 400;
+                  const step = 380 / semanal.length;
+                  const idx = Math.floor((vbX - 15) / step);
+                  if (idx >= 0 && idx < semanal.length) { if (idx !== hoverSem) setHoverSem(idx); }
+                  else if (hoverSem != null) setHoverSem(null);
+                }}
+                onMouseLeave={() => setHoverSem(null)}>
                 <defs>
                   <linearGradient id={`mm-grad-${sku.replace(/[^A-Z0-9]/gi, '')}`} x1="0" x2="0" y1="0" y2="1">
                     <stop offset="0%" stopColor={accent} stopOpacity="0.35" />
@@ -2187,14 +2218,17 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
                   const area = `M ${invPts[0].x} 45 ` + invPts.map((p) => `L ${p.x} ${p.y}`).join(' ') + ` L ${invPts[N-1].x} 45 Z`;
                   return (
                     <>
-                      <path d={area} fill={`url(#mm-grad-${sku.replace(/[^A-Z0-9]/gi, '')})`} />
+                      <path d={area} fill={`url(#mm-grad-${sku.replace(/[^A-Z0-9]/gi, '')})`} pointerEvents="none" />
                       <polyline points={invPts.map((p) => `${p.x},${p.y}`).join(' ')}
-                        stroke={accent} strokeWidth="1.5" fill="none" />
+                        stroke={accent} strokeWidth="1.5" fill="none" pointerEvents="none" />
                       {semanal.map((r, i) => {
                         const barW = step * 0.5;
                         const bx = 15 + i * step + (step - barW) / 2;
                         const bh = Number(r.piezas) > 0 ? (Number(r.piezas) / maxPzSem) * 15 : 0;
-                        return <rect key={i} x={bx} y={45 - bh} width={barW} height={bh} fill="#CBD5E1" opacity="0.85" />;
+                        const isHover = hoverSem === i;
+                        return <rect key={i} x={bx} y={45 - bh} width={barW} height={bh}
+                          fill={isHover ? '#64748B' : '#CBD5E1'} opacity={isHover ? 1 : 0.85}
+                          pointerEvents="none" style={{ transition: 'fill 100ms' }} />;
                       })}
                       {repIdx >= 0 && (() => {
                         const x = 15 + repIdx * step + step * 0.5;
@@ -2205,8 +2239,12 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
                           </g>
                         );
                       })()}
-                      <text x="15" y="56" fontSize="8" fill="#9CA3AF">S{semanal[0].semana}</text>
-                      <text x={15 + (N - 1) * step + step * 0.5} y="56" fontSize="8" fill="#9CA3AF" textAnchor="middle">S{semanal[N - 1].semana}</text>
+                      {hoverSem != null && (() => {
+                        const x = 15 + hoverSem * step + step * 0.5;
+                        return <line x1={x} y1="5" x2={x} y2="48" stroke="#475569" strokeWidth="1" strokeDasharray="3 2" opacity="0.7" pointerEvents="none" />;
+                      })()}
+                      <text x="15" y="56" fontSize="8" fill="#9CA3AF" pointerEvents="none">S{semanal[0].semana}</text>
+                      <text x={15 + (N - 1) * step + step * 0.5} y="56" fontSize="8" fill="#9CA3AF" textAnchor="middle" pointerEvents="none">S{semanal[N - 1].semana}</text>
                     </>
                   );
                 })()}
@@ -2218,12 +2256,12 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
         {/* COL 3: Cards de decisión */}
         <div className="flex flex-col gap-2">
           <div className="rounded-md p-3 border" style={{ background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)`, borderColor: `${accent}55` }}>
-            <div className="text-[9.5px] uppercase tracking-widest font-bold" style={{ color: accent, filter: 'brightness(0.7)' }}>Weeks of Supply</div>
+            <div className="text-[9.5px] uppercase tracking-widest font-bold" style={{ color: accent, filter: 'brightness(0.7)' }}>Días de inventario</div>
             <div className="text-[22px] font-bold tabular-nums" style={{ color: accent, filter: 'brightness(0.6)' }}>
-              {kpis.wos != null ? `${kpis.wos.toFixed(1)} sem` : '—'}
+              {kpis.diasInv != null ? `${kpis.diasInv.toFixed(0)} días` : '—'}
             </div>
             <div className="text-[10px] tabular-nums" style={{ color: accent, filter: 'brightness(0.7)' }}>
-              Al ritmo actual de {kpis.vtaProm4Sem.toFixed(0)} pz/sem
+              Al ritmo actual de {kpis.vtaDiaria.toFixed(1)} pz/día
             </div>
           </div>
           <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
@@ -2237,7 +2275,7 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
           <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
             <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Nivel óptimo estimado</div>
             <div className="text-[14px] font-bold tabular-nums text-gray-800">{kpis.nivelOptimo != null ? `~${fmtInt(kpis.nivelOptimo)} pz` : '—'}</div>
-            <div className="text-[10px] text-gray-500 tabular-nums">2 meses de stock a ritmo actual</div>
+            <div className="text-[10px] text-gray-500 tabular-nums">~60 días de stock a ritmo actual</div>
           </div>
           <div className="bg-gray-50 rounded-md p-2.5 border border-gray-100">
             <div className="text-[9.5px] uppercase tracking-widest text-gray-500 font-semibold">Sell-in Acteck→{clienteNombre}</div>
