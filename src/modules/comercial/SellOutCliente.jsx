@@ -57,6 +57,7 @@ const CLIENTES_META = {
     vistaSkuMes: 'v_sellout_pcel_sku_mes',
     vistaSucursalMes: null,
     vistaMarcaMes: 'v_sellout_pcel_marca_mes',
+    roadmapTabla: 'roadmap_sku_pcel', // PCEL usa SKUs numéricos, roadmap propio
     mayoristaKey: null,
     sellInClienteKey: 'pcel',
     listaPrecio: 'PCEL',
@@ -194,7 +195,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
         fetchAll(meta.vistaMensual, 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
         fetchAll(meta.vistaSkuMes, 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anioActual])),
-        fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp,sort_order'),
+        fetchAll(meta.roadmapTabla || 'roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp,sort_order'),
         fetchAll('facturacion_clientes', 'sku,anio,mes,piezas,monto',
           (q) => q.eq('cliente_key', meta.sellInClienteKey).in('anio', [anioPrev, anioActual])),
         fetchAll('inventario_cliente', 'sku,stock,valor,precio_venta,costo_convenio,anio,semana,fecha_ultima_venta,dias_sin_venta',
@@ -220,7 +221,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
       setMarcaMes(mrcMes);
       setLoading(false);
     })();
-  }, [anioActual, anioPrev, meta.vistaMensual, meta.vistaSkuMes, meta.vistaMarcaMes, meta.sellInClienteKey]);
+  }, [anioActual, anioPrev, meta.vistaMensual, meta.vistaSkuMes, meta.vistaMarcaMes, meta.roadmapTabla, meta.sellInClienteKey]);
 
   // ── Determinar mes actual real (último mes con data) ──
   const mesActual = useMemo(() => {
