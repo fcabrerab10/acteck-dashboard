@@ -77,7 +77,7 @@ export default function TelemetriaPanel() {
     setLoading(true);
     (async () => {
       const [perf, evs, fact] = await Promise.all([
-        supabase.from('perfiles').select('user_id,nombre,email,rol').order('nombre'),
+        supabase.from('perfiles').select('user_id,nombre,email,rol,tipo,puesto').order('nombre'),
         supabase.from('eventos_usuario')
           .select('id,user_id,ts,tipo,cliente,pagina,detalle')
           .gte('ts', ini.toISOString())
@@ -124,9 +124,9 @@ export default function TelemetriaPanel() {
       for (const k of Object.keys(cliCount)) if (cliCount[k] > maxCli) { maxCli = cliCount[k]; clienteTop = Number(k); }
       const totalCli = Object.values(cliCount).reduce((s, v) => s + v, 0);
       const pctTop = totalCli > 0 ? (maxCli / totalCli * 100) : 0;
-      // Bono estimado (aplica sólo a viewer con al menos 1 día activo)
-      const esViewer = u.rol === 'viewer';
-      const bonoEstimado = esViewer
+      // Bono estimado — sólo internos NO super_admin (Karolina)
+      const aplicaBono = u.tipo === 'interno' && u.rol !== 'super_admin';
+      const bonoEstimado = aplicaBono
         ? (dias.size > 0 ? Math.max(BONO_BASE, facturacionMes * BONO_PCT) : BONO_BASE)
         : null;
       m.set(u.user_id, {
@@ -183,60 +183,40 @@ export default function TelemetriaPanel() {
         </div>
       </div>
 
-      {/* Grid de usuarios */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {usuarios.map((u) => {
-          const k = kpisPorUser.get(u.user_id);
-          const isExp = expanded === u.user_id;
-          const colorRol = u.rol === 'super_admin' ? '#0EA5E9' : '#EC4899';
-          return (
-            <div key={u.user_id}
-              onClick={() => setExpanded(isExp ? null : u.user_id)}
-              className={`bg-white rounded-xl p-4 border cursor-pointer transition hover:shadow-md ${isExp ? 'border-gray-400 ring-2 ring-gray-200' : 'border-gray-200'}`}>
-              <div className="flex items-start justify-between mb-3 gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                    style={{ background: colorRol }}>{iniciales(u.nombre || u.email)}</div>
-                  <div className="min-w-0">
-                    <div className="font-bold text-[13px] text-gray-800 truncate">{u.nombre || u.email?.split('@')[0]}</div>
-                    <div className="text-[10.5px] text-gray-500 truncate">{u.rol} · {u.email}</div>
-                  </div>
+      {/* Grid de usuarios — separado por tipo interno/externo */}
+      {(() => {
+        const internos = usuarios.filter((u) => u.tipo === 'interno');
+        const externos = usuarios.filter((u) => u.tipo === 'externo');
+        return (
+          <>
+            {internos.length > 0 && (
+              <div>
+                <div className="flex items-baseline justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 rounded-full bg-sky-500"></span>
+                    Acteck · Equipo interno
+                  </h3>
+                  <span className="text-[11px] text-gray-500">{internos.length} usuarios · con bono aplicable a admin/viewer</span>
                 </div>
-                <div className="text-gray-400">{isExp ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}</div>
+                <SeccionUsuarios usuarios={internos} kpisPorUser={kpisPorUser} diasEnMes={diasEnMes} facturacionMes={facturacionMes} expanded={expanded} setExpanded={setExpanded} />
               </div>
-              <div className="grid grid-cols-2 gap-2 text-[11.5px]">
-                <div className="bg-gray-50 rounded-md p-2">
-                  <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Días activos</div>
-                  <div className="text-[15px] font-bold tabular-nums">{k?.diasActivos || 0}/{diasEnMes}</div>
+            )}
+            {externos.length > 0 && (
+              <div className="mt-4">
+                <div className="flex items-baseline justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 rounded-full bg-amber-500"></span>
+                    Externos · clientes y aliados
+                  </h3>
+                  <span className="text-[11px] text-gray-500">{externos.length} usuarios · sin bono, solo monitoreo</span>
                 </div>
-                <div className="bg-gray-50 rounded-md p-2">
-                  <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Tiempo activo</div>
-                  <div className="text-[15px] font-bold tabular-nums">{fmtHm(k?.minutos || 0)}</div>
-                </div>
-                <div className="bg-gray-50 rounded-md p-2">
-                  <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Última sesión</div>
-                  <div className="text-[12px] font-semibold tabular-nums">{fmtHace(k?.ultimo)}</div>
-                </div>
-                <div className="bg-gray-50 rounded-md p-2">
-                  <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Cliente top</div>
-                  <div className="text-[12px] font-semibold tabular-nums">
-                    {k?.clienteTop ? `${CLIENTE_LABEL[k.clienteTop]} · ${k.pctTop.toFixed(0)}%` : '—'}
-                  </div>
-                </div>
-                {k?.bonoEstimado != null && (
-                  <div className="col-span-2 bg-emerald-50 rounded-md p-2 border border-emerald-100">
-                    <div className="text-[9px] uppercase tracking-widest text-emerald-700 font-bold">Bono estimado del mes</div>
-                    <div className="text-[15px] font-bold tabular-nums text-emerald-800">{formatMXN(k.bonoEstimado)}</div>
-                    <div className="text-[9.5px] text-emerald-700">
-                      {k.diasActivos === 0 ? 'Sin actividad · piso $3,000' : (k.bonoEstimado === BONO_BASE ? 'Piso $3,000 aplica' : `${(BONO_PCT * 100).toFixed(2)}% × ${formatMXN(facturacionMes)}`)}
-                    </div>
-                  </div>
-                )}
+                <SeccionUsuarios usuarios={externos} kpisPorUser={kpisPorUser} diasEnMes={diasEnMes} facturacionMes={facturacionMes} expanded={expanded} setExpanded={setExpanded} />
               </div>
-            </div>
-          );
-        })}
-      </div>
+            )}
+          </>
+        );
+      })()}
+
 
       {/* Detalle del usuario expandido */}
       {expanded && (() => {
@@ -365,6 +345,78 @@ export default function TelemetriaPanel() {
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+// ────────── SeccionUsuarios ──────────
+// Grid de cards de usuarios (interno o externo). Cada card es click-to-expand.
+function SeccionUsuarios({ usuarios, kpisPorUser, diasEnMes, facturacionMes, expanded, setExpanded }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      {usuarios.map((u) => {
+        const k = kpisPorUser.get(u.user_id);
+        const isExp = expanded === u.user_id;
+        const colorRol = u.rol === 'super_admin' ? '#0EA5E9'
+                       : u.tipo === 'externo' ? '#F59E0B'
+                       : '#EC4899';
+        const tipoBadge = u.tipo === 'externo'
+          ? { bg: '#FEF3C7', fg: '#78350F', label: 'externo' }
+          : { bg: '#E0F2FE', fg: '#075985', label: 'interno' };
+        return (
+          <div key={u.user_id}
+            onClick={() => setExpanded(isExp ? null : u.user_id)}
+            className={`bg-white rounded-xl p-4 border cursor-pointer transition hover:shadow-md ${isExp ? 'border-gray-400 ring-2 ring-gray-200' : 'border-gray-200'}`}>
+            <div className="flex items-start justify-between mb-3 gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                  style={{ background: colorRol }}>{iniciales(u.nombre || u.email)}</div>
+                <div className="min-w-0">
+                  <div className="font-bold text-[13px] text-gray-800 truncate flex items-center gap-1.5">
+                    {u.nombre || u.email?.split('@')[0]}
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider"
+                      style={{ background: tipoBadge.bg, color: tipoBadge.fg }}>{tipoBadge.label}</span>
+                  </div>
+                  <div className="text-[10.5px] text-gray-500 truncate">
+                    {u.puesto ? `${u.puesto} · ` : ''}{u.rol}
+                  </div>
+                  <div className="text-[10px] text-gray-400 truncate">{u.email}</div>
+                </div>
+              </div>
+              <div className="text-gray-400">{isExp ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}</div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11.5px]">
+              <div className="bg-gray-50 rounded-md p-2">
+                <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Días activos</div>
+                <div className="text-[15px] font-bold tabular-nums">{k?.diasActivos || 0}/{diasEnMes}</div>
+              </div>
+              <div className="bg-gray-50 rounded-md p-2">
+                <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Tiempo activo</div>
+                <div className="text-[15px] font-bold tabular-nums">{fmtHm(k?.minutos || 0)}</div>
+              </div>
+              <div className="bg-gray-50 rounded-md p-2">
+                <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Última sesión</div>
+                <div className="text-[12px] font-semibold tabular-nums">{fmtHace(k?.ultimo)}</div>
+              </div>
+              <div className="bg-gray-50 rounded-md p-2">
+                <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Cliente top</div>
+                <div className="text-[12px] font-semibold tabular-nums">
+                  {k?.clienteTop ? `${CLIENTE_LABEL[k.clienteTop]} · ${k.pctTop.toFixed(0)}%` : '—'}
+                </div>
+              </div>
+              {k?.bonoEstimado != null && (
+                <div className="col-span-2 bg-emerald-50 rounded-md p-2 border border-emerald-100">
+                  <div className="text-[9px] uppercase tracking-widest text-emerald-700 font-bold">Bono estimado del mes</div>
+                  <div className="text-[15px] font-bold tabular-nums text-emerald-800">{formatMXN(k.bonoEstimado)}</div>
+                  <div className="text-[9.5px] text-emerald-700">
+                    {k.diasActivos === 0 ? 'Sin actividad · piso $3,000' : (k.bonoEstimado === BONO_BASE ? 'Piso $3,000 aplica' : `${(BONO_PCT * 100).toFixed(2)}% × ${formatMXN(facturacionMes)}`)}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
