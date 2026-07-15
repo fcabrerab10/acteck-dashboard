@@ -28,6 +28,7 @@ const MENU_A_PERMISO_GLOBAL = {
   estrategiaPrecios:'estrategia_precios',
   ordenesCompra:    'ordenes_compra',
   adminInterna:     'admin_interna',
+  // telemetria: visible para todos los autenticados (RLS filtra a lo propio)
   evaluaciones:     'evaluaciones',
   axonMexico:       'axon_mexico',
   configuracion:    'configuracion',
@@ -131,7 +132,8 @@ const MENU_CONFIG = [
     // se oculta (lógica en GrupoBloque).
     items: [
       { id: 'adminInterna', label: 'Pendientes & Calendario', icon: ClipboardList },
-      { id: 'evaluaciones', label: 'Evaluaciones',             icon: Award },
+      { id: 'telemetria',   label: 'Telemetría',                icon: Activity },
+      { id: 'evaluaciones', label: 'Evaluaciones (histórico)', icon: Award },
     ],
   },
   {

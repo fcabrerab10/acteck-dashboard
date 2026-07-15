@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED } from './lib/supabase';
 import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_MES, ML_SELLOUT_DEFAULT, clientes } from './lib/constants';
 import { formatMXN, formatUSD, formatFecha, diasRestantes, calcularSalud, loadSheetJS } from './lib/utils';
+import { useTelemetry, telemetria } from './lib/telemetry';
 import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, Sidebar } from './components';
 import { CLIENTES as SIDEBAR_CLIENTES } from './components/Sidebar';
 import { Toaster } from './lib/toast';
@@ -17,6 +18,7 @@ import ReporteTab from './modules/comercial/ReporteTab';
 import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
 import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
 import EvaluacionesPanel from './modules/interno/EvaluacionesPanel';
+import TelemetriaPanel from './modules/interno/TelemetriaPanel';
 import AxonMexico from './modules/interno/AxonMexico';
 import LoginPage from './modules/auth/LoginPage';
 import { Configuracion } from './modules/configuracion';
@@ -282,14 +284,14 @@ export default function App() {
 
   
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
-    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','evaluaciones','axonMexico']), []);
+    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','evaluaciones','telemetria','axonMexico']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
       try { return localStorage.getItem('nav_pagina') || 'home'; } catch { return 'home'; }
     });
     const [clienteActivo, setClienteActivo] = useState(() => {
       try {
         const pag = localStorage.getItem('nav_pagina') || 'home';
-        const globals = new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','evaluaciones','axonMexico']);
+        const globals = new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','evaluaciones','telemetria','axonMexico']);
         if (globals.has(pag)) return null;
         return localStorage.getItem('nav_cliente') || 'digitalife';
       } catch { return 'digitalife'; }
@@ -297,14 +299,19 @@ export default function App() {
     const [vistaActual, setVistaActual] = useState(() => {
       try { return localStorage.getItem('nav_vista') || null; } catch { return null; }
     });
+    // Telemetría global: login/logout + heartbeats cada 60s
+    useTelemetry();
     React.useEffect(() => {
       try { localStorage.setItem('nav_pagina', paginaActiva); } catch {}
-    }, [paginaActiva]);
+      // Emit navegación de pestaña (con cliente activo si aplica)
+      telemetria.navPagina(paginaActiva, clienteActivo);
+    }, [paginaActiva, clienteActivo]);
     React.useEffect(() => {
       try {
         if (clienteActivo) localStorage.setItem('nav_cliente', clienteActivo);
         else localStorage.removeItem('nav_cliente');
       } catch {}
+      if (clienteActivo) telemetria.navCliente(clienteActivo);
     }, [clienteActivo]);
     React.useEffect(() => {
       try {
@@ -495,6 +502,7 @@ export default function App() {
               ? <EvaluacionesPanel />
               : <SinAcceso motivo="No tienes acceso a Evaluaciones." />
           )}
+          {paginaActiva === "telemetria" && <TelemetriaPanel />}
           {paginaActiva === "axonMexico" && (
             puedeVerPestanaGlobal(perfil, "axon_mexico")
               ? <AxonMexico />
