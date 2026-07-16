@@ -262,6 +262,135 @@ async function taskActualizarFillRates() {
 }
 
 // ═════════════════════ Handler ═════════════════════
+// ═════════════════════════════════════════════════════════════════
+// TASK: recordatorio-eval
+// Corre diario a las 9 AM CDMX. Envía email a Fernando + Karolina el
+// día 1 (primer aviso) y día 3 (vence hoy) del mes, si la evaluación
+// del mes anterior no está cerrada.
+// ═════════════════════════════════════════════════════════════════
+async function taskRecordatorioEvaluacion() {
+  // Fecha actual en CDMX
+  const hoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+  const dia = hoy.getDate();
+
+  // Solo enviamos día 1 y día 3
+  if (dia !== 1 && dia !== 3) {
+    return { skip: `Hoy es día ${dia}, solo enviamos día 1 y 3` };
+  }
+
+  // Mes a evaluar = mes anterior
+  const anioEval = hoy.getMonth() === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear();
+  const mesEval  = hoy.getMonth() === 0 ? 12 : hoy.getMonth(); // getMonth es 0-11, mes 1-12
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+  // 1. Buscar usuarios internos con evaluación (Karolina)
+  const perfRes = await fetch(`${SB_URL}/rest/v1/perfiles?select=user_id,nombre,email,rol,tipo&tipo=eq.interno&rol=neq.super_admin`, {
+    headers: { apikey: SRK, Authorization: 'Bearer ' + SRK },
+  });
+  const perfiles = await perfRes.json();
+  if (!Array.isArray(perfiles) || perfiles.length === 0) {
+    return { skip: 'No hay usuarios internos con evaluación' };
+  }
+
+  // 2. Chequear cuáles NO tienen evaluación cerrada del mes anterior
+  const pendientes = [];
+  for (const p of perfiles) {
+    const evRes = await fetch(
+      `${SB_URL}/rest/v1/evaluaciones_mensuales?select=id,cerrada&user_id=eq.${p.user_id}&anio=eq.${anioEval}&mes=eq.${mesEval}`,
+      { headers: { apikey: SRK, Authorization: 'Bearer ' + SRK } }
+    );
+    const evs = await evRes.json();
+    const cerrada = evs?.[0]?.cerrada === true;
+    if (!cerrada) pendientes.push(p);
+  }
+
+  if (pendientes.length === 0) {
+    return { skip: 'Todas las evaluaciones del mes anterior ya están cerradas' };
+  }
+
+  // 3. Enviar email
+  const SMTP_USER = process.env.SMTP_USER;
+  const SMTP_PASS = process.env.SMTP_PASS;
+  const TO_FERNANDO = process.env.SMTP_TO_FERNANDO || 'fernando.cabrera@acteck.com';
+  const TO_KAROLINA = process.env.SMTP_TO_KAROLINA || 'karolina.veliz@acteck.com';
+  if (!SMTP_USER || !SMTP_PASS) {
+    return { error: 'SMTP_USER y SMTP_PASS no configurados en Vercel env vars' };
+  }
+
+  const { default: nodemailer } = await import('nodemailer');
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: { user: SMTP_USER, pass: SMTP_PASS.replace(/\s+/g, '') },
+  });
+
+  const enviados = [];
+  for (const p of pendientes) {
+    const esDia1 = dia === 1;
+    const asunto = esDia1
+      ? `⏰ Pendiente evaluar a ${p.nombre} · ${MESES[mesEval - 1]} ${anioEval}`
+      : `⚠️ Vence HOY · Evaluación ${p.nombre} · ${MESES[mesEval - 1]} ${anioEval}`;
+
+    // Facturación del mes para dato rápido
+    let factTotal = 0;
+    try {
+      const fRes = await fetch(
+        `${SB_URL}/rest/v1/facturacion_clientes?select=monto&anio=eq.${anioEval}&mes=eq.${mesEval}&cliente_key=in.(digitalife,pcel,dicotech)`,
+        { headers: { apikey: SRK, Authorization: 'Bearer ' + SRK } }
+      );
+      const f = await fRes.json();
+      factTotal = (f || []).reduce((s, r) => s + (Number(r.monto) || 0), 0);
+    } catch {}
+
+    const bonoBase = Math.max(3000, factTotal * 0.0004);
+    const fmtMX = (n) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
+
+    const cuerpo = esDia1
+      ? `Fernando,
+
+Es día 1 y ya cerró ${MESES[mesEval - 1].toLowerCase()}. Toca cerrar la evaluación
+de ${p.nombre} y pagar el bono antes del día 3.
+
+Datos rápidos del mes:
+· Facturación total:  ${fmtMX(factTotal)}
+· Bono base calc.:    ${fmtMX(bonoBase)}
+
+Ajusta ratings, tareas y ajustes en el dashboard:
+https://acteck-dashboard.vercel.app/  → Administración Interna → Actividad del equipo
+
+— Dashboard Acteck`
+      : `Fernando,
+
+⚠️ Recordatorio · HOY vence la evaluación de ${p.nombre}
+de ${MESES[mesEval - 1].toLowerCase()} ${anioEval}. Si no cierras hoy, el bono
+queda sin pagar en la fecha acordada.
+
+Datos rápidos:
+· Facturación total:  ${fmtMX(factTotal)}
+· Bono base calc.:    ${fmtMX(bonoBase)}
+
+Ciérrala ya:
+https://acteck-dashboard.vercel.app/  → Administración Interna → Actividad del equipo
+
+— Dashboard Acteck`;
+
+    try {
+      const info = await transporter.sendMail({
+        from: `"Dashboard Acteck" <${SMTP_USER}>`,
+        to: [TO_FERNANDO, TO_KAROLINA].join(','),
+        subject: asunto,
+        text: cuerpo,
+      });
+      enviados.push({ para: p.nombre, msg_id: info.messageId, dia });
+    } catch (e) {
+      enviados.push({ para: p.nombre, error: e.message });
+    }
+  }
+
+  return { dia, mesEval, anioEval, pendientes: pendientes.length, enviados };
+}
+
 export default async function handler(req, res) {
   if (process.env.CRON_SECRET) {
     const got = req.headers.authorization?.replace(/^Bearer\s+/, '') || req.headers['x-cron-secret'];
@@ -277,10 +406,12 @@ export default async function handler(req, res) {
       result = await taskSyncMasterEmbarques();
     } else if (task === 'actualizar-fill-rates') {
       result = await taskActualizarFillRates();
+    } else if (task === 'recordatorio-eval') {
+      result = await taskRecordatorioEvaluacion();
     } else {
       return res.status(400).json({
         error: 'task inválido',
-        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates',
+        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval',
       });
     }
     if (result.status && result.error) return res.status(result.status).json(result);

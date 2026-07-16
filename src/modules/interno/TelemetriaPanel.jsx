@@ -178,16 +178,65 @@ export default function TelemetriaPanel() {
 
   if (loading) return <div className="p-12 text-center text-sm text-gray-500">Cargando telemetría…</div>;
 
+  // Alert de evaluación pendiente del mes anterior — sólo super_admin, día 1-5
+  const alertPendiente = React.useMemo(() => {
+    if (!esAdmin) return null;
+    const hoy = new Date();
+    const dia = hoy.getDate();
+    if (dia > 5) return null; // sólo primer semana del mes
+    const mesPrev = hoy.getMonth(); // getMonth 0-11 → mesPrev = mes anterior (1-12) si getMonth > 0
+    const anioPrev = mesPrev === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear();
+    const mesPrevNum = mesPrev === 0 ? 12 : mesPrev;
+    // Buscar internos con evaluación (requiereEvaluacion) que no tengan evaluación cerrada del mes anterior
+    const internos = usuarios.filter(requiereEvaluacion);
+    if (internos.length === 0) return null;
+    return { dia, anioPrev, mesPrevNum, internos };
+  }, [esAdmin, usuarios]);
+
+  const [alertPendientesReal, setAlertPendientesReal] = useState([]);
+  useEffect(() => {
+    if (!alertPendiente) { setAlertPendientesReal([]); return; }
+    (async () => {
+      const pend = [];
+      for (const u of alertPendiente.internos) {
+        const { data } = await supabase.from('evaluaciones_mensuales')
+          .select('cerrada').eq('user_id', u.user_id)
+          .eq('anio', alertPendiente.anioPrev).eq('mes', alertPendiente.mesPrevNum).maybeSingle();
+        if (!data || !data.cerrada) pend.push(u);
+      }
+      setAlertPendientesReal(pend);
+    })();
+  }, [alertPendiente]);
+
   return (
     <div className="space-y-4">
+      {/* Alert de evaluación pendiente del mes anterior */}
+      {alertPendiente && alertPendientesReal.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-100 to-amber-50 border border-amber-400 rounded-lg p-3 flex items-center gap-3">
+          <div className="text-[22px]">⏰</div>
+          <div className="flex-1 text-[13px] text-amber-900">
+            <strong>Pendiente:</strong> evaluar {alertPendientesReal.map((u) => u.nombre).join(', ')} · <strong>{['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][alertPendiente.mesPrevNum-1]} {alertPendiente.anioPrev}</strong>.
+            {alertPendiente.dia < 3
+              ? <> Debes cerrar el bono antes del <strong>día 3</strong>.</>
+              : alertPendiente.dia === 3
+                ? <> <strong>VENCE HOY.</strong></>
+                : <> Ya venció el día 3 (hoy es {alertPendiente.dia}).</>}
+          </div>
+          <button onClick={() => alertPendientesReal[0] && setExpanded(alertPendientesReal[0].user_id)}
+            className="bg-amber-800 text-white px-4 py-1.5 rounded-md text-[12px] font-bold hover:bg-amber-900">
+            Evaluar ahora →
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
-            <Activity className="w-6 h-6" /> Telemetría de usuarios
+            <Activity className="w-6 h-6" /> Actividad del equipo
           </h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Actividad automática · {esAdmin ? 'Todos los usuarios' : 'Tu propia actividad'} · Bono = <strong>max($3,000, 0.07% × facturación mes)</strong>
+            Telemetría automática + evaluación mensual · {esAdmin ? 'Todos los usuarios' : 'Tu propia actividad'} · Bono = <strong>max($3,000, {(BONO_PCT * 100).toFixed(2)}% × facturación mes)</strong>
           </p>
         </div>
         <div className="flex items-center gap-2">

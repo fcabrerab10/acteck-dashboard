@@ -7,6 +7,10 @@
     {
       "path": "/api/cron?task=actualizar-fill-rates",
       "schedule": "30 12 * * *"
+    },
+    {
+      "path": "/api/cron?task=recordatorio-eval",
+      "schedule": "0 15 * * *"
     }
   ]
 }
