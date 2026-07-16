@@ -605,48 +605,14 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
       {loading ? (
         <div style={{ padding: 32, textAlign: 'center', color: '#8E8E93', fontSize: 13 }}>Cargando…</div>
       ) : (
-        <div style={{ padding: '14px 20px 20px',
-          display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.15fr)', gap: 14,
-          alignItems: 'start',
-        }}>
-          {/* Columna izq — Telemetría (compacta) */}
-          <div>
-            <SubSectSheet titulo="Actividad del mes">
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                <MiniKPI k="Días" v={`${dias}/${diasEnMes}`} s={`${(dias/diasEnMes*100).toFixed(0)}%`} />
-                <MiniKPI k="Tiempo" v={fmtHm(heartbeats)} s={`${(heartbeats/Math.max(1,dias)/60).toFixed(1)} h/día`} />
-                <MiniKPI k="Última" v={fmtHace(eventos[0]?.ts).replace('hace ', '')}
-                  s={eventos[0] ? fmtFechaHora(eventos[0].ts).split(',')[0] : '—'} />
-              </div>
-              {cliOrden.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Atención por cliente</div>
-                  {cliOrden.map(([cli, cnt]) => {
-                    const pct = totalCli > 0 ? (cnt / totalCli * 100) : 0;
-                    return (
-                      <div key={cli} style={{ marginBottom: 5 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginBottom: 2 }}>
-                          <span style={{ fontWeight: 600 }}>{CLIENTE_LABEL[cli] || cli}</span>
-                          <span style={{ color: '#8E8E93', fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(0)}%</span>
-                        </div>
-                        <div style={{ height: 5, background: 'rgba(0,0,0,0.06)', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: CLIENTE_COLOR[cli] || '#94A3B8', borderRadius: 3 }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </SubSectSheet>
-          </div>
-
-          {/* Columna der — Evaluación */}
-          <div>
-            <EvalSheet user={user} anio={mesRef.anio} mes={mesRef.mes}
-              facturacion={facturacion} cuota={cuota} cuotaPct={cuotaPct}
-              evaluacion={evaluacion} onSaved={reload} perfilId={perfilId} />
-          </div>
-        </div>
+        <EvalPanel
+          user={user} anio={mesRef.anio} mes={mesRef.mes}
+          facturacion={facturacion} cuota={cuota} cuotaPct={cuotaPct}
+          evaluacion={evaluacion} onSaved={reload} perfilId={perfilId}
+          telemetria={{
+            dias, diasEnMes, heartbeats, eventos, cliOrden, totalCli,
+          }}
+        />
       )}
     </div>
   );
@@ -676,8 +642,8 @@ function MiniKPI({ k, v, s }) {
   );
 }
 
-// ═══════════════════ Bloque evaluación (estado local optimista, cero flicker) ═══════════════════
-function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, onSaved, perfilId }) {
+// ═══════════════════ Panel completo (telemetría + evaluación, layout 2-col balanceado) ═══════════════════
+function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, onSaved, perfilId, telemetria }) {
   // Estado local optimista — inicia del prop y se actualiza inmediato en cada click.
   // Los saves a Supabase corren en background sin bloquear UI.
   const [evalLocal, setEvalLocal] = useState(evaluacion);
@@ -784,8 +750,44 @@ function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const { dias, diasEnMes, heartbeats, eventos, cliOrden, totalCli } = telemetria;
+
   return (
-    <div>
+    <div style={{ padding: '14px 20px 20px',
+      display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.15fr)', gap: 14,
+      alignItems: 'start',
+    }}>
+      {/* ═══════════ COLUMNA IZQUIERDA — contexto/KPIs ═══════════ */}
+      <div>
+      {/* Actividad del mes */}
+      <SubSectSheet titulo="Actividad del mes">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+          <MiniKPI k="Días" v={`${dias}/${diasEnMes}`} s={`${(dias/diasEnMes*100).toFixed(0)}%`} />
+          <MiniKPI k="Tiempo" v={fmtHm(heartbeats)} s={`${(heartbeats/Math.max(1,dias)/60).toFixed(1)} h/día`} />
+          <MiniKPI k="Última" v={fmtHace(eventos[0]?.ts).replace('hace ', '')}
+            s={eventos[0] ? fmtFechaHora(eventos[0].ts).split(',')[0] : '—'} />
+        </div>
+        {cliOrden.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Atención por cliente</div>
+            {cliOrden.map(([cli, cnt]) => {
+              const pct = totalCli > 0 ? (cnt / totalCli * 100) : 0;
+              return (
+                <div key={cli} style={{ marginBottom: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
+                    <span style={{ fontWeight: 600 }}>{CLIENTE_LABEL[cli] || cli}</span>
+                    <span style={{ color: '#8E8E93', fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(0)}%</span>
+                  </div>
+                  <div style={{ height: 4, background: 'rgba(0,0,0,0.06)', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: CLIENTE_COLOR[cli] || '#94A3B8', borderRadius: 2 }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SubSectSheet>
+
       {/* Bono hero — compacto */}
       <div style={{
         background: 'white',
@@ -894,6 +896,10 @@ function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
         </div>
       </SubSectSheet>
 
+      </div>{/* ═══════════ /COLUMNA IZQUIERDA ═══════════ */}
+
+      {/* ═══════════ COLUMNA DERECHA — evaluación manual ═══════════ */}
+      <div>
       {/* Ratings — pills segmentadas 1-5 */}
       <SubSectSheet titulo="Evaluación cualitativa">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -930,6 +936,7 @@ function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
       <SubSectSheet titulo={`Ajustes al bono${ajustesTotal !== 0 ? ` · ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)}` : ''}`}>
         <AjustesLista ajustes={evaluacion_?.ajustes || []} onChange={(a) => upsertPatch({ ajustes: a })} disabled={isCerrada} />
       </SubSectSheet>
+      </div>{/* ═══════════ /COLUMNA DERECHA ═══════════ */}
     </div>
   );
 }
