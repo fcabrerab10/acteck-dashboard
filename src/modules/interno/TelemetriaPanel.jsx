@@ -714,46 +714,65 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
   const evaluacion_ = evalLocal;
 
   const copiarTexto = () => {
-    const sep = '═══════════════════════════════════════════════════════════';
-    const rat2 = RATINGS.map((r) => ({ label: r.label, val: evaluacion_?.[r.key] || null }));
-    const conRat2 = rat2.filter((r) => r.val);
-    const promRat2 = conRat2.length ? conRat2.reduce((s, r) => s + r.val, 0) / conRat2.length : 0;
-    const tareas2 = evaluacion_?.tareas || [];
-    const cumplidas2 = tareas2.filter((t) => t.cumplida).length;
-    const ajustes2 = evaluacion_?.ajustes || [];
+    const rats = RATINGS.map((r) => ({ short: r.label.toLowerCase(), val: evaluacion_?.[r.key] || null }))
+      .filter((r) => r.val);
+    const promRat = rats.length ? rats.reduce((s, r) => s + r.val, 0) / rats.length : 0;
+    const tareas = evaluacion_?.tareas || [];
+    const cumplidas = tareas.filter((t) => t.cumplida).length;
+    const pendientes = tareas.filter((t) => !t.cumplida);
+    const ajustes = evaluacion_?.ajustes || [];
+    const nombreCorto = (user.nombre || '').split(' ')[0];
 
-    let txt = `Bono ${user.nombre} · ${MESES[mes-1]} ${anio} · ${fmtMoney(bonoTotal)} MXN\n\n`;
-    txt += sep + '\nCUOTA ALCANZADA\n';
-    txt += `Facturado: ${fmtMoney(facturacion)} | Cuota: ${fmtMoney(cuota)}\n`;
-    txt += `Alcance: ${cuotaPct.toFixed(1)}%${cuotaPct >= 100 ? ' (superó la cuota)' : ''}\n\n`;
+    const L = [];
+    L.push(`Hola,`);
+    L.push('');
+    L.push(`${isCerrada ? 'Cierro' : 'Comparto'} la evaluación de ${nombreCorto} de ${MESES[mes-1]} ${anio}. Bono: ${fmtMoney(bonoTotal)} MXN.`);
+    L.push('');
 
-    txt += sep + '\nEVALUACIÓN CUALITATIVA\n';
-    for (const r of rat2) txt += `· ${r.label.padEnd(22, ' ')}: ${r.val ? `${r.val}/5` : '—'}\n`;
-    if (promRat2 > 0) txt += `Promedio: ${promRat2.toFixed(1)}/5\n`;
-    if (evaluacion_?.comentarios) txt += `\nFeedback:\n${evaluacion_.comentarios}\n`;
+    // Cuota
+    L.push(`Facturación del mes: ${fmtMoney(facturacion)} sobre una cuota de ${fmtMoney(cuota)} (${cuotaPct.toFixed(0)}%${cuotaPct >= 100 ? ', cuota superada' : ''}).`);
 
-    if (tareas2.length > 0) {
-      txt += '\n' + sep + `\nTAREAS DEL MES (${cumplidas2} de ${tareas2.length})\n`;
-      for (const t of tareas2) {
-        txt += `${t.cumplida ? '✓' : '✗'} ${t.texto}\n`;
-        if (t.nota) txt += `    → ${t.nota}\n`;
+    // Cálculo bono breve
+    if (ajustesTotal !== 0) {
+      L.push(`Base ${fmtMoney(bonoBase)} + ajustes ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)} = ${fmtMoney(bonoTotal)}.`);
+    }
+
+    // Ratings — sólo si hay
+    if (rats.length > 0) {
+      L.push('');
+      const ratStr = rats.map((r) => `${r.short} ${r.val}`).join(', ');
+      L.push(`Evaluación cualitativa (${promRat.toFixed(1)}/5): ${ratStr}.`);
+    }
+
+    // Comentarios
+    if (evaluacion_?.comentarios) {
+      L.push('');
+      L.push(evaluacion_.comentarios.trim());
+    }
+
+    // Tareas — resumen
+    if (tareas.length > 0) {
+      L.push('');
+      L.push(`Tareas del mes: ${cumplidas} de ${tareas.length} cumplidas.`);
+      if (pendientes.length > 0 && pendientes.length <= 3) {
+        L.push(`Quedaron pendientes: ${pendientes.map((t) => t.texto).join('; ')}.`);
       }
     }
-    if (ajustes2.length > 0) {
-      txt += '\n' + sep + `\nAJUSTES AL BONO (${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)})\n`;
-      for (const a of ajustes2) {
+
+    // Ajustes explicados
+    if (ajustes.length > 0) {
+      L.push('');
+      for (const a of ajustes) {
         const signo = Number(a.monto) >= 0 ? '+' : '−';
-        txt += `${a.fecha || ''}  ${signo}${fmtMoney(Math.abs(Number(a.monto)))}  ${a.descripcion || ''}\n`;
+        L.push(`Ajuste ${signo}${fmtMoney(Math.abs(Number(a.monto)))}: ${a.descripcion || ''}.`);
       }
     }
-    txt += '\n' + sep + '\nCÁLCULO DEL BONO\n';
-    txt += `Base       = max(${fmtMoney(BONO_BASE)}, ${(BONO_PCT*100).toFixed(2)}% × ${fmtMoney(facturacion)}) = ${fmtMoney(bonoBase)}\n`;
-    if (ajustesTotal !== 0) txt += `Ajustes    = ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)}\n`;
-    txt += `─────────────────────\nTotal a pagar: ${fmtMoney(bonoTotal)} MXN\n\n`;
-    if (isCerrada && evaluacion_?.cerrada_ts) txt += `Evaluación cerrada el ${new Date(evaluacion_.cerrada_ts).toLocaleDateString('es-MX')} · inmutable\n`;
-    else txt += `(evaluación aún abierta — puede cambiar)\n`;
 
-    navigator.clipboard.writeText(txt);
+    L.push('');
+    L.push('Saludos,');
+    L.push('Fernando');
+
+    navigator.clipboard.writeText(L.join('\n'));
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
