@@ -87,7 +87,8 @@ function Ring({ pct, color, size = 44, stroke = 5 }) {
 // ═══════════════════ Componente principal ═══════════════════
 export default function TelemetriaPanel() {
   const { perfil } = usePerfil();
-  const esAdmin = perfil?.rol === 'super_admin';
+  // Doble check por si el campo `rol` no es exacto — usa también flag booleano
+  const esAdmin = perfil?.rol === 'super_admin' || perfil?.es_super_admin === true;
 
   // Estado global (mes actual — el sheet lateral maneja meses individualmente)
   const hoy = new Date();
@@ -209,7 +210,13 @@ export default function TelemetriaPanel() {
     return m;
   }, [evaluacionesMesActual]);
 
-  const usuariosVisibles = esAdmin ? usuarios : usuarios.filter((u) => u.user_id === perfil?.user_id);
+  // Si es admin, ve todos. Si no es admin pero perfil está cargado, ve sólo el suyo.
+  // Si perfil aún no carga, muestra todos (RLS del backend ya filtra la data sensible).
+  const usuariosVisibles = esAdmin
+    ? usuarios
+    : perfil?.user_id
+      ? usuarios.filter((u) => u.user_id === perfil.user_id)
+      : usuarios;
   const internos = usuariosVisibles.filter((u) => u.tipo === 'interno');
   const externos = usuariosVisibles.filter((u) => u.tipo === 'externo');
   // Karolina primero dentro de internos
