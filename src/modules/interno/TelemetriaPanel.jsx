@@ -2,165 +2,138 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import { usePerfil } from '../../lib/perfilContext';
-import { Activity, ChevronDown, ChevronUp, Clock, User, TrendingUp, Layers, LogIn } from 'lucide-react';
 
-// Enum inversos para mostrar en la UI
+// ═══════════════════ Constantes / helpers ═══════════════════
 const CLIENTE_LABEL = { 1: 'Digitalife', 2: 'PCEL', 3: 'Dicotech', 4: 'Mercado Libre', 99: 'Global' };
+const CLIENTE_COLOR = { 1: '#8B5CF6', 2: '#10B981', 3: '#0EA5E9', 4: '#F59E0B', 99: '#94A3B8' };
 const PAGINA_LABEL = {
   1: 'Home', 2: 'Análisis', 3: 'Sell In', 4: 'Sell Out', 5: 'Marketing', 6: 'Pagos', 7: 'Cartera', 8: 'Forecast',
-  9: 'Sell Out global', 10: 'Inventario global', 11: 'Estrategia precios', 12: 'Tracking pedidos', 13: 'Análisis clientes',
-  14: 'Uploads', 15: 'Telemetría', 16: 'Evaluaciones', 17: 'Settings',
+  9: 'Sell Out global', 10: 'Inventario global', 11: 'Estrategia precios', 12: 'Tracking pedidos',
+  13: 'Análisis clientes', 14: 'Uploads', 15: 'Telemetría', 16: 'Evaluaciones', 17: 'Settings',
 };
-const TIPO_LABEL = { 1: 'nav', 2: 'nav', 3: 'drill', 4: 'filter', 5: 'export', 6: 'upload', 7: 'action', 8: 'login', 9: 'logout', 10: 'hb' };
-const TIPO_COLOR = {
-  1: { bg: '#E0F2FE', fg: '#075985' }, 2: { bg: '#E0F2FE', fg: '#075985' },
-  3: { bg: '#F5F3FF', fg: '#5B21B6' }, 4: { bg: '#FEF3C7', fg: '#78350F' },
-  5: { bg: '#DCFCE7', fg: '#166534' }, 6: { bg: '#DCFCE7', fg: '#166534' },
-  7: { bg: '#FEE2E2', fg: '#991B1B' }, 8: { bg: '#F3F4F6', fg: '#4B5563' }, 9: { bg: '#F3F4F6', fg: '#4B5563' },
-};
-const CLIENTE_COLOR = { 1: '#8B5CF6', 2: '#10B981', 3: '#0EA5E9', 4: '#F59E0B', 99: '#94A3B8' };
 
-// Bono: fórmula = max($3,000, 0.04% × facturación_mes)
 const BONO_BASE = 3000;
 const BONO_PCT = 0.0004;
 const CLIENTES_BONO = ['digitalife', 'pcel', 'dicotech'];
-// Digitalife cuota anual acordada (no vive en cuotas_mensuales)
 const DIGITALIFE_CUOTA_ANUAL = 25_000_000;
 
-// Aplica evaluación mensual — hoy solo Karolina (interno, no super_admin)
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
 const requiereEvaluacion = (u) => u.tipo === 'interno' && u.rol !== 'super_admin';
 
 const RATINGS = [
-  { key: 'rating_comunicacion',  label: 'Comunicación' },
-  { key: 'rating_iniciativa',    label: 'Iniciativa' },
-  { key: 'rating_calidad',       label: 'Calidad del trabajo' },
-  { key: 'rating_cumplimiento',  label: 'Cumplimiento' },
-  { key: 'rating_valor',         label: 'Aporte de valor' },
+  { key: 'rating_comunicacion', label: 'Comunicación' },
+  { key: 'rating_iniciativa',   label: 'Iniciativa' },
+  { key: 'rating_calidad',      label: 'Calidad del trabajo' },
+  { key: 'rating_cumplimiento', label: 'Cumplimiento' },
+  { key: 'rating_valor',        label: 'Aporte de valor' },
 ];
 
+// Colores/estilo por usuario según tipo/rol
+const colorAvatar = (u) => u.rol === 'super_admin'
+  ? 'linear-gradient(135deg, #007AFF, #64B5F6)'
+  : u.tipo === 'externo'
+  ? 'linear-gradient(135deg, #FF9F0A, #FFB84D)'
+  : 'linear-gradient(135deg, #FF375F, #FF6B8B)';
+
+const accentUser = (u) => u.rol === 'super_admin' ? '#007AFF' : u.tipo === 'externo' ? '#FF9F0A' : '#FF375F';
+
+function iniciales(nombre) {
+  if (!nombre) return '?';
+  return nombre.split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase();
+}
 function fmtHm(mins) {
   if (!mins || mins < 1) return '0m';
   const h = Math.floor(mins / 60), m = Math.round(mins % 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+function fmtHace(iso) {
+  if (!iso) return '—';
+  const diff = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return 'hace segundos';
+  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
+  return `hace ${Math.floor(diff / 86400)} días`;
 }
 function fmtFechaHora(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
   return d.toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
-function fmtHace(iso) {
-  if (!iso) return '—';
-  const diff = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return 'hace segundos';
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`;
-  const dias = Math.floor(diff / 86400);
-  return `hace ${dias}d`;
+function fmtMoney(n) {
+  if (n == null || !isFinite(n)) return '$—';
+  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
 }
-function iniciales(nombre) {
-  if (!nombre) return '?';
-  return nombre.split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase();
+function rangoMes(anio, mes) {
+  return { ini: new Date(anio, mes - 1, 1), fin: new Date(anio, mes, 1) };
 }
 
-// Rango de mes (1er día 00:00 al 1er día del siguiente mes 00:00)
-function rangoMes(fecha) {
-  const y = fecha.getFullYear(); const m = fecha.getMonth();
-  const ini = new Date(y, m, 1);
-  const fin = new Date(y, m + 1, 1);
-  return { ini, fin, anio: y, mes: m + 1 };
+// Ring tipo Apple Watch (SVG)
+function Ring({ pct, color, size = 44, stroke = 5 }) {
+  const r = size / 2 - stroke;
+  const c = 2 * Math.PI * r;
+  const p = Math.max(0, Math.min(100, pct)) / 100;
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} style={{ width: size, height: size }}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#F0F0F0" strokeWidth={stroke} />
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={`${c * p} ${c}`} strokeLinecap="round"
+        transform={`rotate(-90 ${size/2} ${size/2})`} />
+    </svg>
+  );
 }
 
+// ═══════════════════ Componente principal ═══════════════════
 export default function TelemetriaPanel() {
   const { perfil } = usePerfil();
   const esAdmin = perfil?.rol === 'super_admin';
 
-  const [mesRef, setMesRef] = useState(() => new Date());
+  // Estado global (mes actual — el sheet lateral maneja meses individualmente)
+  const hoy = new Date();
+  const anioActual = hoy.getFullYear();
+  const mesActual = hoy.getMonth() + 1;
+
   const [usuarios, setUsuarios] = useState([]);
   const [eventos, setEventos] = useState([]);
   const [facturacionMes, setFacturacionMes] = useState(0);
-  const [cuotaMes, setCuotaMes] = useState(0);       // cuota total 3 clientes
-  const [evaluaciones, setEvaluaciones] = useState([]); // evaluaciones del mes por user_id
-  const [expanded, setExpanded] = useState(null);
+  const [cuotaMes, setCuotaMes] = useState(0);
+  const [evaluacionesMesActual, setEvaluacionesMesActual] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // NOTA: NO memoizar ini/fin en deps — son objetos Date que se recrean
-  // cada render. Se usan sólo dentro del effect, con [anio, mes] como deps.
-  const { anio, mes } = rangoMes(mesRef);
-  const diasEnMes = new Date(anio, mes, 0).getDate();
-
+  // Fetch inicial: usuarios + eventos del mes actual + fact + cuota + evaluaciones del mes actual
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const ini = new Date(anio, mes - 1, 1);
-      const fin = new Date(anio, mes, 1);
-      const [perf, evs, fact, cuotas, evalMes] = await Promise.all([
+      const { ini, fin } = rangoMes(anioActual, mesActual);
+      const [perf, evs, fact, cuotas, evalRes] = await Promise.all([
         supabase.from('perfiles').select('user_id,nombre,email,rol,tipo,puesto').order('nombre'),
         supabase.from('eventos_usuario')
           .select('id,user_id,ts,tipo,cliente,pagina,detalle')
           .gte('ts', ini.toISOString()).lt('ts', fin.toISOString())
           .order('ts', { ascending: false }).limit(20000),
         supabase.from('facturacion_clientes')
-          .select('monto,cliente_key')
-          .in('cliente_key', CLIENTES_BONO)
-          .eq('anio', anio).eq('mes', mes),
+          .select('monto,cliente_key').in('cliente_key', CLIENTES_BONO)
+          .eq('anio', anioActual).eq('mes', mesActual),
         supabase.from('cuotas_mensuales')
-          .select('cliente,cuota_min')
-          .in('cliente', ['pcel', 'dicotech'])
-          .eq('anio', anio).eq('mes', mes),
-        supabase.from('evaluaciones_mensuales')
-          .select('*')
-          .eq('anio', anio).eq('mes', mes),
+          .select('cliente,cuota_min').in('cliente', ['pcel', 'dicotech'])
+          .eq('anio', anioActual).eq('mes', mesActual),
+        supabase.from('evaluaciones_mensuales').select('*').eq('anio', anioActual).eq('mes', mesActual),
       ]);
       if (cancelled) return;
       setUsuarios(perf.data || []);
       setEventos(evs.data || []);
-      const fT = (fact.data || []).reduce((s, r) => s + (Number(r.monto) || 0), 0);
-      setFacturacionMes(fT);
-      const cPD = (cuotas.data || []).reduce((s, r) => s + (Number(r.cuota_min) || 0), 0);
-      setCuotaMes(cPD + DIGITALIFE_CUOTA_ANUAL / 12);
-      setEvaluaciones(evalMes.data || []);
+      setFacturacionMes((fact.data || []).reduce((s, r) => s + (Number(r.monto) || 0), 0));
+      setCuotaMes((cuotas.data || []).reduce((s, r) => s + (Number(r.cuota_min) || 0), 0) + DIGITALIFE_CUOTA_ANUAL / 12);
+      setEvaluacionesMesActual(evalRes.data || []);
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [anio, mes]);
+  }, [anioActual, mesActual]);
 
-  // Trigger manual de reload cuando un cambio (guardar evaluación, cerrar)
-  // necesita refrescar la data. Se pasa como prop a EvaluacionBloque.
-  const reload = React.useCallback(async () => {
-    setLoading(true);
-    const ini = new Date(anio, mes - 1, 1);
-    const fin = new Date(anio, mes, 1);
-    const [perf, evs, fact, cuotas, evalMes] = await Promise.all([
-      supabase.from('perfiles').select('user_id,nombre,email,rol,tipo,puesto').order('nombre'),
-      supabase.from('eventos_usuario')
-        .select('id,user_id,ts,tipo,cliente,pagina,detalle')
-        .gte('ts', ini.toISOString()).lt('ts', fin.toISOString())
-        .order('ts', { ascending: false }).limit(20000),
-      supabase.from('facturacion_clientes')
-        .select('monto,cliente_key').in('cliente_key', CLIENTES_BONO)
-        .eq('anio', anio).eq('mes', mes),
-      supabase.from('cuotas_mensuales')
-        .select('cliente,cuota_min').in('cliente', ['pcel', 'dicotech'])
-        .eq('anio', anio).eq('mes', mes),
-      supabase.from('evaluaciones_mensuales').select('*').eq('anio', anio).eq('mes', mes),
-    ]);
-    setUsuarios(perf.data || []);
-    setEventos(evs.data || []);
-    setFacturacionMes((fact.data || []).reduce((s, r) => s + (Number(r.monto) || 0), 0));
-    setCuotaMes((cuotas.data || []).reduce((s, r) => s + (Number(r.cuota_min) || 0), 0) + DIGITALIFE_CUOTA_ANUAL / 12);
-    setEvaluaciones(evalMes.data || []);
-    setLoading(false);
-  }, [anio, mes]);
-
-  // evaluación del user_id del mes activo
-  const evalPorUser = useMemo(() => {
-    const m = new Map();
-    for (const e of evaluaciones) m.set(e.user_id, e);
-    return m;
-  }, [evaluaciones]);
-
-  // Índice: user_id → eventos del mes
+  // Índices y KPIs por usuario para las cards
   const eventosPorUser = useMemo(() => {
     const m = new Map();
     for (const e of eventos) {
@@ -170,397 +143,481 @@ export default function TelemetriaPanel() {
     return m;
   }, [eventos]);
 
-  // KPIs por usuario
   const kpisPorUser = useMemo(() => {
     const m = new Map();
+    const diasEnMes = new Date(anioActual, mesActual, 0).getDate();
     for (const u of usuarios) {
       const evs = eventosPorUser.get(u.user_id) || [];
       const heartbeats = evs.filter((e) => e.tipo === 10).length;
-      const acciones = evs.length - heartbeats;
       const dias = new Set(evs.map((e) => new Date(e.ts).toISOString().slice(0, 10)));
       const ultimo = evs[0]?.ts || null;
-      // Distribución por cliente (heartbeats por cliente)
       const cliCount = {};
       for (const e of evs) if (e.tipo === 10 && e.cliente) cliCount[e.cliente] = (cliCount[e.cliente] || 0) + 1;
       let clienteTop = null; let maxCli = 0;
       for (const k of Object.keys(cliCount)) if (cliCount[k] > maxCli) { maxCli = cliCount[k]; clienteTop = Number(k); }
       const totalCli = Object.values(cliCount).reduce((s, v) => s + v, 0);
       const pctTop = totalCli > 0 ? (maxCli / totalCli * 100) : 0;
-      // Bono estimado — sólo internos NO super_admin (Karolina)
-      const aplicaBono = u.tipo === 'interno' && u.rol !== 'super_admin';
+      const aplicaBono = requiereEvaluacion(u);
       const bonoEstimado = aplicaBono
         ? (dias.size > 0 ? Math.max(BONO_BASE, facturacionMes * BONO_PCT) : BONO_BASE)
         : null;
       m.set(u.user_id, {
-        diasActivos: dias.size,
-        minutos: heartbeats, // 1 heartbeat = 1 minuto
-        acciones,
-        ultimo,
-        clienteTop, pctTop,
-        cliCount, totalCli,
-        bonoEstimado,
+        diasActivos: dias.size, diasEnMes,
+        minutos: heartbeats, ultimo, clienteTop, pctTop, cliCount, totalCli,
+        bonoEstimado, aplicaBono,
       });
     }
     return m;
-  }, [usuarios, eventosPorUser, facturacionMes]);
+  }, [usuarios, eventosPorUser, anioActual, mesActual, facturacionMes]);
 
-  const bonoTeoricoMax = Math.max(BONO_BASE, facturacionMes * BONO_PCT);
-
-  // Alert de evaluación pendiente del mes anterior — sólo super_admin, día 1-5
-  // IMPORTANTE: hooks siempre antes del `if (loading) return` (React error #310)
-  const alertPendiente = React.useMemo(() => {
-    if (!esAdmin) return null;
-    const hoy = new Date();
+  // Alert pendiente de evaluación (mes anterior)
+  const [alertPend, setAlertPend] = useState([]);
+  useEffect(() => {
+    if (!esAdmin || usuarios.length === 0) { setAlertPend([]); return; }
     const dia = hoy.getDate();
-    if (dia > 5) return null; // sólo primer semana del mes
+    if (dia > 5) return; // sólo primeros 5 días del mes
     const mesPrev = hoy.getMonth();
     const anioPrev = mesPrev === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear();
     const mesPrevNum = mesPrev === 0 ? 12 : mesPrev;
     const internos = usuarios.filter(requiereEvaluacion);
-    if (internos.length === 0) return null;
-    return { dia, anioPrev, mesPrevNum, internos };
-  }, [esAdmin, usuarios]);
-
-  const [alertPendientesReal, setAlertPendientesReal] = useState([]);
-  useEffect(() => {
-    if (!alertPendiente) { setAlertPendientesReal([]); return; }
+    if (internos.length === 0) { setAlertPend([]); return; }
     (async () => {
       const pend = [];
-      for (const u of alertPendiente.internos) {
+      for (const u of internos) {
         const { data } = await supabase.from('evaluaciones_mensuales')
-          .select('cerrada').eq('user_id', u.user_id)
-          .eq('anio', alertPendiente.anioPrev).eq('mes', alertPendiente.mesPrevNum).maybeSingle();
-        if (!data || !data.cerrada) pend.push(u);
+          .select('cerrada').eq('user_id', u.user_id).eq('anio', anioPrev).eq('mes', mesPrevNum).maybeSingle();
+        if (!data || !data.cerrada) pend.push({ user: u, anio: anioPrev, mes: mesPrevNum, dia });
       }
-      setAlertPendientesReal(pend);
+      setAlertPend(pend);
     })();
-  }, [alertPendiente]);
+  }, [esAdmin, usuarios]);
 
-  if (loading) return <div className="p-12 text-center text-sm text-gray-500">Cargando telemetría…</div>;
+  const evalPorUser = useMemo(() => {
+    const m = new Map();
+    for (const e of evaluacionesMesActual) m.set(e.user_id, e);
+    return m;
+  }, [evaluacionesMesActual]);
+
+  const usuariosVisibles = esAdmin ? usuarios : usuarios.filter((u) => u.user_id === perfil?.user_id);
+  const internos = usuariosVisibles.filter((u) => u.tipo === 'interno');
+  const externos = usuariosVisibles.filter((u) => u.tipo === 'externo');
+  // Karolina primero dentro de internos
+  internos.sort((a, b) => {
+    if (requiereEvaluacion(a) && !requiereEvaluacion(b)) return -1;
+    if (!requiereEvaluacion(a) && requiereEvaluacion(b)) return 1;
+    return 0;
+  });
+
+  if (loading) {
+    return <div className="p-16 text-center text-sm text-gray-500">Cargando…</div>;
+  }
 
   return (
-    <div className="space-y-4">
-      {/* Alert de evaluación pendiente del mes anterior */}
-      {alertPendiente && alertPendientesReal.length > 0 && (
-        <div className="bg-gradient-to-r from-amber-100 to-amber-50 border border-amber-400 rounded-lg p-3 flex items-center gap-3">
-          <div className="text-[22px]">⏰</div>
-          <div className="flex-1 text-[13px] text-amber-900">
-            <strong>Pendiente:</strong> evaluar {alertPendientesReal.map((u) => u.nombre).join(', ')} · <strong>{['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][alertPendiente.mesPrevNum-1]} {alertPendiente.anioPrev}</strong>.
-            {alertPendiente.dia < 3
-              ? <> Debes cerrar el bono antes del <strong>día 3</strong>.</>
-              : alertPendiente.dia === 3
-                ? <> <strong>VENCE HOY.</strong></>
-                : <> Ya venció el día 3 (hoy es {alertPendiente.dia}).</>}
+    <div style={{ background: 'linear-gradient(135deg, #E8F1FF 0%, #FFF5F8 50%, #FFE8D6 100%)',
+                  borderRadius: 24, padding: 28, minHeight: '100vh' }}>
+      {/* Header */}
+      <div className="flex items-end justify-between mb-6">
+        <div>
+          <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', margin: 0 }}>Actividad del equipo</h1>
+          <p style={{ color: '#6E6E73', fontSize: 14, margin: '4px 0 0' }}>
+            {MESES[mesActual - 1]} {anioActual} · Telemetría automática + evaluación mensual
+          </p>
+        </div>
+      </div>
+
+      {/* Alert pendiente */}
+      {alertPend.length > 0 && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(255,159,10,0.14), rgba(255,159,10,0.06))',
+          border: '1px solid rgba(255,159,10,0.3)', borderRadius: 16,
+          padding: '14px 18px', marginBottom: 18,
+          display: 'flex', alignItems: 'center', gap: 14,
+        }}>
+          <div style={{ fontSize: 22 }}>⏰</div>
+          <div style={{ flex: 1, fontSize: 14, color: '#7A4A00' }}>
+            <strong>Pendiente:</strong> evaluar {alertPend.map((p) => p.user.nombre).join(', ')} ·{' '}
+            <strong>{MESES[alertPend[0].mes - 1]} {alertPend[0].anio}</strong>.{' '}
+            {alertPend[0].dia < 3
+              ? <>Debes cerrar antes del <strong>día 3</strong>.</>
+              : alertPend[0].dia === 3 ? <><strong>VENCE HOY.</strong></> : <>Venció el día 3.</>}
           </div>
-          <button onClick={() => alertPendientesReal[0] && setExpanded(alertPendientesReal[0].user_id)}
-            className="bg-amber-800 text-white px-4 py-1.5 rounded-md text-[12px] font-bold hover:bg-amber-900">
+          <button onClick={() => setSelectedUserId(alertPend[0].user.user_id)}
+            style={{ background: '#FF9F0A', color: 'white', border: 'none',
+                     padding: '8px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             Evaluar ahora →
           </button>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex justify-between items-end">
-        <div>
-          <h2 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
-            <Activity className="w-6 h-6" /> Actividad del equipo
-          </h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Telemetría automática + evaluación mensual · {esAdmin ? 'Todos los usuarios' : 'Tu propia actividad'} · Bono = <strong>max($3,000, {(BONO_PCT * 100).toFixed(2)}% × facturación mes)</strong>
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setMesRef(new Date(anio, mes - 2, 15))} className="w-7 h-7 bg-gray-100 rounded-md hover:bg-gray-200 text-gray-600">‹</button>
-          <div className="text-sm font-semibold min-w-[140px] text-center">
-            {mesRef.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
+      {/* Sección Internos */}
+      {internos.length > 0 && (
+        <>
+          <SeccionHeader color="#FF375F" label="Acteck · Equipo interno" cnt={`${internos.length} ${internos.length === 1 ? 'usuario' : 'usuarios'}`} />
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: internos.length === 1 ? '1fr'
+              : requiereEvaluacion(internos[0]) ? '1.4fr 1fr'
+              : 'repeat(auto-fill, minmax(300px, 1fr))',
+            gap: 16, marginBottom: 24,
+          }}>
+            {internos.map((u) => (
+              <UserCard key={u.user_id} u={u} kpis={kpisPorUser.get(u.user_id)}
+                bonoBase={Math.max(BONO_BASE, facturacionMes * BONO_PCT)}
+                evaluacionActual={evalPorUser.get(u.user_id)}
+                onClick={() => setSelectedUserId(u.user_id)} />
+            ))}
           </div>
-          <button onClick={() => setMesRef(new Date(anio, mes, 15))} className="w-7 h-7 bg-gray-100 rounded-md hover:bg-gray-200 text-gray-600">›</button>
-        </div>
-      </div>
+        </>
+      )}
 
-      {/* Facturación del mes + bono teórico max */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 flex justify-between items-center flex-wrap gap-3">
-        <div>
-          <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500">Facturación del mes · Digitalife + PCEL + Dicotech</div>
-          <div className="text-[22px] font-bold tabular-nums">{formatMXN(facturacionMes)}</div>
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500">Bono teórico (si viewer activo)</div>
-          <div className="text-[22px] font-bold tabular-nums text-emerald-700">{formatMXN(bonoTeoricoMax)}</div>
-          <div className="text-[10.5px] text-gray-500">
-            = max($3,000, 0.07% × facturación)
-            {facturacionMes < BONO_BASE / BONO_PCT && <span className="ml-1 text-amber-600">· piso $3,000 aplica</span>}
+      {/* Sección Externos */}
+      {externos.length > 0 && (
+        <>
+          <SeccionHeader color="#FF9F0A" label="Externos · clientes y aliados" cnt={`${externos.length} ${externos.length === 1 ? 'usuario' : 'usuarios'}`} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+            {externos.map((u) => (
+              <UserCard key={u.user_id} u={u} kpis={kpisPorUser.get(u.user_id)}
+                onClick={() => setSelectedUserId(u.user_id)} />
+            ))}
           </div>
-        </div>
+        </>
+      )}
+
+      {/* Sheet lateral */}
+      {selectedUserId && (
+        <UserSheet
+          user={usuarios.find((u) => u.user_id === selectedUserId)}
+          esAdmin={esAdmin}
+          perfilId={perfil?.user_id}
+          onClose={() => setSelectedUserId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════ SeccionHeader ═══════════════════
+function SeccionHeader({ color, label, cnt }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                  marginBottom: 12, paddingLeft: 4 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#1D1D1F', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: 'inline-block' }}></span>
+        {label}
       </div>
+      <div style={{ fontSize: 12, color: '#6E6E73' }}>{cnt}</div>
+    </div>
+  );
+}
 
-      {/* Grid de usuarios — separado por tipo interno/externo */}
-      {(() => {
-        const internos = usuarios.filter((u) => u.tipo === 'interno');
-        const externos = usuarios.filter((u) => u.tipo === 'externo');
-        return (
-          <>
-            {internos.length > 0 && (
-              <div>
-                <div className="flex items-baseline justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                    <span className="inline-block w-2 h-2 rounded-full bg-sky-500"></span>
-                    Acteck · Equipo interno
-                  </h3>
-                  <span className="text-[11px] text-gray-500">{internos.length} usuarios · con bono aplicable a admin/viewer</span>
-                </div>
-                <SeccionUsuarios usuarios={internos} kpisPorUser={kpisPorUser} diasEnMes={diasEnMes} facturacionMes={facturacionMes} expanded={expanded} setExpanded={setExpanded} />
-              </div>
-            )}
-            {externos.length > 0 && (
-              <div className="mt-4">
-                <div className="flex items-baseline justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                    <span className="inline-block w-2 h-2 rounded-full bg-amber-500"></span>
-                    Externos · clientes y aliados
-                  </h3>
-                  <span className="text-[11px] text-gray-500">{externos.length} usuarios · sin bono, solo monitoreo</span>
-                </div>
-                <SeccionUsuarios usuarios={externos} kpisPorUser={kpisPorUser} diasEnMes={diasEnMes} facturacionMes={facturacionMes} expanded={expanded} setExpanded={setExpanded} />
-              </div>
-            )}
-          </>
-        );
-      })()}
+// ═══════════════════ UserCard (glassmorphism) ═══════════════════
+function UserCard({ u, kpis, bonoBase, evaluacionActual, onClick }) {
+  const pendEval = requiereEvaluacion(u) && evaluacionActual && !evaluacionActual.cerrada;
+  const bonoStr = kpis?.bonoEstimado != null ? fmtMoney(kpis.bonoEstimado) : null;
+  const diasPct = kpis ? (kpis.diasActivos / kpis.diasEnMes * 100) : 0;
+  const tiempoPct = kpis ? Math.min(100, kpis.minutos / (kpis.diasEnMes * 60 * 3) * 100) : 0; // meta 3h/día
+  const cliPct = kpis?.pctTop || 0;
+  const isKarolina = requiereEvaluacion(u);
 
-
-      {/* Detalle del usuario expandido */}
-      {expanded && (() => {
-        const u = usuarios.find((x) => x.user_id === expanded);
-        const evs = eventosPorUser.get(expanded) || [];
-        const k = kpisPorUser.get(expanded);
-        if (!u) return null;
-
-        // Timeline diaria (heartbeats por día)
-        const porDia = new Map();
-        for (const e of evs) {
-          if (e.tipo !== 10) continue;
-          const d = new Date(e.ts).toISOString().slice(0, 10);
-          porDia.set(d, (porDia.get(d) || 0) + 1);
-        }
-        const maxDia = Math.max(1, ...Array.from(porDia.values()));
-
-        // Distribución por página
-        const pagCount = {};
-        for (const e of evs) if (e.tipo === 10 && e.pagina) pagCount[e.pagina] = (pagCount[e.pagina] || 0) + 1;
-        const totalPag = Object.values(pagCount).reduce((s, v) => s + v, 0);
-        const pagOrden = Object.entries(pagCount).sort((a, b) => b[1] - a[1]).slice(0, 6);
-
-        // Distribución cliente ordenada
-        const cliOrden = Object.entries(k?.cliCount || {}).sort((a, b) => b[1] - a[1]);
-
-        // Feed últimos 50 no-heartbeat
-        const feed = evs.filter((e) => e.tipo !== 10).slice(0, 50);
-
-        return (
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-              <h3 className="text-sm font-bold text-gray-800">
-                Detalle · {u.nombre || u.email} · {mesRef.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
-              </h3>
-              <button onClick={() => setExpanded(null)} className="text-[11px] text-gray-500 hover:underline">Cerrar</button>
+  return (
+    <div onClick={onClick} style={{
+      background: 'rgba(255,255,255,0.72)',
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
+      border: '1px solid rgba(255,255,255,0.6)',
+      borderRadius: 20, padding: 22,
+      boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+      cursor: 'pointer', transition: 'transform 0.15s, box-shadow 0.15s',
+    }}
+    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.08)'; }}
+    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 24px rgba(0,0,0,0.06)'; }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+        <div>
+          <div style={{
+            width: 56, height: 56, borderRadius: 999, background: colorAvatar(u),
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'white', fontWeight: 700, fontSize: 20,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          }}>{iniciales(u.nombre || u.email)}</div>
+          <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 12 }}>
+            {u.nombre || u.email?.split('@')[0]}
+          </div>
+          <div style={{ fontSize: 12.5, color: '#6E6E73', marginTop: 2 }}>
+            {u.puesto || u.rol}{u.puesto ? ` · ${u.rol}` : ''}
+          </div>
+          {pendEval && (
+            <div style={{
+              display: 'inline-block', fontSize: 11, fontWeight: 600,
+              padding: '4px 10px', borderRadius: 999,
+              background: 'rgba(255,159,10,0.15)', color: '#B25000', marginTop: 8,
+            }}>⏰ Evaluar</div>
+          )}
+        </div>
+        {(isKarolina && bonoStr) ? (
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Bono estimado
             </div>
+            <div style={{ fontSize: 32, fontWeight: 700, color: accentUser(u), letterSpacing: '-0.03em', lineHeight: 1, marginTop: 4 }}>
+              {bonoStr}
+            </div>
+            <div style={{ fontSize: 11.5, color: '#6E6E73', marginTop: 3 }}>
+              del mes en curso
+            </div>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Tiempo activo
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 4 }}>
+              {fmtHm(kpis?.minutos || 0)}
+            </div>
+            <div style={{ fontSize: 11.5, color: '#6E6E73', marginTop: 3 }}>
+              {kpis?.diasActivos || 0}/{kpis?.diasEnMes || 0} días
+            </div>
+          </div>
+        )}
+      </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* Timeline días */}
-              <div className="bg-gray-50 rounded-lg p-3">
-                <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2">Timeline diaria · intensidad</div>
-                <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${diasEnMes}, 1fr)` }}>
-                  {Array.from({ length: diasEnMes }, (_, i) => {
-                    const d = new Date(anio, mes - 1, i + 1).toISOString().slice(0, 10);
-                    const cnt = porDia.get(d) || 0;
-                    const intensidad = cnt / maxDia;
-                    const bg = cnt === 0 ? '#F1F5F9'
-                      : intensidad < 0.2 ? '#A7F3D0'
-                      : intensidad < 0.4 ? '#6EE7B7'
-                      : intensidad < 0.6 ? '#34D399'
-                      : intensidad < 0.8 ? '#10B981' : '#059669';
-                    return <div key={i} title={`${d}: ${cnt} min`} style={{ aspectRatio: '1', background: bg, borderRadius: 2 }} />;
+      {/* Rings de actividad */}
+      <div style={{ display: 'flex', gap: 10, marginTop: 18, paddingTop: 16, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+        <RingCell pct={diasPct} color="#FF375F" num={`${kpis?.diasActivos || 0}/${kpis?.diasEnMes || 0}`} lbl="Días" />
+        <RingCell pct={tiempoPct} color="#34C759" num={fmtHm(kpis?.minutos || 0)} lbl="Tiempo" />
+        <RingCell pct={cliPct} color={kpis?.clienteTop ? (CLIENTE_COLOR[kpis.clienteTop] || '#8B5CF6') : '#94A3B8'}
+          num={kpis?.clienteTop ? `${cliPct.toFixed(0)}%` : '—'}
+          lbl={kpis?.clienteTop ? CLIENTE_LABEL[kpis.clienteTop] : 'Sin datos'} />
+        <RingCell pct={100} color="#8E8E93" num={fmtHace(kpis?.ultimo).replace('hace ', '')} lbl="Última" />
+      </div>
+    </div>
+  );
+}
+
+function RingCell({ pct, color, num, lbl }) {
+  return (
+    <div style={{ textAlign: 'center', flex: 1 }}>
+      <div style={{ display: 'flex', justifyContent: 'center' }}><Ring pct={pct} color={color} /></div>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1D1D1F', marginTop: 4 }}>{num}</div>
+      <div style={{ fontSize: 9.5, fontWeight: 500, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{lbl}</div>
+    </div>
+  );
+}
+
+// ═══════════════════ Sheet lateral con detalle ═══════════════════
+function UserSheet({ user, esAdmin, perfilId, onClose }) {
+  const hoy = new Date();
+  const [mesRef, setMesRef] = useState({ anio: hoy.getFullYear(), mes: hoy.getMonth() + 1 });
+  const [eventos, setEventos] = useState([]);
+  const [evaluacion, setEvaluacion] = useState(null);
+  const [facturacion, setFacturacion] = useState(0);
+  const [cuota, setCuota] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  // Últimos 6 meses (incluye actual)
+  const mesesDisponibles = useMemo(() => {
+    const arr = [];
+    let a = hoy.getFullYear(), m = hoy.getMonth() + 1;
+    for (let i = 0; i < 6; i++) {
+      arr.push({ anio: a, mes: m });
+      m--; if (m < 1) { m = 12; a--; }
+    }
+    return arr;
+  }, []);
+
+  const reload = React.useCallback(async () => {
+    setLoading(true);
+    const { ini, fin } = rangoMes(mesRef.anio, mesRef.mes);
+    const [evs, fact, cuotas, evalRes] = await Promise.all([
+      supabase.from('eventos_usuario')
+        .select('id,ts,tipo,cliente,pagina,detalle')
+        .eq('user_id', user.user_id)
+        .gte('ts', ini.toISOString()).lt('ts', fin.toISOString())
+        .order('ts', { ascending: false }).limit(5000),
+      supabase.from('facturacion_clientes')
+        .select('monto,cliente_key').in('cliente_key', CLIENTES_BONO)
+        .eq('anio', mesRef.anio).eq('mes', mesRef.mes),
+      supabase.from('cuotas_mensuales')
+        .select('cliente,cuota_min').in('cliente', ['pcel', 'dicotech'])
+        .eq('anio', mesRef.anio).eq('mes', mesRef.mes),
+      supabase.from('evaluaciones_mensuales').select('*')
+        .eq('user_id', user.user_id).eq('anio', mesRef.anio).eq('mes', mesRef.mes).maybeSingle(),
+    ]);
+    setEventos(evs.data || []);
+    setFacturacion((fact.data || []).reduce((s, r) => s + (Number(r.monto) || 0), 0));
+    setCuota((cuotas.data || []).reduce((s, r) => s + (Number(r.cuota_min) || 0), 0) + DIGITALIFE_CUOTA_ANUAL / 12);
+    setEvaluacion(evalRes.data || null);
+    setLoading(false);
+  }, [mesRef.anio, mesRef.mes, user.user_id]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  // ESC cierra
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const diasEnMes = new Date(mesRef.anio, mesRef.mes, 0).getDate();
+  const heartbeats = eventos.filter((e) => e.tipo === 10).length;
+  const dias = new Set(eventos.map((e) => new Date(e.ts).toISOString().slice(0, 10))).size;
+  const cliCount = {};
+  for (const e of eventos) if (e.tipo === 10 && e.cliente) cliCount[e.cliente] = (cliCount[e.cliente] || 0) + 1;
+  const totalCli = Object.values(cliCount).reduce((s, v) => s + v, 0);
+  const cliOrden = Object.entries(cliCount).sort((a, b) => b[1] - a[1]);
+
+  const aplicaBono = requiereEvaluacion(user);
+  const bonoBase = Math.max(BONO_BASE, facturacion * BONO_PCT);
+  const ajustesTotal = (evaluacion?.ajustes || []).reduce((s, a) => s + (Number(a.monto) || 0), 0);
+  const bonoTotal = bonoBase + ajustesTotal;
+  const cuotaPct = cuota > 0 ? (facturacion / cuota * 100) : 0;
+
+  return (
+    <>
+      {/* Overlay */}
+      <div onClick={onClose} style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+        zIndex: 100, animation: 'fadein 200ms',
+      }} />
+      {/* Sheet */}
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0, width: '520px', maxWidth: '92vw',
+        background: 'rgba(250,250,252,0.98)',
+        backdropFilter: 'blur(30px)', WebkitBackdropFilter: 'blur(30px)',
+        zIndex: 101, overflowY: 'auto',
+        boxShadow: '-8px 0 40px rgba(0,0,0,0.15)',
+        animation: 'slidein 240ms cubic-bezier(0.32, 0.72, 0, 1)',
+      }}>
+        <style>{`
+          @keyframes fadein { from { opacity: 0 } to { opacity: 1 } }
+          @keyframes slidein { from { transform: translateX(100%) } to { transform: translateX(0) } }
+        `}</style>
+        {/* Botón cerrar */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 20px 0' }}>
+          <button onClick={onClose} style={{
+            width: 30, height: 30, borderRadius: 999, border: 'none',
+            background: 'rgba(0,0,0,0.06)', color: '#1D1D1F', fontSize: 16,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>✕</button>
+        </div>
+
+        {/* Hero */}
+        <div style={{ padding: '8px 28px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 16 }}>
+            <div style={{
+              width: 80, height: 80, borderRadius: 999, background: colorAvatar(user),
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'white', fontWeight: 700, fontSize: 28,
+              boxShadow: `0 6px 20px ${accentUser(user)}55`,
+            }}>{iniciales(user.nombre || user.email)}</div>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>{user.nombre}</div>
+              <div style={{ fontSize: 13, color: '#6E6E73' }}>{u_desc(user)}</div>
+              <div style={{ fontSize: 11.5, color: '#8E8E93', marginTop: 3 }}>{user.email}</div>
+            </div>
+          </div>
+
+          {/* Segmented control meses */}
+          <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.06)', borderRadius: 12, padding: 3, gap: 2, marginBottom: 4, flexWrap: 'wrap' }}>
+            {mesesDisponibles.map((m) => {
+              const on = m.anio === mesRef.anio && m.mes === mesRef.mes;
+              const label = m.anio === hoy.getFullYear() ? MESES_CORTO[m.mes - 1] : `${MESES_CORTO[m.mes - 1]} ${String(m.anio).slice(2)}`;
+              return (
+                <button key={`${m.anio}-${m.mes}`} onClick={() => setMesRef(m)} style={{
+                  border: 'none', background: on ? 'white' : 'transparent',
+                  color: on ? '#1D1D1F' : '#6E6E73',
+                  padding: '7px 12px', fontSize: 12.5, fontWeight: 600, borderRadius: 9,
+                  cursor: 'pointer', boxShadow: on ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                }}>{label}</button>
+              );
+            })}
+          </div>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: '#8E8E93' }}>Cargando…</div>
+        ) : (
+          <div style={{ padding: '0 24px 32px' }}>
+            {/* Telemetría del mes */}
+            <SubSectSheet titulo="Actividad del mes">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                <MiniKPI k="Días activos" v={`${dias}/${diasEnMes}`} s={`${(dias/diasEnMes*100).toFixed(0)}% del mes`} />
+                <MiniKPI k="Tiempo activo" v={fmtHm(heartbeats)} s={`${(heartbeats/Math.max(1,dias)/60).toFixed(1)} h/día`} />
+                <MiniKPI k="Última sesión" v={fmtHace(eventos[0]?.ts).replace('hace ', '')}
+                  s={eventos[0] ? fmtFechaHora(eventos[0].ts) : 'Sin sesiones'} />
+              </div>
+              {cliOrden.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Atención por cliente</div>
+                  {cliOrden.map(([cli, cnt]) => {
+                    const pct = totalCli > 0 ? (cnt / totalCli * 100) : 0;
+                    return (
+                      <div key={cli} style={{ marginBottom: 6 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                          <span style={{ fontWeight: 600 }}>{CLIENTE_LABEL[cli] || cli}</span>
+                          <span style={{ color: '#6E6E73' }}>{pct.toFixed(0)}% · {cnt}m</span>
+                        </div>
+                        <div style={{ height: 6, background: 'rgba(0,0,0,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: CLIENTE_COLOR[cli] || '#94A3B8', borderRadius: 3 }} />
+                        </div>
+                      </div>
+                    );
                   })}
                 </div>
-                <div className="flex justify-between items-center text-[9px] text-gray-500 mt-2">
-                  <span>Día 1</span>
-                  <span>{k?.minutos || 0} min totales</span>
-                  <span>Día {diasEnMes}</span>
-                </div>
-              </div>
+              )}
+            </SubSectSheet>
 
-              {/* Distribución cliente */}
-              <div className="bg-gray-50 rounded-lg p-3">
-                <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2">Atención por cliente</div>
-                {cliOrden.length === 0 && <div className="text-[11px] text-gray-400">Sin datos</div>}
-                {cliOrden.map(([cli, cnt]) => {
-                  const pct = k.totalCli > 0 ? (cnt / k.totalCli * 100) : 0;
-                  return (
-                    <div key={cli} className="mb-1.5">
-                      <div className="flex justify-between items-baseline text-[11.5px]">
-                        <span className="font-semibold text-gray-700">{CLIENTE_LABEL[cli] || cli}</span>
-                        <span className="tabular-nums text-gray-500">{pct.toFixed(0)}% · {cnt}m</span>
-                      </div>
-                      <div className="h-[6px] bg-gray-200 rounded-full mt-1 overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: CLIENTE_COLOR[cli] || '#94A3B8' }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Distribución página */}
-              <div className="bg-gray-50 rounded-lg p-3">
-                <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2">Pestañas más visitadas</div>
-                {pagOrden.length === 0 && <div className="text-[11px] text-gray-400">Sin datos</div>}
-                {pagOrden.map(([pag, cnt]) => {
-                  const pct = totalPag > 0 ? (cnt / totalPag * 100) : 0;
-                  return (
-                    <div key={pag} className="mb-1.5">
-                      <div className="flex justify-between items-baseline text-[11.5px]">
-                        <span className="font-semibold text-gray-700">{PAGINA_LABEL[pag] || `Pag ${pag}`}</span>
-                        <span className="tabular-nums text-gray-500">{pct.toFixed(0)}% · {cnt}m</span>
-                      </div>
-                      <div className="h-[6px] bg-gray-200 rounded-full mt-1 overflow-hidden">
-                        <div className="h-full rounded-full bg-indigo-500" style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Feed de eventos */}
-            <div className="mt-4">
-              <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2">Últimas acciones ({feed.length})</div>
-              <div className="max-h-[300px] overflow-y-auto flex flex-col gap-1 border border-gray-100 rounded-md p-2 bg-gray-50">
-                {feed.length === 0 && <div className="text-[11px] text-gray-400 text-center py-4">Sin acciones registradas este mes</div>}
-                {feed.map((e) => {
-                  const c = TIPO_COLOR[e.tipo] || TIPO_COLOR[8];
-                  return (
-                    <div key={e.id} className="grid grid-cols-[90px_1fr_auto] gap-2 items-center bg-white border border-gray-100 rounded p-1.5 text-[11px]">
-                      <span className="text-gray-500 tabular-nums text-[10px]">{fmtFechaHora(e.ts)}</span>
-                      <span className="text-gray-800 truncate">
-                        {PAGINA_LABEL[e.pagina] || '—'}
-                        {e.cliente ? ` · ${CLIENTE_LABEL[e.cliente]}` : ''}
-                        {e.detalle ? ` · ${e.detalle}` : ''}
-                      </span>
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider"
-                        style={{ background: c.bg, color: c.fg }}>{TIPO_LABEL[e.tipo]}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Bloque de EVALUACIÓN MENSUAL — sólo para usuarios internos con evaluación */}
-            {requiereEvaluacion(u) && esAdmin && (
-              <EvaluacionBloque
-                user={u} anio={anio} mes={mes}
-                facturacionMes={facturacionMes} cuotaMes={cuotaMes}
-                evaluacion={evalPorUser.get(u.user_id) || null}
-                onSaved={reload}
-                perfilId={perfil?.user_id}
-              />
+            {/* Evaluación (sólo internos con evaluación y sólo admin ve) */}
+            {aplicaBono && esAdmin && (
+              <EvalSheet user={user} anio={mesRef.anio} mes={mesRef.mes}
+                facturacion={facturacion} cuota={cuota} cuotaPct={cuotaPct}
+                evaluacion={evaluacion} onSaved={reload} perfilId={perfilId} />
             )}
           </div>
-        );
-      })()}
-    </div>
+        )}
+      </div>
+    </>
   );
 }
 
-// ────────── SeccionUsuarios ──────────
-// Grid de cards de usuarios (interno o externo). Cada card es click-to-expand.
-function SeccionUsuarios({ usuarios, kpisPorUser, diasEnMes, facturacionMes, expanded, setExpanded }) {
+function u_desc(user) {
+  const tipoTxt = user.tipo === 'externo' ? 'Externo' : 'Interno';
+  return `${user.puesto || user.rol} · ${tipoTxt}`;
+}
+
+function SubSectSheet({ titulo, children }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-      {usuarios.map((u) => {
-        const k = kpisPorUser.get(u.user_id);
-        const isExp = expanded === u.user_id;
-        const colorRol = u.rol === 'super_admin' ? '#0EA5E9'
-                       : u.tipo === 'externo' ? '#F59E0B'
-                       : '#EC4899';
-        const tipoBadge = u.tipo === 'externo'
-          ? { bg: '#FEF3C7', fg: '#78350F', label: 'externo' }
-          : { bg: '#E0F2FE', fg: '#075985', label: 'interno' };
-        return (
-          <div key={u.user_id}
-            onClick={() => setExpanded(isExp ? null : u.user_id)}
-            className={`bg-white rounded-xl p-4 border cursor-pointer transition hover:shadow-md ${isExp ? 'border-gray-400 ring-2 ring-gray-200' : 'border-gray-200'}`}>
-            <div className="flex items-start justify-between mb-3 gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                  style={{ background: colorRol }}>{iniciales(u.nombre || u.email)}</div>
-                <div className="min-w-0">
-                  <div className="font-bold text-[13px] text-gray-800 truncate flex items-center gap-1.5">
-                    {u.nombre || u.email?.split('@')[0]}
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider"
-                      style={{ background: tipoBadge.bg, color: tipoBadge.fg }}>{tipoBadge.label}</span>
-                  </div>
-                  <div className="text-[10.5px] text-gray-500 truncate">
-                    {u.puesto ? `${u.puesto} · ` : ''}{u.rol}
-                  </div>
-                  <div className="text-[10px] text-gray-400 truncate">{u.email}</div>
-                </div>
-              </div>
-              <div className="text-gray-400">{isExp ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}</div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-[11.5px]">
-              <div className="bg-gray-50 rounded-md p-2">
-                <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Días activos</div>
-                <div className="text-[15px] font-bold tabular-nums">{k?.diasActivos || 0}/{diasEnMes}</div>
-              </div>
-              <div className="bg-gray-50 rounded-md p-2">
-                <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Tiempo activo</div>
-                <div className="text-[15px] font-bold tabular-nums">{fmtHm(k?.minutos || 0)}</div>
-              </div>
-              <div className="bg-gray-50 rounded-md p-2">
-                <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Última sesión</div>
-                <div className="text-[12px] font-semibold tabular-nums">{fmtHace(k?.ultimo)}</div>
-              </div>
-              <div className="bg-gray-50 rounded-md p-2">
-                <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Cliente top</div>
-                <div className="text-[12px] font-semibold tabular-nums">
-                  {k?.clienteTop ? `${CLIENTE_LABEL[k.clienteTop]} · ${k.pctTop.toFixed(0)}%` : '—'}
-                </div>
-              </div>
-              {k?.bonoEstimado != null && (
-                <div className="col-span-2 bg-emerald-50 rounded-md p-2 border border-emerald-100">
-                  <div className="text-[9px] uppercase tracking-widest text-emerald-700 font-bold">Bono estimado del mes</div>
-                  <div className="text-[15px] font-bold tabular-nums text-emerald-800">{formatMXN(k.bonoEstimado)}</div>
-                  <div className="text-[9.5px] text-emerald-700">
-                    {k.diasActivos === 0 ? 'Sin actividad · piso $3,000' : (k.bonoEstimado === BONO_BASE ? 'Piso $3,000 aplica' : `${(BONO_PCT * 100).toFixed(2)}% × ${formatMXN(facturacionMes)}`)}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
+    <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: 14, padding: '14px 16px', marginBottom: 10 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>{titulo}</div>
+      {children}
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// EvaluacionBloque — sección de evaluación mensual del usuario
-// Sub-secciones: Cuota, Ratings, Comentarios, Tareas, Ajustes, Bono
-// Botones: Copiar texto resumen, Cerrar evaluación (inmutable)
-// ═══════════════════════════════════════════════════════════════
-function EvaluacionBloque({ user, anio, mes, facturacionMes, cuotaMes, evaluacion, onSaved, perfilId }) {
+function MiniKPI({ k, v, s }) {
+  return (
+    <div style={{ background: 'white', borderRadius: 11, padding: '10px 12px' }}>
+      <div style={{ fontSize: 10, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>{k}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+      <div style={{ fontSize: 10.5, color: '#8E8E93', marginTop: 1 }}>{s}</div>
+    </div>
+  );
+}
+
+// ═══════════════════ Bloque evaluación dentro del sheet ═══════════════════
+function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, onSaved, perfilId }) {
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmCerrar, setConfirmCerrar] = useState(false);
 
   const isCerrada = evaluacion?.cerrada === true;
-  const cuotaPct = cuotaMes > 0 ? (facturacionMes / cuotaMes * 100) : 0;
-  const bonoBase = Math.max(BONO_BASE, facturacionMes * BONO_PCT);
+  const bonoBase = Math.max(BONO_BASE, facturacion * BONO_PCT);
   const ajustesTotal = (evaluacion?.ajustes || []).reduce((s, a) => s + (Number(a.monto) || 0), 0);
   const bonoTotal = bonoBase + ajustesTotal;
 
-  // Handler genérico para actualizar campo
-  const updateField = async (patch) => {
+  const upsertPatch = async (patch) => {
     if (isCerrada) return;
     setSaving(true);
     if (evaluacion?.id) {
@@ -568,7 +625,7 @@ function EvaluacionBloque({ user, anio, mes, facturacionMes, cuotaMes, evaluacio
     } else {
       await supabase.from('evaluaciones_mensuales').insert({
         user_id: user.user_id, anio, mes,
-        facturacion: facturacionMes, cuota_total: cuotaMes, cuota_pct: cuotaPct,
+        facturacion, cuota_total: cuota, cuota_pct: cuotaPct,
         bono_base: bonoBase, bono_ajustes: 0, bono_total: bonoBase,
         ...patch,
       });
@@ -581,7 +638,7 @@ function EvaluacionBloque({ user, anio, mes, facturacionMes, cuotaMes, evaluacio
     if (isCerrada) return;
     setSaving(true);
     const patch = {
-      facturacion: facturacionMes, cuota_total: cuotaMes, cuota_pct: cuotaPct,
+      facturacion, cuota_total: cuota, cuota_pct: cuotaPct,
       bono_base: bonoBase, bono_ajustes: ajustesTotal, bono_total: bonoTotal,
       cerrada: true, cerrada_ts: new Date().toISOString(), cerrada_por: perfilId,
     };
@@ -593,17 +650,17 @@ function EvaluacionBloque({ user, anio, mes, facturacionMes, cuotaMes, evaluacio
   };
 
   const copiarTexto = () => {
-    const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const sep = '═══════════════════════════════════════════════════════════';
     const ratings = RATINGS.map((r) => ({ label: r.label, val: evaluacion?.[r.key] || null }));
-    const promRat = ratings.filter((r) => r.val).reduce((s, r) => s + r.val, 0) / Math.max(1, ratings.filter((r) => r.val).length);
+    const conRat = ratings.filter((r) => r.val);
+    const promRat = conRat.length ? conRat.reduce((s, r) => s + r.val, 0) / conRat.length : 0;
     const tareas = evaluacion?.tareas || [];
     const cumplidas = tareas.filter((t) => t.cumplida).length;
     const ajustes = evaluacion?.ajustes || [];
 
-    const sep = '═══════════════════════════════════════════════════════════';
     let txt = `Bono ${user.nombre} · ${MESES[mes-1]} ${anio} · ${fmtMoney(bonoTotal)} MXN\n\n`;
     txt += sep + '\nCUOTA ALCANZADA\n';
-    txt += `Facturado: ${fmtMoney(facturacionMes)} | Cuota: ${fmtMoney(cuotaMes)}\n`;
+    txt += `Facturado: ${fmtMoney(facturacion)} | Cuota: ${fmtMoney(cuota)}\n`;
     txt += `Alcance: ${cuotaPct.toFixed(1)}%${cuotaPct >= 100 ? ' (superó la cuota)' : ''}\n\n`;
 
     txt += sep + '\nEVALUACIÓN CUALITATIVA\n';
@@ -618,19 +675,15 @@ function EvaluacionBloque({ user, anio, mes, facturacionMes, cuotaMes, evaluacio
         if (t.nota) txt += `    → ${t.nota}\n`;
       }
     }
-
     if (ajustes.length > 0) {
-      txt += '\n' + sep + `\nAJUSTES AL BONO (total: ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)})\n`;
+      txt += '\n' + sep + `\nAJUSTES AL BONO (${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)})\n`;
       for (const a of ajustes) {
         const signo = Number(a.monto) >= 0 ? '+' : '−';
-        const monto = fmtMoney(Math.abs(Number(a.monto)));
-        txt += `${a.fecha || ''}  ${signo}${monto}  ${a.descripcion || ''}\n`;
+        txt += `${a.fecha || ''}  ${signo}${fmtMoney(Math.abs(Number(a.monto)))}  ${a.descripcion || ''}\n`;
       }
     }
-
     txt += '\n' + sep + '\nCÁLCULO DEL BONO\n';
-    const pctStr = (BONO_PCT * 100).toFixed(2);
-    txt += `Base       = max(${fmtMoney(BONO_BASE)}, ${pctStr}% × ${fmtMoney(facturacionMes)}) = ${fmtMoney(bonoBase)}\n`;
+    txt += `Base       = max(${fmtMoney(BONO_BASE)}, ${(BONO_PCT*100).toFixed(2)}% × ${fmtMoney(facturacion)}) = ${fmtMoney(bonoBase)}\n`;
     if (ajustesTotal !== 0) txt += `Ajustes    = ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)}\n`;
     txt += `─────────────────────\nTotal a pagar: ${fmtMoney(bonoTotal)} MXN\n\n`;
     if (isCerrada) txt += `Evaluación cerrada el ${new Date(evaluacion.cerrada_ts).toLocaleDateString('es-MX')} · inmutable\n`;
@@ -642,132 +695,133 @@ function EvaluacionBloque({ user, anio, mes, facturacionMes, cuotaMes, evaluacio
   };
 
   return (
-    <div className="mt-4 pt-4 border-t border-gray-200">
-      <div className="flex justify-between items-baseline mb-3">
-        <div>
-          <div className="text-[13px] font-bold text-gray-800">
-            Evaluación mensual · {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mes-1]} {anio}
-          </div>
-          <div className="text-[11px] text-gray-500">
-            {isCerrada
-              ? <span className="text-emerald-700 font-semibold">✓ Cerrada · inmutable · pagada</span>
-              : <span className="text-amber-700 font-semibold">Pendiente de cerrar</span>}
+    <div>
+      {/* Bono hero */}
+      <div style={{
+        background: `linear-gradient(135deg, ${accentUser(user)} 0%, ${accentUser(user)}CC 100%)`,
+        color: 'white', borderRadius: 18, padding: '20px 22px', marginBottom: 12,
+        boxShadow: `0 6px 20px ${accentUser(user)}44`,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'rgba(255,255,255,0.85)' }}>
+              Bono {MESES[mes-1]} {anio}
+            </div>
+            <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, marginTop: 6 }}>
+              {fmtMoney(bonoTotal)}
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 6 }}>
+              {isCerrada
+                ? <>✓ Cerrada · pagada el {new Date(evaluacion.cerrada_ts).toLocaleDateString('es-MX')}</>
+                : cuotaPct >= 100 ? <>Cuota superada · {cuotaPct.toFixed(0)}%</> : <>Cuota al {cuotaPct.toFixed(0)}%</>}
+            </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          <button onClick={copiarTexto}
-            className="text-[11px] px-3 py-1.5 bg-white border border-gray-300 rounded-md hover:bg-gray-50 font-semibold">
-            {copied ? '✓ Copiado' : '📄 Copiar resumen'}
-          </button>
-          {!isCerrada && !confirmCerrar && (
-            <button onClick={() => setConfirmCerrar(true)}
-              className="text-[11px] px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 font-semibold">
-              ✓ Cerrar y pagar
-            </button>
-          )}
-          {confirmCerrar && (
-            <>
-              <button onClick={() => setConfirmCerrar(false)} className="text-[11px] px-3 py-1.5 bg-gray-100 rounded-md">Cancelar</button>
-              <button onClick={cerrarEvaluacion} disabled={saving}
-                className="text-[11px] px-3 py-1.5 bg-emerald-600 text-white rounded-md font-semibold">
-                Confirmar (irreversible)
-              </button>
-            </>
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.25)', fontSize: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+            <span>Base ({(BONO_PCT*100).toFixed(2)}% × {fmtMoney(facturacion)})</span>
+            <span>{fmtMoney(bonoBase)}</span>
+          </div>
+          {ajustesTotal !== 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+              <span>+ Ajustes manuales</span>
+              <span>{ajustesTotal >= 0 ? '+' : ''}{fmtMoney(ajustesTotal)}</span>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Nota para junio 2026 (mes de arranque) */}
+      {/* Botones acciones */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <button onClick={copiarTexto} style={{
+          flex: 1, background: 'white', border: '1px solid rgba(0,0,0,0.1)',
+          padding: '10px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+        }}>{copied ? '✓ Copiado' : '📄 Copiar resumen'}</button>
+        {!isCerrada && !confirmCerrar && (
+          <button onClick={() => setConfirmCerrar(true)} style={{
+            flex: 1, background: '#34C759', border: 'none', color: 'white',
+            padding: '10px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}>✓ Cerrar y pagar</button>
+        )}
+        {confirmCerrar && (
+          <>
+            <button onClick={() => setConfirmCerrar(false)} style={{
+              flex: 1, background: 'rgba(0,0,0,0.06)', border: 'none', padding: '10px',
+              borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}>Cancelar</button>
+            <button onClick={cerrarEvaluacion} disabled={saving} style={{
+              flex: 1, background: '#34C759', border: 'none', color: 'white',
+              padding: '10px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}>Confirmar (irreversible)</button>
+          </>
+        )}
+      </div>
+
+      {/* Nota junio 2026 */}
       {anio === 2026 && mes === 6 && (
-        <div className="mb-3 p-2.5 bg-amber-50 border-l-3 border-amber-400 rounded text-[11px] text-amber-900">
-          <strong>Nota:</strong> La telemetría se activó en julio 2026. Para junio se asume actividad al 100%. Desde julio en adelante cuenta la telemetría real.
+        <div style={{ background: 'rgba(255,159,10,0.14)', borderLeft: '3px solid #FF9F0A',
+                      padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#7A4A00', marginBottom: 12 }}>
+          <strong>Nota:</strong> La telemetría inició en julio 2026. Junio se evalúa con actividad estimada al 100%.
         </div>
       )}
 
-      {/* 1. Cuota alcanzada */}
-      <SubBloque titulo="📊 Cuota alcanzada del mes">
-        <div className="grid grid-cols-[1fr_auto] gap-3 items-center">
+      {/* Cuota */}
+      <SubSectSheet titulo="📊 Cuota alcanzada">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center' }}>
           <div>
-            <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600"
-                style={{ width: `${Math.min(100, cuotaPct)}%` }} />
+            <div style={{ height: 10, background: 'rgba(0,0,0,0.06)', borderRadius: 5, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min(100, cuotaPct)}%`,
+                background: 'linear-gradient(90deg, #34C759 0%, #30B04E 100%)', borderRadius: 5 }} />
             </div>
-            <div className="flex justify-between text-[10px] mt-1 text-gray-500">
-              <span>Facturado <strong className="text-gray-800">{fmtMoney(facturacionMes)}</strong></span>
-              <span>Cuota <strong className="text-gray-800">{fmtMoney(cuotaMes)}</strong></span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 5, color: '#6E6E73' }}>
+              <span>Fact. <strong style={{ color: '#1D1D1F' }}>{fmtMoney(facturacion)}</strong></span>
+              <span>Cuota <strong style={{ color: '#1D1D1F' }}>{fmtMoney(cuota)}</strong></span>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-[22px] font-bold text-emerald-600 tabular-nums">{cuotaPct.toFixed(1)}%</div>
-            <div className="text-[10px] text-gray-500">de la cuota</div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#30B04E', letterSpacing: '-0.02em' }}>{cuotaPct.toFixed(1)}%</div>
           </div>
         </div>
-      </SubBloque>
+      </SubSectSheet>
 
-      {/* 2. Ratings */}
-      <SubBloque titulo="⭐ Rating por categoría">
+      {/* Ratings */}
+      <SubSectSheet titulo="⭐ Rating por categoría">
         {RATINGS.map((r) => (
-          <div key={r.key} className="grid grid-cols-[140px_1fr_35px] gap-2 items-center py-1 border-b border-dashed border-gray-100 last:border-b-0">
-            <div className="text-[11.5px] font-semibold text-gray-700">{r.label}</div>
-            <div className="flex gap-1">
+          <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '140px 1fr 35px', gap: 10,
+            alignItems: 'center', padding: '5px 0', borderBottom: '1px dashed rgba(0,0,0,0.08)' }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600 }}>{r.label}</div>
+            <div style={{ display: 'flex', gap: 2 }}>
               {[1,2,3,4,5].map((n) => (
                 <button key={n} disabled={isCerrada}
-                  onClick={() => updateField({ [r.key]: n })}
-                  className={`text-[16px] leading-none ${isCerrada ? 'cursor-default' : 'cursor-pointer hover:scale-110'} transition`}
-                  style={{ color: (evaluacion?.[r.key] || 0) >= n ? '#F59E0B' : '#E5E7EB' }}>★</button>
+                  onClick={() => upsertPatch({ [r.key]: n })}
+                  style={{ border: 'none', background: 'transparent', fontSize: 18, cursor: isCerrada ? 'default' : 'pointer',
+                    padding: 0, color: (evaluacion?.[r.key] || 0) >= n ? '#FF9F0A' : '#E5E5EA' }}>★</button>
               ))}
             </div>
-            <div className="text-[11px] text-gray-500 tabular-nums">{evaluacion?.[r.key] ? `${evaluacion[r.key]}/5` : '—'}</div>
+            <div style={{ fontSize: 11, color: '#6E6E73', textAlign: 'right' }}>{evaluacion?.[r.key] ? `${evaluacion[r.key]}/5` : '—'}</div>
           </div>
         ))}
-      </SubBloque>
+      </SubSectSheet>
 
-      {/* 3. Comentarios */}
-      <SubBloque titulo="💬 Comentarios / feedback">
+      {/* Comentarios */}
+      <SubSectSheet titulo="💬 Comentarios">
         <textarea disabled={isCerrada} defaultValue={evaluacion?.comentarios || ''}
-          onBlur={(e) => e.target.value !== (evaluacion?.comentarios || '') && updateField({ comentarios: e.target.value })}
-          placeholder="Escribe el feedback narrativo del mes..."
-          className="w-full min-h-[80px] p-2.5 text-[12px] border border-gray-200 rounded-md bg-white resize-y focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:bg-gray-50" />
-      </SubBloque>
+          onBlur={(e) => e.target.value !== (evaluacion?.comentarios || '') && upsertPatch({ comentarios: e.target.value })}
+          placeholder="Feedback del mes..."
+          style={{ width: '100%', minHeight: 70, padding: 10, fontSize: 12.5,
+            border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, background: 'white',
+            resize: 'vertical', fontFamily: 'inherit', outline: 'none' }} />
+      </SubSectSheet>
 
-      {/* 4. Tareas */}
-      <SubBloque titulo={`✓ Tareas del mes${evaluacion?.tareas?.length ? ` (${(evaluacion.tareas || []).filter((t) => t.cumplida).length} de ${evaluacion.tareas.length})` : ''}`}>
-        <TareasLista tareas={evaluacion?.tareas || []} onChange={(nuevas) => updateField({ tareas: nuevas })} disabled={isCerrada} />
-      </SubBloque>
+      {/* Tareas */}
+      <SubSectSheet titulo={`✓ Tareas${evaluacion?.tareas?.length ? ` (${(evaluacion.tareas || []).filter((t) => t.cumplida).length}/${evaluacion.tareas.length})` : ''}`}>
+        <TareasLista tareas={evaluacion?.tareas || []} onChange={(t) => upsertPatch({ tareas: t })} disabled={isCerrada} />
+      </SubSectSheet>
 
-      {/* 5. Ajustes al bono */}
-      <SubBloque titulo={`💵 Ajustes al bono${ajustesTotal !== 0 ? ` (${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)})` : ''}`}>
-        <AjustesLista ajustes={evaluacion?.ajustes || []} onChange={(nuevos) => updateField({ ajustes: nuevos })} disabled={isCerrada} />
-      </SubBloque>
-
-      {/* 6. Bono final */}
-      <div className="mt-3 rounded-lg p-4 border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 to-green-50 grid grid-cols-[1fr_auto] gap-4 items-center">
-        <div>
-          <div className="text-[10.5px] uppercase tracking-widest font-bold text-emerald-800">Bono a pagar</div>
-          <div className="text-[28px] font-bold text-emerald-900 tabular-nums">{fmtMoney(bonoTotal)}</div>
-        </div>
-        <div className="text-right text-[10.5px]">
-          <div className="text-emerald-700 font-bold">Base</div>
-          <div className="text-emerald-900 tabular-nums">
-            max({fmtMoney(BONO_BASE)}, {(BONO_PCT * 100).toFixed(2)}% × {fmtMoney(facturacionMes)}) = {fmtMoney(bonoBase)}
-          </div>
-          {ajustesTotal !== 0 && (
-            <>
-              <div className="text-emerald-700 font-bold mt-1">+ Ajustes</div>
-              <div className="text-emerald-900 tabular-nums">{ajustesTotal >= 0 ? '+' : ''}{fmtMoney(ajustesTotal)}</div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SubBloque({ titulo, children }) {
-  return (
-    <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 mb-2">
-      <div className="text-[10.5px] uppercase tracking-widest font-bold text-gray-500 mb-2">{titulo}</div>
-      {children}
+      {/* Ajustes */}
+      <SubSectSheet titulo={`💵 Ajustes al bono${ajustesTotal !== 0 ? ` (${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)})` : ''}`}>
+        <AjustesLista ajustes={evaluacion?.ajustes || []} onChange={(a) => upsertPatch({ ajustes: a })} disabled={isCerrada} />
+      </SubSectSheet>
     </div>
   );
 }
@@ -775,8 +829,7 @@ function SubBloque({ titulo, children }) {
 function TareasLista({ tareas, onChange, disabled }) {
   const [nuevaTexto, setNuevaTexto] = useState('');
   const add = () => {
-    const t = nuevaTexto.trim();
-    if (!t) return;
+    const t = nuevaTexto.trim(); if (!t) return;
     onChange([...tareas, { id: Date.now(), texto: t, cumplida: false, nota: '' }]);
     setNuevaTexto('');
   };
@@ -785,34 +838,38 @@ function TareasLista({ tareas, onChange, disabled }) {
   const setNota = (i, nota) => onChange(tareas.map((t, k) => k === i ? { ...t, nota } : t));
   return (
     <div>
-      {tareas.length === 0 && <div className="text-[11px] text-gray-400 italic py-1">Sin tareas aún — agrega la primera abajo</div>}
+      {tareas.length === 0 && <div style={{ fontSize: 12, color: '#8E8E93', fontStyle: 'italic' }}>Sin tareas aún</div>}
       {tareas.map((t, i) => (
-        <div key={t.id || i} className="grid grid-cols-[22px_1fr_auto] gap-2 items-start py-1.5 border-b border-dashed border-gray-100 last:border-b-0">
-          <button disabled={disabled} onClick={() => toggle(i)}
-            className={`w-4 h-4 rounded border-2 mt-0.5 ${t.cumplida ? 'bg-emerald-500 border-emerald-500 text-white text-[10px] leading-none flex items-center justify-center' : 'border-gray-300'}`}>
-            {t.cumplida ? '✓' : ''}
-          </button>
+        <div key={t.id || i} style={{ display: 'grid', gridTemplateColumns: '22px 1fr auto', gap: 8,
+          alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px dashed rgba(0,0,0,0.08)' }}>
+          <button disabled={disabled} onClick={() => toggle(i)} style={{
+            width: 18, height: 18, marginTop: 2, borderRadius: 4, border: '2px solid #D1D1D6',
+            background: t.cumplida ? '#34C759' : 'white', color: 'white', fontSize: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderColor: t.cumplida ? '#34C759' : '#D1D1D6', cursor: disabled ? 'default' : 'pointer',
+          }}>{t.cumplida ? '✓' : ''}</button>
           <div>
-            <div className={`text-[12px] ${t.cumplida ? 'line-through text-gray-500' : 'text-gray-800'}`}>{t.texto}</div>
+            <div style={{ fontSize: 12.5, color: t.cumplida ? '#8E8E93' : '#1D1D1F',
+              textDecoration: t.cumplida ? 'line-through' : 'none' }}>{t.texto}</div>
             {!disabled && (
-              <input type="text" defaultValue={t.nota || ''}
+              <input defaultValue={t.nota || ''}
                 onBlur={(e) => e.target.value !== (t.nota || '') && setNota(i, e.target.value)}
-                placeholder="+ nota"
-                className="text-[10.5px] text-gray-600 bg-transparent border-none outline-none placeholder-gray-400 w-full mt-0.5" />
+                placeholder="+ nota" style={{ fontSize: 10.5, color: '#6E6E73', background: 'transparent',
+                  border: 'none', outline: 'none', width: '100%', marginTop: 2 }} />
             )}
-            {disabled && t.nota && <div className="text-[10.5px] text-gray-500 italic mt-0.5">→ {t.nota}</div>}
+            {disabled && t.nota && <div style={{ fontSize: 10.5, color: '#8E8E93', fontStyle: 'italic', marginTop: 2 }}>→ {t.nota}</div>}
           </div>
-          {!disabled && (
-            <button onClick={() => remove(i)} className="text-gray-400 hover:text-rose-600 text-[13px]">×</button>
-          )}
+          {!disabled && <button onClick={() => remove(i)} style={{ color: '#8E8E93', background: 'transparent', border: 'none', fontSize: 14, cursor: 'pointer' }}>×</button>}
         </div>
       ))}
       {!disabled && (
-        <div className="mt-2 flex gap-2">
-          <input type="text" value={nuevaTexto} onChange={(e) => setNuevaTexto(e.target.value)}
+        <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+          <input value={nuevaTexto} onChange={(e) => setNuevaTexto(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && add()}
-            placeholder="Nueva tarea..." className="flex-1 text-[11.5px] px-2 py-1 border border-gray-200 rounded-md" />
-          <button onClick={add} className="text-[11px] px-3 py-1 bg-emerald-600 text-white rounded-md font-semibold">+ Agregar</button>
+            placeholder="Nueva tarea..." style={{ flex: 1, fontSize: 12, padding: '6px 10px',
+              border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, outline: 'none' }} />
+          <button onClick={add} style={{ background: '#34C759', border: 'none', color: 'white',
+            padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+</button>
         </div>
       )}
     </div>
@@ -824,41 +881,40 @@ function AjustesLista({ ajustes, onChange, disabled }) {
   const add = () => {
     const monto = Number(nueva.monto);
     if (!nueva.descripcion.trim() || !isFinite(monto) || monto === 0) return;
-    onChange([...ajustes, { id: Date.now(), fecha: nueva.fecha, descripcion: nueva.descripcion.trim(), monto }]);
+    onChange([...ajustes, { id: Date.now(), ...nueva, descripcion: nueva.descripcion.trim(), monto }]);
     setNueva({ fecha: nueva.fecha, descripcion: '', monto: '' });
   };
   const remove = (i) => onChange(ajustes.filter((_, k) => k !== i));
   return (
     <div>
-      {ajustes.length === 0 && <div className="text-[11px] text-gray-400 italic py-1">Sin ajustes aún</div>}
+      {ajustes.length === 0 && <div style={{ fontSize: 12, color: '#8E8E93', fontStyle: 'italic' }}>Sin ajustes aún</div>}
       {ajustes.map((a, i) => (
-        <div key={a.id || i} className="grid grid-cols-[70px_1fr_auto_auto] gap-2 items-baseline py-1.5 border-b border-dashed border-gray-100 last:border-b-0 text-[11.5px]">
-          <div className="text-[10px] text-gray-500 tabular-nums">{a.fecha}</div>
-          <div className="text-gray-800">{a.descripcion}</div>
-          <div className={`font-bold tabular-nums ${Number(a.monto) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+        <div key={a.id || i} style={{ display: 'grid', gridTemplateColumns: '80px 1fr auto auto', gap: 10,
+          alignItems: 'baseline', padding: '6px 0', borderBottom: '1px dashed rgba(0,0,0,0.08)', fontSize: 12 }}>
+          <div style={{ fontSize: 10.5, color: '#8E8E93' }}>{a.fecha}</div>
+          <div>{a.descripcion}</div>
+          <div style={{ fontWeight: 700, color: Number(a.monto) >= 0 ? '#30B04E' : '#FF3B30' }}>
             {Number(a.monto) >= 0 ? '+' : '−'}{fmtMoney(Math.abs(Number(a.monto)))}
           </div>
-          {!disabled && <button onClick={() => remove(i)} className="text-gray-400 hover:text-rose-600">×</button>}
+          {!disabled && <button onClick={() => remove(i)} style={{ color: '#8E8E93', background: 'transparent', border: 'none', fontSize: 14, cursor: 'pointer' }}>×</button>}
         </div>
       ))}
       {!disabled && (
-        <div className="mt-2 grid grid-cols-[110px_1fr_100px_auto] gap-2">
+        <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '100px 1fr 90px auto', gap: 6 }}>
           <input type="date" value={nueva.fecha} onChange={(e) => setNueva({ ...nueva, fecha: e.target.value })}
-            className="text-[11px] px-2 py-1 border border-gray-200 rounded-md" />
-          <input type="text" value={nueva.descripcion} onChange={(e) => setNueva({ ...nueva, descripcion: e.target.value })}
+            style={{ fontSize: 11, padding: '6px 8px', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8 }} />
+          <input value={nueva.descripcion} onChange={(e) => setNueva({ ...nueva, descripcion: e.target.value })}
             onKeyDown={(e) => e.key === 'Enter' && add()}
-            placeholder="Descripción del ajuste..." className="text-[11.5px] px-2 py-1 border border-gray-200 rounded-md" />
+            placeholder="Descripción..." style={{ fontSize: 12, padding: '6px 10px',
+              border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, outline: 'none' }} />
           <input type="number" value={nueva.monto} onChange={(e) => setNueva({ ...nueva, monto: e.target.value })}
             onKeyDown={(e) => e.key === 'Enter' && add()}
-            placeholder="±$" step="50" className="text-[11.5px] px-2 py-1 border border-gray-200 rounded-md tabular-nums" />
-          <button onClick={add} className="text-[11px] px-3 py-1 bg-emerald-600 text-white rounded-md font-semibold">+</button>
+            placeholder="±$" step="50" style={{ fontSize: 12, padding: '6px 8px',
+              border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
+          <button onClick={add} style={{ background: '#34C759', border: 'none', color: 'white',
+            padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+</button>
         </div>
       )}
     </div>
   );
-}
-
-function fmtMoney(n) {
-  if (n == null || !isFinite(n)) return '$—';
-  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
 }
