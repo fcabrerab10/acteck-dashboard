@@ -531,7 +531,10 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
   const totalCli = Object.values(cliCount).reduce((s, v) => s + v, 0);
   const cliOrden = Object.entries(cliCount).sort((a, b) => b[1] - a[1]);
 
-  const aplicaBono = requiereEvaluacion(user);
+  // Aplica evaluación a cualquier usuario que no sea super_admin (más permisivo que requiereEvaluacion,
+  // por si el campo `tipo` en la DB tiene valores raros).
+  const puedeEvaluar = esAdmin && user.rol !== 'super_admin' && !user.es_super_admin;
+  const aplicaBono = puedeEvaluar;
   const bonoBase = Math.max(BONO_BASE, facturacion * BONO_PCT);
   const ajustesTotal = (evaluacion?.ajustes || []).reduce((s, a) => s + (Number(a.monto) || 0), 0);
   const bonoTotal = bonoBase + ajustesTotal;
