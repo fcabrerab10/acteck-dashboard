@@ -132,7 +132,7 @@ const MENU_CONFIG = [
     // se oculta (lógica en GrupoBloque).
     items: [
       { id: 'adminInterna', label: 'Pendientes & Calendario', icon: ClipboardList },
-      { id: 'telemetria',   label: 'Telemetría',                icon: Activity },
+      { id: 'telemetria',   label: 'Actividad del equipo',       icon: Activity },
       { id: 'evaluaciones', label: 'Evaluaciones (histórico)', icon: Award },
     ],
   },

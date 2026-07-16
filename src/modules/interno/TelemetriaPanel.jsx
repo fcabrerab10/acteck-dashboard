@@ -20,10 +20,23 @@ const TIPO_COLOR = {
 };
 const CLIENTE_COLOR = { 1: '#8B5CF6', 2: '#10B981', 3: '#0EA5E9', 4: '#F59E0B', 99: '#94A3B8' };
 
-// Bono: fórmula = max($3,000, 0.07% × facturación_mes)
+// Bono: fórmula = max($3,000, 0.04% × facturación_mes)
 const BONO_BASE = 3000;
-const BONO_PCT = 0.0007;
+const BONO_PCT = 0.0004;
 const CLIENTES_BONO = ['digitalife', 'pcel', 'dicotech'];
+// Digitalife cuota anual acordada (no vive en cuotas_mensuales)
+const DIGITALIFE_CUOTA_ANUAL = 25_000_000;
+
+// Aplica evaluación mensual — hoy solo Karolina (interno, no super_admin)
+const requiereEvaluacion = (u) => u.tipo === 'interno' && u.rol !== 'super_admin';
+
+const RATINGS = [
+  { key: 'rating_comunicacion',  label: 'Comunicación' },
+  { key: 'rating_iniciativa',    label: 'Iniciativa' },
+  { key: 'rating_calidad',       label: 'Calidad del trabajo' },
+  { key: 'rating_cumplimiento',  label: 'Cumplimiento' },
+  { key: 'rating_valor',         label: 'Aporte de valor' },
+];
 
 function fmtHm(mins) {
   if (!mins || mins < 1) return '0m';
@@ -62,41 +75,60 @@ export default function TelemetriaPanel() {
   const esAdmin = perfil?.rol === 'super_admin';
 
   const [mesRef, setMesRef] = useState(() => new Date());
-  const [usuarios, setUsuarios] = useState([]);      // perfiles con id
-  const [eventos, setEventos] = useState([]);        // eventos raw del mes
-  const [facturacionMes, setFacturacionMes] = useState(0); // total de los 3 clientes
-  const [expanded, setExpanded] = useState(null);    // user_id expandido
+  const [usuarios, setUsuarios] = useState([]);
+  const [eventos, setEventos] = useState([]);
+  const [facturacionMes, setFacturacionMes] = useState(0);
+  const [cuotaMes, setCuotaMes] = useState(0);       // cuota total 3 clientes
+  const [evaluaciones, setEvaluaciones] = useState([]); // evaluaciones del mes por user_id
+  const [expanded, setExpanded] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const { ini, fin, anio, mes } = rangoMes(mesRef);
   const diasEnMes = new Date(anio, mes, 0).getDate();
 
-  // Fetch usuarios + eventos del mes + facturación
+  const reload = React.useCallback(async () => {
+    setLoading(true);
+    const [perf, evs, fact, cuotas, evalMes] = await Promise.all([
+      supabase.from('perfiles').select('user_id,nombre,email,rol,tipo,puesto').order('nombre'),
+      supabase.from('eventos_usuario')
+        .select('id,user_id,ts,tipo,cliente,pagina,detalle')
+        .gte('ts', ini.toISOString()).lt('ts', fin.toISOString())
+        .order('ts', { ascending: false }).limit(20000),
+      supabase.from('facturacion_clientes')
+        .select('monto,cliente_key')
+        .in('cliente_key', CLIENTES_BONO)
+        .eq('anio', anio).eq('mes', mes),
+      supabase.from('cuotas_mensuales')
+        .select('cliente,cuota_min')
+        .in('cliente', ['pcel', 'dicotech'])
+        .eq('anio', anio).eq('mes', mes),
+      supabase.from('evaluaciones_mensuales')
+        .select('*')
+        .eq('anio', anio).eq('mes', mes),
+    ]);
+    setUsuarios(perf.data || []);
+    setEventos(evs.data || []);
+    const fT = (fact.data || []).reduce((s, r) => s + (Number(r.monto) || 0), 0);
+    setFacturacionMes(fT);
+    // Cuota = PCEL + Dicotech (de cuotas_mensuales) + Digitalife (25M/12)
+    const cPD = (cuotas.data || []).reduce((s, r) => s + (Number(r.cuota_min) || 0), 0);
+    setCuotaMes(cPD + DIGITALIFE_CUOTA_ANUAL / 12);
+    setEvaluaciones(evalMes.data || []);
+    setLoading(false);
+  }, [ini, fin, anio, mes]);
+
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    (async () => {
-      const [perf, evs, fact] = await Promise.all([
-        supabase.from('perfiles').select('user_id,nombre,email,rol,tipo,puesto').order('nombre'),
-        supabase.from('eventos_usuario')
-          .select('id,user_id,ts,tipo,cliente,pagina,detalle')
-          .gte('ts', ini.toISOString())
-          .lt('ts', fin.toISOString())
-          .order('ts', { ascending: false })
-          .limit(20000),
-        supabase.from('facturacion_clientes')
-          .select('monto,cliente_key')
-          .in('cliente_key', CLIENTES_BONO)
-          .eq('anio', anio).eq('mes', mes),
-      ]);
-      if (cancelled) return;
-      setUsuarios(perf.data || []);
-      setEventos(evs.data || []);
-      setFacturacionMes((fact.data || []).reduce((s, r) => s + (Number(r.monto) || 0), 0));
-      setLoading(false);
-    })();
+    (async () => { if (!cancelled) await reload(); })();
     return () => { cancelled = true; };
-  }, [ini.getTime(), fin.getTime(), anio, mes]);
+  }, [reload]);
+
+  // evaluación del user_id del mes activo
+  const evalPorUser = useMemo(() => {
+    const m = new Map();
+    for (const e of evaluaciones) m.set(e.user_id, e);
+    return m;
+  }, [evaluaciones]);
 
   // Índice: user_id → eventos del mes
   const eventosPorUser = useMemo(() => {
@@ -342,6 +374,17 @@ export default function TelemetriaPanel() {
                 })}
               </div>
             </div>
+
+            {/* Bloque de EVALUACIÓN MENSUAL — sólo para usuarios internos con evaluación */}
+            {requiereEvaluacion(u) && esAdmin && (
+              <EvaluacionBloque
+                user={u} anio={anio} mes={mes}
+                facturacionMes={facturacionMes} cuotaMes={cuotaMes}
+                evaluacion={evalPorUser.get(u.user_id) || null}
+                onSaved={reload}
+                perfilId={perfil?.user_id}
+              />
+            )}
           </div>
         );
       })()}
@@ -419,4 +462,324 @@ function SeccionUsuarios({ usuarios, kpisPorUser, diasEnMes, facturacionMes, exp
       })}
     </div>
   );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EvaluacionBloque — sección de evaluación mensual del usuario
+// Sub-secciones: Cuota, Ratings, Comentarios, Tareas, Ajustes, Bono
+// Botones: Copiar texto resumen, Cerrar evaluación (inmutable)
+// ═══════════════════════════════════════════════════════════════
+function EvaluacionBloque({ user, anio, mes, facturacionMes, cuotaMes, evaluacion, onSaved, perfilId }) {
+  const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [confirmCerrar, setConfirmCerrar] = useState(false);
+
+  const isCerrada = evaluacion?.cerrada === true;
+  const cuotaPct = cuotaMes > 0 ? (facturacionMes / cuotaMes * 100) : 0;
+  const bonoBase = Math.max(BONO_BASE, facturacionMes * BONO_PCT);
+  const ajustesTotal = (evaluacion?.ajustes || []).reduce((s, a) => s + (Number(a.monto) || 0), 0);
+  const bonoTotal = bonoBase + ajustesTotal;
+
+  // Handler genérico para actualizar campo
+  const updateField = async (patch) => {
+    if (isCerrada) return;
+    setSaving(true);
+    if (evaluacion?.id) {
+      await supabase.from('evaluaciones_mensuales').update(patch).eq('id', evaluacion.id);
+    } else {
+      await supabase.from('evaluaciones_mensuales').insert({
+        user_id: user.user_id, anio, mes,
+        facturacion: facturacionMes, cuota_total: cuotaMes, cuota_pct: cuotaPct,
+        bono_base: bonoBase, bono_ajustes: 0, bono_total: bonoBase,
+        ...patch,
+      });
+    }
+    setSaving(false);
+    if (onSaved) await onSaved();
+  };
+
+  const cerrarEvaluacion = async () => {
+    if (isCerrada) return;
+    setSaving(true);
+    const patch = {
+      facturacion: facturacionMes, cuota_total: cuotaMes, cuota_pct: cuotaPct,
+      bono_base: bonoBase, bono_ajustes: ajustesTotal, bono_total: bonoTotal,
+      cerrada: true, cerrada_ts: new Date().toISOString(), cerrada_por: perfilId,
+    };
+    if (evaluacion?.id) await supabase.from('evaluaciones_mensuales').update(patch).eq('id', evaluacion.id);
+    else await supabase.from('evaluaciones_mensuales').insert({ user_id: user.user_id, anio, mes, ...patch });
+    setSaving(false);
+    setConfirmCerrar(false);
+    if (onSaved) await onSaved();
+  };
+
+  const copiarTexto = () => {
+    const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const ratings = RATINGS.map((r) => ({ label: r.label, val: evaluacion?.[r.key] || null }));
+    const promRat = ratings.filter((r) => r.val).reduce((s, r) => s + r.val, 0) / Math.max(1, ratings.filter((r) => r.val).length);
+    const tareas = evaluacion?.tareas || [];
+    const cumplidas = tareas.filter((t) => t.cumplida).length;
+    const ajustes = evaluacion?.ajustes || [];
+
+    const sep = '═══════════════════════════════════════════════════════════';
+    let txt = `Bono ${user.nombre} · ${MESES[mes-1]} ${anio} · ${fmtMoney(bonoTotal)} MXN\n\n`;
+    txt += sep + '\nCUOTA ALCANZADA\n';
+    txt += `Facturado: ${fmtMoney(facturacionMes)} | Cuota: ${fmtMoney(cuotaMes)}\n`;
+    txt += `Alcance: ${cuotaPct.toFixed(1)}%${cuotaPct >= 100 ? ' (superó la cuota)' : ''}\n\n`;
+
+    txt += sep + '\nEVALUACIÓN CUALITATIVA\n';
+    for (const r of ratings) txt += `· ${r.label.padEnd(22, ' ')}: ${r.val ? `${r.val}/5` : '—'}\n`;
+    if (promRat > 0) txt += `Promedio: ${promRat.toFixed(1)}/5\n`;
+    if (evaluacion?.comentarios) txt += `\nFeedback:\n${evaluacion.comentarios}\n`;
+
+    if (tareas.length > 0) {
+      txt += '\n' + sep + `\nTAREAS DEL MES (${cumplidas} de ${tareas.length})\n`;
+      for (const t of tareas) {
+        txt += `${t.cumplida ? '✓' : '✗'} ${t.texto}\n`;
+        if (t.nota) txt += `    → ${t.nota}\n`;
+      }
+    }
+
+    if (ajustes.length > 0) {
+      txt += '\n' + sep + `\nAJUSTES AL BONO (total: ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)})\n`;
+      for (const a of ajustes) {
+        const signo = Number(a.monto) >= 0 ? '+' : '−';
+        const monto = fmtMoney(Math.abs(Number(a.monto)));
+        txt += `${a.fecha || ''}  ${signo}${monto}  ${a.descripcion || ''}\n`;
+      }
+    }
+
+    txt += '\n' + sep + '\nCÁLCULO DEL BONO\n';
+    const pctStr = (BONO_PCT * 100).toFixed(2);
+    txt += `Base       = max(${fmtMoney(BONO_BASE)}, ${pctStr}% × ${fmtMoney(facturacionMes)}) = ${fmtMoney(bonoBase)}\n`;
+    if (ajustesTotal !== 0) txt += `Ajustes    = ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)}\n`;
+    txt += `─────────────────────\nTotal a pagar: ${fmtMoney(bonoTotal)} MXN\n\n`;
+    if (isCerrada) txt += `Evaluación cerrada el ${new Date(evaluacion.cerrada_ts).toLocaleDateString('es-MX')} · inmutable\n`;
+    else txt += `(evaluación aún abierta — puede cambiar)\n`;
+
+    navigator.clipboard.writeText(txt);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-200">
+      <div className="flex justify-between items-baseline mb-3">
+        <div>
+          <div className="text-[13px] font-bold text-gray-800">
+            Evaluación mensual · {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mes-1]} {anio}
+          </div>
+          <div className="text-[11px] text-gray-500">
+            {isCerrada
+              ? <span className="text-emerald-700 font-semibold">✓ Cerrada · inmutable · pagada</span>
+              : <span className="text-amber-700 font-semibold">Pendiente de cerrar</span>}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={copiarTexto}
+            className="text-[11px] px-3 py-1.5 bg-white border border-gray-300 rounded-md hover:bg-gray-50 font-semibold">
+            {copied ? '✓ Copiado' : '📄 Copiar resumen'}
+          </button>
+          {!isCerrada && !confirmCerrar && (
+            <button onClick={() => setConfirmCerrar(true)}
+              className="text-[11px] px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 font-semibold">
+              ✓ Cerrar y pagar
+            </button>
+          )}
+          {confirmCerrar && (
+            <>
+              <button onClick={() => setConfirmCerrar(false)} className="text-[11px] px-3 py-1.5 bg-gray-100 rounded-md">Cancelar</button>
+              <button onClick={cerrarEvaluacion} disabled={saving}
+                className="text-[11px] px-3 py-1.5 bg-emerald-600 text-white rounded-md font-semibold">
+                Confirmar (irreversible)
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Nota para junio 2026 (mes de arranque) */}
+      {anio === 2026 && mes === 6 && (
+        <div className="mb-3 p-2.5 bg-amber-50 border-l-3 border-amber-400 rounded text-[11px] text-amber-900">
+          <strong>Nota:</strong> La telemetría se activó en julio 2026. Para junio se asume actividad al 100%. Desde julio en adelante cuenta la telemetría real.
+        </div>
+      )}
+
+      {/* 1. Cuota alcanzada */}
+      <SubBloque titulo="📊 Cuota alcanzada del mes">
+        <div className="grid grid-cols-[1fr_auto] gap-3 items-center">
+          <div>
+            <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600"
+                style={{ width: `${Math.min(100, cuotaPct)}%` }} />
+            </div>
+            <div className="flex justify-between text-[10px] mt-1 text-gray-500">
+              <span>Facturado <strong className="text-gray-800">{fmtMoney(facturacionMes)}</strong></span>
+              <span>Cuota <strong className="text-gray-800">{fmtMoney(cuotaMes)}</strong></span>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[22px] font-bold text-emerald-600 tabular-nums">{cuotaPct.toFixed(1)}%</div>
+            <div className="text-[10px] text-gray-500">de la cuota</div>
+          </div>
+        </div>
+      </SubBloque>
+
+      {/* 2. Ratings */}
+      <SubBloque titulo="⭐ Rating por categoría">
+        {RATINGS.map((r) => (
+          <div key={r.key} className="grid grid-cols-[140px_1fr_35px] gap-2 items-center py-1 border-b border-dashed border-gray-100 last:border-b-0">
+            <div className="text-[11.5px] font-semibold text-gray-700">{r.label}</div>
+            <div className="flex gap-1">
+              {[1,2,3,4,5].map((n) => (
+                <button key={n} disabled={isCerrada}
+                  onClick={() => updateField({ [r.key]: n })}
+                  className={`text-[16px] leading-none ${isCerrada ? 'cursor-default' : 'cursor-pointer hover:scale-110'} transition`}
+                  style={{ color: (evaluacion?.[r.key] || 0) >= n ? '#F59E0B' : '#E5E7EB' }}>★</button>
+              ))}
+            </div>
+            <div className="text-[11px] text-gray-500 tabular-nums">{evaluacion?.[r.key] ? `${evaluacion[r.key]}/5` : '—'}</div>
+          </div>
+        ))}
+      </SubBloque>
+
+      {/* 3. Comentarios */}
+      <SubBloque titulo="💬 Comentarios / feedback">
+        <textarea disabled={isCerrada} defaultValue={evaluacion?.comentarios || ''}
+          onBlur={(e) => e.target.value !== (evaluacion?.comentarios || '') && updateField({ comentarios: e.target.value })}
+          placeholder="Escribe el feedback narrativo del mes..."
+          className="w-full min-h-[80px] p-2.5 text-[12px] border border-gray-200 rounded-md bg-white resize-y focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:bg-gray-50" />
+      </SubBloque>
+
+      {/* 4. Tareas */}
+      <SubBloque titulo={`✓ Tareas del mes${evaluacion?.tareas?.length ? ` (${(evaluacion.tareas || []).filter((t) => t.cumplida).length} de ${evaluacion.tareas.length})` : ''}`}>
+        <TareasLista tareas={evaluacion?.tareas || []} onChange={(nuevas) => updateField({ tareas: nuevas })} disabled={isCerrada} />
+      </SubBloque>
+
+      {/* 5. Ajustes al bono */}
+      <SubBloque titulo={`💵 Ajustes al bono${ajustesTotal !== 0 ? ` (${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)})` : ''}`}>
+        <AjustesLista ajustes={evaluacion?.ajustes || []} onChange={(nuevos) => updateField({ ajustes: nuevos })} disabled={isCerrada} />
+      </SubBloque>
+
+      {/* 6. Bono final */}
+      <div className="mt-3 rounded-lg p-4 border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 to-green-50 grid grid-cols-[1fr_auto] gap-4 items-center">
+        <div>
+          <div className="text-[10.5px] uppercase tracking-widest font-bold text-emerald-800">Bono a pagar</div>
+          <div className="text-[28px] font-bold text-emerald-900 tabular-nums">{fmtMoney(bonoTotal)}</div>
+        </div>
+        <div className="text-right text-[10.5px]">
+          <div className="text-emerald-700 font-bold">Base</div>
+          <div className="text-emerald-900 tabular-nums">
+            max({fmtMoney(BONO_BASE)}, {(BONO_PCT * 100).toFixed(2)}% × {fmtMoney(facturacionMes)}) = {fmtMoney(bonoBase)}
+          </div>
+          {ajustesTotal !== 0 && (
+            <>
+              <div className="text-emerald-700 font-bold mt-1">+ Ajustes</div>
+              <div className="text-emerald-900 tabular-nums">{ajustesTotal >= 0 ? '+' : ''}{fmtMoney(ajustesTotal)}</div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SubBloque({ titulo, children }) {
+  return (
+    <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 mb-2">
+      <div className="text-[10.5px] uppercase tracking-widest font-bold text-gray-500 mb-2">{titulo}</div>
+      {children}
+    </div>
+  );
+}
+
+function TareasLista({ tareas, onChange, disabled }) {
+  const [nuevaTexto, setNuevaTexto] = useState('');
+  const add = () => {
+    const t = nuevaTexto.trim();
+    if (!t) return;
+    onChange([...tareas, { id: Date.now(), texto: t, cumplida: false, nota: '' }]);
+    setNuevaTexto('');
+  };
+  const toggle = (i) => onChange(tareas.map((t, k) => k === i ? { ...t, cumplida: !t.cumplida } : t));
+  const remove = (i) => onChange(tareas.filter((_, k) => k !== i));
+  const setNota = (i, nota) => onChange(tareas.map((t, k) => k === i ? { ...t, nota } : t));
+  return (
+    <div>
+      {tareas.length === 0 && <div className="text-[11px] text-gray-400 italic py-1">Sin tareas aún — agrega la primera abajo</div>}
+      {tareas.map((t, i) => (
+        <div key={t.id || i} className="grid grid-cols-[22px_1fr_auto] gap-2 items-start py-1.5 border-b border-dashed border-gray-100 last:border-b-0">
+          <button disabled={disabled} onClick={() => toggle(i)}
+            className={`w-4 h-4 rounded border-2 mt-0.5 ${t.cumplida ? 'bg-emerald-500 border-emerald-500 text-white text-[10px] leading-none flex items-center justify-center' : 'border-gray-300'}`}>
+            {t.cumplida ? '✓' : ''}
+          </button>
+          <div>
+            <div className={`text-[12px] ${t.cumplida ? 'line-through text-gray-500' : 'text-gray-800'}`}>{t.texto}</div>
+            {!disabled && (
+              <input type="text" defaultValue={t.nota || ''}
+                onBlur={(e) => e.target.value !== (t.nota || '') && setNota(i, e.target.value)}
+                placeholder="+ nota"
+                className="text-[10.5px] text-gray-600 bg-transparent border-none outline-none placeholder-gray-400 w-full mt-0.5" />
+            )}
+            {disabled && t.nota && <div className="text-[10.5px] text-gray-500 italic mt-0.5">→ {t.nota}</div>}
+          </div>
+          {!disabled && (
+            <button onClick={() => remove(i)} className="text-gray-400 hover:text-rose-600 text-[13px]">×</button>
+          )}
+        </div>
+      ))}
+      {!disabled && (
+        <div className="mt-2 flex gap-2">
+          <input type="text" value={nuevaTexto} onChange={(e) => setNuevaTexto(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+            placeholder="Nueva tarea..." className="flex-1 text-[11.5px] px-2 py-1 border border-gray-200 rounded-md" />
+          <button onClick={add} className="text-[11px] px-3 py-1 bg-emerald-600 text-white rounded-md font-semibold">+ Agregar</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AjustesLista({ ajustes, onChange, disabled }) {
+  const [nueva, setNueva] = useState({ fecha: new Date().toISOString().slice(0, 10), descripcion: '', monto: '' });
+  const add = () => {
+    const monto = Number(nueva.monto);
+    if (!nueva.descripcion.trim() || !isFinite(monto) || monto === 0) return;
+    onChange([...ajustes, { id: Date.now(), fecha: nueva.fecha, descripcion: nueva.descripcion.trim(), monto }]);
+    setNueva({ fecha: nueva.fecha, descripcion: '', monto: '' });
+  };
+  const remove = (i) => onChange(ajustes.filter((_, k) => k !== i));
+  return (
+    <div>
+      {ajustes.length === 0 && <div className="text-[11px] text-gray-400 italic py-1">Sin ajustes aún</div>}
+      {ajustes.map((a, i) => (
+        <div key={a.id || i} className="grid grid-cols-[70px_1fr_auto_auto] gap-2 items-baseline py-1.5 border-b border-dashed border-gray-100 last:border-b-0 text-[11.5px]">
+          <div className="text-[10px] text-gray-500 tabular-nums">{a.fecha}</div>
+          <div className="text-gray-800">{a.descripcion}</div>
+          <div className={`font-bold tabular-nums ${Number(a.monto) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+            {Number(a.monto) >= 0 ? '+' : '−'}{fmtMoney(Math.abs(Number(a.monto)))}
+          </div>
+          {!disabled && <button onClick={() => remove(i)} className="text-gray-400 hover:text-rose-600">×</button>}
+        </div>
+      ))}
+      {!disabled && (
+        <div className="mt-2 grid grid-cols-[110px_1fr_100px_auto] gap-2">
+          <input type="date" value={nueva.fecha} onChange={(e) => setNueva({ ...nueva, fecha: e.target.value })}
+            className="text-[11px] px-2 py-1 border border-gray-200 rounded-md" />
+          <input type="text" value={nueva.descripcion} onChange={(e) => setNueva({ ...nueva, descripcion: e.target.value })}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+            placeholder="Descripción del ajuste..." className="text-[11.5px] px-2 py-1 border border-gray-200 rounded-md" />
+          <input type="number" value={nueva.monto} onChange={(e) => setNueva({ ...nueva, monto: e.target.value })}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+            placeholder="±$" step="50" className="text-[11.5px] px-2 py-1 border border-gray-200 rounded-md tabular-nums" />
+          <button onClick={add} className="text-[11px] px-3 py-1 bg-emerald-600 text-white rounded-md font-semibold">+</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function fmtMoney(n) {
+  if (n == null || !isFinite(n)) return '$—';
+  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
 }
