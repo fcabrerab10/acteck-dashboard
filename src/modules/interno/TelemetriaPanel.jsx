@@ -20,7 +20,9 @@ const DIGITALIFE_CUOTA_ANUAL = 25_000_000;
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
-const requiereEvaluacion = (u) => u.tipo === 'interno' && u.rol !== 'super_admin';
+// Requiere evaluación mensual todo interno que no sea super_admin.
+// Permisivo con `tipo`: si es null/undefined lo trata como interno (evita que se pierda la eval por dato faltante).
+const requiereEvaluacion = (u) => u.rol !== 'super_admin' && u.tipo !== 'externo';
 
 const RATINGS = [
   { key: 'rating_comunicacion', label: 'Comunicación' },
@@ -217,7 +219,8 @@ export default function TelemetriaPanel() {
     : perfil?.user_id
       ? usuarios.filter((u) => u.user_id === perfil.user_id)
       : usuarios;
-  const internos = usuariosVisibles.filter((u) => u.tipo === 'interno');
+  // Tipo null/undefined → asumir interno (para no ocultar usuarios con dato faltante)
+  const internos = usuariosVisibles.filter((u) => u.tipo !== 'externo');
   const externos = usuariosVisibles.filter((u) => u.tipo === 'externo');
   // Karolina primero dentro de internos
   internos.sort((a, b) => {
