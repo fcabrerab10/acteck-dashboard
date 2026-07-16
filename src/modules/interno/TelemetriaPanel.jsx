@@ -288,48 +288,70 @@ export default function TelemetriaPanel() {
         </div>
       )}
 
-      {/* Sección Internos */}
-      {internos.length > 0 && (
-        <>
-          <SeccionHeader color="#FF375F" label="Acteck · Equipo interno" cnt={`${internos.length} ${internos.length === 1 ? 'usuario' : 'usuarios'}`} />
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: internos.length === 1 ? '1fr'
-              : requiereEvaluacion(internos[0]) ? '1.4fr 1fr'
-              : 'repeat(auto-fill, minmax(300px, 1fr))',
-            gap: 16, marginBottom: 24,
-          }}>
-            {internos.map((u) => (
-              <UserCard key={u.user_id} u={u} kpis={kpisPorUser.get(u.user_id)}
+      {/* Modo enfocado: sólo la card seleccionada + panel */}
+      {selectedUserId ? (() => {
+        const uSel = usuarios.find((u) => u.user_id === selectedUserId);
+        if (!uSel) return null;
+        return (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <button onClick={() => setSelectedUserId(null)} style={{
+                background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.08)',
+                padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', color: '#1D1D1F', display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}>← Ver todos</button>
+              <div style={{ fontSize: 12, color: '#6E6E73' }}>
+                Enfoque en <strong style={{ color: '#1D1D1F' }}>{uSel.nombre}</strong>
+              </div>
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: 16, marginBottom: 12,
+            }}>
+              <UserCard u={uSel} kpis={kpisPorUser.get(uSel.user_id)}
                 bonoBase={Math.max(BONO_BASE, facturacionMes * BONO_PCT)}
-                evaluacionActual={evalPorUser.get(u.user_id)}
-                onClick={() => setSelectedUserId(u.user_id)} />
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Sección Externos */}
-      {externos.length > 0 && (
+                evaluacionActual={evalPorUser.get(uSel.user_id)}
+                onClick={() => setSelectedUserId(null)} />
+            </div>
+            <UserDetailPanel user={uSel} esAdmin={esAdmin} perfilId={perfil?.user_id}
+              onClose={() => setSelectedUserId(null)} />
+          </>
+        );
+      })() : (
         <>
-          <SeccionHeader color="#FF9F0A" label="Externos · clientes y aliados" cnt={`${externos.length} ${externos.length === 1 ? 'usuario' : 'usuarios'}`} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-            {externos.map((u) => (
-              <UserCard key={u.user_id} u={u} kpis={kpisPorUser.get(u.user_id)}
-                onClick={() => setSelectedUserId(u.user_id)} />
-            ))}
-          </div>
-        </>
-      )}
+          {/* Sección Internos */}
+          {internos.length > 0 && (
+            <>
+              <SeccionHeader color="#FF375F" label="Acteck · Equipo interno" cnt={`${internos.length} ${internos.length === 1 ? 'usuario' : 'usuarios'}`} />
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                gap: 16, marginBottom: 24,
+              }}>
+                {internos.map((u) => (
+                  <UserCard key={u.user_id} u={u} kpis={kpisPorUser.get(u.user_id)}
+                    bonoBase={Math.max(BONO_BASE, facturacionMes * BONO_PCT)}
+                    evaluacionActual={evalPorUser.get(u.user_id)}
+                    onClick={() => setSelectedUserId(u.user_id)} />
+                ))}
+              </div>
+            </>
+          )}
 
-      {/* Panel de detalle inline (se despliega debajo) */}
-      {selectedUserId && (
-        <UserDetailPanel
-          user={usuarios.find((u) => u.user_id === selectedUserId)}
-          esAdmin={esAdmin}
-          perfilId={perfil?.user_id}
-          onClose={() => setSelectedUserId(null)}
-        />
+          {/* Sección Externos */}
+          {externos.length > 0 && (
+            <>
+              <SeccionHeader color="#FF9F0A" label="Externos · clientes y aliados" cnt={`${externos.length} ${externos.length === 1 ? 'usuario' : 'usuarios'}`} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+                {externos.map((u) => (
+                  <UserCard key={u.user_id} u={u} kpis={kpisPorUser.get(u.user_id)}
+                    onClick={() => setSelectedUserId(u.user_id)} />
+                ))}
+              </div>
+            </>
+          )}
+        </>
       )}
     </div>
   );
