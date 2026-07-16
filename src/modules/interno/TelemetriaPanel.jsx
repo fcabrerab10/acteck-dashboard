@@ -83,11 +83,54 @@ export default function TelemetriaPanel() {
   const [expanded, setExpanded] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const { ini, fin, anio, mes } = rangoMes(mesRef);
+  // NOTA: NO memoizar ini/fin en deps — son objetos Date que se recrean
+  // cada render. Se usan sólo dentro del effect, con [anio, mes] como deps.
+  const { anio, mes } = rangoMes(mesRef);
   const diasEnMes = new Date(anio, mes, 0).getDate();
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const ini = new Date(anio, mes - 1, 1);
+      const fin = new Date(anio, mes, 1);
+      const [perf, evs, fact, cuotas, evalMes] = await Promise.all([
+        supabase.from('perfiles').select('user_id,nombre,email,rol,tipo,puesto').order('nombre'),
+        supabase.from('eventos_usuario')
+          .select('id,user_id,ts,tipo,cliente,pagina,detalle')
+          .gte('ts', ini.toISOString()).lt('ts', fin.toISOString())
+          .order('ts', { ascending: false }).limit(20000),
+        supabase.from('facturacion_clientes')
+          .select('monto,cliente_key')
+          .in('cliente_key', CLIENTES_BONO)
+          .eq('anio', anio).eq('mes', mes),
+        supabase.from('cuotas_mensuales')
+          .select('cliente,cuota_min')
+          .in('cliente', ['pcel', 'dicotech'])
+          .eq('anio', anio).eq('mes', mes),
+        supabase.from('evaluaciones_mensuales')
+          .select('*')
+          .eq('anio', anio).eq('mes', mes),
+      ]);
+      if (cancelled) return;
+      setUsuarios(perf.data || []);
+      setEventos(evs.data || []);
+      const fT = (fact.data || []).reduce((s, r) => s + (Number(r.monto) || 0), 0);
+      setFacturacionMes(fT);
+      const cPD = (cuotas.data || []).reduce((s, r) => s + (Number(r.cuota_min) || 0), 0);
+      setCuotaMes(cPD + DIGITALIFE_CUOTA_ANUAL / 12);
+      setEvaluaciones(evalMes.data || []);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [anio, mes]);
+
+  // Trigger manual de reload cuando un cambio (guardar evaluación, cerrar)
+  // necesita refrescar la data. Se pasa como prop a EvaluacionBloque.
   const reload = React.useCallback(async () => {
     setLoading(true);
+    const ini = new Date(anio, mes - 1, 1);
+    const fin = new Date(anio, mes, 1);
     const [perf, evs, fact, cuotas, evalMes] = await Promise.all([
       supabase.from('perfiles').select('user_id,nombre,email,rol,tipo,puesto').order('nombre'),
       supabase.from('eventos_usuario')
@@ -95,33 +138,20 @@ export default function TelemetriaPanel() {
         .gte('ts', ini.toISOString()).lt('ts', fin.toISOString())
         .order('ts', { ascending: false }).limit(20000),
       supabase.from('facturacion_clientes')
-        .select('monto,cliente_key')
-        .in('cliente_key', CLIENTES_BONO)
+        .select('monto,cliente_key').in('cliente_key', CLIENTES_BONO)
         .eq('anio', anio).eq('mes', mes),
       supabase.from('cuotas_mensuales')
-        .select('cliente,cuota_min')
-        .in('cliente', ['pcel', 'dicotech'])
+        .select('cliente,cuota_min').in('cliente', ['pcel', 'dicotech'])
         .eq('anio', anio).eq('mes', mes),
-      supabase.from('evaluaciones_mensuales')
-        .select('*')
-        .eq('anio', anio).eq('mes', mes),
+      supabase.from('evaluaciones_mensuales').select('*').eq('anio', anio).eq('mes', mes),
     ]);
     setUsuarios(perf.data || []);
     setEventos(evs.data || []);
-    const fT = (fact.data || []).reduce((s, r) => s + (Number(r.monto) || 0), 0);
-    setFacturacionMes(fT);
-    // Cuota = PCEL + Dicotech (de cuotas_mensuales) + Digitalife (25M/12)
-    const cPD = (cuotas.data || []).reduce((s, r) => s + (Number(r.cuota_min) || 0), 0);
-    setCuotaMes(cPD + DIGITALIFE_CUOTA_ANUAL / 12);
+    setFacturacionMes((fact.data || []).reduce((s, r) => s + (Number(r.monto) || 0), 0));
+    setCuotaMes((cuotas.data || []).reduce((s, r) => s + (Number(r.cuota_min) || 0), 0) + DIGITALIFE_CUOTA_ANUAL / 12);
     setEvaluaciones(evalMes.data || []);
     setLoading(false);
-  }, [ini, fin, anio, mes]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => { if (!cancelled) await reload(); })();
-    return () => { cancelled = true; };
-  }, [reload]);
+  }, [anio, mes]);
 
   // evaluación del user_id del mes activo
   const evalPorUser = useMemo(() => {
