@@ -680,57 +680,77 @@ function MiniKPI({ k, v, s }) {
   );
 }
 
-// ═══════════════════ Bloque evaluación dentro del sheet ═══════════════════
+// ═══════════════════ Bloque evaluación (estado local optimista, cero flicker) ═══════════════════
 function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, onSaved, perfilId }) {
-  const [saving, setSaving] = useState(false);
+  // Estado local optimista — inicia del prop y se actualiza inmediato en cada click.
+  // Los saves a Supabase corren en background sin bloquear UI.
+  const [evalLocal, setEvalLocal] = useState(evaluacion);
   const [copied, setCopied] = useState(false);
   const [confirmCerrar, setConfirmCerrar] = useState(false);
+  const idRef = React.useRef(evaluacion?.id || null);
 
-  const isCerrada = evaluacion?.cerrada === true;
+  // Resincroniza cuando cambia el mes o llega data fresca del servidor
+  useEffect(() => {
+    setEvalLocal(evaluacion);
+    idRef.current = evaluacion?.id || null;
+  }, [evaluacion?.id, anio, mes]);
+
+  const isCerrada = evalLocal?.cerrada === true;
   const bonoBase = Math.max(BONO_BASE, facturacion * BONO_PCT);
-  const ajustesTotal = (evaluacion?.ajustes || []).reduce((s, a) => s + (Number(a.monto) || 0), 0);
+  const ajustesTotal = (evalLocal?.ajustes || []).reduce((s, a) => s + (Number(a.monto) || 0), 0);
   const bonoTotal = bonoBase + ajustesTotal;
 
-  const upsertPatch = async (patch) => {
+  const accent = accentUser(user);
+
+  const upsertPatch = (patch) => {
     if (isCerrada) return;
-    setSaving(true);
-    if (evaluacion?.id) {
-      await supabase.from('evaluaciones_mensuales').update(patch).eq('id', evaluacion.id);
-    } else {
-      await supabase.from('evaluaciones_mensuales').insert({
-        user_id: user.user_id, anio, mes,
-        facturacion, cuota_total: cuota, cuota_pct: cuotaPct,
-        bono_base: bonoBase, bono_ajustes: 0, bono_total: bonoBase,
-        ...patch,
-      });
-    }
-    setSaving(false);
-    if (onSaved) await onSaved();
+    // 1. Update UI instantáneo
+    setEvalLocal((prev) => ({ ...(prev || {}), ...patch }));
+    // 2. Save background
+    (async () => {
+      if (idRef.current) {
+        await supabase.from('evaluaciones_mensuales').update(patch).eq('id', idRef.current);
+      } else {
+        const { data } = await supabase.from('evaluaciones_mensuales').insert({
+          user_id: user.user_id, anio, mes,
+          facturacion, cuota_total: cuota, cuota_pct: cuotaPct,
+          bono_base: bonoBase, bono_ajustes: 0, bono_total: bonoBase,
+          ...patch,
+        }).select('id').single();
+        if (data?.id) idRef.current = data.id;
+      }
+    })();
   };
 
   const cerrarEvaluacion = async () => {
     if (isCerrada) return;
-    setSaving(true);
     const patch = {
       facturacion, cuota_total: cuota, cuota_pct: cuotaPct,
       bono_base: bonoBase, bono_ajustes: ajustesTotal, bono_total: bonoTotal,
       cerrada: true, cerrada_ts: new Date().toISOString(), cerrada_por: perfilId,
     };
-    if (evaluacion?.id) await supabase.from('evaluaciones_mensuales').update(patch).eq('id', evaluacion.id);
-    else await supabase.from('evaluaciones_mensuales').insert({ user_id: user.user_id, anio, mes, ...patch });
-    setSaving(false);
+    setEvalLocal((prev) => ({ ...(prev || {}), ...patch }));
     setConfirmCerrar(false);
-    if (onSaved) await onSaved();
+    if (idRef.current) await supabase.from('evaluaciones_mensuales').update(patch).eq('id', idRef.current);
+    else {
+      const { data } = await supabase.from('evaluaciones_mensuales')
+        .insert({ user_id: user.user_id, anio, mes, ...patch }).select('id').single();
+      if (data?.id) idRef.current = data.id;
+    }
+    if (onSaved) onSaved();
   };
+
+  // Alias para compatibilidad — la variable original evaluacion se usa mucho abajo
+  const evaluacion_ = evalLocal;
 
   const copiarTexto = () => {
     const sep = '═══════════════════════════════════════════════════════════';
-    const ratings = RATINGS.map((r) => ({ label: r.label, val: evaluacion?.[r.key] || null }));
-    const conRat = ratings.filter((r) => r.val);
-    const promRat = conRat.length ? conRat.reduce((s, r) => s + r.val, 0) / conRat.length : 0;
-    const tareas = evaluacion?.tareas || [];
-    const cumplidas = tareas.filter((t) => t.cumplida).length;
-    const ajustes = evaluacion?.ajustes || [];
+    const rat2 = RATINGS.map((r) => ({ label: r.label, val: evaluacion_?.[r.key] || null }));
+    const conRat2 = rat2.filter((r) => r.val);
+    const promRat2 = conRat2.length ? conRat2.reduce((s, r) => s + r.val, 0) / conRat2.length : 0;
+    const tareas2 = evaluacion_?.tareas || [];
+    const cumplidas2 = tareas2.filter((t) => t.cumplida).length;
+    const ajustes2 = evaluacion_?.ajustes || [];
 
     let txt = `Bono ${user.nombre} · ${MESES[mes-1]} ${anio} · ${fmtMoney(bonoTotal)} MXN\n\n`;
     txt += sep + '\nCUOTA ALCANZADA\n';
@@ -738,20 +758,20 @@ function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
     txt += `Alcance: ${cuotaPct.toFixed(1)}%${cuotaPct >= 100 ? ' (superó la cuota)' : ''}\n\n`;
 
     txt += sep + '\nEVALUACIÓN CUALITATIVA\n';
-    for (const r of ratings) txt += `· ${r.label.padEnd(22, ' ')}: ${r.val ? `${r.val}/5` : '—'}\n`;
-    if (promRat > 0) txt += `Promedio: ${promRat.toFixed(1)}/5\n`;
-    if (evaluacion?.comentarios) txt += `\nFeedback:\n${evaluacion.comentarios}\n`;
+    for (const r of rat2) txt += `· ${r.label.padEnd(22, ' ')}: ${r.val ? `${r.val}/5` : '—'}\n`;
+    if (promRat2 > 0) txt += `Promedio: ${promRat2.toFixed(1)}/5\n`;
+    if (evaluacion_?.comentarios) txt += `\nFeedback:\n${evaluacion_.comentarios}\n`;
 
-    if (tareas.length > 0) {
-      txt += '\n' + sep + `\nTAREAS DEL MES (${cumplidas} de ${tareas.length})\n`;
-      for (const t of tareas) {
+    if (tareas2.length > 0) {
+      txt += '\n' + sep + `\nTAREAS DEL MES (${cumplidas2} de ${tareas2.length})\n`;
+      for (const t of tareas2) {
         txt += `${t.cumplida ? '✓' : '✗'} ${t.texto}\n`;
         if (t.nota) txt += `    → ${t.nota}\n`;
       }
     }
-    if (ajustes.length > 0) {
+    if (ajustes2.length > 0) {
       txt += '\n' + sep + `\nAJUSTES AL BONO (${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)})\n`;
-      for (const a of ajustes) {
+      for (const a of ajustes2) {
         const signo = Number(a.monto) >= 0 ? '+' : '−';
         txt += `${a.fecha || ''}  ${signo}${fmtMoney(Math.abs(Number(a.monto)))}  ${a.descripcion || ''}\n`;
       }
@@ -760,7 +780,7 @@ function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
     txt += `Base       = max(${fmtMoney(BONO_BASE)}, ${(BONO_PCT*100).toFixed(2)}% × ${fmtMoney(facturacion)}) = ${fmtMoney(bonoBase)}\n`;
     if (ajustesTotal !== 0) txt += `Ajustes    = ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)}\n`;
     txt += `─────────────────────\nTotal a pagar: ${fmtMoney(bonoTotal)} MXN\n\n`;
-    if (isCerrada) txt += `Evaluación cerrada el ${new Date(evaluacion.cerrada_ts).toLocaleDateString('es-MX')} · inmutable\n`;
+    if (isCerrada && evaluacion_?.cerrada_ts) txt += `Evaluación cerrada el ${new Date(evaluacion_.cerrada_ts).toLocaleDateString('es-MX')} · inmutable\n`;
     else txt += `(evaluación aún abierta — puede cambiar)\n`;
 
     navigator.clipboard.writeText(txt);
@@ -770,132 +790,183 @@ function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
 
   return (
     <div>
-      {/* Bono hero */}
+      {/* Bono hero — refinado, un solo color plano, tipografía grande */}
       <div style={{
-        background: `linear-gradient(135deg, ${accentUser(user)} 0%, ${accentUser(user)}CC 100%)`,
-        color: 'white', borderRadius: 18, padding: '20px 22px', marginBottom: 12,
-        boxShadow: `0 6px 20px ${accentUser(user)}44`,
+        background: 'white',
+        border: `1px solid ${accent}22`,
+        borderRadius: 20, padding: '20px 22px', marginBottom: 14,
+        boxShadow: `0 2px 12px ${accent}18`,
+        position: 'relative', overflow: 'hidden',
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        {/* Accent side-bar */}
+        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: accent }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'rgba(255,255,255,0.85)' }}>
-              Bono {MESES[mes-1]} {anio}
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6E6E73' }}>
+              Bono · {MESES[mes-1]} {anio}
             </div>
-            <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, marginTop: 6 }}>
+            <div style={{ fontSize: 44, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, marginTop: 8,
+              color: accent, fontVariantNumeric: 'tabular-nums' }}>
               {fmtMoney(bonoTotal)}
             </div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 6 }}>
-              {isCerrada
-                ? <>✓ Cerrada · pagada el {new Date(evaluacion.cerrada_ts).toLocaleDateString('es-MX')}</>
-                : cuotaPct >= 100 ? <>Cuota superada · {cuotaPct.toFixed(0)}%</> : <>Cuota al {cuotaPct.toFixed(0)}%</>}
-            </div>
+          </div>
+          <div style={{
+            fontSize: 11, fontWeight: 600, padding: '5px 10px', borderRadius: 999,
+            background: isCerrada ? 'rgba(52,199,89,0.14)' : 'rgba(0,0,0,0.06)',
+            color: isCerrada ? '#1F7A3D' : '#6E6E73', whiteSpace: 'nowrap',
+          }}>
+            {isCerrada ? '✓ Cerrada' : 'Abierta'}
           </div>
         </div>
-        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.25)', fontSize: 12 }}>
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.06)',
+          fontSize: 12, color: '#6E6E73' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
-            <span>Base ({(BONO_PCT*100).toFixed(2)}% × {fmtMoney(facturacion)})</span>
-            <span>{fmtMoney(bonoBase)}</span>
+            <span>Base · {(BONO_PCT*100).toFixed(2)}% de {fmtMoney(facturacion)}</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums', color: '#1D1D1F', fontWeight: 600 }}>{fmtMoney(bonoBase)}</span>
           </div>
           {ajustesTotal !== 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
-              <span>+ Ajustes manuales</span>
-              <span>{ajustesTotal >= 0 ? '+' : ''}{fmtMoney(ajustesTotal)}</span>
+              <span>Ajustes manuales</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums', color: ajustesTotal >= 0 ? '#1F7A3D' : '#B00020', fontWeight: 600 }}>
+                {ajustesTotal >= 0 ? '+' : ''}{fmtMoney(ajustesTotal)}
+              </span>
             </div>
           )}
         </div>
       </div>
 
       {/* Botones acciones */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
         <button onClick={copiarTexto} style={{
           flex: 1, background: 'white', border: '1px solid rgba(0,0,0,0.1)',
-          padding: '10px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-        }}>{copied ? '✓ Copiado' : '📄 Copiar resumen'}</button>
+          padding: '11px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          transition: 'background 120ms',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.03)'}
+        onMouseLeave={(e) => e.currentTarget.style.background = 'white'}>
+          {copied ? '✓ Copiado al portapapeles' : 'Copiar resumen'}
+        </button>
         {!isCerrada && !confirmCerrar && (
           <button onClick={() => setConfirmCerrar(true)} style={{
-            flex: 1, background: '#34C759', border: 'none', color: 'white',
-            padding: '10px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-          }}>✓ Cerrar y pagar</button>
+            flex: 1, background: '#1F7A3D', border: 'none', color: 'white',
+            padding: '11px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            transition: 'background 120ms',
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.background = '#175F30'}
+          onMouseLeave={(e) => e.currentTarget.style.background = '#1F7A3D'}>
+            Cerrar y pagar
+          </button>
         )}
         {confirmCerrar && (
           <>
             <button onClick={() => setConfirmCerrar(false)} style={{
-              flex: 1, background: 'rgba(0,0,0,0.06)', border: 'none', padding: '10px',
+              flex: 1, background: 'rgba(0,0,0,0.06)', border: 'none', padding: '11px',
               borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
             }}>Cancelar</button>
-            <button onClick={cerrarEvaluacion} disabled={saving} style={{
-              flex: 1, background: '#34C759', border: 'none', color: 'white',
-              padding: '10px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            }}>Confirmar (irreversible)</button>
+            <button onClick={cerrarEvaluacion} style={{
+              flex: 1, background: '#B00020', border: 'none', color: 'white',
+              padding: '11px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}>Confirmar · irreversible</button>
           </>
         )}
       </div>
 
       {/* Nota junio 2026 */}
       {anio === 2026 && mes === 6 && (
-        <div style={{ background: 'rgba(255,159,10,0.14)', borderLeft: '3px solid #FF9F0A',
+        <div style={{ background: 'rgba(255,159,10,0.10)', borderLeft: `3px solid #FF9F0A`,
                       padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#7A4A00', marginBottom: 12 }}>
-          <strong>Nota:</strong> La telemetría inició en julio 2026. Junio se evalúa con actividad estimada al 100%.
+          <strong>Nota</strong> · La telemetría inició en julio 2026. Junio se evalúa con actividad estimada al 100%.
         </div>
       )}
 
       {/* Cuota */}
-      <SubSectSheet titulo="📊 Cuota alcanzada">
+      <SubSectSheet titulo="Cuota alcanzada">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center' }}>
           <div>
-            <div style={{ height: 10, background: 'rgba(0,0,0,0.06)', borderRadius: 5, overflow: 'hidden' }}>
+            <div style={{ height: 8, background: 'rgba(0,0,0,0.06)', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${Math.min(100, cuotaPct)}%`,
-                background: 'linear-gradient(90deg, #34C759 0%, #30B04E 100%)', borderRadius: 5 }} />
+                background: '#1F7A3D', borderRadius: 4, transition: 'width 320ms cubic-bezier(0.32,0.72,0,1)' }} />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 5, color: '#6E6E73' }}>
-              <span>Fact. <strong style={{ color: '#1D1D1F' }}>{fmtMoney(facturacion)}</strong></span>
-              <span>Cuota <strong style={{ color: '#1D1D1F' }}>{fmtMoney(cuota)}</strong></span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 6, color: '#6E6E73' }}>
+              <span>Fact. <strong style={{ color: '#1D1D1F', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(facturacion)}</strong></span>
+              <span>Cuota <strong style={{ color: '#1D1D1F', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(cuota)}</strong></span>
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#30B04E', letterSpacing: '-0.02em' }}>{cuotaPct.toFixed(1)}%</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: cuotaPct >= 100 ? '#1F7A3D' : '#1D1D1F',
+              letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{cuotaPct.toFixed(0)}%</div>
           </div>
         </div>
       </SubSectSheet>
 
-      {/* Ratings */}
-      <SubSectSheet titulo="⭐ Rating por categoría">
-        {RATINGS.map((r) => (
-          <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '140px 1fr 35px', gap: 10,
-            alignItems: 'center', padding: '5px 0', borderBottom: '1px dashed rgba(0,0,0,0.08)' }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600 }}>{r.label}</div>
-            <div style={{ display: 'flex', gap: 2 }}>
-              {[1,2,3,4,5].map((n) => (
-                <button key={n} disabled={isCerrada}
-                  onClick={() => upsertPatch({ [r.key]: n })}
-                  style={{ border: 'none', background: 'transparent', fontSize: 18, cursor: isCerrada ? 'default' : 'pointer',
-                    padding: 0, color: (evaluacion?.[r.key] || 0) >= n ? '#FF9F0A' : '#E5E5EA' }}>★</button>
-              ))}
-            </div>
-            <div style={{ fontSize: 11, color: '#6E6E73', textAlign: 'right' }}>{evaluacion?.[r.key] ? `${evaluacion[r.key]}/5` : '—'}</div>
-          </div>
-        ))}
+      {/* Ratings — pills segmentadas 1-5 (Apple-style, cero flicker) */}
+      <SubSectSheet titulo="Evaluación cualitativa">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {RATINGS.map((r) => (
+            <RatingRow key={r.key} label={r.label}
+              value={evaluacion_?.[r.key] || 0}
+              onChange={(n) => upsertPatch({ [r.key]: n })}
+              disabled={isCerrada} accent={accent} />
+          ))}
+        </div>
       </SubSectSheet>
 
       {/* Comentarios */}
-      <SubSectSheet titulo="💬 Comentarios">
-        <textarea disabled={isCerrada} defaultValue={evaluacion?.comentarios || ''}
-          onBlur={(e) => e.target.value !== (evaluacion?.comentarios || '') && upsertPatch({ comentarios: e.target.value })}
-          placeholder="Feedback del mes..."
-          style={{ width: '100%', minHeight: 70, padding: 10, fontSize: 12.5,
-            border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, background: 'white',
-            resize: 'vertical', fontFamily: 'inherit', outline: 'none' }} />
+      <SubSectSheet titulo="Comentarios">
+        <textarea disabled={isCerrada} defaultValue={evaluacion_?.comentarios || ''}
+          key={`comm-${anio}-${mes}`}
+          onBlur={(e) => e.target.value !== (evaluacion_?.comentarios || '') && upsertPatch({ comentarios: e.target.value })}
+          placeholder="Feedback del mes…"
+          style={{ width: '100%', minHeight: 80, padding: 12, fontSize: 13,
+            border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, background: 'white',
+            resize: 'vertical', fontFamily: 'inherit', outline: 'none',
+            transition: 'border-color 120ms',
+          }}
+          onFocus={(e) => e.currentTarget.style.borderColor = accent}
+          onBlurCapture={(e) => e.currentTarget.style.borderColor = 'rgba(0,0,0,0.08)'} />
       </SubSectSheet>
 
       {/* Tareas */}
-      <SubSectSheet titulo={`✓ Tareas${evaluacion?.tareas?.length ? ` (${(evaluacion.tareas || []).filter((t) => t.cumplida).length}/${evaluacion.tareas.length})` : ''}`}>
-        <TareasLista tareas={evaluacion?.tareas || []} onChange={(t) => upsertPatch({ tareas: t })} disabled={isCerrada} />
+      <SubSectSheet titulo={`Tareas del mes${evaluacion_?.tareas?.length ? ` · ${(evaluacion_.tareas || []).filter((t) => t.cumplida).length}/${evaluacion_.tareas.length}` : ''}`}>
+        <TareasLista tareas={evaluacion_?.tareas || []} onChange={(t) => upsertPatch({ tareas: t })} disabled={isCerrada} accent={accent} />
       </SubSectSheet>
 
       {/* Ajustes */}
-      <SubSectSheet titulo={`💵 Ajustes al bono${ajustesTotal !== 0 ? ` (${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)})` : ''}`}>
-        <AjustesLista ajustes={evaluacion?.ajustes || []} onChange={(a) => upsertPatch({ ajustes: a })} disabled={isCerrada} />
+      <SubSectSheet titulo={`Ajustes al bono${ajustesTotal !== 0 ? ` · ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)}` : ''}`}>
+        <AjustesLista ajustes={evaluacion_?.ajustes || []} onChange={(a) => upsertPatch({ ajustes: a })} disabled={isCerrada} />
       </SubSectSheet>
+    </div>
+  );
+}
+
+// Segmented control 1-5 (Apple-style)
+function RatingRow({ label, value, onChange, disabled, accent }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 12, alignItems: 'center' }}>
+      <div style={{ fontSize: 13, fontWeight: 500, color: '#1D1D1F' }}>{label}</div>
+      <div style={{ display: 'flex', background: 'rgba(0,0,0,0.05)', borderRadius: 10, padding: 3, gap: 2 }}>
+        {[1,2,3,4,5].map((n) => {
+          const on = value === n;
+          return (
+            <button key={n} disabled={disabled}
+              onClick={() => onChange(n)}
+              style={{
+                flex: 1, border: 'none', padding: '7px 0', borderRadius: 8,
+                background: on ? accent : 'transparent',
+                color: on ? 'white' : '#6E6E73',
+                fontSize: 13, fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
+                transition: 'background 120ms, color 120ms, transform 100ms',
+                boxShadow: on ? '0 1px 3px rgba(0,0,0,0.15)' : 'none',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+              onMouseDown={(e) => !disabled && !on && (e.currentTarget.style.transform = 'scale(0.95)')}
+              onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}>
+              {n}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
