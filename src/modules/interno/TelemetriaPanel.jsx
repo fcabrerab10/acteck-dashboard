@@ -20,9 +20,12 @@ const DIGITALIFE_CUOTA_ANUAL = 25_000_000;
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
-// Requiere evaluación mensual todo interno que no sea super_admin.
-// Permisivo con `tipo`: si es null/undefined lo trata como interno (evita que se pierda la eval por dato faltante).
-const requiereEvaluacion = (u) => u.rol !== 'super_admin' && u.tipo !== 'externo';
+// Sólo Karolina tiene evaluación mensual + comisión. Los demás sólo se
+// monitorean con telemetría. Match por email para ser resiliente a cambios de nombre.
+const requiereEvaluacion = (u) => {
+  const email = (u.email || '').toLowerCase();
+  return email.startsWith('karolina.veliz') || email.startsWith('karolina@');
+};
 
 const RATINGS = [
   { key: 'rating_comunicacion', label: 'Comunicación' },
@@ -548,11 +551,10 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
   const totalCli = Object.values(cliCount).reduce((s, v) => s + v, 0);
   const cliOrden = Object.entries(cliCount).sort((a, b) => b[1] - a[1]);
 
-  // Mostrar evaluación siempre que se abra el panel. Sin filtros por rol/tipo que
-  // puedan fallar por datos inconsistentes en la DB. Si abre su propia card el super_admin
-  // simplemente ve la eval vacía y no la usa.
-  const puedeEvaluar = true;
-  const aplicaBono = true;
+  // Sólo Karolina tiene evaluación mensual + comisión. Los demás usuarios sólo
+  // se monitorean con telemetría — no se muestra bono, cuota, ratings ni tareas.
+  const puedeEvaluar = requiereEvaluacion(user);
+  const aplicaBono = puedeEvaluar;
   const bonoBase = (BONO_BASE + facturacion * BONO_PCT);
   const ajustesTotal = (evaluacion?.ajustes || []).reduce((s, a) => s + (Number(a.monto) || 0), 0);
   const bonoTotal = bonoBase + ajustesTotal;
@@ -866,8 +868,9 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
 
   return (
     <div style={{ padding: '14px 20px 20px',
-      display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.15fr)', gap: 14,
-      alignItems: 'start',
+      display: 'grid',
+      gridTemplateColumns: puedeEvaluar ? 'minmax(0, 1fr) minmax(0, 1.15fr)' : 'minmax(0, 1fr)',
+      gap: 14, alignItems: 'start',
     }}>
       {/* ═══════════ COLUMNA IZQUIERDA — contexto/KPIs ═══════════ */}
       <div>
@@ -918,6 +921,7 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
         </SubSectSheet>
       )}
 
+      {puedeEvaluar && (<>
       {/* Bono hero — compacto */}
       <div style={{
         background: 'white',
@@ -1043,10 +1047,12 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
           </div>
         </div>
       </SubSectSheet>
+      </>)}{/* /puedeEvaluar */}
 
       </div>{/* ═══════════ /COLUMNA IZQUIERDA ═══════════ */}
 
-      {/* ═══════════ COLUMNA DERECHA — evaluación manual ═══════════ */}
+      {/* ═══════════ COLUMNA DERECHA — evaluación manual (sólo Karolina) ═══════════ */}
+      {puedeEvaluar && (
       <div>
       {/* Ratings — pills segmentadas 1-5 */}
       <SubSectSheet titulo="Evaluación cualitativa">
@@ -1084,7 +1090,8 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
       <SubSectSheet titulo={`Ajustes al bono${ajustesTotal !== 0 ? ` · ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)}` : ''}`}>
         <AjustesLista ajustes={evaluacion_?.ajustes || []} onChange={(a) => upsertPatch({ ajustes: a })} disabled={isCerrada} />
       </SubSectSheet>
-      </div>{/* ═══════════ /COLUMNA DERECHA ═══════════ */}
+      </div>
+      )}{/* ═══════════ /COLUMNA DERECHA ═══════════ */}
     </div>
   );
 }
