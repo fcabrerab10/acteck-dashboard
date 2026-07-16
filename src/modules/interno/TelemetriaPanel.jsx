@@ -101,33 +101,44 @@ export default function TelemetriaPanel() {
   const [evaluacionesMesActual, setEvaluacionesMesActual] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
 
-  // Fetch inicial: usuarios + eventos del mes actual + fact + cuota + evaluaciones del mes actual
+  // Fetch inicial. Cada query en su propio try/catch para que un error puntual
+  // (RLS, view faltante) no rompa toda la vista.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
+      setFetchError(null);
       const { ini, fin } = rangoMes(anioActual, mesActual);
+      const safe = async (label, promise, fallback) => {
+        try {
+          const res = await promise;
+          if (res.error) { console.warn(`[Telemetria][${label}]`, res.error); return fallback; }
+          return res.data ?? fallback;
+        } catch (e) { console.warn(`[Telemetria][${label}]`, e); return fallback; }
+      };
       const [perf, evs, fact, cuotas, evalRes] = await Promise.all([
-        supabase.from('perfiles').select('user_id,nombre,email,rol,tipo,puesto').order('nombre'),
-        supabase.from('eventos_usuario')
+        safe('perfiles', supabase.from('perfiles').select('user_id,nombre,email,rol,tipo,puesto').order('nombre'), []),
+        safe('eventos_usuario', supabase.from('eventos_usuario')
           .select('id,user_id,ts,tipo,cliente,pagina,detalle')
           .gte('ts', ini.toISOString()).lt('ts', fin.toISOString())
-          .order('ts', { ascending: false }).limit(20000),
-        supabase.from('facturacion_clientes')
+          .order('ts', { ascending: false }).limit(20000), []),
+        safe('facturacion_clientes', supabase.from('facturacion_clientes')
           .select('monto,cliente_key').in('cliente_key', CLIENTES_BONO)
-          .eq('anio', anioActual).eq('mes', mesActual),
-        supabase.from('cuotas_mensuales')
+          .eq('anio', anioActual).eq('mes', mesActual), []),
+        safe('cuotas_mensuales', supabase.from('cuotas_mensuales')
           .select('cliente,cuota_min').in('cliente', ['pcel', 'dicotech'])
-          .eq('anio', anioActual).eq('mes', mesActual),
-        supabase.from('evaluaciones_mensuales').select('*').eq('anio', anioActual).eq('mes', mesActual),
+          .eq('anio', anioActual).eq('mes', mesActual), []),
+        safe('evaluaciones_mensuales', supabase.from('evaluaciones_mensuales').select('*').eq('anio', anioActual).eq('mes', mesActual), []),
       ]);
       if (cancelled) return;
-      setUsuarios(perf.data || []);
-      setEventos(evs.data || []);
-      setFacturacionMes((fact.data || []).reduce((s, r) => s + (Number(r.monto) || 0), 0));
-      setCuotaMes((cuotas.data || []).reduce((s, r) => s + (Number(r.cuota_min) || 0), 0) + DIGITALIFE_CUOTA_ANUAL / 12);
-      setEvaluacionesMesActual(evalRes.data || []);
+      setUsuarios(perf);
+      setEventos(evs);
+      setFacturacionMes(fact.reduce((s, r) => s + (Number(r.monto) || 0), 0));
+      setCuotaMes(cuotas.reduce((s, r) => s + (Number(r.cuota_min) || 0), 0) + DIGITALIFE_CUOTA_ANUAL / 12);
+      setEvaluacionesMesActual(evalRes);
+      if (perf.length === 0) setFetchError('No se pudieron cargar los usuarios. Revisa la consola.');
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -208,13 +219,34 @@ export default function TelemetriaPanel() {
     return 0;
   });
 
+  const WRAPPER_STYLE = {
+    background: 'linear-gradient(135deg, #E8F1FF 0%, #FFF5F8 50%, #FFE8D6 100%)',
+    borderRadius: 24, padding: 28, minHeight: '100vh',
+  };
+
   if (loading) {
-    return <div className="p-16 text-center text-sm text-gray-500">Cargando…</div>;
+    return (
+      <div style={WRAPPER_STYLE}>
+        <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', margin: 0 }}>Actividad del equipo</h1>
+        <p style={{ color: '#6E6E73', fontSize: 14, margin: '4px 0 24px' }}>Cargando…</p>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div style={WRAPPER_STYLE}>
+        <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', margin: 0 }}>Actividad del equipo</h1>
+        <div style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.3)',
+          borderRadius: 12, padding: 16, marginTop: 20, fontSize: 14, color: '#B00020' }}>
+          <strong>Error al cargar:</strong> {fetchError}
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div style={{ background: 'linear-gradient(135deg, #E8F1FF 0%, #FFF5F8 50%, #FFE8D6 100%)',
-                  borderRadius: 24, padding: 28, minHeight: '100vh' }}>
+    <div style={WRAPPER_STYLE}>
       {/* Header */}
       <div className="flex items-end justify-between mb-6">
         <div>
