@@ -3,6 +3,8 @@
 // fecha de datos (max(fecha) o max(anio,semana,mes)) y el updated_at de
 // la tabla.
 
+import { requireAuth } from './_auth.js';
+
 const SB_URL = process.env.VITE_SUPABASE_URL || 'https://hrhccvuhnedahznewgaj.supabase.co';
 const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -23,6 +25,8 @@ export default async function handler(req, res) {
   if (!SRK) {
     return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
   }
+  const perfil = await requireAuth(req, res);
+  if (!perfil) return;
 
   const queries = {
     facturacion_global: 'facturacion_clientes?select=anio,mes&order=anio.desc,mes.desc&limit=1',

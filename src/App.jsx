@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase, DB_CONFIGURED } from './lib/supabase';
+import { apiFetch } from './lib/apiFetch';
 import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_MES, ML_SELLOUT_DEFAULT, clientes } from './lib/constants';
 import { formatMXN, formatUSD, formatFecha, diasRestantes, calcularSalud, loadSheetJS } from './lib/utils';
 import { useTelemetry, telemetria } from './lib/telemetry';
@@ -238,7 +239,7 @@ function Breadcrumb({ clienteActivo, paginaActiva, vistaActual }) {
 function UpdatedAtBadgeX() {
   const [info, setInfo] = useState(null);
   useEffect(() => {
-    fetch('/api/last-update').then(r => r.json()).then(setInfo).catch(() => setInfo({ error: true }));
+    apiFetch('/api/last-update').then(r => r.json()).then(setInfo).catch(() => setInfo({ error: true }));
   }, []);
   if (!info) return React.createElement('span', { className: 'text-xs text-gray-400' }, 'cargando…');
   if (info.error || !info.last_update) return React.createElement('span', { className: 'text-xs text-gray-400' }, 'sin datos');
@@ -426,12 +427,22 @@ export default function App() {
             <>
             {/* Banner modo presentaci³n */}
         { /* Banner removed */ }
-          {paginaActiva === "resumen" && <ResumenCuentas />}
-          {paginaActiva === "reporte" && <ReporteTab />}
+          {paginaActiva === "resumen" && (
+            perfil?.es_super_admin
+              ? <ResumenCuentas />
+              : <SinAcceso motivo="No tienes acceso al Resumen general." />
+          )}
+          {paginaActiva === "reporte" && (
+            perfil?.es_super_admin
+              ? <ReporteTab />
+              : <SinAcceso motivo="No tienes acceso al Reporte." />
+          )}
           {paginaActiva === "resumenClientes" && (
-            <ResumenClientesTab
-              onDrillDown={(clienteKey) => { setClienteActivo(clienteKey); setPaginaActiva('home'); }}
-            />
+            puedeVerPestanaGlobal(perfil, "resumen_clientes")
+              ? <ResumenClientesTab
+                  onDrillDown={(clienteKey) => { setClienteActivo(clienteKey); setPaginaActiva('home'); }}
+                />
+              : <SinAcceso motivo="No tienes acceso al Resumen de Clientes." />
           )}
           {paginaActiva === "estadoResultados" && (
             puedeVerPestanaGlobal(perfil, "estado_resultados")
@@ -480,7 +491,11 @@ export default function App() {
               )
               : <SinAcceso motivo="No tienes acceso a Cobranza." />
           )}
-          {paginaActiva === "forecastClientes" && <ForecastClientesTab />}
+          {paginaActiva === "forecastClientes" && (
+            puedeVerPestanaGlobal(perfil, "forecast_clientes")
+              ? <ForecastClientesTab />
+              : <SinAcceso motivo="No tienes acceso a Forecast / S&OP." />
+          )}
           {paginaActiva === "estrategiaPrecios" && (
             puedeVerPestanaGlobal(perfil, "estrategia_precios")
               ? <EstrategiaPrecios />
@@ -502,7 +517,11 @@ export default function App() {
               ? <EvaluacionesPanel />
               : <SinAcceso motivo="No tienes acceso a Evaluaciones." />
           )}
-          {paginaActiva === "telemetria" && <TelemetriaPanel />}
+          {paginaActiva === "telemetria" && (
+            perfil?.es_super_admin
+              ? <TelemetriaPanel />
+              : <SinAcceso motivo="Sólo el super admin puede ver la actividad del equipo." />
+          )}
           {paginaActiva === "axonMexico" && (
             puedeVerPestanaGlobal(perfil, "axon_mexico")
               ? <AxonMexico />

@@ -2,6 +2,8 @@
 // Recalculates intermediate/materialized tables after data uploads.
 // POST { tables: ['ventas_mensuales','sell_in_sku','sellout_sku'] }
 
+import { requireSuperAdmin } from './_auth.js';
+
 const SB_URL = process.env.VITE_SUPABASE_URL || 'https://hrhccvuhnedahznewgaj.supabase.co';
 const SRK    = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -247,6 +249,8 @@ const RECALC_MAP = {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!SRK) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
+  const perfil = await requireSuperAdmin(req, res);
+  if (!perfil) return;
 
   try {
     const { tables, debug, reset, migrate } = req.body || {};

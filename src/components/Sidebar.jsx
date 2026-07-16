@@ -28,7 +28,7 @@ const MENU_A_PERMISO_GLOBAL = {
   estrategiaPrecios:'estrategia_precios',
   ordenesCompra:    'ordenes_compra',
   adminInterna:     'admin_interna',
-  // telemetria: visible para todos los autenticados (RLS filtra a lo propio)
+  telemetria:       '__super_admin_only__', // sentinel: solo Fernando
   evaluaciones:     'evaluaciones',
   axonMexico:       'axon_mexico',
   configuracion:    'configuracion',
@@ -352,6 +352,7 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, onNavegar, isActi
       return (item.children || []).some(isItemVisible);
     }
     const permisoId = MENU_A_PERMISO_GLOBAL[item.id];
+    if (permisoId === '__super_admin_only__') return !!perfil?.es_super_admin;
     if (permisoId) return puedeVerPestanaGlobal(perfil, permisoId);
     return true;
   };

@@ -88,8 +88,7 @@ function Ring({ pct, color, size = 44, stroke = 5 }) {
 
 // ═══════════════════ Componente principal ═══════════════════
 export default function TelemetriaPanel() {
-  const { perfil } = usePerfil();
-  // Doble check por si el campo `rol` no es exacto — usa también flag booleano
+  const perfil = usePerfil(); // Context inyecta el perfil directo, NO {perfil}
   const esAdmin = perfil?.rol === 'super_admin' || perfil?.es_super_admin === true;
 
   // Estado global (mes actual — el sheet lateral maneja meses individualmente)
@@ -109,6 +108,7 @@ export default function TelemetriaPanel() {
   // Fetch inicial. Cada query en su propio try/catch para que un error puntual
   // (RLS, view faltante) no rompa toda la vista.
   useEffect(() => {
+    if (!esAdmin) { setLoading(false); return; } // defensa: no fetch si no es admin
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -145,7 +145,7 @@ export default function TelemetriaPanel() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [anioActual, mesActual]);
+  }, [anioActual, mesActual, esAdmin]);
 
   // Índices y KPIs por usuario para las cards
   const eventosPorUser = useMemo(() => {
@@ -233,6 +233,16 @@ export default function TelemetriaPanel() {
     background: 'linear-gradient(135deg, #E8F1FF 0%, #FFF5F8 50%, #FFE8D6 100%)',
     borderRadius: 24, padding: 28, minHeight: '100vh',
   };
+
+  // Defensa: si no es super_admin, no renderizar contenido (el gate real está en App.jsx).
+  if (!esAdmin) {
+    return (
+      <div style={WRAPPER_STYLE}>
+        <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', margin: 0 }}>Actividad del equipo</h1>
+        <p style={{ color: '#6E6E73', fontSize: 14, margin: '4px 0 24px' }}>Sin acceso.</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

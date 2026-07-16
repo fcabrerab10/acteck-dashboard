@@ -1,6 +1,7 @@
 // Pestaña "Actualización de datos" — solo admin
 // 6 tarjetas de subida manual + 1 de tránsito automático
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { apiFetch } from '../../lib/apiFetch';
 
 const XLSX_URL = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
 const CHUNK_SIZE = 500;
@@ -324,7 +325,7 @@ function relTime(d) {
 
 // ---------- upload orquestador ----------
 async function postChunk(type, rows, meta, chunkIndex, totalChunks, mode) {
-  const r = await fetch('/api/upload', {
+  const r = await apiFetch('/api/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type, rows, meta, chunkIndex, totalChunks, mode })
@@ -360,7 +361,7 @@ export default function ActualizacionDatos({ perfil }) {
 
   const refreshStatus = async () => {
     try {
-      const r = await fetch('/api/sync-status');
+      const r = await apiFetch('/api/sync-status');
       const j = await r.json();
       if (j.ok) setStatus(j);
     } catch (e) { /* ignore */ }
@@ -368,7 +369,7 @@ export default function ActualizacionDatos({ perfil }) {
 
   const refreshUploadStatus = async () => {
     try {
-      const r = await fetch('/api/upload-status');
+      const r = await apiFetch('/api/upload-status');
       if (!r.ok) return;
       const j = await r.json();
       setUploadStatus(j || {});

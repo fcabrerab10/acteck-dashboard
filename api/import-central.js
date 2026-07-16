@@ -8,6 +8,8 @@
 //   sellout_detalle     -> "cliente,fecha,no_parte,row_hash"
 //   inventario_cliente  -> "cliente,sku"
 
+import { requireSuperAdmin } from './_auth.js';
+
 export const config = { api: { bodyParser: { sizeLimit: '4mb' } } };
 
 const SB_URL = process.env.VITE_SUPABASE_URL || 'https://hrhccvuhnedahznewgaj.supabase.co';
@@ -39,6 +41,8 @@ const ALLOWED = {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!SRK) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
+  const perfil = await requireSuperAdmin(req, res);
+  if (!perfil) return;
 
   try {
     const { table, rows, deleteAnios, deletePeriodos } = req.body || {};

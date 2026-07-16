@@ -5,6 +5,8 @@
 // 3) Inserta detalle nuevo en chunks
 // Además, si no viene tipo_cambio, intenta obtener el USD/MXN del día.
 
+import { requireSuperAdmin } from './_auth.js';
+
 export const config = { api: { bodyParser: { sizeLimit: '6mb' } } };
 
 const SB_URL = process.env.VITE_SUPABASE_URL || 'https://hrhccvuhnedahznewgaj.supabase.co';
@@ -40,6 +42,8 @@ async function sbReq(method, path, body, extraHeaders = {}) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!SRK) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
+  const perfil = await requireSuperAdmin(req, res);
+  if (!perfil) return;
 
   try {
     const { resumen, detalle } = req.body || {};

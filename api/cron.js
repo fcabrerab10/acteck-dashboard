@@ -392,10 +392,12 @@ https://acteck-dashboard.vercel.app/  → Administración Interna → Actividad 
 }
 
 export default async function handler(req, res) {
-  if (process.env.CRON_SECRET) {
-    const got = req.headers.authorization?.replace(/^Bearer\s+/, '') || req.headers['x-cron-secret'];
-    if (got !== process.env.CRON_SECRET) return res.status(401).json({ error: 'unauthorized' });
-  }
+  // CRON_SECRET es OBLIGATORIO. Si no está configurado, el endpoint rechaza todo.
+  // Vercel Cron manda `authorization: Bearer <CRON_SECRET>` automáticamente
+  // cuando la env var está seteada en el proyecto.
+  if (!process.env.CRON_SECRET) return res.status(503).json({ error: 'CRON_SECRET no configurada — endpoint deshabilitado' });
+  const got = req.headers.authorization?.replace(/^Bearer\s+/, '') || req.headers['x-cron-secret'];
+  if (got !== process.env.CRON_SECRET) return res.status(401).json({ error: 'unauthorized' });
   if (!SRK) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY no configurada' });
 
   const task = req.query?.task || (req.url?.split('?')[1] || '').split('&').find((p) => p.startsWith('task='))?.slice(5);

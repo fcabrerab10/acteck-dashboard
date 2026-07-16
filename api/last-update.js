@@ -2,6 +2,8 @@
 // Returns the most recent updated_at timestamp across the central Excel tables.
 // Used by the dashboard to show the 'Ultima actualizacion' label.
 
+import { requireAuth } from './_auth.js';
+
 const SB_URL = process.env.VITE_SUPABASE_URL || 'https://hrhccvuhnedahznewgaj.supabase.co';
 const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -17,6 +19,8 @@ const TABLES = [
 
 export default async function handler(req, res) {
   if (!SRK) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
+  const perfil = await requireAuth(req, res);
+  if (!perfil) return;
   try {
     const per = {};
     await Promise.all(TABLES.map(async t => {

@@ -4,6 +4,34 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Actualizar datos — Acteck Dashboard</title>
+<!-- Gate de seguridad: sólo super_admin. Además wrapea fetch() para inyectar Bearer <token> en /api/*. -->
+<script type="module">
+  document.documentElement.style.visibility = 'hidden';
+  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+  // Estas keys son públicas (anon) — la seguridad real está en RLS + requireSuperAdmin de los endpoints.
+  const SB_URL = 'https://hrhccvuhnedahznewgaj.supabase.co';
+  const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhyaGNjdnVobmVkYWh6bmV3Z2FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2MTc2MTAsImV4cCI6MjA5MTE5MzYxMH0.rJNz0WLnJMBKSliMddrw_6JlFfs49cl4e_Q9RbAqMbs';
+  const supa = createClient(SB_URL, SB_ANON);
+  const { data: { session } } = await supa.auth.getSession();
+  if (!session) { alert('Debes iniciar sesión en el dashboard primero.'); window.location.href = '/'; }
+  else {
+    const { data: perfil } = await supa.from('perfiles').select('es_super_admin,rol').eq('user_id', session.user.id).single();
+    const esSuper = perfil?.es_super_admin === true || perfil?.rol === 'super_admin';
+    if (!esSuper) { alert('Sólo el Super Admin puede acceder a esta página.'); window.location.href = '/'; }
+    else {
+      // Wrap fetch para inyectar Authorization en llamadas a /api/*
+      const origFetch = window.fetch.bind(window);
+      window.fetch = (input, init = {}) => {
+        const url = typeof input === 'string' ? input : input.url;
+        if (url && url.startsWith('/api/')) {
+          init.headers = { ...(init.headers || {}), authorization: `Bearer ${session.access_token}` };
+        }
+        return origFetch(input, init);
+      };
+      document.documentElement.style.visibility = 'visible';
+    }
+  }
+</script>
 <style>
   :root { --azul:#1e40af; --gris:#f3f4f6; --bord:#e5e7eb; --ok:#059669; --err:#dc2626; --warn:#d97706; }
   *{box-sizing:border-box}
