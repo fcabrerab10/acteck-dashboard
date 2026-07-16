@@ -562,78 +562,74 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
         @keyframes slidedown { from { transform: translateY(-12px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
       `}</style>
 
-      {/* Header con avatar + cerrar */}
+      {/* Header con avatar + cerrar + meses (todo en una fila) */}
       <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-        padding: '20px 24px 14px',
-        borderBottom: '1px solid rgba(0,0,0,0.05)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14,
+        padding: '12px 18px', borderBottom: '1px solid rgba(0,0,0,0.05)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
           <div style={{
-            width: 64, height: 64, borderRadius: 999, background: colorAvatar(user),
+            width: 44, height: 44, borderRadius: 999, background: colorAvatar(user),
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white', fontWeight: 700, fontSize: 24,
-            boxShadow: `0 4px 14px ${accentUser(user)}55`,
+            color: 'white', fontWeight: 700, fontSize: 16, flexShrink: 0,
+            boxShadow: `0 2px 8px ${accentUser(user)}44`,
           }}>{iniciales(user.nombre || user.email)}</div>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>{user.nombre}</div>
-            <div style={{ fontSize: 13, color: '#6E6E73' }}>{u_desc(user)}</div>
-            <div style={{ fontSize: 11.5, color: '#8E8E93', marginTop: 2 }}>{user.email}</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em' }}>{user.nombre}</div>
+            <div style={{ fontSize: 11.5, color: '#8E8E93' }}>{u_desc(user)} · {user.email}</div>
           </div>
         </div>
-        <button onClick={onClose} style={{
-          width: 32, height: 32, borderRadius: 999, border: 'none',
-          background: 'rgba(0,0,0,0.06)', color: '#1D1D1F', fontSize: 16,
-          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>✕</button>
-      </div>
-
-      {/* Segmented control meses (izq → der cronológico) */}
-      <div style={{ padding: '14px 24px 0', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Mes
-        </span>
-        <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.06)', borderRadius: 12, padding: 3, gap: 2 }}>
-          {mesesDisponibles.map((m) => {
-            const on = m.anio === mesRef.anio && m.mes === mesRef.mes;
-            const label = m.anio === hoy.getFullYear() ? MESES_CORTO[m.mes - 1] : `${MESES_CORTO[m.mes - 1]} ${String(m.anio).slice(2)}`;
-            return (
-              <button key={`${m.anio}-${m.mes}`} onClick={() => setMesRef(m)} style={{
-                border: 'none', background: on ? 'white' : 'transparent',
-                color: on ? '#1D1D1F' : '#6E6E73',
-                padding: '7px 14px', fontSize: 12.5, fontWeight: 600, borderRadius: 9,
-                cursor: 'pointer', boxShadow: on ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-              }}>{label}</button>
-            );
-          })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.06)', borderRadius: 10, padding: 2, gap: 1 }}>
+            {mesesDisponibles.map((m) => {
+              const on = m.anio === mesRef.anio && m.mes === mesRef.mes;
+              const label = m.anio === hoy.getFullYear() ? MESES_CORTO[m.mes - 1] : `${MESES_CORTO[m.mes - 1]} ${String(m.anio).slice(2)}`;
+              return (
+                <button key={`${m.anio}-${m.mes}`} onClick={() => setMesRef(m)} style={{
+                  border: 'none', background: on ? 'white' : 'transparent',
+                  color: on ? '#1D1D1F' : '#6E6E73',
+                  padding: '5px 10px', fontSize: 11.5, fontWeight: 600, borderRadius: 8,
+                  cursor: 'pointer', boxShadow: on ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                }}>{label}</button>
+              );
+            })}
+          </div>
+          <button onClick={onClose} style={{
+            width: 28, height: 28, borderRadius: 999, border: 'none',
+            background: 'rgba(0,0,0,0.06)', color: '#1D1D1F', fontSize: 14,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>✕</button>
         </div>
       </div>
 
       {loading ? (
-        <div style={{ padding: 40, textAlign: 'center', color: '#8E8E93' }}>Cargando…</div>
+        <div style={{ padding: 32, textAlign: 'center', color: '#8E8E93', fontSize: 13 }}>Cargando…</div>
       ) : (
-        <div style={{ padding: '18px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Columna izq — Telemetría */}
+        <div style={{ padding: '14px 20px 20px',
+          display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.15fr)', gap: 14,
+          alignItems: 'start',
+        }}>
+          {/* Columna izq — Telemetría (compacta) */}
           <div>
             <SubSectSheet titulo="Actividad del mes">
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                <MiniKPI k="Días activos" v={`${dias}/${diasEnMes}`} s={`${(dias/diasEnMes*100).toFixed(0)}% del mes`} />
-                <MiniKPI k="Tiempo activo" v={fmtHm(heartbeats)} s={`${(heartbeats/Math.max(1,dias)/60).toFixed(1)} h/día`} />
-                <MiniKPI k="Última sesión" v={fmtHace(eventos[0]?.ts).replace('hace ', '')}
-                  s={eventos[0] ? fmtFechaHora(eventos[0].ts) : 'Sin sesiones'} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                <MiniKPI k="Días" v={`${dias}/${diasEnMes}`} s={`${(dias/diasEnMes*100).toFixed(0)}%`} />
+                <MiniKPI k="Tiempo" v={fmtHm(heartbeats)} s={`${(heartbeats/Math.max(1,dias)/60).toFixed(1)} h/día`} />
+                <MiniKPI k="Última" v={fmtHace(eventos[0]?.ts).replace('hace ', '')}
+                  s={eventos[0] ? fmtFechaHora(eventos[0].ts).split(',')[0] : '—'} />
               </div>
               {cliOrden.length > 0 && (
-                <div style={{ marginTop: 14 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Atención por cliente</div>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Atención por cliente</div>
                   {cliOrden.map(([cli, cnt]) => {
                     const pct = totalCli > 0 ? (cnt / totalCli * 100) : 0;
                     return (
-                      <div key={cli} style={{ marginBottom: 6 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                      <div key={cli} style={{ marginBottom: 5 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginBottom: 2 }}>
                           <span style={{ fontWeight: 600 }}>{CLIENTE_LABEL[cli] || cli}</span>
-                          <span style={{ color: '#6E6E73' }}>{pct.toFixed(0)}% · {cnt}m</span>
+                          <span style={{ color: '#8E8E93', fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(0)}%</span>
                         </div>
-                        <div style={{ height: 6, background: 'rgba(0,0,0,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ height: 5, background: 'rgba(0,0,0,0.06)', borderRadius: 3, overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${pct}%`, background: CLIENTE_COLOR[cli] || '#94A3B8', borderRadius: 3 }} />
                         </div>
                       </div>
@@ -644,7 +640,7 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
             </SubSectSheet>
           </div>
 
-          {/* Evaluación (siempre visible cuando el panel está abierto) */}
+          {/* Columna der — Evaluación */}
           <div>
             <EvalSheet user={user} anio={mesRef.anio} mes={mesRef.mes}
               facturacion={facturacion} cuota={cuota} cuotaPct={cuotaPct}
@@ -663,8 +659,8 @@ function u_desc(user) {
 
 function SubSectSheet({ titulo, children }) {
   return (
-    <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: 14, padding: '14px 16px', marginBottom: 10 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>{titulo}</div>
+    <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: 12, padding: '10px 12px', marginBottom: 8 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 7 }}>{titulo}</div>
       {children}
     </div>
   );
@@ -672,10 +668,10 @@ function SubSectSheet({ titulo, children }) {
 
 function MiniKPI({ k, v, s }) {
   return (
-    <div style={{ background: 'white', borderRadius: 11, padding: '10px 12px' }}>
-      <div style={{ fontSize: 10, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>{k}</div>
-      <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>{v}</div>
-      <div style={{ fontSize: 10.5, color: '#8E8E93', marginTop: 1 }}>{s}</div>
+    <div style={{ background: 'white', borderRadius: 9, padding: '7px 9px' }}>
+      <div style={{ fontSize: 9.5, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>{k}</div>
+      <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+      <div style={{ fontSize: 10, color: '#8E8E93', marginTop: 0 }}>{s}</div>
     </div>
   );
 }
@@ -790,43 +786,42 @@ function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
 
   return (
     <div>
-      {/* Bono hero — refinado, un solo color plano, tipografía grande */}
+      {/* Bono hero — compacto */}
       <div style={{
         background: 'white',
         border: `1px solid ${accent}22`,
-        borderRadius: 20, padding: '20px 22px', marginBottom: 14,
-        boxShadow: `0 2px 12px ${accent}18`,
+        borderRadius: 14, padding: '12px 14px', marginBottom: 10,
+        boxShadow: `0 1px 6px ${accent}15`,
         position: 'relative', overflow: 'hidden',
       }}>
-        {/* Accent side-bar */}
-        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: accent }} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: accent }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6E6E73' }}>
-              Bono · {MESES[mes-1]} {anio}
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#8E8E93' }}>
+              Bono · {MESES_CORTO[mes-1]} {anio}
             </div>
-            <div style={{ fontSize: 44, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, marginTop: 8,
+            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1, marginTop: 4,
               color: accent, fontVariantNumeric: 'tabular-nums' }}>
               {fmtMoney(bonoTotal)}
             </div>
           </div>
           <div style={{
-            fontSize: 11, fontWeight: 600, padding: '5px 10px', borderRadius: 999,
+            fontSize: 10.5, fontWeight: 600, padding: '4px 9px', borderRadius: 999,
             background: isCerrada ? 'rgba(52,199,89,0.14)' : 'rgba(0,0,0,0.06)',
             color: isCerrada ? '#1F7A3D' : '#6E6E73', whiteSpace: 'nowrap',
           }}>
             {isCerrada ? '✓ Cerrada' : 'Abierta'}
           </div>
         </div>
-        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.06)',
-          fontSize: 12, color: '#6E6E73' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
-            <span>Base · {(BONO_PCT*100).toFixed(2)}% de {fmtMoney(facturacion)}</span>
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(0,0,0,0.06)',
+          fontSize: 11, color: '#8E8E93' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+            <span>Base · {(BONO_PCT*100).toFixed(2)}% × {fmtMoney(facturacion)}</span>
             <span style={{ fontVariantNumeric: 'tabular-nums', color: '#1D1D1F', fontWeight: 600 }}>{fmtMoney(bonoBase)}</span>
           </div>
           {ajustesTotal !== 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
-              <span>Ajustes manuales</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+              <span>Ajustes</span>
               <span style={{ fontVariantNumeric: 'tabular-nums', color: ajustesTotal >= 0 ? '#1F7A3D' : '#B00020', fontWeight: 600 }}>
                 {ajustesTotal >= 0 ? '+' : ''}{fmtMoney(ajustesTotal)}
               </span>
@@ -836,20 +831,20 @@ function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
       </div>
 
       {/* Botones acciones */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
         <button onClick={copiarTexto} style={{
           flex: 1, background: 'white', border: '1px solid rgba(0,0,0,0.1)',
-          padding: '11px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          padding: '8px', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer',
           transition: 'background 120ms',
         }}
         onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.03)'}
         onMouseLeave={(e) => e.currentTarget.style.background = 'white'}>
-          {copied ? '✓ Copiado al portapapeles' : 'Copiar resumen'}
+          {copied ? '✓ Copiado' : 'Copiar resumen'}
         </button>
         {!isCerrada && !confirmCerrar && (
           <button onClick={() => setConfirmCerrar(true)} style={{
             flex: 1, background: '#1F7A3D', border: 'none', color: 'white',
-            padding: '11px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            padding: '8px', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer',
             transition: 'background 120ms',
           }}
           onMouseEnter={(e) => e.currentTarget.style.background = '#175F30'}
@@ -860,13 +855,13 @@ function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
         {confirmCerrar && (
           <>
             <button onClick={() => setConfirmCerrar(false)} style={{
-              flex: 1, background: 'rgba(0,0,0,0.06)', border: 'none', padding: '11px',
-              borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              flex: 1, background: 'rgba(0,0,0,0.06)', border: 'none', padding: '8px',
+              borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer',
             }}>Cancelar</button>
             <button onClick={cerrarEvaluacion} style={{
               flex: 1, background: '#B00020', border: 'none', color: 'white',
-              padding: '11px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            }}>Confirmar · irreversible</button>
+              padding: '8px', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            }}>Confirmar</button>
           </>
         )}
       </div>
@@ -899,9 +894,9 @@ function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
         </div>
       </SubSectSheet>
 
-      {/* Ratings — pills segmentadas 1-5 (Apple-style, cero flicker) */}
+      {/* Ratings — pills segmentadas 1-5 */}
       <SubSectSheet titulo="Evaluación cualitativa">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {RATINGS.map((r) => (
             <RatingRow key={r.key} label={r.label}
               value={evaluacion_?.[r.key] || 0}
@@ -942,24 +937,24 @@ function EvalSheet({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
 // Segmented control 1-5 (Apple-style)
 function RatingRow({ label, value, onChange, disabled, accent }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 12, alignItems: 'center' }}>
-      <div style={{ fontSize: 13, fontWeight: 500, color: '#1D1D1F' }}>{label}</div>
-      <div style={{ display: 'flex', background: 'rgba(0,0,0,0.05)', borderRadius: 10, padding: 3, gap: 2 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: 10, alignItems: 'center' }}>
+      <div style={{ fontSize: 12, fontWeight: 500, color: '#1D1D1F' }}>{label}</div>
+      <div style={{ display: 'flex', background: 'rgba(0,0,0,0.05)', borderRadius: 8, padding: 2, gap: 1 }}>
         {[1,2,3,4,5].map((n) => {
           const on = value === n;
           return (
             <button key={n} disabled={disabled}
               onClick={() => onChange(n)}
               style={{
-                flex: 1, border: 'none', padding: '7px 0', borderRadius: 8,
+                flex: 1, border: 'none', padding: '4px 0', borderRadius: 6,
                 background: on ? accent : 'transparent',
                 color: on ? 'white' : '#6E6E73',
-                fontSize: 13, fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
-                transition: 'background 120ms, color 120ms, transform 100ms',
-                boxShadow: on ? '0 1px 3px rgba(0,0,0,0.15)' : 'none',
+                fontSize: 11.5, fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
+                transition: 'background 120ms, color 120ms, transform 80ms',
+                boxShadow: on ? '0 1px 2px rgba(0,0,0,0.15)' : 'none',
                 fontVariantNumeric: 'tabular-nums',
               }}
-              onMouseDown={(e) => !disabled && !on && (e.currentTarget.style.transform = 'scale(0.95)')}
+              onMouseDown={(e) => !disabled && !on && (e.currentTarget.style.transform = 'scale(0.94)')}
               onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
               onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}>
               {n}
