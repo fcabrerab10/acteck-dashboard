@@ -173,7 +173,7 @@ export default function TelemetriaPanel() {
       const pctTop = totalCli > 0 ? (maxCli / totalCli * 100) : 0;
       const aplicaBono = requiereEvaluacion(u);
       const bonoEstimado = aplicaBono
-        ? (dias.size > 0 ? Math.max(BONO_BASE, facturacionMes * BONO_PCT) : BONO_BASE)
+        ? (dias.size > 0 ? (BONO_BASE + facturacionMes * BONO_PCT) : BONO_BASE)
         : null;
       m.set(u.user_id, {
         diasActivos: dias.size, diasEnMes,
@@ -313,7 +313,7 @@ export default function TelemetriaPanel() {
               gap: 16, marginBottom: 12,
             }}>
               <UserCard u={uSel} kpis={kpisPorUser.get(uSel.user_id)}
-                bonoBase={Math.max(BONO_BASE, facturacionMes * BONO_PCT)}
+                bonoBase={(BONO_BASE + facturacionMes * BONO_PCT)}
                 evaluacionActual={evalPorUser.get(uSel.user_id)}
                 onClick={() => setSelectedUserId(null)} />
             </div>
@@ -334,7 +334,7 @@ export default function TelemetriaPanel() {
               }}>
                 {internos.map((u) => (
                   <UserCard key={u.user_id} u={u} kpis={kpisPorUser.get(u.user_id)}
-                    bonoBase={Math.max(BONO_BASE, facturacionMes * BONO_PCT)}
+                    bonoBase={(BONO_BASE + facturacionMes * BONO_PCT)}
                     evaluacionActual={evalPorUser.get(u.user_id)}
                     onClick={() => setSelectedUserId(u.user_id)} />
                 ))}
@@ -543,7 +543,7 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
   // simplemente ve la eval vacía y no la usa.
   const puedeEvaluar = true;
   const aplicaBono = true;
-  const bonoBase = Math.max(BONO_BASE, facturacion * BONO_PCT);
+  const bonoBase = (BONO_BASE + facturacion * BONO_PCT);
   const ajustesTotal = (evaluacion?.ajustes || []).reduce((s, a) => s + (Number(a.monto) || 0), 0);
   const bonoTotal = bonoBase + ajustesTotal;
   const cuotaPct = cuota > 0 ? (facturacion / cuota * 100) : 0;
@@ -666,7 +666,7 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
   }, [evaluacion?.id, anio, mes]);
 
   const isCerrada = evalLocal?.cerrada === true;
-  const bonoBase = Math.max(BONO_BASE, facturacion * BONO_PCT);
+  const bonoBase = (BONO_BASE + facturacion * BONO_PCT);
   const ajustesTotal = (evalLocal?.ajustes || []).reduce((s, a) => s + (Number(a.monto) || 0), 0);
   const bonoTotal = bonoBase + ajustesTotal;
 
@@ -714,52 +714,33 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
   const evaluacion_ = evalLocal;
 
   const copiarTexto = () => {
-    const rats = RATINGS.map((r) => ({ short: r.label.toLowerCase(), val: evaluacion_?.[r.key] || null }))
-      .filter((r) => r.val);
-    const promRat = rats.length ? rats.reduce((s, r) => s + r.val, 0) / rats.length : 0;
+    const rats = RATINGS.map((r) => evaluacion_?.[r.key]).filter(Boolean);
+    const promRat = rats.length ? rats.reduce((s, v) => s + v, 0) / rats.length : 0;
     const tareas = evaluacion_?.tareas || [];
     const cumplidas = tareas.filter((t) => t.cumplida).length;
     const pendientes = tareas.filter((t) => !t.cumplida);
     const ajustes = evaluacion_?.ajustes || [];
     const nombreCorto = (user.nombre || '').split(' ')[0];
+    const bonoPct = facturacion * BONO_PCT;
 
     const L = [];
-    L.push(`Hola,`);
+    L.push(`Evaluación de ${nombreCorto} · ${MESES[mes-1]} ${anio}`);
     L.push('');
-    L.push(`${isCerrada ? 'Cierro' : 'Comparto'} la evaluación de ${nombreCorto} de ${MESES[mes-1]} ${anio}. Bono: ${fmtMoney(bonoTotal)} MXN.`);
-    L.push('');
+    L.push(`Bono: ${fmtMoney(BONO_BASE)} de variable + ${fmtMoney(bonoPct)} (${(BONO_PCT*100).toFixed(2)}% sobre ${fmtMoney(facturacion)}) = ${fmtMoney(bonoBase)}${ajustesTotal !== 0 ? `; con ajustes ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)} → ${fmtMoney(bonoTotal)}` : ''}.`);
+    L.push(`Cuota: ${fmtMoney(facturacion)} de ${fmtMoney(cuota)} (${cuotaPct.toFixed(0)}%${cuotaPct >= 100 ? ', superada' : ''}).`);
 
-    // Cuota
-    L.push(`Facturación del mes: ${fmtMoney(facturacion)} sobre una cuota de ${fmtMoney(cuota)} (${cuotaPct.toFixed(0)}%${cuotaPct >= 100 ? ', cuota superada' : ''}).`);
+    if (rats.length > 0) L.push(`Evaluación cualitativa: ${promRat.toFixed(1)}/5.`);
 
-    // Cálculo bono breve
-    if (ajustesTotal !== 0) {
-      L.push(`Base ${fmtMoney(bonoBase)} + ajustes ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)} = ${fmtMoney(bonoTotal)}.`);
-    }
-
-    // Ratings — sólo si hay
-    if (rats.length > 0) {
-      L.push('');
-      const ratStr = rats.map((r) => `${r.short} ${r.val}`).join(', ');
-      L.push(`Evaluación cualitativa (${promRat.toFixed(1)}/5): ${ratStr}.`);
-    }
-
-    // Comentarios
     if (evaluacion_?.comentarios) {
       L.push('');
       L.push(evaluacion_.comentarios.trim());
     }
 
-    // Tareas — resumen
     if (tareas.length > 0) {
       L.push('');
-      L.push(`Tareas del mes: ${cumplidas} de ${tareas.length} cumplidas.`);
-      if (pendientes.length > 0 && pendientes.length <= 3) {
-        L.push(`Quedaron pendientes: ${pendientes.map((t) => t.texto).join('; ')}.`);
-      }
+      L.push(`Tareas: ${cumplidas} de ${tareas.length} cumplidas${pendientes.length > 0 && pendientes.length <= 3 ? `; pendientes: ${pendientes.map((t) => t.texto).join('; ')}` : ''}.`);
     }
 
-    // Ajustes explicados
     if (ajustes.length > 0) {
       L.push('');
       for (const a of ajustes) {
@@ -767,10 +748,6 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
         L.push(`Ajuste ${signo}${fmtMoney(Math.abs(Number(a.monto)))}: ${a.descripcion || ''}.`);
       }
     }
-
-    L.push('');
-    L.push('Saludos,');
-    L.push('Fernando');
 
     navigator.clipboard.writeText(L.join('\n'));
     setCopied(true);
@@ -933,8 +910,14 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(0,0,0,0.06)',
           fontSize: 11, color: '#8E8E93' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-            <span>Base · {(BONO_PCT*100).toFixed(2)}% × {fmtMoney(facturacion)}</span>
-            <span style={{ fontVariantNumeric: 'tabular-nums', color: '#1D1D1F', fontWeight: 600 }}>{fmtMoney(bonoBase)}</span>
+            <span>Variable fija</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums', color: '#1D1D1F', fontWeight: 600 }}>{fmtMoney(BONO_BASE)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+            <span>+ {(BONO_PCT*100).toFixed(2)}% sobre facturación de {fmtMoney(facturacion)}</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums', color: '#1D1D1F', fontWeight: 600 }}>
+              +{fmtMoney(facturacion * BONO_PCT)}
+            </span>
           </div>
           {ajustesTotal !== 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
