@@ -726,7 +726,7 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
     const L = [];
     L.push(`Evaluación de ${nombreCorto} · ${MESES[mes-1]} ${anio}`);
     L.push('');
-    L.push(`Bono: ${fmtMoney(BONO_BASE)} de variable + ${fmtMoney(bonoPct)} (${(BONO_PCT*100).toFixed(2)}% sobre ${fmtMoney(facturacion)}) = ${fmtMoney(bonoBase)}${ajustesTotal !== 0 ? `; con ajustes ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)} → ${fmtMoney(bonoTotal)}` : ''}.`);
+    L.push(`Bono: ${fmtMoney(bonoBase)} (variable + comisión)${ajustesTotal !== 0 ? ` ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)} de ajustes = ${fmtMoney(bonoTotal)}` : ''}.`);
     L.push(`Cuota: ${fmtMoney(facturacion)} de ${fmtMoney(cuota)} (${cuotaPct.toFixed(0)}%${cuotaPct >= 100 ? ', superada' : ''}).`);
 
     if (rats.length > 0) L.push(`Evaluación cualitativa: ${promRat.toFixed(1)}/5.`);
