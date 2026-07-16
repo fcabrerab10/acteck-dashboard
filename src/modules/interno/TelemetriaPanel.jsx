@@ -531,10 +531,11 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
   const totalCli = Object.values(cliCount).reduce((s, v) => s + v, 0);
   const cliOrden = Object.entries(cliCount).sort((a, b) => b[1] - a[1]);
 
-  // Aplica evaluación a cualquier usuario que no sea super_admin (más permisivo que requiereEvaluacion,
-  // por si el campo `tipo` en la DB tiene valores raros).
-  const puedeEvaluar = esAdmin && user.rol !== 'super_admin' && !user.es_super_admin;
-  const aplicaBono = puedeEvaluar;
+  // Mostrar evaluación siempre que se abra el panel. Sin filtros por rol/tipo que
+  // puedan fallar por datos inconsistentes en la DB. Si abre su propia card el super_admin
+  // simplemente ve la eval vacía y no la usa.
+  const puedeEvaluar = true;
+  const aplicaBono = true;
   const bonoBase = Math.max(BONO_BASE, facturacion * BONO_PCT);
   const ajustesTotal = (evaluacion?.ajustes || []).reduce((s, a) => s + (Number(a.monto) || 0), 0);
   const bonoTotal = bonoBase + ajustesTotal;
@@ -611,12 +612,7 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
       {loading ? (
         <div style={{ padding: 40, textAlign: 'center', color: '#8E8E93' }}>Cargando…</div>
       ) : (
-        <div style={{ padding: '18px 24px 24px',
-          display: 'grid',
-          gridTemplateColumns: (aplicaBono && esAdmin) ? '1fr 1.15fr' : '1fr',
-          gap: 16,
-          alignItems: 'start',
-        }}>
+        <div style={{ padding: '18px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Columna izq — Telemetría */}
           <div>
             <SubSectSheet titulo="Actividad del mes">
@@ -648,14 +644,12 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
             </SubSectSheet>
           </div>
 
-          {/* Columna der — Evaluación (sólo internos que la requieren y sólo admin) */}
-          {aplicaBono && esAdmin && (
-            <div>
-              <EvalSheet user={user} anio={mesRef.anio} mes={mesRef.mes}
-                facturacion={facturacion} cuota={cuota} cuotaPct={cuotaPct}
-                evaluacion={evaluacion} onSaved={reload} perfilId={perfilId} />
-            </div>
-          )}
+          {/* Evaluación (siempre visible cuando el panel está abierto) */}
+          <div>
+            <EvalSheet user={user} anio={mesRef.anio} mes={mesRef.mes}
+              facturacion={facturacion} cuota={cuota} cuotaPct={cuotaPct}
+              evaluacion={evaluacion} onSaved={reload} perfilId={perfilId} />
+          </div>
         </div>
       )}
     </div>
