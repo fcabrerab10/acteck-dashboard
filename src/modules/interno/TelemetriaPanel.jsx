@@ -322,9 +322,9 @@ export default function TelemetriaPanel() {
         </>
       )}
 
-      {/* Sheet lateral */}
+      {/* Panel de detalle inline (se despliega debajo) */}
       {selectedUserId && (
-        <UserSheet
+        <UserDetailPanel
           user={usuarios.find((u) => u.user_id === selectedUserId)}
           esAdmin={esAdmin}
           perfilId={perfil?.user_id}
@@ -443,8 +443,8 @@ function RingCell({ pct, color, num, lbl }) {
   );
 }
 
-// ═══════════════════ Sheet lateral con detalle ═══════════════════
-function UserSheet({ user, esAdmin, perfilId, onClose }) {
+// ═══════════════════ Panel de detalle inline (se despliega debajo) ═══════════════════
+function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
   const hoy = new Date();
   const [mesRef, setMesRef] = useState({ anio: hoy.getFullYear(), mes: hoy.getMonth() + 1 });
   const [eventos, setEventos] = useState([]);
@@ -453,7 +453,7 @@ function UserSheet({ user, esAdmin, perfilId, onClose }) {
   const [cuota, setCuota] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Últimos 6 meses (incluye actual)
+  // Últimos 6 meses (incluye actual) ordenados cronológicamente izq→der
   const mesesDisponibles = useMemo(() => {
     const arr = [];
     let a = hoy.getFullYear(), m = hoy.getMonth() + 1;
@@ -461,7 +461,7 @@ function UserSheet({ user, esAdmin, perfilId, onClose }) {
       arr.push({ anio: a, mes: m });
       m--; if (m < 1) { m = 12; a--; }
     }
-    return arr;
+    return arr.reverse(); // más antiguo primero → actual al final (derecha)
   }, []);
 
   const reload = React.useCallback(async () => {
@@ -512,74 +512,85 @@ function UserSheet({ user, esAdmin, perfilId, onClose }) {
   const bonoTotal = bonoBase + ajustesTotal;
   const cuotaPct = cuota > 0 ? (facturacion / cuota * 100) : 0;
 
+  // Scroll suave al abrir para que el panel entre en vista
+  const panelRef = React.useRef(null);
+  useEffect(() => {
+    if (panelRef.current) panelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [user.user_id]);
+
   return (
-    <>
-      {/* Overlay */}
-      <div onClick={onClose} style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
-        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-        zIndex: 100, animation: 'fadein 200ms',
-      }} />
-      {/* Sheet */}
+    <div ref={panelRef} style={{
+      marginTop: 8,
+      background: 'rgba(255,255,255,0.85)',
+      backdropFilter: 'blur(30px)', WebkitBackdropFilter: 'blur(30px)',
+      border: '1px solid rgba(255,255,255,0.7)',
+      borderRadius: 22,
+      boxShadow: '0 8px 40px rgba(0,0,0,0.08)',
+      overflow: 'hidden',
+      animation: 'slidedown 280ms cubic-bezier(0.32, 0.72, 0, 1)',
+    }}>
+      <style>{`
+        @keyframes slidedown { from { transform: translateY(-12px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+      `}</style>
+
+      {/* Header con avatar + cerrar */}
       <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0, width: '520px', maxWidth: '92vw',
-        background: 'rgba(250,250,252,0.98)',
-        backdropFilter: 'blur(30px)', WebkitBackdropFilter: 'blur(30px)',
-        zIndex: 101, overflowY: 'auto',
-        boxShadow: '-8px 0 40px rgba(0,0,0,0.15)',
-        animation: 'slidein 240ms cubic-bezier(0.32, 0.72, 0, 1)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+        padding: '20px 24px 14px',
+        borderBottom: '1px solid rgba(0,0,0,0.05)',
       }}>
-        <style>{`
-          @keyframes fadein { from { opacity: 0 } to { opacity: 1 } }
-          @keyframes slidein { from { transform: translateX(100%) } to { transform: translateX(0) } }
-        `}</style>
-        {/* Botón cerrar */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 20px 0' }}>
-          <button onClick={onClose} style={{
-            width: 30, height: 30, borderRadius: 999, border: 'none',
-            background: 'rgba(0,0,0,0.06)', color: '#1D1D1F', fontSize: 16,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>✕</button>
-        </div>
-
-        {/* Hero */}
-        <div style={{ padding: '8px 28px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 16 }}>
-            <div style={{
-              width: 80, height: 80, borderRadius: 999, background: colorAvatar(user),
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontWeight: 700, fontSize: 28,
-              boxShadow: `0 6px 20px ${accentUser(user)}55`,
-            }}>{iniciales(user.nombre || user.email)}</div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>{user.nombre}</div>
-              <div style={{ fontSize: 13, color: '#6E6E73' }}>{u_desc(user)}</div>
-              <div style={{ fontSize: 11.5, color: '#8E8E93', marginTop: 3 }}>{user.email}</div>
-            </div>
-          </div>
-
-          {/* Segmented control meses */}
-          <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.06)', borderRadius: 12, padding: 3, gap: 2, marginBottom: 4, flexWrap: 'wrap' }}>
-            {mesesDisponibles.map((m) => {
-              const on = m.anio === mesRef.anio && m.mes === mesRef.mes;
-              const label = m.anio === hoy.getFullYear() ? MESES_CORTO[m.mes - 1] : `${MESES_CORTO[m.mes - 1]} ${String(m.anio).slice(2)}`;
-              return (
-                <button key={`${m.anio}-${m.mes}`} onClick={() => setMesRef(m)} style={{
-                  border: 'none', background: on ? 'white' : 'transparent',
-                  color: on ? '#1D1D1F' : '#6E6E73',
-                  padding: '7px 12px', fontSize: 12.5, fontWeight: 600, borderRadius: 9,
-                  cursor: 'pointer', boxShadow: on ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                }}>{label}</button>
-              );
-            })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{
+            width: 64, height: 64, borderRadius: 999, background: colorAvatar(user),
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'white', fontWeight: 700, fontSize: 24,
+            boxShadow: `0 4px 14px ${accentUser(user)}55`,
+          }}>{iniciales(user.nombre || user.email)}</div>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>{user.nombre}</div>
+            <div style={{ fontSize: 13, color: '#6E6E73' }}>{u_desc(user)}</div>
+            <div style={{ fontSize: 11.5, color: '#8E8E93', marginTop: 2 }}>{user.email}</div>
           </div>
         </div>
+        <button onClick={onClose} style={{
+          width: 32, height: 32, borderRadius: 999, border: 'none',
+          background: 'rgba(0,0,0,0.06)', color: '#1D1D1F', fontSize: 16,
+          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>✕</button>
+      </div>
 
-        {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#8E8E93' }}>Cargando…</div>
-        ) : (
-          <div style={{ padding: '0 24px 32px' }}>
-            {/* Telemetría del mes */}
+      {/* Segmented control meses (izq → der cronológico) */}
+      <div style={{ padding: '14px 24px 0', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Mes
+        </span>
+        <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.06)', borderRadius: 12, padding: 3, gap: 2 }}>
+          {mesesDisponibles.map((m) => {
+            const on = m.anio === mesRef.anio && m.mes === mesRef.mes;
+            const label = m.anio === hoy.getFullYear() ? MESES_CORTO[m.mes - 1] : `${MESES_CORTO[m.mes - 1]} ${String(m.anio).slice(2)}`;
+            return (
+              <button key={`${m.anio}-${m.mes}`} onClick={() => setMesRef(m)} style={{
+                border: 'none', background: on ? 'white' : 'transparent',
+                color: on ? '#1D1D1F' : '#6E6E73',
+                padding: '7px 14px', fontSize: 12.5, fontWeight: 600, borderRadius: 9,
+                cursor: 'pointer', boxShadow: on ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+              }}>{label}</button>
+            );
+          })}
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: 40, textAlign: 'center', color: '#8E8E93' }}>Cargando…</div>
+      ) : (
+        <div style={{ padding: '18px 24px 24px',
+          display: 'grid',
+          gridTemplateColumns: (aplicaBono && esAdmin) ? '1fr 1.15fr' : '1fr',
+          gap: 16,
+          alignItems: 'start',
+        }}>
+          {/* Columna izq — Telemetría */}
+          <div>
             <SubSectSheet titulo="Actividad del mes">
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                 <MiniKPI k="Días activos" v={`${dias}/${diasEnMes}`} s={`${(dias/diasEnMes*100).toFixed(0)}% del mes`} />
@@ -607,17 +618,19 @@ function UserSheet({ user, esAdmin, perfilId, onClose }) {
                 </div>
               )}
             </SubSectSheet>
+          </div>
 
-            {/* Evaluación (sólo internos con evaluación y sólo admin ve) */}
-            {aplicaBono && esAdmin && (
+          {/* Columna der — Evaluación (sólo internos que la requieren y sólo admin) */}
+          {aplicaBono && esAdmin && (
+            <div>
               <EvalSheet user={user} anio={mesRef.anio} mes={mesRef.mes}
                 facturacion={facturacion} cuota={cuota} cuotaPct={cuotaPct}
                 evaluacion={evaluacion} onSaved={reload} perfilId={perfilId} />
-            )}
-          </div>
-        )}
-      </div>
-    </>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
