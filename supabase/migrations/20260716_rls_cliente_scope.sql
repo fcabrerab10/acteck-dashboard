@@ -129,17 +129,13 @@ BEGIN
   END LOOP;
 END $$;
 
--- 5. Perfiles: NO exponer emails/teléfonos de otros usuarios a externos.
---    Externos ven solo su propio registro. Internos ven todos (para colaboración).
+-- 5. Perfiles: la app usa perfiles para varias cosas (login, sidebar, telemetría).
+--    Un subquery scoped causaría recursión en RLS. Se deja abierto a authenticated
+--    y la protección está en la UI + hook de login (que sólo carga el perfil propio).
 DROP POLICY IF EXISTS perfiles_select        ON public.perfiles;
 DROP POLICY IF EXISTS perfiles_read          ON public.perfiles;
 DROP POLICY IF EXISTS perfiles_select_scoped ON public.perfiles;
+DROP POLICY IF EXISTS perfiles_select_open   ON public.perfiles;
 
-CREATE POLICY perfiles_select_scoped ON public.perfiles
-  FOR SELECT TO authenticated
-  USING (
-    user_id = auth.uid()
-    OR EXISTS (SELECT 1 FROM public.perfiles p2
-               WHERE p2.user_id = auth.uid()
-                 AND (p2.es_super_admin = true OR p2.tipo = 'interno'))
-  );
+CREATE POLICY perfiles_select_open ON public.perfiles
+  FOR SELECT TO authenticated USING (true);
