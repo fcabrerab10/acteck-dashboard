@@ -474,6 +474,7 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
   const [mesRef, setMesRef] = useState({ anio: hoy.getFullYear(), mes: hoy.getMonth() + 1 });
   const [eventos, setEventos] = useState([]);
   const [evaluacion, setEvaluacion] = useState(null);
+  const [evalPrev, setEvalPrev] = useState(null); // bono del mes anterior (cerrado) para trend
   const [facturacion, setFacturacion] = useState(0);
   const [cuota, setCuota] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -492,7 +493,10 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
   const reload = React.useCallback(async () => {
     setLoading(true);
     const { ini, fin } = rangoMes(mesRef.anio, mesRef.mes);
-    const [evs, fact, cuotas, evalRes] = await Promise.all([
+    // Mes anterior — para trend del bono
+    const mesPrev = mesRef.mes === 1 ? 12 : mesRef.mes - 1;
+    const anioPrev = mesRef.mes === 1 ? mesRef.anio - 1 : mesRef.anio;
+    const [evs, fact, cuotas, evalRes, evalPrevRes] = await Promise.all([
       supabase.from('eventos_usuario')
         .select('id,ts,tipo,cliente,pagina,detalle')
         .eq('user_id', user.user_id)
@@ -506,11 +510,14 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
         .eq('anio', mesRef.anio).eq('mes', mesRef.mes),
       supabase.from('evaluaciones_mensuales').select('*')
         .eq('user_id', user.user_id).eq('anio', mesRef.anio).eq('mes', mesRef.mes).maybeSingle(),
+      supabase.from('evaluaciones_mensuales').select('bono_total,cerrada')
+        .eq('user_id', user.user_id).eq('anio', anioPrev).eq('mes', mesPrev).maybeSingle(),
     ]);
     setEventos(evs.data || []);
     setFacturacion((fact.data || []).reduce((s, r) => s + (Number(r.monto) || 0), 0));
     setCuota((cuotas.data || []).reduce((s, r) => s + (Number(r.cuota_min) || 0), 0) + DIGITALIFE_CUOTA_ANUAL / 12);
     setEvaluacion(evalRes.data || null);
+    setEvalPrev(evalPrevRes.data && evalPrevRes.data.cerrada ? evalPrevRes.data : null);
     setLoading(false);
   }, [mesRef.anio, mesRef.mes, user.user_id]);
 
@@ -608,7 +615,8 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
         <EvalPanel
           user={user} anio={mesRef.anio} mes={mesRef.mes}
           facturacion={facturacion} cuota={cuota} cuotaPct={cuotaPct}
-          evaluacion={evaluacion} onSaved={reload} perfilId={perfilId}
+          evaluacion={evaluacion} bonoPrev={evalPrev?.bono_total || null}
+          onSaved={reload} perfilId={perfilId}
           telemetria={{
             dias, diasEnMes, heartbeats, eventos, cliOrden, totalCli,
           }}
@@ -643,7 +651,7 @@ function MiniKPI({ k, v, s }) {
 }
 
 // ═══════════════════ Panel completo (telemetría + evaluación, layout 2-col balanceado) ═══════════════════
-function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, onSaved, perfilId, telemetria }) {
+function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, bonoPrev, onSaved, perfilId, telemetria }) {
   // Estado local optimista — inicia del prop y se actualiza inmediato en cada click.
   // Los saves a Supabase corren en background sin bloquear UI.
   const [evalLocal, setEvalLocal] = useState(evaluacion);
@@ -752,6 +760,64 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
 
   const { dias, diasEnMes, heartbeats, eventos, cliOrden, totalCli } = telemetria;
 
+  // Trend vs mes anterior (sólo si el prev está cerrado)
+  const trendPct = bonoPrev && bonoPrev > 0 ? ((bonoTotal - bonoPrev) / bonoPrev * 100) : null;
+  const trendAbs = bonoPrev != null ? (bonoTotal - bonoPrev) : null;
+
+  // Highlights automáticos de telemetría — reglas simples, señales accionables
+  const highlights = React.useMemo(() => {
+    const out = [];
+    // 1. Cliente más atendido
+    if (cliOrden.length > 0) {
+      const [topCli, topCnt] = cliOrden[0];
+      const topPct = totalCli > 0 ? (topCnt / totalCli * 100) : 0;
+      if (topPct >= 45) out.push({
+        icon: '↑', color: '#1F7A3D',
+        text: <>Más foco en <strong>{CLIENTE_LABEL[topCli] || topCli}</strong> · {topPct.toFixed(0)}% del tiempo</>,
+      });
+    }
+    // 2. Clientes de bono con 0 visitas
+    const clientesConEventos = new Set(cliOrden.map(([c]) => Number(c)));
+    const clienteKeyToId = { digitalife: 1, pcel: 2, dicotech: 3 };
+    for (const key of CLIENTES_BONO) {
+      const id = clienteKeyToId[key];
+      if (!clientesConEventos.has(id)) {
+        out.push({
+          icon: '!', color: '#B25000',
+          text: <>Sin visitas a <strong>{CLIENTE_LABEL[id] || key}</strong> este mes</>,
+        });
+      }
+    }
+    // 3. Días activos bajos
+    const pctDias = diasEnMes > 0 ? (dias / diasEnMes * 100) : 0;
+    if (pctDias > 0 && pctDias < 40) out.push({
+      icon: '↓', color: '#B00020',
+      text: <>Actividad baja · sólo <strong>{dias}/{diasEnMes}</strong> días con sesión</>,
+    });
+    // 4. Racha de días activos (streak) — últimos días consecutivos con sesión
+    const diasSet = new Set(eventos.map((e) => new Date(e.ts).toISOString().slice(0, 10)));
+    let streak = 0;
+    const cursor = new Date();
+    while (diasSet.has(cursor.toISOString().slice(0, 10)) && streak < 60) {
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    if (streak >= 5) out.push({
+      icon: '★', color: '#1F7A3D',
+      text: <>Racha activa · <strong>{streak}</strong> días consecutivos</>,
+    });
+    // 5. Sin sesiones en X días recientes
+    const ultimoISO = eventos[0]?.ts;
+    if (ultimoISO) {
+      const diasSinSesion = Math.floor((Date.now() - new Date(ultimoISO).getTime()) / 86400000);
+      if (diasSinSesion >= 3) out.push({
+        icon: '!', color: '#B25000',
+        text: <>Sin sesión hace <strong>{diasSinSesion} días</strong></>,
+      });
+    }
+    return out.slice(0, 4); // máximo 4 para no saturar
+  }, [cliOrden, totalCli, dias, diasEnMes, eventos]);
+
   return (
     <div style={{ padding: '14px 20px 20px',
       display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.15fr)', gap: 14,
@@ -788,6 +854,24 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
         )}
       </SubSectSheet>
 
+      {/* Highlights automáticos */}
+      {highlights.length > 0 && (
+        <SubSectSheet titulo="Highlights">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {highlights.map((h, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12 }}>
+                <span style={{
+                  width: 18, height: 18, borderRadius: 999, background: `${h.color}18`, color: h.color,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 700, flexShrink: 0,
+                }}>{h.icon}</span>
+                <span style={{ color: '#1D1D1F', lineHeight: 1.4 }}>{h.text}</span>
+              </div>
+            ))}
+          </div>
+        </SubSectSheet>
+      )}
+
       {/* Bono hero — compacto */}
       <div style={{
         background: 'white',
@@ -802,9 +886,21 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#8E8E93' }}>
               Bono · {MESES_CORTO[mes-1]} {anio}
             </div>
-            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1, marginTop: 4,
-              color: accent, fontVariantNumeric: 'tabular-nums' }}>
-              {fmtMoney(bonoTotal)}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
+              <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1,
+                color: accent, fontVariantNumeric: 'tabular-nums' }}>
+                {fmtMoney(bonoTotal)}
+              </div>
+              {trendPct != null && (
+                <div style={{
+                  fontSize: 11, fontWeight: 700,
+                  color: trendAbs >= 0 ? '#1F7A3D' : '#B00020',
+                  display: 'inline-flex', alignItems: 'center', gap: 2,
+                  fontVariantNumeric: 'tabular-nums',
+                }} title={`Mes anterior: ${fmtMoney(bonoPrev)}`}>
+                  {trendAbs >= 0 ? '↗' : '↘'} {trendAbs >= 0 ? '+' : ''}{trendPct.toFixed(0)}%
+                </div>
+              )}
             </div>
           </div>
           <div style={{
