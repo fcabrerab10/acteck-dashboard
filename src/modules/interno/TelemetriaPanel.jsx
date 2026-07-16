@@ -723,31 +723,71 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
     const nombreCorto = (user.nombre || '').split(' ')[0];
     const bonoPct = facturacion * BONO_PCT;
 
+    // Highlights automáticos en texto plano (mismas reglas que la UI)
+    const autoHl = [];
+    if (cliOrden.length > 0) {
+      const [topCli, topCnt] = cliOrden[0];
+      const topPct = totalCli > 0 ? (topCnt / totalCli * 100) : 0;
+      if (topPct >= 45) autoHl.push(`Más foco en ${CLIENTE_LABEL[topCli] || topCli} (${topPct.toFixed(0)}% del tiempo).`);
+    }
+    const clientesConEventos = new Set(cliOrden.map(([c]) => Number(c)));
+    const clienteKeyToId = { digitalife: 1, pcel: 2, dicotech: 3 };
+    for (const key of CLIENTES_BONO) {
+      const id = clienteKeyToId[key];
+      if (!clientesConEventos.has(id)) autoHl.push(`Sin visitas a ${CLIENTE_LABEL[id] || key} este mes.`);
+    }
+    const pctDias = diasEnMes > 0 ? (dias / diasEnMes * 100) : 0;
+    if (pctDias > 0 && pctDias < 40) autoHl.push(`Actividad baja: sólo ${dias}/${diasEnMes} días con sesión.`);
+
     const L = [];
     L.push(`Evaluación de ${nombreCorto} · ${MESES[mes-1]} ${anio}`);
+
+    // 1. Alcance de cuota
     L.push('');
-    L.push(`Bono: ${fmtMoney(bonoBase)} (variable + comisión)${ajustesTotal !== 0 ? ` ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)} de ajustes = ${fmtMoney(bonoTotal)}` : ''}.`);
-    L.push(`Cuota: ${fmtMoney(facturacion)} de ${fmtMoney(cuota)} (${cuotaPct.toFixed(0)}%${cuotaPct >= 100 ? ', superada' : ''}).`);
+    L.push(`Alcance de cuota: ${fmtMoney(facturacion)} de ${fmtMoney(cuota)} (${cuotaPct.toFixed(0)}%${cuotaPct >= 100 ? ', superada' : ''}).`);
 
-    if (rats.length > 0) L.push(`Evaluación cualitativa: ${promRat.toFixed(1)}/5.`);
-
-    if (evaluacion_?.comentarios) {
+    // 2. Evaluación cualitativa
+    if (rats.length > 0) {
       L.push('');
-      L.push(evaluacion_.comentarios.trim());
+      L.push(`Evaluación cualitativa: ${promRat.toFixed(1)}/5.`);
     }
 
+    // 3. Highlights automáticos por cuenta
+    if (autoHl.length > 0) {
+      L.push('');
+      L.push('Notas automáticas:');
+      for (const h of autoHl) L.push(`- ${h}`);
+    }
+
+    // 4. Feedback manual
+    if (evaluacion_?.comentarios?.trim()) {
+      L.push('');
+      L.push(`Feedback: ${evaluacion_.comentarios.trim()}`);
+    }
+
+    // 5. Tareas
     if (tareas.length > 0) {
       L.push('');
       L.push(`Tareas: ${cumplidas} de ${tareas.length} cumplidas${pendientes.length > 0 && pendientes.length <= 3 ? `; pendientes: ${pendientes.map((t) => t.texto).join('; ')}` : ''}.`);
     }
 
+    // 6. Ajustes
     if (ajustes.length > 0) {
       L.push('');
+      L.push('Ajustes:');
       for (const a of ajustes) {
         const signo = Number(a.monto) >= 0 ? '+' : '−';
-        L.push(`Ajuste ${signo}${fmtMoney(Math.abs(Number(a.monto)))}: ${a.descripcion || ''}.`);
+        L.push(`- ${signo}${fmtMoney(Math.abs(Number(a.monto)))} · ${a.descripcion || ''}`);
       }
     }
+
+    // 7. Bono con desglose al final
+    L.push('');
+    L.push('Bono:');
+    L.push(`- Variable fija: ${fmtMoney(BONO_BASE)}`);
+    L.push(`- Comisión ${(BONO_PCT*100).toFixed(2)}% sobre ${fmtMoney(facturacion)}: ${fmtMoney(bonoPct)}`);
+    if (ajustesTotal !== 0) L.push(`- Ajustes: ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)}`);
+    L.push(`Total a pagar: ${fmtMoney(bonoTotal)}`);
 
     navigator.clipboard.writeText(L.join('\n'));
     setCopied(true);
