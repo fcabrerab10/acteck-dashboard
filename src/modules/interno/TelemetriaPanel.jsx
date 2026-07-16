@@ -176,18 +176,16 @@ export default function TelemetriaPanel() {
 
   const bonoTeoricoMax = Math.max(BONO_BASE, facturacionMes * BONO_PCT);
 
-  if (loading) return <div className="p-12 text-center text-sm text-gray-500">Cargando telemetría…</div>;
-
   // Alert de evaluación pendiente del mes anterior — sólo super_admin, día 1-5
+  // IMPORTANTE: hooks siempre antes del `if (loading) return` (React error #310)
   const alertPendiente = React.useMemo(() => {
     if (!esAdmin) return null;
     const hoy = new Date();
     const dia = hoy.getDate();
     if (dia > 5) return null; // sólo primer semana del mes
-    const mesPrev = hoy.getMonth(); // getMonth 0-11 → mesPrev = mes anterior (1-12) si getMonth > 0
+    const mesPrev = hoy.getMonth();
     const anioPrev = mesPrev === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear();
     const mesPrevNum = mesPrev === 0 ? 12 : mesPrev;
-    // Buscar internos con evaluación (requiereEvaluacion) que no tengan evaluación cerrada del mes anterior
     const internos = usuarios.filter(requiereEvaluacion);
     if (internos.length === 0) return null;
     return { dia, anioPrev, mesPrevNum, internos };
@@ -207,6 +205,8 @@ export default function TelemetriaPanel() {
       setAlertPendientesReal(pend);
     })();
   }, [alertPendiente]);
+
+  if (loading) return <div className="p-12 text-center text-sm text-gray-500">Cargando telemetría…</div>;
 
   return (
     <div className="space-y-4">
