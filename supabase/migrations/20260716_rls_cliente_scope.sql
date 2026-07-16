@@ -90,10 +90,11 @@ BEGIN
 
     IF col IS NULL THEN CONTINUE; END IF;
 
-    -- Drop policy SELECT anterior (si existía la genérica open)
-    policy_name := tbl || '_select';
-    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', policy_name, tbl);
+    -- Drop policies SELECT anteriores (open + variantes previas del scoped)
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', tbl || '_select', tbl);
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', tbl || '_read', tbl);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', tbl || '_select_scoped', tbl);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', tbl || '_select_super', tbl);
 
     -- Nueva policy: sólo filas cuyo cliente esté en los permitidos del perfil
     EXECUTE format(
@@ -118,6 +119,8 @@ BEGIN
                WHERE table_schema='public' AND table_name=tbl) THEN
       EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', tbl || '_select', tbl);
       EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', tbl || '_read', tbl);
+      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', tbl || '_select_super', tbl);
+      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', tbl || '_select_scoped', tbl);
       EXECUTE format(
         'CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.perfiles WHERE user_id = auth.uid() AND es_super_admin = true))',
         tbl || '_select_super', tbl
@@ -128,8 +131,9 @@ END $$;
 
 -- 5. Perfiles: NO exponer emails/teléfonos de otros usuarios a externos.
 --    Externos ven solo su propio registro. Internos ven todos (para colaboración).
-DROP POLICY IF EXISTS perfiles_select ON public.perfiles;
-DROP POLICY IF EXISTS perfiles_read   ON public.perfiles;
+DROP POLICY IF EXISTS perfiles_select        ON public.perfiles;
+DROP POLICY IF EXISTS perfiles_read          ON public.perfiles;
+DROP POLICY IF EXISTS perfiles_select_scoped ON public.perfiles;
 
 CREATE POLICY perfiles_select_scoped ON public.perfiles
   FOR SELECT TO authenticated
