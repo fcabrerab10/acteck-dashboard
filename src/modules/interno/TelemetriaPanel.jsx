@@ -572,30 +572,30 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
       background: 'rgba(255,255,255,0.85)',
       backdropFilter: 'blur(30px)', WebkitBackdropFilter: 'blur(30px)',
       border: '1px solid rgba(255,255,255,0.7)',
-      borderRadius: 22,
-      boxShadow: '0 8px 40px rgba(0,0,0,0.08)',
-      overflow: 'hidden',
-      animation: 'slidedown 280ms cubic-bezier(0.32, 0.72, 0, 1)',
+      borderRadius: 18,
+      boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+      overflow: 'hidden', maxWidth: 1100,
+      animation: 'slidedown 240ms cubic-bezier(0.32, 0.72, 0, 1)',
     }}>
       <style>{`
         @keyframes slidedown { from { transform: translateY(-12px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
       `}</style>
 
-      {/* Header con avatar + cerrar + meses (todo en una fila) */}
+      {/* Header con avatar + cerrar + meses (todo en una fila, compacto) */}
       <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14,
-        padding: '12px 18px', borderBottom: '1px solid rgba(0,0,0,0.05)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        padding: '9px 14px', borderBottom: '1px solid rgba(0,0,0,0.05)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <div style={{
-            width: 44, height: 44, borderRadius: 999, background: colorAvatar(user),
+            width: 34, height: 34, borderRadius: 999, background: colorAvatar(user),
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white', fontWeight: 700, fontSize: 16, flexShrink: 0,
-            boxShadow: `0 2px 8px ${accentUser(user)}44`,
+            color: 'white', fontWeight: 700, fontSize: 13, flexShrink: 0,
+            boxShadow: `0 1px 4px ${accentUser(user)}44`,
           }}>{iniciales(user.nombre || user.email)}</div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em' }}>{user.nombre}</div>
-            <div style={{ fontSize: 11.5, color: '#8E8E93' }}>{u_desc(user)} · {user.email}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }}>{user.nombre}</div>
+            <div style={{ fontSize: 10.5, color: '#8E8E93' }}>{u_desc(user)}</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -870,10 +870,10 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
   }, [cliOrden, totalCli, dias, diasEnMes, eventos]);
 
   return (
-    <div style={{ padding: '14px 20px 20px',
+    <div style={{ padding: '10px 14px 14px',
       display: 'grid',
       gridTemplateColumns: puedeEvaluar ? 'minmax(0, 1fr) minmax(0, 1.15fr)' : 'minmax(0, 1fr)',
-      gap: 14, alignItems: 'start',
+      gap: 10, alignItems: 'start',
     }}>
       {/* ═══════════ COLUMNA IZQUIERDA — contexto/KPIs ═══════════ */}
       <div>
@@ -1105,6 +1105,11 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
 
 // Mini calendario mensual con heatmap de tiempo activo por día
 function CalendarioMes({ anio, mes, eventos, accent }) {
+  const [diaSel, setDiaSel] = useState(null); // 'YYYY-MM-DD'
+
+  // Reset selección cuando cambia el mes
+  useEffect(() => { setDiaSel(null); }, [anio, mes]);
+
   // Minutos por día (1 heartbeat = 1 min)
   const perDay = React.useMemo(() => {
     const m = new Map();
@@ -1115,6 +1120,28 @@ function CalendarioMes({ anio, mes, eventos, accent }) {
     }
     return m;
   }, [eventos]);
+
+  // Detalle del día seleccionado
+  const detalleDia = React.useMemo(() => {
+    if (!diaSel) return null;
+    const evsDia = eventos.filter((e) => new Date(e.ts).toISOString().slice(0, 10) === diaSel);
+    if (evsDia.length === 0) return { vacio: true };
+    const hb = evsDia.filter((e) => e.tipo === 10);
+    const minutos = hb.length;
+    const cliCount = {};
+    for (const e of hb) if (e.cliente) cliCount[e.cliente] = (cliCount[e.cliente] || 0) + 1;
+    const pagCount = {};
+    for (const e of hb) if (e.pagina) pagCount[e.pagina] = (pagCount[e.pagina] || 0) + 1;
+    const ts = evsDia.map((e) => new Date(e.ts).getTime());
+    const primero = new Date(Math.min(...ts));
+    const ultimo = new Date(Math.max(...ts));
+    const acciones = evsDia.filter((e) => e.tipo !== 10).length;
+    return {
+      minutos, primero, ultimo, acciones,
+      cliOrden: Object.entries(cliCount).sort((a,b) => b[1]-a[1]),
+      pagOrden: Object.entries(pagCount).sort((a,b) => b[1]-a[1]).slice(0, 4),
+    };
+  }, [diaSel, eventos]);
 
   const diasEnMes = new Date(anio, mes, 0).getDate();
   // offset del primer día (0=Dom, 1=Lun…). Uso semana lunes-domingo.
@@ -1157,18 +1184,27 @@ function CalendarioMes({ anio, mes, eventos, accent }) {
         {cells.map((c, i) => c === null ? (
           <div key={`e-${i}`} />
         ) : (
-          <div key={c.iso}
+          <button key={c.iso}
+            onClick={() => setDiaSel((prev) => prev === c.iso ? null : c.iso)}
             title={`${c.d} — ${c.mins > 0 ? fmtHm(c.mins) : 'sin sesión'}`}
             style={{
-              aspectRatio: '1', borderRadius: 4,
+              aspectRatio: '1', borderRadius: 4, padding: 0,
               background: colorFor(c.mins),
-              border: c.esHoy ? `1.5px solid ${accent}` : '1px solid transparent',
+              border: diaSel === c.iso
+                ? `2px solid ${accent}`
+                : c.esHoy ? `1.5px solid ${accent}` : '1px solid transparent',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 9, fontWeight: 600,
               color: c.mins > (maxMin * 0.5) ? 'white' : '#6E6E73',
-              cursor: 'default',
+              cursor: 'pointer',
               fontVariantNumeric: 'tabular-nums',
-            }}>{c.d}</div>
+              transition: 'transform 80ms',
+            }}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.9)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}>
+            {c.d}
+          </button>
         ))}
       </div>
       {/* Leyenda */}
@@ -1182,6 +1218,73 @@ function CalendarioMes({ anio, mes, eventos, accent }) {
         ))}
         <span>más</span>
       </div>
+
+      {/* Detalle del día seleccionado */}
+      {detalleDia && (
+        <div style={{
+          marginTop: 10, padding: '10px 12px', borderRadius: 10,
+          background: 'rgba(0,0,0,0.03)', border: `1px solid ${accent}22`,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1D1D1F' }}>
+              {new Date(diaSel + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'short' })}
+            </div>
+            <button onClick={() => setDiaSel(null)} style={{
+              border: 'none', background: 'transparent', color: '#8E8E93',
+              fontSize: 14, cursor: 'pointer', padding: 0, lineHeight: 1,
+            }}>✕</button>
+          </div>
+          {detalleDia.vacio ? (
+            <div style={{ fontSize: 11, color: '#8E8E93', fontStyle: 'italic' }}>Sin sesión ese día</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#8E8E93' }}>Tiempo activo</span>
+                <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtHm(detalleDia.minutos)}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#8E8E93' }}>Ventana</span>
+                <strong style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {detalleDia.primero.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                  {' → '}
+                  {detalleDia.ultimo.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                </strong>
+              </div>
+              {detalleDia.acciones > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#8E8E93' }}>Acciones</span>
+                  <strong>{detalleDia.acciones}</strong>
+                </div>
+              )}
+              {detalleDia.cliOrden.length > 0 && (
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Por cliente</div>
+                  {detalleDia.cliOrden.map(([cli, cnt]) => {
+                    const pct = detalleDia.minutos > 0 ? (cnt / detalleDia.minutos * 100) : 0;
+                    return (
+                      <div key={cli} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginBottom: 2 }}>
+                        <span>{CLIENTE_LABEL[cli] || cli}</span>
+                        <span style={{ color: '#8E8E93', fontVariantNumeric: 'tabular-nums' }}>{fmtHm(cnt)} · {pct.toFixed(0)}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {detalleDia.pagOrden.length > 0 && (
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Páginas top</div>
+                  {detalleDia.pagOrden.map(([pag, cnt]) => (
+                    <div key={pag} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginBottom: 2 }}>
+                      <span>{PAGINA_LABEL[pag] || `p${pag}`}</span>
+                      <span style={{ color: '#8E8E93', fontVariantNumeric: 'tabular-nums' }}>{fmtHm(cnt)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
