@@ -613,7 +613,7 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
       border: '1px solid rgba(255,255,255,0.7)',
       borderRadius: 16,
       boxShadow: '0 3px 16px rgba(0,0,0,0.05)',
-      overflow: 'hidden', maxWidth: requiereEvaluacion(user) ? 1040 : 780,
+      overflow: 'hidden', maxWidth: requiereEvaluacion(user) ? 960 : 780,
       animation: 'slidedown 240ms cubic-bezier(0.32, 0.72, 0, 1)',
     }}>
       <style>{`
@@ -1182,68 +1182,42 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
   );
 }
 
-// Histórico de bonos de últimos meses — barras con color por cuota alcanzada
+// Histórico de bonos — fila horizontal de mini-chips, un chip por mes
 function HistorialBonos({ historial, accent, anioActual, mesActual }) {
-  const maxBono = Math.max(1, ...historial.map((h) => Number(h.bono_total) || 0));
-  const CHART_H = 60;
-
   const colorFor = (h) => {
-    if (!h.cerrada) return 'rgba(0,0,0,0.15)';
+    if (!h.cerrada) return { bg: 'rgba(0,0,0,0.04)', text: '#8E8E93', dot: 'rgba(0,0,0,0.25)' };
     const pct = Number(h.cuota_pct) || 0;
-    if (pct >= 100) return '#1F7A3D';   // verde — cuota superada
-    if (pct >= 50)  return '#B25000';   // ámbar — parcial
-    return '#B00020';                    // rojo — muy debajo
+    if (pct >= 100) return { bg: 'rgba(31,122,61,0.08)',  text: '#1F7A3D', dot: '#1F7A3D' };
+    if (pct >= 50)  return { bg: 'rgba(178,80,0,0.08)',   text: '#B25000', dot: '#B25000' };
+    return             { bg: 'rgba(176,0,32,0.08)',       text: '#B00020', dot: '#B00020' };
   };
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: CHART_H, marginBottom: 6 }}>
-        {historial.map((h) => {
-          const bono = Number(h.bono_total) || 0;
-          const h_px = Math.max(4, (bono / maxBono) * CHART_H);
-          const esActual = h.anio === anioActual && h.mes === mesActual;
-          return (
-            <div key={`${h.anio}-${h.mes}`} title={`${MESES_CORTO[h.mes-1]} ${h.anio} · ${fmtMoney(bono)}${h.cerrada ? '' : ' (abierta)'} · cuota ${(Number(h.cuota_pct)||0).toFixed(0)}%`}
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', gap: 2 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: '#6E6E73', fontVariantNumeric: 'tabular-nums' }}>
-                {bono >= 1000 ? `${(bono/1000).toFixed(1)}k` : bono}
-              </div>
-              <div style={{
-                width: '100%', height: h_px, borderRadius: 4,
-                background: colorFor(h),
-                opacity: h.cerrada ? 1 : 0.55,
-                border: esActual ? `1.5px solid ${accent}` : 'none',
-                transition: 'height 200ms',
-              }} />
+    <div style={{ display: 'flex', gap: 4 }}>
+      {historial.map((h) => {
+        const bono = Number(h.bono_total) || 0;
+        const c = colorFor(h);
+        const esActual = h.anio === anioActual && h.mes === mesActual;
+        const bonoStr = bono >= 1000 ? `$${(bono/1000).toFixed(1)}k` : `$${bono}`;
+        return (
+          <div key={`${h.anio}-${h.mes}`}
+            title={`${MESES_CORTO[h.mes-1]} ${h.anio} · ${fmtMoney(bono)}${h.cerrada ? '' : ' (abierta)'} · cuota ${(Number(h.cuota_pct)||0).toFixed(0)}%`}
+            style={{
+              flex: 1, minWidth: 0, borderRadius: 8, padding: '5px 6px',
+              background: c.bg,
+              border: esActual ? `1.5px solid ${accent}` : '1px solid transparent',
+              textAlign: 'center',
+            }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {MESES_CORTO[h.mes-1]}
             </div>
-          );
-        })}
-      </div>
-      {/* Etiquetas de mes */}
-      <div style={{ display: 'flex', gap: 6 }}>
-        {historial.map((h) => (
-          <div key={`lbl-${h.anio}-${h.mes}`} style={{
-            flex: 1, textAlign: 'center', fontSize: 9.5, color: '#8E8E93', fontWeight: 600,
-          }}>
-            {MESES_CORTO[h.mes-1]}{historial.length > 3 ? '' : ` ${String(h.anio).slice(2)}`}
+            <div style={{ fontSize: 12, fontWeight: 700, color: c.text, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+              {bonoStr}
+            </div>
+            <div style={{ width: 5, height: 5, borderRadius: 999, background: c.dot, margin: '3px auto 0' }} />
           </div>
-        ))}
-      </div>
-      {/* Leyenda */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, fontSize: 9.5, color: '#8E8E93' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: '#1F7A3D' }} />cuota ≥100%
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: '#B25000' }} />≥50%
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: '#B00020' }} />&lt;50%
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'rgba(0,0,0,0.15)' }} />abierta
-        </span>
-      </div>
+        );
+      })}
     </div>
   );
 }
