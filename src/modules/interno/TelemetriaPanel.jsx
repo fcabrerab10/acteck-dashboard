@@ -613,7 +613,7 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
       border: '1px solid rgba(255,255,255,0.7)',
       borderRadius: 16,
       boxShadow: '0 3px 16px rgba(0,0,0,0.05)',
-      overflow: 'hidden', maxWidth: requiereEvaluacion(user) ? 880 : 520,
+      overflow: 'hidden', maxWidth: requiereEvaluacion(user) ? 880 : 780,
       animation: 'slidedown 240ms cubic-bezier(0.32, 0.72, 0, 1)',
     }}>
       <style>{`
@@ -909,68 +909,46 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
     return out.slice(0, 4); // máximo 4 para no saturar
   }, [cliOrden, totalCli, dias, diasEnMes, eventos]);
 
-  return (
-    <div style={{ padding: '8px 12px 12px',
-      display: 'grid',
-      gridTemplateColumns: puedeEvaluar ? 'minmax(0, 1fr) minmax(0, 1.15fr)' : 'minmax(0, 1fr)',
-      gap: 8, alignItems: 'start',
-    }}>
-      {/* ═══════════ COLUMNA IZQUIERDA — contexto/KPIs ═══════════ */}
-      <div>
-      {/* Actividad del mes */}
-      <SubSectSheet titulo="Actividad del mes">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-          <MiniKPI k="Días" v={`${dias}/${diasEnMes}`} s={`${(dias/diasEnMes*100).toFixed(0)}%`} />
-          <MiniKPI k="Tiempo" v={fmtHm(heartbeats)} s={`${(heartbeats/Math.max(1,dias)/60).toFixed(1)} h/día`} />
-          <MiniKPI k="Última" v={fmtHace(eventos[0]?.ts).replace('hace ', '')}
-            s={eventos[0] ? fmtFechaHora(eventos[0].ts).split(',')[0] : '—'} />
-        </div>
-        {/* Mini calendario heatmap del mes */}
-        <div style={{ marginTop: 12 }}>
-          <CalendarioMes anio={anio} mes={mes} eventos={eventos} accent={accent} />
-        </div>
-        {cliOrden.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Atención por cliente</div>
-            {cliOrden.map(([cli, cnt]) => {
-              const pct = totalCli > 0 ? (cnt / totalCli * 100) : 0;
-              return (
-                <div key={cli} style={{ marginBottom: 4 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
-                    <span style={{ fontWeight: 600 }}>{CLIENTE_LABEL[cli] || cli}</span>
-                    <span style={{ color: '#8E8E93', fontVariantNumeric: 'tabular-nums' }}>{fmtHm(cnt)} · {pct.toFixed(0)}%</span>
-                  </div>
-                  <div style={{ height: 4, background: 'rgba(0,0,0,0.06)', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: CLIENTE_COLOR[cli] || '#94A3B8', borderRadius: 2 }} />
-                  </div>
+  // Bloque de breakdowns — cliente/página/highlights. Puede ir en LEFT (Karolina)
+  // o en RIGHT (usuarios sin eval, panel horizontal).
+  const breakdownBloque = (
+    <>
+      {cliOrden.length > 0 && (
+        <SubSectSheet titulo="Atención por cliente">
+          {cliOrden.map(([cli, cnt]) => {
+            const pct = totalCli > 0 ? (cnt / totalCli * 100) : 0;
+            return (
+              <div key={cli} style={{ marginBottom: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
+                  <span style={{ fontWeight: 600 }}>{CLIENTE_LABEL[cli] || cli}</span>
+                  <span style={{ color: '#8E8E93', fontVariantNumeric: 'tabular-nums' }}>{fmtHm(cnt)} · {pct.toFixed(0)}%</span>
                 </div>
-              );
-            })}
-          </div>
-        )}
-        {pagOrden && pagOrden.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Páginas top</div>
-            {pagOrden.map(([pag, cnt]) => {
-              const totalPag = pagOrden.reduce((s, [, c]) => s + c, 0);
-              const pct = totalPag > 0 ? (cnt / heartbeats * 100) : 0;
-              return (
-                <div key={pag} style={{ marginBottom: 4 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
-                    <span style={{ fontWeight: 600 }}>{PAGINA_LABEL[pag] || `p${pag}`}</span>
-                    <span style={{ color: '#8E8E93', fontVariantNumeric: 'tabular-nums' }}>{fmtHm(cnt)} · {pct.toFixed(0)}%</span>
-                  </div>
-                  <div style={{ height: 4, background: 'rgba(0,0,0,0.06)', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: accent, borderRadius: 2 }} />
-                  </div>
+                <div style={{ height: 4, background: 'rgba(0,0,0,0.06)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: CLIENTE_COLOR[cli] || '#94A3B8', borderRadius: 2 }} />
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </SubSectSheet>
-
-      {/* Highlights automáticos */}
+              </div>
+            );
+          })}
+        </SubSectSheet>
+      )}
+      {pagOrden && pagOrden.length > 0 && (
+        <SubSectSheet titulo="Páginas top">
+          {pagOrden.map(([pag, cnt]) => {
+            const pct = heartbeats > 0 ? (cnt / heartbeats * 100) : 0;
+            return (
+              <div key={pag} style={{ marginBottom: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
+                  <span style={{ fontWeight: 600 }}>{PAGINA_LABEL[pag] || `p${pag}`}</span>
+                  <span style={{ color: '#8E8E93', fontVariantNumeric: 'tabular-nums' }}>{fmtHm(cnt)} · {pct.toFixed(0)}%</span>
+                </div>
+                <div style={{ height: 4, background: 'rgba(0,0,0,0.06)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: accent, borderRadius: 2 }} />
+                </div>
+              </div>
+            );
+          })}
+        </SubSectSheet>
+      )}
       {highlights.length > 0 && (
         <SubSectSheet titulo="Highlights">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -987,6 +965,35 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
           </div>
         </SubSectSheet>
       )}
+    </>
+  );
+
+  return (
+    <div style={{ padding: '8px 12px 12px',
+      display: 'grid',
+      gridTemplateColumns: puedeEvaluar
+        ? 'minmax(0, 1fr) minmax(0, 1.15fr)'
+        : 'minmax(0, 1fr) minmax(0, 1fr)',
+      gap: 8, alignItems: 'start',
+    }}>
+      {/* ═══════════ COLUMNA IZQUIERDA — contexto/KPIs ═══════════ */}
+      <div>
+      {/* Actividad del mes */}
+      <SubSectSheet titulo="Actividad del mes">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+          <MiniKPI k="Días" v={`${dias}/${diasEnMes}`} s={`${(dias/diasEnMes*100).toFixed(0)}%`} />
+          <MiniKPI k="Tiempo" v={fmtHm(heartbeats)} s={`${(heartbeats/Math.max(1,dias)/60).toFixed(1)} h/día`} />
+          <MiniKPI k="Última" v={fmtHace(eventos[0]?.ts).replace('hace ', '')}
+            s={eventos[0] ? fmtFechaHora(eventos[0].ts).split(',')[0] : '—'} />
+        </div>
+        {/* Mini calendario heatmap del mes */}
+        <div style={{ marginTop: 12 }}>
+          <CalendarioMes anio={anio} mes={mes} eventos={eventos} accent={accent} />
+        </div>
+      </SubSectSheet>
+
+      {/* Karolina: breakdowns dentro de la LEFT. Sin eval: van a la RIGHT */}
+      {puedeEvaluar && breakdownBloque}
 
       {puedeEvaluar && (<>
       {/* Bono hero — compacto */}
@@ -1118,7 +1125,12 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
 
       </div>{/* ═══════════ /COLUMNA IZQUIERDA ═══════════ */}
 
-      {/* ═══════════ COLUMNA DERECHA — evaluación manual (sólo Karolina) ═══════════ */}
+      {/* ═══════════ COLUMNA DERECHA ═══════════ */}
+      {/* Usuarios sin eval (Fernando, Camilo): breakdowns aquí para layout horizontal */}
+      {!puedeEvaluar && (
+        <div>{breakdownBloque}</div>
+      )}
+      {/* Karolina: evaluación manual */}
       {puedeEvaluar && (
       <div>
       {/* Ratings — pills segmentadas 1-5 */}
