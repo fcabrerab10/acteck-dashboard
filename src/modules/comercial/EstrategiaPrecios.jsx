@@ -446,25 +446,25 @@ export default function EstrategiaPrecios() {
                       )}
                       {listasVisibles.map((l) => {
                         if (l === 'Mayoreo AAA') {
+                          const promoTooltip = promo
+                            ? `Promo −${(Number(promo.promo_pct) * 100).toFixed(1)}% · lista ${fmtMoney(precioAAA)}\n`
+                              + (promo.promos || []).map((p) => `${p.campania}: ${Math.round(Number(p.promo_pct) * 100)}%`).join('\n')
+                            : undefined;
                           return (
                             <td key={l} className="py-1.5 px-2 text-right whitespace-nowrap"
-                              style={promo ? { background: PALETTE.emerald.bg } : undefined}>
+                              style={promo ? { background: PALETTE.emerald.bg } : undefined}
+                              title={promoTooltip}>
                               {precioAAA != null ? (
-                                <>
-                                  <div className="font-semibold" style={{ color: promo ? PALETTE.emerald.text : '#1f2937' }}>
-                                    {fmtMoney(precioAAAneto)}
-                                  </div>
+                                <span className="font-semibold inline-flex items-center gap-1 justify-end"
+                                  style={{ color: promo ? PALETTE.emerald.text : '#1f2937' }}>
+                                  {fmtMoney(precioAAAneto)}
                                   {promo && (
-                                    <div className="flex flex-col items-end gap-0.5 mt-0.5"
-                                      title={(promo.promos || []).map((p) => `${p.campania}: ${Math.round(Number(p.promo_pct) * 100)}%`).join('\n')}>
-                                      <span className="inline-block text-[9px] font-semibold px-1 py-0.5 rounded"
-                                        style={{ background: PALETTE.emerald.mid, color: '#fff' }}>
-                                        −{(Number(promo.promo_pct) * 100).toFixed(1)}%
-                                      </span>
-                                      <span className="text-[9px] text-gray-500 line-through">{fmtMoney(precioAAA)}</span>
-                                    </div>
+                                    <span className="text-[9px] font-semibold px-1 py-0.5 rounded"
+                                      style={{ background: PALETTE.emerald.mid, color: '#fff' }}>
+                                      −{(Number(promo.promo_pct) * 100).toFixed(0)}%
+                                    </span>
                                   )}
-                                </>
+                                </span>
                               ) : (
                                 <span className="text-gray-400">—</span>
                               )}
