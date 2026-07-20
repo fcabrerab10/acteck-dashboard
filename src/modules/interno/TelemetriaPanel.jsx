@@ -547,9 +547,15 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
   const heartbeats = eventos.filter((e) => e.tipo === 10).length;
   const dias = new Set(eventos.map((e) => new Date(e.ts).toISOString().slice(0, 10))).size;
   const cliCount = {};
-  for (const e of eventos) if (e.tipo === 10 && e.cliente) cliCount[e.cliente] = (cliCount[e.cliente] || 0) + 1;
+  const pagCount = {};
+  for (const e of eventos) {
+    if (e.tipo !== 10) continue;
+    if (e.cliente) cliCount[e.cliente] = (cliCount[e.cliente] || 0) + 1;
+    if (e.pagina) pagCount[e.pagina] = (pagCount[e.pagina] || 0) + 1;
+  }
   const totalCli = Object.values(cliCount).reduce((s, v) => s + v, 0);
   const cliOrden = Object.entries(cliCount).sort((a, b) => b[1] - a[1]);
+  const pagOrden = Object.entries(pagCount).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
   // Sólo Karolina tiene evaluación mensual + comisión. Los demás usuarios sólo
   // se monitorean con telemetría — no se muestra bono, cuota, ratings ni tareas.
@@ -630,7 +636,7 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
           evaluacion={evaluacion} bonoPrev={evalPrev?.bono_total || null}
           onSaved={reload} perfilId={perfilId}
           telemetria={{
-            dias, diasEnMes, heartbeats, eventos, cliOrden, totalCli,
+            dias, diasEnMes, heartbeats, eventos, cliOrden, totalCli, pagOrden,
           }}
         />
       )}
@@ -806,7 +812,7 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const { dias, diasEnMes, heartbeats, eventos, cliOrden, totalCli } = telemetria;
+  const { dias, diasEnMes, heartbeats, eventos, cliOrden, totalCli, pagOrden } = telemetria;
 
   // Sólo Karolina tiene evaluación mensual + comisión.
   const puedeEvaluar = requiereEvaluacion(user);
@@ -898,10 +904,30 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
                 <div key={cli} style={{ marginBottom: 4 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
                     <span style={{ fontWeight: 600 }}>{CLIENTE_LABEL[cli] || cli}</span>
-                    <span style={{ color: '#8E8E93', fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(0)}%</span>
+                    <span style={{ color: '#8E8E93', fontVariantNumeric: 'tabular-nums' }}>{fmtHm(cnt)} · {pct.toFixed(0)}%</span>
                   </div>
                   <div style={{ height: 4, background: 'rgba(0,0,0,0.06)', borderRadius: 2, overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${pct}%`, background: CLIENTE_COLOR[cli] || '#94A3B8', borderRadius: 2 }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {pagOrden && pagOrden.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Páginas top</div>
+            {pagOrden.map(([pag, cnt]) => {
+              const totalPag = pagOrden.reduce((s, [, c]) => s + c, 0);
+              const pct = totalPag > 0 ? (cnt / heartbeats * 100) : 0;
+              return (
+                <div key={pag} style={{ marginBottom: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
+                    <span style={{ fontWeight: 600 }}>{PAGINA_LABEL[pag] || `p${pag}`}</span>
+                    <span style={{ color: '#8E8E93', fontVariantNumeric: 'tabular-nums' }}>{fmtHm(cnt)} · {pct.toFixed(0)}%</span>
+                  </div>
+                  <div style={{ height: 4, background: 'rgba(0,0,0,0.06)', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: accent, borderRadius: 2 }} />
                   </div>
                 </div>
               );
