@@ -347,23 +347,29 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
 // Pill button reutilizable estilo Apple para el footer del sidebar
 function ApplePillButton({ icon: Icon, label, active, onClick, as = 'button', href }) {
   const [hover, setHover] = useState(false);
+  const [pressed, setPressed] = useState(false);
   const Comp = as;
   const bg = active
     ? 'var(--t-sidebarActive, rgba(0,113,227,0.10))'
-    : hover ? 'rgba(0,0,0,0.04)' : 'transparent';
+    : hover ? 'rgba(127,127,127,0.08)' : 'transparent';
   const color = active
     ? 'var(--t-sidebarActiveText, #0071E3)'
     : 'var(--t-sidebarText, #1D1D1F)';
   return (
     <Comp {...(as === 'a' ? { href } : { onClick })}
-      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => { setHover(false); setPressed(false); }}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: 10,
         width: '100%', padding: '8px 12px', borderRadius: 10,
         background: bg, border: 'none', cursor: 'pointer',
         color, fontSize: 13, fontWeight: active ? 600 : 500,
         fontFamily: 'inherit', textDecoration: 'none',
-        transition: 'background 160ms, color 160ms', marginBottom: 2,
+        transform: `scale(${pressed ? 0.97 : 1}) translateX(${hover && !active ? 2 : 0}px)`,
+        transition: 'background 220ms cubic-bezier(0.32, 0.72, 0, 1), color 200ms, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+        marginBottom: 2,
       }}>
       <Icon style={{ width: 15, height: 15, strokeWidth: 2, flexShrink: 0 }} />
       <span style={{ flex: 1, textAlign: 'left' }}>{label}</span>
@@ -416,9 +422,11 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, onNavegar, isActi
       >
         <span style={{ flex: 1 }}>{grupo.label}</span>
         {hasItems && (
-          isOpen
-            ? <ChevronDown style={{ width: 12, height: 12, strokeWidth: 2, opacity: 0.6 }} />
-            : <ChevronRight style={{ width: 12, height: 12, strokeWidth: 2, opacity: 0.6 }} />
+          <ChevronRight style={{
+            width: 12, height: 12, strokeWidth: 2, opacity: 0.6,
+            transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }} />
         )}
       </button>
 
@@ -464,9 +472,11 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, onNavegar, isActi
                     icon={Icon}
                     label={item.label}
                     onClick={() => toggle(item.id)}
-                    trailing={subOpen
-                      ? <ChevronDown style={{ width: 12, height: 12, strokeWidth: 2, opacity: 0.5 }} />
-                      : <ChevronRight style={{ width: 12, height: 12, strokeWidth: 2, opacity: 0.5 }} />}
+                    trailing={<ChevronRight style={{
+                      width: 12, height: 12, strokeWidth: 2, opacity: 0.5,
+                      transform: subOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                      transition: 'transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                    }} />}
                   />
                   {subOpen && (
                     <div style={{ paddingLeft: 12, marginTop: 2, marginBottom: 4, display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -556,11 +566,15 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
         leading={<span style={{
           width: 8, height: 8, borderRadius: 999, flexShrink: 0,
           background: cfg.color, display: 'inline-block',
+          boxShadow: isClienteActual ? `0 0 0 4px ${cfg.color}22` : 'none',
+          transition: 'box-shadow 260ms cubic-bezier(0.34, 1.56, 0.64, 1)',
         }} />}
         label={cfg.label}
-        trailing={isOpen
-          ? <ChevronDown style={{ width: 12, height: 12, strokeWidth: 2, opacity: 0.5 }} />
-          : <ChevronRight style={{ width: 12, height: 12, strokeWidth: 2, opacity: 0.5 }} />}
+        trailing={<ChevronRight style={{
+          width: 12, height: 12, strokeWidth: 2, opacity: 0.5,
+          transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+          transition: 'transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+        }} />}
       />
       {isOpen && (
         <div style={{ paddingLeft: 20, marginTop: 2, marginBottom: 4, display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -581,22 +595,30 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
   );
 }
 
-// ────────── SidebarButton — pill Apple genérico ──────────
+// ────────── SidebarButton — pill Apple con spring + haptic-like ──────────
 function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled, onClick, hint }) {
   const [hover, setHover] = useState(false);
+  const [pressed, setPressed] = useState(false);
   const bg = active
     ? 'var(--t-sidebarActive, rgba(0,113,227,0.10))'
-    : hover && !disabled ? 'rgba(0,0,0,0.04)' : 'transparent';
+    : hover && !disabled ? 'rgba(127,127,127,0.08)' : 'transparent';
   const color = active
     ? 'var(--t-sidebarActiveText, #0071E3)'
     : disabled
     ? 'var(--t-sidebarTextMuted, #86868B)'
     : 'var(--t-sidebarText, #1D1D1F)';
 
+  // Apple spring bounce
+  const scale = pressed ? 0.97 : 1;
+  const translateX = hover && !active && !disabled ? 2 : 0;
+
   return (
     <button onClick={onClick} disabled={disabled}
       title={hint || label}
-      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => { setHover(false); setPressed(false); }}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
       style={{
         width: '100%', display: 'flex', alignItems: 'center', gap: 10,
         padding: '7px 12px', borderRadius: 10, border: 'none',
@@ -604,11 +626,16 @@ function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled,
         fontSize: 13, fontWeight: active ? 600 : 500,
         cursor: disabled ? 'not-allowed' : 'pointer',
         fontFamily: 'inherit', textAlign: 'left',
-        transition: 'background 160ms, color 160ms',
+        transform: `scale(${scale}) translateX(${translateX}px)`,
+        transition: 'background 220ms cubic-bezier(0.32, 0.72, 0, 1), color 200ms, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1)',
         opacity: disabled ? 0.5 : 1,
       }}>
       {leading}
-      {Icon && <Icon style={{ width: 15, height: 15, strokeWidth: 2, flexShrink: 0, opacity: active ? 1 : 0.75 }} />}
+      {Icon && <Icon style={{
+        width: 15, height: 15, strokeWidth: 2, flexShrink: 0,
+        opacity: active ? 1 : 0.75,
+        transition: 'opacity 200ms',
+      }} />}
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
       {hint && !active && (
         <span style={{
@@ -616,7 +643,11 @@ function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled,
           color: 'var(--t-sidebarTextMuted, #86868B)', fontWeight: 600,
         }}>{hint}</span>
       )}
-      {trailing}
+      {trailing && (
+        <span style={{
+          display: 'inline-flex', transition: 'transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+        }}>{trailing}</span>
+      )}
     </button>
   );
 }
