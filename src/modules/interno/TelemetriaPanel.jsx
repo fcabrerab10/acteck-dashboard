@@ -328,7 +328,6 @@ export default function TelemetriaPanel() {
               <UserCard u={uSel} kpis={kpisPorUser.get(uSel.user_id)}
                 bonoBase={(BONO_BASE + facturacionMes * BONO_PCT)}
                 evaluacionActual={evalPorUser.get(uSel.user_id)}
-                compact={!requiereEvaluacion(uSel)}
                 onClick={() => setSelectedUserId(null)} />
             </div>
             <UserDetailPanel user={uSel} esAdmin={esAdmin} perfilId={perfil?.user_id}
@@ -343,14 +342,13 @@ export default function TelemetriaPanel() {
               <SeccionHeader color="#FF375F" label="Acteck · Equipo interno" cnt={`${internos.length} ${internos.length === 1 ? 'usuario' : 'usuarios'}`} />
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
                 gap: 16, marginBottom: 24,
               }}>
                 {internos.map((u) => (
                   <UserCard key={u.user_id} u={u} kpis={kpisPorUser.get(u.user_id)}
                     bonoBase={(BONO_BASE + facturacionMes * BONO_PCT)}
                     evaluacionActual={evalPorUser.get(u.user_id)}
-                    compact={!requiereEvaluacion(u)}
                     onClick={() => setSelectedUserId(u.user_id)} />
                 ))}
               </div>
@@ -361,10 +359,10 @@ export default function TelemetriaPanel() {
           {externos.length > 0 && (
             <>
               <SeccionHeader color="#FF9F0A" label="Externos · clientes y aliados" cnt={`${externos.length} ${externos.length === 1 ? 'usuario' : 'usuarios'}`} />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
                 {externos.map((u) => (
                   <UserCard key={u.user_id} u={u} kpis={kpisPorUser.get(u.user_id)}
-                    compact onClick={() => setSelectedUserId(u.user_id)} />
+                    onClick={() => setSelectedUserId(u.user_id)} />
                 ))}
               </div>
             </>
@@ -599,9 +597,9 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
       background: 'rgba(255,255,255,0.85)',
       backdropFilter: 'blur(30px)', WebkitBackdropFilter: 'blur(30px)',
       border: '1px solid rgba(255,255,255,0.7)',
-      borderRadius: 18,
-      boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
-      overflow: 'hidden', maxWidth: 1100,
+      borderRadius: 16,
+      boxShadow: '0 3px 16px rgba(0,0,0,0.05)',
+      overflow: 'hidden', maxWidth: 880,
       animation: 'slidedown 240ms cubic-bezier(0.32, 0.72, 0, 1)',
     }}>
       <style>{`
@@ -672,8 +670,8 @@ function u_desc(user) {
 
 function SubSectSheet({ titulo, children }) {
   return (
-    <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: 12, padding: '10px 12px', marginBottom: 8 }}>
-      <div style={{ fontSize: 10.5, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 7 }}>{titulo}</div>
+    <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: 10, padding: '8px 10px', marginBottom: 6 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>{titulo}</div>
       {children}
     </div>
   );
@@ -681,10 +679,10 @@ function SubSectSheet({ titulo, children }) {
 
 function MiniKPI({ k, v, s }) {
   return (
-    <div style={{ background: 'white', borderRadius: 9, padding: '7px 9px' }}>
-      <div style={{ fontSize: 9.5, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>{k}</div>
-      <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{v}</div>
-      <div style={{ fontSize: 10, color: '#8E8E93', marginTop: 0 }}>{s}</div>
+    <div style={{ background: 'white', borderRadius: 8, padding: '6px 8px' }}>
+      <div style={{ fontSize: 9, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>{k}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+      <div style={{ fontSize: 9.5, color: '#8E8E93', marginTop: 0 }}>{s}</div>
     </div>
   );
 }
@@ -897,10 +895,10 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
   }, [cliOrden, totalCli, dias, diasEnMes, eventos]);
 
   return (
-    <div style={{ padding: '10px 14px 14px',
+    <div style={{ padding: '8px 12px 12px',
       display: 'grid',
       gridTemplateColumns: puedeEvaluar ? 'minmax(0, 1fr) minmax(0, 1.15fr)' : 'minmax(0, 1fr)',
-      gap: 10, alignItems: 'start',
+      gap: 8, alignItems: 'start',
     }}>
       {/* ═══════════ COLUMNA IZQUIERDA — contexto/KPIs ═══════════ */}
       <div>
