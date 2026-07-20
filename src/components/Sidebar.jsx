@@ -29,7 +29,6 @@ const MENU_A_PERMISO_GLOBAL = {
   ordenesCompra:    'ordenes_compra',
   adminInterna:     'admin_interna',
   telemetria:       '__super_admin_only__', // sentinel: solo Fernando
-  evaluaciones:     'evaluaciones',
   axonMexico:       'axon_mexico',
   configuracion:    'configuracion',
 };
@@ -133,7 +132,6 @@ const MENU_CONFIG = [
     items: [
       { id: 'adminInterna', label: 'Pendientes & Calendario', icon: ClipboardList },
       { id: 'telemetria',   label: 'Actividad del equipo',       icon: Activity },
-      { id: 'evaluaciones', label: 'Evaluaciones (histórico)', icon: Award },
     ],
   },
   {

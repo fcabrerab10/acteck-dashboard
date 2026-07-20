@@ -18,7 +18,6 @@ import VisionGeneral from './modules/comercial/VisionGeneral';
 import ReporteTab from './modules/comercial/ReporteTab';
 import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
 import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
-import EvaluacionesPanel from './modules/interno/EvaluacionesPanel';
 import TelemetriaPanel from './modules/interno/TelemetriaPanel';
 import AxonMexico from './modules/interno/AxonMexico';
 import LoginPage from './modules/auth/LoginPage';
@@ -195,7 +194,6 @@ const GLOBAL_PAGES_INFO = {
   estrategiaPrecios:{ label: 'Estrategia de Precios',  icon: TrendingUp },
   ordenesCompra:    { label: 'Tracking Pedidos',        icon: Target },
   adminInterna:     { label: 'Administración Interna', icon: Building2 },
-  evaluaciones:     { label: 'Evaluaciones',            icon: Building2 },
   axonMexico:       { label: 'Axon de México',          icon: Building2 },
 };
 function Breadcrumb({ clienteActivo, paginaActiva, vistaActual }) {
@@ -285,14 +283,14 @@ export default function App() {
 
   
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
-    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','evaluaciones','telemetria','axonMexico']), []);
+    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','telemetria','axonMexico']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
       try { return localStorage.getItem('nav_pagina') || 'home'; } catch { return 'home'; }
     });
     const [clienteActivo, setClienteActivo] = useState(() => {
       try {
         const pag = localStorage.getItem('nav_pagina') || 'home';
-        const globals = new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','evaluaciones','telemetria','axonMexico']);
+        const globals = new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','telemetria','axonMexico']);
         if (globals.has(pag)) return null;
         return localStorage.getItem('nav_cliente') || 'digitalife';
       } catch { return 'digitalife'; }
@@ -511,11 +509,6 @@ export default function App() {
             puedeVerPestanaGlobal(perfil, "admin_interna")
               ? <AdministracionInterna />
               : <SinAcceso motivo="No tienes acceso a esta pestaña. Pídele a Fernando que te habilite 'Pendientes & Calendario' desde Configuración." />
-          )}
-          {paginaActiva === "evaluaciones" && (
-            puedeVerPestanaGlobal(perfil, "evaluaciones")
-              ? <EvaluacionesPanel />
-              : <SinAcceso motivo="No tienes acceso a Evaluaciones." />
           )}
           {paginaActiva === "telemetria" && (
             perfil?.es_super_admin
