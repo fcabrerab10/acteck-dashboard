@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import AppleLoader from '../../components/apple/AppleLoader';
+import { useTheme } from '../../lib/themeContext';
+import { AppleH1, AppleEyebrow, AppleCard, AppleCardDark, AppleSegment } from '../../components/apple';
 import {
   Calculator, ChevronRight, ChevronDown, TrendingUp, TrendingDown,
   Info, Printer, X, AlertTriangle, ArrowRight,
@@ -381,40 +383,62 @@ export default function EstadoResultados() {
     );
   }
 
+  const focoLabel = mesEnfoque === 0 ? `YTD ene–${MESES_LBL[mesMax - 1]}` : MESES_FULL[mesEnfoque - 1];
+  const focoOptions = [
+    { value: 0, label: 'YTD' },
+    ...Array.from({ length: mesMax }, (_, i) => ({ value: i + 1, label: MESES_LBL[i] })),
+  ];
+
   return (
-    <div className="max-w-none mx-auto p-6 space-y-4">
-      {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-4 px-1">
-        <div>
-          <p className="text-[11px] uppercase tracking-widest text-gray-500 mb-1">
-            REVKO Technology · {mesEnfoque === 0 ? `YTD ene–${MESES_LBL[mesMax - 1]}` : MESES_FULL[mesEnfoque - 1]} {anio}
-          </p>
-          <h2 className="text-2xl font-medium text-gray-800">Estado de resultados</h2>
+    <div style={{ maxWidth: 1240, margin: '0 auto', padding: '32px 24px 60px' }}>
+      {/* ── Header estilo Apple ── */}
+      <div style={{ marginBottom: 28 }}>
+        <AppleEyebrow>Reporte financiero · REVKO Technology</AppleEyebrow>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+          <div>
+            <AppleH1 style={{ fontSize: 40 }}>Estado de resultados.</AppleH1>
+            <p style={{
+              fontSize: 15, color: 'var(--t-textMuted, #6E6E73)',
+              margin: '6px 0 0',
+            }}>
+              {anio} · {focoLabel === 'YTD ene–' + MESES_LBL[mesMax - 1] ? `enero a ${MESES_LBL[mesMax - 1].toLowerCase()}` : focoLabel.toLowerCase()}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }} className="edr-no-print">
+            {aniosDisponibles.length > 1 && (
+              <AppleSegment
+                options={aniosDisponibles.map((y) => ({ value: y, label: String(y) }))}
+                value={anio}
+                onChange={setAnio}
+              />
+            )}
+            <button onClick={() => window.print()}
+              title="Exportar PDF"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '8px 14px', borderRadius: 999,
+                background: 'transparent',
+                border: '1px solid var(--t-border, rgba(0,0,0,0.1))',
+                color: 'var(--t-text, #1D1D1F)',
+                fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'all 200ms cubic-bezier(0.32, 0.72, 0, 1)',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+              <Printer style={{ width: 14, height: 14, strokeWidth: 2 }} /> PDF
+            </button>
+          </div>
         </div>
-        <div className="flex items-end gap-2 edr-no-print">
-          <label className="flex flex-col text-[11px] text-gray-500">
-            Año
-            <select value={anio} onChange={(e) => setAnio(Number(e.target.value))}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white">
-              {aniosDisponibles.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </label>
-          <label className="flex flex-col text-[11px] text-gray-500">
-            Foco
-            <select value={mesEnfoque} onChange={(e) => setMesEnfoque(Number(e.target.value))}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white">
-              <option value={0}>YTD acumulado</option>
-              {Array.from({ length: mesMax }, (_, i) => i + 1).map((m) => (
-                <option key={m} value={m}>{MESES_FULL[m - 1]} {anio}</option>
-              ))}
-            </select>
-          </label>
-          <button onClick={() => window.print()}
-            title="Exportar PDF (Imprimir → Guardar como PDF)"
-            className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white hover:bg-gray-50 text-gray-700">
-            <Printer className="w-4 h-4" /> PDF
-          </button>
-        </div>
+
+        {/* Foco de mes como segunda fila si hay meses */}
+        {mesMax > 0 && (
+          <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10 }} className="edr-no-print">
+            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--t-textSubtle, #86868B)' }}>
+              Foco
+            </span>
+            <AppleSegment options={focoOptions} value={mesEnfoque} onChange={setMesEnfoque} />
+          </div>
+        )}
       </div>
 
       {/* Alertas / outliers */}
@@ -429,24 +453,40 @@ export default function EstadoResultados() {
         />
       )}
 
-      {/* KPIs Bento */}
-      <div className="grid grid-cols-4 gap-2.5">
-        <BentoKpi palette={PALETTE.blue} label="Venta neta" valor={fmtCompact(kpis.ventaNeta)}
-          subtitulo={kpis.deltaVenta == null ? `${anio - 1} sin datos` : ''}
+      {/* ── Hero KPIs: card negra premium (utilidad neta) + 3 cards blancas ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <AppleCardDark padding={28}>
+          <div style={{ fontSize: 12, color: 'rgba(245,245,247,0.7)', fontWeight: 500, letterSpacing: 0 }}>
+            UAII · {anio}
+          </div>
+          <div style={{
+            fontFamily: '"SF Pro Display", sans-serif',
+            fontSize: 52, fontWeight: 600, letterSpacing: '-0.04em', lineHeight: 1,
+            marginTop: 12, marginBottom: 8,
+            background: 'linear-gradient(135deg, #F56300, #FF375F)',
+            WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+            fontVariantNumeric: 'tabular-nums',
+          }}>{fmtCompact(kpis.uaii)}</div>
+          <DeltaChip pct={kpis.deltaUaii} label={`vs ${anio - 1}`} dark />
+          {kpis.pctUaii != null && (
+            <div style={{ fontSize: 12, color: 'rgba(245,245,247,0.55)', marginTop: 4 }}>
+              {kpis.pctUaii.toFixed(1)}% s/ venta
+            </div>
+          )}
+        </AppleCardDark>
+
+        <AppleKpiCard label="Venta neta" value={fmtCompact(kpis.ventaNeta)}
           delta={kpis.deltaVenta} deltaLabel={`vs ${anio - 1}`} />
-        <BentoKpi palette={PALETTE.teal} label="Utilidad bruta" valor={fmtCompact(kpis.utilBruta)}
-          subtitulo={kpis.pctBruta != null ? `Margen ${kpis.pctBruta.toFixed(1)}%` : ''}
+        <AppleKpiCard label="Utilidad bruta" value={fmtCompact(kpis.utilBruta)}
+          sub={kpis.pctBruta != null ? `Margen ${kpis.pctBruta.toFixed(1)}%` : null}
           delta={kpis.deltaUtil} deltaLabel={`vs ${anio - 1}`} />
-        <BentoKpi palette={PALETTE.purple} label="UAFIR s/ proyectos" valor={fmtCompact(kpis.uafir)}
-          subtitulo={kpis.pctUafir != null ? `${kpis.pctUafir.toFixed(1)}% s/ venta` : ''}
+        <AppleKpiCard label="UAFIR s/ proyectos" value={fmtCompact(kpis.uafir)}
+          sub={kpis.pctUafir != null ? `${kpis.pctUafir.toFixed(1)}% s/ venta` : null}
           delta={kpis.deltaUafir} deltaLabel={`vs ${anio - 1}`} />
-        <BentoKpi palette={PALETTE.coral} label="UAII" valor={fmtCompact(kpis.uaii)}
-          subtitulo={kpis.pctUaii != null ? `${kpis.pctUaii.toFixed(1)}% s/ venta` : ''}
-          delta={kpis.deltaUaii} deltaLabel={`vs ${anio - 1}`} />
       </div>
 
       {/* Cascada + Tendencia */}
-      <div className="grid gap-2.5" style={{ gridTemplateColumns: '1.6fr 1fr' }}>
+      <div style={{ display: 'grid', gap: 14, gridTemplateColumns: '1.6fr 1fr', marginBottom: 24 }}>
         <CascadaCard
           data={cascadaData}
           mesLabel={mesEnfoque === 0 ? `YTD ${anio}` : `${MESES_FULL[mesEnfoque - 1]} ${anio}`}
@@ -458,16 +498,28 @@ export default function EstadoResultados() {
         />
       </div>
 
-      {/* Tabla por grupos */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-2">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <h3 className="text-base font-medium text-gray-800">Detalle por cuenta</h3>
-          <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer edr-no-print">
-            <input type="checkbox" checked={showVsAnioPrev}
-              onChange={(e) => setShowVsAnioPrev(e.target.checked)} className="rounded border-gray-300" />
-            Comparativo {anio - 1}
-          </label>
-        </div>
+      {/* Tabla por grupos — encabezado apple */}
+      <div style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        marginBottom: 14, padding: '0 4px',
+      }}>
+        <h2 style={{
+          fontFamily: '"SF Pro Display", sans-serif',
+          fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em',
+          color: 'var(--t-text, #1D1D1F)', margin: 0,
+        }}>Detalle por cuenta.</h2>
+        <label style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          fontSize: 13, color: 'var(--t-textMuted, #6E6E73)', cursor: 'pointer',
+        }} className="edr-no-print">
+          <input type="checkbox" checked={showVsAnioPrev}
+            onChange={(e) => setShowVsAnioPrev(e.target.checked)}
+            style={{ accentColor: '#0071E3' }} />
+          Comparar con {anio - 1}
+        </label>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {GRUPOS_TABLA.map((g) => (
           <GrupoTabla key={g.id} grupo={g} byCuenta={byCuenta} byCuentaPrev={byCuentaPrev}
             mesMax={mesMax} anio={anio} showVsAnioPrev={showVsAnioPrev}
@@ -475,8 +527,11 @@ export default function EstadoResultados() {
         ))}
       </div>
 
-      <p className="text-[11px] text-gray-400 px-2">
-        Fuente: tabla <code>estados_resultados</code> · alimentada desde /uploads.html
+      <p style={{
+        fontSize: 11.5, color: 'var(--t-textSubtle, #86868B)',
+        textAlign: 'center', marginTop: 32,
+      }}>
+        Cifras en MXN. Fuente: <code style={{ background: 'rgba(0,0,0,0.05)', padding: '2px 6px', borderRadius: 4 }}>estados_resultados</code> · alimentada desde /uploads.html
       </p>
 
       {/* Drill-down modal */}
@@ -489,7 +544,6 @@ export default function EstadoResultados() {
         />
       )}
 
-      {/* Estilos para impresión PDF */}
       <style>{`
         @media print {
           .edr-no-print { display: none !important; }
@@ -498,6 +552,48 @@ export default function EstadoResultados() {
         }
       `}</style>
     </div>
+  );
+}
+
+// ─── Card KPI Apple con delta chip ───
+function AppleKpiCard({ label, value, sub, delta, deltaLabel }) {
+  return (
+    <AppleCard padding={22} hoverable>
+      <div style={{ fontSize: 12, color: 'var(--t-textMuted, #6E6E73)', fontWeight: 500 }}>{label}</div>
+      <div style={{
+        fontFamily: '"SF Pro Display", sans-serif',
+        fontSize: 36, fontWeight: 600, letterSpacing: '-0.03em',
+        lineHeight: 1, marginTop: 12, marginBottom: 6,
+        color: 'var(--t-text, #1D1D1F)',
+        fontVariantNumeric: 'tabular-nums',
+      }}>{value}</div>
+      <DeltaChip pct={delta} label={deltaLabel} />
+      {sub && (
+        <div style={{ fontSize: 12, color: 'var(--t-textMuted, #6E6E73)', marginTop: 4 }}>{sub}</div>
+      )}
+    </AppleCard>
+  );
+}
+
+// ─── Chip de delta % ↑/↓ ───
+function DeltaChip({ pct, label, dark }) {
+  const mutedCol = dark ? 'rgba(245,245,247,0.55)' : 'var(--t-textMuted, #6E6E73)';
+  if (pct == null || !isFinite(pct)) {
+    return <span style={{ fontSize: 12.5, color: mutedCol, fontWeight: 500 }}>—</span>;
+  }
+  const isPos = pct >= 0;
+  const posCol = dark ? '#30D158' : '#34C759';
+  const negCol = dark ? '#FF453A' : '#FF3B30';
+  return (
+    <span style={{
+      fontSize: 12.5, fontWeight: 600,
+      color: isPos ? posCol : negCol,
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      fontVariantNumeric: 'tabular-nums',
+    }}>
+      {isPos ? '↑' : '↓'} {Math.abs(pct).toFixed(1)}%
+      {label && <span style={{ color: mutedCol, fontWeight: 500, marginLeft: 4 }}>{label}</span>}
+    </span>
   );
 }
 
@@ -648,23 +744,60 @@ function GrupoTabla({ grupo, byCuenta, byCuentaPrev, mesMax, anio, showVsAnioPre
   const deltaSub = subTotal != null && subTotalPrev > 0 ? ((subTotal - subTotalPrev) / subTotalPrev) * 100 : null;
 
   return (
-    <div className="border border-gray-100 rounded-lg overflow-hidden">
+    <div style={{
+      background: 'var(--t-surface, #FFFFFF)',
+      borderRadius: 20,
+      boxShadow: 'var(--t-shadow, 0 1px 3px rgba(0,0,0,0.04))',
+      overflow: 'hidden',
+      border: '1px solid transparent',
+      transition: 'box-shadow 240ms cubic-bezier(0.32, 0.72, 0, 1)',
+    }}>
       <button onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors"
-        style={{ background: open ? '#FAFBFC' : '#fff', borderBottom: open ? '1px solid #E2E8F0' : '' }}>
-        <div className="flex items-center gap-2">
-          {open ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
-          <span style={{ width: 6, height: 6, borderRadius: 3, background: grupo.color, display: 'inline-block' }} />
-          <span className="font-medium text-sm text-gray-800">{grupo.label}</span>
-          <span className="text-[11px] text-gray-400">{cuentas.length}</span>
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '18px 24px', background: 'transparent', border: 'none',
+          cursor: 'pointer', fontFamily: 'inherit',
+          borderBottom: open ? '1px solid var(--t-border, rgba(0,0,0,0.06))' : 'none',
+          transition: 'background 200ms cubic-bezier(0.32, 0.72, 0, 1)',
+        }}
+        onMouseEnter={(e) => !open && (e.currentTarget.style.background = 'rgba(0,0,0,0.02)')}
+        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ChevronRight style={{
+            width: 14, height: 14, strokeWidth: 2,
+            color: 'var(--t-textMuted, #6E6E73)',
+            transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }} />
+          <span style={{ width: 8, height: 8, borderRadius: 999, background: grupo.color, display: 'inline-block' }} />
+          <span style={{
+            fontFamily: '"SF Pro Display", sans-serif',
+            fontSize: 17, fontWeight: 600, letterSpacing: '-0.015em',
+            color: 'var(--t-text, #1D1D1F)',
+          }}>{grupo.label}</span>
+          <span style={{
+            fontSize: 11, color: 'var(--t-textSubtle, #86868B)', fontWeight: 500,
+            background: 'var(--t-bg, #F5F5F7)', padding: '2px 8px', borderRadius: 999,
+          }}>{cuentas.length}</span>
         </div>
         {sub && (
-          <div className="flex items-center gap-3 text-sm">
-            <span className="text-gray-500 text-[11px]">YTD</span>
-            <span className="font-medium text-gray-800" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtCompact(subTotal)}</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+            <span style={{
+              fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em',
+              color: 'var(--t-textSubtle, #86868B)', fontWeight: 700,
+            }}>YTD</span>
+            <span style={{
+              fontFamily: '"SF Pro Display", sans-serif',
+              fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em',
+              color: 'var(--t-text, #1D1D1F)', fontVariantNumeric: 'tabular-nums',
+            }}>{fmtCompact(subTotal)}</span>
             {showVsAnioPrev && deltaSub != null && (
-              <span style={{ color: deltaSub >= 0 ? '#0F6E56' : '#A32D2D', fontSize: 11, fontWeight: 500 }}>
-                {fmtPctDelta(deltaSub)}
+              <span style={{
+                color: deltaSub >= 0 ? '#34C759' : '#FF3B30',
+                fontSize: 12.5, fontWeight: 600,
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {deltaSub >= 0 ? '↑' : '↓'} {Math.abs(deltaSub).toFixed(1)}%
               </span>
             )}
           </div>
