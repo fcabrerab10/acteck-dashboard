@@ -1,6 +1,25 @@
 // Sistema de tokens visuales por tema. Todos los componentes deben leer de aquí,
 // no hardcodear colores. Cada tema comparte la MISMA estructura de tokens.
 
+// ═══ Escala tipográfica Apple — se aplica en todos los temas ═══
+export const TYPO = {
+  fontText:    '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI Variable", "Segoe UI", Roboto, sans-serif',
+  fontDisplay: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter Display", "Inter", "Segoe UI Variable Display", "Segoe UI", Roboto, sans-serif',
+  // Sizes
+  hero:    { fs: 56, w: 600, ls: '-0.045em', lh: 1 },
+  h1:      { fs: 44, w: 600, ls: '-0.035em', lh: 1.05 },
+  h2:      { fs: 28, w: 700, ls: '-0.025em', lh: 1.15 },
+  h3:      { fs: 17, w: 600, ls: '-0.015em', lh: 1.2 },
+  body:    { fs: 15, w: 400, ls: 0, lh: 1.5 },
+  sub:     { fs: 15, w: 400, ls: 0, lh: 1.5 },
+  eyebrow: { fs: 13, w: 500, ls: 0 },
+  label:   { fs: 12, w: 500, ls: 0 },
+  caption: { fs: 12, w: 400, ls: 0 },
+  kpiLg:   { fs: 52, w: 600, ls: '-0.04em', lh: 1 },
+  kpiMd:   { fs: 34, w: 600, ls: '-0.03em', lh: 1 },
+  total:   { fs: 20, w: 600, ls: '-0.02em' },
+};
+
 export const THEMES = {
   airy: {
     key: 'airy',
@@ -80,17 +99,18 @@ export const THEMES = {
   },
   hibrida: {
     key: 'hibrida',
-    label: 'Híbrida',
-    desc: 'Header oscuro con impacto, cuerpo claro para leer.',
-    mode: 'hybrid',
-    bg: '#F5F5F7',
-    bgElevated: '#FFFFFF',
-    surface: '#FFFFFF',
-    surfaceHover: 'rgba(0,0,0,0.02)',
-    surfaceDark: '#000000',
-    border: 'rgba(0,0,0,0.06)',
-    borderStrong: 'rgba(0,0,0,0.1)',
-    divider: 'rgba(0,0,0,0.05)',
+    label: 'Vibrant',
+    desc: 'Mesh gradient tricolor, glass cards con blur, KPI hero con orb glow.',
+    mode: 'vibrant',
+    // Fondo con mesh tricolor tenue — se aplica al body via CSS var
+    bg: 'radial-gradient(circle at 20% 0%, rgba(0,113,227,0.08) 0%, transparent 45%), radial-gradient(circle at 90% 30%, rgba(191,90,242,0.08) 0%, transparent 45%), radial-gradient(circle at 40% 100%, rgba(255,55,95,0.08) 0%, transparent 45%), #F5F5F7',
+    bgElevated: 'rgba(255,255,255,0.72)',
+    surface: 'rgba(255,255,255,0.72)', // glass — usan backdrop-filter en el componente
+    surfaceHover: 'rgba(255,255,255,0.85)',
+    surfaceDark: 'linear-gradient(135deg, #1D1D1F 0%, #2C2C2E 50%, #1D1D1F 100%)',
+    border: 'rgba(255,255,255,0.7)',
+    borderStrong: 'rgba(0,0,0,0.08)',
+    divider: 'rgba(0,0,0,0.04)',
     text: '#1D1D1F',
     textOnDark: '#F5F5F7',
     textMuted: '#6E6E73',
@@ -105,16 +125,16 @@ export const THEMES = {
     orangeSoft: '#FF6482',
     pink: '#FF375F',
     purple: '#BF5AF2',
-    shadow: '0 1px 3px rgba(0,0,0,0.04)',
-    shadowHover: '0 4px 20px rgba(0,0,0,0.08)',
-    heroCardBg: '#000000',
+    shadow: '0 4px 20px rgba(0,0,0,0.04)',
+    shadowHover: '0 8px 30px rgba(0,0,0,0.08)',
+    heroCardBg: 'linear-gradient(135deg, #1D1D1F 0%, #2C2C2E 50%, #1D1D1F 100%)',
     heroCardText: '#F5F5F7',
-    sidebar: '#0A0A0C', // sidebar dark en híbrida
-    sidebarText: '#F5F5F7',
-    sidebarTextMuted: 'rgba(245,245,247,0.65)',
-    sidebarActive: 'rgba(255,255,255,0.10)',
-    sidebarActiveText: '#F5F5F7',
-    sidebarBorder: 'rgba(255,255,255,0.08)',
+    sidebar: 'rgba(255,255,255,0.72)', // sidebar glass
+    sidebarText: '#1D1D1F',
+    sidebarTextMuted: '#6E6E73',
+    sidebarActive: 'rgba(0,113,227,0.14)',
+    sidebarActiveText: '#0055B5',
+    sidebarBorder: 'rgba(0,0,0,0.06)',
   },
 };
 

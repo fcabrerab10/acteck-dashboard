@@ -656,8 +656,13 @@ function SelectorApariencia({ perfil }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {opciones.map((t) => {
           const on = t.key === theme.key;
-          const previewBg = t.mode === 'dark' ? '#000' : t.mode === 'hybrid' ? '#F5F5F7' : '#F5F5F7';
-          const previewCardBg = t.mode === 'dark' ? '#1D1D1F' : 'white';
+          const previewBg = t.mode === 'dark'
+            ? '#000'
+            : t.mode === 'vibrant'
+            ? 'radial-gradient(circle at 20% 0%, rgba(0,113,227,0.18) 0%, transparent 45%), radial-gradient(circle at 90% 70%, rgba(191,90,242,0.18) 0%, transparent 45%), radial-gradient(circle at 40% 100%, rgba(255,55,95,0.14) 0%, transparent 45%), #F5F5F7'
+            : '#F5F5F7';
+          const previewCardBg = t.mode === 'dark' ? '#1D1D1F'
+            : t.mode === 'vibrant' ? 'rgba(255,255,255,0.72)' : 'white';
           const previewTextCol = t.mode === 'dark' ? '#F5F5F7' : '#1D1D1F';
           return (
             <button key={t.key} onClick={() => setThemeKey(t.key)}

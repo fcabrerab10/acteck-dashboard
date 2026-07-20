@@ -1,19 +1,34 @@
 // Primitivas Apple.com — se usan en todas las pestañas para consistencia.
-// Todas leen tokens del ThemeContext, así el mismo componente se ve distinto
-// según Airy / Puro / Híbrida.
+// Todas leen tokens del ThemeContext + la escala TYPO de themeTokens.
 import React from 'react';
 import { useTheme } from '../../lib/themeContext';
+import { TYPO } from '../../lib/themeTokens';
 
-// ─── Título grande de página ───
+// Helper para crear estilos tipográficos desde TYPO tokens
+const typoStyle = (t) => ({
+  fontFamily: t === TYPO.body || t === TYPO.sub || t === TYPO.eyebrow || t === TYPO.label || t === TYPO.caption
+    ? TYPO.fontText : TYPO.fontDisplay,
+  fontSize: t.fs, fontWeight: t.w,
+  letterSpacing: t.ls, lineHeight: t.lh || 1.4,
+});
+
+// ─── Título hero de página (56px, gigante) ───
+export function AppleHero({ children, style }) {
+  const { theme } = useTheme();
+  return (
+    <h1 style={{ ...typoStyle(TYPO.hero), margin: 0, color: theme.text, ...style }}>
+      {children}
+    </h1>
+  );
+}
+
+// ─── Título de página (44px, uso más común) ───
 export function AppleH1({ children, style }) {
   const { theme } = useTheme();
   return (
-    <h1 style={{
-      fontFamily: '-apple-system, "SF Pro Display", sans-serif',
-      fontSize: 44, fontWeight: 700, letterSpacing: '-0.035em',
-      lineHeight: 1.05, margin: 0, color: theme.text,
-      ...style,
-    }}>{children}</h1>
+    <h1 style={{ ...typoStyle(TYPO.h1), margin: 0, color: theme.text, ...style }}>
+      {children}
+    </h1>
   );
 }
 
@@ -22,8 +37,8 @@ export function AppleEyebrow({ children, color, style }) {
   const { theme } = useTheme();
   return (
     <p style={{
-      fontSize: 13, fontWeight: 500, letterSpacing: 0,
-      color: color || theme.textMuted, margin: '0 0 6px', ...style,
+      ...typoStyle(TYPO.eyebrow),
+      color: color || theme.textMuted, margin: '0 0 8px', ...style,
     }}>{children}</p>
   );
 }
@@ -33,42 +48,84 @@ export function AppleSubtitle({ children, style }) {
   const { theme } = useTheme();
   return (
     <p style={{
-      fontSize: 16, color: theme.textMuted, margin: 0, ...style,
+      ...typoStyle(TYPO.sub), color: theme.textMuted, margin: 0, ...style,
     }}>{children}</p>
   );
 }
 
-// ─── Título de sección ───
+// ─── Título de sección (h2 con weight 700) ───
 export function AppleH2({ children, style }) {
   const { theme } = useTheme();
   return (
     <h2 style={{
-      fontFamily: '-apple-system, "SF Pro Display", sans-serif',
-      fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em',
-      margin: '32px 0 16px', color: theme.text, ...style,
+      ...typoStyle(TYPO.h2), margin: '32px 0 16px', color: theme.text, ...style,
     }}>{children}</h2>
   );
 }
 
-// ─── Card base (blanca en airy/hibrida, oscura en puro) ───
-export function AppleCard({ children, style, padding = 26, hoverable = false, onClick }) {
+// ─── Título de card (h3) ───
+export function AppleH3({ children, style }) {
+  const { theme } = useTheme();
+  return (
+    <h3 style={{
+      ...typoStyle(TYPO.h3), margin: 0, color: theme.text, ...style,
+    }}>{children}</h3>
+  );
+}
+
+// ─── Number displays reusables ───
+export function AppleKpiValue({ children, size = 'md', gradient = false, style }) {
+  const { theme } = useTheme();
+  const t = size === 'lg' ? TYPO.kpiLg : size === 'total' ? TYPO.total : TYPO.kpiMd;
+  return (
+    <div style={{
+      ...typoStyle(t),
+      fontVariantNumeric: 'tabular-nums',
+      color: gradient ? 'transparent' : theme.text,
+      margin: '12px 0 8px',
+      ...(gradient ? {
+        background: `linear-gradient(135deg, ${theme.orange}, ${theme.pink})`,
+        WebkitBackgroundClip: 'text', backgroundClip: 'text',
+      } : {}),
+      ...style,
+    }}>{children}</div>
+  );
+}
+
+// ─── Card base — se adapta al tema: flat en airy, dark border en puro, glass blur en vibrant ───
+export function AppleCard({ children, style, padding = 26, hoverable = false, onClick, accent }) {
   const { theme } = useTheme();
   const [hover, setHover] = React.useState(false);
+  const isVibrant = theme.mode === 'vibrant';
   return (
     <div onClick={onClick}
       onMouseEnter={() => hoverable && setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
         background: theme.surface,
-        border: theme.mode === 'dark' ? `1px solid ${theme.border}` : 'none',
+        backdropFilter: isVibrant ? 'blur(20px) saturate(180%)' : undefined,
+        WebkitBackdropFilter: isVibrant ? 'blur(20px) saturate(180%)' : undefined,
+        border: theme.mode === 'dark' ? `1px solid ${theme.border}`
+              : isVibrant ? `1px solid ${theme.border}` : 'none',
         borderRadius: 22, padding,
         boxShadow: hover ? theme.shadowHover : theme.shadow,
         transition: 'box-shadow 240ms, transform 200ms',
         transform: hover && hoverable ? 'translateY(-2px)' : 'translateY(0)',
         cursor: onClick ? 'pointer' : 'default',
         color: theme.text,
+        position: 'relative',
+        overflow: 'hidden',
         ...style,
-      }}>{children}</div>
+      }}>
+      {/* Strip de color en vibrant si viene accent */}
+      {isVibrant && accent && (
+        <div style={{
+          position: 'absolute', top: 0, left: padding, right: padding, height: 3,
+          borderRadius: '0 0 4px 4px', background: accent,
+        }} />
+      )}
+      {children}
+    </div>
   );
 }
 

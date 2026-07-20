@@ -396,10 +396,10 @@ export default function EstadoResultados() {
         <AppleEyebrow>Reporte financiero · REVKO Technology</AppleEyebrow>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
           <div>
-            <AppleH1 style={{ fontSize: 40 }}>Estado de resultados.</AppleH1>
+            <AppleH1>Estado de resultados.</AppleH1>
             <p style={{
               fontSize: 15, color: 'var(--t-textMuted, #6E6E73)',
-              margin: '6px 0 0',
+              margin: '10px 0 0',
             }}>
               {anio} · {focoLabel === 'YTD ene–' + MESES_LBL[mesMax - 1] ? `enero a ${MESES_LBL[mesMax - 1].toLowerCase()}` : focoLabel.toLowerCase()}
             </p>
@@ -476,11 +476,14 @@ export default function EstadoResultados() {
         </AppleCardDark>
 
         <AppleKpiCard label="Venta neta" value={fmtCompact(kpis.ventaNeta)}
+          accent="linear-gradient(90deg, #0071E3, #5AC8FA)"
           delta={kpis.deltaVenta} deltaLabel={`vs ${anio - 1}`} />
         <AppleKpiCard label="Utilidad bruta" value={fmtCompact(kpis.utilBruta)}
+          accent="linear-gradient(90deg, #34C759, #30D158)"
           sub={kpis.pctBruta != null ? `Margen ${kpis.pctBruta.toFixed(1)}%` : null}
           delta={kpis.deltaUtil} deltaLabel={`vs ${anio - 1}`} />
         <AppleKpiCard label="UAFIR s/ proyectos" value={fmtCompact(kpis.uafir)}
+          accent="linear-gradient(90deg, #AF52DE, #FF375F)"
           sub={kpis.pctUafir != null ? `${kpis.pctUafir.toFixed(1)}% s/ venta` : null}
           delta={kpis.deltaUafir} deltaLabel={`vs ${anio - 1}`} />
       </div>
@@ -556,9 +559,9 @@ export default function EstadoResultados() {
 }
 
 // ─── Card KPI Apple con delta chip ───
-function AppleKpiCard({ label, value, sub, delta, deltaLabel }) {
+function AppleKpiCard({ label, value, sub, delta, deltaLabel, accent }) {
   return (
-    <AppleCard padding={22} hoverable>
+    <AppleCard padding={22} hoverable accent={accent}>
       <div style={{ fontSize: 12, color: 'var(--t-textMuted, #6E6E73)', fontWeight: 500 }}>{label}</div>
       <div style={{
         fontFamily: '"SF Pro Display", sans-serif',
