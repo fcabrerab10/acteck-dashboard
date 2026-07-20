@@ -507,9 +507,23 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
   const [eventos, setEventos] = useState([]);
   const [evaluacion, setEvaluacion] = useState(null);
   const [evalPrev, setEvalPrev] = useState(null); // bono del mes anterior (cerrado) para trend
+  const [historial, setHistorial] = useState([]); // últimos 6 meses de bonos para el chart
   const [facturacion, setFacturacion] = useState(0);
   const [cuota, setCuota] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  // Historial de bonos — se carga una vez por usuario (no en cada cambio de mes)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('evaluaciones_mensuales')
+        .select('anio,mes,bono_total,cuota_pct,cerrada')
+        .eq('user_id', user.user_id)
+        .order('anio', { ascending: false })
+        .order('mes', { ascending: false })
+        .limit(6);
+      setHistorial((data || []).reverse()); // cronológico: más antiguo → actual
+    })();
+  }, [user.user_id]);
 
   // Últimos 6 meses (incluye actual) ordenados cronológicamente izq→der
   const mesesDisponibles = useMemo(() => {
@@ -653,6 +667,7 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
           user={user} anio={mesRef.anio} mes={mesRef.mes}
           facturacion={facturacion} cuota={cuota} cuotaPct={cuotaPct}
           evaluacion={evaluacion} bonoPrev={evalPrev?.bono_total || null}
+          historial={historial}
           onSaved={reload} perfilId={perfilId}
           telemetria={{
             dias, diasEnMes, heartbeats, eventos, cliOrden, totalCli, pagOrden,
@@ -688,7 +703,7 @@ function MiniKPI({ k, v, s }) {
 }
 
 // ═══════════════════ Panel completo (telemetría + evaluación, layout 2-col balanceado) ═══════════════════
-function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, bonoPrev, onSaved, perfilId, telemetria }) {
+function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, bonoPrev, historial, onSaved, perfilId, telemetria }) {
   // Estado local optimista — inicia del prop y se actualiza inmediato en cada click.
   // Los saves a Supabase corren en background sin bloquear UI.
   const [evalLocal, setEvalLocal] = useState(evaluacion);
@@ -1142,8 +1157,81 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
       <SubSectSheet titulo={`Ajustes al bono${ajustesTotal !== 0 ? ` · ${ajustesTotal >= 0 ? '+' : ''}${fmtMoney(ajustesTotal)}` : ''}`}>
         <AjustesLista ajustes={evaluacion_?.ajustes || []} onChange={(a) => upsertPatch({ ajustes: a })} disabled={isCerrada} />
       </SubSectSheet>
+
+      {/* Historial de bonos */}
+      {historial && historial.length > 0 && (
+        <SubSectSheet titulo={`Historial de bonos · ${historial.length} ${historial.length === 1 ? 'mes' : 'meses'}`}>
+          <HistorialBonos historial={historial} accent={accent} anioActual={anio} mesActual={mes} />
+        </SubSectSheet>
+      )}
       </div>
       )}{/* ═══════════ /COLUMNA DERECHA ═══════════ */}
+    </div>
+  );
+}
+
+// Histórico de bonos de últimos meses — barras con color por cuota alcanzada
+function HistorialBonos({ historial, accent, anioActual, mesActual }) {
+  const maxBono = Math.max(1, ...historial.map((h) => Number(h.bono_total) || 0));
+  const CHART_H = 60;
+
+  const colorFor = (h) => {
+    if (!h.cerrada) return 'rgba(0,0,0,0.15)';
+    const pct = Number(h.cuota_pct) || 0;
+    if (pct >= 100) return '#1F7A3D';   // verde — cuota superada
+    if (pct >= 50)  return '#B25000';   // ámbar — parcial
+    return '#B00020';                    // rojo — muy debajo
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: CHART_H, marginBottom: 6 }}>
+        {historial.map((h) => {
+          const bono = Number(h.bono_total) || 0;
+          const h_px = Math.max(4, (bono / maxBono) * CHART_H);
+          const esActual = h.anio === anioActual && h.mes === mesActual;
+          return (
+            <div key={`${h.anio}-${h.mes}`} title={`${MESES_CORTO[h.mes-1]} ${h.anio} · ${fmtMoney(bono)}${h.cerrada ? '' : ' (abierta)'} · cuota ${(Number(h.cuota_pct)||0).toFixed(0)}%`}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', gap: 2 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#6E6E73', fontVariantNumeric: 'tabular-nums' }}>
+                {bono >= 1000 ? `${(bono/1000).toFixed(1)}k` : bono}
+              </div>
+              <div style={{
+                width: '100%', height: h_px, borderRadius: 4,
+                background: colorFor(h),
+                opacity: h.cerrada ? 1 : 0.55,
+                border: esActual ? `1.5px solid ${accent}` : 'none',
+                transition: 'height 200ms',
+              }} />
+            </div>
+          );
+        })}
+      </div>
+      {/* Etiquetas de mes */}
+      <div style={{ display: 'flex', gap: 6 }}>
+        {historial.map((h) => (
+          <div key={`lbl-${h.anio}-${h.mes}`} style={{
+            flex: 1, textAlign: 'center', fontSize: 9.5, color: '#8E8E93', fontWeight: 600,
+          }}>
+            {MESES_CORTO[h.mes-1]}{historial.length > 3 ? '' : ` ${String(h.anio).slice(2)}`}
+          </div>
+        ))}
+      </div>
+      {/* Leyenda */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, fontSize: 9.5, color: '#8E8E93' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: '#1F7A3D' }} />cuota ≥100%
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: '#B25000' }} />≥50%
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: '#B00020' }} />&lt;50%
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'rgba(0,0,0,0.15)' }} />abierta
+        </span>
+      </div>
     </div>
   );
 }
