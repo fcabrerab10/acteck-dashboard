@@ -328,6 +328,7 @@ export default function TelemetriaPanel() {
               <UserCard u={uSel} kpis={kpisPorUser.get(uSel.user_id)}
                 bonoBase={(BONO_BASE + facturacionMes * BONO_PCT)}
                 evaluacionActual={evalPorUser.get(uSel.user_id)}
+                compact={!requiereEvaluacion(uSel)}
                 onClick={() => setSelectedUserId(null)} />
             </div>
             <UserDetailPanel user={uSel} esAdmin={esAdmin} perfilId={perfil?.user_id}
@@ -342,13 +343,14 @@ export default function TelemetriaPanel() {
               <SeccionHeader color="#FF375F" label="Acteck · Equipo interno" cnt={`${internos.length} ${internos.length === 1 ? 'usuario' : 'usuarios'}`} />
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
                 gap: 16, marginBottom: 24,
               }}>
                 {internos.map((u) => (
                   <UserCard key={u.user_id} u={u} kpis={kpisPorUser.get(u.user_id)}
                     bonoBase={(BONO_BASE + facturacionMes * BONO_PCT)}
                     evaluacionActual={evalPorUser.get(u.user_id)}
+                    compact={!requiereEvaluacion(u)}
                     onClick={() => setSelectedUserId(u.user_id)} />
                 ))}
               </div>
@@ -359,10 +361,10 @@ export default function TelemetriaPanel() {
           {externos.length > 0 && (
             <>
               <SeccionHeader color="#FF9F0A" label="Externos · clientes y aliados" cnt={`${externos.length} ${externos.length === 1 ? 'usuario' : 'usuarios'}`} />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
                 {externos.map((u) => (
                   <UserCard key={u.user_id} u={u} kpis={kpisPorUser.get(u.user_id)}
-                    onClick={() => setSelectedUserId(u.user_id)} />
+                    compact onClick={() => setSelectedUserId(u.user_id)} />
                 ))}
               </div>
             </>
@@ -388,7 +390,7 @@ function SeccionHeader({ color, label, cnt }) {
 }
 
 // ═══════════════════ UserCard (glassmorphism) ═══════════════════
-function UserCard({ u, kpis, bonoBase, evaluacionActual, onClick }) {
+function UserCard({ u, kpis, bonoBase, evaluacionActual, onClick, compact = false }) {
   const pendEval = requiereEvaluacion(u) && evaluacionActual && !evaluacionActual.cerrada;
   const bonoStr = kpis?.bonoEstimado != null ? fmtMoney(kpis.bonoEstimado) : null;
   const diasPct = kpis ? (kpis.diasActivos / kpis.diasEnMes * 100) : 0;
@@ -396,31 +398,46 @@ function UserCard({ u, kpis, bonoBase, evaluacionActual, onClick }) {
   const cliPct = kpis?.pctTop || 0;
   const isKarolina = requiereEvaluacion(u);
 
+  // Escala compacta para tarjetas sin evaluación
+  const S = compact ? {
+    pad: 14, radius: 14, avatar: 40, avatarFs: 15,
+    nombreFs: 15, subFs: 11, gapTop: 10,
+    kpiHeader: 10, kpiVal: 18, kpiSub: 10,
+    ringSize: 32, ringStroke: 4, ringNum: 10, ringLbl: 8.5,
+    ringsGap: 6, ringsPadTop: 10, ringsMarginTop: 12,
+  } : {
+    pad: 22, radius: 20, avatar: 56, avatarFs: 20,
+    nombreFs: 19, subFs: 12.5, gapTop: 12,
+    kpiHeader: 11, kpiVal: 24, kpiSub: 11.5,
+    ringSize: 44, ringStroke: 5, ringNum: 11.5, ringLbl: 9.5,
+    ringsGap: 10, ringsPadTop: 16, ringsMarginTop: 18,
+  };
+
   return (
     <div onClick={onClick} style={{
       background: 'rgba(255,255,255,0.72)',
       backdropFilter: 'blur(20px)',
       WebkitBackdropFilter: 'blur(20px)',
       border: '1px solid rgba(255,255,255,0.6)',
-      borderRadius: 20, padding: 22,
+      borderRadius: S.radius, padding: S.pad,
       boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
       cursor: 'pointer', transition: 'transform 0.15s, box-shadow 0.15s',
     }}
     onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.08)'; }}
     onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 24px rgba(0,0,0,0.06)'; }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div>
           <div style={{
-            width: 56, height: 56, borderRadius: 999, background: colorAvatar(u),
+            width: S.avatar, height: S.avatar, borderRadius: 999, background: colorAvatar(u),
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white', fontWeight: 700, fontSize: 20,
+            color: 'white', fontWeight: 700, fontSize: S.avatarFs,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           }}>{iniciales(u.nombre || u.email)}</div>
-          <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 12 }}>
+          <div style={{ fontSize: S.nombreFs, fontWeight: 700, letterSpacing: '-0.02em', marginTop: S.gapTop }}>
             {u.nombre || u.email?.split('@')[0]}
           </div>
-          <div style={{ fontSize: 12.5, color: '#6E6E73', marginTop: 2 }}>
+          <div style={{ fontSize: S.subFs, color: '#6E6E73', marginTop: 2 }}>
             {u.puesto || u.rol}{u.puesto ? ` · ${u.rol}` : ''}
           </div>
           {pendEval && (
@@ -445,13 +462,13 @@ function UserCard({ u, kpis, bonoBase, evaluacionActual, onClick }) {
           </div>
         ) : (
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <div style={{ fontSize: S.kpiHeader, fontWeight: 600, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Tiempo activo
             </div>
-            <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 4 }}>
+            <div style={{ fontSize: S.kpiVal, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 4 }}>
               {fmtHm(kpis?.minutos || 0)}
             </div>
-            <div style={{ fontSize: 11.5, color: '#6E6E73', marginTop: 3 }}>
+            <div style={{ fontSize: S.kpiSub, color: '#6E6E73', marginTop: 3 }}>
               {kpis?.diasActivos || 0}/{kpis?.diasEnMes || 0} días
             </div>
           </div>
@@ -459,24 +476,28 @@ function UserCard({ u, kpis, bonoBase, evaluacionActual, onClick }) {
       </div>
 
       {/* Rings de actividad */}
-      <div style={{ display: 'flex', gap: 10, marginTop: 18, paddingTop: 16, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-        <RingCell pct={diasPct} color="#FF375F" num={`${kpis?.diasActivos || 0}/${kpis?.diasEnMes || 0}`} lbl="Días" />
-        <RingCell pct={tiempoPct} color="#34C759" num={fmtHm(kpis?.minutos || 0)} lbl="Tiempo" />
+      <div style={{ display: 'flex', gap: S.ringsGap, marginTop: S.ringsMarginTop, paddingTop: S.ringsPadTop, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+        <RingCell pct={diasPct} color="#FF375F" num={`${kpis?.diasActivos || 0}/${kpis?.diasEnMes || 0}`} lbl="Días"
+          size={S.ringSize} stroke={S.ringStroke} numFs={S.ringNum} lblFs={S.ringLbl} />
+        <RingCell pct={tiempoPct} color="#34C759" num={fmtHm(kpis?.minutos || 0)} lbl="Tiempo"
+          size={S.ringSize} stroke={S.ringStroke} numFs={S.ringNum} lblFs={S.ringLbl} />
         <RingCell pct={cliPct} color={kpis?.clienteTop ? (CLIENTE_COLOR[kpis.clienteTop] || '#8B5CF6') : '#94A3B8'}
           num={kpis?.clienteTop ? `${cliPct.toFixed(0)}%` : '—'}
-          lbl={kpis?.clienteTop ? CLIENTE_LABEL[kpis.clienteTop] : 'Sin datos'} />
-        <RingCell pct={100} color="#8E8E93" num={fmtHace(kpis?.ultimo).replace('hace ', '')} lbl="Última" />
+          lbl={kpis?.clienteTop ? CLIENTE_LABEL[kpis.clienteTop] : 'Sin datos'}
+          size={S.ringSize} stroke={S.ringStroke} numFs={S.ringNum} lblFs={S.ringLbl} />
+        <RingCell pct={100} color="#8E8E93" num={fmtHace(kpis?.ultimo).replace('hace ', '')} lbl="Última"
+          size={S.ringSize} stroke={S.ringStroke} numFs={S.ringNum} lblFs={S.ringLbl} />
       </div>
     </div>
   );
 }
 
-function RingCell({ pct, color, num, lbl }) {
+function RingCell({ pct, color, num, lbl, size = 44, stroke = 5, numFs = 11.5, lblFs = 9.5 }) {
   return (
-    <div style={{ textAlign: 'center', flex: 1 }}>
-      <div style={{ display: 'flex', justifyContent: 'center' }}><Ring pct={pct} color={color} /></div>
-      <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1D1D1F', marginTop: 4 }}>{num}</div>
-      <div style={{ fontSize: 9.5, fontWeight: 500, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{lbl}</div>
+    <div style={{ textAlign: 'center', flex: 1, minWidth: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'center' }}><Ring pct={pct} color={color} size={size} stroke={stroke} /></div>
+      <div style={{ fontSize: numFs, fontWeight: 700, color: '#1D1D1F', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{num}</div>
+      <div style={{ fontSize: lblFs, fontWeight: 500, color: '#6E6E73', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lbl}</div>
     </div>
   );
 }
