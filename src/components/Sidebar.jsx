@@ -209,37 +209,55 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
   const puedeActualizar = puedeActualizarDatos(perfilUsuario);
 
   return (
-    <aside className="w-60 flex flex-col shrink-0"
+    <aside className="flex flex-col shrink-0"
       style={{
+        width: 264,
         background: 'var(--t-sidebar, #FFFFFF)',
         borderRight: '1px solid var(--t-sidebarBorder, rgba(0,0,0,0.06))',
         color: 'var(--t-sidebarText, #1D1D1F)',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
       }}>
       {/* ─── BRAND ─── */}
-      <div style={{ padding: '18px 20px 12px' }}>
-        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--t-sidebarTextMuted, #6E6E73)', letterSpacing: 0 }}>
-          Balam Rush
-        </div>
+      <div style={{ padding: '22px 22px 16px' }}>
         <div style={{
-          fontFamily: '-apple-system, "SF Pro Display", sans-serif',
-          fontSize: 19, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15,
-          color: 'var(--t-sidebarText, #1D1D1F)', marginTop: 2,
-        }}>Dashboard Acteck</div>
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          {/* Logo mark — cuadrado con inicial */}
+          <div style={{
+            width: 30, height: 30, borderRadius: 8,
+            background: 'linear-gradient(135deg, #1D1D1F, #2C2C2E)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#F5F5F7', fontWeight: 700, fontSize: 13, letterSpacing: '-0.02em',
+            fontFamily: '"SF Pro Display", sans-serif',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+          }}>a</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{
+              fontFamily: '-apple-system, "SF Pro Display", sans-serif',
+              fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', lineHeight: 1.2,
+              color: 'var(--t-sidebarText, #1D1D1F)',
+            }}>Dashboard</div>
+            <div style={{
+              fontSize: 11, fontWeight: 500, letterSpacing: 0, lineHeight: 1.3,
+              color: 'var(--t-sidebarTextMuted, #6E6E73)',
+            }}>Balam Rush · Acteck</div>
+          </div>
+        </div>
         {modoPresent && (
           <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10,
+            display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12,
             padding: '3px 9px', borderRadius: 999,
             background: 'rgba(52,199,89,0.12)', color: '#1F7A3D',
-            fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
+            fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
           }}>
-            <span style={{ width: 6, height: 6, borderRadius: 999, background: '#34C759' }} />
+            <span style={{ width: 5, height: 5, borderRadius: 999, background: '#34C759' }} />
             Presentación
           </div>
         )}
       </div>
 
       {/* ─── NAV ─── */}
-      <nav className="flex-1 overflow-y-auto" style={{ padding: '4px 12px' }}>
+      <nav className="flex-1 overflow-y-auto" style={{ padding: '4px 14px' }}>
         {MENU_CONFIG
           .filter((grupo) => {
             // Compat: legacy rolesPermitidos. Nuevos grupos se filtran sus
@@ -268,60 +286,61 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
       {/* ─── FOOTER estilo Apple ─── */}
       <div style={{
         borderTop: '1px solid var(--t-sidebarBorder, rgba(0,0,0,0.06))',
-        padding: '12px',
+        padding: '10px 14px 14px',
       }}>
-        {/* Acciones admin */}
+        {/* Acciones admin como items del sidebar */}
         {!modoPresent && (puedeVerConfig || puedeActualizar) && (
-          <div style={{ marginBottom: 8 }}>
+          <div style={{ marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 1 }}>
             {puedeVerConfig && (
-              <ApplePillButton icon={Settings} label="Configuración"
+              <SidebarButton icon={Settings} label="Configuración"
                 active={isActiveGlobal('configuracion')}
                 onClick={() => onNavegar(null, 'configuracion')} />
             )}
             {puedeActualizar && (
-              <ApplePillButton as="a" href="/uploads.html" icon={RefreshCw} label="Actualizar datos" />
+              <a href="/uploads.html" style={{ textDecoration: 'none' }}>
+                <SidebarButton icon={RefreshCw} label="Actualizar datos" />
+              </a>
             )}
+            <SidebarButton icon={Eye}
+              label={modoPresent ? 'Salir de presentación' : 'Modo presentación'}
+              active={modoPresent}
+              onClick={() => setModoPresent(!modoPresent)} />
           </div>
         )}
 
-        {/* Modo Presentación */}
-        <button onClick={() => setModoPresent(!modoPresent)}
-          style={{
-            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            padding: '8px 12px', borderRadius: 999,
-            background: modoPresent ? 'var(--t-sidebarText, #1D1D1F)' : 'transparent',
-            border: `1px solid ${modoPresent ? 'transparent' : 'var(--t-sidebarBorder, rgba(0,0,0,0.1))'}`,
-            color: modoPresent ? 'var(--t-sidebar, #FFF)' : 'var(--t-sidebarTextMuted, #6E6E73)',
-            fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
-            fontFamily: 'inherit', marginBottom: 8, transition: 'all 160ms',
-          }}>
-          <Eye style={{ width: 13, height: 13, strokeWidth: 2 }} />
-          {modoPresent ? 'Salir de presentación' : 'Modo presentación'}
-        </button>
+        {/* Divisor sutil */}
+        {perfilUsuario?.nombre && (puedeVerConfig || puedeActualizar) && (
+          <div style={{
+            height: 1, background: 'var(--t-sidebarBorder, rgba(0,0,0,0.06))',
+            margin: '8px 0 10px',
+          }} />
+        )}
 
-        {/* Tarjeta de usuario */}
+        {/* Tarjeta de usuario refinada */}
         {perfilUsuario?.nombre && (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '10px 8px', borderRadius: 12,
-            background: 'transparent',
+            display: 'flex', alignItems: 'center', gap: 11,
+            padding: '4px 8px',
           }}>
             <div style={{
-              width: 32, height: 32, flexShrink: 0, borderRadius: 999,
-              background: 'linear-gradient(135deg, #0071E3, #5856D6)',
+              width: 34, height: 34, flexShrink: 0, borderRadius: 999,
+              background: 'linear-gradient(135deg, #007AFF, #5856D6)',
               color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 600, fontSize: 13, letterSpacing: '-0.01em',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+              fontWeight: 600, fontSize: 13.5, letterSpacing: '-0.015em',
+              fontFamily: '"SF Pro Display", sans-serif',
+              boxShadow: '0 2px 6px rgba(0,113,227,0.28), inset 0 1px 0 rgba(255,255,255,0.15)',
             }}>
               {(perfilUsuario.nombre || 'U').charAt(0).toUpperCase()}
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{
-                fontSize: 12.5, fontWeight: 600, color: 'var(--t-sidebarText, #1D1D1F)',
+                fontSize: 13, fontWeight: 600,
+                color: 'var(--t-sidebarText, #1D1D1F)', letterSpacing: '-0.005em',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>{perfilUsuario.nombre}</div>
               <div style={{
-                fontSize: 10.5, color: 'var(--t-sidebarTextMuted, #6E6E73)', fontWeight: 500,
+                fontSize: 11, color: 'var(--t-sidebarTextMuted, #6E6E73)',
+                fontWeight: 500, marginTop: 1,
               }}>{ROL_LABELS[perfilUsuario.rol] || perfilUsuario.rol}</div>
             </div>
             {onCerrarSesion && (
@@ -329,11 +348,11 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
                 style={{
                   background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--t-sidebarTextMuted, #6E6E73)',
-                  padding: 6, borderRadius: 8, display: 'flex', alignItems: 'center',
-                  transition: 'background 160ms, color 160ms',
+                  padding: 8, borderRadius: 9, display: 'flex', alignItems: 'center',
+                  transition: 'background 200ms cubic-bezier(0.32, 0.72, 0, 1), color 200ms, transform 180ms',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,59,48,0.1)'; e.currentTarget.style.color = '#FF3B30'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--t-sidebarTextMuted, #6E6E73)'; }}>
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,59,48,0.1)'; e.currentTarget.style.color = '#FF3B30'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--t-sidebarTextMuted, #6E6E73)'; e.currentTarget.style.transform = 'scale(1)'; }}>
                 <LogOut style={{ width: 14, height: 14, strokeWidth: 2 }} />
               </button>
             )}
@@ -344,7 +363,8 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
   );
 }
 
-// Pill button reutilizable estilo Apple para el footer del sidebar
+// Pill button legacy — no usado desde el rediseño del footer.
+// eslint-disable-next-line no-unused-vars
 function ApplePillButton({ icon: Icon, label, active, onClick, as = 'button', href }) {
   const [hover, setHover] = useState(false);
   const [pressed, setPressed] = useState(false);
@@ -407,23 +427,23 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, onNavegar, isActi
   if (!hayNoSeparador) return null;
 
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div style={{ marginBottom: 18 }}>
       <button
         onClick={() => hasItems && toggle(grupo.id)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 6,
-          padding: '4px 10px 6px', background: 'transparent', border: 'none',
-          fontSize: 10.5, fontWeight: 700,
+          padding: '10px 10px 6px', background: 'transparent', border: 'none',
+          fontSize: 10.5, fontWeight: 600,
           color: 'var(--t-sidebarTextMuted, #86868B)',
-          textTransform: 'uppercase', letterSpacing: '0.08em',
+          textTransform: 'uppercase', letterSpacing: '0.09em',
           fontFamily: 'inherit', cursor: hasItems ? 'pointer' : 'default',
-          textAlign: 'left',
+          textAlign: 'left', opacity: 0.9,
         }}
       >
         <span style={{ flex: 1 }}>{grupo.label}</span>
         {hasItems && (
           <ChevronRight style={{
-            width: 12, height: 12, strokeWidth: 2, opacity: 0.6,
+            width: 11, height: 11, strokeWidth: 2.5, opacity: 0.5,
             transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
             transition: 'transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)',
           }} />
@@ -620,27 +640,30 @@ function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled,
       onMouseDown={() => setPressed(true)}
       onMouseUp={() => setPressed(false)}
       style={{
-        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-        padding: '7px 12px', borderRadius: 10, border: 'none',
+        width: '100%', display: 'flex', alignItems: 'center', gap: 11,
+        padding: '9px 12px', borderRadius: 9, border: 'none',
         background: bg, color,
-        fontSize: 13, fontWeight: active ? 600 : 500,
+        fontSize: 13.5, fontWeight: active ? 600 : 400,
+        letterSpacing: '-0.005em',
         cursor: disabled ? 'not-allowed' : 'pointer',
         fontFamily: 'inherit', textAlign: 'left',
         transform: `scale(${scale}) translateX(${translateX}px)`,
         transition: 'background 220ms cubic-bezier(0.32, 0.72, 0, 1), color 200ms, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-        opacity: disabled ? 0.5 : 1,
+        opacity: disabled ? 0.4 : 1,
+        position: 'relative',
       }}>
       {leading}
       {Icon && <Icon style={{
-        width: 15, height: 15, strokeWidth: 2, flexShrink: 0,
-        opacity: active ? 1 : 0.75,
+        width: 16, height: 16, strokeWidth: 1.75, flexShrink: 0,
+        opacity: active ? 1 : 0.8,
         transition: 'opacity 200ms',
       }} />}
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
       {hint && !active && (
         <span style={{
-          fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.05em',
-          color: 'var(--t-sidebarTextMuted, #86868B)', fontWeight: 600,
+          fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em',
+          color: 'var(--t-sidebarTextMuted, #86868B)', fontWeight: 700,
+          opacity: 0.7,
         }}>{hint}</span>
       )}
       {trailing && (
