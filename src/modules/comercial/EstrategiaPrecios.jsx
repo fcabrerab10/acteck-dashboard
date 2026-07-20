@@ -407,7 +407,8 @@ export default function EstrategiaPrecios() {
                   <React.Fragment key={r.sku}>
                     <tr
                       onClick={() => setSkuAbierto(abierto ? null : r.sku)}
-                      className={`border-t border-gray-100 cursor-pointer ${abierto ? 'bg-blue-50/60' : 'hover:bg-gray-50'}`}>
+                      className={`border-t border-gray-100 cursor-pointer ${abierto ? 'bg-blue-50/60' : 'hover:bg-gray-50'}`}
+                      style={{ height: 32 }}>
                       <td className="py-1 px-1.5 text-gray-600 whitespace-nowrap text-[10px]" style={{ width: 70 }}>{r.marca || '—'}</td>
                       <td className="py-1 px-1.5 font-mono text-gray-700 whitespace-nowrap text-[10px]" style={{ width: 90 }}>
                         <span className="inline-flex items-center gap-1">
@@ -419,8 +420,8 @@ export default function EstrategiaPrecios() {
                         </span>
                       </td>
                       <td className="py-1 px-1.5 text-gray-800"
-                        style={abierto ? { whiteSpace: 'normal' } : { maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        title={abierto ? undefined : r.descripcion}>
+                        style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={r.descripcion}>
                         {r.descripcion || '—'}
                       </td>
                       <td className="py-1 px-1.5 text-center whitespace-nowrap" style={{ width: 60 }}>
@@ -434,12 +435,10 @@ export default function EstrategiaPrecios() {
                       {verPrecioBajo && (
                         <td className="py-1 px-1.5 text-right whitespace-nowrap" style={{ width: 110 }}>
                           {mostrarBajo ? (
-                            <>
-                              <div className="font-medium text-rose-800 text-[10px]">{fmtMoney(r.bajo.precio_bajo)}</div>
-                              <div className="text-[9px] text-gray-500 truncate" style={{ maxWidth: 100 }} title={r.bajo.cliente_bajo}>
-                                {r.bajo.cliente_bajo} · {fmtInt(r.bajo.piezas_bajo)} pz
-                              </div>
-                            </>
+                            <span className="font-medium text-rose-800 text-[10px]"
+                              title={`${r.bajo.cliente_bajo} · ${fmtInt(r.bajo.piezas_bajo)} pz`}>
+                              {fmtMoney(r.bajo.precio_bajo)}
+                            </span>
                           ) : (
                             <span className="text-gray-400">—</span>
                           )}
