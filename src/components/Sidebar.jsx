@@ -29,6 +29,7 @@ const MENU_A_PERMISO_GLOBAL = {
   ordenesCompra:    'ordenes_compra',
   adminInterna:     'admin_interna',
   telemetria:       '__super_admin_only__', // sentinel: solo Fernando
+  propuestas:       'propuestas',
   axonMexico:       'axon_mexico',
   configuracion:    'configuracion',
 };
@@ -107,6 +108,7 @@ const MENU_CONFIG = [
       { id: 'forecastClientes', label: 'S&OP',                icon: Target },
       { type: 'separator', label: 'Clientes Propios' },
       { id: 'resumenClientes',  label: 'Resumen de Clientes', icon: BarChart3 },
+      { id: 'propuestas',       label: 'Propuestas',          icon: ClipboardList },
       { id: 'estrategiaPrecios',label: 'Estrategia de Precios', icon: TrendingUp },
       { id: 'ordenesCompra',    label: 'Tracking Pedidos',    icon: FileCheck },
       {

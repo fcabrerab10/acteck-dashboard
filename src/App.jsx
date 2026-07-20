@@ -17,6 +17,7 @@ import EstadoResultados from './modules/general/EstadoResultados';
 import VisionGeneral from './modules/comercial/VisionGeneral';
 import ReporteTab from './modules/comercial/ReporteTab';
 import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
+import PropuestasTab from './modules/comercial/PropuestasTab';
 import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
 import TelemetriaPanel from './modules/interno/TelemetriaPanel';
 import AxonMexico from './modules/interno/AxonMexico';
@@ -283,14 +284,14 @@ export default function App() {
 
   
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
-    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','telemetria','axonMexico']), []);
+    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','ordenesCompra','adminInterna','telemetria','axonMexico']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
       try { return localStorage.getItem('nav_pagina') || 'home'; } catch { return 'home'; }
     });
     const [clienteActivo, setClienteActivo] = useState(() => {
       try {
         const pag = localStorage.getItem('nav_pagina') || 'home';
-        const globals = new Set(['resumen','reporte','resumenClientes','forecastClientes','ordenesCompra','adminInterna','telemetria','axonMexico']);
+        const globals = new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','ordenesCompra','adminInterna','telemetria','axonMexico']);
         if (globals.has(pag)) return null;
         return localStorage.getItem('nav_cliente') || 'digitalife';
       } catch { return 'digitalife'; }
@@ -441,6 +442,11 @@ export default function App() {
                   onDrillDown={(clienteKey) => { setClienteActivo(clienteKey); setPaginaActiva('home'); }}
                 />
               : <SinAcceso motivo="No tienes acceso al Resumen de Clientes." />
+          )}
+          {paginaActiva === "propuestas" && (
+            puedeVerPestanaGlobal(perfil, "propuestas")
+              ? <PropuestasTab />
+              : <SinAcceso motivo="No tienes acceso a Propuestas." />
           )}
           {paginaActiva === "estadoResultados" && (
             puedeVerPestanaGlobal(perfil, "estado_resultados")

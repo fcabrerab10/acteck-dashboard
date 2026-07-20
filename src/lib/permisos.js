@@ -166,6 +166,7 @@ export const PESTANAS_CLIENTE = [
 export const PESTANAS_GLOBALES = [
   { id: "estado_resultados",  label: "Estado de Resultados",  desc: "P&L de Acteck (Dirección General)" },
   { id: "resumen_clientes",   label: "Resumen de Clientes",   desc: "Dashboard consolidado de los 3 clientes" },
+  { id: "propuestas",         label: "Propuestas",             desc: "Armado y export de propuestas de venta por cliente" },
   { id: "vision_general",     label: "Visión General",        desc: "KPIs ejecutivos consolidados del negocio (incl. márgenes)" },
   { id: "analisis_clientes",  label: "Análisis por Cliente",  desc: "Vista comparativa lado a lado entre clientes" },
   { id: "sell_in",            label: "Sell In",               desc: "Lo que Acteck factura a los clientes" },
