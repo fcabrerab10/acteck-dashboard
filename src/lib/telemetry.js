@@ -36,6 +36,12 @@ let _flushQueue = [];
 let _flushTimer = null;
 let _lastHeartbeatTs = 0;
 
+// Contexto actual — lo que el usuario está viendo. Se actualiza en cada
+// navCliente/navPagina y se usa en los heartbeats para que la telemetría
+// sepa dónde pasó el tiempo, no sólo cuánto.
+let _currentCliente = null;
+let _currentPagina = null;
+
 // Buffer en memoria: si emit() dispara muchos eventos rápidos, se agrupan y
 // se mandan en un batch cada 5s para no saturar la DB.
 function scheduleFlush() {
@@ -114,7 +120,8 @@ export function useTelemetry() {
       const now = Date.now();
       if (now - _lastHeartbeatTs < HB_INTERVAL_MS - 1000) return; // dedup
       _lastHeartbeatTs = now;
-      emit(TIPO.HEARTBEAT);
+      // Heartbeat carga el contexto actual — sabemos EN QUÉ pasó el tiempo, no sólo cuánto.
+      emit(TIPO.HEARTBEAT, _currentCliente, _currentPagina);
     };
     const hbId = setInterval(tick, HB_INTERVAL_MS);
     // Tick inmediato al recobrar foco
@@ -148,10 +155,18 @@ export function useTelemetry() {
   }, []);
 }
 
-// Helpers públicos para wrappers específicos
+// Helpers públicos para wrappers específicos.
+// navCliente/navPagina también actualizan el contexto que consumen los heartbeats.
 export const telemetria = {
-  navCliente: (clienteKey) => emit(TIPO.NAV_CLIENTE, CLIENTE[clienteKey] || null),
-  navPagina:  (paginaKey, clienteKey = null) => emit(TIPO.NAV_PAGINA, CLIENTE[clienteKey] || null, PAGINA[paginaKey] || null),
+  navCliente: (clienteKey) => {
+    _currentCliente = CLIENTE[clienteKey] || null;
+    emit(TIPO.NAV_CLIENTE, _currentCliente);
+  },
+  navPagina:  (paginaKey, clienteKey = null) => {
+    _currentCliente = CLIENTE[clienteKey] || null;
+    _currentPagina  = PAGINA[paginaKey]  || null;
+    emit(TIPO.NAV_PAGINA, _currentCliente, _currentPagina);
+  },
   drill:      (paginaKey, clienteKey, detalle) => emit(TIPO.DRILL, CLIENTE[clienteKey] || null, PAGINA[paginaKey] || null, detalle),
   filter:     (paginaKey, clienteKey, detalle) => emit(TIPO.FILTER, CLIENTE[clienteKey] || null, PAGINA[paginaKey] || null, detalle),
   export:     (paginaKey, clienteKey, detalle) => emit(TIPO.EXPORT, CLIENTE[clienteKey] || null, PAGINA[paginaKey] || null, detalle),
