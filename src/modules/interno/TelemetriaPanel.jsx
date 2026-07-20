@@ -885,6 +885,10 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
           <MiniKPI k="Última" v={fmtHace(eventos[0]?.ts).replace('hace ', '')}
             s={eventos[0] ? fmtFechaHora(eventos[0].ts).split(',')[0] : '—'} />
         </div>
+        {/* Mini calendario heatmap del mes */}
+        <div style={{ marginTop: 12 }}>
+          <CalendarioMes anio={anio} mes={mes} eventos={eventos} accent={accent} />
+        </div>
         {cliOrden.length > 0 && (
           <div style={{ marginTop: 10 }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Atención por cliente</div>
@@ -1095,6 +1099,89 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
       </SubSectSheet>
       </div>
       )}{/* ═══════════ /COLUMNA DERECHA ═══════════ */}
+    </div>
+  );
+}
+
+// Mini calendario mensual con heatmap de tiempo activo por día
+function CalendarioMes({ anio, mes, eventos, accent }) {
+  // Minutos por día (1 heartbeat = 1 min)
+  const perDay = React.useMemo(() => {
+    const m = new Map();
+    for (const e of eventos) {
+      if (e.tipo !== 10) continue; // sólo heartbeats
+      const dia = new Date(e.ts).toISOString().slice(0, 10);
+      m.set(dia, (m.get(dia) || 0) + 1);
+    }
+    return m;
+  }, [eventos]);
+
+  const diasEnMes = new Date(anio, mes, 0).getDate();
+  // offset del primer día (0=Dom, 1=Lun…). Uso semana lunes-domingo.
+  const primerDia = new Date(anio, mes - 1, 1).getDay();
+  const offset = primerDia === 0 ? 6 : primerDia - 1;
+
+  const maxMin = Math.max(30, ...Array.from(perDay.values()));
+  const colorFor = (mins) => {
+    if (!mins) return 'rgba(0,0,0,0.05)';
+    const pct = Math.min(1, mins / maxMin);
+    // interpolación: rgba con opacidad basada en intensidad
+    const alpha = 0.25 + pct * 0.75;
+    return `${accent}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`;
+  };
+
+  const hoyISO = new Date().toISOString().slice(0, 10);
+  const cells = [];
+  for (let i = 0; i < offset; i++) cells.push(null);
+  for (let d = 1; d <= diasEnMes; d++) {
+    const iso = `${anio}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const mins = perDay.get(iso) || 0;
+    const esHoy = iso === hoyISO;
+    cells.push({ d, iso, mins, esHoy });
+  }
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const DIAS = ['L','M','X','J','V','S','D'];
+
+  return (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#8E8E93', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+        Calendario del mes
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, marginBottom: 4 }}>
+        {DIAS.map((d) => (
+          <div key={d} style={{ fontSize: 9, fontWeight: 700, color: '#8E8E93', textAlign: 'center' }}>{d}</div>
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+        {cells.map((c, i) => c === null ? (
+          <div key={`e-${i}`} />
+        ) : (
+          <div key={c.iso}
+            title={`${c.d} — ${c.mins > 0 ? fmtHm(c.mins) : 'sin sesión'}`}
+            style={{
+              aspectRatio: '1', borderRadius: 4,
+              background: colorFor(c.mins),
+              border: c.esHoy ? `1.5px solid ${accent}` : '1px solid transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 9, fontWeight: 600,
+              color: c.mins > (maxMin * 0.5) ? 'white' : '#6E6E73',
+              cursor: 'default',
+              fontVariantNumeric: 'tabular-nums',
+            }}>{c.d}</div>
+        ))}
+      </div>
+      {/* Leyenda */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 9.5, color: '#8E8E93', justifyContent: 'flex-end' }}>
+        <span>menos</span>
+        {[0, 0.2, 0.4, 0.6, 0.85].map((p, i) => (
+          <div key={i} style={{
+            width: 10, height: 10, borderRadius: 2,
+            background: p === 0 ? 'rgba(0,0,0,0.05)' : `${accent}${Math.round((0.25 + p * 0.75) * 255).toString(16).padStart(2,'0')}`,
+          }} />
+        ))}
+        <span>más</span>
+      </div>
     </div>
   );
 }
