@@ -808,6 +808,12 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
 
   const { dias, diasEnMes, heartbeats, eventos, cliOrden, totalCli } = telemetria;
 
+<<<<<<< Updated upstream
+=======
+  // Sólo Karolina tiene evaluación mensual + comisión.
+  const puedeEvaluar = requiereEvaluacion(user);
+
+>>>>>>> Stashed changes
   // Trend vs mes anterior (sólo si el prev está cerrado)
   const trendPct = bonoPrev && bonoPrev > 0 ? ((bonoTotal - bonoPrev) / bonoPrev * 100) : null;
   const trendAbs = bonoPrev != null ? (bonoTotal - bonoPrev) : null;
