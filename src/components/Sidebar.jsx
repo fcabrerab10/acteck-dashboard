@@ -215,20 +215,31 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
         borderRight: '1px solid var(--t-sidebarBorder, rgba(0,0,0,0.06))',
         color: 'var(--t-sidebarText, #1D1D1F)',
       }}>
-      {/* ─── HEADER (solo visible en modo presentación) ─── */}
-      {modoPresent && (
-        <div className="px-4 py-3 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-            <p className="text-xs text-green-600 font-semibold uppercase tracking-widest">
-              Modo Presentación
-            </p>
-          </div>
+      {/* ─── BRAND ─── */}
+      <div style={{ padding: '18px 20px 12px' }}>
+        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--t-sidebarTextMuted, #6E6E73)', letterSpacing: 0 }}>
+          Balam Rush
         </div>
-      )}
+        <div style={{
+          fontFamily: '-apple-system, "SF Pro Display", sans-serif',
+          fontSize: 19, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15,
+          color: 'var(--t-sidebarText, #1D1D1F)', marginTop: 2,
+        }}>Dashboard Acteck</div>
+        {modoPresent && (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10,
+            padding: '3px 9px', borderRadius: 999,
+            background: 'rgba(52,199,89,0.12)', color: '#1F7A3D',
+            fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: '#34C759' }} />
+            Presentación
+          </div>
+        )}
+      </div>
 
       {/* ─── NAV ─── */}
-      <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto" style={{ padding: '4px 12px' }}>
         {MENU_CONFIG
           .filter((grupo) => {
             // Compat: legacy rolesPermitidos. Nuevos grupos se filtran sus
@@ -254,88 +265,109 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
           ))}
       </nav>
 
-      {/* ─── FOOTER ─── */}
-      <div className="border-t border-gray-100">
-        {/* Tarjeta de usuario */}
-        {perfilUsuario?.nombre && (
-          <div className="px-3 py-3 border-b border-gray-100 flex items-center gap-2">
-            <div className="w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center font-bold text-sm">
-              {(perfilUsuario.nombre || 'U').charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-gray-800 truncate">
-                {perfilUsuario.nombre}
-              </div>
-              <div className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">
-                {ROL_LABELS[perfilUsuario.rol] || perfilUsuario.rol}
-              </div>
-            </div>
+      {/* ─── FOOTER estilo Apple ─── */}
+      <div style={{
+        borderTop: '1px solid var(--t-sidebarBorder, rgba(0,0,0,0.06))',
+        padding: '12px',
+      }}>
+        {/* Acciones admin */}
+        {!modoPresent && (puedeVerConfig || puedeActualizar) && (
+          <div style={{ marginBottom: 8 }}>
+            {puedeVerConfig && (
+              <ApplePillButton icon={Settings} label="Configuración"
+                active={isActiveGlobal('configuracion')}
+                onClick={() => onNavegar(null, 'configuracion')} />
+            )}
+            {puedeActualizar && (
+              <ApplePillButton as="a" href="/uploads.html" icon={RefreshCw} label="Actualizar datos" />
+            )}
           </div>
         )}
 
         {/* Modo Presentación */}
-        <div className="px-3 pt-2">
-          <button
-            onClick={() => setModoPresent(!modoPresent)}
-            className={[
-              'w-full text-xs font-medium px-3 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5',
-              modoPresent
-                ? 'bg-gray-800 text-white hover:bg-gray-700'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
-            ].join(' ')}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            {modoPresent ? 'Salir de Presentación' : 'Modo Presentación'}
-          </button>
-        </div>
+        <button onClick={() => setModoPresent(!modoPresent)}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            padding: '8px 12px', borderRadius: 999,
+            background: modoPresent ? 'var(--t-sidebarText, #1D1D1F)' : 'transparent',
+            border: `1px solid ${modoPresent ? 'transparent' : 'var(--t-sidebarBorder, rgba(0,0,0,0.1))'}`,
+            color: modoPresent ? 'var(--t-sidebar, #FFF)' : 'var(--t-sidebarTextMuted, #6E6E73)',
+            fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
+            fontFamily: 'inherit', marginBottom: 8, transition: 'all 160ms',
+          }}>
+          <Eye style={{ width: 13, height: 13, strokeWidth: 2 }} />
+          {modoPresent ? 'Salir de presentación' : 'Modo presentación'}
+        </button>
 
-        {/* Acciones admin */}
-        {!modoPresent && (puedeVerConfig || puedeActualizar) && (
-          <div className="px-3 py-2 space-y-0.5">
-            {puedeVerConfig && (
-              <button
-                onClick={() => onNavegar(null, 'configuracion')}
-                className={[
-                  'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors',
-                  isActiveGlobal('configuracion')
-                    ? 'bg-gray-100 text-gray-800 font-semibold'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800',
-                ].join(' ')}
-              >
-                <Settings className="w-3.5 h-3.5" />
-                Configuración
+        {/* Tarjeta de usuario */}
+        {perfilUsuario?.nombre && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 8px', borderRadius: 12,
+            background: 'transparent',
+          }}>
+            <div style={{
+              width: 32, height: 32, flexShrink: 0, borderRadius: 999,
+              background: 'linear-gradient(135deg, #0071E3, #5856D6)',
+              color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 600, fontSize: 13, letterSpacing: '-0.01em',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+            }}>
+              {(perfilUsuario.nombre || 'U').charAt(0).toUpperCase()}
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{
+                fontSize: 12.5, fontWeight: 600, color: 'var(--t-sidebarText, #1D1D1F)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{perfilUsuario.nombre}</div>
+              <div style={{
+                fontSize: 10.5, color: 'var(--t-sidebarTextMuted, #6E6E73)', fontWeight: 500,
+              }}>{ROL_LABELS[perfilUsuario.rol] || perfilUsuario.rol}</div>
+            </div>
+            {onCerrarSesion && (
+              <button onClick={onCerrarSesion} title="Cerrar sesión"
+                style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  color: 'var(--t-sidebarTextMuted, #6E6E73)',
+                  padding: 6, borderRadius: 8, display: 'flex', alignItems: 'center',
+                  transition: 'background 160ms, color 160ms',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,59,48,0.1)'; e.currentTarget.style.color = '#FF3B30'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--t-sidebarTextMuted, #6E6E73)'; }}>
+                <LogOut style={{ width: 14, height: 14, strokeWidth: 2 }} />
               </button>
             )}
-            {puedeActualizar && (
-              <a
-                href="/uploads.html"
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Actualizar Datos
-              </a>
-            )}
           </div>
         )}
-
-        {/* Cerrar sesión */}
-        {onCerrarSesion && (
-          <div className="border-t border-gray-100 px-3 py-2">
-            <button
-              onClick={onCerrarSesion}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              Cerrar sesión
-            </button>
-          </div>
-        )}
-
-        <div className="px-3 py-1.5 text-[10px] text-gray-400 text-center border-t border-gray-100">
-          v1.0 · Abril 2026
-        </div>
       </div>
     </aside>
+  );
+}
+
+// Pill button reutilizable estilo Apple para el footer del sidebar
+function ApplePillButton({ icon: Icon, label, active, onClick, as = 'button', href }) {
+  const [hover, setHover] = React.useState(false);
+  const Comp = as;
+  const bg = active
+    ? 'var(--t-sidebarActive, rgba(0,113,227,0.10))'
+    : hover ? 'rgba(0,0,0,0.04)' : 'transparent';
+  const color = active
+    ? 'var(--t-sidebarActiveText, #0071E3)'
+    : 'var(--t-sidebarText, #1D1D1F)';
+  return (
+    <Comp {...(as === 'a' ? { href } : { onClick })}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        width: '100%', padding: '8px 12px', borderRadius: 10,
+        background: bg, border: 'none', cursor: 'pointer',
+        color, fontSize: 13, fontWeight: active ? 600 : 500,
+        fontFamily: 'inherit', textDecoration: 'none',
+        transition: 'background 160ms, color 160ms', marginBottom: 2,
+      }}>
+      <Icon style={{ width: 15, height: 15, strokeWidth: 2, flexShrink: 0 }} />
+      <span style={{ flex: 1, textAlign: 'left' }}>{label}</span>
+    </Comp>
   );
 }
 
@@ -369,29 +401,37 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, onNavegar, isActi
   if (!hayNoSeparador) return null;
 
   return (
-    <div>
+    <div style={{ marginBottom: 14 }}>
       <button
         onClick={() => hasItems && toggle(grupo.id)}
-        className="w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+          padding: '4px 10px 6px', background: 'transparent', border: 'none',
+          fontSize: 10.5, fontWeight: 700,
+          color: 'var(--t-sidebarTextMuted, #86868B)',
+          textTransform: 'uppercase', letterSpacing: '0.08em',
+          fontFamily: 'inherit', cursor: hasItems ? 'pointer' : 'default',
+          textAlign: 'left',
+        }}
       >
+        <span style={{ flex: 1 }}>{grupo.label}</span>
         {hasItems && (
           isOpen
-            ? <ChevronDown className="w-4 h-4 text-gray-400" />
-            : <ChevronRight className="w-4 h-4 text-gray-400" />
+            ? <ChevronDown style={{ width: 12, height: 12, strokeWidth: 2, opacity: 0.6 }} />
+            : <ChevronRight style={{ width: 12, height: 12, strokeWidth: 2, opacity: 0.6 }} />
         )}
-        <span className="text-base">{grupo.emoji}</span>
-        <span className="flex-1 text-left">{grupo.label}</span>
       </button>
 
       {isOpen && (
-        <div className="ml-3 mt-0.5 pl-2 border-l border-gray-100 space-y-0.5">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {itemsFiltrados.map((item, idx) => {
             if (item.type === 'separator') {
               return (
-                <div
-                  key={`sep-${idx}`}
-                  className="mt-2 mb-1 px-2 text-[10px] uppercase tracking-widest font-semibold text-gray-400"
-                >
+                <div key={`sep-${idx}`} style={{
+                  padding: '10px 10px 4px', fontSize: 10.5, fontWeight: 700,
+                  color: 'var(--t-sidebarTextMuted, #86868B)',
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
+                }}>
                   {item.label}
                 </div>
               );
@@ -420,18 +460,16 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, onNavegar, isActi
               const Icon = item.icon;
               return (
                 <div key={item.id}>
-                  <button
+                  <SidebarButton
+                    icon={Icon}
+                    label={item.label}
                     onClick={() => toggle(item.id)}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    {subOpen
-                      ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                      : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
-                    {Icon && <Icon className="w-4 h-4 text-gray-500" />}
-                    <span className="flex-1 text-left">{item.label}</span>
-                  </button>
+                    trailing={subOpen
+                      ? <ChevronDown style={{ width: 12, height: 12, strokeWidth: 2, opacity: 0.5 }} />
+                      : <ChevronRight style={{ width: 12, height: 12, strokeWidth: 2, opacity: 0.5 }} />}
+                  />
                   {subOpen && (
-                    <div className="ml-3 mt-0.5 pl-2 border-l border-gray-100 space-y-0.5">
+                    <div style={{ paddingLeft: 12, marginTop: 2, marginBottom: 4, display: 'flex', flexDirection: 'column', gap: 1 }}>
                       {hijosVisibles.map((child) => {
                         if (child.type === 'cliente') {
                           const cfg = CLIENTES[child.clienteId];
@@ -494,16 +532,17 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
 
   if (!cfg.activo) {
     return (
-      <div className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-gray-400">
-        <Lock className="w-3.5 h-3.5" />
-        <span className="flex-1">{cfg.label}</span>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '8px 12px', fontSize: 13,
+        color: 'var(--t-sidebarTextMuted, #86868B)',
+      }}>
+        <Lock style={{ width: 13, height: 13, strokeWidth: 2 }} />
+        <span style={{ flex: 1 }}>{cfg.label}</span>
       </div>
     );
   }
 
-  // Cada pestaña se filtra por su permiso específico para este cliente.
-  // Si el nivel es 'oculto', no aparece. 'ver' y 'edit' sí aparecen (el
-  // enforcement de solo-lectura ocurre dentro del componente de la pestaña).
   const pestanasPermitidas = (cfg.pestanas || []).filter((p) =>
     puedeVerPestanaCliente(perfil, clienteId, p.id)
   );
@@ -511,35 +550,29 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
 
   return (
     <div>
-      <button
+      <SidebarButton
         onClick={() => toggle(key)}
-        className={[
-          'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors',
-          isClienteActual ? 'text-blue-700 bg-blue-50/40' : 'text-gray-700 hover:bg-gray-50',
-        ].join(' ')}
-      >
-        {isOpen
-          ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-          : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
-        <span
-          className="w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: cfg.color }}
-        />
-        <span className="flex-1 text-left">{cfg.label}</span>
-      </button>
+        active={isClienteActual}
+        leading={<span style={{
+          width: 8, height: 8, borderRadius: 999, flexShrink: 0,
+          background: cfg.color, display: 'inline-block',
+        }} />}
+        label={cfg.label}
+        trailing={isOpen
+          ? <ChevronDown style={{ width: 12, height: 12, strokeWidth: 2, opacity: 0.5 }} />
+          : <ChevronRight style={{ width: 12, height: 12, strokeWidth: 2, opacity: 0.5 }} />}
+      />
       {isOpen && (
-        <div className="ml-3 mt-0.5 pl-2 border-l border-gray-100 space-y-0.5">
+        <div style={{ paddingLeft: 20, marginTop: 2, marginBottom: 4, display: 'flex', flexDirection: 'column', gap: 1 }}>
           {pestanasPermitidas.map((p) => (
             <NavItem
               key={p.id}
               label={p.label}
               icon={p.icon}
-              emoji={p.emoji}
               disabled={p.disabled}
               hint={p.hint}
               active={isActiveLeaf(clienteId, p.id)}
               onClick={() => !p.disabled && onNavegar(clienteId, p.id)}
-              small
             />
           ))}
         </div>
@@ -548,37 +581,53 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
   );
 }
 
-// ────────── NavItem ──────────
-function NavItem({ label, icon: Icon, emoji, active, disabled, hint, onClick, small = false }) {
+// ────────── SidebarButton — pill Apple genérico ──────────
+function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled, onClick, hint }) {
+  const [hover, setHover] = React.useState(false);
+  const bg = active
+    ? 'var(--t-sidebarActive, rgba(0,113,227,0.10))'
+    : hover && !disabled ? 'rgba(0,0,0,0.04)' : 'transparent';
+  const color = active
+    ? 'var(--t-sidebarActiveText, #0071E3)'
+    : disabled
+    ? 'var(--t-sidebarTextMuted, #86868B)'
+    : 'var(--t-sidebarText, #1D1D1F)';
+
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
+    <button onClick={onClick} disabled={disabled}
       title={hint || label}
-      className={[
-        'w-full flex items-center gap-2 px-2 rounded-md text-left transition-colors',
-        small ? 'py-1 text-[13px]' : 'py-1.5 text-sm',
-        active
-          ? 'bg-blue-50 text-blue-600 font-semibold'
-          : disabled
-          ? 'text-gray-400 cursor-not-allowed'
-          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
-      ].join(' ')}
-    >
-      {Icon ? (
-        <Icon className={[
-          'shrink-0',
-          small ? 'w-3.5 h-3.5' : 'w-4 h-4',
-          active ? 'text-blue-600' : 'text-gray-500',
-        ].join(' ')} />
-      ) : emoji ? (
-        <span className="shrink-0">{emoji}</span>
-      ) : null}
-      <span className="flex-1 truncate">{label}</span>
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+        padding: '7px 12px', borderRadius: 10, border: 'none',
+        background: bg, color,
+        fontSize: 13, fontWeight: active ? 600 : 500,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontFamily: 'inherit', textAlign: 'left',
+        transition: 'background 160ms, color 160ms',
+        opacity: disabled ? 0.5 : 1,
+      }}>
+      {leading}
+      {Icon && <Icon style={{ width: 15, height: 15, strokeWidth: 2, flexShrink: 0, opacity: active ? 1 : 0.75 }} />}
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
       {hint && !active && (
-        <span className="text-[9px] text-gray-400 uppercase">{hint}</span>
+        <span style={{
+          fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.05em',
+          color: 'var(--t-sidebarTextMuted, #86868B)', fontWeight: 600,
+        }}>{hint}</span>
       )}
+      {trailing}
     </button>
+  );
+}
+
+// ────────── NavItem — wrapper de SidebarButton ──────────
+function NavItem({ label, icon, active, disabled, hint, onClick }) {
+  return (
+    <SidebarButton
+      icon={icon} label={label} active={active} disabled={disabled}
+      hint={hint} onClick={onClick}
+    />
   );
 }
 
