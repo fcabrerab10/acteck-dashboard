@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import AppleLoader from '../../components/apple/AppleLoader';
 import {
   Activity, TrendingUp, TrendingDown, ChevronRight, ChevronDown,
   Wallet, Package, Receipt, Target, ShoppingBag, Ship, X,
@@ -344,12 +345,7 @@ export default function VisionGeneral() {
   }, [sellMensual, sellMensualPrev, sellRotacion, mesMax, anio]);
 
   if (loading) {
-    return (
-      <div className="p-12 text-center text-gray-400">
-        <Activity className="w-10 h-10 mx-auto mb-3" />
-        Cargando visión general…
-      </div>
-    );
+    return <AppleLoader label="Cargando visión general…" />;
   }
   if (margenAct.length === 0) {
     return (

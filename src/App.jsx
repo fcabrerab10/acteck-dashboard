@@ -36,6 +36,7 @@ import {
 } from './lib/permisos';
 import { PerfilContext } from './lib/perfilContext';
 import { ThemeProvider } from './lib/themeContext';
+import { AppleLoaderFullscreen, PageTransition } from './components/apple/AppleLoader';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -399,7 +400,7 @@ export default function App() {
   ]
 
   
-  if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><p className="text-gray-400">Cargando...</p></div>;
+  if (authLoading) return <AppleLoaderFullscreen label="Cargando…" />;
   if (!authUser || !perfil) return <LoginPage onLogin={handleLogin} />;
 
 
@@ -422,6 +423,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto">
           <div className="w-full px-6 py-4">
           <Breadcrumb clienteActivo={clienteActivo} paginaActiva={paginaActiva} vistaActual={vistaActual} />
+          <PageTransition keyId={vistaActual === 'configuracion' ? 'configuracion' : `${clienteActivo || 'g'}-${paginaActiva}`}>
           {vistaActual === "configuracion" ? (
             puedeVerConfig ? <Configuracion session={{user: authUser, perfil}} /> : <SinAcceso motivo="Solo el Super Admin puede ver Configuración." />
           ) : (
@@ -558,6 +560,7 @@ export default function App() {
           </>
             </>
           )}
+          </PageTransition>
         </div>
         </main>
 

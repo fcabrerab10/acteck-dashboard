@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import AppleLoader from '../../components/apple/AppleLoader';
 import {
   Calculator, ChevronRight, ChevronDown, TrendingUp, TrendingDown,
   Info, Printer, X, AlertTriangle, ArrowRight,
@@ -368,12 +369,7 @@ export default function EstadoResultados() {
   }, [byCuenta, byCuentaPrev]);
 
   if (loading) {
-    return (
-      <div className="p-12 text-center text-gray-400">
-        <Calculator className="w-10 h-10 mx-auto mb-3" />
-        Cargando estado de resultados…
-      </div>
-    );
+    return <AppleLoader label="Cargando estado de resultados…" />;
   }
   if (rows.length === 0) {
     return (
