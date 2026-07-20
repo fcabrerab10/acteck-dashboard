@@ -613,7 +613,7 @@ function UserDetailPanel({ user, esAdmin, perfilId, onClose }) {
       border: '1px solid rgba(255,255,255,0.7)',
       borderRadius: 16,
       boxShadow: '0 3px 16px rgba(0,0,0,0.05)',
-      overflow: 'hidden', maxWidth: 880,
+      overflow: 'hidden', maxWidth: requiereEvaluacion(user) ? 880 : 520,
       animation: 'slidedown 240ms cubic-bezier(0.32, 0.72, 0, 1)',
     }}>
       <style>{`
