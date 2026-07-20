@@ -346,7 +346,7 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
 
 // Pill button reutilizable estilo Apple para el footer del sidebar
 function ApplePillButton({ icon: Icon, label, active, onClick, as = 'button', href }) {
-  const [hover, setHover] = React.useState(false);
+  const [hover, setHover] = useState(false);
   const Comp = as;
   const bg = active
     ? 'var(--t-sidebarActive, rgba(0,113,227,0.10))'
@@ -583,7 +583,7 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
 
 // ────────── SidebarButton — pill Apple genérico ──────────
 function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled, onClick, hint }) {
-  const [hover, setHover] = React.useState(false);
+  const [hover, setHover] = useState(false);
   const bg = active
     ? 'var(--t-sidebarActive, rgba(0,113,227,0.10))'
     : hover && !disabled ? 'rgba(0,0,0,0.04)' : 'transparent';
