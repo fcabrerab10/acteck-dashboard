@@ -209,7 +209,12 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
   const puedeActualizar = puedeActualizarDatos(perfilUsuario);
 
   return (
-    <aside className="w-60 bg-white border-r border-gray-100 flex flex-col shrink-0">
+    <aside className="w-60 flex flex-col shrink-0"
+      style={{
+        background: 'var(--t-sidebar, #FFFFFF)',
+        borderRight: '1px solid var(--t-sidebarBorder, rgba(0,0,0,0.06))',
+        color: 'var(--t-sidebarText, #1D1D1F)',
+      }}>
       {/* ─── HEADER (solo visible en modo presentación) ─── */}
       {modoPresent && (
         <div className="px-4 py-3 border-b border-gray-100">

@@ -7,6 +7,8 @@ import {
   PESTANAS_CLIENTE,
   PESTANAS_GLOBALES,
 } from '../../lib/permisos';
+import { useTheme } from '../../lib/themeContext';
+import { THEMES } from '../../lib/themeTokens';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Configuración — Gestión de usuarios y permisos granulares
@@ -324,6 +326,9 @@ export default function Configuracion({ session }) {
         </div>
       )}
 
+      {/* ═══ APARIENCIA ═══ */}
+      <SelectorApariencia perfil={session.perfil} />
+
       {/* ═══ FORMULARIO ═══ */}
       {showForm && (
         <div className="bg-white rounded-2xl shadow-sm p-6 mb-6 border border-gray-100">
@@ -635,6 +640,64 @@ function SegmentedNivel({ valor, onChange, disabled = false, disabledMsg = "" })
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Selector de apariencia (Airy / Puro / Híbrida) ───
+function SelectorApariencia({ perfil }) {
+  const { theme, setThemeKey } = useTheme();
+  const opciones = ['airy', 'puro', 'hibrida'].map((k) => THEMES[k]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm p-6 mb-6 border border-gray-100">
+      <h3 className="text-lg font-semibold mb-1">Apariencia</h3>
+      <p className="text-sm text-gray-500 mb-4">Elige el tema visual del dashboard. El cambio se aplica al instante.</p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {opciones.map((t) => {
+          const on = t.key === theme.key;
+          const previewBg = t.mode === 'dark' ? '#000' : t.mode === 'hybrid' ? '#F5F5F7' : '#F5F5F7';
+          const previewCardBg = t.mode === 'dark' ? '#1D1D1F' : 'white';
+          const previewTextCol = t.mode === 'dark' ? '#F5F5F7' : '#1D1D1F';
+          return (
+            <button key={t.key} onClick={() => setThemeKey(t.key)}
+              className="text-left"
+              style={{
+                padding: 0, background: 'transparent', border: 'none', cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}>
+              <div style={{
+                borderRadius: 14, overflow: 'hidden',
+                border: on ? '2px solid #0071E3' : '2px solid rgba(0,0,0,0.08)',
+                transition: 'border-color 160ms',
+              }}>
+                {/* Preview */}
+                <div style={{ background: previewBg, height: 100, position: 'relative', padding: 12 }}>
+                  {t.mode === 'hybrid' && (
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 40, background: '#000' }} />
+                  )}
+                  <div style={{ position: 'relative', display: 'flex', gap: 6, marginBottom: 8 }}>
+                    <div style={{ width: 22, height: 22, borderRadius: 4, background: t.mode === 'hybrid' ? 'rgba(255,255,255,0.15)' : (t.mode === 'dark' ? '#2C2C2E' : 'white') }} />
+                    <div style={{ flex: 1, height: 22, borderRadius: 4, background: t.mode === 'hybrid' ? 'rgba(255,255,255,0.15)' : (t.mode === 'dark' ? '#2C2C2E' : 'white') }} />
+                  </div>
+                  <div style={{ position: 'relative', background: previewCardBg, borderRadius: 6, padding: '8px 10px', border: t.mode === 'dark' ? '1px solid rgba(255,255,255,0.06)' : 'none', boxShadow: t.mode === 'light' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none' }}>
+                    <div style={{ height: 4, width: '30%', background: t.mode === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)', borderRadius: 2, marginBottom: 4 }} />
+                    <div style={{ height: 8, width: '55%', background: 'linear-gradient(135deg, #F56300, #FF375F)', borderRadius: 2 }} />
+                  </div>
+                </div>
+                {/* Label */}
+                <div style={{ background: 'white', padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1D1D1F' }}>{t.label}</div>
+                    <div style={{ fontSize: 11, color: '#6E6E73', marginTop: 1 }}>{t.desc}</div>
+                  </div>
+                  {on && <span style={{ color: '#0071E3', fontSize: 16 }}>✓</span>}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

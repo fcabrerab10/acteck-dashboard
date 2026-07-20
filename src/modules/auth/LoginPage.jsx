@@ -1,3 +1,6 @@
+// LoginPage — estilo Apple.com. Sin dependencia de ThemeContext porque aún no
+// hay perfil (default Airy). Fondo gris muy claro, card blanca centrada, tipografía
+// SF Pro Display grande.
 import React, { useState } from "react";
 import { supabase } from '../../lib/supabase';
 
@@ -30,57 +33,91 @@ export default function LoginPage({ onLogin }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-800">Dashboard Acteck</h1>
-          <p className="text-sm text-gray-400 mt-1">Balam Rush</p>
+    <div style={{
+      minHeight: '100vh', background: '#F5F5F7',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif',
+      WebkitFontSmoothing: 'antialiased',
+    }}>
+      <div style={{
+        background: 'white', borderRadius: 22, padding: '48px 40px',
+        width: '100%', maxWidth: 440,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 4px 20px rgba(0,0,0,0.06)',
+      }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: '#6E6E73', marginBottom: 6 }}>
+            Balam Rush
+          </div>
+          <h1 style={{
+            fontFamily: '-apple-system, "SF Pro Display", sans-serif',
+            fontSize: 36, fontWeight: 700, letterSpacing: '-0.03em',
+            color: '#1D1D1F', margin: 0, lineHeight: 1.1,
+          }}>Dashboard Acteck.</h1>
+          <p style={{
+            fontSize: 15, color: '#6E6E73', margin: '10px 0 0',
+          }}>Ingresa con tu cuenta corporativa.</p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">{error}</div>
+          <div style={{
+            marginBottom: 16, padding: '12px 14px',
+            background: 'rgba(255,59,48,0.08)',
+            border: '1px solid rgba(255,59,48,0.2)',
+            borderRadius: 12, color: '#B00020', fontSize: 13,
+          }}>{error}</div>
         )}
 
         <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-600 mb-1">Correo electrónico</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition"
-              placeholder="usuario@acteck.com"
-              autoComplete="email"
-              required
-              autoFocus
-            />
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelStyle}>Correo electrónico</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              style={inputStyle} placeholder="usuario@acteck.com"
+              autoComplete="email" required autoFocus />
           </div>
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-600 mb-1">Contraseña</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition"
-              placeholder="••••••••"
-              autoComplete="current-password"
-              required
-            />
+          <div style={{ marginBottom: 24 }}>
+            <label style={labelStyle}>Contraseña</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+              style={inputStyle} placeholder="••••••••"
+              autoComplete="current-password" required />
           </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition disabled:opacity-50"
-          >
-            {loading ? "Verificando..." : "Entrar"}
+          <button type="submit" disabled={loading}
+            style={{
+              width: '100%', background: loading ? '#4DA3FF' : '#0071E3',
+              color: 'white', border: 'none',
+              padding: '13px 24px', borderRadius: 999,
+              fontSize: 15, fontWeight: 500, cursor: loading ? 'wait' : 'pointer',
+              fontFamily: 'inherit',
+              transition: 'background 200ms',
+            }}
+            onMouseEnter={(e) => !loading && (e.currentTarget.style.background = '#0077ED')}
+            onMouseLeave={(e) => !loading && (e.currentTarget.style.background = '#0071E3')}>
+            {loading ? "Verificando…" : "Entrar"}
           </button>
         </form>
 
-        <p className="text-center text-xs text-gray-400 mt-6">
-          ¿Olvidaste tu contraseña? Contacta al administrador.
-        </p>
-        <p className="text-center text-xs text-gray-300 mt-2">v1.0 · Abril 2026</p>
+        <div style={{
+          textAlign: 'center', marginTop: 28, paddingTop: 20,
+          borderTop: '1px solid rgba(0,0,0,0.06)',
+        }}>
+          <p style={{ fontSize: 12, color: '#86868B', margin: 0 }}>
+            ¿Olvidaste tu contraseña? Contacta al administrador.
+          </p>
+          <p style={{ fontSize: 11, color: '#C7C7CC', margin: '6px 0 0' }}>v2.0 · 2026</p>
+        </div>
       </div>
     </div>
   );
 }
+
+const labelStyle = {
+  display: 'block', fontSize: 13, fontWeight: 500,
+  color: '#1D1D1F', marginBottom: 6,
+};
+const inputStyle = {
+  width: '100%', padding: '12px 14px', borderRadius: 12,
+  border: '1px solid rgba(0,0,0,0.1)', fontSize: 14,
+  outline: 'none', fontFamily: 'inherit', color: '#1D1D1F',
+  background: '#FBFBFD',
+  transition: 'border-color 160ms, background 160ms',
+};

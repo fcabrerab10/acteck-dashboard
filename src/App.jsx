@@ -35,6 +35,7 @@ import {
   puedeVerPestanaGlobal,
 } from './lib/permisos';
 import { PerfilContext } from './lib/perfilContext';
+import { ThemeProvider } from './lib/themeContext';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -404,7 +405,8 @@ export default function App() {
 
   return (
     <PerfilContext.Provider value={perfil}>
-    <div className="flex h-screen bg-gray-50 font-sans">
+    <ThemeProvider perfil={perfil}>
+    <div className="flex h-screen font-sans" style={{ background: 'var(--t-bg, #F5F5F7)' }}>
 
       {/* SIDEBAR */}
       <Sidebar
@@ -563,6 +565,7 @@ export default function App() {
 
       <Toaster />
     </div>
+    </ThemeProvider>
     </PerfilContext.Provider>
   );
 }
