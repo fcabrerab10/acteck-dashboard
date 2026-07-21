@@ -931,11 +931,12 @@ function AgingTile({ palette, label, valor, total }) {
 
 // ────────── Tendencia 3 años ──────────
 function TendenciaCard({ data, anio, mesMax }) {
+  const { theme } = useTheme();
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <div className="flex items-baseline justify-between mb-2">
-        <p className="text-sm font-medium text-gray-800">Tendencia mensual · 3 años</p>
-        <p className="text-[11px] text-gray-400">{anio - 2}, {anio - 1}, {anio}</p>
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
+      <div className="flex items-baseline justify-between mb-4">
+        <h4 style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Tendencia mensual · 3 años</h4>
+        <p style={{ fontSize: 12, color: theme.textMuted, margin: 0 }}>{anio - 2}, {anio - 1}, {anio}</p>
       </div>
       <div style={{ width: '100%', height: 260 }}>
         <ResponsiveContainer>
@@ -1632,25 +1633,33 @@ function SellOutBloque({
 
   const hayDatos = totalYTD > 0 || sellMayoristas.length > 0;
 
+  const invBg = theme.surfaceInverse || (theme.mode === 'dark' ? '#F5F5F7' : '#000000');
+  const invText = theme.textOnInverse || (theme.mode === 'dark' ? '#1D1D1F' : '#F5F5F7');
+  const invMuted = theme.mode === 'dark' ? 'rgba(29,29,31,0.65)' : 'rgba(245,245,247,0.7)';
   return (
-    <section className="space-y-3">
+    <section className="space-y-3.5">
       <div className="flex items-baseline justify-between px-1">
         <div>
-          <p className="text-[11px] uppercase tracking-widest text-gray-500 mb-1">Bloque · Sell Out</p>
-          <h3 className="text-lg font-medium text-gray-800">Sell out del canal</h3>
+          <p style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>Bloque · Sell Out</p>
+          <h3 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay, lineHeight: 1.1 }}>Sell out del canal.</h3>
         </div>
-        <span className="text-xs text-gray-500">Ajustado por 90 días de crédito · {anio}</span>
+        <span style={{ fontSize: 13, color: theme.textMuted, fontFamily: TYPO.fontText }}>Ajustado por 90 días de crédito · {anio}</span>
       </div>
 
       {!hayDatos && (
-        <div className="rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 p-4 text-sm">
+        <div style={{
+          borderRadius: 22, padding: 16,
+          background: theme.mode === 'dark' ? 'rgba(255,159,10,0.14)' : 'rgba(255,149,0,0.08)',
+          color: theme.orange || '#A34209',
+          fontSize: 13, fontFamily: TYPO.fontText,
+        }}>
           Aún no hay datos de <code>sellout_general</code> en Supabase.
           Sube el archivo Sellout General.xlsx en <code>/uploads.html</code> para activar este bloque.
         </div>
       )}
 
-      {/* ① KPIs globales */}
-      <div className="grid grid-cols-3 gap-2.5">
+      {/* ① KPIs globales · center INVERSE (patrón AirPods) */}
+      <div className="grid grid-cols-3 gap-3.5">
         <BentoKpi palette={PALETTE.coral} icon={ShoppingBag}
           label={`Sell-out ${MESES_LBL[sellOutMes.mesEfectivo - 1]}${sellOutMes.esEnCurso ? ' (último cerrado)' : ''}`}
           valor={fmtCompact(sellOutMes.total)}
@@ -1661,7 +1670,8 @@ function SellOutBloque({
           valor={fmtCompact(sellOutMes.ytd)}
           delta={sellOutMes.deltaYTD}
           deltaLabel="YoY"
-          subtitulo={<span>{fmtCompact(sellOutMes.ytdPrev)} en {anio - 1}</span>} />
+          subtitulo={<span>{fmtCompact(sellOutMes.ytdPrev)} en {anio - 1}</span>}
+          inverse />
         <BentoKpi palette={PALETTE.purple} icon={ShoppingBag} label="Clientes finales activos"
           valor={fmtInt(sellTopClientes.length > 0
             ? canalRows.reduce((s, r) => s + r.clientes, 0)
@@ -1670,35 +1680,38 @@ function SellOutBloque({
           subtitulo={<span>en {sellMayoristas.length || '—'} mayoristas</span>} />
       </div>
 
-      {/* ② Sell-out por canal */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <div className="flex items-baseline justify-between mb-3">
-          <h4 className="text-sm font-medium text-gray-800">Sell-out por canal</h4>
-          <span className="text-xs text-gray-500">YTD {anio}</span>
+      {/* ② Sell-out por canal · cards alternadas */}
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
+        <div className="flex items-baseline justify-between mb-4">
+          <h4 style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Sell-out por canal</h4>
+          <span style={{ fontSize: 12, color: theme.textMuted }}>YTD {anio}</span>
         </div>
-        <div className="grid grid-cols-3 gap-2.5">
-          {canalRows.map((c) => {
+        <div className="grid grid-cols-3 gap-3.5">
+          {canalRows.map((c, i) => {
             const meta = CANAL_SELLOUT_META[c.key];
             const pal = meta.palette;
+            const inv = i === 1;
+            const bg = inv ? invBg : theme.surface;
+            const tx = inv ? invText : theme.text;
+            const lb = inv ? invMuted : theme.textMuted;
             return (
               <div key={c.key} style={{
-                background: theme.surface, border: `1px solid ${theme.border}`,
-                borderLeft: `3px solid ${pal.mid}`,
-                borderRadius: 14, padding: 14, fontFamily: TYPO.fontText,
+                background: bg, color: tx,
+                border: inv ? 'none' : `1px solid ${theme.border}`,
+                borderRadius: 18, padding: 18, fontFamily: TYPO.fontText,
+                display: 'flex', flexDirection: 'column',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                  <IconBadge icon={ShoppingBag} color={pal.mid} size={32} />
-                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted }}>
-                    {meta.label}
-                  </div>
+                <IconBadge icon={ShoppingBag} color={pal.mid} size={36} />
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: lb, marginTop: 12 }}>
+                  {meta.label}
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em', lineHeight: 1.1, fontFamily: TYPO.fontDisplay }}>
+                <div style={{ fontSize: 28, fontWeight: 600, color: tx, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em', lineHeight: 1.05, fontFamily: TYPO.fontDisplay, marginTop: 4 }}>
                   {fmtCompact(c.importe)}
                 </div>
-                <div style={{ fontSize: 11, marginTop: 2, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-                  {fmtPct(c.share)} del total{c.deltaYoY != null && <> · <span style={{ color: c.deltaYoY >= 0 ? theme.green : theme.red, fontWeight: 500 }}>{fmtPctDelta(c.deltaYoY)} YoY</span></>}
+                <div style={{ fontSize: 12, marginTop: 4, color: lb, fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtPct(c.share)} del total{c.deltaYoY != null && <> · <span style={{ color: c.deltaYoY >= 0 ? (theme.green || '#34C759') : (theme.red || '#FF3B30'), fontWeight: 500 }}>{fmtPctDelta(c.deltaYoY)} YoY</span></>}
                 </div>
-                <div style={{ fontSize: 10, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${theme.divider || theme.border}`, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                <div style={{ fontSize: 11, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${inv ? 'rgba(255,255,255,0.12)' : theme.border}`, color: lb, fontVariantNumeric: 'tabular-nums' }}>
                   {fmtInt(c.clientes)} clientes · {fmtInt(c.skus)} SKUs
                 </div>
               </div>
@@ -1709,7 +1722,7 @@ function SellOutBloque({
 
       {/* ③ Ranking mayoristas */}
       {sellMayoristas.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-2xl p-4">
+        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
           <div className="flex items-baseline justify-between mb-3">
             <h4 className="text-sm font-medium text-gray-800">Ranking de mayoristas</h4>
             <span className="text-xs text-gray-500">{sellMayoristas.length} activos</span>
@@ -1740,7 +1753,7 @@ function SellOutBloque({
       )}
 
       {/* ⑤ Tendencia mensual */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
         <div className="flex items-baseline justify-between mb-3">
           <h4 className="text-sm font-medium text-gray-800">Sell-out mensual {anio} vs {anio - 1}</h4>
           <div className="text-[11px] text-gray-500">
@@ -1762,7 +1775,7 @@ function SellOutBloque({
 
       {/* ⑥ + ⑦ Top SKUs + Top clientes finales */}
       <div className="grid grid-cols-2 gap-2.5">
-        <div className="bg-white border border-gray-200 rounded-2xl p-4">
+        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
           <h4 className="text-sm font-medium text-gray-800 mb-3">Top 10 SKUs por sell-out YTD</h4>
           {sellTopSkus.length === 0 ? (
             <div className="text-xs text-gray-500">Sin datos.</div>
@@ -1779,7 +1792,7 @@ function SellOutBloque({
             </div>
           )}
         </div>
-        <div className="bg-white border border-gray-200 rounded-2xl p-4">
+        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
           <h4 className="text-sm font-medium text-gray-800 mb-3">Top 10 clientes finales</h4>
           {sellTopClientes.length === 0 ? (
             <div className="text-xs text-gray-500">Sin datos.</div>
@@ -1800,7 +1813,7 @@ function SellOutBloque({
 
       {/* ⑨ Efectividad de promos por temporada */}
       {sellPromosResumen && sellPromosResumen.campania && (
-        <div className="bg-white border border-gray-200 rounded-2xl p-4">
+        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
           <div className="flex items-baseline justify-between mb-3">
             <h4 className="text-sm font-medium text-gray-800">Efectividad de promos por temporada</h4>
             <span className="text-xs text-gray-500">{MESES_FULL[mesMax - 1]} {anio}</span>
