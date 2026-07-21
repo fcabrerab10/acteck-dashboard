@@ -118,18 +118,25 @@ Los 3 temas comparten estructura de tokens (`bg`, `surface`, `text`, `accent`…
 
 ## 3 · Tipografía
 
-Fuente única en los 3 temas: **SF Pro** — el mismo stack que usa `apple.com` en producción. Sin Inter, sin Segoe, sin Roboto — los fallbacks intermedios ensucian y no son necesarios: `-apple-system` cubre macOS/iOS, y `Helvetica Neue → Helvetica → Arial` cubre todo lo demás con una tipografía humanista suficientemente parecida.
+Fuente única en los 3 temas: **SF Pro** — self-hosted desde `/public/fonts/` para que Windows y Linux también rendericen SF Pro real (no fallback a Helvetica).
 
 ```css
---font-text:    -apple-system, BlinkMacSystemFont, "SF Pro Text",
+--font-text:    "SF Pro Text", -apple-system, BlinkMacSystemFont,
                 "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
---font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+--font-display: "SF Pro Display", -apple-system, BlinkMacSystemFont,
                 "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
 ```
 
-Es el mismo stack CSS que sirve Apple en `apple.com/mx` (Store, Mac, iPhone). En Mac se ve SF Pro real; en Windows/Linux cae a Helvetica Neue / Arial que respeta la métrica.
+**Self-hosting** (aplicado 2026-07-21): 6 pesos subseteados a Latin + puntuación + símbolos (~75KB c/u, 450KB total) en `public/fonts/*.woff2`. El `@font-face` declara `src: local('SF Pro …'), url('/fonts/…')` — Mac usa el sistema (0 bytes descarga), Windows/Linux bajan el woff2. Definido en `src/index.css`.
 
-**Opcional recomendado — self-hosting de SF Pro:** Apple distribuye SF Pro gratis para descarga desde <https://developer.apple.com/fonts/>. Si en el futuro queremos que Windows también vea SF Pro, se descarga el `.woff2` y se sirve desde `/public/fonts/` con `@font-face`. Sin licencia extra requerida — Apple lo permite explícitamente.
+Pesos disponibles: Display Regular/Semibold/Bold (400/600/700) para cifras y títulos ≥20px, Text Regular/Medium/Semibold (400/500/600) para body, labels, captions.
+
+**Descarga original:** [developer.apple.com/fonts/](https://developer.apple.com/fonts/) — Apple Font License. Regenerar subset con:
+```bash
+pyftsubset SF-Pro-Display-Regular.otf \
+  --unicodes="U+0020-007E,U+00A0-00FF,U+0100-017F,U+0180-024F,U+2000-206F,U+2070-209F,U+20A0-20CF,U+2190-21FF,U+2200-22FF" \
+  --flavor=woff2 --output-file=SF-Pro-Display-Regular.woff2
+```
 
 **Regla:** display para cifras y títulos ≥20px, text para body, labels, captions.
 
@@ -1118,3 +1125,43 @@ Los glows radiales del Midnight y el hover suave de Fitness rings deben desactiv
 - [ ] Estados de hover tienen equivalente de touch (:active o :focus-visible)
 - [ ] Sidebar colapsa correctamente en tablet/mobile (drawer + bottom tab bar)
 - [ ] `@media (prefers-reduced-motion)` respetado — glows y animaciones desactivadas
+
+---
+
+## 20 · Recursos oficiales de Apple
+
+Todo lo que este manual afirma sobre "estilo Apple" está anclado a estos recursos. Si algo aquí contradice el link oficial, gana el link.
+
+### Design resources
+- **Portal general:** <https://developer.apple.com/design/resources/> — hub oficial con Sketch, Figma, Keynote y fuentes.
+- **SF Pro (descarga):** <https://developer.apple.com/fonts/> — .otf de Display, Text, Rounded, Mono, Compact. Apple Font License permite uso en apps propias.
+- **SF Symbols:** <https://developer.apple.com/sf-symbols/> — inspiración para elegir Lucide equivalente. No usamos SF Symbols como fuente porque no renderiza en web sin trucos.
+
+### Guidelines
+- **Human Interface Guidelines (HIG):** <https://developer.apple.com/design/human-interface-guidelines/> — biblia. Especialmente:
+  - [Foundations → Color](https://developer.apple.com/design/human-interface-guidelines/color) — sistema iOS de colores (los que copiamos en `themeTokens.js`)
+  - [Foundations → Typography](https://developer.apple.com/design/human-interface-guidelines/typography) — escala de tamaños, weights recomendados
+  - [Foundations → Layout](https://developer.apple.com/design/human-interface-guidelines/layout) — safe areas, márgenes
+  - [Components → Charts](https://developer.apple.com/design/human-interface-guidelines/charts) — de dónde sale la regla "charts sin chrome"
+
+### Sitios de Apple usados como benchmark visual
+- **apple.com** — Store, iPhone, Mac (patrón AirPods de tarjetas alternadas blanco/negro)
+- **Fitness+ (Activity rings)** — inspiración del hero radial del Midnight
+- **iPad multitasking** — inspiración del Bento grid con celdas de tamaños distintos
+
+### Lucide ↔ SF Symbols (mapeo usado en este proyecto)
+
+| Sección | Lucide | SF Symbol equivalente |
+|---------|--------|----------------------|
+| Estado de resultados | `Calculator` | `plusminus.circle` |
+| Sell in / Sell out | `TrendingUp` | `chart.line.uptrend.xyaxis` |
+| Inventario | `Package` | `shippingbox` |
+| Marketing | `Megaphone` | `megaphone` |
+| Pagos | `Wallet` | `creditcard` |
+| Crédito y cobranza | `Coins` | `dollarsign.circle` |
+| Forecast | `LineChart` | `waveform.path` |
+| Análisis | `BarChart3` | `chart.bar` |
+| Estrategia de precios | `Tags` | `tag` |
+| Propuestas | `FileText` | `doc.text` |
+| Configuración | `Settings2` | `gearshape.2` |
+| Alertas | `AlertCircle` | `exclamationmark.circle` |
