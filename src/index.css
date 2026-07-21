@@ -18,60 +18,58 @@ body {
 
 /* ═══════════════════════════════════════════════════════════════ */
 /* MIDNIGHT overrides · fuerza Tailwind cards/textos a los tokens */
-/* del tema oscuro para todas las pestañas legacy que aún no fueron */
-/* migradas a inline theme.* .                                     */
+/* del tema oscuro para todas las pestañas legacy que aún no      */
+/* fueron migradas a inline theme.*                                */
 /* ═══════════════════════════════════════════════════════════════ */
-[data-theme="midnight"] {
-  /* Backgrounds */
-  .bg-white              { background-color: var(--t-surface) !important; }
-  .bg-gray-50            { background-color: var(--t-surface) !important; }
-  .bg-gray-100           { background-color: var(--t-surfaceHover) !important; }
-  .bg-slate-50           { background-color: var(--t-surface) !important; }
-  .bg-slate-100          { background-color: var(--t-surfaceHover) !important; }
 
-  /* Borders */
-  .border-gray-100       { border-color: var(--t-border) !important; }
-  .border-gray-200       { border-color: var(--t-border) !important; }
-  .border-gray-300       { border-color: var(--t-borderStrong) !important; }
-  .border-slate-100      { border-color: var(--t-border) !important; }
-  .border-slate-200      { border-color: var(--t-border) !important; }
+/* Backgrounds */
+[data-theme="midnight"] .bg-white     { background-color: var(--t-surface) !important; }
+[data-theme="midnight"] .bg-gray-50   { background-color: var(--t-surface) !important; }
+[data-theme="midnight"] .bg-gray-100  { background-color: var(--t-surfaceHover) !important; }
+[data-theme="midnight"] .bg-slate-50  { background-color: var(--t-surface) !important; }
+[data-theme="midnight"] .bg-slate-100 { background-color: var(--t-surfaceHover) !important; }
 
-  /* Textos primarios */
-  .text-gray-900,
-  .text-gray-800,
-  .text-slate-900,
-  .text-slate-800        { color: var(--t-text) !important; }
+/* Borders */
+[data-theme="midnight"] .border-gray-100  { border-color: var(--t-border) !important; }
+[data-theme="midnight"] .border-gray-200  { border-color: var(--t-border) !important; }
+[data-theme="midnight"] .border-gray-300  { border-color: var(--t-borderStrong) !important; }
+[data-theme="midnight"] .border-slate-100 { border-color: var(--t-border) !important; }
+[data-theme="midnight"] .border-slate-200 { border-color: var(--t-border) !important; }
 
-  /* Textos secundarios */
-  .text-gray-700,
-  .text-gray-600,
-  .text-slate-700,
-  .text-slate-600        { color: var(--t-textMuted) !important; }
+/* Textos primarios */
+[data-theme="midnight"] .text-gray-900,
+[data-theme="midnight"] .text-gray-800,
+[data-theme="midnight"] .text-slate-900,
+[data-theme="midnight"] .text-slate-800 { color: var(--t-text) !important; }
 
-  /* Textos muted */
-  .text-gray-500,
-  .text-gray-400,
-  .text-slate-500,
-  .text-slate-400        { color: var(--t-textSubtle) !important; }
+/* Textos secundarios */
+[data-theme="midnight"] .text-gray-700,
+[data-theme="midnight"] .text-gray-600,
+[data-theme="midnight"] .text-slate-700,
+[data-theme="midnight"] .text-slate-600 { color: var(--t-textMuted) !important; }
 
-  /* Divide (líneas entre rows de tabla) */
-  .divide-gray-100 > * + *,
-  .divide-gray-200 > * + * { border-color: var(--t-divider) !important; }
+/* Textos muted */
+[data-theme="midnight"] .text-gray-500,
+[data-theme="midnight"] .text-gray-400,
+[data-theme="midnight"] .text-slate-500,
+[data-theme="midnight"] .text-slate-400 { color: var(--t-textSubtle) !important; }
 
-  /* Hover states */
-  .hover\:bg-gray-50:hover,
-  .hover\:bg-gray-100:hover { background-color: var(--t-surfaceHover) !important; }
-}
+/* Divide */
+[data-theme="midnight"] .divide-gray-100 > * + *,
+[data-theme="midnight"] .divide-gray-200 > * + * { border-color: var(--t-divider) !important; }
 
-/* Marfil · similar pero adaptado al warm cream. Los bg-white en Marfil
-   se ven ok (blanco sobre cream), sólo ajustamos los bg-gray-50/100
-   para que armonicen con la paleta warm. */
-[data-theme="marfil"] {
-  .bg-gray-50            { background-color: var(--t-surface) !important; }
-  .bg-gray-100           { background-color: var(--t-surface) !important; }
-  .bg-slate-50           { background-color: var(--t-surface) !important; }
-  .bg-slate-100          { background-color: var(--t-surface) !important; }
+/* Hover states */
+[data-theme="midnight"] .hover\:bg-gray-50:hover,
+[data-theme="midnight"] .hover\:bg-gray-100:hover { background-color: var(--t-surfaceHover) !important; }
 
-  .border-gray-100       { border-color: var(--t-border) !important; }
-  .border-gray-200       { border-color: var(--t-border) !important; }
-}
+/* ═══════════════════════════════════════════════════════════════ */
+/* MARFIL · ajusta bg-gray a surface warm (bg-white queda bien   */
+/* en cream, sólo suavizamos los grises).                         */
+/* ═══════════════════════════════════════════════════════════════ */
+[data-theme="marfil"] .bg-gray-50   { background-color: var(--t-surface) !important; }
+[data-theme="marfil"] .bg-gray-100  { background-color: var(--t-surface) !important; }
+[data-theme="marfil"] .bg-slate-50  { background-color: var(--t-surface) !important; }
+[data-theme="marfil"] .bg-slate-100 { background-color: var(--t-surface) !important; }
+
+[data-theme="marfil"] .border-gray-100 { border-color: var(--t-border) !important; }
+[data-theme="marfil"] .border-gray-200 { border-color: var(--t-border) !important; }
