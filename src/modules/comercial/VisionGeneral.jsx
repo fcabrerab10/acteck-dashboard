@@ -510,21 +510,21 @@ export default function VisionGeneral() {
 // ────────── HERO Card ──────────
 function HeroCard({ kpis, anio, mesMaxLabel }) {
   const { theme } = useTheme();
-  const isDark = theme.mode === 'dark';
-  const cardBg = isDark ? theme.surface : null; // null → usa palette.bg
-  const border = isDark ? `1px solid ${theme.border}` : 'none';
-  const bigTitleCol = isDark ? theme.text : PALETTE.blue.text;
-  const bigLabelCol = isDark ? theme.textMuted : PALETTE.blue.mid;
-  const midTitleCol = isDark ? theme.text : PALETTE.teal.text;
-  const midLabelCol = isDark ? theme.textMuted : PALETTE.teal.mid;
-  const runTitleCol = isDark ? theme.text : (kpis.cuotaTotal > 0 ? PALETTE.purple.text : PALETTE.gray.text);
-  const runLabelCol = isDark ? theme.textMuted : (kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid);
+  // Unificado en los 3 temas: card surface + strip lateral color paleta.
+  const cardBg = theme.surface;
+  const border = `1px solid ${theme.border}`;
+  const bigTitleCol = theme.text;
+  const bigLabelCol = theme.textMuted;
+  const midTitleCol = theme.text;
+  const midLabelCol = theme.textMuted;
+  const runTitleCol = theme.text;
+  const runLabelCol = theme.textMuted;
 
   return (
     <div className="grid gap-2.5" style={{ gridTemplateColumns: '1.6fr 1fr' }}>
       {/* Facturación YTD grande */}
       <div style={{
-        background: cardBg || PALETTE.blue.bg, borderRadius: 14, padding: '20px 24px',
+        background: cardBg, borderRadius: 14, padding: '20px 24px',
         border, borderLeft: `4px solid ${PALETTE.blue.mid}`,
       }}>
         <p style={{ fontSize: 11, margin: 0, color: bigLabelCol, letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: TYPO.fontText }}>
@@ -558,7 +558,7 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
       {/* Columna lateral: Mes actual + Run-rate vs cuota */}
       <div className="grid grid-rows-2 gap-2.5">
         <div style={{
-          background: cardBg || PALETTE.teal.bg, borderRadius: 12, padding: '14px 16px',
+          background: cardBg, borderRadius: 12, padding: '14px 16px',
           border, borderLeft: `3px solid ${PALETTE.teal.mid}`,
         }}>
           <p style={{ fontSize: 11, margin: 0, color: midLabelCol, letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>
@@ -574,8 +574,7 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
           )}
         </div>
         <div style={{
-          background: cardBg || (kpis.cuotaTotal > 0 ? PALETTE.purple.bg : PALETTE.gray.bg),
-          borderRadius: 12, padding: '14px 16px',
+          background: cardBg, borderRadius: 12, padding: '14px 16px',
           border, borderLeft: `3px solid ${kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid}`,
         }}>
           <div className="flex items-center gap-2" style={{ marginBottom: 2 }}>
@@ -610,11 +609,11 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
 // ────────── Bento KPI ──────────
 function BentoKpi({ palette, icon: Icon, label, valor, subtitulo, delta, deltaLabel }) {
   const { theme } = useTheme();
-  const isDark = theme.mode === 'dark';
-  const cardBg = isDark ? theme.surface : palette.bg;
-  const labelCol = isDark ? theme.textMuted : palette.mid;
-  const valueCol = isDark ? theme.text : palette.text;
-  const border = isDark ? `1px solid ${theme.border}` : 'none';
+  // Unificado en los 3 temas: card surface + strip lateral de la paleta.
+  const cardBg = theme.surface;
+  const labelCol = theme.textMuted;
+  const valueCol = theme.text;
+  const border = `1px solid ${theme.border}`;
   return (
     <div style={{
       background: cardBg, borderRadius: 12, padding: '14px 16px', border,
@@ -954,11 +953,11 @@ function TendenciaCard({ data, anio, mesMax }) {
 // ────────── Sección de Inventario ──────────
 function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoCalendario, caminoProximas, caminoSemanal, caminoRetrasadas, caminoProveedores, caminoAgotados, caminoLeadtime, comprasYTD, anio, ventaPromMes }) {
   const { theme } = useTheme();
-  const isDark = theme.mode === 'dark';
-  const cardBgFor = (p) => isDark ? theme.surface : p.bg;
-  const cardTitleFor = (p) => isDark ? theme.text : p.text;
-  const cardLabelFor = (p) => isDark ? theme.textMuted : p.mid;
-  const cardBorder = isDark ? `1px solid ${theme.border}` : 'none';
+  // Unificado en los 3 temas: surface + strip lateral color paleta.
+  const cardBgFor = () => theme.surface;
+  const cardTitleFor = () => theme.text;
+  const cardLabelFor = () => theme.textMuted;
+  const cardBorder = `1px solid ${theme.border}`;
   // Buckets de estatus en orden de pipeline + total agregado
   const BUCKET_LABELS = {
     produccion:        { label: 'En producción',      palette: PALETTE.amber },
@@ -1282,23 +1281,24 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
 
 function RetrasadasBanner({ retrasadas }) {
   const { theme } = useTheme();
-  const isDark = theme.mode === 'dark';
   const total = retrasadas.reduce((s, r) => s + (Number(r.valor_mxn) || 0), 0);
   const top = retrasadas.slice(0, 2);
   const restante = retrasadas.length - top.length;
   return (
     <div style={{
-      background: isDark ? 'rgba(255,69,58,0.10)' : PALETTE.red.bg,
-      border: `1px solid ${isDark ? theme.red : PALETTE.red.strong}`, borderRadius: 10,
+      background: theme.surface,
+      border: `1px solid ${theme.border}`,
+      borderLeft: `4px solid ${theme.red}`,
+      borderRadius: 10,
       padding: '12px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12,
       fontFamily: TYPO.fontText,
     }}>
-      <i className="ti ti-alert-triangle" style={{ fontSize: 22, color: isDark ? theme.red : PALETTE.red.mid, flex: 'none' }} aria-hidden="true" />
+      <i className="ti ti-alert-triangle" style={{ fontSize: 22, color: theme.red, flex: 'none' }} aria-hidden="true" />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 12, margin: 0, color: isDark ? theme.text : PALETTE.red.text, fontWeight: 500 }}>
+        <p style={{ fontSize: 12, margin: 0, color: theme.text, fontWeight: 500 }}>
           {retrasadas.length} {retrasadas.length === 1 ? 'PO' : 'POs'} en retraso · {fmtCompact(total)} atrapados
         </p>
-        <p style={{ fontSize: 11, margin: '2px 0 0', color: isDark ? theme.textMuted : PALETTE.red.mid }}>
+        <p style={{ fontSize: 11, margin: '2px 0 0', color: theme.textMuted }}>
           {top.map((r, i) => (
             <span key={r.movid}>
               {i > 0 && ' · '}
@@ -1314,11 +1314,11 @@ function RetrasadasBanner({ retrasadas }) {
 
 function CaminoHero({ valor, piezas, pos, inventarioStock, leadtime, comprasYTD, anio }) {
   const { theme } = useTheme();
-  const isDark = theme.mode === 'dark';
-  const cardBgFor = (p) => isDark ? theme.surface : p.bg;
-  const cardTitleFor = (p) => isDark ? theme.text : p.text;
-  const cardLabelFor = (p) => isDark ? theme.textMuted : p.mid;
-  const cardBorder = isDark ? `1px solid ${theme.border}` : 'none';
+  // Unificado en los 3 temas: surface + strip lateral color paleta.
+  const cardBgFor = () => theme.surface;
+  const cardTitleFor = () => theme.text;
+  const cardLabelFor = () => theme.textMuted;
+  const cardBorder = `1px solid ${theme.border}`;
 
   const ratioStock = inventarioStock > 0 ? Math.round((valor / inventarioStock) * 100) : null;
   const ytdAct = comprasYTD.find((r) => r.anio === anio);
@@ -1566,11 +1566,11 @@ function SellOutBloque({
   anio, mesMax,
 }) {
   const { theme } = useTheme();
-  const isDark = theme.mode === 'dark';
-  const cardBgFor = (p) => isDark ? theme.surface : p.bg;
-  const cardTitleFor = (p) => isDark ? theme.text : p.text;
-  const cardLabelFor = (p) => isDark ? theme.textMuted : p.mid;
-  const cardBorder = isDark ? `1px solid ${theme.border}` : 'none';
+  // Unificado en los 3 temas: surface + strip lateral color paleta.
+  const cardBgFor = () => theme.surface;
+  const cardTitleFor = () => theme.text;
+  const cardLabelFor = () => theme.textMuted;
+  const cardBorder = `1px solid ${theme.border}`;
   const canalRows = useMemo(() => {
     const total = sellCanal.reduce((s, r) => s + (Number(r.importe) || 0), 0);
     const prevMap = new Map(sellCanalPrev.map((r) => [r.canal_sellout, Number(r.importe) || 0]));
