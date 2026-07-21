@@ -500,14 +500,8 @@ function HeroRing({ theme, kpis, anio, mesMax }) {
     }}>
       <svg viewBox="0 0 100 100" style={{ width: 200, height: 200, flexShrink: 0 }}>
         <circle cx="50" cy="50" r="42" fill="none" stroke={theme.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} strokeWidth="10" />
-        <circle cx="50" cy="50" r="42" fill="none" stroke="url(#heroRingGrad)" strokeWidth="10" strokeLinecap="round"
+        <circle cx="50" cy="50" r="42" fill="none" stroke={theme.text} strokeWidth="10" strokeLinecap="round"
           strokeDasharray={`${dashArray} 264`} transform="rotate(-90 50 50)" />
-        <defs>
-          <linearGradient id="heroRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={theme.orange} />
-            <stop offset="100%" stopColor={theme.pink} />
-          </linearGradient>
-        </defs>
         <text x="50" y="46" textAnchor="middle" fontSize="9" fill={theme.textMuted}
           fontWeight="500" fontFamily={TYPO.fontText}>margen UAII</text>
         <text x="50" y="60" textAnchor="middle" fontSize="16" fontWeight="700" fill={theme.text}
@@ -570,7 +564,8 @@ function KpiMini({ theme, label, value, delta, deltaLabel, series, mesMax, isPts
       <DeltaLine theme={theme} pct={delta} label={deltaLabel} isPts={isPts} />
       <div style={{ marginTop: 10 }}>
         <Sparkline theme={theme} series={series} mesMax={mesMax}
-          color={delta != null && delta < 0 ? theme.red : theme.text} />
+          color={delta != null && delta < 0 ? theme.red : theme.text}
+          interactive fmt={(v) => value.includes('%') ? (v?.toFixed(1) || '—') + '%' : fmtCompact(v)} />
       </div>
     </div>
   );
@@ -579,22 +574,41 @@ function KpiMini({ theme, label, value, delta, deltaLabel, series, mesMax, isPts
 // ═══════════════════════════════════════════════════════════════════
 // SPARKLINE
 // ═══════════════════════════════════════════════════════════════════
-function Sparkline({ theme, series, mesMax, color, height = 24, width = 100 }) {
+function Sparkline({ theme, series, mesMax, color, height = 24, width = 100, interactive = false, fmt = fmtCompact }) {
+  const [hoverI, setHoverI] = useState(null);
   const points = (series || []).slice(0, mesMax).filter((v) => v != null && !isNaN(v));
   if (points.length < 2) return <div style={{ height }} />;
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = max - min || 1;
   const step = width / (points.length - 1);
-  const poly = points.map((v, i) => {
-    const x = i * step;
-    const y = height - ((v - min) / range) * (height - 4) - 2;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
+  const coords = points.map((v, i) => ({
+    x: i * step,
+    y: height - ((v - min) / range) * (height - 4) - 2,
+    v,
+  }));
+  const poly = coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+
+  const handleMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * width;
+    const i = Math.round(x / step);
+    setHoverI(i >= 0 && i < coords.length ? i : null);
+  };
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ display: 'block', width: '100%', height }}>
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none"
+      style={{ display: 'block', width: '100%', height, cursor: interactive ? 'crosshair' : 'default' }}
+      onMouseMove={interactive ? handleMove : undefined}
+      onMouseLeave={interactive ? () => setHoverI(null) : undefined}>
       <polyline points={poly} fill="none" stroke={color || theme.text}
         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {interactive && hoverI != null && coords[hoverI] && (
+        <>
+          <circle cx={coords[hoverI].x} cy={coords[hoverI].y} r="2.5" fill={color || theme.text} />
+          <title>{`${MESES_LBL[hoverI]}: ${fmt(coords[hoverI].v)}`}</title>
+        </>
+      )}
     </svg>
   );
 }
@@ -694,6 +708,7 @@ function NoticePill({ theme, alertas, onDismiss, onMesClick }) {
 // TREND CARD — gráfica wide con área gradient + comparativo dashed
 // ═══════════════════════════════════════════════════════════════════
 function TrendCard({ theme, data, anio, mesMax, modo, setModo, onMesClick }) {
+  const [hoverIdx, setHoverIdx] = useState(null);
   const config = {
     venta:  { key: 'ventaNeta',  keyPrev: 'ventaNetaPrev', label: 'Venta neta', fmt: fmtCompact },
     uafir:  { key: 'uafir',      keyPrev: 'uafirPrev',     label: 'UAFIR',      fmt: fmtCompact },
@@ -709,11 +724,11 @@ function TrendCard({ theme, data, anio, mesMax, modo, setModo, onMesClick }) {
   const max = Math.max(...allVals);
   const range = (max - min) || 1;
 
-  const W = 900, H = 200;
-  const padL = 40, padR = 40, padT = 30, padB = 40;
+  const W = 900, H = 220;
+  const padL = 40, padR = 40, padT = 30, padB = 46;
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
-  const stepX = chartW / 11; // 12 meses
+  const stepX = chartW / 11;
 
   const scaleY = (v) => padT + chartH - ((v - min) / range) * chartH;
   const scaleX = (i) => padL + i * stepX;
@@ -727,6 +742,24 @@ function TrendCard({ theme, data, anio, mesMax, modo, setModo, onMesClick }) {
   const linePathB = pointsB.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
 
   const promedio = allVals.reduce((a, b) => a + b, 0) / allVals.length;
+
+  const handleMouseMove = (e) => {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * W;
+    if (x < padL || x > W - padR) { setHoverIdx(null); return; }
+    const i = Math.round((x - padL) / stepX);
+    if (i < 0 || i > 11) { setHoverIdx(null); return; }
+    setHoverIdx(i);
+  };
+
+  const hovered = hoverIdx != null ? {
+    i: hoverIdx,
+    x: scaleX(hoverIdx),
+    vA: seriesA[hoverIdx],
+    vB: seriesB ? seriesB[hoverIdx] : null,
+    mes: MESES_FULL[hoverIdx],
+  } : null;
 
   return (
     <div style={{
@@ -763,13 +796,9 @@ function TrendCard({ theme, data, anio, mesMax, modo, setModo, onMesClick }) {
         />
       </div>
 
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }}>
-        <defs>
-          <linearGradient id="trendArea" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={theme.text} stopOpacity="0.14" />
-            <stop offset="100%" stopColor={theme.text} stopOpacity="0" />
-          </linearGradient>
-        </defs>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHoverIdx(null)}>
         {/* baseline */}
         <line x1={padL} y1={scaleY(0)} x2={W - padR} y2={scaleY(0)} stroke={theme.divider} strokeWidth="1" />
 
@@ -783,30 +812,80 @@ function TrendCard({ theme, data, anio, mesMax, modo, setModo, onMesClick }) {
           </>
         )}
 
-        {/* Serie actual (solid + area) */}
-        {areaPathA && <path d={areaPathA} fill="url(#trendArea)" />}
+        {/* Serie actual (solid, sin gradiente de área) */}
+        {areaPathA && <path d={areaPathA} fill={theme.text} fillOpacity="0.05" />}
         {linePathA && <path d={linePathA} fill="none" stroke={theme.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-        {pointsA.map((p) => (
-          <g key={p.i}>
-            <circle cx={p.x} cy={p.y} r="5" fill={theme.text}
-              style={{ cursor: 'pointer' }}
+
+        {/* Guide vertical al hover */}
+        {hovered && hovered.vA != null && (
+          <line x1={hovered.x} x2={hovered.x} y1={padT} y2={padT + chartH}
+            stroke={theme.text} strokeOpacity="0.25" strokeWidth="1" strokeDasharray="2 3" />
+        )}
+
+        {/* Puntos actuales */}
+        {pointsA.map((p) => {
+          const isHovered = hovered && hovered.i === p.i;
+          return (
+            <circle key={p.i} cx={p.x} cy={p.y} r={isHovered ? 6.5 : 4.5}
+              fill={theme.text}
+              stroke={theme.surface} strokeWidth={isHovered ? 3 : 2}
+              style={{ cursor: 'pointer', transition: 'r 180ms cubic-bezier(0.34, 1.56, 0.64, 1)' }}
               onClick={() => onMesClick && onMesClick(p.i + 1)} />
-            <text x={p.x} y={p.y - 12} textAnchor="middle"
-              fontSize="11" fontWeight="600" fill={theme.text}
+          );
+        })}
+
+        {/* Labels del hover */}
+        {hovered && hovered.vA != null && (
+          <g>
+            <text x={hovered.x} y={scaleY(hovered.vA) - 14} textAnchor="middle"
+              fontSize="12" fontWeight="700" fill={theme.text}
               fontFamily={TYPO.fontDisplay}
               style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {config.fmt(p.v)}
+              {config.fmt(hovered.vA)}
             </text>
+            {hovered.vB != null && (
+              <text x={hovered.x} y={scaleY(hovered.vB) + 14} textAnchor="middle"
+                fontSize="10.5" fill={theme.textSubtle}
+                fontFamily={TYPO.fontText}
+                style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {anio - 1} · {config.fmt(hovered.vB)}
+              </text>
+            )}
           </g>
-        ))}
+        )}
 
-        {/* X labels */}
+        {/* X labels (mes hovered destacado) */}
         {MESES_LBL.map((m, i) => (
-          <text key={m} x={scaleX(i)} y={H - 12} textAnchor="middle"
-            fontSize="11" fill={i < mesMax ? theme.textMuted : theme.textSubtle}
+          <text key={m} x={scaleX(i)} y={H - 14} textAnchor="middle"
+            fontSize="11"
+            fontWeight={hovered && hovered.i === i ? 600 : 400}
+            fill={hovered && hovered.i === i ? theme.text : (i < mesMax ? theme.textMuted : theme.textSubtle)}
             fontFamily={TYPO.fontText}>{m}</text>
         ))}
       </svg>
+
+      {/* Tooltip resumen abajo (cuando hover) */}
+      <div style={{
+        minHeight: 22, marginTop: 8,
+        ...typo(TYPO.caption), fontFamily: TYPO.fontText, color: theme.textMuted,
+        display: 'flex', gap: 16, alignItems: 'center', justifyContent: 'center',
+        opacity: hovered ? 1 : 0, transition: 'opacity 180ms',
+      }}>
+        {hovered && (
+          <>
+            <span><span style={{ color: theme.text, fontWeight: 500 }}>{hovered.mes} {anio}</span></span>
+            {hovered.vA != null && hovered.vB != null && (() => {
+              const delta = ((hovered.vA - hovered.vB) / Math.abs(hovered.vB)) * 100;
+              return (
+                <span style={{ color: delta >= 0 ? theme.green : theme.red, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+                  {delta >= 0 ? '↑' : '↓'} {Math.abs(delta).toFixed(1)}% vs {anio - 1}
+                </span>
+              );
+            })()}
+            <span style={{ ...typo(TYPO.caption), color: theme.textSubtle }}>Click para ver detalle del mes</span>
+          </>
+        )}
+      </div>
     </div>
   );
 }

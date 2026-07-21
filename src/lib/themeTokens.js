@@ -42,12 +42,12 @@ export const THEMES = {
     textSubtleOnDark: 'rgba(245,245,247,0.5)',
     accent: '#0071E3',
     accentHover: '#0077ED',
-    green: '#34C759',
-    red: '#FF3B30',
-    orange: '#F56300',
-    orangeSoft: '#FF6482',
-    pink: '#FF375F',
-    purple: '#BF5AF2',
+    green: '#1F7A3D',    // Apple dot green sólido (usado como semántica, no decoración)
+    red: '#B00020',      // rojo cinemático Apple (no el #FF3B30 iOS)
+    orange: '#C4520D',   // terracotta cálido tipo eyebrow "NUEVO" apple.com
+    orangeSoft: '#E27A3F',
+    pink: '#B62755',     // magenta oscuro apple (no fluorescente)
+    purple: '#6E44A6',   // púrpura editorial apple (no #BF5AF2 iOS)
     shadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03)',
     shadowHover: '0 4px 20px rgba(0,0,0,0.08)',
     heroCardBg: '#1D1D1F', // card negra premium para KPI hero en airy
