@@ -462,24 +462,330 @@ Esta es LA pestaña de referencia. Los patrones aquí se replican en las demás 
 
 ---
 
-## 9 · Otras pestañas _(pending — mismo template)_
+## 9 · Otras pestañas
 
-Cada pestaña que se codee debe:
-1. Documentar aquí su spec por tema (secciones 9.x, 10.x, …)
-2. Usar los tokens y componentes ya definidos (no inventar nuevos)
-3. Elegir UN patrón hero por tema y aplicarlo consistente
+Cada pestaña sigue una de estas 3 arquetípicas por tema. La 9.0 define el patrón base — el resto sólo documenta variaciones y casos especiales.
 
-Pestañas por documentar:
-- Home Cliente
-- Sell Out / Sell In
-- Inventario
-- Estrategia de Precios
-- Marketing
-- Pagos / Crédito y Cobranza
-- Forecast
-- Análisis
-- Propuestas
-- Configuración
+### 9.0 · Patrón base
+
+Estructura común de cualquier pestaña:
+1. **Header** — título + acciones (segmented year, filter, exportar)
+2. **Contenido principal** — varía por naturaleza (analytical / operational / config)
+3. **Footer opcional** — metadata (fuente, timestamp)
+
+**Cómo cada tema resuelve el esqueleto por default:**
+
+| Tema | Header | Contenido |
+|------|--------|-----------|
+| ☀ Claro | Sub-nav sticky + hero blanco con título 96px + tagline 28px + link chevron | Secciones alternadas blanco↔negro o cards 2×2 + tech-specs table |
+| 🌙 Midnight | Top bar minimal + hero cifra 88-140px con text-shadow cyan glow | KPI band film-frame + tabla dark card #0F0F0F |
+| 🎨 Marfil | Top bar warm + hero centrado con eyebrow terracotta pill + tagline | Featurette azul bleed (para ideas destacadas) + detail card marfil #EEE7DA |
+
+Pestañas de naturaleza distinta (tablas dominantes, kanban, wizard, settings) tienen sus propias secciones abajo.
+
+---
+
+### 9.1 · Home Cliente
+
+**Datos:** venta mes actual + delta MoM + inventario + próximos pagos + promociones activas + minuta última visita.
+
+**Estructura común:** hero con nombre del cliente + logo + KPI principal (venta mes) + bento de 4 áreas (Sell In · Sell Out · Inventario · Pagos) + timeline del cliente (últimos eventos).
+
+**Claro:** hero blanco con nombre cliente 72px + venta del mes 140px + link "Ver análisis detallado ›". Debajo: sección negra alternada con 4 metric cards (los KPIs de cada área). Luego grid 2×2 de cards blancas/negras alternadas con tarjeta por área (Sell In, Sell Out, Inventario, Pagos) — cada una con su cifra hero y CTA.
+
+**Midnight:** top bar con dot del color del cliente + nombre. Hero cinemático: venta del mes en 140px cyan glow tenue. KPI band de 4 columnas (Sell In · Sell Out · Inventario · Pagos). Debajo, 4 cards `#0F0F0F` con timeline de eventos recientes.
+
+**Marfil:** hero warm con eyebrow terracotta pill "Cliente Q1 2026" + nombre 72px + venta del mes 140px. Featurette azul bleed con 4 métricas de negocio (venta / margen / rotación / cartera). Detail card marfil con timeline mensual.
+
+**Regla especial:** nunca mostrar el color de brand del cliente (Digitalife rojo, PCEL rojo, Dicotech cyan) como fondo ambiental. Sólo como dot 8px o strip 2px marcador. La paleta del tema domina.
+
+---
+
+### 9.2 · Análisis por Cliente _(vista dentro del cliente)_
+
+**Datos:** ranking de SKUs por venta/margen · concentración top-10 · promedio de días de inventario · mix de familias.
+
+**Estructura común:** hero con "análisis Q# del cliente X" + KPIs de concentración + gráficas de mix (bar/donut) + tabla ranking top SKUs.
+
+**Claro:** hero blanco centrado con "Los productos que mueven el negocio." + KPI dominante (participación del top-10). Después sección negra con 3 métricas de concentración. Grid 2×2 con card por familia. Tech-specs table con ranking al final.
+
+**Midnight:** hero cifra "60%" del top-10 en 200px + KPI band con Familias / SKUs / Concentración / Rotación. Tabla dark con ranking de SKUs, primer SKU en cyan glow (protagonista).
+
+**Marfil:** hero centrado + featurette azul "Los 10 SKUs que definen el trimestre" con lista de 10 en 3 columnas. Detail card con tabla ranking completa.
+
+---
+
+### 9.3 · Análisis Global _(agregado de 3 clientes)_
+
+**Datos:** comparativo entre 3 clientes · rentabilidad relativa · quién está creciendo · quién bajando.
+
+**Estructura común:** tabla comparativa dominante · 3 columnas por cliente con misma métrica en cada fila.
+
+**Claro:** hero blanco con título "Comparativo Q1 2026 · Digitalife · PCEL · Dicotech" + 3 metric cards alternadas negras/blancas (uno por cliente, cada card con su venta neta 88px + delta). Tabla tech-specs con las cuentas comparadas por columna.
+
+**Midnight:** hero con "3 clientes · $X.XM combinado" en 140px. KPI band de 3 celdas (una por cliente), cada una con hairline vertical separadora tipo film-frame. Tabla dark comparativa.
+
+**Marfil:** hero + featurette azul mostrando las 3 marcas alineadas (nombre + venta + delta cada una en su columna). Detail card marfil con tabla comparativa completa.
+
+---
+
+### 9.4 · Sell In
+
+**Datos:** ERP ventas por SKU/semana/mes · vs meta anual · Rebate SPIFF acumulado.
+
+**Estructura común:** cuota anual dominante + segmented year + tabla mensual de sell in por cliente.
+
+**Claro:** hero blanco "Sell In {año}." + BarraCuota gigante (progress bar sutil, 8px alto) + KPI hero de acumulado. Sección negra con 3 métricas (acumulado / restante / cuota). Grid 2×2 con card por mes destacado. Tech-specs table por SKU.
+
+**Midnight:** hero cifra acumulada + cuota como sub. KPI band mensual (Ene/Feb/Mar/Total). Tabla dark con sell in por SKU y sparkline.
+
+**Marfil:** hero + featurette azul "Al 87% de la cuota anual." con la barra de progreso en marfil sobre azul. Detail card con tabla SKU-mensual.
+
+---
+
+### 9.5 · Sell Out
+
+**Datos:** unidades y valor vendidas al canal · desglose semanal · por sucursal · por SKU.
+
+**Estructura común:** venta semanal dominante + minimap 52 semanas + tabla SKU × semana.
+
+**Claro:** hero blanco "Sell Out · última semana" + cifra venta semanal 140px + delta vs semana anterior. Sección negra con 3 métricas (semana / MoM / YoY). Grid 2×2 con cards por top-4 SKU. Tech-specs table con SKUs y sparklines.
+
+**Midnight:** hero cifra venta semana + KPI band 4 columnas (Semana / MoM / YoY / Ranking). Minimap 52 semanas en línea cyan sobre negro. Tabla dark SKU × semana.
+
+**Marfil:** hero + featurette azul con "Semana X · $Y.YM movidos" + 3 top SKUs. Detail card con tabla completa.
+
+**Regla especial:** el minimap de 52 semanas usa la misma paleta Sparkline (color = theme.text). Nunca escalones colorados por bloque.
+
+---
+
+### 9.6 · Estrategia de Precios
+
+**Datos:** SKU × versión de lista de precios · precio actual vs anterior · margen vs costo.
+
+**Estructura común:** tabla dominante con filas TODOS del mismo tamaño (regla establecida por el usuario). Sin thumbnails. Precio actualizado en display font.
+
+**Claro:** hero blanco "Estrategia de precios · marzo 2026" + KPI de cuántos SKUs actualizados. Sección negra con 3 métricas (SKUs activos / actualizados / con margen negativo). Tech-specs table dominante — Sin cards intermedias, la tabla ES el contenido.
+
+**Midnight:** top bar minimal, sin hero-cifra grande (la tabla es lo importante). Tabla dark protagonista con precio actual en cyan cuando cambió esta semana.
+
+**Marfil:** hero centrado + directo a la detail card marfil oscuro con la tabla. Sin featurette azul (no hay hero moment aquí).
+
+**Regla especial (usuario):** filas de tabla mismo tamaño exacto. Sin `min-height` variable. Padding celda idéntico en todas.
+
+---
+
+### 9.7 · Marketing
+
+**Datos:** campañas activas · inversión mensual · calendario de contenidos · resultados por campaña.
+
+**Estructura común:** calendario + KPI de inversión + tabla de campañas.
+
+**Claro:** hero blanco con inversión mes 88px + delta vs mes anterior. Sección negra con 3 métricas (activas / próximas / cerradas). Grid 2×2 con cards por tipo de campaña. Al pie: calendario de contenidos como tabla tech-specs (por día).
+
+**Midnight:** hero cifra inversión + KPI band 4 (activas / próximas / cerradas / ROI). Calendario en grid oscuro con dot cyan por día con contenido.
+
+**Marfil:** hero + featurette azul "La campaña del mes" con detalle destacado. Calendario en marfil oscuro debajo.
+
+---
+
+### 9.8 · Pagos
+
+**Datos:** pagos programados · vencidos · pagados este mes · desglose por método · calculadora Rebate/SPIFF.
+
+**Estructura común:** KPI de vencidos (dominante — el que urge) + tabla de pagos + sección calculadora colapsable.
+
+**Claro:** hero blanco con "Pagos · $X.XM vencidos" en 140px, delta rojo si sube. Sección negra con 3 métricas (vencidos / programados / pagados). Grid 2×2 por tipo. Tech-specs table de pagos con status pills. Calculadora en sección aparte al final (sin hero).
+
+**Midnight:** hero cifra vencidos en 140px, en rojo `#FF453A` con text-shadow rojo tenue (no cyan). KPI band. Tabla dark de pagos con hover cyan.
+
+**Marfil:** hero + featurette azul con "Cierre de mes · X pagos pendientes" con calendario compacto. Detail card marfil con tabla de pagos.
+
+**Regla especial:** cuando el KPI dominante es "vencidos" (negativo), Midnight cambia el glow del hero de cyan → rojo, pero **conserva la estructura**. El acento del tema (cyan) cede paso a la semántica cuando la información es urgente.
+
+---
+
+### 9.9 · Crédito y Cobranza
+
+**Datos:** cartera vencida · aging por rango de días · saldos por cliente/factura · comportamiento histórico.
+
+**Estructura común:** aging chart (barras stacked) + tabla facturas + KPI dominante = "días promedio cobro".
+
+**Claro:** hero blanco "DSO · X días" + delta. Sección negra con 4 buckets aging (0-30 / 31-60 / 61-90 / +90) como 4 metric cards. Grid 2×2 por cliente. Tech-specs table facturas.
+
+**Midnight:** hero cifra DSO + KPI band aging 4 columnas. Aging chart con barras horizontales negras + primer bucket (0-30) en cyan glow. Tabla dark facturas.
+
+**Marfil:** hero + featurette azul con visualización del aging (4 columnas de altura variable, marfil sobre azul). Detail card marfil con tabla.
+
+---
+
+### 9.10 · Inventario
+
+**Datos:** stock actual (Acteck + cliente) · en tránsito · roadmap SKU · días de inventario · pronta expiración.
+
+**Estructura común:** cifra total inventario + minimap por familia + tabla SKU con stock/rotación.
+
+**Claro:** hero blanco "Inventario · $X.XM" 140px. Sección negra 3 métricas (SKUs / rotación / días). Grid 2×2 por familia. Tech-specs table SKU × ubicación.
+
+**Midnight:** hero cifra + KPI band (Acteck / cliente / tránsito / total). Minimap de familias como pequeños rings cyan. Tabla dark SKU.
+
+**Marfil:** hero + featurette azul "Cobertura de 87 días de venta" con desglose por familia. Detail card marfil con tabla.
+
+**Regla especial:** las alertas de "stock crítico" y "por vencer" son NoticePills discretos (§6.4), nunca banners full-width.
+
+---
+
+### 9.11 · Forecast · S&OP
+
+**Datos:** venta actual vs plan · pronóstico próximos 6 meses · sesgo del pronóstico (bias).
+
+**Estructura común:** gráfica dominante (real vs plan vs forecast) + KPI de accuracy + tabla mensual.
+
+**Claro:** hero blanco "Forecast · precisión Y%" + tagline. Sección negra con 3 métricas (venta real / plan / forecast). Grid 2×2 con cards por horizonte (1M / 3M / 6M / 12M). Tech-specs table mensual.
+
+**Midnight:** hero cifra accuracy + KPI band + gráfica lineal grande (real solid + plan dashed + forecast dotted, todo en cyan tenue con el tramo actual full opacity). Tabla dark mensual.
+
+**Marfil:** hero + featurette azul "Cerraremos el año en $X.XM (pronóstico)" con gráfica invertida (línea marfil sobre azul). Detail card marfil con tabla proyectada.
+
+---
+
+### 9.12 · Tracking Pedidos _(órdenes de compra)_
+
+**Datos:** órdenes activas · próximos arribos · retrasadas · tabla de embarques con status.
+
+**Estructura común:** timeline dominante (kanban-like por status) + tabla de pedidos.
+
+**Claro:** hero blanco "X pedidos en tránsito." + delta vs semana anterior. Sección negra con 4 metric cards por status (Confirmado / Producción / Tránsito / Recibido). Kanban board con 4 columnas alternadas negras/blancas. Al pie: tech-specs table de embarques.
+
+**Midnight:** hero cifra pedidos activos + KPI band 4 status. Kanban en cards `#0F0F0F` con dot de color por status (cyan = tránsito). Tabla dark de embarques.
+
+**Marfil:** hero + featurette azul "Próximo arribo: MMM DD · $X.XM" (el que urge). Kanban compacto marfil. Detail card marfil con tabla.
+
+**Regla especial:** este es el único caso donde un layout **kanban horizontal** es aceptado — normalmente evitamos kanbans, pero acá el status del pedido es su naturaleza.
+
+---
+
+### 9.13 · Propuestas _(wizard de armado)_
+
+**Datos:** wizard de 5 pasos (Cliente → Contexto → Catálogo → Ajustes → Revisar) + preview + export Excel.
+
+**Estructura común:** este NO sigue el patrón hero-cifra. Es un wizard con progress bar + form central + preview lateral.
+
+**Claro:** landing blanca inicial con hero "Nueva propuesta." + botón CTA azul grande "Iniciar ›". Al iniciar: layout 2-col (form 60% + preview 40%). Progress bar 5-steps horizontal apple.com estilo (dots numerados con línea que se llena). Cada paso es una sección con hero pequeño + inputs. Al final: pantalla de export con vista previa del Excel.
+
+**Midnight:** landing con hero cyan "Nueva propuesta." + botón cyan. Wizard en card `#0F0F0F` con progress dots cyan. Preview lateral en card separada.
+
+**Marfil:** landing hero centrado + featurette azul explicando "el flujo". Wizard en card marfil con progress bar en 5 pasos usando terracotta como color activo.
+
+**Regla especial:** el wizard es Apple-natural — Apple usa este pattern en Apple ID setup, iCloud onboarding, App Store checkout. Progress bar debe estar sticky arriba del wizard.
+
+---
+
+### 9.14 · Resumen de Clientes
+
+**Datos:** grid con card por cliente · venta mes / delta / status / próximo evento.
+
+**Estructura común:** grid de 3-4 cards de cliente, cada uno con acceso rápido drill-down.
+
+**Claro:** hero blanco "Tus clientes." + subtitle "Resumen del cierre {mes}." Grid 3 col con card por cliente, alternando la 2da como negra (visual rhythm). Cada card: nombre + venta mes 44px + delta + link "Ver detalle ›".
+
+**Midnight:** grid 3 col de cards `#0F0F0F` con dot de color del cliente arriba izquierda + venta 64px + delta cyan si positivo. Sin hero cifra global.
+
+**Marfil:** hero + featurette azul con "3 clientes · $X.XM combinado" agregado. Grid marfil oscuro debajo.
+
+---
+
+### 9.15 · Visión General _(dashboard ejecutivo)_
+
+**Datos:** un shot único con todos los KPIs críticos del negocio en una sola vista.
+
+**Estructura común:** bento denso — muchas cifras visibles a la vez.
+
+**Claro:** hero blanco pequeño (título 40px, sin cifra dominante — el bento es el hero). Bento 4 col × 3 filas con cifras y sparklines. Sección negra con 3 highlights del mes. Al pie: tech-specs table resumida.
+
+**Midnight:** top bar minimal. Bento 4×3 en cards `#0F0F0F` con hairlines internas separadoras. Sin hero cifra — la cifra principal (UAII) va en la card top-izquierda 2×2. Cyan glow sólo en la UAII.
+
+**Marfil:** hero + featurette azul con las 3 métricas de negocio. Bento marfil oscuro debajo.
+
+**Regla especial:** esta pestaña es data-first, no storytelling. Puede tener MÁS densidad que el estándar — es la excepción a "un solo hero por pantalla".
+
+---
+
+### 9.16 · Administración Interna _(Pendientes & Calendario)_
+
+**Datos:** tareas pendientes · calendario de eventos · notas · reuniones agendadas.
+
+**Estructura común:** layout 2-col: pendientes (kanban lite) + calendario mes.
+
+**Claro:** hero blanco "Tu semana." + KPI "X pendientes." Sección negra con 3 métricas (por vencer / esta semana / atrasados). Layout 2-col: pendientes columna izq + calendario columna der. Sin tech-specs table (data operacional, no analítica).
+
+**Midnight:** hero cifra pendientes + KPI band. 2-col dark con pendientes en cards `#0F0F0F` y calendario en grid dark con hover cyan.
+
+**Marfil:** hero + featurette azul "Foco de la semana." con 3 items destacados. 2-col marfil debajo.
+
+---
+
+### 9.17 · Telemetría _(Actividad del equipo)_
+
+**Datos:** eventos del equipo (logins, cambios, uploads, actividad por usuario), evaluaciones mensuales.
+
+**Estructura común:** feed cronológico + resumen por usuario + panel de evaluaciones.
+
+**Claro:** hero blanco "Actividad del equipo." + KPI eventos hoy. Sección negra con 3 métricas (usuarios activos / eventos hoy / evaluaciones pendientes). Grid 2×2 por área (Sell / Cobranza / Marketing / Config). Feed cronológico como tech-specs table.
+
+**Midnight:** hero cifra eventos + KPI band 4 categorías. Feed en cards `#0F0F0F` con dot cyan tipo notification.
+
+**Marfil:** hero + featurette azul con "Los 5 usuarios más activos esta semana." Feed en marfil.
+
+**Regla especial:** el feed debe respetar los mismos íconos por sección definidos en §4 (ícono por pestaña visitada).
+
+---
+
+### 9.18 · Axon de México
+
+**Datos:** aún vacía. Placeholder con "Próximamente".
+
+**Estructura común:** empty state limpio.
+
+**Los 3 temas:** hero centrado con ícono `Building2` 48px del color del tema + "Axon de México" + subtítulo "En construcción". Sin bento ni tabla. Un solo elemento visual centrado.
+
+---
+
+### 9.19 · Configuración
+
+**Datos:** gestión de usuarios · permisos granulares · selector de apariencia (temas).
+
+**Estructura común:** sin hero-cifra. Es un panel de settings tipo apple.com/account.
+
+**Claro:** header simple "Configuración." + subtitle. Selector de apariencia como bloque destacado arriba (3 preview cards). Debajo: formulario de gestión de usuarios como cards blancas con inputs apple.com estilo (labels flotantes, pill buttons). Tabla de usuarios como tech-specs.
+
+**Midnight:** header + selector de apariencia con preview cards en dark. Formulario en cards `#0F0F0F`. Tabla dark de usuarios.
+
+**Marfil:** header + selector en cards marfil. Sin featurette (no aplica). Formulario en marfil oscuro.
+
+**Regla especial:** el selector de tema DEBE mostrar los 3 previews con render real de cada uno. Nunca colored dots o iconografía — se muestra el layout real en miniatura.
+
+---
+
+### 9.20 · Reporte
+
+**Datos:** super-admin only. Vista consolidada de cierre para descargar/imprimir.
+
+**Estructura común:** documento formal print-ready.
+
+**Los 3 temas:** IGNORA los layouts propios y usa una versión "print-first" para todos: fondo blanco puro, tipografía negra, hairlines. El tema activo del usuario NO se aplica aquí — es un documento único imprimible. Único caso donde rompemos la regla de "consistente en los 3 temas".
+
+**Regla especial:** cuando el usuario imprime desde esta pestaña, el CSS `@media print` produce PDF idéntico independientemente del tema. Es un "documento", no una pantalla.
+
+---
+
+### Pestañas dentro de un cliente activo _(Marketing, Pagos, Cartera del cliente)_
+
+Cuando el usuario está en un cliente específico (ej. Digitalife → Marketing), la pestaña **hereda** la spec de la pestaña global equivalente (§9.7 Marketing, §9.8 Pagos, §9.9 Crédito y Cobranza) con estas adiciones:
+
+- El top-bar/subnav muestra el nombre del cliente antes del título ("Digitalife · Marketing")
+- El dot 8px del color del cliente aparece a la izquierda del título
+- El resto del layout es idéntico
 
 ---
 
