@@ -12,6 +12,7 @@ import {
   puedeVerPestanaCliente,
   puedeVerPestanaGlobal,
 } from '../lib/permisos';
+import { useTheme } from '../lib/themeContext';
 
 // Mapping entre ids del menú y ids del schema de permisos globales
 // (ej: 'resumenClientes' en la UI → 'resumen_clientes' en permisos JSON).
@@ -170,6 +171,7 @@ const saveExpanded = (obj) => {
 //  COMPONENTE PRINCIPAL
 // ────────────────────────────────────────────────────────────
 export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerrarSesion, perfilUsuario }) {
+  const { theme } = useTheme();
   const [expanded, setExpanded] = useState(loadExpanded);
   const [modoPresent, setModoPresent] = useState(false);
   useEffect(() => { saveExpanded(expanded); }, [expanded]);
@@ -222,14 +224,15 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
-          {/* Logo mark — cuadrado con inicial */}
+          {/* Logo mark — sólido, sin gradiente. Estilo por tema. */}
           <div style={{
             width: 30, height: 30, borderRadius: 8,
-            background: 'linear-gradient(135deg, #1D1D1F, #2C2C2E)',
+            background: theme.key === 'midnight' ? theme.accent : theme.text,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#F5F5F7', fontWeight: 700, fontSize: 13, letterSpacing: '-0.02em',
+            color: theme.key === 'midnight' ? '#000' : theme.textOnDark || '#F5F5F7',
+            fontWeight: 700, fontSize: 13, letterSpacing: '-0.02em',
             fontFamily: '"SF Pro Display", sans-serif',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+            boxShadow: theme.key === 'midnight' ? `0 0 12px ${theme.accentGlow || 'rgba(100,210,255,0.4)'}` : 'none',
           }}>a</div>
           <div style={{ minWidth: 0 }}>
             <div style={{
@@ -324,11 +327,17 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
           }}>
             <div style={{
               width: 34, height: 34, flexShrink: 0, borderRadius: 999,
-              background: 'linear-gradient(135deg, #007AFF, #5856D6)',
-              color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: theme.key === 'midnight'
+                ? (theme.accentBg || 'rgba(100,210,255,0.15)')
+                : theme.accent,
+              color: theme.key === 'midnight' ? theme.accent : (theme.textOnDark || 'white'),
+              border: theme.key === 'midnight' ? `1px solid ${theme.accent}` : 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontWeight: 600, fontSize: 13.5, letterSpacing: '-0.015em',
               fontFamily: '"SF Pro Display", sans-serif',
-              boxShadow: '0 2px 6px rgba(0,113,227,0.28), inset 0 1px 0 rgba(255,255,255,0.15)',
+              boxShadow: theme.key === 'midnight'
+                ? `0 0 12px ${theme.accentGlow || 'rgba(100,210,255,0.3)'}`
+                : 'none',
             }}>
               {(perfilUsuario.nombre || 'U').charAt(0).toUpperCase()}
             </div>
@@ -615,18 +624,28 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
   );
 }
 
-// ────────── SidebarButton — pill Apple con spring + haptic-like ──────────
+// ────────── SidebarButton — pill Apple con spring + variantes por tema ──────────
 function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled, onClick, hint }) {
+  const { theme } = useTheme();
   const [hover, setHover] = useState(false);
   const [pressed, setPressed] = useState(false);
+
+  const isMidnight = theme.key === 'midnight';
+  const isMarfil = theme.key === 'marfil';
+
   const bg = active
-    ? 'var(--t-sidebarActive, rgba(0,113,227,0.10))'
-    : hover && !disabled ? 'rgba(127,127,127,0.08)' : 'transparent';
+    ? theme.sidebarActive
+    : hover && !disabled ? (isMidnight ? 'rgba(255,255,255,0.05)' : 'rgba(127,127,127,0.08)') : 'transparent';
+
+  // Marfil: cuando el item está activo, mantenemos el color de texto normal
+  // pero cambiamos el peso; el acento va en el ícono.
   const color = active
-    ? 'var(--t-sidebarActiveText, #0071E3)'
-    : disabled
-    ? 'var(--t-sidebarTextMuted, #86868B)'
-    : 'var(--t-sidebarText, #1D1D1F)';
+    ? (isMarfil ? theme.sidebarText : theme.sidebarActiveText)
+    : disabled ? theme.sidebarTextMuted : theme.sidebarText;
+
+  const iconColor = active
+    ? (isMarfil ? (theme.sidebarActiveIcon || theme.orange) : theme.sidebarActiveText)
+    : color;
 
   // Apple spring bounce
   const scale = pressed ? 0.97 : 1;
@@ -642,6 +661,8 @@ function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled,
       style={{
         width: '100%', display: 'flex', alignItems: 'center', gap: 11,
         padding: '9px 12px', borderRadius: 9, border: 'none',
+        // Midnight active: barra vertical cyan a la izquierda
+        borderLeft: active && isMidnight ? `2px solid ${theme.accent}` : '2px solid transparent',
         background: bg, color,
         fontSize: 13.5, fontWeight: active ? 600 : 400,
         letterSpacing: '-0.005em',
@@ -651,19 +672,21 @@ function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled,
         transition: 'background 220ms cubic-bezier(0.32, 0.72, 0, 1), color 200ms, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1)',
         opacity: disabled ? 0.4 : 1,
         position: 'relative',
+        // Midnight active: glow tenue del texto
+        textShadow: active && isMidnight ? `0 0 8px ${theme.accentGlow || 'rgba(100,210,255,0.4)'}` : 'none',
       }}>
       {leading}
       {Icon && <Icon style={{
         width: 16, height: 16, strokeWidth: 1.75, flexShrink: 0,
+        color: iconColor,
         opacity: active ? 1 : 0.8,
-        transition: 'opacity 200ms',
+        transition: 'opacity 200ms, color 200ms',
       }} />}
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
       {hint && !active && (
         <span style={{
           fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em',
-          color: 'var(--t-sidebarTextMuted, #86868B)', fontWeight: 700,
-          opacity: 0.7,
+          color: theme.sidebarTextMuted, fontWeight: 700, opacity: 0.7,
         }}>{hint}</span>
       )}
       {trailing && (
