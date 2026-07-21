@@ -1257,7 +1257,7 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
 
           {/* Sin embarque asignado */}
           {sinEmbarque && Number(sinEmbarque.valor_mxn) > 0 && (
-            <div className="mt-4 p-3 rounded-lg flex items-center justify-between gap-3" style={{ background: cardBgFor(PALETTE.gray), border: `1px dashed ${isDark ? theme.border : PALETTE.gray.mid}`, fontFamily: TYPO.fontText }}>
+            <div className="mt-4 p-3 rounded-lg flex items-center justify-between gap-3" style={{ background: cardBgFor(PALETTE.gray), border: `1px dashed ${theme.border}`, fontFamily: TYPO.fontText }}>
               <div>
                 <p className="text-[11px] m-0 font-medium" style={{ color: cardTitleFor(PALETTE.gray) }}>
                   {fmtInt(sinEmbarque.pos)} POs sin embarque asignado en Master
