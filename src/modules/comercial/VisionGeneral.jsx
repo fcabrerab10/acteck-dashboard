@@ -686,11 +686,11 @@ function BloqueBento({ item, expandido, onClick, puedeExpandir }) {
         fontFamily: TYPO.fontText,
       }}>
       <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
-          <span style={{ width: 10, height: 10, borderRadius: 5, background: palette.mid, display: 'inline-block' }} />
-          <p style={{ fontSize: 12, margin: 0, color: theme.text, fontWeight: 500, lineHeight: 1.2 }}>{item.key}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <IconBadge icon={TrendingUp} color={palette.mid} size={28} />
+          <p style={{ fontSize: 12, margin: 0, color: theme.text, fontWeight: 500, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.key}</p>
         </div>
-        <span style={{ fontSize: 10, padding: '1px 8px', background: pillBg, borderRadius: 10, color: theme.textMuted, fontWeight: 500 }}>
+        <span style={{ fontSize: 10, padding: '1px 8px', background: pillBg, borderRadius: 10, color: theme.textMuted, fontWeight: 500, flexShrink: 0 }}>
           {item.share.toFixed(1)}%
         </span>
       </div>
@@ -1194,8 +1194,8 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
           )}
 
           {/* Tiles por estatus */}
-          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">Por estatus actual</p>
-          <div className="grid gap-1.5 mb-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, marginBottom: 8, fontFamily: TYPO.fontText }}>Por estatus actual</p>
+          <div className="grid gap-2 mb-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
             {BUCKET_ORDER.map((k) => {
               const cfg = BUCKET_LABELS[k];
               const r = resumenMap.get(k);
@@ -1203,12 +1203,16 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
               const piezas = Number(r?.piezas) || 0;
               const pos = Number(r?.pos) || 0;
               return (
-                <div key={k} style={{ background: cfg.palette.bg, borderRadius: 10, padding: '10px 12px' }}>
-                  <p style={{ fontSize: 9, color: cfg.palette.mid, margin: 0, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{cfg.label}</p>
-                  <p style={{ fontSize: 18, fontWeight: 500, margin: '2px 0 0', color: cfg.palette.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+                <div key={k} style={{
+                  background: theme.surface, border: `1px solid ${theme.border}`,
+                  borderLeft: `3px solid ${cfg.palette.mid}`,
+                  borderRadius: 12, padding: '10px 12px', fontFamily: TYPO.fontText,
+                }}>
+                  <p style={{ fontSize: 9, color: theme.textMuted, margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{cfg.label}</p>
+                  <p style={{ fontSize: 18, fontWeight: 600, margin: '4px 0 0', color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
                     {val > 0 ? fmtCompact(val) : '—'}
                   </p>
-                  <p style={{ fontSize: 10, color: cfg.palette.mid, margin: '1px 0 0', fontVariantNumeric: 'tabular-nums' }}>
+                  <p style={{ fontSize: 10, color: theme.textMuted, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>
                     {fmtInt(piezas)} pzs · {pos} PO
                   </p>
                 </div>
@@ -1696,17 +1700,24 @@ function SellOutBloque({
             const meta = CANAL_SELLOUT_META[c.key];
             const pal = meta.palette;
             return (
-              <div key={c.key} className="rounded-xl p-3" style={{ background: pal.bg }}>
-                <div className="text-[10px] font-medium uppercase tracking-wider" style={{ color: pal.mid }}>
-                  {meta.label}
+              <div key={c.key} style={{
+                background: theme.surface, border: `1px solid ${theme.border}`,
+                borderLeft: `3px solid ${pal.mid}`,
+                borderRadius: 14, padding: 14, fontFamily: TYPO.fontText,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                  <IconBadge icon={ShoppingBag} color={pal.mid} size={32} />
+                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted }}>
+                    {meta.label}
+                  </div>
                 </div>
-                <div className="text-2xl font-medium mt-1" style={{ color: pal.text }}>
+                <div style={{ fontSize: 24, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em', lineHeight: 1.1, fontFamily: TYPO.fontDisplay }}>
                   {fmtCompact(c.importe)}
                 </div>
-                <div className="text-[11px] mt-0.5" style={{ color: pal.mid }}>
-                  {fmtPct(c.share)} del total{c.deltaYoY != null && ` · ${fmtPctDelta(c.deltaYoY)} YoY`}
+                <div style={{ fontSize: 11, marginTop: 2, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtPct(c.share)} del total{c.deltaYoY != null && <> · <span style={{ color: c.deltaYoY >= 0 ? theme.green : theme.red, fontWeight: 500 }}>{fmtPctDelta(c.deltaYoY)} YoY</span></>}
                 </div>
-                <div className="text-[10px] mt-2 pt-2 border-t" style={{ borderColor: pal.soft || pal.mid + '30', color: pal.mid }}>
+                <div style={{ fontSize: 10, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${theme.divider || theme.border}`, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
                   {fmtInt(c.clientes)} clientes · {fmtInt(c.skus)} SKUs
                 </div>
               </div>
