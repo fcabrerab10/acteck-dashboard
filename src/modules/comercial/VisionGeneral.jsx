@@ -61,6 +61,149 @@ function IconBadge({ icon: Icon, color, size = 40 }) {
   );
 }
 
+// ────────── MiniKpiRow · 3 cards horizontales 84px · Inventario · Cartera · Sell Out ──────────
+function MiniKpiRow({ inventario, ventaProm, sellOutMes, sellMensual, anio }) {
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
+  const invBg = theme.surfaceInverse || (isDark ? '#F5F5F7' : '#000000');
+  const invText = theme.textOnInverse || (isDark ? '#1D1D1F' : '#F5F5F7');
+  const invMuted = isDark ? 'rgba(29,29,31,0.7)' : 'rgba(245,245,247,0.72)';
+  const invDivider = isDark ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.14)';
+  const border = `1px solid ${theme.border}`;
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
+  const pink = theme.pink || '#FF2D55';
+
+  // ── Ring cobertura
+  const dias = (ventaProm > 0 && inventario?.valor_inventario)
+    ? Math.round((Number(inventario.valor_inventario) / ventaProm) * 30 / 30) // días equivalentes
+    : null;
+  const diasCap = dias == null ? null : Math.min(90, dias);
+  const ringPct = diasCap == null ? 0 : Math.min(1, diasCap / 45);
+  const ringCol = dias == null ? theme.textMuted : (dias < 15 ? red : dias > 60 ? theme.orange || '#FF9500' : green);
+  const R = 15, C = 2 * Math.PI * R;
+  const ringDash = C, ringOffset = C * (1 - ringPct);
+
+  // ── Sparkline sellout últimos 6 meses
+  const sparkPts = (() => {
+    if (!sellMensual?.length) return [];
+    const byMes = {};
+    sellMensual.forEach((r) => { const m = Number(r.mes); byMes[m] = (byMes[m] || 0) + (Number(r.importe) || 0); });
+    const meses = Object.keys(byMes).map(Number).sort((a, b) => a - b);
+    return meses.slice(-6).map((m) => byMes[m]);
+  })();
+  const sparkPath = (() => {
+    if (sparkPts.length < 2) return '';
+    const max = Math.max(...sparkPts, 0.001);
+    const min = Math.min(...sparkPts);
+    const range = max - min || 1;
+    return sparkPts.map((v, i) => {
+      const x = (i / (sparkPts.length - 1)) * 72;
+      const y = 20 - ((v - min) / range) * 16;
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+  })();
+  const sparkLast = sparkPts.length ? { x: 72, y: 20 - ((sparkPts[sparkPts.length - 1] - Math.min(...sparkPts)) / (Math.max(...sparkPts) - Math.min(...sparkPts) || 1)) * 16 } : null;
+
+  const CardShell = ({ inverse, children }) => (
+    <div style={{
+      background: inverse ? invBg : theme.surface,
+      color: inverse ? invText : theme.text,
+      border: inverse ? 'none' : border,
+      borderRadius: 16, padding: '12px 14px',
+      display: 'flex', alignItems: 'center', gap: 12, minHeight: 84,
+      fontFamily: TYPO.fontText,
+    }}>{children}</div>
+  );
+
+  return (
+    <div className="grid grid-cols-3 gap-2.5">
+      {/* ① Inventario · ring cobertura */}
+      <CardShell>
+        <IconBadge icon={Package} color={PALETTE.purple.mid} size={32} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, margin: 0, color: theme.textMuted }}>Inventario en stock</p>
+          <p style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', margin: '2px 0 0', color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
+            {fmtCompact(inventario?.valor_inventario)}
+          </p>
+          <p style={{ fontSize: 11, color: theme.textMuted, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>
+            {fmtInt(inventario?.skus_con_stock)} SKUs
+          </p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+          <div style={{ width: 36, height: 36, position: 'relative', color: ringCol }}>
+            <svg width="36" height="36" style={{ transform: 'rotate(-90deg)' }}>
+              <circle cx="18" cy="18" r={R} strokeWidth="3.5" fill="none" stroke={theme.border} />
+              <circle cx="18" cy="18" r={R} strokeWidth="3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeDasharray={ringDash} strokeDashoffset={ringOffset} />
+            </svg>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>
+              {dias != null ? `${dias}d` : '—'}
+            </div>
+          </div>
+          <span style={{ fontSize: 10, color: theme.textMuted }}>cobertura</span>
+        </div>
+      </CardShell>
+
+      {/* ② Cartera · placeholder aging INVERSE */}
+      <CardShell inverse>
+        <IconBadge icon={Receipt} color={theme.teal || '#5AC8FA'} size={32} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, margin: 0, color: invMuted }}>Cartera por cobrar</p>
+          <p style={{ fontSize: 22, fontWeight: 500, margin: '2px 0 0', color: invText, opacity: 0.7, fontFamily: TYPO.fontDisplay, letterSpacing: '-0.02em', lineHeight: 1 }}>
+            Próximamente
+          </p>
+          <p style={{ fontSize: 11, color: invMuted, margin: '2px 0 0', fontStyle: 'italic' }}>
+            Pendiente ingesta estados_cuenta
+          </p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0, minWidth: 84 }}>
+          <div style={{ display: 'flex', height: 5, borderRadius: 999, overflow: 'hidden', background: invDivider, width: 80 }}>
+            <span style={{ display: 'block', height: '100%', width: '60%', background: green, opacity: 0.5 }} />
+            <span style={{ display: 'block', height: '100%', width: '20%', background: theme.orange || '#FF9500', opacity: 0.5 }} />
+            <span style={{ display: 'block', height: '100%', width: '12%', background: pink, opacity: 0.5 }} />
+            <span style={{ display: 'block', height: '100%', width: '8%', background: red, opacity: 0.5 }} />
+          </div>
+          <span style={{ fontSize: 10, color: invMuted }}>aging</span>
+        </div>
+      </CardShell>
+
+      {/* ③ Sell Out · mini spark 6m */}
+      <CardShell>
+        <IconBadge icon={ShoppingBag} color={pink} size={32} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, margin: 0, color: theme.textMuted }}>
+            Sell Out {MESES_LBL[sellOutMes.mesEfectivo - 1]}
+          </p>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 2 }}>
+            <p style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', margin: 0, color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
+              {fmtCompact(sellOutMes.total)}
+            </p>
+            {sellOutMes.deltaYoY != null && (
+              <span style={{ fontSize: 11, fontWeight: 500, color: sellOutMes.deltaYoY >= 0 ? green : red, fontVariantNumeric: 'tabular-nums' }}>
+                {sellOutMes.deltaYoY >= 0 ? '↑' : '↓'} {Math.abs(sellOutMes.deltaYoY).toFixed(1)}%
+              </span>
+            )}
+          </div>
+          <p style={{ fontSize: 11, color: theme.textMuted, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>
+            YTD {fmtCompact(sellOutMes.ytd)}
+          </p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
+          {sparkPts.length >= 2 ? (
+            <svg width="72" height="22" style={{ display: 'block' }}>
+              <path d={sparkPath} fill="none" stroke={pink} strokeWidth="1.5" strokeLinecap="round" />
+              {sparkLast && <circle cx={sparkLast.x} cy={sparkLast.y} r="2" fill={pink} />}
+            </svg>
+          ) : (
+            <div style={{ width: 72, height: 22 }} />
+          )}
+          <span style={{ fontSize: 10, color: theme.textMuted }}>6 meses</span>
+        </div>
+      </CardShell>
+    </div>
+  );
+}
+
 // ────────── Formateadores ──────────
 const fmtCompact = (n) => {
   if (n == null || isNaN(n)) return '—';
@@ -425,28 +568,14 @@ export default function VisionGeneral() {
       {/* HERO 3-col: Facturación grande · Mes inverse · Run-rate */}
       <HeroCard kpis={kpis} anio={anio} mesMaxLabel={MESES_FULL[mesMax - 1]} />
 
-      {/* KPIs mini: Inventario / Cartera INVERSE / Sell Out */}
-      <div className="grid grid-cols-3 gap-3.5">
-        <BentoKpi palette={PALETTE.purple} icon={Package} label="Inventario en stock"
-          valor={fmtCompact(inventario?.valor_inventario)}
-          delta={null}
-          subtitulo={
-            <span>
-              {fmtInt(inventario?.skus_con_stock)} SKUs ·{' '}
-              {kpis.ventaYTD > 0 && inventario?.valor_inventario
-                ? Math.round((Number(inventario.valor_inventario) / (kpis.ventaYTD / mesMax)) ) + ' días cobertura'
-                : ''}
-            </span>
-          } />
-        <ProximamenteKpi icon={Receipt} label="Cartera por cobrar"
-          nota="En construcción" inverse />
-        <BentoKpi palette={PALETTE.coral} icon={ShoppingBag}
-          label={`Sell Out ${MESES_LBL[sellOutMes.mesEfectivo - 1]}${sellOutMes.esEnCurso ? ' (último cerrado)' : ''}`}
-          valor={fmtCompact(sellOutMes.total)}
-          delta={sellOutMes.deltaYoY}
-          deltaLabel={`vs ${MESES_LBL[sellOutMes.mesEfectivo - 1]} ${anio - 1}`}
-          subtitulo={<span>YTD {fmtCompact(sellOutMes.ytd)}</span>} />
-      </div>
+      {/* KPIs mini · Compacto B · horizontal 84px con viz derecha */}
+      <MiniKpiRow
+        inventario={inventario}
+        ventaProm={kpis.ventaYTD > 0 ? kpis.ventaYTD / mesMax : 0}
+        sellOutMes={sellOutMes}
+        sellMensual={sellMensual}
+        anio={anio}
+      />
 
       {/* Toggle dimensión */}
       <div className="flex items-center gap-3 px-1 mt-2 flex-wrap">
