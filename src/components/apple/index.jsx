@@ -74,39 +74,37 @@ export function AppleH3({ children, style }) {
 }
 
 // ─── Number displays reusables ───
-export function AppleKpiValue({ children, size = 'md', gradient = false, style }) {
+// Sin `gradient` prop — el sistema prohíbe gradientes en cifras (anti-pattern §18).
+// Si se necesita destacar una cifra, usar `accent` con un color sólido del tema.
+export function AppleKpiValue({ children, size = 'md', accent, style }) {
   const { theme } = useTheme();
   const t = size === 'lg' ? TYPO.kpiLg : size === 'total' ? TYPO.total : TYPO.kpiMd;
   return (
     <div style={{
       ...typoStyle(t),
       fontVariantNumeric: 'tabular-nums',
-      color: gradient ? 'transparent' : theme.text,
+      color: accent || theme.text,
       margin: '12px 0 8px',
-      ...(gradient ? {
-        background: `linear-gradient(135deg, ${theme.orange}, ${theme.pink})`,
-        WebkitBackgroundClip: 'text', backgroundClip: 'text',
-      } : {}),
       ...style,
     }}>{children}</div>
   );
 }
 
-// ─── Card base — se adapta al tema: flat en airy, dark border en puro, glass blur en vibrant ───
+// ─── Card base — flat en Claro/Marfil, dark border en Midnight ───
+// Opcional accent: strip 3px arriba con color, usa cuando el card necesita
+// diferenciarse por semántica (ej. sección de alertas).
 export function AppleCard({ children, style, padding = 26, hoverable = false, onClick, accent }) {
   const { theme } = useTheme();
   const [hover, setHover] = React.useState(false);
-  const isVibrant = theme.mode === 'vibrant';
+  const isDark = theme.mode === 'dark';
   return (
     <div onClick={onClick}
       onMouseEnter={() => hoverable && setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
         background: theme.surface,
-        backdropFilter: isVibrant ? 'blur(20px) saturate(180%)' : undefined,
-        WebkitBackdropFilter: isVibrant ? 'blur(20px) saturate(180%)' : undefined,
-        border: theme.mode === 'dark' ? `1px solid ${theme.border}`
-              : isVibrant ? `1px solid ${theme.border}` : 'none',
+        // Midnight requiere border para separar del bg negro; Claro/Marfil usan color de surface para separar
+        border: isDark ? `1px solid ${theme.border}` : 'none',
         borderRadius: 22, padding,
         boxShadow: hover ? theme.shadowHover : theme.shadow,
         transition: 'box-shadow 240ms, transform 200ms',
@@ -117,8 +115,7 @@ export function AppleCard({ children, style, padding = 26, hoverable = false, on
         overflow: 'hidden',
         ...style,
       }}>
-      {/* Strip de color en vibrant si viene accent */}
-      {isVibrant && accent && (
+      {accent && (
         <div style={{
           position: 'absolute', top: 0, left: padding, right: padding, height: 3,
           borderRadius: '0 0 4px 4px', background: accent,
@@ -156,21 +153,13 @@ export function AppleKpi({ label, value, sub, delta, size = 'md', accent, dark }
   const textCol = dark ? theme.heroCardText : theme.text;
   const mutedCol = dark ? theme.textMutedOnDark : theme.textMuted;
 
-  let valueStyle = {
-    fontFamily: '-apple-system, "SF Pro Display", sans-serif',
+  const valueStyle = {
+    fontFamily: TYPO.fontDisplay,
     fontSize: s.val, fontWeight: 600, letterSpacing: s.letter,
     lineHeight: 1, margin: '12px 0 6px',
     fontVariantNumeric: 'tabular-nums',
-    color: textCol,
+    color: accent || textCol,
   };
-  if (accent === 'gradient') {
-    valueStyle = { ...valueStyle,
-      background: `linear-gradient(135deg, ${theme.orange}, ${theme.pink})`,
-      WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
-    };
-  } else if (accent) {
-    valueStyle = { ...valueStyle, color: accent };
-  }
 
   return (
     <div>
