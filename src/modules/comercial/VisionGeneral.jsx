@@ -70,6 +70,8 @@ function colorCanalIOS(theme, key, fallbackIdx = 0) {
     'MAYOREO':              theme.purple,
     'DISTRIBUIDOR':         theme.accent,
     'E-COMMERCE':           theme.teal,
+    'VENTA DIRECTA':        theme.teal,
+    'DIRECTO':              theme.teal,
     'RETAIL REPRESENTADOS': theme.orange,
     'RETAIL PROPIOS':       theme.pink,
     'MOSTRADOR':            theme.green,
@@ -1957,6 +1959,437 @@ const CANAL_SELLOUT_META = {
   directo:      { label: 'Venta directa', palette: PALETTE.coral, nota: 'Sin lag · Mostrador · E-com · Marketplaces' },
 };
 
+// ────────── Helpers para Sell Out block ──────────
+
+const CANAL_SELLOUT_LBL = { mayoreo: 'Mayoreo', distribuidor: 'Distribuidor', directo: 'Venta Directa' };
+
+function SellOutKpiRow({ sellOutMes, sellMayoristas, canalRows, anio }) {
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
+  const invBg = theme.surfaceInverse || (isDark ? '#F5F5F7' : '#000000');
+  const invText = theme.textOnInverse || (isDark ? '#1D1D1F' : '#F5F5F7');
+  const invMuted = isDark ? 'rgba(29,29,31,0.7)' : 'rgba(245,245,247,0.72)';
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
+  const clientesTotal = canalRows.reduce((s, r) => s + (Number(r.clientes) || 0), 0);
+
+  const Card = ({ inverse, badgeBg, badgeCol, Icon, eyebrow, kpi, delta, deltaCol, sub }) => (
+    <div style={{
+      background: inverse ? invBg : theme.surface,
+      color: inverse ? invText : theme.text,
+      border: inverse ? 'none' : `1px solid ${theme.border}`,
+      borderRadius: 14, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10,
+      minHeight: 52, fontFamily: TYPO.fontText,
+    }}>
+      <div style={{
+        width: 26, height: 26, borderRadius: 8, background: badgeBg, color: badgeCol,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>
+        <Icon style={{ width: 13, height: 13 }} strokeWidth={1.8} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, margin: 0, color: inverse ? invMuted : theme.textMuted }}>{eyebrow}</p>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 2 }}>
+          <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', margin: 0, fontVariantNumeric: 'tabular-nums', lineHeight: 1, color: inverse ? invText : theme.text }}>{kpi}</p>
+          {delta && <span style={{ fontSize: 11, fontWeight: 500, color: deltaCol, fontVariantNumeric: 'tabular-nums' }}>{delta}</span>}
+          {sub && !delta && <span style={{ fontSize: 11, color: inverse ? invMuted : theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{sub}</span>}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="grid grid-cols-3 gap-2.5">
+      <Card
+        badgeBg={`${theme.orange || '#FF9500'}22`} badgeCol={theme.orange || '#FF9500'} Icon={ShoppingBag}
+        eyebrow={`Sell-out ${MESES_LBL[sellOutMes.mesEfectivo - 1]}${sellOutMes.esEnCurso ? ' · último cerrado' : ''}`}
+        kpi={fmtCompact(sellOutMes.total)}
+        delta={sellOutMes.deltaYoY != null ? `${sellOutMes.deltaYoY >= 0 ? '↑' : '↓'}${Math.abs(sellOutMes.deltaYoY).toFixed(1)}%` : null}
+        deltaCol={sellOutMes.deltaYoY == null ? theme.textMuted : sellOutMes.deltaYoY >= 0 ? green : red}
+      />
+      <Card inverse
+        badgeBg={isDark ? 'rgba(0,85,181,0.20)' : `${theme.accent || '#007AFF'}33`} badgeCol={isDark ? theme.accent : (theme.accent || '#007AFF')} Icon={TrendingUp}
+        eyebrow="Sell-out YTD · YoY"
+        kpi={fmtCompact(sellOutMes.ytd)}
+        delta={sellOutMes.deltaYTD != null ? `${sellOutMes.deltaYTD >= 0 ? '↑' : '↓'}${Math.abs(sellOutMes.deltaYTD).toFixed(1)}%` : null}
+        deltaCol={sellOutMes.deltaYTD == null ? invMuted : sellOutMes.deltaYTD >= 0 ? green : red}
+      />
+      <Card
+        badgeBg={`${theme.purple || '#AF52DE'}22`} badgeCol={theme.purple || '#AF52DE'} Icon={ShoppingBag}
+        eyebrow={`Clientes finales · en ${sellMayoristas.length || '—'} mayoristas`}
+        kpi={fmtInt(clientesTotal)}
+        sub="activos"
+      />
+    </div>
+  );
+}
+
+function SellOutMix({ canalRows, totalYTD, deltaYTD, anio, expandido, onSelect }) {
+  const { theme } = useTheme();
+  const [hover, setHover] = useState(null);
+  const items = [...(canalRows || [])].filter((c) => (c.importe || 0) > 0).sort((a, b) => (b.importe || 0) - (a.importe || 0));
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
+
+  if (!items.length) {
+    return (
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 24, color: theme.textMuted, fontFamily: TYPO.fontText, textAlign: 'center', fontSize: 13 }}>
+        Sin datos de sell-out por canal.
+      </div>
+    );
+  }
+
+  const total = items.reduce((s, it) => s + (it.importe || 0), 0) || 1;
+  const R = 42, CIRC = 2 * Math.PI * R;
+  let offsetAcc = 0;
+  const arcs = items.map((it) => {
+    const pct = (it.importe || 0) / total;
+    const len = pct * CIRC;
+    const dash = `${len} ${CIRC}`;
+    const dashOffset = -offsetAcc;
+    offsetAcc += len;
+    return { key: it.key, color: colorCanalIOS(theme, CANAL_SELLOUT_LBL[it.key] || it.key), dash, dashOffset };
+  });
+
+  return (
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16,
+      padding: '14px 18px', display: 'grid', gridTemplateColumns: '132px 1fr', gap: 20,
+      alignItems: 'center', fontFamily: TYPO.fontText,
+    }}>
+      <div style={{ position: 'relative', width: 132, height: 132 }}>
+        <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+          <circle cx="50" cy="50" r={R} fill="none" stroke={theme.border} strokeWidth="10" />
+          {arcs.map((a) => {
+            const active = hover === a.key || expandido === a.key;
+            const other = (hover || expandido) && !active;
+            return (
+              <circle key={a.key} cx="50" cy="50" r={R} fill="none"
+                stroke={a.color} strokeWidth={active ? 12 : 10}
+                strokeDasharray={a.dash} strokeDashoffset={a.dashOffset}
+                opacity={other ? 0.25 : 1}
+                style={{ transition: 'stroke-width 120ms, opacity 120ms', cursor: 'pointer' }}
+                onMouseEnter={() => setHover(a.key)}
+                onMouseLeave={() => setHover(null)}
+                onClick={() => onSelect(a.key)}
+              />
+            );
+          })}
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          {(() => {
+            const sel = items.find((it) => it.key === (hover || expandido));
+            if (sel) {
+              const pct = ((sel.importe || 0) / total) * 100;
+              return (
+                <>
+                  <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{CANAL_SELLOUT_LBL[sel.key] || sel.key}</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.03em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtCompact(sel.importe)}</div>
+                  <div style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{pct.toFixed(1)}% del total</div>
+                </>
+              );
+            }
+            return (
+              <>
+                <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>YTD Sell-Out</div>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.03em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtCompact(totalYTD)}</div>
+                {deltaYTD != null && (
+                  <div style={{ fontSize: 10, fontVariantNumeric: 'tabular-nums', marginTop: 2, color: deltaYTD >= 0 ? green : red, fontWeight: 500 }}>
+                    {deltaYTD >= 0 ? '↑' : '↓'} {Math.abs(deltaYTD).toFixed(1)}% vs {anio - 1}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gap: 1 }}>
+        {items.map((it, i) => {
+          const col = colorCanalIOS(theme, CANAL_SELLOUT_LBL[it.key] || it.key);
+          const pct = ((it.importe || 0) / total) * 100;
+          const active = hover === it.key || expandido === it.key;
+          const dim = (hover || expandido) && !active;
+          return (
+            <div key={it.key}
+              onMouseEnter={() => setHover(it.key)}
+              onMouseLeave={() => setHover(null)}
+              onClick={() => onSelect(it.key)}
+              style={{
+                display: 'grid', gridTemplateColumns: '12px 6px minmax(0, 1fr) 50px 62px 34px', alignItems: 'center', gap: 6,
+                padding: '3px 3px', borderRadius: 6,
+                background: active ? (theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)') : 'transparent',
+                opacity: dim ? 0.5 : 1,
+                cursor: 'pointer', transition: 'background 120ms, opacity 120ms',
+              }}>
+              <span style={{ fontSize: 9, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{i + 1}</span>
+              <span style={{ width: 6, height: 6, borderRadius: 2, background: col }} />
+              <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, minWidth: 0 }}>
+                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, textTransform: 'uppercase', letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{CANAL_SELLOUT_LBL[it.key] || it.key}</span>
+                <span style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>· {pct.toFixed(1)}%</span>
+              </span>
+              <div style={{ height: 3, borderRadius: 999, background: theme.border, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.max(2, pct)}%`, background: col, borderRadius: 999 }} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 4 }}>
+                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{fmtCompact(it.importe)}</span>
+              </div>
+              <span style={{ fontSize: 9, fontWeight: 500, color: it.deltaYoY == null ? theme.textMuted : it.deltaYoY >= 0 ? green : red, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                {it.deltaYoY == null ? '' : `${it.deltaYoY >= 0 ? '↑' : '↓'}${Math.abs(it.deltaYoY).toFixed(0)}%`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SellOutTendencia({ data, anio }) {
+  const { theme } = useTheme();
+  const pink = theme.pink || '#FF2D55';
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 16px', fontFamily: TYPO.fontText, display: 'flex', flexDirection: 'column' }}>
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 4 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Tendencia sell-out mensual.</h4>
+        <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: pink }} />{anio}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anio - 1}</span>
+        </div>
+      </div>
+      <div style={{ width: '100%', height: 132, flex: 1 }}>
+        <ResponsiveContainer>
+          <AreaChart data={data} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
+            <defs>
+              <linearGradient id="fillSO" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={pink} stopOpacity={0.20} />
+                <stop offset="100%" stopColor={pink} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
+            <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
+            <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={38} />
+            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
+            <Area type="monotone" dataKey={`${anio - 1}`} stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
+            <Area type="monotone" dataKey={`${anio}`} stroke={pink} strokeWidth={2.2} fill="url(#fillSO)" dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: pink, strokeWidth: 2 }} isAnimationActive={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function SellOutRanking({ mayoristas, totalYTD, expandido, onSelect }) {
+  const { theme } = useTheme();
+  const blue = theme.accent || '#007AFF';
+  const items = [...(mayoristas || [])].sort((a, b) => (Number(b.importe) || 0) - (Number(a.importe) || 0));
+  const half = Math.ceil(items.length / 2);
+  const col1 = items.slice(0, half);
+  const col2 = items.slice(half);
+  const max = Math.max(...items.map((m) => Number(m.importe) || 0), 1);
+
+  const Row = ({ m, i }) => {
+    const w = (Number(m.importe) / max) * 100;
+    const share = totalYTD > 0 ? (Number(m.importe) / totalYTD) * 100 : 0;
+    const active = expandido === m.mayorista;
+    return (
+      <div onClick={() => onSelect(m.mayorista)}
+        style={{
+          display: 'grid', gridTemplateColumns: '16px minmax(0, 1fr) 60px 40px', alignItems: 'center', gap: 8,
+          padding: '3px 4px', borderRadius: 6, cursor: 'pointer',
+          background: active ? (theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)') : 'transparent',
+        }}>
+        <span style={{ fontSize: 9, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{i + 1}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: theme.text }}>{m.mayorista}</span>
+          <div style={{ flex: 1, minWidth: 30, height: 3, borderRadius: 999, background: theme.border, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${Math.max(2, w)}%`, background: blue, borderRadius: 999 }} />
+          </div>
+        </span>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.text, letterSpacing: '-0.01em' }}>{fmtCompact(m.importe)}</span>
+        <span style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{share.toFixed(1)}%</span>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 16px', fontFamily: TYPO.fontText }}>
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 8 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Ranking mayoristas</h4>
+        <span style={{ fontSize: 10, color: theme.textMuted }}>{items.length} activos</span>
+      </div>
+      {items.length === 0 ? (
+        <p style={{ fontSize: 11, color: theme.textMuted, margin: 0 }}>Sin datos.</p>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 20px' }}>
+          <div>{col1.map((m, i) => <Row key={m.mayorista} m={m} i={i} />)}</div>
+          <div>{col2.map((m, i) => <Row key={m.mayorista} m={m} i={half + i} />)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SellOutTopTable({ title, meta, data, keyField, mono = false }) {
+  const { theme } = useTheme();
+  const rows = (data || []).slice(0, 6);
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 16px', fontFamily: TYPO.fontText }}>
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 8 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>{title}</h4>
+        <span style={{ fontSize: 10, color: theme.textMuted }}>{meta}</span>
+      </div>
+      {rows.length === 0 ? (
+        <p style={{ fontSize: 11, color: theme.textMuted, margin: 0 }}>Sin datos.</p>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}`, width: 16 }}>#</th>
+              <th style={{ textAlign: 'left', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}` }}>{keyField === 'sku' && mono ? 'SKU' : 'Nombre'}</th>
+              <th style={{ textAlign: 'right', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}` }}>Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={(r[keyField] || '') + i}>
+                <td style={{ padding: '3px 6px', fontSize: 10, color: theme.textSubtle, borderBottom: `1px solid ${theme.border}` }}>{i + 1}</td>
+                <td style={{ padding: '3px 6px', fontSize: 11, color: theme.text, fontFamily: mono ? '-apple-system, "SF Mono", ui-monospace, monospace' : TYPO.fontDisplay, fontWeight: mono ? 400 : 500, letterSpacing: mono ? 0 : '-0.005em', borderBottom: `1px solid ${theme.border}`, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r[keyField]}>{r[keyField]}</td>
+                <td style={{ padding: '3px 6px', fontSize: 12, textAlign: 'right', color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.01em', borderBottom: `1px solid ${theme.border}` }}>{fmtCompact(Number(r.importe) || 0)}</td>
+              </tr>
+            ))}
+            {data && data.length > 6 && (
+              <tr><td colSpan={3} style={{ padding: '4px 6px', color: theme.textMuted, fontSize: 10, textAlign: 'center', borderBottom: 0 }}>+ {data.length - 6} más</td></tr>
+            )}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function SellOutCanalPanel({ canalKey, canalRow, serie12m, sellMayoristas, sellTopSkus, sellTopClientes, anio, mesMax, onClose }) {
+  const { theme } = useTheme();
+  const label = CANAL_SELLOUT_LBL[canalKey] || canalKey;
+  const canalCol = colorCanalIOS(theme, label);
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
+  const ytdAct = canalRow?.importe || 0;
+  const ytdPrev = canalRow?.prev || 0;
+  const delta = ytdPrev > 0 ? ((ytdAct - ytdPrev) / ytdPrev) * 100 : null;
+  const mayoristasCanal = (sellMayoristas || []).filter((m) => m.canal_sellout === canalKey || !m.canal_sellout);
+
+  const KBox = ({ lbl, val, sub, subColor, last }) => (
+    <div style={{ padding: '2px 14px', borderRight: last ? 'none' : `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column' }}>
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>{lbl}</p>
+      <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', color: subColor || theme.text, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{val}</p>
+      {sub && <p style={{ fontSize: 10, color: subColor || theme.textMuted, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{sub}</p>}
+    </div>
+  );
+
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '14px 18px', fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10, borderBottom: `1px solid ${theme.border}`, marginBottom: 12 }}>
+        <span style={{ width: 10, height: 10, borderRadius: 3, background: canalCol, flexShrink: 0 }} />
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, textTransform: 'uppercase' }}>{label}</span>
+        <span style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 4 }}>
+          · {mayoristasCanal.length} mayoristas · {fmtInt(canalRow?.clientes || 0)} clientes · {(canalRow?.share || 0).toFixed(1)}% del sell-out total
+        </span>
+        <button onClick={onClose} title="Cerrar" style={{ marginLeft: 'auto', background: 'transparent', border: 0, color: theme.textMuted, cursor: 'pointer', padding: 4, lineHeight: 1 }}>
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 12 }}>
+        <KBox lbl={`YTD ${anio}`} val={fmtCompact(ytdAct)} sub={`vs ${fmtCompact(ytdPrev)} en ${anio - 1}`} />
+        <KBox lbl={`YTD ${anio - 1}`} val={fmtCompact(ytdPrev)} sub={`${mesMax} meses cerrados`} />
+        <KBox lbl="Δ YoY" val={delta == null ? '—' : fmtPctDelta(delta)} sub={delta == null ? '' : `${delta >= 0 ? '+' : ''}${fmtCompact(ytdAct - ytdPrev)} vs prev`} subColor={delta == null ? theme.textMuted : delta >= 0 ? green : red} />
+        <KBox lbl="Clientes finales" val={fmtInt(canalRow?.clientes || 0)} sub={`${fmtInt(canalRow?.skus || 0)} SKUs distintos`} last />
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '6px 0 6px' }}>
+        <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Sell-out mensual · {anio - 1} vs {anio}</p>
+        <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: canalCol }} />{anio}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: canalCol, opacity: 0.28 }} />{anio - 1}</span>
+        </div>
+      </div>
+      <div style={{ width: '100%', height: 130, marginBottom: 12 }}>
+        <ResponsiveContainer>
+          <BarChart data={serie12m} margin={{ top: 6, right: 4, left: -6, bottom: 0 }} barCategoryGap="18%" barGap={2}>
+            <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
+            <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
+            <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={38} />
+            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} cursor={{ fill: theme.textMuted, fillOpacity: 0.06 }} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
+            <Bar dataKey={`${anio - 1}`} fill={canalCol} fillOpacity={0.28} radius={[7, 7, 0, 0]} isAnimationActive={false} />
+            <Bar dataKey={`${anio}`}     fill={canalCol}                    radius={[7, 7, 0, 0]} isAnimationActive={false} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20 }}>
+        <div>
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '0 0 6px' }}>Top mayoristas del canal · YTD</p>
+          <SellOutTopTable title="" meta="" data={mayoristasCanal.map((m) => ({ ...m, sku: m.mayorista }))} keyField="sku" />
+        </div>
+        <div>
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '0 0 6px' }}>Top SKUs del canal · YTD</p>
+          <SellOutTopTable title="" meta="" data={sellTopSkus} keyField="sku" mono />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SellOutMayoristaPanel({ mayorista, totalYTD, serie12m, sellTopSkus, sellTopClientes, anio, onClose }) {
+  const { theme } = useTheme();
+  if (!mayorista) return null;
+  const canalCol = colorCanalIOS(theme, CANAL_SELLOUT_LBL[mayorista.canal_sellout] || 'MAYOREO');
+  const share = totalYTD > 0 ? (Number(mayorista.importe) / totalYTD) * 100 : 0;
+  const clientesN = Number(mayorista.clientes_finales) || 0;
+  const skusN = Number(mayorista.skus) || 0;
+
+  const KBox = ({ lbl, val, sub, subColor, last }) => (
+    <div style={{ padding: '2px 14px', borderRight: last ? 'none' : `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column' }}>
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>{lbl}</p>
+      <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', color: subColor || theme.text, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{val}</p>
+      {sub && <p style={{ fontSize: 10, color: subColor || theme.textMuted, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{sub}</p>}
+    </div>
+  );
+
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '14px 18px', fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10, borderBottom: `1px solid ${theme.border}`, marginBottom: 12 }}>
+        <span style={{ width: 10, height: 10, borderRadius: 3, background: canalCol, flexShrink: 0 }} />
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, textTransform: 'uppercase' }}>{mayorista.mayorista}</span>
+        <span style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 4 }}>
+          · {CANAL_SELLOUT_LBL[mayorista.canal_sellout] || 'Mayoreo'} · {share.toFixed(1)}% del sell-out · {fmtInt(clientesN)} clientes finales
+        </span>
+        <button onClick={onClose} title="Cerrar" style={{ marginLeft: 'auto', background: 'transparent', border: 0, color: theme.textMuted, cursor: 'pointer', padding: 4, lineHeight: 1 }}>
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 12 }}>
+        <KBox lbl="Sell-out YTD" val={fmtCompact(mayorista.importe)} sub={`${share.toFixed(1)}% del total`} />
+        <KBox lbl="Clientes finales" val={fmtInt(clientesN)} sub={`${fmtInt(skusN)} SKUs distintos`} />
+        <KBox lbl="Ticket promedio" val={clientesN > 0 ? fmtCompact(Number(mayorista.importe) / clientesN) : '—'} sub="por cliente/año" />
+        <KBox lbl="Rank" val={`#${mayorista._rank || '—'}`} sub="por facturación" last />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div>
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '0 0 6px' }}>Top clientes que compran a {mayorista.mayorista}</p>
+          <SellOutTopTable title="" meta="" data={sellTopClientes.map((c) => ({ ...c, sku: c.cliente_final }))} keyField="sku" />
+        </div>
+        <div>
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '0 0 6px' }}>Top SKUs vendidos vía {mayorista.mayorista}</p>
+          <SellOutTopTable title="" meta="" data={sellTopSkus} keyField="sku" mono />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SellOutBloque({
   sellCanal, sellCanalPrev, sellMayoristas, sellRotacion,
   sellMensual, sellMensualPrev, sellTopSkus, sellTopClientes,
@@ -1964,6 +2397,8 @@ function SellOutBloque({
   anio, mesMax,
 }) {
   const { theme } = useTheme();
+  const [canalDrillDown, setCanalDrillDown] = useState(null);
+  const [mayoristaDrillDown, setMayoristaDrillDown] = useState(null);
   // Unificado en los 3 temas: surface + strip lateral color paleta.
   const cardBgFor = () => theme.surface;
   const cardTitleFor = () => theme.text;
@@ -2043,158 +2478,56 @@ function SellOutBloque({
         </div>
       )}
 
-      {/* ① KPIs globales · center INVERSE (patrón AirPods) */}
-      <div className="grid grid-cols-3 gap-3.5">
-        <BentoKpi palette={PALETTE.coral} icon={ShoppingBag}
-          label={`Sell-out ${MESES_LBL[sellOutMes.mesEfectivo - 1]}${sellOutMes.esEnCurso ? ' (último cerrado)' : ''}`}
-          valor={fmtCompact(sellOutMes.total)}
-          delta={sellOutMes.deltaYoY}
-          deltaLabel={`vs ${MESES_LBL[sellOutMes.mesEfectivo - 1]} ${anio - 1}`}
-          subtitulo={<span>{fmtCompact(sellOutMes.prev)} en {anio - 1}</span>} />
-        <BentoKpi palette={PALETTE.blue} icon={TrendingUp} label="Sell-out YTD"
-          valor={fmtCompact(sellOutMes.ytd)}
-          delta={sellOutMes.deltaYTD}
-          deltaLabel="YoY"
-          subtitulo={<span>{fmtCompact(sellOutMes.ytdPrev)} en {anio - 1}</span>}
-          inverse />
-        <BentoKpi palette={PALETTE.purple} icon={ShoppingBag} label="Clientes finales activos"
-          valor={fmtInt(sellTopClientes.length > 0
-            ? canalRows.reduce((s, r) => s + r.clientes, 0)
-            : 0)}
-          delta={null}
-          subtitulo={<span>en {sellMayoristas.length || '—'} mayoristas</span>} />
+      {/* ① KPI row · densidad 1 · 56px */}
+      <SellOutKpiRow sellOutMes={sellOutMes} sellMayoristas={sellMayoristas} canalRows={canalRows} anio={anio} />
+
+      {/* ② Mix (donut+ranking) + Tendencia mensual · lado a lado */}
+      <div className="grid gap-2.5" style={{ gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1fr)' }}>
+        <SellOutMix
+          canalRows={canalRows}
+          totalYTD={totalYTD}
+          deltaYTD={sellOutMes.deltaYTD}
+          anio={anio}
+          expandido={canalDrillDown}
+          onSelect={(k) => { setCanalDrillDown(canalDrillDown === k ? null : k); setMayoristaDrillDown(null); }}
+        />
+        <SellOutTendencia data={serie12m} anio={anio} />
       </div>
 
-      {/* ② Sell-out por canal · cards alternadas */}
-      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
-        <div className="flex items-baseline justify-between mb-4">
-          <h4 style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Sell-out por canal</h4>
-          <span style={{ fontSize: 12, color: theme.textMuted }}>YTD {anio}</span>
-        </div>
-        <div className="grid grid-cols-3 gap-3.5">
-          {canalRows.map((c, i) => {
-            const meta = CANAL_SELLOUT_META[c.key];
-            const pal = meta.palette;
-            const inv = i === 1;
-            const bg = inv ? invBg : theme.surface;
-            const tx = inv ? invText : theme.text;
-            const lb = inv ? invMuted : theme.textMuted;
-            return (
-              <div key={c.key} style={{
-                background: bg, color: tx,
-                border: inv ? 'none' : `1px solid ${theme.border}`,
-                borderRadius: 18, padding: 18, fontFamily: TYPO.fontText,
-                display: 'flex', flexDirection: 'column',
-              }}>
-                <IconBadge icon={ShoppingBag} color={pal.mid} size={36} />
-                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: lb, marginTop: 12 }}>
-                  {meta.label}
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 600, color: tx, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em', lineHeight: 1.05, fontFamily: TYPO.fontDisplay, marginTop: 4 }}>
-                  {fmtCompact(c.importe)}
-                </div>
-                <div style={{ fontSize: 12, marginTop: 4, color: lb, fontVariantNumeric: 'tabular-nums' }}>
-                  {fmtPct(c.share)} del total{c.deltaYoY != null && <> · <span style={{ color: c.deltaYoY >= 0 ? (theme.green || '#34C759') : (theme.red || '#FF3B30'), fontWeight: 500 }}>{fmtPctDelta(c.deltaYoY)} YoY</span></>}
-                </div>
-                <div style={{ fontSize: 11, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${inv ? 'rgba(255,255,255,0.12)' : theme.border}`, color: lb, fontVariantNumeric: 'tabular-nums' }}>
-                  {fmtInt(c.clientes)} clientes · {fmtInt(c.skus)} SKUs
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ③ Ranking mayoristas */}
-      {sellMayoristas.length > 0 && (
-        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
-          <div className="flex items-baseline justify-between mb-3">
-            <h4 className="text-sm font-medium text-gray-800">Ranking de mayoristas</h4>
-            <span className="text-xs text-gray-500">{sellMayoristas.length} activos</span>
-          </div>
-          <div className="space-y-2">
-            {sellMayoristas.slice(0, 13).map((m, i) => {
-              const w = mayoristaMax > 0 ? (Number(m.importe) / mayoristaMax) * 100 : 0;
-              return (
-                <div key={m.mayorista} className="grid items-center gap-2 text-xs"
-                  style={{ gridTemplateColumns: '24px 180px 1fr auto' }}>
-                  <span className="text-gray-400">#{i + 1}</span>
-                  <span className="text-gray-800 truncate">{m.mayorista}</span>
-                  <div className="bg-gray-100 rounded h-3 relative">
-                    <div className="absolute left-0 top-0 h-3 rounded"
-                      style={{ background: PALETTE.blue.mid, width: `${Math.max(2, w)}%` }} />
-                  </div>
-                  <span className="text-gray-800 font-medium text-right whitespace-nowrap">
-                    {fmtCompact(m.importe)}
-                    <span className="ml-1 text-gray-400">
-                      · {totalYTD > 0 ? fmtPct((Number(m.importe) / totalYTD) * 100) : '—'}
-                    </span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {/* Drill-down canal */}
+      {canalDrillDown && (
+        <SellOutCanalPanel
+          canalKey={canalDrillDown}
+          canalRow={canalRows.find((c) => c.key === canalDrillDown)}
+          serie12m={serie12m}
+          sellMayoristas={sellMayoristas}
+          sellTopSkus={sellTopSkus}
+          sellTopClientes={sellTopClientes}
+          anio={anio}
+          mesMax={mesMax}
+          onClose={() => setCanalDrillDown(null)}
+        />
       )}
 
-      {/* ⑤ Tendencia mensual */}
-      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
-        <div className="flex items-baseline justify-between mb-3">
-          <h4 className="text-sm font-medium text-gray-800">Sell-out mensual {anio} vs {anio - 1}</h4>
-          <div className="text-[11px] text-gray-500">
-            <span className="inline-block w-2.5 h-2.5 mr-1 align-middle rounded-sm" style={{ background: PALETTE.coral.mid }} /> {anio}
-            <span className="ml-2 inline-block w-2.5 h-2.5 mr-1 align-middle rounded-sm" style={{ background: PALETTE.coral.soft || PALETTE.coral.mid + '60' }} /> {anio - 1}
-          </div>
-        </div>
-        <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={serie12m} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-            <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#888' }} />
-            <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 11, fill: '#888' }} width={50} />
-            <Tooltip formatter={(v) => v == null ? '—' : fmtMoney(v)} />
-            <Line type="monotone" dataKey={`${anio - 1}`} stroke={PALETTE.coral.soft || '#F5C4B3'} strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey={`${anio}`} stroke={PALETTE.coral.mid} strokeWidth={2.5} dot={{ r: 3, fill: PALETTE.coral.mid }} />
-          </LineChart>
-        </ResponsiveContainer>
+      {/* ③ Ranking mayoristas · 2 col + Top SKUs + Top clientes */}
+      <div className="grid gap-2.5" style={{ gridTemplateColumns: '1.2fr 1fr 1fr' }}>
+        <SellOutRanking mayoristas={sellMayoristas} totalYTD={totalYTD} expandido={mayoristaDrillDown} onSelect={(m) => { setMayoristaDrillDown(mayoristaDrillDown === m ? null : m); setCanalDrillDown(null); }} />
+        <SellOutTopTable title="Top SKUs · YTD" meta="valor sell-out" data={sellTopSkus} keyField="sku" mono />
+        <SellOutTopTable title="Top clientes finales" meta="valor sell-out" data={sellTopClientes.map((c) => ({ ...c, sku: c.cliente_final }))} keyField="sku" />
       </div>
 
-      {/* ⑥ + ⑦ Top SKUs + Top clientes finales */}
-      <div className="grid grid-cols-2 gap-2.5">
-        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
-          <h4 className="text-sm font-medium text-gray-800 mb-3">Top 10 SKUs por sell-out YTD</h4>
-          {sellTopSkus.length === 0 ? (
-            <div className="text-xs text-gray-500">Sin datos.</div>
-          ) : (
-            <div className="space-y-1">
-              {sellTopSkus.map((s, i) => (
-                <div key={s.sku} className="flex items-baseline gap-2 text-xs">
-                  <span className="text-gray-400 w-5">{i + 1}</span>
-                  <span className="font-mono text-gray-700 flex-1 truncate">{s.sku}</span>
-                  <span className="text-gray-400 tabular-nums">{fmtInt(s.clientes)} cli</span>
-                  <span className="text-gray-800 font-medium tabular-nums w-16 text-right">{fmtCompact(s.importe)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
-          <h4 className="text-sm font-medium text-gray-800 mb-3">Top 10 clientes finales</h4>
-          {sellTopClientes.length === 0 ? (
-            <div className="text-xs text-gray-500">Sin datos.</div>
-          ) : (
-            <div className="space-y-1">
-              {sellTopClientes.map((c, i) => (
-                <div key={c.cliente_final} className="flex items-baseline gap-2 text-xs">
-                  <span className="text-gray-400 w-5">{i + 1}</span>
-                  <span className="text-gray-700 flex-1 truncate" title={c.cliente_final}>{c.cliente_final}</span>
-                  <span className="text-gray-400 tabular-nums text-[10px]">{fmtInt(c.mayoristas_o_canales)} vía</span>
-                  <span className="text-gray-800 font-medium tabular-nums w-16 text-right">{fmtCompact(c.importe)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Drill-down mayorista */}
+      {mayoristaDrillDown && (
+        <SellOutMayoristaPanel
+          mayorista={sellMayoristas.find((m) => m.mayorista === mayoristaDrillDown)}
+          totalYTD={totalYTD}
+          serie12m={serie12m}
+          sellTopSkus={sellTopSkus}
+          sellTopClientes={sellTopClientes}
+          anio={anio}
+          onClose={() => setMayoristaDrillDown(null)}
+        />
+      )}
 
       {/* ⑨ Efectividad de promos por temporada */}
       {sellPromosResumen && sellPromosResumen.campania && (
