@@ -834,7 +834,7 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
             var gapIdeal = cuotaIdeal - ytd.si;
             var mensualParaMin = mesesRest > 0 && gapMin > 0 ? gapMin / mesesRest : 0;
             var mensualParaIdeal = mesesRest > 0 && gapIdeal > 0 ? gapIdeal / mesesRest : 0;
-            return el("div", { style: { background: "linear-gradient(135deg, #fef3c7, #fde68a)", borderRadius: 10, padding: "14px 18px", marginBottom: 14 } },
+            return el("div", { style: { background: "#FEF3E3", borderRadius: 10, padding: "14px 18px", marginBottom: 14 } },
               el("div", { style: { fontSize: 13, fontWeight: 700, color: "#92400e", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 } },
                 el(Target, { style: { width: 14, height: 14 } }), "Esfuerzo para superar cuotas"),
               el("div", { style: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 } },

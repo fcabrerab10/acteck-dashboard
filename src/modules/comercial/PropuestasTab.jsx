@@ -204,7 +204,7 @@ function ContextoCard({ cliente, contexto }) {
   const cuotaPct = contexto.cuota > 0 ? (contexto.facturado / contexto.cuota * 100) : 0;
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4"
-      style={{ background: `linear-gradient(135deg, white, ${cliente.color}08)` }}>
+      style={{ background: `${cliente.color}08` }}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold"

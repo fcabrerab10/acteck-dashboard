@@ -954,7 +954,7 @@ function BloqueMarca({ marcas, matriz, mesActual, anioActual, anioPrev, meta }) 
           const maxSerie = Math.max(1, ...serie);
           return (
             <div key={m.name} className="rounded-xl p-4 border relative"
-              style={{ background: `linear-gradient(135deg, ${color}18 0%, ${color}08 100%)`, borderColor: `${color}55` }}>
+              style={{ background: `${color}12`, borderColor: `${color}55` }}>
               <div className="flex justify-between items-baseline gap-2 mb-1">
                 <div>
                   <div className="text-[16px] font-bold" style={{ color, filter: 'brightness(0.7)' }}>{m.name}</div>
@@ -1394,7 +1394,7 @@ function BentoSucursales({ fisicas, virtuales, matriz, mesActual, metrica, valor
     return (
       <button onClick={() => setSelKey(isSel ? null : hero.key)}
         className={`text-left rounded-xl p-4 relative transition ${isSel ? 'ring-2 ring-sky-400' : ''}`}
-        style={{ background: `linear-gradient(135deg, ${hero.color}18 0%, ${hero.color}08 100%)`, border: `1px solid ${hero.color}55` }}>
+        style={{ background: `${hero.color}12`, border: `1px solid ${hero.color}55` }}>
         <span className="absolute top-2.5 right-2.5 text-[9px] font-bold uppercase tracking-wider text-white px-2 py-0.5 rounded-full"
           style={{ background: hero.color }}>🏆 Top</span>
         <div className="text-[19px] font-bold leading-tight" style={{ color: hero.color, filter: 'brightness(0.7)' }}>
@@ -1858,7 +1858,7 @@ function AnalisisMargenSku({ sku, rows, sellInAcumulado, anioActual, mesActual, 
       {/* COL 3: Cards apiladas — sólo métricas que no están en el chart */}
       <div className="flex flex-col gap-2">
         {/* Hero: Margen total YTD */}
-        <div className="rounded-md p-3 border" style={{ background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)`, borderColor: `${accent}55` }}>
+        <div className="rounded-md p-3 border" style={{ background: `${accent}12`, borderColor: `${accent}55` }}>
           <div className="text-[9.5px] uppercase tracking-widest font-bold" style={{ color: accent, filter: 'brightness(0.7)' }}>Margen total YTD</div>
           <div className="text-[22px] font-bold tabular-nums" style={{ color: accent, filter: 'brightness(0.6)' }}>{formatMXN(kpis.totalMargen)}</div>
           <div className="text-[10px] tabular-nums" style={{ color: accent, filter: 'brightness(0.7)' }}>
@@ -2308,7 +2308,7 @@ function AnalisisPcelSku({ sku, rows, sellInAcumulado, anioActual, mesActual, ac
         <div className="flex flex-col gap-2">
 
           {/* 1) Hero: Días de inventario (full width) */}
-          <div className="rounded-md p-3 border" style={{ background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)`, borderColor: `${accent}55` }}>
+          <div className="rounded-md p-3 border" style={{ background: `${accent}12`, borderColor: `${accent}55` }}>
             <div className="flex justify-between items-baseline">
               <div>
                 <div className="text-[9.5px] uppercase tracking-widest font-bold" style={{ color: accent, filter: 'brightness(0.7)' }}>Días de inventario</div>

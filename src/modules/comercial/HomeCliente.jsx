@@ -1595,7 +1595,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       })()
     ),
     // Banner: última actualización por fuente (Sell In / Sell Out / Inventario)
-    React.createElement("div", { style: { background: "linear-gradient(90deg, #EFF6FF 0%, #F8FAFC 100%)", border: "1px solid #BFDBFE", borderRadius: 12, padding: "10px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 12 } },
+    React.createElement("div", { style: { background: "#F5F9FF", border: "1px solid #BFDBFE", borderRadius: 12, padding: "10px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 12 } },
       React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, "📅 Última actualización:"),
       // Sell In — última fecha del Sell In de este año (mayor mes con datos)
       (function(){

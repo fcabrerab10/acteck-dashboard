@@ -35,14 +35,14 @@ const RATINGS = [
   { key: 'rating_valor',        label: 'Aporte de valor' },
 ];
 
-// Colores/estilo por usuario según tipo/rol
+// Colores/estilo por usuario según tipo/rol · sólidos (anti-pattern §18 prohíbe gradientes en UI)
 const colorAvatar = (u) => u.rol === 'super_admin'
-  ? 'linear-gradient(135deg, #007AFF, #64B5F6)'
+  ? '#0066CC'   // azul apple.com
   : u.tipo === 'externo'
-  ? 'linear-gradient(135deg, #FF9F0A, #FFB84D)'
-  : 'linear-gradient(135deg, #FF375F, #FF6B8B)';
+  ? '#C4520D'   // terracotta editorial
+  : '#B00020';  // crimson
 
-const accentUser = (u) => u.rol === 'super_admin' ? '#007AFF' : u.tipo === 'externo' ? '#FF9F0A' : '#FF375F';
+const accentUser = (u) => u.rol === 'super_admin' ? '#0066CC' : u.tipo === 'externo' ? '#C4520D' : '#B00020';
 
 function iniciales(nombre) {
   if (!nombre) return '?';
@@ -233,7 +233,7 @@ export default function TelemetriaPanel() {
   });
 
   const WRAPPER_STYLE = {
-    background: 'linear-gradient(135deg, #E8F1FF 0%, #FFF5F8 50%, #FFE8D6 100%)',
+    background: 'var(--t-bgAlt, #F5F5F7)',
     borderRadius: 24, padding: 28, minHeight: '100vh',
   };
 
@@ -283,8 +283,8 @@ export default function TelemetriaPanel() {
       {/* Alert pendiente */}
       {alertPend.length > 0 && (
         <div style={{
-          background: 'linear-gradient(135deg, rgba(255,159,10,0.14), rgba(255,159,10,0.06))',
-          border: '1px solid rgba(255,159,10,0.3)', borderRadius: 16,
+          background: 'rgba(196,82,13,0.08)',
+          border: '1px solid rgba(196,82,13,0.3)', borderRadius: 16,
           padding: '14px 18px', marginBottom: 18,
           display: 'flex', alignItems: 'center', gap: 14,
         }}>
@@ -297,7 +297,7 @@ export default function TelemetriaPanel() {
               : alertPend[0].dia === 3 ? <><strong>VENCE HOY.</strong></> : <>Venció el día 3.</>}
           </div>
           <button onClick={() => setSelectedUserId(alertPend[0].user.user_id)}
-            style={{ background: '#FF9F0A', color: 'white', border: 'none',
+            style={{ background: '#C4520D', color: 'white', border: 'none',
                      padding: '8px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             Evaluar ahora →
           </button>
@@ -339,7 +339,7 @@ export default function TelemetriaPanel() {
           {/* Sección Internos */}
           {internos.length > 0 && (
             <>
-              <SeccionHeader color="#FF375F" label="Acteck · Equipo interno" cnt={`${internos.length} ${internos.length === 1 ? 'usuario' : 'usuarios'}`} />
+              <SeccionHeader color="#B00020" label="Acteck · Equipo interno" cnt={`${internos.length} ${internos.length === 1 ? 'usuario' : 'usuarios'}`} />
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
@@ -358,7 +358,7 @@ export default function TelemetriaPanel() {
           {/* Sección Externos */}
           {externos.length > 0 && (
             <>
-              <SeccionHeader color="#FF9F0A" label="Externos · clientes y aliados" cnt={`${externos.length} ${externos.length === 1 ? 'usuario' : 'usuarios'}`} />
+              <SeccionHeader color="#C4520D" label="Externos · clientes y aliados" cnt={`${externos.length} ${externos.length === 1 ? 'usuario' : 'usuarios'}`} />
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
                 {externos.map((u) => (
                   <UserCard key={u.user_id} u={u} kpis={kpisPorUser.get(u.user_id)}
@@ -442,7 +442,7 @@ function UserCard({ u, kpis, bonoBase, evaluacionActual, onClick, compact = fals
             <div style={{
               display: 'inline-block', fontSize: 11, fontWeight: 600,
               padding: '4px 10px', borderRadius: 999,
-              background: 'rgba(255,159,10,0.15)', color: '#B25000', marginTop: 8,
+              background: 'rgba(196,82,13,0.15)', color: '#B25000', marginTop: 8,
             }}>⏰ Evaluar</div>
           )}
         </div>
@@ -475,9 +475,9 @@ function UserCard({ u, kpis, bonoBase, evaluacionActual, onClick, compact = fals
 
       {/* Rings de actividad */}
       <div style={{ display: 'flex', gap: S.ringsGap, marginTop: S.ringsMarginTop, paddingTop: S.ringsPadTop, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-        <RingCell pct={diasPct} color="#FF375F" num={`${kpis?.diasActivos || 0}/${kpis?.diasEnMes || 0}`} lbl="Días"
+        <RingCell pct={diasPct} color="#B00020" num={`${kpis?.diasActivos || 0}/${kpis?.diasEnMes || 0}`} lbl="Días"
           size={S.ringSize} stroke={S.ringStroke} numFs={S.ringNum} lblFs={S.ringLbl} />
-        <RingCell pct={tiempoPct} color="#34C759" num={fmtHm(kpis?.minutos || 0)} lbl="Tiempo"
+        <RingCell pct={tiempoPct} color="#1F7A3D" num={fmtHm(kpis?.minutos || 0)} lbl="Tiempo"
           size={S.ringSize} stroke={S.ringStroke} numFs={S.ringNum} lblFs={S.ringLbl} />
         <RingCell pct={cliPct} color={kpis?.clienteTop ? (CLIENTE_COLOR[kpis.clienteTop] || '#8B5CF6') : '#94A3B8'}
           num={kpis?.clienteTop ? `${cliPct.toFixed(0)}%` : '—'}
@@ -1096,7 +1096,7 @@ function EvalPanel({ user, anio, mes, facturacion, cuota, cuotaPct, evaluacion, 
 
       {/* Nota junio 2026 */}
       {anio === 2026 && mes === 6 && (
-        <div style={{ background: 'rgba(255,159,10,0.10)', borderLeft: `3px solid #FF9F0A`,
+        <div style={{ background: 'rgba(196,82,13,0.10)', borderLeft: `3px solid #C4520D`,
                       padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#7A4A00', marginBottom: 12 }}>
           <strong>Nota</strong> · La telemetría inició en julio 2026. Junio se evalúa con actividad estimada al 100%.
         </div>
@@ -1458,9 +1458,9 @@ function TareasLista({ tareas, onChange, disabled }) {
           alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px dashed rgba(0,0,0,0.08)' }}>
           <button disabled={disabled} onClick={() => toggle(i)} style={{
             width: 18, height: 18, marginTop: 2, borderRadius: 4, border: '2px solid #D1D1D6',
-            background: t.cumplida ? '#34C759' : 'white', color: 'white', fontSize: 10,
+            background: t.cumplida ? '#1F7A3D' : 'white', color: 'white', fontSize: 10,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderColor: t.cumplida ? '#34C759' : '#D1D1D6', cursor: disabled ? 'default' : 'pointer',
+            borderColor: t.cumplida ? '#1F7A3D' : '#D1D1D6', cursor: disabled ? 'default' : 'pointer',
           }}>{t.cumplida ? '✓' : ''}</button>
           <div>
             <div style={{ fontSize: 12.5, color: t.cumplida ? '#8E8E93' : '#1D1D1F',
@@ -1482,7 +1482,7 @@ function TareasLista({ tareas, onChange, disabled }) {
             onKeyDown={(e) => e.key === 'Enter' && add()}
             placeholder="Nueva tarea..." style={{ flex: 1, fontSize: 12, padding: '6px 10px',
               border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, outline: 'none' }} />
-          <button onClick={add} style={{ background: '#34C759', border: 'none', color: 'white',
+          <button onClick={add} style={{ background: '#1F7A3D', border: 'none', color: 'white',
             padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+</button>
         </div>
       )}
@@ -1507,7 +1507,7 @@ function AjustesLista({ ajustes, onChange, disabled }) {
           alignItems: 'baseline', padding: '6px 0', borderBottom: '1px dashed rgba(0,0,0,0.08)', fontSize: 12 }}>
           <div style={{ fontSize: 10.5, color: '#8E8E93' }}>{a.fecha}</div>
           <div>{a.descripcion}</div>
-          <div style={{ fontWeight: 700, color: Number(a.monto) >= 0 ? '#30B04E' : '#FF3B30' }}>
+          <div style={{ fontWeight: 700, color: Number(a.monto) >= 0 ? '#30B04E' : '#B00020' }}>
             {Number(a.monto) >= 0 ? '+' : '−'}{fmtMoney(Math.abs(Number(a.monto)))}
           </div>
           {!disabled && <button onClick={() => remove(i)} style={{ color: '#8E8E93', background: 'transparent', border: 'none', fontSize: 14, cursor: 'pointer' }}>×</button>}
@@ -1525,7 +1525,7 @@ function AjustesLista({ ajustes, onChange, disabled }) {
             onKeyDown={(e) => e.key === 'Enter' && add()}
             placeholder="±$" step="50" style={{ fontSize: 12, padding: '6px 8px',
               border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
-          <button onClick={add} style={{ background: '#34C759', border: 'none', color: 'white',
+          <button onClick={add} style={{ background: '#1F7A3D', border: 'none', color: 'white',
             padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+</button>
         </div>
       )}
