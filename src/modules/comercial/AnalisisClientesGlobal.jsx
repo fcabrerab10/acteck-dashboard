@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../lib/themeContext';
+import { TYPO } from '../../lib/themeTokens';
 import {
   Activity, TrendingUp, TrendingDown, Minus, Search, X, Users,
 } from 'lucide-react';
@@ -111,6 +113,7 @@ const fmtPct = (n) => n == null || isNaN(n) ? '—' : n.toFixed(1) + '%';
 const fmtInt = (n) => n == null || isNaN(n) ? '—' : Math.round(n).toLocaleString('es-MX');
 
 export default function AnalisisClientesGlobal() {
+  const { theme } = useTheme();
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [aniosDisponibles, setAniosDisponibles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -320,39 +323,51 @@ export default function AnalisisClientesGlobal() {
 
   if (loading) {
     return (
-      <div className="p-12 text-center text-gray-400">
-        <Activity className="w-10 h-10 mx-auto mb-3" />
+      <div style={{ padding: 48, textAlign: 'center', color: theme.textMuted, background: theme.bg, minHeight: '100%', fontFamily: TYPO.fontText }}>
+        <Activity style={{ width: 40, height: 40, margin: '0 auto 12px', color: theme.textSubtle, strokeWidth: 1.5 }} />
         Cargando análisis por cliente…
       </div>
     );
   }
   if (canalAct.length === 0) {
     return (
-      <div className="p-12 text-center text-gray-500">
-        <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-        <h2 className="text-xl font-semibold text-gray-700 mb-2">Análisis por cliente</h2>
+      <div style={{ padding: 48, textAlign: 'center', color: theme.textMuted, background: theme.bg, minHeight: '100%', fontFamily: TYPO.fontText }}>
+        <Users style={{ width: 48, height: 48, color: theme.textSubtle, margin: '0 auto 16px', strokeWidth: 1.5 }} />
+        <h2 style={{ fontSize: 20, fontWeight: 600, color: theme.text, marginBottom: 8, fontFamily: TYPO.fontDisplay, letterSpacing: '-0.02em' }}>Análisis por cliente</h2>
         <p>No hay datos para {anio}. Sube el archivo ERP en /uploads.html.</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-none mx-auto p-6 space-y-4">
+    <div className="max-w-none mx-auto p-6 space-y-4"
+      style={{ background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4 px-1">
         <div>
-          <p className="text-[11px] uppercase tracking-widest text-gray-500 mb-1">
+          <p style={{
+            fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em',
+            color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText,
+          }}>
             Dirección Comercial · YTD ene–{MESES_LBL[mesMax - 1]} {anio}
           </p>
-          <h2 className="text-2xl font-medium text-gray-800">Análisis por cliente</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <h2 style={{
+            fontSize: 28, fontWeight: 600, letterSpacing: '-0.025em',
+            fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0,
+          }}>Análisis por cliente</h2>
+          <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 2, fontFamily: TYPO.fontText }}>
             {kpis.activos.toLocaleString('es-MX')} clientes activos en facturación
           </p>
         </div>
-        <label className="flex flex-col text-[11px] text-gray-500">
+        <label style={{ display: 'flex', flexDirection: 'column', fontSize: 11, color: theme.textMuted, fontFamily: TYPO.fontText }}>
           Año
           <select value={anio} onChange={(e) => setAnio(Number(e.target.value))}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white">
+            style={{
+              border: `1px solid ${theme.border}`, borderRadius: 10,
+              padding: '6px 12px', fontSize: 14,
+              background: theme.surface, color: theme.text,
+              fontFamily: TYPO.fontText,
+            }}>
             {aniosDisponibles.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </label>
@@ -360,24 +375,39 @@ export default function AnalisisClientesGlobal() {
 
       {/* Buscador + filtro de canal */}
       <div className="flex gap-2 items-center">
-        <div className="flex-1 flex items-center gap-2 px-3 bg-white border border-gray-200 rounded-lg h-10">
-          <Search className="w-4 h-4 text-gray-400" />
+        <div style={{
+          flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px',
+          background: theme.surface, border: `1px solid ${theme.border}`,
+          borderRadius: 10, height: 40, fontFamily: TYPO.fontText,
+        }}>
+          <Search style={{ width: 16, height: 16, color: theme.textMuted, flexShrink: 0 }} />
           <input
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar cliente (CT INTERNACIONAL, DICOTECH, PCEL…)"
-            className="flex-1 outline-none text-sm bg-transparent"
+            style={{
+              flex: 1, outline: 'none', fontSize: 14, background: 'transparent',
+              border: 'none', color: theme.text, fontFamily: 'inherit',
+            }}
           />
           {busqueda && (
-            <button onClick={() => setBusqueda('')} className="text-gray-400 hover:text-gray-600">
-              <X className="w-4 h-4" />
+            <button onClick={() => setBusqueda('')} style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: theme.textMuted, padding: 4,
+            }}>
+              <X style={{ width: 16, height: 16 }} />
             </button>
           )}
         </div>
         <select
           value={canalFiltro}
           onChange={(e) => setCanalFiltro(e.target.value)}
-          className="h-10 px-3 border border-gray-200 rounded-lg text-sm bg-white"
+          style={{
+            height: 40, padding: '0 12px',
+            border: `1px solid ${theme.border}`, borderRadius: 10,
+            fontSize: 14, background: theme.surface, color: theme.text,
+            fontFamily: TYPO.fontText,
+          }}
         >
           <option value="TODOS">Todos los canales</option>
           {canalesOpciones.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -533,29 +563,38 @@ export default function AnalisisClientesGlobal() {
 }
 
 function KpiTile({ label, valor, delta, subtitulo, esWarning }) {
+  const { theme } = useTheme();
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-3">
-      <div className="text-[11px] text-gray-500">{label}</div>
-      <div className="text-xl font-medium mt-0.5 text-gray-800">{valor}</div>
-      <div className="text-[11px] mt-1 flex items-center gap-1">
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`,
+      borderRadius: 12, padding: 14, fontFamily: TYPO.fontText,
+    }}>
+      <div style={{ fontSize: 11, color: theme.textMuted }}>{label}</div>
+      <div style={{
+        fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em',
+        marginTop: 4, color: theme.text, fontFamily: TYPO.fontDisplay,
+        fontVariantNumeric: 'tabular-nums', lineHeight: 1.1,
+      }}>{valor}</div>
+      <div style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
         {delta != null && (
-          <span className={delta >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+          <span style={{ color: delta >= 0 ? theme.green : theme.red, fontWeight: 500 }}>
             {delta >= 0 ? <TrendingUp className="w-3 h-3 inline -mt-0.5" /> : <TrendingDown className="w-3 h-3 inline -mt-0.5" />}
             {' '}{fmtPctDelta(delta)}
           </span>
         )}
-        <span className={esWarning ? 'text-amber-600' : 'text-gray-500'}>{subtitulo}</span>
+        <span style={{ color: esWarning ? (theme.eyebrowColor || theme.orange) : theme.textMuted }}>{subtitulo}</span>
       </div>
     </div>
   );
 }
 
 function TarjetaCliente({ ranking, cliente, onClick }) {
+  const { theme } = useTheme();
   const pal = colorCanal(cliente.canal);
-  const deltaColor = cliente.deltaYoY == null ? 'text-gray-500'
-    : cliente.deltaYoY > 3 ? 'text-emerald-600'
-    : cliente.deltaYoY < -3 ? 'text-rose-600'
-    : 'text-gray-500';
+  const deltaCol = cliente.deltaYoY == null ? theme.textMuted
+    : cliente.deltaYoY > 3 ? theme.green
+    : cliente.deltaYoY < -3 ? theme.red
+    : theme.textMuted;
   const DeltaIcon = cliente.deltaYoY == null ? Minus
     : cliente.deltaYoY > 3 ? TrendingUp
     : cliente.deltaYoY < -3 ? TrendingDown
@@ -563,38 +602,50 @@ function TarjetaCliente({ ranking, cliente, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="text-left bg-white border border-gray-200 rounded-xl p-3 hover:border-gray-400 hover:shadow-sm transition-all"
+      style={{
+        textAlign: 'left', background: theme.surface,
+        border: `1px solid ${theme.border}`, borderLeft: `3px solid ${pal.mid}`,
+        borderRadius: 12, padding: 14, cursor: 'pointer', fontFamily: TYPO.fontText,
+        transition: 'border-color 160ms, box-shadow 160ms',
+      }}
     >
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-[10px] text-gray-400 font-medium">#{ranking}</span>
-          <span className="text-[13px] font-medium text-gray-800 truncate">{cliente.cliente}</span>
+          <span style={{ fontSize: 10, color: theme.textSubtle, fontWeight: 500 }}>#{ranking}</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cliente.cliente}</span>
         </div>
         <span
-          className="text-[9px] font-medium px-1.5 py-0.5 rounded shrink-0"
-          style={{ background: pal.bg, color: pal.text }}
+          style={{
+            fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+            background: `${pal.mid}18`, color: pal.mid, flexShrink: 0,
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}
           title={cliente.canal}
         >
           {chipCanal(cliente.canal)}
         </span>
       </div>
-      <div className="text-[10px] text-gray-500">
+      <div style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
         YTD · mes {fmtCompact(cliente.mes)}
       </div>
-      <div className="text-xl font-medium text-gray-800 leading-tight">
+      <div style={{
+        fontSize: 20, fontWeight: 600, color: theme.text, lineHeight: 1.1,
+        letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay,
+        fontVariantNumeric: 'tabular-nums', marginTop: 2,
+      }}>
         {fmtCompact(cliente.ytd)}
       </div>
-      <div className="mt-1.5">
-        <div className="flex justify-between text-[10px] mb-0.5">
-          <span className={deltaColor}>
+      <div style={{ marginTop: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ color: deltaCol, fontWeight: 500 }}>
             <DeltaIcon className="w-3 h-3 inline -mt-0.5" /> {fmtPctDelta(cliente.deltaYoY)}
           </span>
-          <span className="text-gray-700 font-medium">{fmtPct(cliente.share)} del total</span>
+          <span style={{ color: theme.textMuted, fontWeight: 500 }}>{fmtPct(cliente.share)} del total</span>
         </div>
-        <div className="bg-gray-100 h-1 rounded-full overflow-hidden">
+        <div style={{ background: theme.divider, height: 3, borderRadius: 999, overflow: 'hidden' }}>
           <div
-            className="h-full rounded-full"
             style={{
+              height: '100%', borderRadius: 999,
               background: pal.mid,
               width: `${Math.min(100, Math.max(2, cliente.share * 6))}%`,
             }}
