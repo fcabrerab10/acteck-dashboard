@@ -533,68 +533,93 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
   const border = `1px solid ${theme.border}`;
   const invBg = theme.surfaceInverse || (theme.mode === 'dark' ? '#F5F5F7' : '#000000');
   const invText = theme.textOnInverse || (theme.mode === 'dark' ? '#1D1D1F' : '#F5F5F7');
-  const invMuted = theme.mode === 'dark' ? 'rgba(29,29,31,0.65)' : 'rgba(245,245,247,0.7)';
+  const invMuted = theme.mode === 'dark' ? 'rgba(29,29,31,0.7)' : 'rgba(245,245,247,0.72)';
+  const invDivider = theme.mode === 'dark' ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.14)';
+  const heroAccent = theme.mode === 'dark' ? (theme.accent || '#0055B5') : '#64B5FF';
 
   return (
-    <div className="grid gap-3.5" style={{ gridTemplateColumns: '2fr 1fr 1fr' }}>
-      {/* ① Facturación YTD · hero blanco 72px */}
-      <div style={{ background: theme.surface, borderRadius: 26, padding: 32, border, display: 'flex', flexDirection: 'column' }}>
-        <IconBadge icon={Wallet} color={PALETTE.blue.mid} size={40} />
-        <p style={{ fontSize: 12, margin: '16px 0 4px', color: theme.textMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>Facturación YTD {anio}</p>
-        <p style={{ fontSize: 15, margin: '0 0 20px', color: theme.textMuted, fontFamily: TYPO.fontText }}>Consolidado de todos los canales</p>
-        <p style={{ fontSize: 'clamp(44px, 5.5vw, 72px)', fontWeight: 600, letterSpacing: '-0.045em', margin: 0, color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
-          {fmtCompact(kpis.ventaYTD)}
-        </p>
-        <div className="flex flex-wrap gap-x-4 gap-y-1" style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', marginTop: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* ① HERO editorial · card INVERSE ancho completo, número gigante */}
+      <div style={{
+        background: invBg, color: invText, borderRadius: 28, padding: '40px 44px',
+        display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 32, alignItems: 'end',
+      }}>
+        <div>
+          <div style={{
+            width: 44, height: 44, borderRadius: 14,
+            background: theme.mode === 'dark' ? 'rgba(0,85,181,0.18)' : 'rgba(10,132,255,0.24)',
+            color: heroAccent,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <Wallet style={{ width: 22, height: 22 }} strokeWidth={1.75} />
+          </div>
+          <p style={{ fontSize: 13, margin: '20px 0 8px', color: invMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>Facturación YTD {anio}</p>
+          <p style={{ fontSize: 17, margin: '0 0 24px', color: invMuted, fontFamily: TYPO.fontDisplay, fontWeight: 400, lineHeight: 1.4, maxWidth: 480 }}>
+            Consolidado de todos los canales · Dirección Comercial · YTD ene–{MESES_LBL[Math.min(11, (anio === new Date().getFullYear() ? new Date().getMonth() : 11))].toLowerCase()}.
+          </p>
+          <p style={{ fontSize: 'clamp(56px, 8vw, 112px)', fontWeight: 600, letterSpacing: '-0.055em', margin: 0, color: invText, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
+            {fmtCompact(kpis.ventaYTD)}
+          </p>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start', paddingBottom: 8 }}>
           {kpis.deltaVenta != null && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: kpis.deltaVenta >= 0 ? theme.green : theme.red, fontWeight: 500 }}>
-              {kpis.deltaVenta >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-              {fmtPctDelta(kpis.deltaVenta)} vs {anio - 1}
-              <span style={{ color: theme.textMuted, opacity: 0.85, fontWeight: 400 }}>({fmtCompact(kpis.ventaPrev)})</span>
-            </span>
+            <div>
+              <p style={{ fontSize: 12, color: invMuted, fontWeight: 500, margin: 0 }}>vs {anio - 1}</p>
+              <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, color: invMuted, fontVariantNumeric: 'tabular-nums', fontWeight: 400, margin: '4px 0 2px' }}>
+                {fmtCompact(kpis.ventaPrev)}
+              </p>
+              <p style={{ fontSize: 15, fontWeight: 500, margin: 0, color: kpis.deltaVenta >= 0 ? (theme.green || '#34C759') : (theme.red || '#FF3B30'), fontVariantNumeric: 'tabular-nums' }}>
+                {kpis.deltaVenta >= 0 ? '↑' : '↓'} {Math.abs(kpis.deltaVenta).toFixed(1)}%
+              </p>
+            </div>
           )}
           {kpis.deltaVenta2 != null && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: kpis.deltaVenta2 >= 0 ? theme.green : theme.red, fontWeight: 500 }}>
-              {kpis.deltaVenta2 >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-              {fmtPctDelta(kpis.deltaVenta2)} vs {anio - 2}
-            </span>
+            <div>
+              <p style={{ fontSize: 12, color: invMuted, fontWeight: 500, margin: 0 }}>vs {anio - 2}</p>
+              <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, color: invMuted, fontVariantNumeric: 'tabular-nums', fontWeight: 400, margin: '4px 0 2px' }}>
+                {fmtCompact(kpis.ventaPrev2)}
+              </p>
+              <p style={{ fontSize: 15, fontWeight: 500, margin: 0, color: kpis.deltaVenta2 >= 0 ? (theme.green || '#34C759') : (theme.red || '#FF3B30'), fontVariantNumeric: 'tabular-nums' }}>
+                {kpis.deltaVenta2 >= 0 ? '↑' : '↓'} {Math.abs(kpis.deltaVenta2).toFixed(1)}%
+              </p>
+            </div>
           )}
         </div>
       </div>
 
-      {/* ② Mes en curso · card INVERSE */}
-      <div style={{ background: invBg, color: invText, borderRadius: 22, padding: 24, display: 'flex', flexDirection: 'column' }}>
-        <IconBadge icon={Activity} color={theme.orange || '#FF9500'} size={40} />
-        <p style={{ fontSize: 12, margin: '16px 0 4px', color: invMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>{mesMaxLabel} · mes en curso</p>
-        <p style={{ fontSize: 13, margin: '0 0 16px', color: invMuted, fontFamily: TYPO.fontText }}>Datos parciales</p>
-        <p style={{ fontSize: 44, fontWeight: 600, letterSpacing: '-0.035em', margin: 0, color: invText, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
-          {fmtCompact(kpis.ventaMes)}
-        </p>
-        {kpis.deltaMes != null && (
-          <span style={{ fontSize: 13, color: kpis.deltaMes >= 0 ? (theme.green || '#34C759') : (theme.red || '#FF3B30'), fontVariantNumeric: 'tabular-nums', marginTop: 12, fontWeight: 500 }}>
-            {kpis.deltaMes >= 0 ? '↑' : '↓'} {Math.abs(kpis.deltaMes).toFixed(1)}% vs {mesMaxLabel.toLowerCase()} {anio - 1}
-          </span>
-        )}
-      </div>
-
-      {/* ③ Run-rate · card blanca */}
-      <div style={{ background: theme.surface, borderRadius: 22, padding: 24, border, display: 'flex', flexDirection: 'column' }}>
-        <IconBadge icon={Target} color={PALETTE.purple.mid} size={40} />
-        <p style={{ fontSize: 12, margin: '16px 0 4px', color: theme.textMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>
-          {kpis.cuotaTotal > 0 ? 'Run-rate vs cuota' : 'Run-rate proyectado'}
-        </p>
-        <p style={{ fontSize: 13, margin: '0 0 16px', color: theme.textMuted, fontFamily: TYPO.fontText }}>Basado en ritmo actual</p>
-        <p style={{ fontSize: 44, fontWeight: 600, letterSpacing: '-0.035em', margin: 0, color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
-          {fmtCompact(kpis.runRate)}
-        </p>
-        {kpis.cuotaTotal > 0 ? (
-          <span style={{ fontSize: 12, color: theme.textMuted, marginTop: 12 }}>
-            Meta: {fmtCompact(kpis.cuotaTotal)} ·{' '}
-            <strong style={{ color: kpis.gapVsRunRate >= 0 ? theme.green : theme.red }}>{fmtPctDelta(kpis.cumplYTD - 100)} cumpl.</strong>
-          </span>
-        ) : (
-          <span style={{ fontSize: 12, color: theme.textMuted, fontStyle: 'italic', marginTop: 12 }}>Sin cuota cargada</span>
-        )}
+      {/* ② + ③ · 2 cards blancas debajo · Julio y Run-rate */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div style={{ background: theme.surface, borderRadius: 22, padding: 24, border, display: 'flex', flexDirection: 'column' }}>
+          <IconBadge icon={Activity} color={theme.orange || '#FF9500'} size={40} />
+          <p style={{ fontSize: 12, margin: '18px 0 4px', color: theme.textMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>{mesMaxLabel} · mes en curso</p>
+          <p style={{ fontSize: 40, fontWeight: 600, letterSpacing: '-0.035em', margin: '4px 0 0', color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.05, fontFamily: TYPO.fontDisplay }}>
+            {fmtCompact(kpis.ventaMes)}
+          </p>
+          {kpis.deltaMes != null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: kpis.deltaMes >= 0 ? (theme.green || '#34C759') : (theme.red || '#FF3B30'), fontVariantNumeric: 'tabular-nums' }}>
+                {kpis.deltaMes >= 0 ? '↑' : '↓'} {Math.abs(kpis.deltaMes).toFixed(1)}%
+              </span>
+              <span style={{ fontSize: 12, color: theme.textMuted }}>vs {mesMaxLabel.toLowerCase()} {anio - 1}</span>
+            </div>
+          )}
+        </div>
+        <div style={{ background: theme.surface, borderRadius: 22, padding: 24, border, display: 'flex', flexDirection: 'column' }}>
+          <IconBadge icon={Target} color={PALETTE.purple.mid} size={40} />
+          <p style={{ fontSize: 12, margin: '18px 0 4px', color: theme.textMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>
+            {kpis.cuotaTotal > 0 ? 'Run-rate vs cuota' : 'Run-rate proyectado'}
+          </p>
+          <p style={{ fontSize: 40, fontWeight: 600, letterSpacing: '-0.035em', margin: '4px 0 0', color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.05, fontFamily: TYPO.fontDisplay }}>
+            {fmtCompact(kpis.runRate)}
+          </p>
+          {kpis.cuotaTotal > 0 ? (
+            <span style={{ fontSize: 12, color: theme.textMuted, marginTop: 10 }}>
+              Meta: {fmtCompact(kpis.cuotaTotal)} · <strong style={{ color: kpis.gapVsRunRate >= 0 ? theme.green : theme.red, fontWeight: 500 }}>{fmtPctDelta(kpis.cumplYTD - 100)} cumpl.</strong>
+            </span>
+          ) : (
+            <span style={{ fontSize: 12, color: theme.textMuted, fontStyle: 'italic', marginTop: 10 }}>Sin cuota cargada — agrega en cuotas_canales</span>
+          )}
+        </div>
       </div>
     </div>
   );
