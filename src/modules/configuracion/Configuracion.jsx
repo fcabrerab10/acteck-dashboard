@@ -644,10 +644,67 @@ function SegmentedNivel({ valor, onChange, disabled = false, disabledMsg = "" })
   );
 }
 
-// ─── Selector de apariencia (Airy / Puro / Híbrida) ───
+// ─── Selector de apariencia · Claro · Midnight · Marfil ───
 function SelectorApariencia({ perfil }) {
   const { theme, setThemeKey } = useTheme();
-  const opciones = ['airy', 'puro', 'hibrida'].map((k) => THEMES[k]);
+  const opciones = ['claro', 'midnight', 'marfil'].map((k) => THEMES[k]);
+
+  // Render de mini-preview representativo por tema (no gradient — usa cifra + hairlines)
+  const renderPreview = (t) => {
+    if (t.key === 'claro') {
+      // apple.com style: sección blanca + sección negra alternada
+      return (
+        <div style={{ height: 100, position: 'relative', background: '#FFFFFF' }}>
+          <div style={{ padding: '10px 12px 6px' }}>
+            <div style={{ height: 3, width: '30%', background: '#1D1D1F', borderRadius: 2, marginBottom: 4 }} />
+            <div style={{ fontSize: 22, fontWeight: 600, color: '#1D1D1F', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: '-apple-system, "SF Pro Display"' }}>$26.00M</div>
+          </div>
+          <div style={{ background: '#000', height: 40, padding: '8px 12px', display: 'flex', alignItems: 'center' }}>
+            <div style={{ height: 3, width: '25%', background: 'rgba(255,255,255,0.6)', borderRadius: 2, marginRight: 8 }} />
+            <div style={{ height: 8, width: '35%', background: '#2997FF', borderRadius: 2 }} />
+          </div>
+        </div>
+      );
+    }
+    if (t.key === 'midnight') {
+      // Negro OLED con cifra grande cyan glow
+      return (
+        <div style={{
+          height: 100, position: 'relative', background: '#000',
+          padding: '14px 12px', overflow: 'hidden',
+        }}>
+          <div style={{
+            position: 'absolute', top: -20, left: -20, width: 100, height: 100,
+            background: 'radial-gradient(circle, rgba(100,210,255,0.15) 0%, transparent 60%)',
+          }} />
+          <div style={{ position: 'relative' }}>
+            <div style={{ fontSize: 9, color: 'rgba(237,237,240,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>UAII</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: '#FFF', letterSpacing: '-0.04em', lineHeight: 1, fontFamily: '-apple-system, "SF Pro Display"', textShadow: '0 0 12px rgba(100,210,255,0.4)' }}>$26.00M</div>
+            <div style={{ fontSize: 10, color: '#64D2FF', marginTop: 6, fontWeight: 500 }}>↑ 233.8%</div>
+          </div>
+        </div>
+      );
+    }
+    if (t.key === 'marfil') {
+      // Cream con featurette azul bleed
+      return (
+        <div style={{ height: 100, position: 'relative', background: '#F7F3EC' }}>
+          <div style={{ padding: '8px 12px 4px' }}>
+            <div style={{
+              display: 'inline-block', padding: '2px 8px', borderRadius: 999,
+              background: 'rgba(196,82,13,0.12)', color: '#A34209',
+              fontSize: 8, fontWeight: 600, marginBottom: 4,
+            }}>Q1 2026</div>
+            <div style={{ fontSize: 18, fontWeight: 600, color: '#1A1A1A', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: '-apple-system, "SF Pro Display"' }}>$26.00M</div>
+          </div>
+          <div style={{ background: '#0055B5', height: 32, padding: '6px 12px' }}>
+            <div style={{ fontSize: 8, color: '#7BB3EC', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 2 }}>Los números</div>
+            <div style={{ fontSize: 11, color: '#F7F3EC', fontWeight: 600, letterSpacing: '-0.02em' }}>Todo lo que hizo posible.</div>
+          </div>
+        </div>
+      );
+    }
+  };
 
   return (
     <div className="bg-white rounded-2xl shadow-sm p-6 mb-6 border border-gray-100">
@@ -656,14 +713,6 @@ function SelectorApariencia({ perfil }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {opciones.map((t) => {
           const on = t.key === theme.key;
-          const previewBg = t.mode === 'dark'
-            ? '#000'
-            : t.mode === 'vibrant'
-            ? 'radial-gradient(circle at 20% 0%, rgba(0,113,227,0.18) 0%, transparent 45%), radial-gradient(circle at 90% 70%, rgba(191,90,242,0.18) 0%, transparent 45%), radial-gradient(circle at 40% 100%, rgba(255,55,95,0.14) 0%, transparent 45%), #F5F5F7'
-            : '#F5F5F7';
-          const previewCardBg = t.mode === 'dark' ? '#1D1D1F'
-            : t.mode === 'vibrant' ? 'rgba(255,255,255,0.72)' : 'white';
-          const previewTextCol = t.mode === 'dark' ? '#F5F5F7' : '#1D1D1F';
           return (
             <button key={t.key} onClick={() => setThemeKey(t.key)}
               className="text-left"
@@ -673,30 +722,16 @@ function SelectorApariencia({ perfil }) {
               }}>
               <div style={{
                 borderRadius: 14, overflow: 'hidden',
-                border: on ? '2px solid #0071E3' : '2px solid rgba(0,0,0,0.08)',
+                border: on ? '2px solid #0066CC' : '2px solid rgba(0,0,0,0.08)',
                 transition: 'border-color 160ms',
               }}>
-                {/* Preview */}
-                <div style={{ background: previewBg, height: 100, position: 'relative', padding: 12 }}>
-                  {t.mode === 'hybrid' && (
-                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 40, background: '#000' }} />
-                  )}
-                  <div style={{ position: 'relative', display: 'flex', gap: 6, marginBottom: 8 }}>
-                    <div style={{ width: 22, height: 22, borderRadius: 4, background: t.mode === 'hybrid' ? 'rgba(255,255,255,0.15)' : (t.mode === 'dark' ? '#2C2C2E' : 'white') }} />
-                    <div style={{ flex: 1, height: 22, borderRadius: 4, background: t.mode === 'hybrid' ? 'rgba(255,255,255,0.15)' : (t.mode === 'dark' ? '#2C2C2E' : 'white') }} />
-                  </div>
-                  <div style={{ position: 'relative', background: previewCardBg, borderRadius: 6, padding: '8px 10px', border: t.mode === 'dark' ? '1px solid rgba(255,255,255,0.06)' : 'none', boxShadow: t.mode === 'light' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none' }}>
-                    <div style={{ height: 4, width: '30%', background: t.mode === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)', borderRadius: 2, marginBottom: 4 }} />
-                    <div style={{ height: 8, width: '55%', background: 'linear-gradient(135deg, #F56300, #FF375F)', borderRadius: 2 }} />
-                  </div>
-                </div>
-                {/* Label */}
+                {renderPreview(t)}
                 <div style={{ background: 'white', padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
+                  <div style={{ minWidth: 0, marginRight: 8 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#1D1D1F' }}>{t.label}</div>
-                    <div style={{ fontSize: 11, color: '#6E6E73', marginTop: 1 }}>{t.desc}</div>
+                    <div style={{ fontSize: 11, color: '#6E6E73', marginTop: 1, lineHeight: 1.3 }}>{t.desc}</div>
                   </div>
-                  {on && <span style={{ color: '#0071E3', fontSize: 16 }}>✓</span>}
+                  {on && <span style={{ color: '#0066CC', fontSize: 16, flexShrink: 0 }}>✓</span>}
                 </div>
               </div>
             </button>

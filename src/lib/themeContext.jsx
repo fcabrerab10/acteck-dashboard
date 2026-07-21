@@ -1,8 +1,11 @@
 // ThemeContext — provee el tema visual actual a toda la app.
 // Se hidrata desde perfiles.tema_ui al montar App.jsx.
 import { createContext, useContext, useEffect, useState } from 'react';
-import { getTheme, DEFAULT_THEME, applyThemeToRoot } from './themeTokens';
+import { getTheme, DEFAULT_THEME, applyThemeToRoot, THEME_MIGRATIONS } from './themeTokens';
 import { supabase } from './supabase';
+
+// Migra keys viejos (airy/puro/hibrida) a los nuevos (claro/midnight/marfil).
+const migrate = (k) => THEME_MIGRATIONS[k] || k || DEFAULT_THEME;
 
 export const ThemeContext = createContext({
   theme: getTheme(DEFAULT_THEME),
@@ -12,11 +15,11 @@ export const ThemeContext = createContext({
 export const useTheme = () => useContext(ThemeContext);
 
 export function ThemeProvider({ perfil, children }) {
-  const [themeKey, setThemeKey] = useState(perfil?.tema_ui || DEFAULT_THEME);
+  const [themeKey, setThemeKey] = useState(migrate(perfil?.tema_ui));
 
-  // Cuando cambia el perfil (login), sincroniza el tema
+  // Cuando cambia el perfil (login), sincroniza el tema (con migración)
   useEffect(() => {
-    if (perfil?.tema_ui) setThemeKey(perfil.tema_ui);
+    if (perfil?.tema_ui) setThemeKey(migrate(perfil.tema_ui));
   }, [perfil?.tema_ui]);
 
   const theme = getTheme(themeKey);
