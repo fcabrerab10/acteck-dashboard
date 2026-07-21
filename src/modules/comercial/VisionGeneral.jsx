@@ -509,31 +509,45 @@ export default function VisionGeneral() {
 
 // ────────── HERO Card ──────────
 function HeroCard({ kpis, anio, mesMaxLabel }) {
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
+  const cardBg = isDark ? theme.surface : null; // null → usa palette.bg
+  const border = isDark ? `1px solid ${theme.border}` : 'none';
+  const bigTitleCol = isDark ? theme.text : PALETTE.blue.text;
+  const bigLabelCol = isDark ? theme.textMuted : PALETTE.blue.mid;
+  const midTitleCol = isDark ? theme.text : PALETTE.teal.text;
+  const midLabelCol = isDark ? theme.textMuted : PALETTE.teal.mid;
+  const runTitleCol = isDark ? theme.text : (kpis.cuotaTotal > 0 ? PALETTE.purple.text : PALETTE.gray.text);
+  const runLabelCol = isDark ? theme.textMuted : (kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid);
+
   return (
     <div className="grid gap-2.5" style={{ gridTemplateColumns: '1.6fr 1fr' }}>
       {/* Facturación YTD grande */}
-      <div style={{ background: PALETTE.blue.bg, borderRadius: 14, padding: '20px 24px' }}>
-        <p style={{ fontSize: 11, margin: 0, color: PALETTE.blue.mid, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+      <div style={{
+        background: cardBg || PALETTE.blue.bg, borderRadius: 14, padding: '20px 24px',
+        border, borderLeft: `4px solid ${PALETTE.blue.mid}`,
+      }}>
+        <p style={{ fontSize: 11, margin: 0, color: bigLabelCol, letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: TYPO.fontText }}>
           Facturación YTD
         </p>
-        <p style={{ fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 600, letterSpacing: '-0.035em', margin: '6px 0 8px', color: PALETTE.blue.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+        <p style={{ fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 600, letterSpacing: '-0.035em', margin: '6px 0 8px', color: bigTitleCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
           {fmtCompact(kpis.ventaYTD)}
         </p>
         <div className="flex flex-wrap gap-x-5 gap-y-1" style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
           {kpis.deltaVenta != null && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: kpis.deltaVenta >= 0 ? '#0F6E56' : '#A32D2D', fontWeight: 500 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: kpis.deltaVenta >= 0 ? theme.green : theme.red, fontWeight: 500 }}>
               {kpis.deltaVenta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
               {fmtPctDelta(kpis.deltaVenta)} vs {anio - 1}
-              <span style={{ color: PALETTE.blue.mid, opacity: 0.7, fontWeight: 400 }}>
+              <span style={{ color: bigLabelCol, opacity: 0.7, fontWeight: 400 }}>
                 ({fmtCompact(kpis.ventaPrev)})
               </span>
             </span>
           )}
           {kpis.deltaVenta2 != null && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: kpis.deltaVenta2 >= 0 ? '#0F6E56' : '#A32D2D', fontWeight: 500 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: kpis.deltaVenta2 >= 0 ? theme.green : theme.red, fontWeight: 500 }}>
               {kpis.deltaVenta2 >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
               {fmtPctDelta(kpis.deltaVenta2)} vs {anio - 2}
-              <span style={{ color: PALETTE.blue.mid, opacity: 0.7, fontWeight: 400 }}>
+              <span style={{ color: bigLabelCol, opacity: 0.7, fontWeight: 400 }}>
                 ({fmtCompact(kpis.ventaPrev2)})
               </span>
             </span>
@@ -543,40 +557,47 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
 
       {/* Columna lateral: Mes actual + Run-rate vs cuota */}
       <div className="grid grid-rows-2 gap-2.5">
-        <div style={{ background: PALETTE.teal.bg, borderRadius: 12, padding: '14px 16px' }}>
-          <p style={{ fontSize: 11, margin: 0, color: PALETTE.teal.mid, letterSpacing: '0.03em' }}>
+        <div style={{
+          background: cardBg || PALETTE.teal.bg, borderRadius: 12, padding: '14px 16px',
+          border, borderLeft: `3px solid ${PALETTE.teal.mid}`,
+        }}>
+          <p style={{ fontSize: 11, margin: 0, color: midLabelCol, letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>
             {mesMaxLabel} (mes en curso)
           </p>
-          <p style={{ fontSize: 24, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.teal.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+          <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: midTitleCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
             {fmtCompact(kpis.ventaMes)}
           </p>
           {kpis.deltaMes != null && (
-            <span style={{ fontSize: 11, color: kpis.deltaMes >= 0 ? '#0F6E56' : '#A32D2D', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 11, color: kpis.deltaMes >= 0 ? theme.green : theme.red, fontVariantNumeric: 'tabular-nums' }}>
               {fmtPctDelta(kpis.deltaMes)} vs {mesMaxLabel.toLowerCase()} {anio - 1}
             </span>
           )}
         </div>
-        <div style={{ background: kpis.cuotaTotal > 0 ? PALETTE.purple.bg : PALETTE.gray.bg, borderRadius: 12, padding: '14px 16px' }}>
+        <div style={{
+          background: cardBg || (kpis.cuotaTotal > 0 ? PALETTE.purple.bg : PALETTE.gray.bg),
+          borderRadius: 12, padding: '14px 16px',
+          border, borderLeft: `3px solid ${kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid}`,
+        }}>
           <div className="flex items-center gap-2" style={{ marginBottom: 2 }}>
             <Target className="w-3.5 h-3.5" style={{ color: kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid }} />
-            <p style={{ fontSize: 11, margin: 0, color: kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid, letterSpacing: '0.03em' }}>
+            <p style={{ fontSize: 11, margin: 0, color: runLabelCol, letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>
               {kpis.cuotaTotal > 0 ? 'Run-rate vs cuota' : 'Run-rate proyectado'}
             </p>
           </div>
-          <p style={{ fontSize: 24, fontWeight: 500, margin: '4px 0 2px',
-            color: kpis.cuotaTotal > 0 ? PALETTE.purple.text : PALETTE.gray.text,
-            fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+          <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px',
+            color: runTitleCol,
+            fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
             {fmtCompact(kpis.runRate)}
           </p>
           {kpis.cuotaTotal > 0 ? (
-            <span style={{ fontSize: 11, color: PALETTE.purple.mid }}>
+            <span style={{ fontSize: 11, color: runLabelCol }}>
               Meta: {fmtCompact(kpis.cuotaTotal)} ·{' '}
-              <strong style={{ color: kpis.gapVsRunRate >= 0 ? '#0F6E56' : '#A32D2D' }}>
+              <strong style={{ color: kpis.gapVsRunRate >= 0 ? theme.green : theme.red }}>
                 {fmtPctDelta(kpis.cumplYTD - 100)} cumpl. YTD
               </strong>
             </span>
           ) : (
-            <span style={{ fontSize: 11, color: PALETTE.gray.mid, fontStyle: 'italic' }}>
+            <span style={{ fontSize: 11, color: runLabelCol, fontStyle: 'italic' }}>
               Sin cuota cargada · agrega en cuotas_canales
             </span>
           )}
@@ -588,19 +609,28 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
 
 // ────────── Bento KPI ──────────
 function BentoKpi({ palette, icon: Icon, label, valor, subtitulo, delta, deltaLabel }) {
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
+  const cardBg = isDark ? theme.surface : palette.bg;
+  const labelCol = isDark ? theme.textMuted : palette.mid;
+  const valueCol = isDark ? theme.text : palette.text;
+  const border = isDark ? `1px solid ${theme.border}` : 'none';
   return (
-    <div style={{ background: palette.bg, borderRadius: 12, padding: '14px 16px' }}>
+    <div style={{
+      background: cardBg, borderRadius: 12, padding: '14px 16px', border,
+      borderLeft: `3px solid ${palette.mid}`,
+    }}>
       <div className="flex items-center justify-between" style={{ marginBottom: 2 }}>
-        <p style={{ fontSize: 11, margin: 0, color: palette.mid, letterSpacing: '0.03em' }}>{label}</p>
+        <p style={{ fontSize: 11, margin: 0, color: labelCol, letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>{label}</p>
         {Icon && <Icon className="w-3.5 h-3.5" style={{ color: palette.mid }} />}
       </div>
-      <p style={{ fontSize: 24, fontWeight: 500, margin: '4px 0 2px', color: palette.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+      <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: valueCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
         {valor}
       </p>
-      <div style={{ fontSize: 11, color: palette.mid, minHeight: 14 }}>
+      <div style={{ fontSize: 11, color: labelCol, minHeight: 14 }}>
         {delta != null && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginRight: 8, fontWeight: 500,
-            color: delta >= 0 ? '#0F6E56' : '#A32D2D' }}>
+            color: delta >= 0 ? theme.green : theme.red }}>
             {delta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
             {fmtPctDelta(delta)} {deltaLabel}
           </span>
@@ -613,40 +643,45 @@ function BentoKpi({ palette, icon: Icon, label, valor, subtitulo, delta, deltaLa
 
 // ────────── Bloque Bento (canal/marca/categoría) ──────────
 function BloqueBento({ item, expandido, onClick, puedeExpandir }) {
+  const { theme } = useTheme();
   const palette = colorBloque(item.key);
   const max = Math.max(...item.spark, 0) || 1;
   const min = Math.min(...item.spark, 0);
   const range = max - min || 1;
+  const isDark = theme.mode === 'dark';
+  const pillBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
   return (
     <button onClick={onClick}
       disabled={!puedeExpandir}
       style={{
-        textAlign: 'left', display: 'block', background: '#fff',
-        border: '1px solid ' + (expandido ? palette.mid : '#E2E8F0'),
+        textAlign: 'left', display: 'block',
+        background: theme.surface,
+        border: '1px solid ' + (expandido ? palette.mid : theme.border),
         borderRadius: 12, padding: 14, cursor: puedeExpandir ? 'pointer' : 'default',
         transition: 'border 0.15s, box-shadow 0.15s',
-        boxShadow: expandido ? `0 0 0 3px ${palette.bg}` : 'none',
+        boxShadow: expandido ? `0 0 0 3px ${isDark ? theme.border : palette.bg}` : 'none',
+        fontFamily: TYPO.fontText,
       }}>
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <span style={{ width: 10, height: 10, borderRadius: 5, background: palette.mid, display: 'inline-block' }} />
-          <p style={{ fontSize: 12, margin: 0, color: '#1E293B', fontWeight: 500, lineHeight: 1.2 }}>{item.key}</p>
+          <p style={{ fontSize: 12, margin: 0, color: theme.text, fontWeight: 500, lineHeight: 1.2 }}>{item.key}</p>
         </div>
-        <span style={{ fontSize: 10, padding: '1px 8px', background: '#F1F5F9', borderRadius: 10, color: '#6B6A64', fontWeight: 500 }}>
+        <span style={{ fontSize: 10, padding: '1px 8px', background: pillBg, borderRadius: 10, color: theme.textMuted, fontWeight: 500 }}>
           {item.share.toFixed(1)}%
         </span>
       </div>
-      <p style={{ fontSize: 22, fontWeight: 500, margin: '6px 0 2px', color: '#0F172A', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+      <p style={{ fontSize: 22, fontWeight: 600, margin: '6px 0 2px', color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
         {fmtCompact(item.venta)}
       </p>
       <div style={{ display: 'flex', gap: 10, fontSize: 11, fontVariantNumeric: 'tabular-nums', flexWrap: 'wrap' }}>
         {item.deltaYoY != null && (
-          <span style={{ color: item.deltaYoY >= 0 ? '#0F6E56' : '#A32D2D', fontWeight: 500 }}>
+          <span style={{ color: item.deltaYoY >= 0 ? theme.green : theme.red, fontWeight: 500 }}>
             {fmtPctDelta(item.deltaYoY)} YoY
           </span>
         )}
         {item.pctMargen != null && (
-          <span style={{ color: PALETTE.teal.mid }}>
+          <span style={{ color: palette.mid }}>
             margen {item.pctMargen.toFixed(1)}%
           </span>
         )}
@@ -805,17 +840,21 @@ function MiniKpi({ palette, label, valor, sub }) {
 
 // ────────── Tile "Próximamente" ──────────
 function ProximamenteKpi({ icon: Icon, label, nota }) {
+  const { theme } = useTheme();
   return (
     <div style={{
-      background: '#F8FAFC', borderRadius: 12, padding: '14px 16px',
-      border: '1px dashed #CBD5E1', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 84,
+      background: theme.mode === 'dark' ? 'rgba(255,255,255,0.02)' : theme.bgAlt || 'rgba(0,0,0,0.02)',
+      borderRadius: 12, padding: '14px 16px',
+      border: `1px dashed ${theme.border}`,
+      display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 84,
+      fontFamily: TYPO.fontText,
     }}>
       <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-        {Icon && <Icon className="w-3.5 h-3.5" style={{ color: '#94A3B8' }} />}
-        <p style={{ fontSize: 11, margin: 0, color: '#94A3B8', letterSpacing: '0.03em' }}>{label}</p>
+        {Icon && <Icon className="w-3.5 h-3.5" style={{ color: theme.textSubtle }} />}
+        <p style={{ fontSize: 11, margin: 0, color: theme.textSubtle, letterSpacing: '0.03em' }}>{label}</p>
       </div>
-      <p style={{ fontSize: 16, fontWeight: 500, margin: 0, color: '#64748B' }}>Próximamente</p>
-      {nota && <p style={{ fontSize: 10, color: '#94A3B8', margin: '2px 0 0', fontStyle: 'italic' }}>{nota}</p>}
+      <p style={{ fontSize: 16, fontWeight: 500, margin: 0, color: theme.textMuted, fontFamily: TYPO.fontDisplay }}>Próximamente</p>
+      {nota && <p style={{ fontSize: 10, color: theme.textSubtle, margin: '2px 0 0', fontStyle: 'italic' }}>{nota}</p>}
     </div>
   );
 }
@@ -914,6 +953,12 @@ function TendenciaCard({ data, anio, mesMax }) {
 
 // ────────── Sección de Inventario ──────────
 function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoCalendario, caminoProximas, caminoSemanal, caminoRetrasadas, caminoProveedores, caminoAgotados, caminoLeadtime, comprasYTD, anio, ventaPromMes }) {
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
+  const cardBgFor = (p) => isDark ? theme.surface : p.bg;
+  const cardTitleFor = (p) => isDark ? theme.text : p.text;
+  const cardLabelFor = (p) => isDark ? theme.textMuted : p.mid;
+  const cardBorder = isDark ? `1px solid ${theme.border}` : 'none';
   // Buckets de estatus en orden de pipeline + total agregado
   const BUCKET_LABELS = {
     produccion:        { label: 'En producción',      palette: PALETTE.amber },
@@ -974,50 +1019,50 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
   return (
     <div className="space-y-2.5">
       <div className="flex items-baseline justify-between px-1">
-        <p className="text-[11px] uppercase tracking-widest text-gray-500">
+        <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, margin: 0, fontFamily: TYPO.fontText }}>
           <Package className="inline w-3 h-3 mr-1" style={{ verticalAlign: -1 }} />
           Inventario
         </p>
-        <p className="text-[11px] text-gray-400">
+        <p style={{ fontSize: 11, color: theme.textSubtle, margin: 0, fontFamily: TYPO.fontText }}>
           Almacenes comerciales · al {inventario?.ultima_carga ? new Date(inventario.ultima_carga).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
         </p>
       </div>
 
       {/* 4 KPI tiles */}
       <div className="grid grid-cols-4 gap-2">
-        <div style={{ background: PALETTE.purple.bg, borderRadius: 12, padding: '12px 14px' }}>
-          <p style={{ fontSize: 10, color: PALETTE.purple.mid, margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Valor en stock</p>
-          <p style={{ fontSize: 22, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.purple.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+        <div style={{ background: cardBgFor(PALETTE.purple), borderRadius: 12, padding: '12px 14px', border: cardBorder, borderLeft: `3px solid ${PALETTE.purple.mid}` }}>
+          <p style={{ fontSize: 10, color: cardLabelFor(PALETTE.purple), margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>Valor en stock</p>
+          <p style={{ fontSize: 22, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.purple), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
             {fmtCompact(valorInv)}
           </p>
-          <p style={{ fontSize: 11, color: PALETTE.purple.mid, margin: 0 }}>
+          <p style={{ fontSize: 11, color: cardLabelFor(PALETTE.purple), margin: 0 }}>
             {fmtInt(piezas)} piezas · {fmtInt(skus)} SKUs
           </p>
         </div>
-        <div style={{ background: PALETTE.teal.bg, borderRadius: 12, padding: '12px 14px' }}>
-          <p style={{ fontSize: 10, color: PALETTE.teal.mid, margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Días cobertura</p>
-          <p style={{ fontSize: 22, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.teal.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+        <div style={{ background: cardBgFor(PALETTE.teal), borderRadius: 12, padding: '12px 14px', border: cardBorder, borderLeft: `3px solid ${PALETTE.teal.mid}` }}>
+          <p style={{ fontSize: 10, color: cardLabelFor(PALETTE.teal), margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>Días cobertura</p>
+          <p style={{ fontSize: 22, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.teal), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
             {diasCob != null ? `~${diasCob} días` : '—'}
           </p>
-          <p style={{ fontSize: 11, color: PALETTE.teal.mid, margin: 0 }}>{cobLbl}</p>
+          <p style={{ fontSize: 11, color: cardLabelFor(PALETTE.teal), margin: 0 }}>{cobLbl}</p>
         </div>
-        <div style={{ background: PALETTE.amber.bg, borderRadius: 12, padding: '12px 14px' }}>
-          <p style={{ fontSize: 10, color: PALETTE.amber.mid, margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>SKUs agotados</p>
-          <p style={{ fontSize: 22, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.amber.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+        <div style={{ background: cardBgFor(PALETTE.amber), borderRadius: 12, padding: '12px 14px', border: cardBorder, borderLeft: `3px solid ${PALETTE.amber.mid}` }}>
+          <p style={{ fontSize: 10, color: cardLabelFor(PALETTE.amber), margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>SKUs agotados</p>
+          <p style={{ fontSize: 22, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.amber), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
             {fmtInt(agotados)}
           </p>
-          <p style={{ fontSize: 11, color: PALETTE.amber.mid, margin: 0 }}>Con venta reciente</p>
+          <p style={{ fontSize: 11, color: cardLabelFor(PALETTE.amber), margin: 0 }}>Con venta reciente</p>
         </div>
         {tieneCamino ? (
-          <div style={{ background: PALETTE.blue.bg, borderRadius: 12, padding: '12px 14px' }}>
+          <div style={{ background: cardBgFor(PALETTE.blue), borderRadius: 12, padding: '12px 14px', border: cardBorder, borderLeft: `3px solid ${PALETTE.blue.mid}` }}>
             <div className="flex items-center justify-between" style={{ marginBottom: 2 }}>
-              <p style={{ fontSize: 10, color: PALETTE.blue.mid, margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Valor en camino</p>
+              <p style={{ fontSize: 10, color: cardLabelFor(PALETTE.blue), margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>Valor en camino</p>
               <Ship className="w-3.5 h-3.5" style={{ color: PALETTE.blue.mid }} />
             </div>
-            <p style={{ fontSize: 22, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.blue.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+            <p style={{ fontSize: 22, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.blue), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
               {fmtCompact(totalEnCamino)}
             </p>
-            <p style={{ fontSize: 11, color: PALETTE.blue.mid, margin: 0 }}>
+            <p style={{ fontSize: 11, color: cardLabelFor(PALETTE.blue), margin: 0 }}>
               {fmtInt(totalPosEnCamino)} PO · {fmtInt(totalPiezasEnCamino)} pzs
             </p>
           </div>
@@ -1213,12 +1258,12 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
 
           {/* Sin embarque asignado */}
           {sinEmbarque && Number(sinEmbarque.valor_mxn) > 0 && (
-            <div className="mt-4 p-3 rounded-lg flex items-center justify-between gap-3" style={{ background: PALETTE.gray.bg, border: `1px dashed ${PALETTE.gray.mid}` }}>
+            <div className="mt-4 p-3 rounded-lg flex items-center justify-between gap-3" style={{ background: cardBgFor(PALETTE.gray), border: `1px dashed ${isDark ? theme.border : PALETTE.gray.mid}`, fontFamily: TYPO.fontText }}>
               <div>
-                <p className="text-[11px] m-0 font-medium" style={{ color: PALETTE.gray.text }}>
+                <p className="text-[11px] m-0 font-medium" style={{ color: cardTitleFor(PALETTE.gray) }}>
                   {fmtInt(sinEmbarque.pos)} POs sin embarque asignado en Master
                 </p>
-                <p className="text-[10px] mt-0.5" style={{ color: PALETTE.gray.mid }}>
+                <p className="text-[10px] mt-0.5" style={{ color: cardLabelFor(PALETTE.gray) }}>
                   Probablemente compras nacionales o aún sin mapear en Master Embarques.
                 </p>
               </div>
@@ -1236,20 +1281,24 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
 // ────────── Sub-componentes del bloque 'Inventario en camino' ──────────
 
 function RetrasadasBanner({ retrasadas }) {
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
   const total = retrasadas.reduce((s, r) => s + (Number(r.valor_mxn) || 0), 0);
   const top = retrasadas.slice(0, 2);
   const restante = retrasadas.length - top.length;
   return (
     <div style={{
-      background: PALETTE.red.bg, border: `1px solid ${PALETTE.red.strong}`, borderRadius: 10,
+      background: isDark ? 'rgba(255,69,58,0.10)' : PALETTE.red.bg,
+      border: `1px solid ${isDark ? theme.red : PALETTE.red.strong}`, borderRadius: 10,
       padding: '12px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12,
+      fontFamily: TYPO.fontText,
     }}>
-      <i className="ti ti-alert-triangle" style={{ fontSize: 22, color: PALETTE.red.mid, flex: 'none' }} aria-hidden="true" />
+      <i className="ti ti-alert-triangle" style={{ fontSize: 22, color: isDark ? theme.red : PALETTE.red.mid, flex: 'none' }} aria-hidden="true" />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 12, margin: 0, color: PALETTE.red.text, fontWeight: 500 }}>
+        <p style={{ fontSize: 12, margin: 0, color: isDark ? theme.text : PALETTE.red.text, fontWeight: 500 }}>
           {retrasadas.length} {retrasadas.length === 1 ? 'PO' : 'POs'} en retraso · {fmtCompact(total)} atrapados
         </p>
-        <p style={{ fontSize: 11, margin: '2px 0 0', color: PALETTE.red.mid }}>
+        <p style={{ fontSize: 11, margin: '2px 0 0', color: isDark ? theme.textMuted : PALETTE.red.mid }}>
           {top.map((r, i) => (
             <span key={r.movid}>
               {i > 0 && ' · '}
@@ -1264,6 +1313,13 @@ function RetrasadasBanner({ retrasadas }) {
 }
 
 function CaminoHero({ valor, piezas, pos, inventarioStock, leadtime, comprasYTD, anio }) {
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
+  const cardBgFor = (p) => isDark ? theme.surface : p.bg;
+  const cardTitleFor = (p) => isDark ? theme.text : p.text;
+  const cardLabelFor = (p) => isDark ? theme.textMuted : p.mid;
+  const cardBorder = isDark ? `1px solid ${theme.border}` : 'none';
+
   const ratioStock = inventarioStock > 0 ? Math.round((valor / inventarioStock) * 100) : null;
   const ytdAct = comprasYTD.find((r) => r.anio === anio);
   const ytdPrev = comprasYTD.find((r) => r.anio === anio - 1);
@@ -1273,33 +1329,33 @@ function CaminoHero({ valor, piezas, pos, inventarioStock, leadtime, comprasYTD,
 
   return (
     <div className="grid gap-2.5 mb-3.5" style={{ gridTemplateColumns: '1.6fr 1fr 1fr' }}>
-      <div style={{ background: PALETTE.blue.bg, borderRadius: 12, padding: '14px 18px' }}>
-        <p style={{ fontSize: 11, margin: 0, color: PALETTE.blue.mid, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Valor en tránsito</p>
-        <p style={{ fontSize: 34, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.blue.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+      <div style={{ background: cardBgFor(PALETTE.blue), borderRadius: 12, padding: '14px 18px', border: cardBorder, borderLeft: `4px solid ${PALETTE.blue.mid}` }}>
+        <p style={{ fontSize: 11, margin: 0, color: cardLabelFor(PALETTE.blue), letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: TYPO.fontText }}>Valor en tránsito</p>
+        <p style={{ fontSize: 34, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.blue), fontVariantNumeric: 'tabular-nums', lineHeight: 1, letterSpacing: '-0.03em', fontFamily: TYPO.fontDisplay }}>
           {fmtCompact(valor)}
         </p>
-        <p style={{ fontSize: 11, color: PALETTE.blue.mid, margin: 0 }}>
+        <p style={{ fontSize: 11, color: cardLabelFor(PALETTE.blue), margin: 0 }}>
           {fmtInt(piezas)} piezas · {pos} órdenes{ratioStock != null ? ` · ${ratioStock}% del stock actual` : ''}
         </p>
       </div>
-      <div style={{ background: PALETTE.amber.bg, borderRadius: 12, padding: '14px 18px' }}>
+      <div style={{ background: cardBgFor(PALETTE.amber), borderRadius: 12, padding: '14px 18px', border: cardBorder, borderLeft: `3px solid ${PALETTE.amber.mid}` }}>
         <div className="flex items-center gap-1" style={{ marginBottom: 2 }}>
           <i className="ti ti-clock" style={{ fontSize: 12, color: PALETTE.amber.mid }} aria-hidden="true" />
-          <p style={{ fontSize: 11, margin: 0, color: PALETTE.amber.mid, letterSpacing: '0.03em' }}>Lead time promedio</p>
+          <p style={{ fontSize: 11, margin: 0, color: cardLabelFor(PALETTE.amber), letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>Lead time promedio</p>
         </div>
-        <p style={{ fontSize: 24, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.amber.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+        <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.amber), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
           {leadtime?.lt_total != null ? `${leadtime.lt_total} días` : '—'}
         </p>
-        <p style={{ fontSize: 11, color: PALETTE.amber.mid, margin: 0 }}>
+        <p style={{ fontSize: 11, color: cardLabelFor(PALETTE.amber), margin: 0 }}>
           Emisión → arribo CEDIS
         </p>
       </div>
-      <div style={{ background: PALETTE.purple.bg, borderRadius: 12, padding: '14px 18px' }}>
+      <div style={{ background: cardBgFor(PALETTE.purple), borderRadius: 12, padding: '14px 18px', border: cardBorder, borderLeft: `3px solid ${PALETTE.purple.mid}` }}>
         <div className="flex items-center gap-1" style={{ marginBottom: 2 }}>
           <i className="ti ti-shopping-cart" style={{ fontSize: 12, color: PALETTE.purple.mid }} aria-hidden="true" />
-          <p style={{ fontSize: 11, margin: 0, color: PALETTE.purple.mid, letterSpacing: '0.03em' }}>Compras YTD {anio}</p>
+          <p style={{ fontSize: 11, margin: 0, color: cardLabelFor(PALETTE.purple), letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>Compras YTD {anio}</p>
         </div>
-        <p style={{ fontSize: 24, fontWeight: 500, margin: '4px 0 2px', color: PALETTE.purple.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+        <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.purple), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
           {fmtCompact(valorYTD)}
         </p>
         <p style={{ fontSize: 11, margin: 0 }}>
@@ -1509,6 +1565,12 @@ function SellOutBloque({
   sellPromosResumen, sellPromosSkus, sellOutMes,
   anio, mesMax,
 }) {
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
+  const cardBgFor = (p) => isDark ? theme.surface : p.bg;
+  const cardTitleFor = (p) => isDark ? theme.text : p.text;
+  const cardLabelFor = (p) => isDark ? theme.textMuted : p.mid;
+  const cardBorder = isDark ? `1px solid ${theme.border}` : 'none';
   const canalRows = useMemo(() => {
     const total = sellCanal.reduce((s, r) => s + (Number(r.importe) || 0), 0);
     const prevMap = new Map(sellCanalPrev.map((r) => [r.canal_sellout, Number(r.importe) || 0]));
@@ -1725,26 +1787,26 @@ function SellOutBloque({
             <span className="text-xs text-gray-500">{MESES_FULL[mesMax - 1]} {anio}</span>
           </div>
           <div className="grid grid-cols-4 gap-2 mb-3">
-            <div className="rounded-lg p-3" style={{ background: PALETTE.amber.bg }}>
-              <div className="text-[10px] tracking-widest" style={{ color: PALETTE.amber.mid }}>CAMPAÑA</div>
-              <div className="text-sm font-medium mt-1" style={{ color: PALETTE.amber.text }}>{sellPromosResumen.campania}</div>
-              <div className="text-[11px] mt-1" style={{ color: PALETTE.amber.mid }}>
+            <div className="rounded-lg p-3" style={{ background: cardBgFor(PALETTE.amber), border: cardBorder, borderLeft: `3px solid ${PALETTE.amber.mid}`, fontFamily: TYPO.fontText }}>
+              <div className="text-[10px] tracking-widest" style={{ color: cardLabelFor(PALETTE.amber) }}>CAMPAÑA</div>
+              <div className="text-sm font-medium mt-1" style={{ color: cardTitleFor(PALETTE.amber) }}>{sellPromosResumen.campania}</div>
+              <div className="text-[11px] mt-1" style={{ color: cardLabelFor(PALETTE.amber) }}>
                 {fmtInt(sellPromosResumen.skus_campania)} SKUs
               </div>
             </div>
-            <div className="rounded-lg p-3" style={{ background: PALETTE.gray.bg }}>
-              <div className="text-[10px] tracking-widest" style={{ color: PALETTE.gray.mid }}>SELLOUT EN PROMO</div>
-              <div className="text-base font-medium mt-1" style={{ color: PALETTE.gray.text }}>{fmtCompact(sellPromosResumen.sellout_en_promo)}</div>
-              <div className="text-[11px] mt-1" style={{ color: PALETTE.gray.mid }}>
+            <div className="rounded-lg p-3" style={{ background: cardBgFor(PALETTE.gray), border: cardBorder, borderLeft: `3px solid ${PALETTE.gray.mid}`, fontFamily: TYPO.fontText }}>
+              <div className="text-[10px] tracking-widest" style={{ color: cardLabelFor(PALETTE.gray) }}>SELLOUT EN PROMO</div>
+              <div className="text-base font-medium mt-1" style={{ color: cardTitleFor(PALETTE.gray) }}>{fmtCompact(sellPromosResumen.sellout_en_promo)}</div>
+              <div className="text-[11px] mt-1" style={{ color: cardLabelFor(PALETTE.gray) }}>
                 {(() => {
                   const total = (Number(sellPromosResumen.sellout_en_promo) || 0) + (Number(sellPromosResumen.sellout_fuera_promo) || 0);
                   return total > 0 ? fmtPct((Number(sellPromosResumen.sellout_en_promo) / total) * 100) : '—';
                 })()} del total
               </div>
             </div>
-            <div className="rounded-lg p-3" style={{ background: PALETTE.gray.bg }}>
-              <div className="text-[10px] tracking-widest" style={{ color: PALETTE.gray.mid }}>SELLOUT FUERA</div>
-              <div className="text-base font-medium mt-1" style={{ color: PALETTE.gray.text }}>{fmtCompact(sellPromosResumen.sellout_fuera_promo)}</div>
+            <div className="rounded-lg p-3" style={{ background: cardBgFor(PALETTE.gray), border: cardBorder, borderLeft: `3px solid ${PALETTE.gray.mid}`, fontFamily: TYPO.fontText }}>
+              <div className="text-[10px] tracking-widest" style={{ color: cardLabelFor(PALETTE.gray) }}>SELLOUT FUERA</div>
+              <div className="text-base font-medium mt-1" style={{ color: cardTitleFor(PALETTE.gray) }}>{fmtCompact(sellPromosResumen.sellout_fuera_promo)}</div>
             </div>
             <div className="rounded-lg p-3 bg-emerald-50">
               <div className="text-[10px] tracking-widest text-emerald-700">LIFT VS MES ANTERIOR</div>
