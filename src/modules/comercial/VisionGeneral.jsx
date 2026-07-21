@@ -230,6 +230,17 @@ export default function VisionGeneral() {
     // # clientes activos YTD
     const nClientesActivos = new Set(clientesDim.map((c) => c.cliente_nombre)).size;
 
+    // Mejor / peor mes YTD (por total ventas del mes)
+    const ventaPorMes = {};
+    margenAct.filter((r) => Number(r.mes) <= mesMax).forEach((r) => {
+      const m = Number(r.mes);
+      ventaPorMes[m] = (ventaPorMes[m] || 0) + (Number(r.venta) || 0);
+    });
+    const mesesArr = Object.entries(ventaPorMes).map(([m, v]) => ({ mes: Number(m), venta: v }));
+    const mejorMes = mesesArr.length ? mesesArr.reduce((a, b) => (b.venta > a.venta ? b : a)) : null;
+    const peorMes  = mesesArr.length ? mesesArr.reduce((a, b) => (b.venta < a.venta ? b : a)) : null;
+    const promedioMes = mesesArr.length ? ventaYTD / mesesArr.length : 0;
+
     // Run-rate: proyección lineal del año basada en YTD
     const runRate = mesMax > 0 ? ventaYTD * 12 / mesMax : 0;
 
@@ -242,6 +253,7 @@ export default function VisionGeneral() {
       ventaYTD, piezasYTD, ventaPrev, ventaPrev2,
       ventaMes, ventaMesPrev,
       nClientesActivos,
+      mejorMes, peorMes, promedioMes,
       deltaVenta:  ventaPrev > 0 ? ((ventaYTD - ventaPrev) / ventaPrev) * 100 : null,
       deltaVenta2: ventaPrev2 > 0 ? ((ventaYTD - ventaPrev2) / ventaPrev2) * 100 : null,
       deltaMes:    ventaMesPrev > 0 ? ((ventaMes - ventaMesPrev) / ventaMesPrev) * 100 : null,
@@ -533,92 +545,143 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
   const border = `1px solid ${theme.border}`;
   const invBg = theme.surfaceInverse || (theme.mode === 'dark' ? '#F5F5F7' : '#000000');
   const invText = theme.textOnInverse || (theme.mode === 'dark' ? '#1D1D1F' : '#F5F5F7');
-  const invMuted = theme.mode === 'dark' ? 'rgba(29,29,31,0.7)' : 'rgba(245,245,247,0.72)';
+  const invMuted = theme.mode === 'dark' ? 'rgba(29,29,31,0.72)' : 'rgba(245,245,247,0.72)';
   const invDivider = theme.mode === 'dark' ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.14)';
-  const heroAccent = theme.mode === 'dark' ? (theme.accent || '#0055B5') : '#64B5FF';
+  const heroBadgeBg = theme.mode === 'dark' ? 'rgba(0,85,181,0.18)' : 'rgba(10,132,255,0.24)';
+  const heroBadgeCol = theme.mode === 'dark' ? (theme.accent || '#0A84FF') : '#64B5FF';
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
+
+  const cell = (label, val, delta, deltaCol) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '2px 0' }}>
+      <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: invMuted, fontWeight: 500 }}>{label}</span>
+      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, color: invText, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.015em' }}>{val}</span>
+      {delta && <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: deltaCol || invMuted }}>{delta}</span>}
+    </div>
+  );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* ① HERO editorial · card INVERSE ancho completo, número gigante */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* ① Card INVERSE compacta · rail 2x2 a la derecha */}
       <div style={{
-        background: invBg, color: invText, borderRadius: 28, padding: '40px 44px',
-        display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 32, alignItems: 'end',
+        background: invBg, color: invText, borderRadius: 22, padding: '22px 26px',
+        display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)', gap: 24, alignItems: 'center',
       }}>
-        <div>
-          <div style={{
-            width: 44, height: 44, borderRadius: 14,
-            background: theme.mode === 'dark' ? 'rgba(0,85,181,0.18)' : 'rgba(10,132,255,0.24)',
-            color: heroAccent,
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <Wallet style={{ width: 22, height: 22 }} strokeWidth={1.75} />
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 11,
+              background: heroBadgeBg, color: heroBadgeCol,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <Wallet style={{ width: 18, height: 18 }} strokeWidth={1.8} />
+            </div>
+            <p style={{ fontSize: 11, margin: 0, color: invMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>
+              Facturación YTD {anio} · Dirección Comercial
+            </p>
           </div>
-          <p style={{ fontSize: 13, margin: '20px 0 8px', color: invMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>Facturación YTD {anio}</p>
-          <p style={{ fontSize: 17, margin: '0 0 24px', color: invMuted, fontFamily: TYPO.fontDisplay, fontWeight: 400, lineHeight: 1.4, maxWidth: 480 }}>
-            Consolidado de todos los canales · Dirección Comercial · YTD ene–{MESES_LBL[Math.min(11, (anio === new Date().getFullYear() ? new Date().getMonth() : 11))].toLowerCase()}.
-          </p>
-          <p style={{ fontSize: 'clamp(56px, 8vw, 112px)', fontWeight: 600, letterSpacing: '-0.055em', margin: 0, color: invText, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
+          <p style={{ fontSize: 'clamp(44px, 5vw, 64px)', fontWeight: 600, letterSpacing: '-0.045em', margin: 0, color: invText, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
             {fmtCompact(kpis.ventaYTD)}
           </p>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start', paddingBottom: 8 }}>
-          {kpis.deltaVenta != null && (
-            <div>
-              <p style={{ fontSize: 12, color: invMuted, fontWeight: 500, margin: 0 }}>vs {anio - 1}</p>
-              <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, color: invMuted, fontVariantNumeric: 'tabular-nums', fontWeight: 400, margin: '4px 0 2px' }}>
-                {fmtCompact(kpis.ventaPrev)}
-              </p>
-              <p style={{ fontSize: 15, fontWeight: 500, margin: 0, color: kpis.deltaVenta >= 0 ? (theme.green || '#34C759') : (theme.red || '#FF3B30'), fontVariantNumeric: 'tabular-nums' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 12, marginTop: 8 }}>
+            {kpis.deltaVenta != null && (
+              <span style={{ fontSize: 13, fontWeight: 500, color: kpis.deltaVenta >= 0 ? green : red, fontVariantNumeric: 'tabular-nums' }}>
                 {kpis.deltaVenta >= 0 ? '↑' : '↓'} {Math.abs(kpis.deltaVenta).toFixed(1)}%
-              </p>
-            </div>
+              </span>
+            )}
+            <span style={{ fontSize: 12, color: invMuted, fontVariantNumeric: 'tabular-nums' }}>vs {fmtCompact(kpis.ventaPrev)} en {anio - 1}</span>
+            {kpis.promedioMes > 0 && (
+              <>
+                <span style={{ fontSize: 12, color: invMuted }}>·</span>
+                <span style={{ fontSize: 12, color: invMuted, fontVariantNumeric: 'tabular-nums' }}>~{fmtCompact(kpis.promedioMes)}/mes</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Rail 2x2 · vs 2025, vs 2024, mejor mes, peor mes */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px',
+          paddingLeft: 24, borderLeft: `1px solid ${invDivider}`,
+        }}>
+          {kpis.deltaVenta != null && cell(
+            `vs ${anio - 1}`,
+            fmtCompact(kpis.ventaPrev),
+            (kpis.deltaVenta >= 0 ? '↑' : '↓') + ' ' + Math.abs(kpis.deltaVenta).toFixed(1) + '%',
+            kpis.deltaVenta >= 0 ? green : red
           )}
-          {kpis.deltaVenta2 != null && (
-            <div>
-              <p style={{ fontSize: 12, color: invMuted, fontWeight: 500, margin: 0 }}>vs {anio - 2}</p>
-              <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, color: invMuted, fontVariantNumeric: 'tabular-nums', fontWeight: 400, margin: '4px 0 2px' }}>
-                {fmtCompact(kpis.ventaPrev2)}
-              </p>
-              <p style={{ fontSize: 15, fontWeight: 500, margin: 0, color: kpis.deltaVenta2 >= 0 ? (theme.green || '#34C759') : (theme.red || '#FF3B30'), fontVariantNumeric: 'tabular-nums' }}>
-                {kpis.deltaVenta2 >= 0 ? '↑' : '↓'} {Math.abs(kpis.deltaVenta2).toFixed(1)}%
-              </p>
-            </div>
+          {kpis.deltaVenta2 != null && cell(
+            `vs ${anio - 2}`,
+            fmtCompact(kpis.ventaPrev2),
+            (kpis.deltaVenta2 >= 0 ? '↑' : '↓') + ' ' + Math.abs(kpis.deltaVenta2).toFixed(1) + '%',
+            kpis.deltaVenta2 >= 0 ? green : red
+          )}
+          {kpis.mejorMes && cell(
+            'Mejor mes YTD',
+            fmtCompact(kpis.mejorMes.venta),
+            MESES_FULL[kpis.mejorMes.mes - 1]
+          )}
+          {kpis.peorMes && cell(
+            'Peor mes YTD',
+            fmtCompact(kpis.peorMes.venta),
+            MESES_FULL[kpis.peorMes.mes - 1] + (kpis.peorMes.mes === kpis.mejorMes?.mes ? '' : '')
           )}
         </div>
       </div>
 
-      {/* ② + ③ · 2 cards blancas debajo · Julio y Run-rate */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <div style={{ background: theme.surface, borderRadius: 22, padding: 24, border, display: 'flex', flexDirection: 'column' }}>
-          <IconBadge icon={Activity} color={theme.orange || '#FF9500'} size={40} />
-          <p style={{ fontSize: 12, margin: '18px 0 4px', color: theme.textMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>{mesMaxLabel} · mes en curso</p>
-          <p style={{ fontSize: 40, fontWeight: 600, letterSpacing: '-0.035em', margin: '4px 0 0', color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.05, fontFamily: TYPO.fontDisplay }}>
-            {fmtCompact(kpis.ventaMes)}
-          </p>
-          {kpis.deltaMes != null && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
-              <span style={{ fontSize: 13, fontWeight: 500, color: kpis.deltaMes >= 0 ? (theme.green || '#34C759') : (theme.red || '#FF3B30'), fontVariantNumeric: 'tabular-nums' }}>
-                {kpis.deltaMes >= 0 ? '↑' : '↓'} {Math.abs(kpis.deltaMes).toFixed(1)}%
-              </span>
-              <span style={{ fontSize: 12, color: theme.textMuted }}>vs {mesMaxLabel.toLowerCase()} {anio - 1}</span>
+      {/* ② + ③ · 2 cards blancas flat con badge inline */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div style={{
+          background: theme.surface, borderRadius: 18, padding: '16px 18px', border,
+          display: 'flex', alignItems: 'center', gap: 14,
+        }}>
+          <IconBadge icon={Activity} color={theme.orange || '#FF9500'} size={36} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 11, margin: 0, color: theme.textMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>{mesMaxLabel} · mes en curso</p>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 2 }}>
+              <p style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.03em', margin: 0, color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
+                {fmtCompact(kpis.ventaMes)}
+              </p>
+              {kpis.deltaMes != null && (
+                <span style={{ fontSize: 12, fontWeight: 500, color: kpis.deltaMes >= 0 ? green : red, fontVariantNumeric: 'tabular-nums' }}>
+                  {kpis.deltaMes >= 0 ? '↑' : '↓'} {Math.abs(kpis.deltaMes).toFixed(1)}%
+                </span>
+              )}
             </div>
-          )}
+            <p style={{ fontSize: 11, color: theme.textMuted, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>
+              vs {mesMaxLabel.toLowerCase()} {anio - 1} · {fmtCompact(kpis.ventaMesPrev)}
+            </p>
+          </div>
         </div>
-        <div style={{ background: theme.surface, borderRadius: 22, padding: 24, border, display: 'flex', flexDirection: 'column' }}>
-          <IconBadge icon={Target} color={PALETTE.purple.mid} size={40} />
-          <p style={{ fontSize: 12, margin: '18px 0 4px', color: theme.textMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>
-            {kpis.cuotaTotal > 0 ? 'Run-rate vs cuota' : 'Run-rate proyectado'}
-          </p>
-          <p style={{ fontSize: 40, fontWeight: 600, letterSpacing: '-0.035em', margin: '4px 0 0', color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.05, fontFamily: TYPO.fontDisplay }}>
-            {fmtCompact(kpis.runRate)}
-          </p>
-          {kpis.cuotaTotal > 0 ? (
-            <span style={{ fontSize: 12, color: theme.textMuted, marginTop: 10 }}>
-              Meta: {fmtCompact(kpis.cuotaTotal)} · <strong style={{ color: kpis.gapVsRunRate >= 0 ? theme.green : theme.red, fontWeight: 500 }}>{fmtPctDelta(kpis.cumplYTD - 100)} cumpl.</strong>
-            </span>
-          ) : (
-            <span style={{ fontSize: 12, color: theme.textMuted, fontStyle: 'italic', marginTop: 10 }}>Sin cuota cargada — agrega en cuotas_canales</span>
-          )}
+        <div style={{
+          background: theme.surface, borderRadius: 18, padding: '16px 18px', border,
+          display: 'flex', alignItems: 'center', gap: 14,
+        }}>
+          <IconBadge icon={Target} color={PALETTE.purple.mid} size={36} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 11, margin: 0, color: theme.textMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>
+              {kpis.cuotaTotal > 0 ? 'Run-rate vs cuota' : 'Run-rate proyectado'}
+            </p>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 2 }}>
+              <p style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.03em', margin: 0, color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
+                {fmtCompact(kpis.runRate)}
+              </p>
+              {kpis.cuotaTotal > 0 && (
+                <span style={{ fontSize: 12, fontWeight: 500, color: kpis.gapVsRunRate >= 0 ? green : red, fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtPctDelta(kpis.cumplYTD - 100)}
+                </span>
+              )}
+            </div>
+            {kpis.cuotaTotal > 0 ? (
+              <p style={{ fontSize: 11, color: theme.textMuted, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>
+                Meta {fmtCompact(kpis.cuotaTotal)} · YTD {fmtCompact(kpis.ventaYTD)}
+              </p>
+            ) : (
+              <p style={{ fontSize: 11, color: theme.textMuted, margin: '2px 0 0', fontStyle: 'italic' }}>
+                Sin cuota cargada · agrega en cuotas_canales
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>
