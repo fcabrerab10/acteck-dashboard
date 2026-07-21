@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  AreaChart, Area,
   XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
 } from 'recharts';
 
@@ -61,6 +62,28 @@ function IconBadge({ icon: Icon, color, size = 40 }) {
   );
 }
 
+// ────────── iOS system palette map por canal ──────────
+// Ordenado por prioridad de facturación esperada. Usa colores del theme (iOS Claro/Midnight, editorial Marfil).
+const IOS_CANAL_ORDER = ['purple', 'accent', 'teal', 'orange', 'pink', 'green', 'indigo', 'red'];
+function colorCanalIOS(theme, key, fallbackIdx = 0) {
+  const overrides = {
+    'MAYOREO':              theme.purple,
+    'DISTRIBUIDOR':         theme.accent,
+    'E-COMMERCE':           theme.teal,
+    'RETAIL REPRESENTADOS': theme.orange,
+    'RETAIL PROPIOS':       theme.pink,
+    'MOSTRADOR':            theme.green,
+    'MERCADO LIBRE':        theme.orange,
+    'AMAZON':               theme.pink,
+    'SITIO WEB':            theme.teal,
+    'CYBERPURTA':           theme.purple,
+    'SANBORN':              theme.pink,
+    'WALMART':              theme.indigo,
+  };
+  const norm = String(key || '').toUpperCase();
+  return overrides[norm] || theme[IOS_CANAL_ORDER[fallbackIdx % IOS_CANAL_ORDER.length]] || theme.accent;
+}
+
 // ────────── MixDonut · donut + ranking interactivo (hover cruzado) ──────────
 function MixDonut({ bloques, ventaTotal, deltaTotal, anio, expandido, onSelect, puedeSeleccionar }) {
   const { theme } = useTheme();
@@ -84,7 +107,7 @@ function MixDonut({ bloques, ventaTotal, deltaTotal, anio, expandido, onSelect, 
     const dash = `${len} ${CIRC}`;
     const dashOffset = -offsetAcc;
     offsetAcc += len;
-    return { key: it.key, color: colorBloque(it.key).mid, dash, dashOffset, pct };
+    return { key: it.key, color: colorCanalIOS(theme, it.key, items.indexOf(it)), dash, dashOffset, pct };
   });
   const green = theme.green || '#34C759';
   const red = theme.red || '#FF3B30';
@@ -146,7 +169,7 @@ function MixDonut({ bloques, ventaTotal, deltaTotal, anio, expandido, onSelect, 
       {/* Ranking */}
       <div style={{ display: 'grid', gap: 6 }}>
         {items.map((it, i) => {
-          const pal = colorBloque(it.key);
+          const palMid = colorCanalIOS(theme, it.key, i);
           const pct = ((it.venta || 0) / total) * 100;
           const active = hover === it.key || expandido === it.key;
           const dim = (hover || expandido) && !active;
@@ -164,13 +187,13 @@ function MixDonut({ bloques, ventaTotal, deltaTotal, anio, expandido, onSelect, 
                 transition: 'background 120ms, opacity 120ms',
               }}>
               <span style={{ fontSize: 10, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{i + 1}</span>
-              <span style={{ width: 10, height: 10, borderRadius: 3, background: pal.mid, flexShrink: 0 }} />
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: palMid, flexShrink: 0 }} />
               <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0, overflow: 'hidden' }}>
                 <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 500, color: theme.text, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.key}</span>
                 <span style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>· {pct.toFixed(1)}%</span>
               </span>
               <div style={{ height: 5, borderRadius: 999, background: theme.border, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${Math.max(2, pct)}%`, background: pal.mid, borderRadius: 999 }} />
+                <div style={{ height: '100%', width: `${Math.max(2, pct)}%`, background: palMid, borderRadius: 999 }} />
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 6 }}>
                 <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.015em' }}>{fmtCompact(it.venta)}</span>
@@ -739,16 +762,19 @@ export default function VisionGeneral() {
         <span style={{ fontSize: 10, color: theme.textSubtle, fontStyle: 'italic', fontFamily: TYPO.fontText }}>Marca / Categoría pendientes</span>
       </div>
 
-      {/* Mix por dimensión · donut + ranking interactivo */}
-      <MixDonut
-        bloques={bloques}
-        ventaTotal={kpis.ventaYTD}
-        deltaTotal={kpis.deltaVenta}
-        anio={anio}
-        expandido={bloqueExpandido}
-        onSelect={(k) => setBloqueExpandido(bloqueExpandido === k ? null : k)}
-        puedeSeleccionar={dimension === 'canal'}
-      />
+      {/* Mix + Tendencia · misma fila */}
+      <div className="grid gap-2.5" style={{ gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1fr)' }}>
+        <MixDonut
+          bloques={bloques}
+          ventaTotal={kpis.ventaYTD}
+          deltaTotal={kpis.deltaVenta}
+          anio={anio}
+          expandido={bloqueExpandido}
+          onSelect={(k) => setBloqueExpandido(bloqueExpandido === k ? null : k)}
+          puedeSeleccionar={dimension === 'canal'}
+        />
+        <TendenciaCard data={tendencia} anio={anio} mesMax={mesMax} />
+      </div>
 
       {/* Drill-down de clientes del bloque expandido (solo dimension=canal) */}
       {bloqueExpandido && dimension === 'canal' && (
@@ -757,9 +783,6 @@ export default function VisionGeneral() {
           anio={anio} mesMax={mesMax}
           onClose={() => setBloqueExpandido(null)} />
       )}
-
-      {/* Tendencia 3 años */}
-      <TendenciaCard data={tendencia} anio={anio} mesMax={mesMax} />
 
       {/* Bloque Sell Out */}
       <SellOutBloque
@@ -1052,10 +1075,10 @@ function BloqueBento({ item, expandido, onClick, puedeExpandir, inverse = false 
 
 // ────────── Drill-down: detalle del canal con chart y clientes ──────────
 function ClientesPanel({ canal, clientes, mensualAct, mensualPrev, anio, mesMax, onClose }) {
+  const { theme } = useTheme();
   const totalCanal = clientes.reduce((s, c) => s + (Number(c.venta) || 0), 0);
-  const palette = colorBloque(canal);
+  const canalCol = colorCanalIOS(theme, canal);
 
-  // KPIs del canal
   const ytdAct  = mensualAct.filter((r) => r.canal === canal && Number(r.mes) <= mesMax)
     .reduce((s, r) => s + (Number(r.venta) || 0), 0);
   const ytdPrev = mensualPrev.filter((r) => r.canal === canal && Number(r.mes) <= mesMax)
@@ -1066,103 +1089,118 @@ function ClientesPanel({ canal, clientes, mensualAct, mensualPrev, anio, mesMax,
   const ventaMesPrev = mensualPrev.filter((r) => r.canal === canal && Number(r.mes) === mesMax)
     .reduce((s, r) => s + (Number(r.venta) || 0), 0);
   const deltaMes = ventaMesPrev > 0 ? ((ventaMes - ventaMesPrev) / ventaMesPrev) * 100 : null;
+  const totalNegocio = mensualAct.reduce((s, r) => s + (Number(r.venta) || 0), 0) || 1;
+  const shareCanal = (ytdAct / totalNegocio) * 100;
 
-  // Data mensual para barras lado a lado
   const trendData = Array.from({ length: 12 }, (_, i) => {
     const m = i + 1;
     const a = mensualAct.filter((r) => r.canal === canal && Number(r.mes) === m).reduce((s, r) => s + (Number(r.venta) || 0), 0);
     const p = mensualPrev.filter((r) => r.canal === canal && Number(r.mes) === m).reduce((s, r) => s + (Number(r.venta) || 0), 0);
-    return { mes: MESES_LBL[i], anioPrev: p || null, anioAct: m <= mesMax ? (a || null) : null };
+    return { mes: MESES_LBL[i], [`${anio - 1}`]: p || null, [`${anio}`]: m <= mesMax ? (a || null) : null };
   });
 
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
+
+  const KBox = ({ lbl, val, sub, subColor, last }) => (
+    <div style={{ padding: '2px 14px', borderRight: last ? 'none' : `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column' }}>
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>{lbl}</p>
+      <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', color: subColor || theme.text, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{val}</p>
+      {sub && <p style={{ fontSize: 10, color: subColor || theme.textMuted, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{sub}</p>}
+    </div>
+  );
+
   return (
-    <div className="bg-white rounded-xl p-4" style={{ border: `1px solid ${palette.mid}` }}>
-      <div className="flex items-start justify-between mb-3 flex-wrap gap-3">
-        <div>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: 12, height: 12, borderRadius: 6, background: palette.mid, display: 'inline-block' }} />
-            <span className="text-lg font-medium text-gray-800">{canal}</span>
-          </span>
-          <p className="text-[11px] text-gray-500 mt-0.5">
-            {clientes.length} clientes · {((ytdAct / (mensualAct.reduce((s, r) => s + (Number(r.venta) || 0), 0) || 1)) * 100).toFixed(1)}% del negocio total
-          </p>
-        </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-700" title="Cerrar">
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 18,
+      padding: '14px 20px', fontFamily: TYPO.fontText,
+    }}>
+      {/* Header inline */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10, borderBottom: `1px solid ${theme.border}`, marginBottom: 12 }}>
+        <span style={{ width: 10, height: 10, borderRadius: 3, background: canalCol, flexShrink: 0 }} />
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text }}>{canal}</span>
+        <span style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 4 }}>
+          · {clientes.length} clientes · {shareCanal.toFixed(1)}% del negocio total
+        </span>
+        <button onClick={onClose} title="Cerrar" style={{ marginLeft: 'auto', background: 'transparent', border: 0, color: theme.textMuted, cursor: 'pointer', padding: 4, lineHeight: 1 }}>
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      {/* 4 mini-KPIs del canal */}
-      <div className="grid grid-cols-4 gap-2 mb-4">
-        <MiniKpi palette={palette} label={`YTD ${anio}`}      valor={fmtCompact(ytdAct)} />
-        <MiniKpi palette={PALETTE.gray} label={`YTD ${anio - 1}`} valor={fmtCompact(ytdPrev)} />
-        <MiniKpi palette={delta == null ? PALETTE.gray : delta >= 0 ? PALETTE.teal : PALETTE.red}
-          label="Δ YoY"
-          valor={delta == null ? '—' : fmtPctDelta(delta)} />
-        <MiniKpi palette={PALETTE.amber}
-          label={`${MESES_FULL[mesMax - 1]} ${anio}`}
-          valor={fmtCompact(ventaMes)}
-          sub={deltaMes != null ? fmtPctDelta(deltaMes) + ' YoY' : ''} />
+      {/* 4 KPIs sin bg · separados por dividers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 12 }}>
+        <KBox lbl={`YTD ${anio}`} val={fmtCompact(ytdAct)} sub={`vs ${fmtCompact(ytdPrev)} en ${anio - 1}`} />
+        <KBox lbl={`YTD ${anio - 1}`} val={fmtCompact(ytdPrev)} sub={`${mesMax} meses cerrados`} />
+        <KBox lbl="Δ YoY" val={delta == null ? '—' : fmtPctDelta(delta)} sub={delta == null ? '' : `${delta >= 0 ? '+' : ''}${fmtCompact(ytdAct - ytdPrev)} vs prev`} subColor={delta == null ? theme.textMuted : delta >= 0 ? green : red} />
+        <KBox lbl={`${MESES_FULL[mesMax - 1]} ${anio}`} val={fmtCompact(ventaMes)} sub={deltaMes != null ? `${deltaMes >= 0 ? '↑' : '↓'} ${Math.abs(deltaMes).toFixed(1)}% YoY` : ''} subColor={deltaMes == null ? theme.textMuted : deltaMes >= 0 ? green : red} last />
       </div>
 
-      {/* Bar chart 2025 vs 2026 */}
-      <p className="text-[11px] uppercase tracking-widest text-gray-500 mb-1">Facturación mensual · {anio - 1} vs {anio}</p>
-      <div style={{ width: '100%', height: 220, marginBottom: 16 }}>
+      {/* Area chart Apple Health style · 2025 vs 2026 */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '8px 0 6px' }}>
+        <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Facturación mensual · {anio - 1} vs {anio}</p>
+        <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: canalCol }} />{anio}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anio - 1}</span>
+        </div>
+      </div>
+      <div style={{ width: '100%', height: 150, marginBottom: 14 }}>
         <ResponsiveContainer>
-          <BarChart data={trendData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="#F1F5F9" vertical={false} />
-            <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
-            <YAxis tickFormatter={(v) => '$' + (v / 1e6).toFixed(0) + 'M'} tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v) => fmtMoney(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-            <Legend wrapperStyle={{ fontSize: 11 }} iconType="square" />
-            <Bar dataKey="anioPrev" name={`${anio - 1}`} fill={palette.bg} stroke={palette.mid} strokeWidth={1} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-            <Bar dataKey="anioAct"  name={`${anio}`}     fill={palette.mid} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-          </BarChart>
+          <AreaChart data={trendData} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
+            <defs>
+              <linearGradient id={`fillCanal-${String(canal).replace(/\W/g, '')}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={canalCol} stopOpacity={0.20} />
+                <stop offset="100%" stopColor={canalCol} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
+            <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
+            <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={38} />
+            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
+            <Area type="monotone" dataKey={`${anio - 1}`} stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
+            <Area type="monotone" dataKey={`${anio}`} stroke={canalCol} strokeWidth={2.2} fill={`url(#fillCanal-${String(canal).replace(/\W/g, '')})`} dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: canalCol, strokeWidth: 2 }} isAnimationActive={false} />
+          </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      {clientes.length === 0 ? null : (
+      {clientes.length > 0 && (
         <>
-      <p className="text-[11px] uppercase tracking-widest text-gray-500 mb-1">Top clientes del canal · YTD</p>
-      <table className="w-full" style={{ fontSize: 12 }}>
-        <thead>
-          <tr style={{ background: '#FAFBFC', borderBottom: '1px solid #E2E8F0' }}>
-            <th style={thLeft}>#</th>
-            <th style={thLeft}>Cliente</th>
-            <th style={thRight}>Venta YTD</th>
-            <th style={thRight}>% del canal</th>
-            <th style={thRight}>Piezas</th>
-            <th style={thRight}>Meses activos</th>
-          </tr>
-        </thead>
-        <tbody>
-          {clientes.slice(0, 25).map((c, i) => {
-            const venta = Number(c.venta) || 0;
-            const share = totalCanal > 0 ? (venta / totalCanal) * 100 : 0;
-            return (
-              <tr key={c.cliente_nombre + i} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                <td style={{ ...tdLeft, color: '#94A3B8' }}>{i + 1}</td>
-                <td style={{ ...tdLeft, maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                  title={c.cliente_nombre}>
-                  {c.cliente_nombre}
-                </td>
-                <td style={{ ...tdRight, fontWeight: 500 }}>{fmtCompact(venta)}</td>
-                <td style={tdRight}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
-                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{share.toFixed(1)}%</span>
-                    <span style={{ width: 40, height: 6, background: '#F1F5F9', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
-                      <span style={{ position: 'absolute', inset: 0, width: `${Math.min(share, 100)}%`, background: colorBloque(canal).mid }} />
-                    </span>
-                  </span>
-                </td>
-                <td style={tdRight}>{fmtInt(c.piezas)}</td>
-                <td style={tdRight}>{c.meses_activos || '—'}</td>
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '4px 0 6px' }}>Top clientes · YTD {anio}</p>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}`, width: 24 }}>#</th>
+                <th style={{ textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}` }}>Cliente</th>
+                <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}`, width: 100 }}>Venta YTD</th>
+                <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}`, width: 110 }}>% del canal</th>
+                <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}`, width: 80 }}>Piezas</th>
+                <th style={{ textAlign: 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '6px 8px', borderBottom: `1px solid ${theme.border}`, width: 60 }}>Meses</th>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      </>
+            </thead>
+            <tbody>
+              {clientes.slice(0, 25).map((c, i) => {
+                const venta = Number(c.venta) || 0;
+                const share = totalCanal > 0 ? (venta / totalCanal) * 100 : 0;
+                return (
+                  <tr key={c.cliente_nombre + i}>
+                    <td style={{ padding: '5px 8px', fontSize: 11, color: theme.textSubtle, fontWeight: 500, borderBottom: `1px solid ${theme.border}` }}>{i + 1}</td>
+                    <td style={{ padding: '5px 8px', fontSize: 12, color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 500, letterSpacing: '-0.005em', borderBottom: `1px solid ${theme.border}`, maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.cliente_nombre}>{c.cliente_nombre}</td>
+                    <td style={{ padding: '5px 8px', fontSize: 13, textAlign: 'right', color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.01em', borderBottom: `1px solid ${theme.border}` }}>{fmtCompact(venta)}</td>
+                    <td style={{ padding: '5px 8px', fontSize: 12, textAlign: 'right', color: theme.text, borderBottom: `1px solid ${theme.border}` }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                        <span>{share.toFixed(1)}%</span>
+                        <span style={{ width: 40, height: 4, background: theme.border, borderRadius: 999, position: 'relative', overflow: 'hidden' }}>
+                          <span style={{ position: 'absolute', inset: 0, width: `${Math.min(share, 100)}%`, background: canalCol, borderRadius: 999 }} />
+                        </span>
+                      </span>
+                    </td>
+                    <td style={{ padding: '5px 8px', fontSize: 12, textAlign: 'right', color: theme.text, borderBottom: `1px solid ${theme.border}` }}>{fmtInt(c.piezas)}</td>
+                    <td style={{ padding: '5px 8px', fontSize: 12, textAlign: 'right', color: theme.text, borderBottom: `1px solid ${theme.border}` }}>{c.meses_activos || '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </>
       )}
     </div>
   );
@@ -1277,23 +1315,32 @@ function AgingTile({ palette, label, valor, total }) {
 function TendenciaCard({ data, anio, mesMax }) {
   const { theme } = useTheme();
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 22, padding: 24, fontFamily: TYPO.fontText }}>
-      <div className="flex items-baseline justify-between mb-4">
-        <h4 style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Tendencia mensual · 3 años</h4>
-        <p style={{ fontSize: 12, color: theme.textMuted, margin: 0 }}>{anio - 2}, {anio - 1}, {anio}</p>
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 18, padding: '14px 18px', fontFamily: TYPO.fontText, display: 'flex', flexDirection: 'column' }}>
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 6 }}>
+        <h4 style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Tendencia mensual · 3 años.</h4>
+        <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.accent }} />{anio}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.6 }} />{anio - 1}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.3 }} />{anio - 2}</span>
+        </div>
       </div>
-      <div style={{ width: '100%', height: 260 }}>
+      <div style={{ width: '100%', height: 158, flex: 1 }}>
         <ResponsiveContainer>
-          <LineChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="#F1F5F9" vertical={false} />
-            <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
-            <YAxis tickFormatter={(v) => '$' + (v / 1e6).toFixed(0) + 'M'} tick={{ fontSize: 10, fill: '#6B6A64' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-            <Legend wrapperStyle={{ fontSize: 11 }} iconType="line" />
-            <Line type="monotone" dataKey={`${anio - 2}`} stroke={PALETTE.gray.mid} strokeWidth={1.2} strokeDasharray="3 3" dot={false} isAnimationActive={false} />
-            <Line type="monotone" dataKey={`${anio - 1}`} stroke={PALETTE.blue.mid}  strokeWidth={1.6} dot={false} isAnimationActive={false} />
-            <Line type="monotone" dataKey={`${anio}`}     stroke={PALETTE.purple.mid} strokeWidth={2.2} dot={{ r: 3, fill: PALETTE.purple.mid }} isAnimationActive={false} />
-          </LineChart>
+          <AreaChart data={data} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
+            <defs>
+              <linearGradient id="fillNow" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={theme.accent} stopOpacity={0.18} />
+                <stop offset="100%" stopColor={theme.accent} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
+            <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
+            <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={38} />
+            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
+            <Area type="monotone" dataKey={`${anio - 2}`} stroke={theme.textMuted} strokeOpacity={0.35} strokeWidth={1} strokeDasharray="3 3" fill="none" dot={false} isAnimationActive={false} />
+            <Area type="monotone" dataKey={`${anio - 1}`} stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
+            <Area type="monotone" dataKey={`${anio}`}     stroke={theme.accent} strokeWidth={2.2} fill="url(#fillNow)" dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: theme.accent, strokeWidth: 2 }} isAnimationActive={false} />
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </div>
