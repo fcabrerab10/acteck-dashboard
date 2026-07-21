@@ -118,14 +118,18 @@ Los 3 temas comparten estructura de tokens (`bg`, `surface`, `text`, `accent`…
 
 ## 3 · Tipografía
 
-Fuente única en los 3 temas: **SF Pro** (con fallback a Segoe UI Variable en Windows, Inter → system sans).
+Fuente única en los 3 temas: **SF Pro** — el mismo stack que usa `apple.com` en producción. Sin Inter, sin Segoe, sin Roboto — los fallbacks intermedios ensucian y no son necesarios: `-apple-system` cubre macOS/iOS, y `Helvetica Neue → Helvetica → Arial` cubre todo lo demás con una tipografía humanista suficientemente parecida.
 
 ```css
 --font-text:    -apple-system, BlinkMacSystemFont, "SF Pro Text",
-                "Segoe UI Variable Text", "Segoe UI", "Inter", Roboto, sans-serif;
+                "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
 --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display",
-                "Segoe UI Variable Display", "Segoe UI", "Inter Display", Roboto, sans-serif;
+                "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
 ```
+
+Es el mismo stack CSS que sirve Apple en `apple.com/mx` (Store, Mac, iPhone). En Mac se ve SF Pro real; en Windows/Linux cae a Helvetica Neue / Arial que respeta la métrica.
+
+**Opcional recomendado — self-hosting de SF Pro:** Apple distribuye SF Pro gratis para descarga desde <https://developer.apple.com/fonts/>. Si en el futuro queremos que Windows también vea SF Pro, se descarga el `.woff2` y se sirve desde `/public/fonts/` con `@font-face`. Sin licencia extra requerida — Apple lo permite explícitamente.
 
 **Regla:** display para cifras y títulos ≥20px, text para body, labels, captions.
 

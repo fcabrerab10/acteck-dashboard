@@ -3,8 +3,10 @@
 
 // ═══ Escala tipográfica Apple — se aplica en todos los temas ═══
 export const TYPO = {
-  fontText:    '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI Variable", "Segoe UI", Roboto, sans-serif',
-  fontDisplay: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter Display", "Inter", "Segoe UI Variable Display", "Segoe UI", Roboto, sans-serif',
+  // Stack CSS exacto que sirve apple.com/mx — sin Inter/Segoe/Roboto intermedios.
+  // Mac/iOS: SF Pro real. Windows/Linux: Helvetica Neue → Helvetica → Arial (métrica cercana).
+  fontText:    '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif',
+  fontDisplay: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif',
   // Sizes
   hero:    { fs: 56, w: 600, ls: '-0.045em', lh: 1 },
   h1:      { fs: 44, w: 600, ls: '-0.035em', lh: 1.05 },
