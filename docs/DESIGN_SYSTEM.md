@@ -483,7 +483,299 @@ Pestañas por documentar:
 
 ---
 
-## 10 · Anti-patterns _(qué NO hacer)_
+---
+
+# PARTE 3 · RESPONSIVE
+
+Este dashboard tiene que verse bien desde un iPhone SE (375px) hasta un monitor externo 4K. Esta parte define cómo cada componente se adapta.
+
+## 12 · Breakpoints
+
+Alineados con la lógica que usa apple.com y con los dispositivos más comunes del mercado en 2026:
+
+| Nombre | Rango px | Dispositivos objetivo |
+|--------|---------|-----------------------|
+| `mobile` | 320 – 767 | iPhone SE, iPhone 15/16, iPhone 17 Pro, iPhone Pro Max (portrait) |
+| `tablet` | 768 – 1023 | iPad Mini (portrait), iPad Air 11" (portrait), iPhone Pro Max (landscape) |
+| `laptop` | 1024 – 1439 | iPad Pro 11" (portrait), iPad Pro 12.9" (portrait), Surface Pro, MacBook Air 11", Windows laptops HD (1366×768 y 1440×900) |
+| `desktop` | 1440 – 1919 | MacBook Air 13" M-series, MacBook Pro 14"/16", Windows FHD 1920×1080, iPad Pro 12.9" landscape |
+| `wide` | 1920 + | Studio Display, iMac 24", monitores externos WQHD/4K, Windows QHD 2560×1440 |
+
+**Media queries en CSS (mobile-first, siempre):**
+
+```css
+/* Base = mobile */
+@media (min-width: 768px)  { /* tablet */ }
+@media (min-width: 1024px) { /* laptop */ }
+@media (min-width: 1440px) { /* desktop */ }
+@media (min-width: 1920px) { /* wide */ }
+```
+
+**Nunca max-width queries.** Se escribe mobile primero y se agrega complejidad hacia arriba — más fácil de mantener y más rápido en móvil.
+
+---
+
+## 13 · Dispositivos objetivo (tabla completa)
+
+### Apple
+
+| Dispositivo | Portrait | Landscape | Notas |
+|-------------|---------|----------|-------|
+| iPhone SE | 375 × 667 | 667 × 375 | Mínimo absoluto de soporte |
+| iPhone 15/16 | 393 × 852 | 852 × 393 | — |
+| iPhone 17 | 393 × 852 | 852 × 393 | — |
+| iPhone 15/16/17 Pro Max | 430 × 932 | 932 × 430 | **Landscape muy común para revisar dashboards** — priorizar |
+| iPad Mini 6 | 744 × 1133 | 1133 × 744 | — |
+| iPad 10 / iPad Air 11 | 820 × 1180 | 1180 × 820 | — |
+| iPad Pro 11" | 834 × 1194 | 1194 × 834 | — |
+| iPad Pro 12.9" / 13" | 1024 × 1366 | 1366 × 1024 | En landscape ya es "laptop" |
+| MacBook Air 13" (M3) | — | 1440 × 900 (efectivo) | Retina @ 2× |
+| MacBook Pro 14" | — | 1512 × 982 | Retina @ 2× |
+| MacBook Pro 16" | — | 1728 × 1117 | Retina @ 2× |
+| iMac 24" | — | 2240 × 1260 (efectivo) | — |
+| Studio Display / Pro Display | — | 2560 × 1440 y arriba | — |
+
+### Windows y otros
+
+| Dispositivo | Resolución nativa | Efectivo |
+|-------------|-------------------|---------|
+| Windows laptop HD | 1366 × 768 | 1366 × 768 | Aún muy común en corporativo |
+| Windows FHD | 1920 × 1080 | 1920 × 1080 | Mayoría en 2026 |
+| Windows QHD | 2560 × 1440 | 1707 × 960 @ 150% (default) | Escala 125-150% típica |
+| Surface Pro | 2880 × 1920 | 1440 × 960 | Aspect 3:2 |
+| Android phones populares | 360 × 800 – 412 × 915 | — | Cubierto por rango `mobile` |
+| Samsung Galaxy Fold (desplegado) | 812 × 673 | — | Cubierto por rango `tablet` |
+
+**Regla:** cualquier pantalla entre 320px y 4K debe funcionar. Testear en `iPhone SE (375)`, `iPad Air portrait (820)`, `MacBook Air (1440)`, `Windows FHD (1920)` cubre el 95% de casos.
+
+---
+
+## 14 · Reglas responsivas base
+
+### 14.1 · Container y padding lateral
+
+| Breakpoint | Max-width | Padding X |
+|-----------|-----------|-----------|
+| mobile | 100% | 20px |
+| tablet | 100% | 32px |
+| laptop | 1240px | 40px |
+| desktop | 1240px | 40px |
+| wide | 1440px | 60px |
+
+Nunca dejar el contenido "flotando" ancho completo en pantallas >1440 — se rompe la línea de lectura y las cifras se ven perdidas.
+
+### 14.2 · Escala tipográfica reducida en mobile
+
+Todos los tokens de `TYPO` escalan hacia abajo automáticamente vía `clamp()`:
+
+| Token | Mobile | Tablet | Laptop+ |
+|-------|--------|--------|---------|
+| `heroMax` (200-240) | 88px | 140px | 240px |
+| `heroDisplay` (96) | 40px | 64px | 96px |
+| `hero` (72) | 32px | 48px | 72px |
+| `h1` (48) | 28px | 36px | 48px |
+| `h2` (32) | 24px | 28px | 32px |
+| `h3` (22) | 19px | 21px | 22px |
+| `tagline` (28) | 18px | 22px | 28px |
+| `kpiXl` (88) | 44px | 64px | 88px |
+| `kpiLg` (64) | 36px | 52px | 64px |
+| `kpiMd` (44) | 28px | 36px | 44px |
+| `body` (15) | 15px | 15px | 15px |
+| `caption` (12) | 12px | 12px | 12px |
+
+Implementación en CSS: `font-size: clamp(<mobile>, <preferred>, <max>);` donde preferred es un cálculo vw + rem.
+
+### 14.3 · Grids colapsables
+
+| Grid original | Mobile | Tablet | Laptop+ |
+|---------------|--------|--------|---------|
+| Bento 4 col | 1 col | 2 col | 4 col |
+| Bento 3 col | 1 col | 2 col | 3 col |
+| Feature cards 2×2 | 1 col × 4 filas | 2×2 | 2×2 |
+| KPI band (4 verticales) | 2×2 stacked | 4 horizontal | 4 horizontal |
+| Sidebar 264 + main | Off-canvas + main full | Off-canvas + main full | 264 + main |
+
+### 14.4 · Touch targets
+
+En mobile y tablet, todo elemento clicable debe tener **mínimo 44×44px** de área táctil (Apple HIG estándar). Si el diseño visual tiene un botón de 32px, se compensa con padding invisible o `min-height/min-width: 44px`.
+
+### 14.5 · Safe area insets (iPhone notch + home indicator)
+
+En mobile, cualquier UI que llegue al borde de pantalla debe respetar los notches:
+
+```css
+padding-top: env(safe-area-inset-top);
+padding-bottom: env(safe-area-inset-bottom);
+padding-left: env(safe-area-inset-left);   /* iPhone landscape */
+padding-right: env(safe-area-inset-right);
+```
+
+Y en `index.html` el meta debe ser:
+
+```html
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+```
+
+Con `viewport-fit=cover` para que el fondo llene toda la pantalla incluidas las notches (importante especialmente en Midnight, donde el fondo negro debe llegar edge-to-edge en iPhone Pro Max).
+
+### 14.6 · Overflow horizontal
+
+Ninguna página debe hacer scroll horizontal del body. Las tablas anchas van en un container con `overflow-x: auto; -webkit-overflow-scrolling: touch;` y sombra sutil al borde derecho para indicar scroll disponible.
+
+### 14.7 · Hover vs Touch
+
+Los `:hover` no existen en touch. Todo estado de hover debe tener también un estado equivalente `:active` o `:focus-visible` para touch. Cuando un elemento sólo se activa con hover (ej. tooltip de sparkline), en mobile se activa con tap.
+
+Detección:
+```css
+@media (hover: hover) { /* estilos hover — Mac/Windows/mouse */ }
+@media (hover: none)  { /* touch — mobile/tablet */ }
+```
+
+---
+
+## 15 · Menú (Sidebar) responsive
+
+El sidebar de 264px del desktop se transforma según pantalla:
+
+### 15.1 · Desktop y wide (≥1024)
+
+Como en la spec sección 7. Fixed left, 264px, siempre visible.
+
+### 15.2 · Tablet (768-1023)
+
+- **Portrait (ej. iPad Air 820px):** sidebar colapsado a 72px (solo íconos, sin labels). Hover expande a 264px por 300ms.
+- **Landscape (ej. iPad Pro landscape 1194px):** ya cae en `laptop`, sidebar completo 264px.
+
+### 15.3 · Mobile (320-767)
+
+- **Sidebar desaparece** completamente. Se reemplaza por dos patrones combinados:
+  - **Top bar sticky** de 56px con: hamburger (izq) + título de pestaña actual (centro) + acción principal (der)
+  - **Bottom tab bar** iOS-style de 60px con 5 íconos: Home · Ventas · Inventario · Pagos · Más — el resto de pestañas caen en "Más"
+- Hamburger abre un drawer full-height desde la izquierda con la jerarquía completa. El drawer respeta safe-area-inset-top.
+- Bottom tab bar respeta `safe-area-inset-bottom` (área del home indicator en iPhone).
+
+### 15.4 · Comportamiento por tema en mobile
+
+- **Claro:** top bar dark blur (mismo `#1D1D1F` translúcido), bottom tab bar blanco con hairline superior
+- **Midnight:** top bar `#0A0A0C` con hairline `rgba(255,255,255,0.08)`, bottom tab bar mismo negro. Ícono activo en cyan `#64D2FF` con glow
+- **Marfil:** top bar `#F7F3EC` con hairline warm, bottom tab bar `#EEE7DA`. Ícono activo con dot azul cobalto `#0055B5` debajo
+
+---
+
+## 16 · Estado de Resultados responsive
+
+### 16.1 · Desktop y wide (≥1024)
+
+Como en la spec sección 8. Layout completo por tema.
+
+### 16.2 · Laptop (1024-1439)
+
+- Container max-width 1240px.
+- Hero cifra del Claro/Midnight de 240px → 180px.
+- Featurette azul del Marfil mantiene bleed edge-to-edge.
+- Grid 2×2 de feature cards del Claro se mantiene, cards con padding 40px en lugar de 60px.
+
+### 16.3 · Tablet (768-1023)
+
+- **Claro:**
+  - Sub-nav sticky se mantiene pero con menos acciones (los links secundarios entran en menú "···")
+  - Hero cifra 240px → 120px
+  - Grid 2×2 de feature cards → 2×2 pero cards más chicas (min-height 280px)
+  - Tabla tech specs: font-size 13px, padding celda `14px 12px`
+- **Midnight:**
+  - Hero cifra 200px → 120px
+  - KPI band 4 col → 2×2 (dos filas de dos)
+  - Glows laterales reducidos al 60% de tamaño para no cargar mucho
+- **Marfil:**
+  - Hero cifra 200px → 120px
+  - Featurette azul: `margin: 40px -32px` (respeta el padding lateral tablet)
+  - Grid de 3 métricas en featurette → 3 columnas (aún cabe)
+
+### 16.4 · Mobile (320-767)
+
+- **Todos los temas:**
+  - Los top bars y bottom tab bar del sidebar (sección 15.3) sustituyen la nav
+  - Container padding X = 20px, contenido single column
+  - Cifras hero grandes (200-240px) → 72-88px
+  - Deltas y sub-info debajo de la cifra en línea múltiple (no todo en un renglón)
+  - Tabla detalle: **columnas colapsan** a solo `Cuenta | YTD | Δ%` (los meses individuales se muestran en drill-down modal, no en la tabla principal). El detalle mensual queda accesible via tap en la fila.
+  - Grid 2×2 de feature cards (Claro) → 1 columna, 4 cards apiladas
+  - KPI band Midnight (4 celdas) → 2×2 con hairlines
+  - Featurette azul del Marfil: sigue bleed edge-to-edge, padding reducido a `48px 24px`
+
+- **Claro específico:** las secciones alternadas (blanco → negro → blanco) se sienten muy bien en scroll vertical mobile — como landing de apple.com/iphone en móvil
+- **Midnight específico:** el hero cinematográfico funciona mejor en landscape iPhone Pro Max (932×430). Considerar rotación forzada NO — sólo optimizar landscape para que la cifra dominante quede visible sin scroll
+- **Marfil específico:** en mobile la featurette bleed toca los bordes exactos de la pantalla — hairline superior/inferior para separar del contenido marfil
+
+### 16.5 · Landscape iPhone Pro Max (932 × 430)
+
+Caso especial que muchos usuarios ocuparán:
+- Layout mobile pero con hero-band 2 col en lugar de 1 col
+- KPI mini de 4 cards en un solo row (no stackea)
+- Bottom tab bar reduce su altura a 44px para no comerse tanto verticalmente
+
+---
+
+## 17 · Reglas técnicas de implementación
+
+### 17.1 · CSS custom properties + clamp()
+
+Toda la tipografía responsiva se resuelve con `clamp()` en las custom properties del tema:
+
+```css
+:root {
+  --font-hero-max: clamp(88px, 15vw, 240px);
+  --font-hero-display: clamp(40px, 8vw, 96px);
+  --font-hero: clamp(32px, 6vw, 72px);
+  /* ... resto */
+}
+```
+
+Ventaja: la tipografía escala suavemente entre breakpoints, no hay "saltos" bruscos.
+
+### 17.2 · CSS Grid con auto-fit para bento
+
+En lugar de escribir `grid-template-columns: 1fr / 2fr / 4fr` por breakpoint, usar:
+
+```css
+grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+```
+
+Las cards se auto-organizan según ancho disponible sin necesidad de media queries manuales para cada rango.
+
+### 17.3 · Testing manual antes de mergear
+
+Chrome DevTools → toggle device toolbar → probar en:
+- iPhone SE (375)
+- iPhone 15 Pro Max (430)
+- iPhone 15 Pro Max landscape (932 × 430)
+- iPad Mini portrait (768)
+- iPad Air portrait (820)
+- iPad Pro 11" landscape (1194)
+- Windows FHD (1920)
+
+Si en cualquiera de esos: (a) hay scroll horizontal del body, (b) el touch target de un botón mide <44px, (c) una cifra hero rompe el layout, (d) una tabla se sale de pantalla — no se mergea.
+
+### 17.4 · Reduced motion
+
+Respetar preferencia de sistema:
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+```
+
+Los glows radiales del Midnight y el hover suave de Fitness rings deben desactivarse cuando el usuario tiene la preferencia activa (iOS `Ajustes → Accesibilidad → Movimiento`).
+
+---
+
+---
+
+# PARTE 4 · REGLAS Y CHECKLIST
+
+## 18 · Anti-patterns _(qué NO hacer)_
 
 - ❌ Gradiente en un número (`background-clip: text`).
 - ❌ Gradiente en un ring, barra o botón.
@@ -500,7 +792,7 @@ Pestañas por documentar:
 
 ---
 
-## 11 · Checklist antes de mergear una pestaña
+## 19 · Checklist antes de mergear una pestaña
 
 - [ ] Todos los colores vienen de `theme.*` — cero hex hardcoded
 - [ ] Toda la tipografía viene de `TYPO` — cero `fontSize` fuera de la escala
@@ -512,4 +804,11 @@ Pestañas por documentar:
 - [ ] Se ve consistente aplicando cada uno de los 3 temas (test manual en Configuración)
 - [ ] Un solo "momento hero" por pantalla
 - [ ] La pestaña está documentada en la sección 9 de este manual
-- [ ] Anti-patterns de la sección 10 = cero
+- [ ] Anti-patterns de la sección 18 = cero
+- [ ] Responsive: testeada en iPhone SE (375), iPhone Pro Max landscape (932×430), iPad Air portrait (820), MacBook Air (1440), Windows FHD (1920)
+- [ ] Ningún scroll horizontal del body en cualquier breakpoint
+- [ ] Touch targets ≥ 44×44px en mobile/tablet
+- [ ] Safe area insets respetados (env(safe-area-inset-*))
+- [ ] Estados de hover tienen equivalente de touch (:active o :focus-visible)
+- [ ] Sidebar colapsa correctamente en tablet/mobile (drawer + bottom tab bar)
+- [ ] `@media (prefers-reduced-motion)` respetado — glows y animaciones desactivadas
