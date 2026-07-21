@@ -61,6 +61,133 @@ function IconBadge({ icon: Icon, color, size = 40 }) {
   );
 }
 
+// ────────── MixDonut · donut + ranking interactivo (hover cruzado) ──────────
+function MixDonut({ bloques, ventaTotal, deltaTotal, anio, expandido, onSelect, puedeSeleccionar }) {
+  const { theme } = useTheme();
+  const [hover, setHover] = useState(null);
+  const items = [...(bloques || [])].sort((a, b) => (b.venta || 0) - (a.venta || 0));
+  if (!items.length) {
+    return (
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 20, padding: 24, color: theme.textMuted, fontFamily: TYPO.fontText, textAlign: 'center', fontSize: 13 }}>
+        Sin datos para mostrar.
+      </div>
+    );
+  }
+  const total = items.reduce((s, it) => s + (it.venta || 0), 0) || 1;
+  // Radio y perímetro del arco (r=42 igual que mockup)
+  const R = 42;
+  const CIRC = 2 * Math.PI * R;
+  let offsetAcc = 0;
+  const arcs = items.map((it) => {
+    const pct = (it.venta || 0) / total;
+    const len = pct * CIRC;
+    const dash = `${len} ${CIRC}`;
+    const dashOffset = -offsetAcc;
+    offsetAcc += len;
+    return { key: it.key, color: colorBloque(it.key).mid, dash, dashOffset, pct };
+  });
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
+
+  return (
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 20,
+      padding: '20px 24px', display: 'grid', gridTemplateColumns: '180px 1fr', gap: 32,
+      alignItems: 'center', fontFamily: TYPO.fontText,
+    }}>
+      {/* Donut */}
+      <div style={{ position: 'relative', width: 180, height: 180 }}>
+        <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+          <circle cx="50" cy="50" r={R} fill="none" stroke={theme.border} strokeWidth="12" />
+          {arcs.map((a) => {
+            const active = hover === a.key || expandido === a.key;
+            const other = (hover || expandido) && !active;
+            return (
+              <circle key={a.key} cx="50" cy="50" r={R} fill="none"
+                stroke={a.color} strokeWidth={active ? 14 : 12}
+                strokeDasharray={a.dash} strokeDashoffset={a.dashOffset}
+                opacity={other ? 0.25 : 1}
+                style={{ transition: 'stroke-width 120ms, opacity 120ms', cursor: puedeSeleccionar ? 'pointer' : 'default' }}
+                onMouseEnter={() => setHover(a.key)}
+                onMouseLeave={() => setHover(null)}
+                onClick={() => puedeSeleccionar && onSelect(a.key)}
+              />
+            );
+          })}
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          {(() => {
+            const sel = items.find((it) => it.key === (hover || expandido));
+            if (sel) {
+              const pct = ((sel.venta || 0) / total) * 100;
+              return (
+                <>
+                  <div style={{ fontSize: 10, color: theme.textMuted, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{sel.key}</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.03em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtCompact(sel.venta)}</div>
+                  <div style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{pct.toFixed(1)}% del total</div>
+                </>
+              );
+            }
+            return (
+              <>
+                <div style={{ fontSize: 10, color: theme.textMuted, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total YTD</div>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 24, fontWeight: 600, letterSpacing: '-0.03em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtCompact(ventaTotal)}</div>
+                {deltaTotal != null && (
+                  <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', marginTop: 2, color: deltaTotal >= 0 ? green : red, fontWeight: 500 }}>
+                    {deltaTotal >= 0 ? '↑' : '↓'} {Math.abs(deltaTotal).toFixed(1)}% vs {anio - 1}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* Ranking */}
+      <div style={{ display: 'grid', gap: 6 }}>
+        {items.map((it, i) => {
+          const pal = colorBloque(it.key);
+          const pct = ((it.venta || 0) / total) * 100;
+          const active = hover === it.key || expandido === it.key;
+          const dim = (hover || expandido) && !active;
+          return (
+            <div key={it.key}
+              onMouseEnter={() => setHover(it.key)}
+              onMouseLeave={() => setHover(null)}
+              onClick={() => puedeSeleccionar && onSelect(it.key)}
+              style={{
+                display: 'grid', gridTemplateColumns: '18px 10px minmax(0, 1fr) 90px 70px', alignItems: 'center', gap: 10,
+                padding: '6px 8px', borderRadius: 10,
+                background: active ? (theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)') : 'transparent',
+                opacity: dim ? 0.5 : 1,
+                cursor: puedeSeleccionar ? 'pointer' : 'default',
+                transition: 'background 120ms, opacity 120ms',
+              }}>
+              <span style={{ fontSize: 10, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{i + 1}</span>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: pal.mid, flexShrink: 0 }} />
+              <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0, overflow: 'hidden' }}>
+                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 500, color: theme.text, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.key}</span>
+                <span style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>· {pct.toFixed(1)}%</span>
+              </span>
+              <div style={{ height: 5, borderRadius: 999, background: theme.border, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.max(2, pct)}%`, background: pal.mid, borderRadius: 999 }} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 6 }}>
+                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.015em' }}>{fmtCompact(it.venta)}</span>
+                {it.deltaYoY != null && (
+                  <span style={{ fontSize: 10, fontWeight: 500, color: it.deltaYoY >= 0 ? green : red, fontVariantNumeric: 'tabular-nums' }}>
+                    {it.deltaYoY >= 0 ? '↑' : '↓'}{Math.abs(it.deltaYoY).toFixed(0)}%
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ────────── MiniKpiRow · 3 cards horizontales 84px · Inventario · Cartera · Sell Out ──────────
 function MiniKpiRow({ inventario, ventaProm, sellOutMes, sellMensual, anio }) {
   const { theme } = useTheme();
@@ -612,16 +739,16 @@ export default function VisionGeneral() {
         <span style={{ fontSize: 10, color: theme.textSubtle, fontStyle: 'italic', fontFamily: TYPO.fontText }}>Marca / Categoría pendientes</span>
       </div>
 
-      {/* Bloques bento · alternancia inverse cada 4 posiciones (patrón AirPods) */}
-      <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-        {bloques.map((b, i) => (
-          <BloqueBento key={b.key} item={b}
-            expandido={bloqueExpandido === b.key}
-            onClick={() => setBloqueExpandido(bloqueExpandido === b.key ? null : b.key)}
-            puedeExpandir={dimension === 'canal'}
-            inverse={i % 4 === 0} />
-        ))}
-      </div>
+      {/* Mix por dimensión · donut + ranking interactivo */}
+      <MixDonut
+        bloques={bloques}
+        ventaTotal={kpis.ventaYTD}
+        deltaTotal={kpis.deltaVenta}
+        anio={anio}
+        expandido={bloqueExpandido}
+        onSelect={(k) => setBloqueExpandido(bloqueExpandido === k ? null : k)}
+        puedeSeleccionar={dimension === 'canal'}
+      />
 
       {/* Drill-down de clientes del bloque expandido (solo dimension=canal) */}
       {bloqueExpandido && dimension === 'canal' && (
