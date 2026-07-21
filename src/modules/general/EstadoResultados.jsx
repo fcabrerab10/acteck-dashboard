@@ -1163,10 +1163,14 @@ function FichaMesModal({ theme, ficha, anio, anioPrev, onClose }) {
       backdropFilter: 'blur(6px)',
     }}>
       <div onClick={(e) => e.stopPropagation()} style={{
-        background: theme.bgElevated, width: 500, maxWidth: '95vw', height: '100vh',
+        background: theme.surfaceElevated || theme.surface,
+        width: 500, maxWidth: '95vw', height: '100vh',
         overflowY: 'auto', padding: 32,
-        boxShadow: '-12px 0 40px rgba(0,0,0,0.2)',
+        boxShadow: theme.mode === 'dark'
+          ? '-12px 0 40px rgba(0,0,0,0.6)'
+          : '-12px 0 40px rgba(0,0,0,0.2)',
         color: theme.text,
+        borderLeft: theme.mode === 'dark' ? `1px solid ${theme.border}` : 'none',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
           <div>
