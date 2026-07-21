@@ -644,8 +644,8 @@ function NoticePill({ theme, alertas, onDismiss, onMesClick }) {
     <div className="edr-no-print" style={{ marginBottom: 24 }}>
       <div style={{
         display: 'inline-flex', alignItems: 'center', gap: 10,
-        background: theme.mode === 'dark' ? 'rgba(255,149,0,0.14)' : 'rgba(245,99,0,0.08)',
-        color: theme.mode === 'dark' ? theme.orange : '#B25000',
+        background: theme.eyebrowSoft || (theme.mode === 'dark' ? 'rgba(255,149,0,0.14)' : 'rgba(196,82,13,0.08)'),
+        color: theme.eyebrowColor || theme.orange,
         padding: '9px 16px', borderRadius: 999,
         ...typo(TYPO.eyebrow), fontFamily: TYPO.fontText,
         cursor: 'pointer',
