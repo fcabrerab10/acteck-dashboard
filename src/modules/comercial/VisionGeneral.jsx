@@ -1143,22 +1143,16 @@ function ClientesPanel({ canal, clientes, mensualAct, mensualPrev, anio, mesMax,
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anio - 1}</span>
         </div>
       </div>
-      <div style={{ width: '100%', height: 150, marginBottom: 14 }}>
+      <div style={{ width: '100%', height: 160, marginBottom: 14 }}>
         <ResponsiveContainer>
-          <AreaChart data={trendData} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
-            <defs>
-              <linearGradient id={`fillCanal-${String(canal).replace(/\W/g, '')}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={canalCol} stopOpacity={0.20} />
-                <stop offset="100%" stopColor={canalCol} stopOpacity={0} />
-              </linearGradient>
-            </defs>
+          <BarChart data={trendData} margin={{ top: 6, right: 4, left: -6, bottom: 0 }} barCategoryGap="18%" barGap={2}>
             <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
             <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
             <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={38} />
-            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
-            <Area type="monotone" dataKey={`${anio - 1}`} stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
-            <Area type="monotone" dataKey={`${anio}`} stroke={canalCol} strokeWidth={2.2} fill={`url(#fillCanal-${String(canal).replace(/\W/g, '')})`} dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: canalCol, strokeWidth: 2 }} isAnimationActive={false} />
-          </AreaChart>
+            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} cursor={{ fill: theme.textMuted, fillOpacity: 0.06 }} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
+            <Bar dataKey={`${anio - 1}`} fill={canalCol} fillOpacity={0.28} radius={[7, 7, 0, 0]} isAnimationActive={false} />
+            <Bar dataKey={`${anio}`}     fill={canalCol}                       radius={[7, 7, 0, 0]} isAnimationActive={false} />
+          </BarChart>
         </ResponsiveContainer>
       </div>
 
