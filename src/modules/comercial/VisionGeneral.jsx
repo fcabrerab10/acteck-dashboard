@@ -45,6 +45,22 @@ const CANAL_COLOR = {
 };
 const colorBloque = (k) => CANAL_COLOR[String(k || '').toUpperCase()] || PALETTE.gray;
 
+// ────────── IconBadge (patrón AirPods · 40x40 rounded, bg tinted, icon en color solido) ──────────
+function IconBadge({ icon: Icon, color, size = 40 }) {
+  if (!Icon) return null;
+  const iconSize = Math.round(size * 0.5);
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: Math.round(size * 0.3),
+      background: `${color}22`, color,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      flexShrink: 0,
+    }}>
+      <Icon style={{ width: iconSize, height: iconSize }} strokeWidth={1.75} />
+    </div>
+  );
+}
+
 // ────────── Formateadores ──────────
 const fmtCompact = (n) => {
   if (n == null || isNaN(n)) return '—';
@@ -524,12 +540,15 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
     <div className="grid gap-2.5" style={{ gridTemplateColumns: '1.6fr 1fr' }}>
       {/* Facturación YTD grande */}
       <div style={{
-        background: cardBg, borderRadius: 14, padding: '20px 24px',
+        background: cardBg, borderRadius: 18, padding: '20px 24px',
         border, borderLeft: `4px solid ${PALETTE.blue.mid}`,
       }}>
-        <p style={{ fontSize: 11, margin: 0, color: bigLabelCol, letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: TYPO.fontText }}>
-          Facturación YTD
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+          <IconBadge icon={Wallet} color={PALETTE.blue.mid} size={40} />
+          <p style={{ fontSize: 11, margin: 0, color: bigLabelCol, letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: TYPO.fontText }}>
+            Facturación YTD
+          </p>
+        </div>
         <p style={{ fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 600, letterSpacing: '-0.035em', margin: '6px 0 8px', color: bigTitleCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
           {fmtCompact(kpis.ventaYTD)}
         </p>
@@ -558,12 +577,15 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
       {/* Columna lateral: Mes actual + Run-rate vs cuota */}
       <div className="grid grid-rows-2 gap-2.5">
         <div style={{
-          background: cardBg, borderRadius: 12, padding: '14px 16px',
+          background: cardBg, borderRadius: 14, padding: '14px 16px',
           border, borderLeft: `3px solid ${PALETTE.teal.mid}`,
         }}>
-          <p style={{ fontSize: 11, margin: 0, color: midLabelCol, letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>
-            {mesMaxLabel} (mes en curso)
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <IconBadge icon={Activity} color={PALETTE.teal.mid} size={32} />
+            <p style={{ fontSize: 11, margin: 0, color: midLabelCol, letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>
+              {mesMaxLabel} (mes en curso)
+            </p>
+          </div>
           <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: midTitleCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
             {fmtCompact(kpis.ventaMes)}
           </p>
@@ -574,11 +596,11 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
           )}
         </div>
         <div style={{
-          background: cardBg, borderRadius: 12, padding: '14px 16px',
+          background: cardBg, borderRadius: 14, padding: '14px 16px',
           border, borderLeft: `3px solid ${kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid}`,
         }}>
-          <div className="flex items-center gap-2" style={{ marginBottom: 2 }}>
-            <Target className="w-3.5 h-3.5" style={{ color: kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <IconBadge icon={Target} color={kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid} size={32} />
             <p style={{ fontSize: 11, margin: 0, color: runLabelCol, letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>
               {kpis.cuotaTotal > 0 ? 'Run-rate vs cuota' : 'Run-rate proyectado'}
             </p>
@@ -616,16 +638,18 @@ function BentoKpi({ palette, icon: Icon, label, valor, subtitulo, delta, deltaLa
   const border = `1px solid ${theme.border}`;
   return (
     <div style={{
-      background: cardBg, borderRadius: 12, padding: '14px 16px', border,
+      background: cardBg, borderRadius: 14, padding: '14px 16px', border,
       borderLeft: `3px solid ${palette.mid}`,
     }}>
-      <div className="flex items-center justify-between" style={{ marginBottom: 2 }}>
-        <p style={{ fontSize: 11, margin: 0, color: labelCol, letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>{label}</p>
-        {Icon && <Icon className="w-3.5 h-3.5" style={{ color: palette.mid }} />}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <IconBadge icon={Icon} color={palette.mid} size={36} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p style={{ fontSize: 11, margin: 0, color: labelCol, letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>{label}</p>
+          <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: valueCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
+            {valor}
+          </p>
+        </div>
       </div>
-      <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: valueCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
-        {valor}
-      </p>
       <div style={{ fontSize: 11, color: labelCol, minHeight: 14 }}>
         {delta != null && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginRight: 8, fontWeight: 500,
@@ -1329,8 +1353,11 @@ function CaminoHero({ valor, piezas, pos, inventarioStock, leadtime, comprasYTD,
 
   return (
     <div className="grid gap-2.5 mb-3.5" style={{ gridTemplateColumns: '1.6fr 1fr 1fr' }}>
-      <div style={{ background: cardBgFor(PALETTE.blue), borderRadius: 12, padding: '14px 18px', border: cardBorder, borderLeft: `4px solid ${PALETTE.blue.mid}` }}>
-        <p style={{ fontSize: 11, margin: 0, color: cardLabelFor(PALETTE.blue), letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: TYPO.fontText }}>Valor en tránsito</p>
+      <div style={{ background: cardBgFor(PALETTE.blue), borderRadius: 16, padding: '14px 18px', border: cardBorder, borderLeft: `4px solid ${PALETTE.blue.mid}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <IconBadge icon={Ship} color={PALETTE.blue.mid} size={36} />
+          <p style={{ fontSize: 11, margin: 0, color: cardLabelFor(PALETTE.blue), letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: TYPO.fontText }}>Valor en tránsito</p>
+        </div>
         <p style={{ fontSize: 34, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.blue), fontVariantNumeric: 'tabular-nums', lineHeight: 1, letterSpacing: '-0.03em', fontFamily: TYPO.fontDisplay }}>
           {fmtCompact(valor)}
         </p>
@@ -1338,9 +1365,9 @@ function CaminoHero({ valor, piezas, pos, inventarioStock, leadtime, comprasYTD,
           {fmtInt(piezas)} piezas · {pos} órdenes{ratioStock != null ? ` · ${ratioStock}% del stock actual` : ''}
         </p>
       </div>
-      <div style={{ background: cardBgFor(PALETTE.amber), borderRadius: 12, padding: '14px 18px', border: cardBorder, borderLeft: `3px solid ${PALETTE.amber.mid}` }}>
-        <div className="flex items-center gap-1" style={{ marginBottom: 2 }}>
-          <i className="ti ti-clock" style={{ fontSize: 12, color: PALETTE.amber.mid }} aria-hidden="true" />
+      <div style={{ background: cardBgFor(PALETTE.amber), borderRadius: 14, padding: '14px 18px', border: cardBorder, borderLeft: `3px solid ${PALETTE.amber.mid}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <IconBadge icon={Package} color={PALETTE.amber.mid} size={32} />
           <p style={{ fontSize: 11, margin: 0, color: cardLabelFor(PALETTE.amber), letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>Lead time promedio</p>
         </div>
         <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.amber), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
@@ -1350,9 +1377,9 @@ function CaminoHero({ valor, piezas, pos, inventarioStock, leadtime, comprasYTD,
           Emisión → arribo CEDIS
         </p>
       </div>
-      <div style={{ background: cardBgFor(PALETTE.purple), borderRadius: 12, padding: '14px 18px', border: cardBorder, borderLeft: `3px solid ${PALETTE.purple.mid}` }}>
-        <div className="flex items-center gap-1" style={{ marginBottom: 2 }}>
-          <i className="ti ti-shopping-cart" style={{ fontSize: 12, color: PALETTE.purple.mid }} aria-hidden="true" />
+      <div style={{ background: cardBgFor(PALETTE.purple), borderRadius: 14, padding: '14px 18px', border: cardBorder, borderLeft: `3px solid ${PALETTE.purple.mid}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <IconBadge icon={ShoppingBag} color={PALETTE.purple.mid} size={32} />
           <p style={{ fontSize: 11, margin: 0, color: cardLabelFor(PALETTE.purple), letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>Compras YTD {anio}</p>
         </div>
         <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.purple), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
