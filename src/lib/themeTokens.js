@@ -44,15 +44,17 @@ export const THEMES = {
     label: '☀ Claro',
     desc: 'apple.com puro. Blanco clínico, cards negras/blancas alternadas, azul Apple.',
     mode: 'light',
-    // Superficies
-    bg: '#FFFFFF',
-    bgAlt: '#F5F5F7',
-    surface: '#FFFFFF',
+    // Superficies · patrón AirPods (bg gris + cards blancas)
+    bg: '#F5F5F7',           // gris apple.com
+    bgAlt: '#FFFFFF',
+    surface: '#FFFFFF',      // cards blancas puras
     surfaceHover: 'rgba(0,0,0,0.02)',
     surfaceDark: '#000000',
+    surfaceInverse: '#000000',   // cards negras alternadas
     // Texto
     text: '#1D1D1F',
     textOnDark: '#F5F5F7',
+    textOnInverse: '#F5F5F7',    // texto sobre card negra alternada
     textMuted: '#6E6E73',
     textSubtle: '#86868B',
     textMutedOnDark: 'rgba(245,245,247,0.7)',
@@ -61,17 +63,20 @@ export const THEMES = {
     border: 'rgba(0,0,0,0.06)',
     borderStrong: 'rgba(0,0,0,0.15)',
     divider: 'rgba(0,0,0,0.1)',
-    // Acentos
-    accent: '#0066CC',       // Azul apple.com para links sobre blanco
+    // Acentos · iOS system colors light (matching app icons)
+    accent:      '#007AFF',  // iOS blue · App Store · Safari
     accentHover: '#0055B5',
-    accentDark: '#2997FF',   // Azul iOS para links sobre negro
-    // Semánticos
-    green: '#1F7A3D',
-    red: '#B00020',
-    orange: '#C4520D',       // terracotta cálido tipo eyebrow "NUEVO" apple.com
-    orangeSoft: '#E27A3F',
-    pink: '#B62755',
-    purple: '#6E44A6',
+    accentDark:  '#2997FF',  // Azul iOS para links sobre negro
+    // Semánticos · iOS palette
+    green:       '#34C759',  // iOS green · Mensajes · FaceTime
+    red:         '#FF3B30',  // iOS red · Fotos Booth
+    orange:      '#FF9500',  // iOS orange · Casa · GarageBand
+    orangeSoft:  '#FFB84D',
+    pink:        '#FF2D55',  // iOS pink · Salud
+    purple:      '#AF52DE',  // iOS purple · Podcasts · iTunes
+    teal:        '#5AC8FA',  // iOS cyan · Freeform
+    indigo:      '#5856D6',
+    yellow:      '#FFCC00',
     // Sombras — Claro no usa sombras marcadas
     shadow: 'none',
     shadowHover: '0 1px 3px rgba(0,0,0,0.06)',
@@ -97,17 +102,19 @@ export const THEMES = {
     label: '🌙 Midnight',
     desc: 'iPhone Pro OLED. Negro puro, cyan neon con glow tenue en esquinas.',
     mode: 'dark',
-    // Superficies
-    bg: '#000000',
+    // Superficies · patrón AirPods invertido (bg negro + cards oscuras + inverse blancas)
+    bg: '#000000',           // negro puro
     bgAlt: '#0A0A0C',
-    surface: '#0F0F0F',
-    surfaceHover: '#1D1D1F',
-    surfaceElevated: '#1D1D1F',
+    surface: '#1D1D1F',      // cards elevadas del negro
+    surfaceHover: '#2A2A2C',
+    surfaceElevated: '#2A2A2C',
     surfaceDark: '#000000',
+    surfaceInverse: '#F5F5F7',   // cards blancas alternadas
     // Texto
     text: '#EDEDF0',
     textStrong: '#FFFFFF',
     textOnDark: '#EDEDF0',
+    textOnInverse: '#1D1D1F',    // texto sobre card blanca alternada
     textMuted: 'rgba(237,237,240,0.6)',
     textSubtle: 'rgba(237,237,240,0.4)',
     textMutedOnDark: 'rgba(237,237,240,0.6)',
@@ -116,19 +123,23 @@ export const THEMES = {
     border: 'rgba(255,255,255,0.06)',
     borderStrong: 'rgba(255,255,255,0.15)',
     divider: 'rgba(255,255,255,0.06)',
-    // Acentos — un solo acento: cyan
-    accent: '#64D2FF',
-    accentHover: '#7DDDFF',
-    accentDark: '#64D2FF',
-    accentGlow: 'rgba(100,210,255,0.15)',
-    accentBg: 'rgba(50,200,255,0.10)',
-    // Semánticos
-    green: '#30D158',
-    red: '#FF453A',
-    orange: '#FF9500',
-    orangeSoft: '#FFB84D',
-    pink: '#FF375F',
-    purple: '#BF5AF2',
+    // Acentos · iOS system colors dark (app icons at night)
+    accent:      '#0A84FF',  // iOS blue dark
+    accentHover: '#409CFF',
+    accentDark:  '#0A84FF',
+    accentGlow:  'rgba(10,132,255,0.20)',
+    accentBg:    'rgba(10,132,255,0.14)',
+    accentCyan:  '#64D2FF',  // cyan preservado para efectos glow
+    // Semánticos · iOS dark palette
+    green:       '#30D158',
+    red:         '#FF453A',
+    orange:      '#FF9F0A',  // iOS orange dark
+    orangeSoft:  '#FFB84D',
+    pink:        '#FF375F',
+    purple:      '#BF5AF2',
+    teal:        '#64D2FF',
+    indigo:      '#5E5CE6',
+    yellow:      '#FFD60A',
     // Sombras — dark no lleva sombras, separa con hairlines
     shadow: 'none',
     shadowHover: 'none',
@@ -157,12 +168,12 @@ export const THEMES = {
     label: '🎨 Marfil',
     desc: 'apple.com/newsroom. Cream warm, azul cobalto profundo, terracotta.',
     mode: 'light',
-    // Superficies
-    bg: '#F7F3EC',
-    bgAlt: '#F0EAE0',
-    surface: '#EEE7DA',
+    // Superficies · patrón AirPods warm (bg cream + cards blancas + inverse dark)
+    bg: '#F7F3EC',           // cream warm
+    bgAlt: '#EEE7DA',
+    surface: '#FFFFFF',      // cards blancas puras
     surfaceHover: 'rgba(26,26,26,0.03)',
-    surfaceInverse: '#0055B5',  // Featurette azul bleed
+    surfaceInverse: '#1A1A1A',  // cards oscuras alternadas
     surfaceDark: '#1A1A1A',
     // Texto
     text: '#1A1A1A',
@@ -177,20 +188,23 @@ export const THEMES = {
     border: 'rgba(26,26,26,0.08)',
     borderStrong: '#1A1A1A',
     divider: 'rgba(26,26,26,0.08)',
-    // Acentos — azul cobalto + terracotta editorial
-    accent: '#0055B5',       // Azul cobalto profundo (no iOS blue)
-    accentHover: '#004599',
-    accentDark: '#7BB3EC',
-    accentSoft: 'rgba(0,85,181,0.10)',
-    eyebrowColor: '#A34209', // Terracotta editorial — solo para eyebrows
-    eyebrowSoft: 'rgba(196,82,13,0.10)',
-    // Semánticos
-    green: '#1F7A3D',
-    red: '#B00020',
-    orange: '#A34209',       // Alias del terracotta
-    orangeSoft: '#C4520D',
-    pink: '#B62755',
-    purple: '#6E44A6',
+    // Acentos · Editorial (cobalto + terracotta) — diferenciador vs Claro/Midnight
+    accent:       '#0055B5',  // Azul cobalto profundo (no iOS blue)
+    accentHover:  '#004599',
+    accentDark:   '#7BB3EC',
+    accentSoft:   'rgba(0,85,181,0.10)',
+    eyebrowColor: '#A34209',  // Terracotta editorial
+    eyebrowSoft:  'rgba(196,82,13,0.10)',
+    // Semánticos · Paleta editorial deliberada
+    green:        '#1F7A3D',  // Verde bosque editorial
+    red:          '#B00020',  // Crimson editorial
+    orange:       '#A34209',  // Terracotta oscuro
+    orangeSoft:   '#C4520D',
+    pink:         '#B62755',  // Magenta oscuro
+    purple:       '#6E44A6',  // Púrpura editorial
+    teal:         '#0F6E56',  // Teal profundo
+    indigo:       '#3D2E7A',
+    yellow:       '#B25000',
     // Sombras — Marfil evita sombras, separa con color de superficie
     shadow: 'none',
     shadowHover: 'none',
