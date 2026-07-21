@@ -379,26 +379,29 @@ export default function VisionGeneral() {
   return (
     <div className="max-w-none mx-auto p-6 space-y-4"
       style={{ background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
-      {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-4 px-1">
+      {/* Header estilo apple.com */}
+      <div className="flex flex-wrap items-end justify-between gap-4 px-1 mb-2">
         <div>
           <p style={{
-            fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em',
-            color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText,
+            fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.12em',
+            color: theme.textMuted, marginBottom: 6, fontFamily: TYPO.fontText, fontWeight: 500,
           }}>
             Dirección Comercial · YTD ene–{MESES_LBL[mesMax - 1]} {anio}
           </p>
           <h2 style={{
-            ...({ fontSize: 28, fontWeight: 600, letterSpacing: '-0.025em' }),
-            fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0,
-          }}>Visión general</h2>
+            fontSize: 'clamp(32px, 4vw, 44px)', fontWeight: 600, letterSpacing: '-0.035em',
+            fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.05,
+          }}>Visión general.</h2>
+          <p style={{ fontSize: 15, color: theme.textMuted, margin: '8px 0 0', fontFamily: TYPO.fontText }}>
+            Cómo va el año y dónde poner el foco.
+          </p>
         </div>
         <label style={{ display: 'flex', flexDirection: 'column', fontSize: 11, color: theme.textMuted, fontFamily: TYPO.fontText }}>
           Año
           <select value={anio} onChange={(e) => setAnio(Number(e.target.value))}
             style={{
-              border: `1px solid ${theme.border}`, borderRadius: 10,
-              padding: '6px 12px', fontSize: 14,
+              border: `1px solid ${theme.border}`, borderRadius: 999,
+              padding: '10px 20px', fontSize: 14, marginTop: 4,
               background: theme.surface, color: theme.text,
               fontFamily: TYPO.fontText,
             }}>
@@ -407,11 +410,11 @@ export default function VisionGeneral() {
         </label>
       </div>
 
-      {/* HERO */}
+      {/* HERO 3-col: Facturación grande · Mes inverse · Run-rate */}
       <HeroCard kpis={kpis} anio={anio} mesMaxLabel={MESES_FULL[mesMax - 1]} />
 
-      {/* KPIs: Inventario + 2 placeholders Próximamente */}
-      <div className="grid grid-cols-3 gap-2.5">
+      {/* KPIs mini: Inventario / Cartera INVERSE / Sell Out */}
+      <div className="grid grid-cols-3 gap-3.5">
         <BentoKpi palette={PALETTE.purple} icon={Package} label="Inventario en stock"
           valor={fmtCompact(inventario?.valor_inventario)}
           delta={null}
@@ -424,7 +427,7 @@ export default function VisionGeneral() {
             </span>
           } />
         <ProximamenteKpi icon={Receipt} label="Cartera por cobrar"
-          nota="En construcción" />
+          nota="En construcción" inverse />
         <BentoKpi palette={PALETTE.coral} icon={ShoppingBag}
           label={`Sell Out ${MESES_LBL[sellOutMes.mesEfectivo - 1]}${sellOutMes.esEnCurso ? ' (último cerrado)' : ''}`}
           valor={fmtCompact(sellOutMes.total)}
@@ -468,13 +471,14 @@ export default function VisionGeneral() {
         <span style={{ fontSize: 10, color: theme.textSubtle, fontStyle: 'italic', fontFamily: TYPO.fontText }}>Marca / Categoría pendientes</span>
       </div>
 
-      {/* Bloques bento */}
-      <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-        {bloques.map((b) => (
+      {/* Bloques bento · alternancia inverse cada 4 posiciones (patrón AirPods) */}
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+        {bloques.map((b, i) => (
           <BloqueBento key={b.key} item={b}
             expandido={bloqueExpandido === b.key}
             onClick={() => setBloqueExpandido(bloqueExpandido === b.key ? null : b.key)}
-            puedeExpandir={dimension === 'canal'} />
+            puedeExpandir={dimension === 'canal'}
+            inverse={i % 4 === 0} />
         ))}
       </div>
 
@@ -526,134 +530,100 @@ export default function VisionGeneral() {
 // ────────── HERO Card ──────────
 function HeroCard({ kpis, anio, mesMaxLabel }) {
   const { theme } = useTheme();
-  // Unificado en los 3 temas: card surface + strip lateral color paleta.
-  const cardBg = theme.surface;
   const border = `1px solid ${theme.border}`;
-  const bigTitleCol = theme.text;
-  const bigLabelCol = theme.textMuted;
-  const midTitleCol = theme.text;
-  const midLabelCol = theme.textMuted;
-  const runTitleCol = theme.text;
-  const runLabelCol = theme.textMuted;
+  const invBg = theme.surfaceInverse || (theme.mode === 'dark' ? '#F5F5F7' : '#000000');
+  const invText = theme.textOnInverse || (theme.mode === 'dark' ? '#1D1D1F' : '#F5F5F7');
+  const invMuted = theme.mode === 'dark' ? 'rgba(29,29,31,0.65)' : 'rgba(245,245,247,0.7)';
 
   return (
-    <div className="grid gap-2.5" style={{ gridTemplateColumns: '1.6fr 1fr' }}>
-      {/* Facturación YTD grande */}
-      <div style={{
-        background: cardBg, borderRadius: 18, padding: '20px 24px',
-        border, borderLeft: `4px solid ${PALETTE.blue.mid}`,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-          <IconBadge icon={Wallet} color={PALETTE.blue.mid} size={40} />
-          <p style={{ fontSize: 11, margin: 0, color: bigLabelCol, letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: TYPO.fontText }}>
-            Facturación YTD
-          </p>
-        </div>
-        <p style={{ fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 600, letterSpacing: '-0.035em', margin: '6px 0 8px', color: bigTitleCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
+    <div className="grid gap-3.5" style={{ gridTemplateColumns: '2fr 1fr 1fr' }}>
+      {/* ① Facturación YTD · hero blanco 72px */}
+      <div style={{ background: theme.surface, borderRadius: 26, padding: 32, border, display: 'flex', flexDirection: 'column' }}>
+        <IconBadge icon={Wallet} color={PALETTE.blue.mid} size={40} />
+        <p style={{ fontSize: 12, margin: '16px 0 4px', color: theme.textMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>Facturación YTD {anio}</p>
+        <p style={{ fontSize: 15, margin: '0 0 20px', color: theme.textMuted, fontFamily: TYPO.fontText }}>Consolidado de todos los canales</p>
+        <p style={{ fontSize: 'clamp(44px, 5.5vw, 72px)', fontWeight: 600, letterSpacing: '-0.045em', margin: 0, color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
           {fmtCompact(kpis.ventaYTD)}
         </p>
-        <div className="flex flex-wrap gap-x-5 gap-y-1" style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+        <div className="flex flex-wrap gap-x-4 gap-y-1" style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', marginTop: 16 }}>
           {kpis.deltaVenta != null && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: kpis.deltaVenta >= 0 ? theme.green : theme.red, fontWeight: 500 }}>
-              {kpis.deltaVenta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              {kpis.deltaVenta >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
               {fmtPctDelta(kpis.deltaVenta)} vs {anio - 1}
-              <span style={{ color: bigLabelCol, opacity: 0.7, fontWeight: 400 }}>
-                ({fmtCompact(kpis.ventaPrev)})
-              </span>
+              <span style={{ color: theme.textMuted, opacity: 0.85, fontWeight: 400 }}>({fmtCompact(kpis.ventaPrev)})</span>
             </span>
           )}
           {kpis.deltaVenta2 != null && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: kpis.deltaVenta2 >= 0 ? theme.green : theme.red, fontWeight: 500 }}>
-              {kpis.deltaVenta2 >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              {kpis.deltaVenta2 >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
               {fmtPctDelta(kpis.deltaVenta2)} vs {anio - 2}
-              <span style={{ color: bigLabelCol, opacity: 0.7, fontWeight: 400 }}>
-                ({fmtCompact(kpis.ventaPrev2)})
-              </span>
             </span>
           )}
         </div>
       </div>
 
-      {/* Columna lateral: Mes actual + Run-rate vs cuota */}
-      <div className="grid grid-rows-2 gap-2.5">
-        <div style={{
-          background: cardBg, borderRadius: 14, padding: '14px 16px',
-          border, borderLeft: `3px solid ${PALETTE.teal.mid}`,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <IconBadge icon={Activity} color={PALETTE.teal.mid} size={32} />
-            <p style={{ fontSize: 11, margin: 0, color: midLabelCol, letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>
-              {mesMaxLabel} (mes en curso)
-            </p>
-          </div>
-          <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: midTitleCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
-            {fmtCompact(kpis.ventaMes)}
-          </p>
-          {kpis.deltaMes != null && (
-            <span style={{ fontSize: 11, color: kpis.deltaMes >= 0 ? theme.green : theme.red, fontVariantNumeric: 'tabular-nums' }}>
-              {fmtPctDelta(kpis.deltaMes)} vs {mesMaxLabel.toLowerCase()} {anio - 1}
-            </span>
-          )}
-        </div>
-        <div style={{
-          background: cardBg, borderRadius: 14, padding: '14px 16px',
-          border, borderLeft: `3px solid ${kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid}`,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <IconBadge icon={Target} color={kpis.cuotaTotal > 0 ? PALETTE.purple.mid : PALETTE.gray.mid} size={32} />
-            <p style={{ fontSize: 11, margin: 0, color: runLabelCol, letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>
-              {kpis.cuotaTotal > 0 ? 'Run-rate vs cuota' : 'Run-rate proyectado'}
-            </p>
-          </div>
-          <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px',
-            color: runTitleCol,
-            fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
-            {fmtCompact(kpis.runRate)}
-          </p>
-          {kpis.cuotaTotal > 0 ? (
-            <span style={{ fontSize: 11, color: runLabelCol }}>
-              Meta: {fmtCompact(kpis.cuotaTotal)} ·{' '}
-              <strong style={{ color: kpis.gapVsRunRate >= 0 ? theme.green : theme.red }}>
-                {fmtPctDelta(kpis.cumplYTD - 100)} cumpl. YTD
-              </strong>
-            </span>
-          ) : (
-            <span style={{ fontSize: 11, color: runLabelCol, fontStyle: 'italic' }}>
-              Sin cuota cargada · agrega en cuotas_canales
-            </span>
-          )}
-        </div>
+      {/* ② Mes en curso · card INVERSE */}
+      <div style={{ background: invBg, color: invText, borderRadius: 22, padding: 24, display: 'flex', flexDirection: 'column' }}>
+        <IconBadge icon={Activity} color={theme.orange || '#FF9500'} size={40} />
+        <p style={{ fontSize: 12, margin: '16px 0 4px', color: invMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>{mesMaxLabel} · mes en curso</p>
+        <p style={{ fontSize: 13, margin: '0 0 16px', color: invMuted, fontFamily: TYPO.fontText }}>Datos parciales</p>
+        <p style={{ fontSize: 44, fontWeight: 600, letterSpacing: '-0.035em', margin: 0, color: invText, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
+          {fmtCompact(kpis.ventaMes)}
+        </p>
+        {kpis.deltaMes != null && (
+          <span style={{ fontSize: 13, color: kpis.deltaMes >= 0 ? (theme.green || '#34C759') : (theme.red || '#FF3B30'), fontVariantNumeric: 'tabular-nums', marginTop: 12, fontWeight: 500 }}>
+            {kpis.deltaMes >= 0 ? '↑' : '↓'} {Math.abs(kpis.deltaMes).toFixed(1)}% vs {mesMaxLabel.toLowerCase()} {anio - 1}
+          </span>
+        )}
+      </div>
+
+      {/* ③ Run-rate · card blanca */}
+      <div style={{ background: theme.surface, borderRadius: 22, padding: 24, border, display: 'flex', flexDirection: 'column' }}>
+        <IconBadge icon={Target} color={PALETTE.purple.mid} size={40} />
+        <p style={{ fontSize: 12, margin: '16px 0 4px', color: theme.textMuted, fontWeight: 500, fontFamily: TYPO.fontText }}>
+          {kpis.cuotaTotal > 0 ? 'Run-rate vs cuota' : 'Run-rate proyectado'}
+        </p>
+        <p style={{ fontSize: 13, margin: '0 0 16px', color: theme.textMuted, fontFamily: TYPO.fontText }}>Basado en ritmo actual</p>
+        <p style={{ fontSize: 44, fontWeight: 600, letterSpacing: '-0.035em', margin: 0, color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1, fontFamily: TYPO.fontDisplay }}>
+          {fmtCompact(kpis.runRate)}
+        </p>
+        {kpis.cuotaTotal > 0 ? (
+          <span style={{ fontSize: 12, color: theme.textMuted, marginTop: 12 }}>
+            Meta: {fmtCompact(kpis.cuotaTotal)} ·{' '}
+            <strong style={{ color: kpis.gapVsRunRate >= 0 ? theme.green : theme.red }}>{fmtPctDelta(kpis.cumplYTD - 100)} cumpl.</strong>
+          </span>
+        ) : (
+          <span style={{ fontSize: 12, color: theme.textMuted, fontStyle: 'italic', marginTop: 12 }}>Sin cuota cargada</span>
+        )}
       </div>
     </div>
   );
 }
 
 // ────────── Bento KPI ──────────
-function BentoKpi({ palette, icon: Icon, label, valor, subtitulo, delta, deltaLabel }) {
+function BentoKpi({ palette, icon: Icon, label, valor, subtitulo, delta, deltaLabel, inverse = false }) {
   const { theme } = useTheme();
-  // Unificado en los 3 temas: card surface + strip lateral de la paleta.
-  const cardBg = theme.surface;
-  const labelCol = theme.textMuted;
-  const valueCol = theme.text;
-  const border = `1px solid ${theme.border}`;
+  const invBg = theme.surfaceInverse || (theme.mode === 'dark' ? '#F5F5F7' : '#000000');
+  const invText = theme.textOnInverse || (theme.mode === 'dark' ? '#1D1D1F' : '#F5F5F7');
+  const invMuted = theme.mode === 'dark' ? 'rgba(29,29,31,0.65)' : 'rgba(245,245,247,0.7)';
+  const cardBg = inverse ? invBg : theme.surface;
+  const txtCol = inverse ? invText : theme.text;
+  const lblCol = inverse ? invMuted : theme.textMuted;
+  const border = inverse ? 'none' : `1px solid ${theme.border}`;
   return (
     <div style={{
-      background: cardBg, borderRadius: 14, padding: '14px 16px', border,
-      borderLeft: `3px solid ${palette.mid}`,
+      background: cardBg, color: txtCol, borderRadius: 22, padding: 20, border,
+      display: 'flex', flexDirection: 'column',
     }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <IconBadge icon={Icon} color={palette.mid} size={36} />
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <p style={{ fontSize: 11, margin: 0, color: labelCol, letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>{label}</p>
-          <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: valueCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
-            {valor}
-          </p>
-        </div>
-      </div>
-      <div style={{ fontSize: 11, color: labelCol, minHeight: 14 }}>
+      <IconBadge icon={Icon} color={palette.mid} size={40} />
+      <p style={{ fontSize: 12, margin: '14px 0 4px', color: lblCol, fontWeight: 500, fontFamily: TYPO.fontText }}>{label}</p>
+      <p style={{ fontSize: 32, fontWeight: 600, margin: '4px 0 0', color: txtCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1.05, letterSpacing: '-0.03em', fontFamily: TYPO.fontDisplay }}>
+        {valor}
+      </p>
+      <div style={{ fontSize: 12, color: lblCol, marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
         {delta != null && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginRight: 8, fontWeight: 500,
-            color: delta >= 0 ? theme.green : theme.red }}>
+            color: delta >= 0 ? (theme.green || '#34C759') : (theme.red || '#FF3B30') }}>
             {delta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
             {fmtPctDelta(delta)} {deltaLabel}
           </span>
@@ -665,24 +635,30 @@ function BentoKpi({ palette, icon: Icon, label, valor, subtitulo, delta, deltaLa
 }
 
 // ────────── Bloque Bento (canal/marca/categoría) ──────────
-function BloqueBento({ item, expandido, onClick, puedeExpandir }) {
+function BloqueBento({ item, expandido, onClick, puedeExpandir, inverse = false }) {
   const { theme } = useTheme();
   const palette = colorBloque(item.key);
   const max = Math.max(...item.spark, 0) || 1;
   const min = Math.min(...item.spark, 0);
   const range = max - min || 1;
   const isDark = theme.mode === 'dark';
-  const pillBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+  const invBg = theme.surfaceInverse || (isDark ? '#F5F5F7' : '#000000');
+  const invText = theme.textOnInverse || (isDark ? '#1D1D1F' : '#F5F5F7');
+  const invMuted = isDark ? 'rgba(29,29,31,0.65)' : 'rgba(245,245,247,0.7)';
+  const cardBg = inverse ? invBg : theme.surface;
+  const txtCol = inverse ? invText : theme.text;
+  const lblCol = inverse ? invMuted : theme.textMuted;
+  const pillBg = inverse ? 'rgba(255,255,255,0.12)' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)');
   return (
     <button onClick={onClick}
       disabled={!puedeExpandir}
       style={{
         textAlign: 'left', display: 'block',
-        background: theme.surface,
-        border: '1px solid ' + (expandido ? palette.mid : theme.border),
-        borderRadius: 12, padding: 14, cursor: puedeExpandir ? 'pointer' : 'default',
+        background: cardBg, color: txtCol,
+        border: inverse ? 'none' : ('1px solid ' + (expandido ? palette.mid : theme.border)),
+        borderRadius: 22, padding: 20, cursor: puedeExpandir ? 'pointer' : 'default',
         transition: 'border 0.15s, box-shadow 0.15s',
-        boxShadow: expandido ? `0 0 0 3px ${isDark ? theme.border : palette.bg}` : 'none',
+        boxShadow: expandido && !inverse ? `0 0 0 3px ${isDark ? theme.border : palette.bg}` : 'none',
         fontFamily: TYPO.fontText,
       }}>
       <div className="flex items-center justify-between mb-1">
@@ -862,22 +838,27 @@ function MiniKpi({ palette, label, valor, sub }) {
 }
 
 // ────────── Tile "Próximamente" ──────────
-function ProximamenteKpi({ icon: Icon, label, nota }) {
+function ProximamenteKpi({ icon: Icon, label, nota, inverse = false }) {
   const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
+  const invBg = theme.surfaceInverse || (isDark ? '#F5F5F7' : '#000000');
+  const invText = theme.textOnInverse || (isDark ? '#1D1D1F' : '#F5F5F7');
+  const invMuted = isDark ? 'rgba(29,29,31,0.65)' : 'rgba(245,245,247,0.7)';
+  const cardBg = inverse ? invBg : theme.surface;
+  const txtCol = inverse ? invText : theme.text;
+  const lblCol = inverse ? invMuted : theme.textMuted;
   return (
     <div style={{
-      background: theme.mode === 'dark' ? 'rgba(255,255,255,0.02)' : theme.bgAlt || 'rgba(0,0,0,0.02)',
-      borderRadius: 12, padding: '14px 16px',
-      border: `1px dashed ${theme.border}`,
-      display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 84,
+      background: cardBg, color: txtCol,
+      borderRadius: 22, padding: 20,
+      border: inverse ? 'none' : `1px solid ${theme.border}`,
+      display: 'flex', flexDirection: 'column',
       fontFamily: TYPO.fontText,
     }}>
-      <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-        {Icon && <Icon className="w-3.5 h-3.5" style={{ color: theme.textSubtle }} />}
-        <p style={{ fontSize: 11, margin: 0, color: theme.textSubtle, letterSpacing: '0.03em' }}>{label}</p>
-      </div>
-      <p style={{ fontSize: 16, fontWeight: 500, margin: 0, color: theme.textMuted, fontFamily: TYPO.fontDisplay }}>Próximamente</p>
-      {nota && <p style={{ fontSize: 10, color: theme.textSubtle, margin: '2px 0 0', fontStyle: 'italic' }}>{nota}</p>}
+      <IconBadge icon={Icon} color={inverse ? (theme.accentCyan || theme.teal || '#5AC8FA') : (PALETTE.teal.mid)} size={40} />
+      <p style={{ fontSize: 12, margin: '14px 0 4px', color: lblCol, fontWeight: 500 }}>{label}</p>
+      <p style={{ fontSize: 24, fontWeight: 500, margin: '4px 0 0', color: lblCol, fontFamily: TYPO.fontDisplay, letterSpacing: '-0.02em' }}>Próximamente</p>
+      {nota && <p style={{ fontSize: 11, color: lblCol, margin: '6px 0 0', fontStyle: 'italic', opacity: 0.8 }}>{nota}</p>}
     </div>
   );
 }
