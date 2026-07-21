@@ -9,8 +9,8 @@
 // Los pequeños son fijos porque en mobile no queremos que se encojan más.
 export const TYPO = {
   // Stack CSS exacto que sirve apple.com/mx
-  fontText:    '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif',
-  fontDisplay: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif',
+  fontText:    '"SF Pro Text", -apple-system, BlinkMacSystemFont, "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif',
+  fontDisplay: '"SF Pro Display", -apple-system, BlinkMacSystemFont, "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif',
 
   // Cifras y títulos hero — responsive vía clamp
   heroMax:     { fs: 'clamp(72px, 15vw, 240px)', w: 600, ls: '-0.065em', lh: 0.85 },
