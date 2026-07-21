@@ -393,6 +393,7 @@ export default function VisionGeneral() {
   const [clientesDim, setClientesDim] = useState([]);
   const [inventario, setInventario] = useState(null);
   const [inventarioMarca, setInventarioMarca] = useState([]);
+  const [inventarioFamilia, setInventarioFamilia] = useState([]);
   const [caminoResumen, setCaminoResumen] = useState([]);
   const [caminoCalendario, setCaminoCalendario] = useState([]);
   const [caminoProximas, setCaminoProximas] = useState([]);
@@ -475,6 +476,24 @@ export default function VisionGeneral() {
       setClientesDim(c.data || []);
       setInventario(inv.data || null);
       setInventarioMarca(invMarca.data || []);
+      // Composición por familia (join inventario_acteck × roadmap_sku)
+      try {
+        const [{ data: skusRoad }, { data: skusInv }] = await Promise.all([
+          supabase.from('roadmap_sku').select('sku, familia'),
+          supabase.from('inventario_acteck').select('sku, valor_mxn'),
+        ]);
+        if (skusRoad && skusInv) {
+          const famMap = new Map((skusRoad || []).map((r) => [String(r.sku), r.familia || 'Sin familia']));
+          const byFam = {};
+          (skusInv || []).forEach((i) => {
+            const fam = famMap.get(String(i.sku)) || 'Sin familia';
+            if (!byFam[fam]) byFam[fam] = { familia: fam, valor: 0, skus: 0 };
+            byFam[fam].valor += Number(i.valor_mxn) || 0;
+            byFam[fam].skus += 1;
+          });
+          setInventarioFamilia(Object.values(byFam).filter((f) => f.valor > 0).sort((a, b) => b.valor - a.valor));
+        }
+      } catch (e) { /* familia opcional */ }
       setCartera(cart.data || []);
       setCuotas(q.data || []);
       setCaminoResumen(cRes.data || []);
@@ -800,6 +819,7 @@ export default function VisionGeneral() {
       {/* Sección de inventario */}
       <InventarioSection inventario={inventario}
         inventarioMarca={inventarioMarca}
+        inventarioFamilia={inventarioFamilia}
         caminoResumen={caminoResumen}
         caminoCalendario={caminoCalendario}
         caminoProximas={caminoProximas}
@@ -1344,7 +1364,123 @@ function TendenciaCard({ data, anio, mesMax }) {
 }
 
 // ────────── Sección de Inventario ──────────
-function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoCalendario, caminoProximas, caminoSemanal, caminoRetrasadas, caminoProveedores, caminoAgotados, caminoLeadtime, comprasYTD, anio, ventaPromMes }) {
+// ────────── Mini donut compacto reutilizable (marca / familia) ──────────
+function InventarioMiniDonut({ title, meta, items, valueKey = 'valor', labelKey = 'marca', colorFn, centerLabel, centerValue, centerSub, emptyMsg }) {
+  const { theme } = useTheme();
+  const [hover, setHover] = useState(null);
+  const list = (items || []).filter((it) => (Number(it[valueKey]) || 0) > 0);
+  if (list.length === 0) {
+    return (
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '14px 18px', fontFamily: TYPO.fontText, minHeight: 168, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+          <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>{title}</h4>
+          <span style={{ fontSize: 10, color: theme.textMuted }}>{meta}</span>
+        </div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.textMuted, fontSize: 12, fontStyle: 'italic' }}>{emptyMsg || 'Sin datos'}</div>
+      </div>
+    );
+  }
+  const total = list.reduce((s, it) => s + (Number(it[valueKey]) || 0), 0) || 1;
+  const R = 42, CIRC = 2 * Math.PI * R;
+  let offsetAcc = 0;
+  const arcs = list.slice(0, 8).map((it, i) => {
+    const pct = (Number(it[valueKey]) || 0) / total;
+    const len = pct * CIRC;
+    const dash = `${len} ${CIRC}`;
+    const dashOffset = -offsetAcc;
+    offsetAcc += len;
+    return { key: it[labelKey], color: colorFn(it[labelKey], i), dash, dashOffset };
+  });
+  const top = list.slice(0, 4);
+  const rest = list.slice(4);
+  const restVal = rest.reduce((s, it) => s + (Number(it[valueKey]) || 0), 0);
+
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '14px 18px', fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>{title}</h4>
+        <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{meta}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '112px 1fr', gap: 16, alignItems: 'center' }}>
+        <div style={{ position: 'relative', width: 112, height: 112 }}>
+          <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+            <circle cx="50" cy="50" r={R} fill="none" stroke={theme.border} strokeWidth="10" />
+            {arcs.map((a) => {
+              const active = hover === a.key;
+              const other = hover && !active;
+              return (
+                <circle key={a.key} cx="50" cy="50" r={R} fill="none"
+                  stroke={a.color} strokeWidth={active ? 12 : 10}
+                  strokeDasharray={a.dash} strokeDashoffset={a.dashOffset}
+                  opacity={other ? 0.25 : 1}
+                  style={{ transition: 'stroke-width 120ms, opacity 120ms' }}
+                  onMouseEnter={() => setHover(a.key)}
+                  onMouseLeave={() => setHover(null)}
+                />
+              );
+            })}
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            {(() => {
+              const sel = list.find((it) => it[labelKey] === hover);
+              if (sel) {
+                const pct = ((Number(sel[valueKey]) || 0) / total) * 100;
+                return (
+                  <>
+                    <div style={{ fontSize: 8, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{sel[labelKey]}</div>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.025em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtCompact(sel[valueKey])}</div>
+                    <div style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{pct.toFixed(1)}%</div>
+                  </>
+                );
+              }
+              return (
+                <>
+                  <div style={{ fontSize: 8, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{centerLabel}</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.025em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{centerValue}</div>
+                  {centerSub && <div style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{centerSub}</div>}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+        <div style={{ display: 'grid', gap: 1 }}>
+          {top.map((it, i) => {
+            const col = colorFn(it[labelKey], i);
+            const pct = ((Number(it[valueKey]) || 0) / total) * 100;
+            const active = hover === it[labelKey];
+            const dim = hover && !active;
+            return (
+              <div key={it[labelKey]}
+                onMouseEnter={() => setHover(it[labelKey])}
+                onMouseLeave={() => setHover(null)}
+                style={{
+                  display: 'grid', gridTemplateColumns: '12px 6px minmax(0, 1fr) 60px 40px', alignItems: 'center', gap: 6,
+                  padding: '3px 4px', borderRadius: 6,
+                  opacity: dim ? 0.5 : 1, transition: 'opacity 120ms',
+                }}>
+                <span style={{ fontSize: 9, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{i + 1}</span>
+                <span style={{ width: 6, height: 6, borderRadius: 2, background: col }} />
+                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, textTransform: 'uppercase', letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it[labelKey]}</span>
+                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em', textAlign: 'right' }}>{fmtCompact(it[valueKey])}</span>
+                <span style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{pct.toFixed(1)}%</span>
+              </div>
+            );
+          })}
+          {rest.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: '12px 6px minmax(0, 1fr) 60px 40px', alignItems: 'center', gap: 6, padding: '3px 4px', opacity: 0.6 }}>
+              <span></span><span></span>
+              <span style={{ fontSize: 10, color: theme.textMuted, fontStyle: 'italic' }}>+ {rest.length} más</span>
+              <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtCompact(restVal)}</span>
+              <span style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{((restVal / total) * 100).toFixed(1)}%</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InventarioSection({ inventario, inventarioMarca, inventarioFamilia, caminoResumen, caminoCalendario, caminoProximas, caminoSemanal, caminoRetrasadas, caminoProveedores, caminoAgotados, caminoLeadtime, comprasYTD, anio, ventaPromMes }) {
   const { theme } = useTheme();
   // Unificado en los 3 temas: surface + strip lateral color paleta.
   const cardBgFor = () => theme.surface;
@@ -1408,271 +1544,331 @@ function InventarioSection({ inventario, inventarioMarca, caminoResumen, caminoC
   };
   const colorMarca = (m) => MARCA_COLOR[String(m).toUpperCase()] || MARCA_COLOR[m] || PALETTE.pink.mid;
 
+  // Color helpers iOS palette para donuts
+  const IOS_ORDER = [theme.accent, theme.orange, theme.purple, theme.pink, theme.green, theme.teal, theme.indigo, theme.yellow || '#FFCC00', theme.red].filter(Boolean);
+  const colorMarcaIOS = (m, i) => {
+    const map = { 'ACTECK': theme.accent, 'BALAM RUSH': theme.orange, 'MOBIFREE': theme.purple, 'SWANN': theme.teal, 'EVOROK': theme.pink, 'Sin marca': theme.textMuted, 'Otras marcas': theme.textMuted };
+    return map[String(m).toUpperCase()] || map[m] || IOS_ORDER[i % IOS_ORDER.length];
+  };
+  const colorFamiliaIOS = (_f, i) => IOS_ORDER[i % IOS_ORDER.length];
+
   return (
     <div className="space-y-2.5">
+      {/* Header estilo Apple */}
       <div className="flex items-baseline justify-between px-1">
-        <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, margin: 0, fontFamily: TYPO.fontText }}>
-          <Package className="inline w-3 h-3 mr-1" style={{ verticalAlign: -1 }} />
-          Inventario
-        </p>
-        <p style={{ fontSize: 11, color: theme.textSubtle, margin: 0, fontFamily: TYPO.fontText }}>
-          Almacenes comerciales · al {inventario?.ultima_carga ? new Date(inventario.ultima_carga).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+        <div>
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em', color: theme.textMuted, fontWeight: 600, marginBottom: 2, fontFamily: TYPO.fontText }}>Bloque · Inventario</p>
+          <h3 style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay, lineHeight: 1.1 }}>
+            Inventario · {fmtCompact(valorInv)} en stock.
+          </h3>
+        </div>
+        <p style={{ fontSize: 11, color: theme.textMuted, margin: 0, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
+          Cobertura ~{diasCob != null ? diasCob : '—'} días · {fmtInt(agotados)} SKUs agotados
         </p>
       </div>
 
-      {/* 4 KPI tiles */}
-      <div className="grid grid-cols-4 gap-2">
-        <div style={{ background: cardBgFor(PALETTE.purple), borderRadius: 12, padding: '12px 14px', border: cardBorder, borderLeft: `3px solid ${PALETTE.purple.mid}` }}>
-          <p style={{ fontSize: 10, color: cardLabelFor(PALETTE.purple), margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>Valor en stock</p>
-          <p style={{ fontSize: 22, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.purple), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
-            {fmtCompact(valorInv)}
-          </p>
-          <p style={{ fontSize: 11, color: cardLabelFor(PALETTE.purple), margin: 0 }}>
-            {fmtInt(piezas)} piezas · {fmtInt(skus)} SKUs
-          </p>
-        </div>
-        <div style={{ background: cardBgFor(PALETTE.teal), borderRadius: 12, padding: '12px 14px', border: cardBorder, borderLeft: `3px solid ${PALETTE.teal.mid}` }}>
-          <p style={{ fontSize: 10, color: cardLabelFor(PALETTE.teal), margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>Días cobertura</p>
-          <p style={{ fontSize: 22, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.teal), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
-            {diasCob != null ? `~${diasCob} días` : '—'}
-          </p>
-          <p style={{ fontSize: 11, color: cardLabelFor(PALETTE.teal), margin: 0 }}>{cobLbl}</p>
-        </div>
-        <div style={{ background: cardBgFor(PALETTE.amber), borderRadius: 12, padding: '12px 14px', border: cardBorder, borderLeft: `3px solid ${PALETTE.amber.mid}` }}>
-          <p style={{ fontSize: 10, color: cardLabelFor(PALETTE.amber), margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>SKUs agotados</p>
-          <p style={{ fontSize: 22, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.amber), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
-            {fmtInt(agotados)}
-          </p>
-          <p style={{ fontSize: 11, color: cardLabelFor(PALETTE.amber), margin: 0 }}>Con venta reciente</p>
-        </div>
-        {tieneCamino ? (
-          <div style={{ background: cardBgFor(PALETTE.blue), borderRadius: 12, padding: '12px 14px', border: cardBorder, borderLeft: `3px solid ${PALETTE.blue.mid}` }}>
-            <div className="flex items-center justify-between" style={{ marginBottom: 2 }}>
-              <p style={{ fontSize: 10, color: cardLabelFor(PALETTE.blue), margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>Valor en camino</p>
-              <Ship className="w-3.5 h-3.5" style={{ color: PALETTE.blue.mid }} />
-            </div>
-            <p style={{ fontSize: 22, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(PALETTE.blue), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
-              {fmtCompact(totalEnCamino)}
-            </p>
-            <p style={{ fontSize: 11, color: cardLabelFor(PALETTE.blue), margin: 0 }}>
-              {fmtInt(totalPosEnCamino)} PO · {fmtInt(totalPiezasEnCamino)} pzs
-            </p>
-          </div>
+      {/* Banner retrasadas (si aplica) */}
+      {caminoRetrasadas.length > 0 && (
+        <RetrasadasBanner retrasadas={caminoRetrasadas} />
+      )}
+
+      {/* Row 1: Marca donut + Familia donut + KPIs stack (3-col) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.8fr', gap: 10 }}>
+        <InventarioMiniDonut
+          title="Por marca"
+          meta={`${marcasParaDonut.length} · ${fmtCompact(totalMarca)}`}
+          items={marcasParaDonut}
+          valueKey="valor" labelKey="marca"
+          colorFn={colorMarcaIOS}
+          centerLabel="Total" centerValue={fmtCompact(totalMarca)} centerSub={`${fmtInt(skus)} SKUs`}
+          emptyMsg="Sin datos de marca"
+        />
+        <InventarioMiniDonut
+          title="Por familia"
+          meta={inventarioFamilia.length > 0 ? `${inventarioFamilia.length} · roadmap_sku` : 'roadmap_sku'}
+          items={inventarioFamilia}
+          valueKey="valor" labelKey="familia"
+          colorFn={colorFamiliaIOS}
+          centerLabel="Familias" centerValue={String(inventarioFamilia.length || 0)} centerSub="activas"
+          emptyMsg="Requiere roadmap_sku cargado"
+        />
+        <InventarioKpiStack
+          valorTransito={totalEnCamino} posTransito={totalPosEnCamino} pctStock={valorInv > 0 ? Math.round((totalEnCamino / valorInv) * 100) : 0}
+          leadtime={caminoLeadtime}
+          comprasYTD={comprasYTD} anio={anio}
+        />
+      </div>
+
+      {/* Row 2: Lead time por etapa + Estatus actual */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 10 }}>
+        {caminoLeadtime && caminoLeadtime.lt_total > 0 ? (
+          <LeadtimeEtapasCompact lt={caminoLeadtime} />
         ) : (
-          <ProximamenteKpi icon={Ship} label="Valor en camino" nota="Sube ERP con Vw_TablaH_Compras" />
-        )}
-      </div>
-
-      {/* Composición: marca + categoría pendiente */}
-      <div className="grid gap-2.5" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-sm font-medium text-gray-800 mb-2">Composición por marca</p>
-          {marcasParaDonut.length === 0 ? (
-            <p className="text-xs text-gray-400 italic">Sin datos de marca</p>
-          ) : (
-            <>
-              <div style={{ width: '100%', height: 180 }}>
-                <ResponsiveContainer>
-                  <PieChart>
-                    <Pie data={marcasParaDonut} dataKey="valor" nameKey="marca"
-                      innerRadius={48} outerRadius={80} stroke="#fff" strokeWidth={2}
-                      isAnimationActive={false}>
-                      {marcasParaDonut.map((m, i) => <Cell key={i} fill={colorMarca(m.marca)} />)}
-                    </Pie>
-                    <Tooltip formatter={(v) => fmtMoney(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-3 flex flex-col gap-1">
-                {marcasParaDonut.map((m) => {
-                  const share = totalMarca > 0 ? ((Number(m.valor) || 0) / totalMarca) * 100 : 0;
-                  return (
-                    <div key={m.marca} className="flex items-center justify-between text-[11px]">
-                      <span className="flex items-center gap-1.5">
-                        <span style={{ width: 8, height: 8, background: colorMarca(m.marca), display: 'inline-block' }} />
-                        {m.marca}
-                      </span>
-                      <span style={{ fontVariantNumeric: 'tabular-nums', color: '#64748B' }}>
-                        {fmtCompact(m.valor)} · {share.toFixed(1)}%
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-
-        <div style={{
-          background: '#F8FAFC', borderRadius: 12, padding: 16, border: '1px dashed #CBD5E1',
-          display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: 320,
-        }}>
-          <Package className="w-7 h-7 mb-2" style={{ color: '#94A3B8' }} />
-          <p className="text-[13px] text-gray-600 font-medium m-0">Composición por categoría</p>
-          <p className="text-[14px] text-gray-800 font-medium mt-1">Próximamente</p>
-          <p className="text-[11px] text-gray-400 mt-2 italic text-center" style={{ maxWidth: 280 }}>
-            Pendiente confirmar fuente de categorías
-          </p>
-        </div>
-      </div>
-
-      {/* Inventario en camino */}
-      {!tieneCamino ? (
-        <div style={{
-          background: '#F8FAFC', borderRadius: 12, padding: '28px 16px', border: '1px dashed #CBD5E1',
-          display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-        }}>
-          <Ship className="w-8 h-8 mb-2" style={{ color: '#94A3B8' }} />
-          <p className="text-[13px] text-gray-600 font-medium m-0">Inventario en camino</p>
-          <p className="text-[16px] text-gray-800 font-medium mt-1">Sin datos cargados</p>
-          <p className="text-[11px] text-gray-400 mt-2 italic text-center" style={{ maxWidth: 420 }}>
-            Sube el ERP con la hoja Vw_TablaH_Compras para ver POs pendientes con valor MXN.
-          </p>
-        </div>
-      ) : (
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-            <p className="text-sm font-medium text-gray-800">
-              <Ship className="inline w-4 h-4 mr-1" style={{ verticalAlign: -2 }} />
-              Inventario en camino
-            </p>
-            <p className="text-[11px] text-gray-400">
-              Vw_TablaH_Compras × Master Embarques · {fmtInt(totalPosEnCamino)} POs activas
-            </p>
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 16px', color: theme.textMuted, fontSize: 12, fontFamily: TYPO.fontText, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            Sin datos de lead time
           </div>
-
-          {/* Banner alerta PO en retraso */}
-          {caminoRetrasadas.length > 0 && (
-            <RetrasadasBanner retrasadas={caminoRetrasadas} />
-          )}
-
-          {/* Hero: 3 KPIs grandes (Valor / Lead time / Compras YTD vs prev) */}
-          <CaminoHero
-            valor={totalEnCamino}
-            piezas={totalPiezasEnCamino}
-            pos={totalPosEnCamino}
-            inventarioStock={Number(inventario?.valor_inventario) || 0}
-            leadtime={caminoLeadtime}
-            comprasYTD={comprasYTD}
-            anio={anio}
-          />
-
-          {/* Lead time por etapa */}
-          {caminoLeadtime && caminoLeadtime.lt_total > 0 && (
-            <LeadtimeEtapas lt={caminoLeadtime} />
-          )}
-
-          {/* Tiles por estatus */}
-          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, marginBottom: 8, fontFamily: TYPO.fontText }}>Por estatus actual</p>
-          <div className="grid gap-2 mb-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+        )}
+        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 16px', fontFamily: TYPO.fontText }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+            <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Por estatus actual</h4>
+            <span style={{ fontSize: 10, color: theme.textMuted }}>5 buckets</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
             {BUCKET_ORDER.map((k) => {
               const cfg = BUCKET_LABELS[k];
               const r = resumenMap.get(k);
               const val = Number(r?.valor_mxn) || 0;
-              const piezas = Number(r?.piezas) || 0;
-              const pos = Number(r?.pos) || 0;
+              const iosCol = ({
+                produccion: theme.orange, transito: theme.accent, pendiente_modular: theme.indigo, por_zarpar: theme.pink, por_consolidar: theme.textMuted,
+              })[k] || theme.textMuted;
               return (
                 <div key={k} style={{
                   background: theme.surface, border: `1px solid ${theme.border}`,
-                  borderLeft: `3px solid ${cfg.palette.mid}`,
-                  borderRadius: 12, padding: '10px 12px', fontFamily: TYPO.fontText,
+                  borderLeft: `3px solid ${iosCol}`,
+                  borderRadius: 10, padding: '8px 10px', fontFamily: TYPO.fontText,
                 }}>
-                  <p style={{ fontSize: 9, color: theme.textMuted, margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{cfg.label}</p>
-                  <p style={{ fontSize: 18, fontWeight: 600, margin: '4px 0 0', color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
+                  <p style={{ fontSize: 9, color: theme.textMuted, margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{cfg.label}</p>
+                  <p style={{ fontSize: 15, fontWeight: 600, margin: '2px 0 0', color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
                     {val > 0 ? fmtCompact(val) : '—'}
-                  </p>
-                  <p style={{ fontSize: 10, color: theme.textMuted, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>
-                    {fmtInt(piezas)} pzs · {pos} PO
                   </p>
                 </div>
               );
             })}
           </div>
+        </div>
+      </div>
 
-          {/* Concentración semanal (próximas semanas) */}
-          {caminoSemanal.length > 0 && (
-            <ConcentracionSemanal semanas={caminoSemanal} />
-          )}
+      {/* Row 3: Concentración semanal + Top proveedores + Agotados */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 10 }}>
+        {caminoSemanal.length > 0 ? (
+          <ConcentracionSemanalCompact semanas={caminoSemanal} />
+        ) : (
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 16px', color: theme.textMuted, fontSize: 12, fontFamily: TYPO.fontText, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 128 }}>
+            Sin datos de concentración semanal
+          </div>
+        )}
+        {caminoProveedores.length > 0 ? (
+          <TopProveedoresCompact proveedores={caminoProveedores} totalCamino={totalEnCamino} />
+        ) : (
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 16px', color: theme.textMuted, fontSize: 12, fontFamily: TYPO.fontText, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 128 }}>
+            Sin datos de proveedores
+          </div>
+        )}
+        {caminoAgotados.length > 0 ? (
+          <AgotadosCompact agotados={caminoAgotados} />
+        ) : (
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 16px', color: theme.textMuted, fontSize: 12, fontFamily: TYPO.fontText, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 128 }}>
+            Sin SKUs agotados con orden
+          </div>
+        )}
+      </div>
 
-          {/* 2 columnas: Top proveedores + SKUs agotados con orden */}
-          {(caminoProveedores.length > 0 || caminoAgotados.length > 0) && (
-            <div className="grid gap-2.5 mb-4" style={{ gridTemplateColumns: '1.2fr 1fr' }}>
-              {caminoProveedores.length > 0 && (
-                <TopProveedores proveedores={caminoProveedores} totalCamino={totalEnCamino} />
-              )}
-              {caminoAgotados.length > 0 && (
-                <AgotadosConOrden agotados={caminoAgotados} />
-              )}
-            </div>
-          )}
-
-          {/* Próximas PO */}
-          {caminoProximas.length > 0 && (
-            <>
-              <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">Próximas {Math.min(caminoProximas.length, 10)} POs en llegar</p>
-              <div className="overflow-x-auto">
-                <table className="w-full" style={{ fontSize: 11 }}>
-                  <thead>
-                    <tr style={{ background: '#FAFBFC', borderBottom: '1px solid #E2E8F0' }}>
-                      <th style={thLeft}>PO</th>
-                      <th style={thLeft}>Proveedor</th>
-                      <th style={thRight}>ETA CEDIS</th>
-                      <th style={thRight}>SKUs</th>
-                      <th style={thRight}>Piezas</th>
-                      <th style={thRight}>Valor MXN</th>
-                      <th style={thLeft}>Estatus</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {caminoProximas.slice(0, 10).map((r) => {
-                      const cfg = BUCKET_LABELS[r.bucket_estatus] || BUCKET_LABELS.otro;
-                      const eta = r.eta_cedis || r.eta_puerto;
-                      return (
-                        <tr key={r.movid} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                          <td style={tdLeft}>{r.movid}</td>
-                          <td style={{ ...tdLeft, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.proveedor}>
-                            {r.proveedor}
-                          </td>
-                          <td style={tdRight}>{eta ? new Date(eta).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '—'}</td>
-                          <td style={tdRight}>{fmtInt(r.skus)}</td>
-                          <td style={tdRight}>{fmtInt(r.piezas)}</td>
-                          <td style={{ ...tdRight, fontWeight: 500 }}>{fmtCompact(r.valor_mxn)}</td>
-                          <td style={tdLeft}>
-                            <span style={{
-                              fontSize: 10, padding: '1px 6px', borderRadius: 8,
-                              background: cfg.palette.bg, color: cfg.palette.text,
-                            }}>{cfg.label}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-
-          {/* Sin embarque asignado */}
-          {sinEmbarque && Number(sinEmbarque.valor_mxn) > 0 && (
-            <div className="mt-4 p-3 rounded-lg flex items-center justify-between gap-3" style={{ background: cardBgFor(PALETTE.gray), border: `1px dashed ${theme.border}`, fontFamily: TYPO.fontText }}>
-              <div>
-                <p className="text-[11px] m-0 font-medium" style={{ color: cardTitleFor(PALETTE.gray) }}>
-                  {fmtInt(sinEmbarque.pos)} POs sin embarque asignado en Master
-                </p>
-                <p className="text-[10px] mt-0.5" style={{ color: cardLabelFor(PALETTE.gray) }}>
-                  Probablemente compras nacionales o aún sin mapear en Master Embarques.
-                </p>
-              </div>
-              <span className="font-medium" style={{ fontSize: 14, color: PALETTE.gray.text, fontVariantNumeric: 'tabular-nums' }}>
-                {fmtCompact(sinEmbarque.valor_mxn)}
-              </span>
-            </div>
-          )}
+      {/* Sin embarque asignado (legacy inline) */}
+      {sinEmbarque && Number(sinEmbarque.valor_mxn) > 0 && (
+        <div style={{
+          background: theme.surface, border: `1px dashed ${theme.border}`, borderRadius: 12, padding: '10px 14px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          fontFamily: TYPO.fontText,
+        }}>
+          <div>
+            <p style={{ fontSize: 11, margin: 0, fontWeight: 500, color: theme.text }}>
+              {fmtInt(sinEmbarque.pos)} POs sin embarque asignado en Master
+            </p>
+            <p style={{ fontSize: 10, margin: '2px 0 0', color: theme.textMuted, fontStyle: 'italic' }}>
+              Probablemente compras nacionales o aún sin mapear en Master Embarques.
+            </p>
+          </div>
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{fmtCompact(sinEmbarque.valor_mxn)}</span>
         </div>
       )}
     </div>
   );
 }
+
+// ────────── Componentes helpers Inventario Opción B ──────────
+function InventarioKpiStack({ valorTransito, posTransito, pctStock, leadtime, comprasYTD, anio }) {
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
+  const invBg = theme.surfaceInverse || (isDark ? '#F5F5F7' : '#000000');
+  const invText = theme.textOnInverse || (isDark ? '#1D1D1F' : '#F5F5F7');
+  const invMuted = isDark ? 'rgba(29,29,31,0.7)' : 'rgba(245,245,247,0.72)';
+  const red = theme.red || '#FF3B30';
+  const green = theme.green || '#34C759';
+  const ytdAct = comprasYTD.find((r) => r.anio === anio);
+  const ytdPrev = comprasYTD.find((r) => r.anio === anio - 1);
+  const valorYTD = Number(ytdAct?.valor_mxn) || 0;
+  const valorYTDPrev = Number(ytdPrev?.valor_mxn) || 0;
+  const deltaYoY = valorYTDPrev > 0 ? ((valorYTD - valorYTDPrev) / valorYTDPrev) * 100 : null;
+
+  const Row = ({ inverse, badgeBg, badgeCol, Icon, lbl, val, sub, subColor }) => (
+    <div style={{
+      background: inverse ? invBg : theme.surface,
+      color: inverse ? invText : theme.text,
+      border: inverse ? 'none' : `1px solid ${theme.border}`,
+      borderRadius: 12, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10,
+      fontFamily: TYPO.fontText,
+    }}>
+      <div style={{ width: 26, height: 26, borderRadius: 8, background: badgeBg, color: badgeCol, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Icon style={{ width: 13, height: 13 }} strokeWidth={1.8} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: inverse ? invMuted : theme.textMuted, fontWeight: 600, margin: 0 }}>{lbl}</p>
+        <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', margin: '1px 0 0', fontVariantNumeric: 'tabular-nums', color: inverse ? invText : theme.text }}>
+          {val} {sub && <span style={{ fontSize: 10, color: subColor || (inverse ? invMuted : theme.textMuted), fontWeight: 500 }}>{sub}</span>}
+        </p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr 1fr', gap: 10 }}>
+      <Row badgeBg={`${theme.accent || '#007AFF'}22`} badgeCol={theme.accent || '#007AFF'} Icon={Ship}
+        lbl={`Valor en tránsito · ${fmtInt(posTransito)} POs`}
+        val={fmtCompact(valorTransito)}
+        sub={pctStock > 0 ? `· ${pctStock}% del stock` : ''}
+      />
+      <Row inverse badgeBg={isDark ? 'rgba(255,159,10,0.20)' : `${theme.orange || '#FF9500'}33`} badgeCol={theme.orange || '#FF9500'} Icon={Package}
+        lbl="Lead time promedio"
+        val={leadtime?.lt_total != null ? `${leadtime.lt_total} días` : '—'}
+      />
+      <Row badgeBg={`${theme.purple || '#AF52DE'}22`} badgeCol={theme.purple || '#AF52DE'} Icon={ShoppingBag}
+        lbl={`Compras YTD ${anio} · ${fmtInt(ytdAct?.pos || 0)} PO`}
+        val={fmtCompact(valorYTD)}
+        sub={deltaYoY != null ? `${deltaYoY >= 0 ? '↑' : '↓'}${Math.abs(deltaYoY).toFixed(0)}%` : ''}
+        subColor={deltaYoY == null ? undefined : deltaYoY >= 0 ? green : red}
+      />
+    </div>
+  );
+}
+
+function LeadtimeEtapasCompact({ lt }) {
+  const { theme } = useTheme();
+  const total = Number(lt.lt_total) || 1;
+  const etapas = [
+    { lbl: '1 · Producción', val: Number(lt.lt_produccion) || 0, color: theme.orange || '#FF9500' },
+    { lbl: '2 · Marítimo', val: Number(lt.lt_maritimo) || 0, color: theme.accent || '#007AFF' },
+    { lbl: '3 · Aduana → CEDIS', val: Number(lt.lt_aduana) || 0, color: theme.green || '#34C759' },
+  ];
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 16px', fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Lead time por etapa</h4>
+        <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{lt.lt_total}d</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {etapas.map((e) => {
+          const pct = Math.round((e.val / total) * 100);
+          return (
+            <div key={e.lbl}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 2 }}>
+                <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>
+                  {e.lbl} · <strong style={{ color: theme.text }}>{e.val}d</strong>
+                </span>
+                <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
+              </div>
+              <div style={{ height: 4, borderRadius: 999, background: theme.border, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: e.color, borderRadius: 999 }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ConcentracionSemanalCompact({ semanas }) {
+  const { theme } = useTheme();
+  const data = (semanas || []).slice(0, 12).map((s) => ({ semana: s.semana_label || s.semana, valor: Number(s.valor_mxn) || 0, piezas: Number(s.piezas) || 0 }));
+  const max = Math.max(...data.map((d) => d.valor), 1);
+  const maxSemana = data.find((d) => d.valor === max);
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 16px', fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Concentración semanal</h4>
+        {maxSemana && <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>Pico: {maxSemana.semana} · {fmtCompact(max)}</span>}
+      </div>
+      <div style={{ width: '100%', height: 98 }}>
+        <ResponsiveContainer>
+          <BarChart data={data} margin={{ top: 6, right: 4, left: -6, bottom: 0 }} barCategoryGap="20%">
+            <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
+            <XAxis dataKey="semana" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} />
+            <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={38} />
+            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} cursor={{ fill: theme.textMuted, fillOpacity: 0.06 }} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
+            <Bar dataKey="valor" radius={[7, 7, 0, 0]} isAnimationActive={false}>
+              {data.map((d, i) => <Cell key={i} fill={d.valor === max ? (theme.orange || '#FF9500') : (theme.accent || '#007AFF')} fillOpacity={d.valor === max ? 1 : 0.75} />)}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function TopProveedoresCompact({ proveedores, totalCamino }) {
+  const { theme } = useTheme();
+  const top = (proveedores || []).slice(0, 4);
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 16px', fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Top proveedores</h4>
+        <span style={{ fontSize: 10, color: theme.textMuted }}>tránsito</span>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}`, width: 16 }}>#</th>
+            <th style={{ textAlign: 'left', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}` }}>Proveedor</th>
+            <th style={{ textAlign: 'right', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}` }}>Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {top.map((p, i) => (
+            <tr key={(p.proveedor || '') + i}>
+              <td style={{ padding: '3px 6px', fontSize: 10, color: theme.textSubtle, borderBottom: `1px solid ${theme.border}` }}>{i + 1}</td>
+              <td style={{ padding: '3px 6px', fontSize: 11, color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 500, letterSpacing: '-0.005em', borderBottom: `1px solid ${theme.border}`, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.proveedor}>{p.proveedor}</td>
+              <td style={{ padding: '3px 6px', fontSize: 12, textAlign: 'right', color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.01em', borderBottom: `1px solid ${theme.border}` }}>{fmtCompact(p.valor_mxn || p.valor)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AgotadosCompact({ agotados }) {
+  const { theme } = useTheme();
+  const top = (agotados || []).slice(0, 4);
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 16px', fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Agotados con orden</h4>
+        <span style={{ fontSize: 10, color: theme.textMuted }}>{agotados.length} SKUs</span>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}`, width: 16 }}>#</th>
+            <th style={{ textAlign: 'left', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}` }}>SKU</th>
+            <th style={{ textAlign: 'right', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, padding: '5px 6px', borderBottom: `1px solid ${theme.border}` }}>Llega</th>
+          </tr>
+        </thead>
+        <tbody>
+          {top.map((a, i) => (
+            <tr key={(a.sku || '') + i}>
+              <td style={{ padding: '3px 6px', fontSize: 10, color: theme.textSubtle, borderBottom: `1px solid ${theme.border}` }}>{i + 1}</td>
+              <td style={{ padding: '3px 6px', fontSize: 11, color: theme.text, fontFamily: '-apple-system, "SF Mono", ui-monospace, monospace', letterSpacing: 0, borderBottom: `1px solid ${theme.border}` }}>{a.sku}</td>
+              <td style={{ padding: '3px 6px', fontSize: 12, textAlign: 'right', color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.01em', borderBottom: `1px solid ${theme.border}` }}>
+                {a.eta_cedis || a.eta_puerto ? new Date(a.eta_cedis || a.eta_puerto).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 
 // ────────── Sub-componentes del bloque 'Inventario en camino' ──────────
 
