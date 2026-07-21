@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import AppleLoader from '../../components/apple/AppleLoader';
+import { useTheme } from '../../lib/themeContext';
+import { TYPO } from '../../lib/themeTokens';
 import {
   Activity, TrendingUp, TrendingDown, ChevronRight, ChevronDown,
   Wallet, Package, Receipt, Target, ShoppingBag, Ship, X,
@@ -68,6 +70,7 @@ const sumYTDPor = (rows, fn, mesMax) => rows
 
 // ────────── Componente principal ──────────
 export default function VisionGeneral() {
+  const { theme } = useTheme();
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [aniosDisponibles, setAniosDisponibles] = useState([]);
   const [dimension, setDimension] = useState('canal'); // 'canal' | 'marca' | 'categoria'
@@ -349,28 +352,40 @@ export default function VisionGeneral() {
   }
   if (margenAct.length === 0) {
     return (
-      <div className="p-12 text-center text-gray-500">
-        <Activity className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-        <h2 className="text-xl font-semibold text-gray-700 mb-2">Visión general</h2>
+      <div style={{ padding: 48, textAlign: 'center', color: theme.textMuted, background: theme.bg, minHeight: '100%', fontFamily: TYPO.fontText }}>
+        <Activity style={{ width: 48, height: 48, color: theme.textSubtle, margin: '0 auto 16px', strokeWidth: 1.5 }} />
+        <h2 style={{ fontSize: 20, fontWeight: 600, color: theme.text, marginBottom: 8, fontFamily: TYPO.fontDisplay, letterSpacing: '-0.02em' }}>Visión general</h2>
         <p>No hay datos para {anio}. Sube el archivo ERP en /uploads.html.</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-none mx-auto p-6 space-y-4">
+    <div className="max-w-none mx-auto p-6 space-y-4"
+      style={{ background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4 px-1">
         <div>
-          <p className="text-[11px] uppercase tracking-widest text-gray-500 mb-1">
+          <p style={{
+            fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em',
+            color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText,
+          }}>
             Dirección Comercial · YTD ene–{MESES_LBL[mesMax - 1]} {anio}
           </p>
-          <h2 className="text-2xl font-medium text-gray-800">Visión general</h2>
+          <h2 style={{
+            ...({ fontSize: 28, fontWeight: 600, letterSpacing: '-0.025em' }),
+            fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0,
+          }}>Visión general</h2>
         </div>
-        <label className="flex flex-col text-[11px] text-gray-500">
+        <label style={{ display: 'flex', flexDirection: 'column', fontSize: 11, color: theme.textMuted, fontFamily: TYPO.fontText }}>
           Año
           <select value={anio} onChange={(e) => setAnio(Number(e.target.value))}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white">
+            style={{
+              border: `1px solid ${theme.border}`, borderRadius: 10,
+              padding: '6px 12px', fontSize: 14,
+              background: theme.surface, color: theme.text,
+              fontFamily: TYPO.fontText,
+            }}>
             {aniosDisponibles.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </label>
@@ -404,27 +419,37 @@ export default function VisionGeneral() {
 
       {/* Toggle dimensión */}
       <div className="flex items-center gap-3 px-1 mt-2 flex-wrap">
-        <span className="text-[11px] text-gray-500 uppercase tracking-widest">Ver mix por</span>
-        <div className="inline-flex gap-0.5 bg-gray-100 rounded-lg p-0.5 text-xs">
+        <span style={{ fontSize: 11, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.12em', fontFamily: TYPO.fontText }}>Ver mix por</span>
+        <div style={{
+          display: 'inline-flex', gap: 2, padding: 3, borderRadius: 10,
+          background: theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+        }}>
           {[
             { id: 'canal',     lbl: 'Canal', enabled: true },
             { id: 'marca',     lbl: 'Marca', enabled: false },
             { id: 'categoria', lbl: 'Categoría', enabled: false },
-          ].map((t) => (
-            <button key={t.id}
-              onClick={() => t.enabled && setDimension(t.id)}
-              disabled={!t.enabled}
-              title={!t.enabled ? 'Pendiente — requiere ventas_erp completo con marca/familia' : ''}
-              className={`px-3 py-1 rounded ${
-                dimension === t.id
-                  ? 'bg-white shadow text-purple-700 font-medium'
-                  : t.enabled ? 'text-gray-600' : 'text-gray-300 cursor-not-allowed'
-              }`}>
-              {t.lbl}
-            </button>
-          ))}
+          ].map((t) => {
+            const on = dimension === t.id;
+            return (
+              <button key={t.id}
+                onClick={() => t.enabled && setDimension(t.id)}
+                disabled={!t.enabled}
+                title={!t.enabled ? 'Pendiente — requiere ventas_erp completo con marca/familia' : ''}
+                style={{
+                  padding: '6px 14px', borderRadius: 7,
+                  background: on ? (theme.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'white') : 'transparent',
+                  color: on ? theme.text : t.enabled ? theme.textMuted : theme.textSubtle,
+                  border: 'none', fontFamily: TYPO.fontText, fontSize: 13,
+                  fontWeight: on ? 600 : 500,
+                  cursor: t.enabled ? 'pointer' : 'not-allowed',
+                  boxShadow: on && theme.mode !== 'dark' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                }}>
+                {t.lbl}
+              </button>
+            );
+          })}
         </div>
-        <span className="text-[10px] text-gray-400 italic">Marca / Categor&iacute;a pendientes</span>
+        <span style={{ fontSize: 10, color: theme.textSubtle, fontStyle: 'italic', fontFamily: TYPO.fontText }}>Marca / Categoría pendientes</span>
       </div>
 
       {/* Bloques bento */}
@@ -474,7 +499,7 @@ export default function VisionGeneral() {
         anio={anio}
         ventaPromMes={mesMax > 0 ? kpis.ventaYTD / mesMax : 0} />
 
-      <p className="text-[11px] text-gray-400 px-2">
+      <p style={{ fontSize: 11, color: theme.textSubtle, padding: '0 8px', fontFamily: TYPO.fontText }}>
         Fuente: facturacion_clientes (canal × cliente × SKU × mes), inventario_acteck
         (almacenes comerciales). Margen y cartera pendientes de fuente.
       </p>
