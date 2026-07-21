@@ -37,6 +37,8 @@ import {
 import { PerfilContext } from './lib/perfilContext';
 import { ThemeProvider } from './lib/themeContext';
 import { AppleLoaderFullscreen, PageTransition } from './components/apple/AppleLoader';
+import { useBreakpoint, isMobile } from './lib/useBreakpoint';
+import MobileNav from './components/MobileNav';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -250,10 +252,12 @@ function UpdatedAtBadgeX() {
 }
 
 export default function App() {
-  //  AUTH STATE 
+  //  AUTH STATE
   const [authUser, setAuthUser] = useState(null);
   const [perfil, setPerfil] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const bp = useBreakpoint();
+  const mobile = isMobile(bp);
 
   useEffect(() => {
     // Check existing session
@@ -407,22 +411,44 @@ export default function App() {
   return (
     <PerfilContext.Provider value={perfil}>
     <ThemeProvider perfil={perfil}>
-    <div className="flex h-screen font-sans" style={{ background: 'var(--t-bg, #F5F5F7)' }}>
+    <div className="font-sans" style={{
+      background: 'var(--t-bg, #F5F5F7)',
+      display: mobile ? 'block' : 'flex',
+      height: '100vh',
+    }}>
 
-      {/* SIDEBAR */}
-      <Sidebar
-        clienteActivo={clienteActivo}
-        paginaActiva={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva}
-        onNavegar={handleNavegar}
-        onCerrarSesion={handleLogout}
-        perfilUsuario={perfil}
-        modoPresent={false}
-      />
+      {/* SIDEBAR — sólo desktop/laptop/tablet ≥768 */}
+      {!mobile && (
+        <Sidebar
+          clienteActivo={clienteActivo}
+          paginaActiva={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva}
+          onNavegar={handleNavegar}
+          onCerrarSesion={handleLogout}
+          perfilUsuario={perfil}
+          modoPresent={false}
+        />
+      )}
+
+      {/* MOBILE NAV — top bar + bottom tab bar + drawer, sólo mobile */}
+      {mobile && (
+        <MobileNav
+          clienteActivo={clienteActivo}
+          paginaActiva={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva}
+          onNavegar={handleNavegar}
+          onCerrarSesion={handleLogout}
+          perfilUsuario={perfil}
+        />
+      )}
 
       {/* CONTENIDO */}
-      <main className="flex-1 overflow-y-auto">
-          <div className="w-full px-6 py-4">
-          <Breadcrumb clienteActivo={clienteActivo} paginaActiva={paginaActiva} vistaActual={vistaActual} />
+      <main className={mobile ? '' : 'flex-1 overflow-y-auto'} style={mobile ? {
+        paddingBottom: 'calc(60px + env(safe-area-inset-bottom) + 16px)',
+        minHeight: '100vh',
+      } : undefined}>
+          <div className="w-full" style={{
+            padding: mobile ? '12px 16px' : '16px 24px',
+          }}>
+          {!mobile && <Breadcrumb clienteActivo={clienteActivo} paginaActiva={paginaActiva} vistaActual={vistaActual} />}
           <PageTransition keyId={vistaActual === 'configuracion' ? 'configuracion' : `${clienteActivo || 'g'}-${paginaActiva}`}>
           {vistaActual === "configuracion" ? (
             puedeVerConfig ? <Configuracion session={{user: authUser, perfil}} /> : <SinAcceso motivo="Solo el Super Admin puede ver Configuración." />
