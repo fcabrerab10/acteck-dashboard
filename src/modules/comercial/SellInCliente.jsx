@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
+import { useTheme } from '../../lib/themeContext';
+import { TYPO } from '../../lib/themeTokens';
 import {
   ShoppingCart, Search, Download, ChevronDown, ChevronRight, Check, ArrowUpDown, ArrowUp, ArrowDown,
+  Calendar, TrendingUp, Target, Activity,
 } from 'lucide-react';
 import SellInDrillDown, { DrillDownBoundary } from './SellInDrillDown';
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip,
+  LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip,
   CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
 import * as XLSX from 'xlsx-js-style';
@@ -99,6 +102,7 @@ function MultiSelect({ label, options, selected, onChange, width = 160 }) {
 }
 
 export default function SellInCliente({ clienteKey }) {
+  const { theme } = useTheme();
   const CLIENTE_KEY = clienteKey;
   const esGlobal = !CLIENTE_KEY;
   const meta = esGlobal
@@ -464,154 +468,166 @@ export default function SellInCliente({ clienteKey }) {
     );
   };
 
+  // ── Helpers Apple ──
+  const isDark = theme.mode === 'dark';
+  const invBg = theme.surfaceInverse || (isDark ? '#F5F5F7' : '#000000');
+  const invText = theme.textOnInverse || (isDark ? '#1D1D1F' : '#F5F5F7');
+  const invMuted = isDark ? 'rgba(29,29,31,0.72)' : 'rgba(245,245,247,0.72)';
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
+  const blue = theme.accent || '#007AFF';
+  const orange = theme.orange || '#FF9500';
+
+  const KpiApple = ({ inverse, Icon, badgeCol, lbl, val, delta, deltaCol, sub }) => (
+    <div style={{
+      background: inverse ? invBg : theme.surface,
+      color: inverse ? invText : theme.text,
+      border: inverse ? 'none' : `1px solid ${theme.border}`,
+      borderRadius: 14, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10,
+      minHeight: 60, fontFamily: TYPO.fontText,
+    }}>
+      <div style={{ width: 26, height: 26, borderRadius: 8, background: `${badgeCol}22`, color: badgeCol, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Icon style={{ width: 13, height: 13 }} strokeWidth={1.8} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: inverse ? invMuted : theme.textMuted, fontWeight: 600, margin: 0 }}>{lbl}</p>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 2 }}>
+          <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', margin: 0, fontVariantNumeric: 'tabular-nums', lineHeight: 1, color: inverse ? invText : theme.text }}>{val}</p>
+          {delta && <span style={{ fontSize: 11, fontWeight: 500, color: deltaCol, fontVariantNumeric: 'tabular-nums' }}>{delta}</span>}
+        </div>
+        {sub && <p style={{ fontSize: 10, color: inverse ? invMuted : theme.textMuted, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>{sub}</p>}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="max-w-none mx-auto p-3 space-y-3">
-      {/* Header */}
-      <div className="flex items-end justify-between">
+    <div style={{ padding: 12, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
+      {/* Header apple */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, padding: '0 4px', marginBottom: 4 }}>
         <div>
-          <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full ${meta.badgeBg} ${meta.badgeText} text-[11px] font-semibold mb-1.5`}>
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
-            {meta.nombre} · {meta.marca}
-          </div>
-          <h2 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
-            <ShoppingCart className="w-6 h-6 text-gray-700" /> Sell In
+          <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
+            Bloque · Sell In · YTD ene–{MESES[mesActual - 1]} {anioActual}
+          </p>
+          <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
+            Sell In · Facturación {esGlobal ? 'consolidada' : `al cliente`}.
           </h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {esGlobal ? 'Facturación consolidada de todos los clientes' : 'Facturación al cliente'} · Fuente ERP Acteck · {facturacion.length.toLocaleString('es-MX')} rows cargados
+          <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
+            {esGlobal ? `${facturacion.length.toLocaleString('es-MX')} rows · Fuente ERP Acteck` : `${meta.nombre} · ${meta.marca}`} · <strong style={{ color: theme.text, fontWeight: 500 }}>{formatMXN(totalYTD.monto)}</strong> YTD
           </p>
         </div>
       </div>
 
-      {/* KPI cards */}
-      <div className={`grid grid-cols-1 ${esGlobal ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-3'} gap-3`}>
-        <KPI
-          label={`Facturación mes actual · ${MESES_LARGO[mesActual - 1]} ${anioActual} (MTD)`}
-          badge={pctMTD != null ? `${pctMTD.toFixed(0)}% cuota` : 'Sin cuota'}
-          badgeTone={pctMTD == null ? 'neutral' : pctMTD >= 90 ? 'good' : pctMTD >= 60 ? 'warn' : 'bad'}
-          value={formatMXN(mesActualData.monto)}
-          valueSub={mesActualData.cuota ? `/ ${formatMXN(mesActualData.cuota.ideal)}` : null}
-          progress={pctMTD}
-          progressTone={pctMTD == null ? 'neutral' : pctMTD >= 90 ? 'good' : pctMTD >= 60 ? 'warn' : 'bad'}
-          sub={<>
-            <span>{fmtInt(mesActualData.piezas)} piezas</span>
-            {mesActualData.cuota && <span className="text-gray-400">Min {fmtMoneyShort(mesActualData.cuota.min)} · Ideal {fmtMoneyShort(mesActualData.cuota.ideal)}</span>}
-          </>}
+      {/* KPI row · alternado inverse (2do y 4to) */}
+      <div className={`grid grid-cols-1 ${esGlobal ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-3'} gap-2.5`}>
+        <KpiApple
+          Icon={Calendar} badgeCol={orange}
+          lbl={`${MESES_LARGO[mesActual - 1]} MTD · ${pctMTD != null ? pctMTD.toFixed(0) + '% cuota' : 'sin cuota'}`}
+          val={fmtMoneyShort(mesActualData.monto)}
+          delta={mesActualData.cuota ? `/ ${fmtMoneyShort(mesActualData.cuota.ideal)}` : null}
+          deltaCol={pctMTD == null ? theme.textMuted : pctMTD >= 90 ? green : pctMTD >= 60 ? orange : red}
+          sub={`${fmtInt(mesActualData.piezas)} piezas`}
         />
-        <KPI
-          label={`Facturación YTD ${anioActual} · Ene – ${MESES[mesActual - 1]}`}
-          badge={pctYTD != null ? `${pctYTD.toFixed(0)}% cuota` : 'Sin cuota'}
-          badgeTone={pctYTD == null ? 'neutral' : pctYTD >= 90 ? 'good' : pctYTD >= 60 ? 'warn' : 'bad'}
-          value={formatMXN(totalYTD.monto)}
-          valueSub={cuotaYTD.ideal ? `/ ${formatMXN(cuotaYTD.ideal)}` : null}
-          progress={pctYTD}
-          progressTone={pctYTD == null ? 'neutral' : pctYTD >= 90 ? 'good' : pctYTD >= 60 ? 'warn' : 'bad'}
-          sub={<span>{fmtInt(totalYTD.piezas)} piezas · {skusFacturados.size} SKUs distintos</span>}
+        <KpiApple inverse
+          Icon={TrendingUp} badgeCol={blue}
+          lbl={`YTD ${anioActual} · ${pctYTD != null ? pctYTD.toFixed(0) + '% cuota' : 'sin cuota'}`}
+          val={fmtMoneyShort(totalYTD.monto)}
+          delta={cuotaYTD.ideal ? `/ ${fmtMoneyShort(cuotaYTD.ideal)}` : null}
+          deltaCol={pctYTD == null ? invMuted : pctYTD >= 90 ? green : pctYTD >= 60 ? orange : red}
+          sub={`${fmtInt(totalYTD.piezas)} piezas · ${skusFacturados.size} SKUs`}
         />
-        <KPI
-          label={`${MESES_LARGO[mesActual - 1]} ${anioActual} vs ${MESES_LARGO[mesActual - 1]} ${anioPrev} (YoY)`}
-          badge={yoyMonto != null ? `${yoyMonto >= 0 ? '+' : ''}${yoyMonto.toFixed(0)}%` : 'Sin comparativo'}
-          badgeTone={yoyMonto == null ? 'neutral' : yoyMonto >= 0 ? 'good' : 'bad'}
-          value={formatMXN(mesActualData.monto)}
-          valueSub={`vs ${formatMXN(mesActualData.prevMonto)}`}
-          sub={<>
-            <span>Piezas {fmtInt(mesActualData.piezas)} <span className="text-gray-400">vs {fmtInt(mesActualData.prevPiezas)}</span></span>
-            {yoyPiezas != null && (
-              <span className={yoyPiezas >= 0 ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>
-                {yoyPiezas >= 0 ? '↑' : '↓'} {fmtInt(Math.abs(yoyPiezas))} pz
-              </span>
-            )}
-          </>}
+        <KpiApple
+          Icon={Activity} badgeCol={theme.pink || '#FF2D55'}
+          lbl={`${MESES_LARGO[mesActual - 1]} vs ${anioPrev} (YoY)`}
+          val={fmtMoneyShort(mesActualData.monto)}
+          delta={yoyMonto != null ? `${yoyMonto >= 0 ? '↑' : '↓'}${Math.abs(yoyMonto).toFixed(1)}%` : null}
+          deltaCol={yoyMonto == null ? theme.textMuted : yoyMonto >= 0 ? green : red}
+          sub={`vs ${fmtMoneyShort(mesActualData.prevMonto)}${yoyPiezas != null ? ` · ${yoyPiezas >= 0 ? '↑' : '↓'} ${fmtInt(Math.abs(yoyPiezas))} pz` : ''}`}
         />
         {esGlobal && (
-          <KPI
-            label={`${MESES_LARGO[mesActual - 1]} ${anioActual} vs ${momMesAnteriorLabel} (MoM)`}
-            badge={momMontoPct != null ? `${momMontoPct >= 0 ? '+' : ''}${momMontoPct.toFixed(0)}%` : 'Sin comparativo'}
-            badgeTone={momMontoPct == null ? 'neutral' : momMontoPct >= 0 ? 'good' : 'bad'}
-            value={formatMXN(mesActualData.monto)}
-            valueSub={`vs ${formatMXN(momMontoPrev)}`}
-            sub={<>
-              <span>Piezas {fmtInt(mesActualData.piezas)} <span className="text-gray-400">vs {fmtInt(momPiezasPrev)}</span></span>
-              {momPiezasDelta != null && (
-                <span className={momPiezasDelta >= 0 ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>
-                  {momPiezasDelta >= 0 ? '↑' : '↓'} {fmtInt(Math.abs(momPiezasDelta))} pz
-                </span>
-              )}
-            </>}
+          <KpiApple inverse
+            Icon={Target} badgeCol={theme.purple || '#AF52DE'}
+            lbl={`vs ${momMesAnteriorLabel} (MoM)`}
+            val={fmtMoneyShort(mesActualData.monto)}
+            delta={momMontoPct != null ? `${momMontoPct >= 0 ? '↑' : '↓'}${Math.abs(momMontoPct).toFixed(1)}%` : null}
+            deltaCol={momMontoPct == null ? invMuted : momMontoPct >= 0 ? green : red}
+            sub={`vs ${fmtMoneyShort(momMontoPrev)}${momPiezasDelta != null ? ` · ${momPiezasDelta >= 0 ? '↑' : '↓'} ${fmtInt(Math.abs(momPiezasDelta))} pz` : ''}`}
           />
         )}
       </div>
 
-      {/* Chart + Categorías */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.7fr_1fr] gap-3">
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="flex justify-between items-baseline mb-2">
-            <h3 className="text-sm font-semibold text-gray-800">Evolución mensual · Sell In vs Cuota vs Año anterior</h3>
-            <div className="text-[11px] text-gray-500 flex gap-3">
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5" style={{ background: '#94A3B8' }} /> {anioPrev}</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5" style={{ background: ACCENT }} /> {anioActual}</span>
-              {cuotaAnual.ideal > 0 && <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-0.5" style={{ background: '#F59E0B' }} /> Cuota
-              </span>}
-            </div>
-          </div>
-          <div style={{ height: 260 }}>
-            <ResponsiveContainer>
-              <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="0" stroke="#F3F4F6" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-                <YAxis domain={[0, 'auto']} allowDataOverflow={true} tickFormatter={(v) => fmtMoneyShort(v)} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={55} />
-                <Tooltip
-                  formatter={(v, name) => [formatMXN(v), name]}
-                  labelStyle={{ color: '#374151', fontWeight: 600 }}
-                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}
-                />
-                <Line dataKey="monto2025" name={String(anioPrev)} stroke="#94A3B8" strokeWidth={2} dot={{ r: 3, fill: '#94A3B8' }} activeDot={{ r: 5 }} connectNulls={false} />
-                <Line dataKey="monto2026" name={String(anioActual)} stroke={ACCENT} strokeWidth={2.5} dot={{ r: 3.5, fill: ACCENT }} activeDot={{ r: 5 }} connectNulls={false} />
-                <Line dataKey="cuotaIdeal" name="Cuota" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3, fill: '#F59E0B' }} activeDot={{ r: 5 }} connectNulls={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="flex justify-between items-baseline mb-3">
-            <h3 className="text-sm font-semibold text-gray-800">Composición por familia</h3>
-            <span className="text-[10.5px] text-gray-500">YTD {anioActual} · {formatMXN(totalYTD.monto)}</span>
-          </div>
-          <div className="grid grid-cols-[130px_1fr] gap-4 items-center">
-            <div style={{ width: 130, height: 130, position: 'relative' }}>
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie data={familiasYTD} dataKey="monto" cx="50%" cy="50%" innerRadius={40} outerRadius={62} paddingAngle={1} stroke="none">
-                    {familiasYTD.map((c, i) => <Cell key={i} fill={c.color} />)}
-                  </Pie>
-                  <Tooltip formatter={(v) => formatMXN(v)} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                <div className="text-[15px] font-semibold text-gray-800 tabular-nums">{familiasYTD.length}</div>
-                <div className="text-[9px] uppercase tracking-widest text-gray-500 mt-0.5">familias</div>
+      {/* Chart AreaChart Apple Health + Composición familia · misma card */}
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '14px 18px', fontFamily: TYPO.fontText }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 24 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+              <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>Evolución mensual.</h4>
+              <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: blue }} />{anioActual}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anioPrev}</span>
+                {cuotaAnual.ideal > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: orange }} />Cuota</span>}
               </div>
             </div>
-            <div className="flex flex-col gap-1.5 text-[11px]">
-              {familiasYTD.slice(0, 8).map((c) => (
-                <div key={c.name} className="grid grid-cols-[10px_1fr_auto] gap-2 items-center">
-                  <span className="w-2 h-2 rounded-sm" style={{ background: c.color }} />
-                  <span className="text-gray-700 truncate">{c.name}</span>
-                  <span className="text-gray-500 tabular-nums font-medium">{c.pct.toFixed(1)}%</span>
-                  <span className="col-span-2 col-start-2 h-0.5 bg-gray-100 rounded-full overflow-hidden mt-0.5">
-                    <span className="block h-full rounded-full" style={{ width: `${Math.min(100, c.pct)}%`, background: c.color }} />
-                  </span>
-                </div>
-              ))}
+            <div style={{ width: '100%', height: 200 }}>
+              <ResponsiveContainer>
+                <AreaChart data={chartData} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="fillSellIn" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={blue} stopOpacity={0.20} />
+                      <stop offset="100%" stopColor={blue} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
+                  <XAxis dataKey="mes" tick={{ fontSize: 10, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
+                  <YAxis tickFormatter={(v) => fmtMoneyShort(v)} tick={{ fontSize: 10, fill: theme.textMuted }} axisLine={false} tickLine={false} width={44} />
+                  <Tooltip formatter={(v) => formatMXN(v)} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
+                  {/* Cuota como línea dashed superpuesta */}
+                  {cuotaAnual.ideal > 0 && <Area type="monotone" dataKey="cuotaIdeal" stroke={orange} strokeWidth={1.4} strokeDasharray="4 3" fill="none" dot={false} isAnimationActive={false} />}
+                  <Area type="monotone" dataKey="monto2025" stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
+                  <Area type="monotone" dataKey="monto2026" stroke={blue} strokeWidth={2.2} fill="url(#fillSellIn)" dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: blue, strokeWidth: 2 }} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </div>
-          {familiasYTD.length >= 2 && (
-            <div className="border-t border-gray-100 pt-2.5 mt-3 flex justify-between text-[11px] text-gray-500">
-              <span>Dominante: <span className="text-gray-800 font-semibold">{familiasYTD[0].name}</span></span>
-              <span>Top 2 = <span className="text-gray-800 font-semibold tabular-nums">{(familiasYTD[0].pct + (familiasYTD[1]?.pct || 0)).toFixed(1)}%</span></span>
+
+          <div style={{ borderLeft: `1px solid ${theme.border}`, paddingLeft: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+              <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>Composición familia.</h4>
+              <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{familiasYTD.length}</span>
             </div>
-          )}
+            <div style={{ display: 'grid', gridTemplateColumns: '112px 1fr', gap: 12, alignItems: 'center' }}>
+              <div style={{ position: 'relative', width: 112, height: 112 }}>
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie data={familiasYTD} dataKey="monto" cx="50%" cy="50%" innerRadius={36} outerRadius={54} paddingAngle={1} stroke="none">
+                      {familiasYTD.map((c, i) => <Cell key={i} fill={c.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => formatMXN(v)} contentStyle={{ fontSize: 11, borderRadius: 8, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                  <div style={{ fontSize: 8, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.025em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtMoneyShort(totalYTD.monto)}</div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gap: 3 }}>
+                {familiasYTD.slice(0, 5).map((c, i) => (
+                  <div key={c.name} style={{ display: 'grid', gridTemplateColumns: '12px 6px minmax(0, 1fr) 55px 40px', alignItems: 'center', gap: 6, padding: '2px 4px' }}>
+                    <span style={{ fontSize: 9, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{i + 1}</span>
+                    <span style={{ width: 6, height: 6, borderRadius: 2, background: c.color }} />
+                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.name}>{c.name}</span>
+                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtMoneyShort(c.monto)}</span>
+                    <span style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{c.pct.toFixed(1)}%</span>
+                  </div>
+                ))}
+                {familiasYTD.length > 5 && (
+                  <div style={{ padding: '2px 4px', display: 'grid', gridTemplateColumns: '12px 6px 1fr', alignItems: 'center', gap: 6, opacity: 0.6 }}>
+                    <span></span><span></span>
+                    <span style={{ fontSize: 10, color: theme.textMuted, fontStyle: 'italic' }}>+ {familiasYTD.length - 5} familias más</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
