@@ -3,10 +3,10 @@ import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import {
-  Activity, TrendingUp, TrendingDown, Minus, Search, X, Users,
+  Activity, TrendingUp, TrendingDown, Minus, Search, X, Users, Target, Wallet, Calendar,
 } from 'lucide-react';
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
+  BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
 } from 'recharts';
 
 const MESES_LBL  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -35,6 +35,198 @@ const CANAL_COLOR = {
   'RETAIL':               PALETTE.purple,
 };
 const colorCanal = (k) => CANAL_COLOR[String(k || '').toUpperCase()] || PALETTE.gray;
+
+// ────────── iOS palette map por canal (usa theme colors) ──────────
+function colorCanalIOS(theme, key, fallbackIdx = 0) {
+  const overrides = {
+    'MAYOREO':              theme.purple,
+    'DISTRIBUIDOR':         theme.accent,
+    'E-COMMERCE':           theme.teal,
+    'MERCADO LIBRE':        theme.orange,
+    'AMAZON':               theme.pink,
+    'SITIO WEB':            theme.teal,
+    'CYBERPUERTA':          theme.purple,
+    'MOSTRADOR':            theme.green,
+    'RETAIL REPRESENTADOS': theme.orange,
+    'RETAIL PROPIOS':       theme.pink,
+    'RETAIL':               theme.orange,
+  };
+  const norm = String(key || '').toUpperCase();
+  const order = [theme.purple, theme.accent, theme.teal, theme.orange, theme.pink, theme.green, theme.indigo, theme.red].filter(Boolean);
+  return overrides[norm] || order[fallbackIdx % order.length] || theme.accent;
+}
+
+// ────────── IconBadge (patrón AirPods) ──────────
+function IconBadge({ icon: Icon, color, size = 26 }) {
+  if (!Icon) return null;
+  const iconSize = Math.round(size * 0.5);
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: Math.round(size * 0.3),
+      background: `${color}22`, color,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    }}>
+      <Icon style={{ width: iconSize, height: iconSize }} strokeWidth={1.8} />
+    </div>
+  );
+}
+
+// ────────── MixDonut interactivo · click canal → filtro ──────────
+function MixDonutCanal({ canales, ventaTotal, deltaTotal, anio, canalActivo, onSelect }) {
+  const { theme } = useTheme();
+  const [hover, setHover] = useState(null);
+  const items = [...(canales || [])].filter((c) => (c.venta || 0) > 0);
+  if (!items.length) {
+    return (
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 24, color: theme.textMuted, fontFamily: TYPO.fontText, textAlign: 'center', fontSize: 13 }}>
+        Sin datos de canal.
+      </div>
+    );
+  }
+  const total = items.reduce((s, it) => s + (it.venta || 0), 0) || 1;
+  const R = 42, CIRC = 2 * Math.PI * R;
+  let offsetAcc = 0;
+  const arcs = items.map((it, i) => {
+    const pct = (it.venta || 0) / total;
+    const len = pct * CIRC;
+    const dash = `${len} ${CIRC}`;
+    const dashOffset = -offsetAcc;
+    offsetAcc += len;
+    return { key: it.canal, color: colorCanalIOS(theme, it.canal, i), dash, dashOffset };
+  });
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
+  const activo = canalActivo && canalActivo !== 'TODOS' ? canalActivo : null;
+
+  return (
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16,
+      padding: '14px 18px', fontFamily: TYPO.fontText,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+        <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>Mix por canal.</h4>
+        <span style={{ fontSize: 10, color: theme.textMuted }}>{items.length} activos · click filtra</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '132px 1fr', gap: 20, alignItems: 'center' }}>
+        <div style={{ position: 'relative', width: 132, height: 132 }}>
+          <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+            <circle cx="50" cy="50" r={R} fill="none" stroke={theme.border} strokeWidth="10" />
+            {arcs.map((a) => {
+              const active = hover === a.key || activo === a.key;
+              const other = (hover || activo) && !active;
+              return (
+                <circle key={a.key} cx="50" cy="50" r={R} fill="none"
+                  stroke={a.color} strokeWidth={active ? 12 : 10}
+                  strokeDasharray={a.dash} strokeDashoffset={a.dashOffset}
+                  opacity={other ? 0.25 : 1}
+                  style={{ transition: 'stroke-width 120ms, opacity 120ms', cursor: 'pointer' }}
+                  onMouseEnter={() => setHover(a.key)}
+                  onMouseLeave={() => setHover(null)}
+                  onClick={() => onSelect(a.key)}
+                />
+              );
+            })}
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            {(() => {
+              const sel = items.find((c) => c.canal === (hover || activo));
+              if (sel) {
+                const pct = ((sel.venta || 0) / total) * 100;
+                return (
+                  <>
+                    <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{sel.canal}</div>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.03em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtCompact(sel.venta)}</div>
+                    <div style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{pct.toFixed(1)}% del total</div>
+                  </>
+                );
+              }
+              return (
+                <>
+                  <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total YTD</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.03em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtCompact(ventaTotal)}</div>
+                  {deltaTotal != null && (
+                    <div style={{ fontSize: 10, fontVariantNumeric: 'tabular-nums', marginTop: 2, color: deltaTotal >= 0 ? green : red, fontWeight: 500 }}>
+                      {deltaTotal >= 0 ? '↑' : '↓'} {Math.abs(deltaTotal).toFixed(1)}% vs {anio - 1}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+        <div style={{ display: 'grid', gap: 2 }}>
+          {items.map((it, i) => {
+            const col = colorCanalIOS(theme, it.canal, i);
+            const pct = ((it.venta || 0) / total) * 100;
+            const active = hover === it.canal || activo === it.canal;
+            const dim = (hover || activo) && !active;
+            return (
+              <div key={it.canal}
+                onMouseEnter={() => setHover(it.canal)}
+                onMouseLeave={() => setHover(null)}
+                onClick={() => onSelect(it.canal)}
+                style={{
+                  display: 'grid', gridTemplateColumns: '14px 8px minmax(0, 1fr) 60px 70px 42px', alignItems: 'center', gap: 8,
+                  padding: '4px 4px', borderRadius: 8, cursor: 'pointer',
+                  background: active ? (theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)') : 'transparent',
+                  opacity: dim ? 0.5 : 1, transition: 'background 120ms, opacity 120ms',
+                }}>
+                <span style={{ fontSize: 10, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{i + 1}</span>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: col }} />
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0 }}>
+                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 500, color: theme.text, textTransform: 'uppercase', letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.canal}</span>
+                  <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>· {pct.toFixed(1)}%</span>
+                </span>
+                <div style={{ height: 3, borderRadius: 999, background: theme.border, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.max(2, pct)}%`, background: col, borderRadius: 999 }} />
+                </div>
+                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right', letterSpacing: '-0.01em' }}>{fmtCompact(it.venta)}</span>
+                <span style={{ fontSize: 10, fontWeight: 500, color: it.deltaYoY == null ? theme.textMuted : it.deltaYoY >= 0 ? green : red, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {it.deltaYoY == null ? '' : `${it.deltaYoY >= 0 ? '↑' : '↓'}${Math.abs(it.deltaYoY).toFixed(0)}%`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ────────── AreaChart Apple Health tendencia mensual ──────────
+function TendenciaMensualArea({ data, anio }) {
+  const { theme } = useTheme();
+  const blue = theme.accent || '#007AFF';
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '14px 18px', fontFamily: TYPO.fontText, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+        <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>Facturación mensual · vs {anio - 1}.</h4>
+        <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: blue }} />{anio}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anio - 1}</span>
+        </div>
+      </div>
+      <div style={{ width: '100%', height: 150, flex: 1 }}>
+        <ResponsiveContainer>
+          <AreaChart data={data} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
+            <defs>
+              <linearGradient id="fillAnalisis" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={blue} stopOpacity={0.18} />
+                <stop offset="100%" stopColor={blue} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
+            <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
+            <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={38} />
+            <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
+            <Area type="monotone" dataKey="anterior" name={`${anio - 1}`} stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
+            <Area type="monotone" dataKey="actual"   name={`${anio}`}     stroke={blue} strokeWidth={2.2} fill="url(#fillAnalisis)" dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: blue, strokeWidth: 2 }} isAnimationActive={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
 
 // Reglas de canonización: muchos canales (MOSTRADOR, E-COMMERCE) tienen
 // un cliente_nombre distinto por venta. Se colapsan a entidades reales.
@@ -342,29 +534,29 @@ export default function AnalisisClientesGlobal() {
   return (
     <div className="max-w-none mx-auto p-6 space-y-4"
       style={{ background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
-      {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-4 px-1">
+      {/* Header estilo Apple */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, padding: '0 4px', marginBottom: 4 }}>
         <div>
           <p style={{
             fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em',
-            color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText,
+            color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500,
           }}>
             Dirección Comercial · YTD ene–{MESES_LBL[mesMax - 1]} {anio}
           </p>
           <h2 style={{
-            fontSize: 28, fontWeight: 600, letterSpacing: '-0.025em',
-            fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0,
-          }}>Análisis por cliente</h2>
-          <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 2, fontFamily: TYPO.fontText }}>
-            {kpis.activos.toLocaleString('es-MX')} clientes activos en facturación
+            fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em',
+            fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1,
+          }}>Análisis por cliente.</h2>
+          <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
+            {kpis.activos.toLocaleString('es-MX')} clientes activos generaron {fmtCompact(kpis.ventaYTD)} este año.
           </p>
         </div>
         <label style={{ display: 'flex', flexDirection: 'column', fontSize: 11, color: theme.textMuted, fontFamily: TYPO.fontText }}>
           Año
           <select value={anio} onChange={(e) => setAnio(Number(e.target.value))}
             style={{
-              border: `1px solid ${theme.border}`, borderRadius: 10,
-              padding: '6px 12px', fontSize: 14,
+              border: `1px solid ${theme.border}`, borderRadius: 999,
+              padding: '8px 16px', fontSize: 14, marginTop: 4,
               background: theme.surface, color: theme.text,
               fontFamily: TYPO.fontText,
             }}>
@@ -373,12 +565,12 @@ export default function AnalisisClientesGlobal() {
         </label>
       </div>
 
-      {/* Buscador + filtro de canal */}
-      <div className="flex gap-2 items-center">
+      {/* Buscador apple.com pill + filtro de canal */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
         <div style={{
-          flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px',
+          flex: 1, display: 'flex', alignItems: 'center', gap: 10, padding: '0 18px',
           background: theme.surface, border: `1px solid ${theme.border}`,
-          borderRadius: 10, height: 40, fontFamily: TYPO.fontText,
+          borderRadius: 999, height: 40, fontFamily: TYPO.fontText,
         }}>
           <Search style={{ width: 16, height: 16, color: theme.textMuted, flexShrink: 0 }} />
           <input
@@ -403,10 +595,10 @@ export default function AnalisisClientesGlobal() {
           value={canalFiltro}
           onChange={(e) => setCanalFiltro(e.target.value)}
           style={{
-            height: 40, padding: '0 12px',
-            border: `1px solid ${theme.border}`, borderRadius: 10,
-            fontSize: 14, background: theme.surface, color: theme.text,
-            fontFamily: TYPO.fontText,
+            height: 40, padding: '0 16px',
+            border: `1px solid ${theme.border}`, borderRadius: 999,
+            fontSize: 13, background: theme.surface, color: theme.text,
+            fontFamily: TYPO.fontText, cursor: 'pointer',
           }}
         >
           <option value="TODOS">Todos los canales</option>
@@ -414,92 +606,74 @@ export default function AnalisisClientesGlobal() {
         </select>
       </div>
 
-      {/* KPIs globales */}
-      <div className="grid grid-cols-4 gap-2.5">
-        <KpiTile
-          label={`Facturación ${MESES_FULL[mesMax - 1].toLowerCase()}`}
-          valor={fmtCompact(kpis.ventaMes)}
-          delta={kpis.deltaMes}
-          subtitulo={`vs ${MESES_LBL[mesMax - 1]} ${anio - 1}: ${fmtCompact(kpis.ventaMesPrev)}`}
-        />
-        <KpiTile
-          label={`YTD ${anio}`}
-          valor={fmtCompact(kpis.ventaYTD)}
-          delta={kpis.deltaYTD}
-          subtitulo={`vs YTD ${anio - 1}: ${fmtCompact(kpis.ventaYTDPrev)}`}
-        />
-        <KpiTile
-          label="Clientes activos"
-          valor={kpis.activos.toLocaleString('es-MX')}
-          delta={null}
-          subtitulo={`de ${kpis.total.toLocaleString('es-MX')} en cartera`}
-        />
-        <KpiTile
-          label="Cumplimiento cuota"
-          valor={kpis.cumpl != null ? fmtPct(kpis.cumpl) : 'Pendiente'}
-          delta={null}
-          subtitulo={kpis.gap > 0 ? `Faltan ${fmtCompact(kpis.gap)}` : 'Cuota anual pendiente'}
-          esWarning={kpis.cumpl != null && kpis.cumpl < 80}
-        />
-      </div>
+      {/* KPI row Compacto B · 4 cards ~56px, Cumpl. cuota inverse */}
+      {(() => {
+        const isDark = theme.mode === 'dark';
+        const invBg = theme.surfaceInverse || (isDark ? '#F5F5F7' : '#000000');
+        const invText = theme.textOnInverse || (isDark ? '#1D1D1F' : '#F5F5F7');
+        const invMuted = isDark ? 'rgba(29,29,31,0.72)' : 'rgba(245,245,247,0.72)';
+        const green = theme.green || '#34C759';
+        const red = theme.red || '#FF3B30';
+        const KpiCard = ({ inverse, Icon, badgeCol, lbl, val, delta, deltaCol, sub, warning }) => (
+          <div style={{
+            background: inverse ? invBg : theme.surface,
+            color: inverse ? invText : theme.text,
+            border: inverse ? 'none' : `1px solid ${theme.border}`,
+            borderRadius: 14, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10,
+            minHeight: 56, fontFamily: TYPO.fontText,
+          }}>
+            <IconBadge icon={Icon} color={badgeCol} size={26} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, margin: 0, color: inverse ? invMuted : theme.textMuted }}>{lbl}</p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 2 }}>
+                <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', margin: 0, fontVariantNumeric: 'tabular-nums', lineHeight: 1, color: warning ? (theme.orange || '#FF9500') : (inverse ? invText : theme.text) }}>{val}</p>
+                {delta && <span style={{ fontSize: 11, fontWeight: 500, color: deltaCol, fontVariantNumeric: 'tabular-nums' }}>{delta}</span>}
+                {sub && !delta && <span style={{ fontSize: 11, color: inverse ? invMuted : theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{sub}</span>}
+              </div>
+            </div>
+          </div>
+        );
+        return (
+          <div className="grid grid-cols-4 gap-2.5">
+            <KpiCard Icon={Calendar} badgeCol={theme.orange || '#FF9500'}
+              lbl={`Facturación ${MESES_LBL[mesMax - 1]} · YoY`}
+              val={fmtCompact(kpis.ventaMes)}
+              delta={kpis.deltaMes != null ? `${kpis.deltaMes >= 0 ? '↑' : '↓'}${Math.abs(kpis.deltaMes).toFixed(1)}%` : null}
+              deltaCol={kpis.deltaMes == null ? theme.textMuted : kpis.deltaMes >= 0 ? green : red}
+            />
+            <KpiCard Icon={TrendingUp} badgeCol={theme.accent || '#007AFF'}
+              lbl={`YTD ${anio} · vs ${anio - 1}`}
+              val={fmtCompact(kpis.ventaYTD)}
+              delta={kpis.deltaYTD != null ? `${kpis.deltaYTD >= 0 ? '↑' : '↓'}${Math.abs(kpis.deltaYTD).toFixed(1)}%` : null}
+              deltaCol={kpis.deltaYTD == null ? theme.textMuted : kpis.deltaYTD >= 0 ? green : red}
+            />
+            <KpiCard Icon={Users} badgeCol={theme.purple || '#AF52DE'}
+              lbl={`Clientes activos · de ${kpis.total.toLocaleString('es-MX')}`}
+              val={kpis.activos.toLocaleString('es-MX')}
+              sub="en cartera"
+            />
+            <KpiCard inverse Icon={Target}
+              badgeCol={isDark ? theme.orange : '#FFB454'}
+              lbl="Cumplimiento cuota anual"
+              val={kpis.cumpl != null ? fmtPct(kpis.cumpl) : 'Pendiente'}
+              sub={kpis.gap > 0 ? `Faltan ${fmtCompact(kpis.gap)}` : 'sin cuota'}
+              warning={kpis.cumpl != null && kpis.cumpl < 80}
+            />
+          </div>
+        );
+      })()}
 
-      {/* Gráfica YoY mensual */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <div className="flex items-baseline justify-between mb-3">
-          <h3 className="text-sm font-medium text-gray-800">Facturación mensual vs {anio - 1}</h3>
-          <span className="text-xs text-gray-500">
-            {MESES_FULL[mesMax - 1]} {anio}: {fmtPctDelta(kpis.deltaMes)} YoY
-          </span>
-        </div>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={yoyMensual} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-            <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#888' }} />
-            <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 11, fill: '#888' }} width={50} />
-            <Tooltip formatter={(v) => fmtMoney(v)} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="anterior" name={`${anio - 1}`} fill={PALETTE.blue.soft} radius={[3, 3, 0, 0]} />
-            <Bar dataKey="actual" name={`${anio}`} fill={PALETTE.blue.mid} radius={[3, 3, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Canales */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <div className="flex items-baseline justify-between mb-3">
-          <h3 className="text-sm font-medium text-gray-800">Canales</h3>
-          <span className="text-xs text-gray-500">YTD {anio}</span>
-        </div>
-        <div className="grid grid-cols-3 gap-2.5">
-          {canales.map((c) => {
-            const pal = colorCanal(c.canal);
-            return (
-              <button
-                key={c.canal}
-                onClick={() => setCanalFiltro(canalFiltro === c.canal ? 'TODOS' : c.canal)}
-                className="text-left rounded-xl p-3 transition-all hover:ring-2"
-                style={{
-                  background: pal.bg,
-                  ringColor: pal.mid,
-                  border: canalFiltro === c.canal ? `2px solid ${pal.mid}` : '2px solid transparent',
-                }}
-              >
-                <div className="text-[10px] font-medium uppercase tracking-wider" style={{ color: pal.mid }}>
-                  {c.canal}
-                </div>
-                <div className="text-lg font-medium mt-0.5" style={{ color: pal.text }}>
-                  {fmtCompact(c.venta)}
-                </div>
-                <div className="text-[11px] mt-0.5" style={{ color: pal.mid }}>
-                  {c.deltaYoY != null && (
-                    <span>{fmtPctDelta(c.deltaYoY)} YoY · </span>
-                  )}
-                  {fmtPct(c.share)} del total
-                </div>
-              </button>
-            );
-          })}
-        </div>
+      {/* Row 2-col: Mix donut interactivo + Tendencia mensual area */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1fr)', gap: 10 }}>
+        <MixDonutCanal
+          canales={canales}
+          ventaTotal={kpis.ventaYTD}
+          deltaTotal={kpis.deltaYTD}
+          anio={anio}
+          canalActivo={canalFiltro}
+          onSelect={(k) => setCanalFiltro(canalFiltro === k ? 'TODOS' : k)}
+        />
+        <TendenciaMensualArea data={yoyMensual} anio={anio} />
       </div>
 
       {/* Clientes ranking */}
