@@ -4,12 +4,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
+import { useTheme } from '../../lib/themeContext';
+import { TYPO } from '../../lib/themeTokens';
+import { ClipboardList, Search, ChevronRight, Download, X } from 'lucide-react';
 
 // ═══ Constantes ═══
 const CLIENTES = [
-  { key: 'digitalife', label: 'Digitalife', color: '#8B5CF6', iniciales: 'DL' },
-  { key: 'pcel',       label: 'PCEL',       color: '#10B981', iniciales: 'PC' },
-  { key: 'dicotech',   label: 'Dicotech',   color: '#0EA5E9', iniciales: 'DT' },
+  { key: 'digitalife', label: 'Digitalife', iniciales: 'D' },
+  { key: 'pcel',       label: 'PCEL',       iniciales: 'P' },
+  { key: 'dicotech',   label: 'Dicotech',   iniciales: 'Di' },
 ];
 
 const FAMILIA_DIGITALIFE_HOJA = {
@@ -33,8 +36,28 @@ function mesesCerrados() {
 const MES_ACTUAL = { anio: new Date().getFullYear(), mes: new Date().getMonth() + 1 };
 const MES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
+// ═══ Paleta derivada del tema ═══
+function paletteFromTheme(theme) {
+  return {
+    accent: theme.accent  || '#007AFF',
+    green:  theme.green   || '#34C759',
+    orange: theme.orange  || '#FF9500',
+    red:    theme.red     || '#FF3B30',
+    purple: theme.purple  || '#AF52DE',
+    teal:   theme.teal    || '#5AC8FA',
+  };
+}
+function clienteColor(theme, key) {
+  const P = paletteFromTheme(theme);
+  const map = { digitalife: P.accent, pcel: P.red, dicotech: P.purple };
+  return map[key] || P.accent;
+}
+
 // ═══ Componente principal ═══
 export default function PropuestasTab() {
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
+
   // Estados del wizard
   const [paso, setPaso] = useState(0); // 0 = landing, 1..5 = pasos
   const [clienteKey, setClienteKey] = useState(null);
@@ -44,12 +67,12 @@ export default function PropuestasTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [skus, setSkus] = useState([]);
-  const [contexto, setContexto] = useState(null); // { cuota, facturado, gap, topVendidos, cartera }
+  const [contexto, setContexto] = useState(null);
 
   // Fetch al pasar de paso 1 → 2
   useEffect(() => {
     if (paso < 2 || !clienteKey) return;
-    if (skus.length > 0) return; // ya cargado
+    if (skus.length > 0) return;
     fetchAll(clienteKey).then(({ skus: rows, contexto: ctx }) => {
       setSkus(rows);
       setContexto(ctx);
@@ -62,7 +85,6 @@ export default function PropuestasTab() {
     setLoading(true);
   }, [paso, clienteKey, skus.length]);
 
-  // Reset al cambiar cliente
   const reiniciar = () => {
     setPaso(0);
     setClienteKey(null);
@@ -73,7 +95,6 @@ export default function PropuestasTab() {
   };
 
   const iniciar = (cli) => {
-    // Limpia estado previo pero deja el paso avanzando al 2 (Contexto)
     setPropuesta({});
     setSkus([]);
     setContexto(null);
@@ -86,116 +107,155 @@ export default function PropuestasTab() {
 
   // ═══ Landing ═══
   if (paso === 0) {
-    return <Landing onIniciar={() => setPaso(1)} />;
+    return <Landing theme={theme} onIniciar={() => setPaso(1)} />;
   }
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
-      {/* Header con back a landing */}
-      <div className="flex items-center justify-between mb-4">
+    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, padding: '0 4px', marginBottom: 4, flexWrap: 'wrap' }}>
         <div>
-          <button onClick={reiniciar} className="text-xs text-gray-500 hover:text-gray-800 mb-1">← Propuestas</button>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Nueva propuesta</h1>
+          <button onClick={reiniciar}
+            style={{ background: 'transparent', border: 0, padding: 0, fontSize: 11, color: theme.textMuted, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            onMouseEnter={(e) => e.currentTarget.style.color = theme.text}
+            onMouseLeave={(e) => e.currentTarget.style.color = theme.textMuted}>
+            ← Propuestas
+          </button>
+          <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
+            Nueva propuesta.
+          </h2>
+          {cliente && (
+            <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
+              Para <strong style={{ color: theme.text, fontWeight: 500 }}>{cliente.label}</strong> · {MES_LABEL[MES_ACTUAL.mes - 1]} {MES_ACTUAL.anio}
+            </p>
+          )}
         </div>
       </div>
 
       {/* Stepper */}
-      <Stepper paso={paso} />
+      <Stepper theme={theme} paso={paso} isDark={isDark} />
 
       {/* Contexto card (visible desde paso 2) */}
       {paso >= 2 && contexto && (
-        <ContextoCard cliente={cliente} contexto={contexto} />
+        <ContextoCard theme={theme} cliente={cliente} contexto={contexto} isDark={isDark} />
       )}
 
-      {loading && <div className="text-center py-16 text-gray-400 text-sm">Cargando data de {cliente?.label}…</div>}
-      {error && <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-lg p-4 text-sm">{error}</div>}
+      {loading && (
+        <div style={{ padding: 40, textAlign: 'center', color: theme.textMuted, fontSize: 12 }}>
+          Cargando data de {cliente?.label}…
+        </div>
+      )}
+      {error && (
+        <div style={{ padding: 14, background: `${paletteFromTheme(theme).red}14`, border: `1px solid ${paletteFromTheme(theme).red}40`, borderRadius: 12, color: paletteFromTheme(theme).red, fontSize: 12 }}>
+          {error}
+        </div>
+      )}
 
       {/* Contenido por paso */}
       {!loading && !error && paso === 1 && (
-        <Paso1Cliente onElegir={iniciar} />
+        <Paso1Cliente theme={theme} onElegir={iniciar} isDark={isDark} />
       )}
       {!loading && !error && paso === 2 && contexto && (
-        <Paso2Contexto contexto={contexto} onSiguiente={() => setPaso(3)} onPrev={() => setPaso(1)} />
+        <Paso2Contexto theme={theme} contexto={contexto} onSiguiente={() => setPaso(3)} onPrev={() => setPaso(1)} />
       )}
       {!loading && !error && paso === 3 && (
-        <Paso3Catalogo
-          skus={skus}
-          propuesta={propuesta}
-          setPropuesta={setPropuesta}
-          onSiguiente={() => setPaso(4)}
-          onPrev={() => setPaso(2)}
-        />
+        <Paso3Catalogo theme={theme} skus={skus} propuesta={propuesta} setPropuesta={setPropuesta}
+          onSiguiente={() => setPaso(4)} onPrev={() => setPaso(2)} isDark={isDark} />
       )}
       {!loading && !error && paso === 4 && (
-        <Paso4Ajustes
-          skus={skus}
-          propuesta={propuesta}
-          setPropuesta={setPropuesta}
-          cliente={cliente}
-          onSiguiente={() => setPaso(5)}
-          onPrev={() => setPaso(3)}
-        />
+        <Paso4Ajustes theme={theme} skus={skus} propuesta={propuesta} setPropuesta={setPropuesta}
+          cliente={cliente} onSiguiente={() => setPaso(5)} onPrev={() => setPaso(3)} isDark={isDark} />
       )}
       {!loading && !error && paso === 5 && (
-        <Paso5Revisar
-          skus={skus}
-          propuesta={propuesta}
-          cliente={cliente}
-          onPrev={() => setPaso(4)}
-        />
+        <Paso5Revisar theme={theme} skus={skus} propuesta={propuesta} cliente={cliente}
+          onPrev={() => setPaso(4)} isDark={isDark} />
       )}
     </div>
   );
 }
 
 // ═══ Landing ═══
-function Landing({ onIniciar }) {
+function Landing({ theme, onIniciar }) {
+  const P = paletteFromTheme(theme);
+  const isDark = theme.mode === 'dark';
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
-      <div className="flex items-baseline justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Propuestas</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Arma propuestas de venta por cliente y expórtalas a Excel.</p>
-        </div>
+    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
+      <div style={{ padding: '0 4px', marginBottom: 20 }}>
+        <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
+          Dirección Comercial · Armador
+        </p>
+        <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
+          Propuestas.
+        </h2>
+        <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText }}>
+          Arma propuestas de venta por cliente con inventario, precios y sell-out en un solo flujo.
+        </p>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center max-w-2xl mx-auto shadow-sm">
-        <div className="text-5xl mb-3">📋</div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Iniciar una propuesta nueva</h2>
-        <p className="text-sm text-gray-500 mb-8 max-w-md mx-auto">
+      <div style={{
+        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 20,
+        padding: '48px 32px', textAlign: 'center', maxWidth: 640, margin: '32px auto',
+        fontFamily: TYPO.fontText,
+      }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: 16, background: `${P.accent}18`, color: P.accent,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+        }}>
+          <ClipboardList style={{ width: 26, height: 26 }} strokeWidth={1.5} />
+        </div>
+        <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
+          Iniciar una propuesta nueva
+        </h3>
+        <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 8, marginBottom: 28, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
           Elige el cliente, revisa su contexto de venta y arma la propuesta paso a paso.
         </p>
         <button onClick={onIniciar}
-          className="px-8 py-3 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 shadow-md transition">
-          + Nueva propuesta
+          style={{
+            padding: '11px 24px', background: P.accent, color: '#FFFFFF',
+            border: 0, borderRadius: 999, fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+            cursor: 'pointer', letterSpacing: '-0.01em',
+            transition: 'transform 120ms',
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-1px)'}
+          onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}>
+          Nueva propuesta
         </button>
       </div>
     </div>
   );
 }
 
-// ═══ Stepper ═══
-function Stepper({ paso }) {
+// ═══ Stepper — pills iOS ═══
+function Stepper({ theme, paso, isDark }) {
+  const P = paletteFromTheme(theme);
   return (
-    <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 mb-4 flex items-center gap-1 overflow-x-auto">
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
+      padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 4,
+      overflowX: 'auto', fontFamily: TYPO.fontText,
+    }}>
       {PASOS.map((label, i) => {
         const n = i + 1;
         const state = paso > n ? 'done' : paso === n ? 'active' : 'pending';
+        const dotBg = state === 'done' ? P.green : state === 'active' ? P.accent : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)');
+        const dotFg = state === 'pending' ? theme.textMuted : '#FFFFFF';
+        const lblColor = state === 'done' ? P.green : state === 'active' ? theme.text : theme.textMuted;
         return (
           <React.Fragment key={label}>
-            <div className={`flex items-center gap-2 flex-shrink-0 text-xs font-semibold ${
-              state === 'done' ? 'text-emerald-600' :
-              state === 'active' ? 'text-gray-900' :
-              'text-gray-300'
-            }`}>
-              <span className={`w-6 h-6 rounded-full inline-flex items-center justify-center text-[10px] font-bold ${
-                state === 'done' ? 'bg-emerald-500 text-white' :
-                state === 'active' ? 'bg-black text-white' :
-                'bg-gray-100 text-gray-400'
-              }`}>{state === 'done' ? '✓' : n}</span>
-              {label}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <span style={{
+                width: 22, height: 22, borderRadius: 999, background: dotBg, color: dotFg,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.01em',
+              }}>{state === 'done' ? '✓' : n}</span>
+              <span style={{
+                fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: state === 'active' ? 600 : 500,
+                letterSpacing: '-0.01em', color: lblColor,
+              }}>{label}</span>
             </div>
-            {i < PASOS.length - 1 && <div className={`flex-1 h-px min-w-[24px] ${paso > n ? 'bg-emerald-500' : 'bg-gray-200'}`} />}
+            {i < PASOS.length - 1 && (
+              <div style={{ flex: 1, minWidth: 20, height: 1, background: paso > n ? P.green : theme.border }} />
+            )}
           </React.Fragment>
         );
       })}
@@ -204,37 +264,50 @@ function Stepper({ paso }) {
 }
 
 // ═══ Card contexto cliente (persiste en pasos 2-5) ═══
-function ContextoCard({ cliente, contexto }) {
+function ContextoCard({ theme, cliente, contexto, isDark }) {
+  const P = paletteFromTheme(theme);
+  const col = clienteColor(theme, cliente.key);
   const cuotaPct = contexto.cuota > 0 ? (contexto.facturado / contexto.cuota * 100) : 0;
+  const toneGap = cuotaPct >= 100 ? P.green : cuotaPct >= 70 ? P.orange : P.red;
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4"
-      style={{ background: `${cliente.color}08` }}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold"
-            style={{ background: cliente.color }}>{cliente.iniciales}</div>
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderLeft: `4px solid ${col}`,
+      borderRadius: 14, padding: '12px 14px', fontFamily: TYPO.fontText,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 10, background: col, color: '#FFFFFF',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, letterSpacing: '-0.02em',
+          }}>{cliente.iniciales}</div>
           <div>
-            <div className="font-bold text-gray-900">{cliente.label}</div>
-            <div className="text-[11px] text-gray-500">{MES_LABEL[MES_ACTUAL.mes - 1]} {MES_ACTUAL.anio}</div>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>{cliente.label}</div>
+            <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{MES_LABEL[MES_ACTUAL.mes - 1]} {MES_ACTUAL.anio}</div>
           </div>
         </div>
-        <div className="text-[11px] text-gray-500">Contexto de venta del mes</div>
+        <span style={{ fontSize: 10, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 }}>
+          Contexto de venta del mes
+        </span>
       </div>
-      <div className="grid grid-cols-5 gap-4">
-        <KpiMini label="Cuota" value={formatMXN(contexto.cuota)} />
-        <KpiMini label="Facturado" value={formatMXN(contexto.facturado)} sub={`${cuotaPct.toFixed(0)}%`} />
-        <KpiMini label="Gap" value={formatMXN(Math.max(0, contexto.cuota - contexto.facturado))}
-          tone={cuotaPct >= 100 ? 'pos' : cuotaPct >= 70 ? 'warn' : 'bad'} />
-        <KpiMini label="Días restantes" value={contexto.diasRestantes} />
-        <KpiMini label="SKUs disponibles" value={contexto.skusConInv?.toLocaleString('es-MX') || '—'} sub="con inv Acteck" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+        <KpiMini theme={theme} label="Cuota" value={formatMXN(contexto.cuota)} />
+        <KpiMini theme={theme} label="Facturado" value={formatMXN(contexto.facturado)} sub={`${cuotaPct.toFixed(0)}% cuota`} />
+        <KpiMini theme={theme} label="Gap" value={formatMXN(Math.max(0, contexto.cuota - contexto.facturado))} color={toneGap} />
+        <KpiMini theme={theme} label="Días restantes" value={String(contexto.diasRestantes)} sub="para cerrar mes" />
+        <KpiMini theme={theme} label="SKUs disponibles" value={contexto.skusConInv?.toLocaleString('es-MX') || '—'} sub="con inv Acteck" />
       </div>
       {contexto.topVendidos && contexto.topVendidos.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-gray-100 text-[11px] text-gray-600">
-          <span className="text-gray-400 font-semibold uppercase tracking-wider mr-2">Top 5 vendidos 90d:</span>
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${theme.border}`, fontSize: 11, color: theme.textMuted }}>
+          <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginRight: 10 }}>
+            Top 5 vendidos 90d:
+          </span>
           {contexto.topVendidos.slice(0, 5).map((s, i) => (
             <span key={s.sku}>
-              {i > 0 && <span className="text-gray-300 mx-1.5">·</span>}
-              <span className="font-medium">{s.sku}</span> <span className="text-gray-400">({s.piezas}pz)</span>
+              {i > 0 && <span style={{ color: theme.textSubtle || theme.textMuted, margin: '0 6px' }}>·</span>}
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 500, color: theme.text }}>{s.sku}</span>
+              <span style={{ color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}> ({s.piezas}pz)</span>
             </span>
           ))}
         </div>
@@ -243,60 +316,95 @@ function ContextoCard({ cliente, contexto }) {
   );
 }
 
-function KpiMini({ label, value, sub, tone }) {
-  const color = tone === 'pos' ? '#10B981' : tone === 'warn' ? '#F59E0B' : tone === 'bad' ? '#EF4444' : '#111827';
+function KpiMini({ theme, label, value, sub, color }) {
   return (
-    <div>
-      <div className="text-[9.5px] uppercase tracking-wider text-gray-400 font-bold">{label}</div>
-      <div className="text-[15px] font-bold tabular-nums" style={{ color }}>{value}</div>
-      {sub && <div className="text-[10px] text-gray-500">{sub}</div>}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: color || theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{sub}</div>}
     </div>
   );
 }
 
 // ═══ Paso 1: Elegir cliente ═══
-function Paso1Cliente({ onElegir }) {
+function Paso1Cliente({ theme, onElegir, isDark }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
-      <h2 className="text-lg font-bold text-gray-900 mb-2">¿Para qué cliente?</h2>
-      <p className="text-sm text-gray-500 mb-6">Selecciona el cliente para el que armarás la propuesta.</p>
-      <div className="grid grid-cols-3 gap-4 max-w-2xl mx-auto">
-        {CLIENTES.map((c) => (
-          <button key={c.key} onClick={() => onElegir(c.key)}
-            className="p-6 border-2 border-gray-200 rounded-xl hover:border-gray-900 hover:shadow-md transition text-left group">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-sm font-bold mb-3"
-              style={{ background: c.color }}>{c.iniciales}</div>
-            <div className="font-bold text-gray-900">{c.label}</div>
-            <div className="text-xs text-gray-500 group-hover:text-gray-700 mt-1">Iniciar propuesta →</div>
-          </button>
-        ))}
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16,
+      padding: '32px 24px', textAlign: 'center', fontFamily: TYPO.fontText,
+    }}>
+      <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
+        ¿Para qué cliente?
+      </h3>
+      <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 6, marginBottom: 24 }}>
+        Selecciona el cliente para el que armarás la propuesta.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, maxWidth: 720, margin: '0 auto' }}>
+        {CLIENTES.map((c) => {
+          const col = clienteColor(theme, c.key);
+          return (
+            <button key={c.key} onClick={() => onElegir(c.key)}
+              style={{
+                padding: 20, background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 14,
+                textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'transform 120ms, border-color 120ms, background 120ms',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.borderColor = col;
+                e.currentTarget.style.background = `${col}0A`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'none';
+                e.currentTarget.style.borderColor = theme.border;
+                e.currentTarget.style.background = theme.bg;
+              }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 12, background: col, color: '#FFFFFF',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 15, letterSpacing: '-0.02em',
+                marginBottom: 12,
+              }}>{c.iniciales}</div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, color: theme.text, letterSpacing: '-0.02em' }}>{c.label}</div>
+              <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                Iniciar propuesta <ChevronRight style={{ width: 12, height: 12 }} strokeWidth={2} />
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 // ═══ Paso 2: Confirmar contexto ═══
-function Paso2Contexto({ contexto, onSiguiente, onPrev }) {
+function Paso2Contexto({ theme, contexto, onSiguiente, onPrev }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6">
-      <h2 className="text-lg font-bold text-gray-900 mb-2">Contexto del cliente</h2>
-      <p className="text-sm text-gray-500 mb-4">
-        Revisa la información de venta antes de elegir SKUs. La card de arriba muestra cuota, facturado, gap
-        y los productos que más se están moviendo en los últimos 90 días.
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '18px 20px', fontFamily: TYPO.fontText }}>
+      <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
+        Contexto del cliente
+      </h3>
+      <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 6, marginBottom: 14, lineHeight: 1.5 }}>
+        Revisa la información de venta antes de elegir SKUs. La card de arriba muestra cuota, facturado, gap y los
+        productos con más movimiento en los últimos 90 días.
       </p>
-      <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 text-xs text-gray-600 space-y-1">
-        <div><strong>Cuota del mes:</strong> lo que te propusiste facturar en {MES_LABEL[MES_ACTUAL.mes - 1]}</div>
-        <div><strong>Facturado:</strong> lo que llevas facturado hasta hoy</div>
-        <div><strong>Gap:</strong> lo que falta para cerrar la cuota</div>
-        <div><strong>Top vendidos 90d:</strong> productos con más venta en los últimos 3 meses cerrados</div>
+      <div style={{
+        background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12,
+        padding: '12px 14px', fontSize: 11, color: theme.textMuted, display: 'grid', gap: 5,
+      }}>
+        <div><strong style={{ color: theme.text, fontWeight: 500 }}>Cuota del mes:</strong> lo que te propusiste facturar en {MES_LABEL[MES_ACTUAL.mes - 1]}.</div>
+        <div><strong style={{ color: theme.text, fontWeight: 500 }}>Facturado:</strong> lo que llevas facturado hasta hoy.</div>
+        <div><strong style={{ color: theme.text, fontWeight: 500 }}>Gap:</strong> lo que falta para cerrar la cuota.</div>
+        <div><strong style={{ color: theme.text, fontWeight: 500 }}>Top vendidos 90d:</strong> productos con más venta en los últimos 3 meses cerrados.</div>
       </div>
-      <NavBotones onPrev={onPrev} onSiguiente={onSiguiente} labelNext="Ver catálogo →" />
+      <NavBotones theme={theme} onPrev={onPrev} onSiguiente={onSiguiente} labelNext="Ver catálogo" />
     </div>
   );
 }
 
 // ═══ Paso 3: Elegir SKUs ═══
-function Paso3Catalogo({ skus, propuesta, setPropuesta, onSiguiente, onPrev }) {
+function Paso3Catalogo({ theme, skus, propuesta, setPropuesta, onSiguiente, onPrev, isDark }) {
+  const P = paletteFromTheme(theme);
   const [busqueda, setBusqueda] = useState('');
   const [filtroFamilia, setFiltroFamilia] = useState('todas');
   const [soloConInv, setSoloConInv] = useState(false);
@@ -335,43 +443,60 @@ function Paso3Catalogo({ skus, propuesta, setPropuesta, onSiguiente, onPrev }) {
 
   const seleccionados = Object.keys(propuesta).length;
 
+  const thStyle = { position: 'sticky', top: 0, background: theme.surface, zIndex: 1, textAlign: 'right', padding: '8px 6px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap' };
+  const thLeft = { ...thStyle, textAlign: 'left' };
+  const tdStyle = { padding: '5px 6px', borderTop: `1px solid ${theme.border}`, fontSize: 11, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-bold text-gray-900">Elige los productos</h2>
-        <div className="text-sm text-gray-500">
-          <strong className="text-gray-900">{seleccionados}</strong> seleccionado{seleccionados !== 1 ? 's' : ''}
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 14px', fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+        <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
+          Elige los productos
+        </h3>
+        <div style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+          <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{seleccionados}</strong> seleccionado{seleccionados !== 1 ? 's' : ''}
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mb-3">
-        <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar SKU o descripción…"
-          className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-gray-400" />
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 999, height: 32, flex: 1, minWidth: 240, maxWidth: 320 }}>
+          <Search style={{ width: 12, height: 12, color: theme.textMuted }} strokeWidth={2} />
+          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar SKU o descripción…"
+            style={{ border: 0, outline: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 12, color: theme.text, flex: 1 }} />
+        </div>
         <select value={filtroFamilia} onChange={(e) => setFiltroFamilia(e.target.value)}
-          className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none bg-white cursor-pointer">
+          style={{ height: 32, padding: '0 14px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999, fontSize: 12, color: theme.text, fontFamily: 'inherit', cursor: 'pointer' }}>
           {familias.map((f) => <option key={f} value={f}>{f === 'todas' ? 'Todas las familias' : f}</option>)}
         </select>
-        <label className="text-sm text-gray-600 cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg">
-          <input type="checkbox" checked={soloConInv} onChange={(e) => setSoloConInv(e.target.checked)} />
+        <label style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 14px',
+          background: soloConInv ? `${P.accent}18` : theme.surface, border: `1px solid ${soloConInv ? P.accent : theme.border}`,
+          borderRadius: 999, fontSize: 12, color: soloConInv ? P.accent : theme.text, cursor: 'pointer', fontWeight: soloConInv ? 600 : 500,
+        }}>
+          <input type="checkbox" checked={soloConInv} onChange={(e) => setSoloConInv(e.target.checked)} style={{ margin: 0 }} />
           Solo con inventario
         </label>
-        <div className="text-xs text-gray-500 whitespace-nowrap">{filtrados.length.toLocaleString('es-MX')}</div>
+        <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 'auto' }}>
+          {filtrados.length.toLocaleString('es-MX')} SKUs
+        </span>
       </div>
 
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
-        <div style={{ maxHeight: 'calc(100vh - 460px)', overflow: 'auto' }}>
-          <table className="w-full text-xs">
-            <thead className="bg-gray-50 sticky top-0 z-10">
-              <tr className="text-gray-600">
-                <th className="text-left px-2 py-2 font-semibold w-8"></th>
-                <th className="text-left px-2 py-2 font-semibold" style={{ width: 100 }}>SKU</th>
-                <th className="text-left px-2 py-2 font-semibold">Descripción</th>
-                <th className="text-left px-2 py-2 font-semibold" style={{ width: 100 }}>Familia</th>
-                <th className="text-right px-2 py-2 font-semibold" style={{ width: 60 }}>Inv cli</th>
-                <th className="text-right px-2 py-2 font-semibold" style={{ width: 60 }}>Inv Ack</th>
-                <th className="text-right px-2 py-2 font-semibold" style={{ width: 70 }}>Prom SO 90d</th>
-                <th className="text-right px-2 py-2 font-semibold" style={{ width: 80 }}>Precio ref.</th>
+      {/* Tabla */}
+      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ maxHeight: 'calc(100vh - 480px)', overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+            <thead>
+              <tr>
+                <th style={{ ...thLeft, width: 32 }}></th>
+                <th style={{ ...thLeft, width: 110 }}>SKU</th>
+                <th style={thLeft}>Descripción</th>
+                <th style={{ ...thLeft, width: 120 }}>Familia</th>
+                <th style={{ ...thStyle, width: 60 }}>Inv cli</th>
+                <th style={{ ...thStyle, width: 60 }}>Inv Ack</th>
+                <th style={{ ...thStyle, width: 70 }}>SO 90d</th>
+                <th style={{ ...thStyle, width: 80 }}>Precio ref.</th>
               </tr>
             </thead>
             <tbody>
@@ -381,20 +506,23 @@ function Paso3Catalogo({ skus, propuesta, setPropuesta, onSiguiente, onPrev }) {
                 return (
                   <tr key={r.sku}
                     onClick={() => toggleSku(r.sku)}
-                    className={`border-t border-gray-100 cursor-pointer ${sel ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                    style={{ height: 30 }}>
-                    <td className="px-2 py-1 text-center">
-                      <input type="checkbox" checked={sel} readOnly className="cursor-pointer" />
+                    style={{
+                      cursor: 'pointer',
+                      background: sel ? `${P.accent}${isDark ? '20' : '0F'}` : 'transparent',
+                      height: 30,
+                    }}
+                    onMouseEnter={(e) => { if (!sel) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
+                    onMouseLeave={(e) => { if (!sel) e.currentTarget.style.background = 'transparent'; }}>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      <input type="checkbox" checked={sel} readOnly style={{ margin: 0, cursor: 'pointer', accentColor: P.accent }} />
                     </td>
-                    <td className="px-2 py-1 font-mono text-gray-700 whitespace-nowrap text-[10px]">{r.sku}</td>
-                    <td className="px-2 py-1 text-gray-800" style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>
-                      {r.descripcion || '—'}
-                    </td>
-                    <td className="px-2 py-1 text-gray-500 text-[10px] whitespace-nowrap">{r.familia || '—'}</td>
-                    <td className="px-2 py-1 text-right tabular-nums">{r.invCliente || <span className="text-gray-300">0</span>}</td>
-                    <td className="px-2 py-1 text-right tabular-nums">{r.invActeck || <span className="text-gray-300">0</span>}</td>
-                    <td className="px-2 py-1 text-right tabular-nums font-medium">{r.promSellout || <span className="text-gray-300">0</span>}</td>
-                    <td className="px-2 py-1 text-right tabular-nums text-gray-600">{precioRef != null ? formatMXN(precioRef) : <span className="text-gray-300">—</span>}</td>
+                    <td style={{ ...tdStyle, textAlign: 'left', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, fontWeight: 600, color: theme.text }}>{r.sku}</td>
+                    <td style={{ ...tdStyle, textAlign: 'left', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.descripcion}>{r.descripcion || '—'}</td>
+                    <td style={{ ...tdStyle, textAlign: 'left', color: theme.textMuted, fontSize: 10 }}>{r.familia || '—'}</td>
+                    <td style={tdStyle}>{r.invCliente || <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
+                    <td style={tdStyle}>{r.invActeck || <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
+                    <td style={{ ...tdStyle, fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text }}>{r.promSellout || <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}</td>
+                    <td style={{ ...tdStyle, color: theme.textMuted }}>{precioRef != null ? formatMXN(precioRef) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
                   </tr>
                 );
               })}
@@ -403,18 +531,16 @@ function Paso3Catalogo({ skus, propuesta, setPropuesta, onSiguiente, onPrev }) {
         </div>
       </div>
 
-      <NavBotones
-        onPrev={onPrev}
-        onSiguiente={onSiguiente}
+      <NavBotones theme={theme} onPrev={onPrev} onSiguiente={onSiguiente}
         disabledSiguiente={seleccionados === 0}
-        labelNext={`Ajustar precios (${seleccionados}) →`}
-      />
+        labelNext={`Ajustar precios (${seleccionados})`} />
     </div>
   );
 }
 
 // ═══ Paso 4: Ajustar piezas y precio ═══
-function Paso4Ajustes({ skus, propuesta, setPropuesta, cliente, onSiguiente, onPrev }) {
+function Paso4Ajustes({ theme, skus, propuesta, setPropuesta, cliente, onSiguiente, onPrev, isDark }) {
+  const P = paletteFromTheme(theme);
   const propuestaLista = useMemo(() => Object.entries(propuesta)
     .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
     .filter((r) => r.sku), [propuesta, skus]);
@@ -424,60 +550,61 @@ function Paso4Ajustes({ skus, propuesta, setPropuesta, cliente, onSiguiente, onP
   const editPropuesta = (sku, patch) => setPropuesta((prev) => ({ ...prev, [sku]: { ...(prev[sku] || {}), ...patch } }));
   const removePropuesta = (sku) => setPropuesta((prev) => { const n = { ...prev }; delete n[sku]; return n; });
 
+  const thStyle = { textAlign: 'right', padding: '8px 10px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap' };
+  const thLeft = { ...thStyle, textAlign: 'left' };
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-gray-900">Ajusta piezas y precio</h2>
-        <div className="text-sm">
-          <span className="text-gray-500">{propuestaLista.length} SKU · {piezas} pz · </span>
-          <strong className="text-gray-900 tabular-nums">{formatMXN(total)}</strong>
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 14px', fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+        <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
+          Ajusta piezas y precio
+        </h3>
+        <div style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+          {propuestaLista.length} SKU · {piezas.toLocaleString('es-MX')} pz · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{formatMXN(total)}</strong>
         </div>
       </div>
 
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
-        <table className="w-full text-xs">
-          <thead className="bg-gray-50">
-            <tr className="text-gray-600">
-              <th className="text-left px-3 py-2 font-semibold" style={{ width: 100 }}>SKU</th>
-              <th className="text-left px-3 py-2 font-semibold">Descripción</th>
-              <th className="text-right px-3 py-2 font-semibold" style={{ width: 60 }}>Inv cli</th>
-              <th className="text-right px-3 py-2 font-semibold" style={{ width: 60 }}>Inv Ack</th>
-              <th className="text-right px-3 py-2 font-semibold" style={{ width: 90 }}>Piezas</th>
-              <th className="text-left px-3 py-2 font-semibold" style={{ width: 220 }}>Precio</th>
-              <th className="text-right px-3 py-2 font-semibold" style={{ width: 110 }}>Total</th>
-              <th style={{ width: 32 }}></th>
+      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+          <thead>
+            <tr>
+              <th style={{ ...thLeft, width: 110 }}>SKU</th>
+              <th style={thLeft}>Descripción</th>
+              <th style={{ ...thStyle, width: 60 }}>Inv cli</th>
+              <th style={{ ...thStyle, width: 60 }}>Inv Ack</th>
+              <th style={{ ...thStyle, width: 90 }}>Piezas</th>
+              <th style={{ ...thLeft, width: 240 }}>Precio</th>
+              <th style={{ ...thStyle, width: 110 }}>Total</th>
+              <th style={{ ...thStyle, width: 32 }}></th>
             </tr>
           </thead>
           <tbody>
             {propuestaLista.map((r) => (
-              <AjusteRow key={r.sku} r={r}
+              <AjusteRow key={r.sku} theme={theme} P={P} r={r}
                 onEdit={(patch) => editPropuesta(r.sku, patch)}
                 onRemove={() => removePropuesta(r.sku)} />
             ))}
-            <tr className="bg-gray-900 text-white">
-              <td colSpan={4} className="px-3 py-2 font-bold text-right">Total propuesta</td>
-              <td className="px-3 py-2 text-right tabular-nums font-bold">{piezas}</td>
+            <tr style={{ background: isDark ? '#0F0F0F' : '#1D1D1F', color: '#FFFFFF' }}>
+              <td colSpan={4} style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, letterSpacing: '-0.01em' }}>Total propuesta</td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{piezas.toLocaleString('es-MX')}</td>
               <td></td>
-              <td className="px-3 py-2 text-right tabular-nums font-bold">{formatMXN(total)}</td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{formatMXN(total)}</td>
               <td></td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <NavBotones
-        onPrev={onPrev}
-        onSiguiente={onSiguiente}
-        disabledSiguiente={propuestaLista.length === 0}
-        labelNext="Revisar propuesta →"
-      />
+      <NavBotones theme={theme} onPrev={onPrev} onSiguiente={onSiguiente}
+        disabledSiguiente={propuestaLista.length === 0} labelNext="Revisar propuesta" />
     </div>
   );
 }
 
-function AjusteRow({ r, onEdit, onRemove }) {
+function AjusteRow({ theme, P, r, onEdit, onRemove }) {
   const listas = Object.entries(r.precios);
   const [modo, setModo] = useState(r.listaSel === 'personalizado' || !r.listaSel ? 'personalizado' : r.listaSel);
+  const subtotal = (Number(r.piezas) || 0) * (Number(r.precio) || 0);
 
   const setLista = (l) => {
     setModo(l);
@@ -486,25 +613,32 @@ function AjusteRow({ r, onEdit, onRemove }) {
     if (precio != null) onEdit({ listaSel: l, precio });
     else onEdit({ listaSel: l });
   };
-  const subtotal = (Number(r.piezas) || 0) * (Number(r.precio) || 0);
+
+  const inputStyle = {
+    width: '100%', padding: '5px 8px', textAlign: 'right', fontSize: 11, fontFamily: 'inherit',
+    background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, color: theme.text,
+    outline: 'none', fontVariantNumeric: 'tabular-nums',
+  };
+  const selectStyle = {
+    flex: 1, minWidth: 0, padding: '5px 8px', fontSize: 10, fontFamily: 'inherit',
+    background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, color: theme.text,
+    outline: 'none', cursor: 'pointer',
+  };
 
   return (
-    <tr className="border-t border-gray-100">
-      <td className="px-3 py-2 font-mono text-[10px] text-gray-700">{r.sku}</td>
-      <td className="px-3 py-2 text-gray-800" style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>
-        {r.descripcion}
-      </td>
-      <td className="px-3 py-2 text-right tabular-nums text-gray-500">{r.invCliente || 0}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-gray-500">{r.invActeck || 0}</td>
-      <td className="px-3 py-2">
+    <tr style={{ borderTop: `1px solid ${theme.border}` }}>
+      <td style={{ padding: '6px 10px', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, fontWeight: 600, color: theme.text }}>{r.sku}</td>
+      <td style={{ padding: '6px 10px', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{r.invCliente || 0}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{r.invActeck || 0}</td>
+      <td style={{ padding: '6px 10px' }}>
         <input type="number" min="0" value={r.piezas ?? ''}
           onChange={(e) => onEdit({ piezas: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
-          className="w-full px-2 py-1 text-right text-xs border border-gray-200 rounded outline-none focus:border-gray-400 tabular-nums" />
+          style={inputStyle} />
       </td>
-      <td className="px-3 py-2">
-        <div className="flex gap-1">
-          <select value={modo} onChange={(e) => setLista(e.target.value)}
-            className="flex-1 min-w-0 px-1 py-1 text-[10px] border border-gray-200 rounded outline-none bg-white cursor-pointer">
+      <td style={{ padding: '6px 10px' }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <select value={modo} onChange={(e) => setLista(e.target.value)} style={selectStyle}>
             {listas.map(([l, p]) => (
               <option key={l} value={l}>{l} · ${Math.round(p).toLocaleString('es-MX')}</option>
             ))}
@@ -513,28 +647,33 @@ function AjusteRow({ r, onEdit, onRemove }) {
           {modo === 'personalizado' && (
             <input type="number" min="0" step="0.01" value={r.precio ?? ''}
               onChange={(e) => onEdit({ precio: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })}
-              className="w-20 px-2 py-1 text-right text-[10px] border border-gray-200 rounded outline-none focus:border-gray-400 tabular-nums"
-              placeholder="$" />
+              placeholder="$" style={{ ...inputStyle, width: 80 }} />
           )}
         </div>
       </td>
-      <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMXN(subtotal)}</td>
-      <td className="px-3 py-2 text-center">
-        <button onClick={onRemove} className="text-gray-400 hover:text-rose-500 text-sm">✕</button>
+      <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{formatMXN(subtotal)}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+        <button onClick={onRemove}
+          style={{ background: 'transparent', border: 0, padding: 4, color: theme.textMuted, cursor: 'pointer', borderRadius: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = P.red; e.currentTarget.style.background = `${P.red}14`; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = theme.textMuted; e.currentTarget.style.background = 'transparent'; }}
+          title="Quitar SKU">
+          <X style={{ width: 12, height: 12 }} strokeWidth={2} />
+        </button>
       </td>
     </tr>
   );
 }
 
 // ═══ Paso 5: Revisar + Exportar ═══
-function Paso5Revisar({ skus, propuesta, cliente, onPrev }) {
+function Paso5Revisar({ theme, skus, propuesta, cliente, onPrev, isDark }) {
+  const P = paletteFromTheme(theme);
   const propuestaLista = useMemo(() => Object.entries(propuesta)
     .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
     .filter((r) => r.sku), [propuesta, skus]);
   const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
   const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
 
-  // Para Digitalife agrupamos por hoja (Monitores/Sillas/Todo lo demás)
   const grupos = useMemo(() => {
     if (cliente.key !== 'digitalife') return { 'Propuesta': propuestaLista };
     const g = { 'Monitores': [], 'Sillas': [], 'Todo lo demás': [] };
@@ -544,28 +683,43 @@ function Paso5Revisar({ skus, propuesta, cliente, onPrev }) {
 
   const exportar = () => alert('Export Excel — próximo push. Ya podemos verificar el flujo.');
 
+  const thStyle = { textAlign: 'right', padding: '8px 10px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#FFFFFF', whiteSpace: 'nowrap' };
+  const thLeft = { ...thStyle, textAlign: 'left' };
+  const heroBg = isDark ? '#0F0F0F' : '#1D1D1F';
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-gray-900">Revisar propuesta</h2>
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 14px', fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+        <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
+          Revisar propuesta
+        </h3>
         <button onClick={exportar}
-          className="px-5 py-2.5 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 shadow-md">
-          📥 Exportar Excel
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px',
+            background: P.accent, color: '#FFFFFF', border: 0, borderRadius: 999,
+            fontSize: 12, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', letterSpacing: '-0.01em',
+          }}>
+          <Download style={{ width: 12, height: 12 }} strokeWidth={2} />
+          Exportar Excel
         </button>
       </div>
 
-      <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 mb-4 grid grid-cols-3 gap-6 text-sm">
+      {/* Resumen KPIs */}
+      <div style={{
+        background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12,
+        padding: '14px 16px', marginBottom: 14, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20,
+      }}>
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">SKUs</div>
-          <div className="text-xl font-bold text-gray-900 tabular-nums">{propuestaLista.length}</div>
+          <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>SKUs</div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 4 }}>{propuestaLista.length}</div>
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Piezas</div>
-          <div className="text-xl font-bold text-gray-900 tabular-nums">{piezas.toLocaleString('es-MX')}</div>
+          <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Piezas</div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 4 }}>{piezas.toLocaleString('es-MX')}</div>
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Total propuesta</div>
-          <div className="text-xl font-bold text-gray-900 tabular-nums">{formatMXN(total)}</div>
+          <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Total propuesta</div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 4 }}>{formatMXN(total)}</div>
         </div>
       </div>
 
@@ -574,44 +728,49 @@ function Paso5Revisar({ skus, propuesta, cliente, onPrev }) {
         const totalGrupo = filas.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
         const piezasGrupo = filas.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
         return (
-          <div key={nombreGrupo} className="mb-4">
+          <div key={nombreGrupo} style={{ marginBottom: 14 }}>
             {cliente.key === 'digitalife' && (
-              <div className="text-sm font-bold text-gray-700 mb-2 px-1">
-                {nombreGrupo} <span className="text-gray-400 font-normal">· {filas.length} SKU · {piezasGrupo}pz · {formatMXN(totalGrupo)}</span>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, marginBottom: 6, padding: '0 4px' }}>
+                {nombreGrupo}
+                <span style={{ color: theme.textMuted, fontWeight: 400, marginLeft: 6, fontVariantNumeric: 'tabular-nums' }}>
+                  · {filas.length} SKU · {piezasGrupo}pz · {formatMXN(totalGrupo)}
+                </span>
               </div>
             )}
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-900 text-white">
-                  <tr>
-                    <th className="text-left px-3 py-2 font-semibold" style={{ width: 100 }}>SKU</th>
-                    <th className="text-left px-3 py-2 font-semibold">Descripción</th>
-                    <th className="text-right px-3 py-2 font-semibold" style={{ width: 70 }}>Inv cli</th>
-                    <th className="text-right px-3 py-2 font-semibold" style={{ width: 70 }}>Inv propio</th>
-                    <th className="text-right px-3 py-2 font-semibold" style={{ width: 80 }}>Prom SO 90d</th>
-                    <th className="text-right px-3 py-2 font-semibold" style={{ width: 70 }}>Piezas</th>
-                    <th className="text-right px-3 py-2 font-semibold" style={{ width: 90 }}>Precio</th>
-                    <th className="text-right px-3 py-2 font-semibold" style={{ width: 110 }}>Total</th>
+            <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                <thead>
+                  <tr style={{ background: heroBg }}>
+                    <th style={{ ...thLeft, width: 110 }}>SKU</th>
+                    <th style={thLeft}>Descripción</th>
+                    <th style={{ ...thStyle, width: 70 }}>Inv cli</th>
+                    <th style={{ ...thStyle, width: 70 }}>Inv Ack</th>
+                    <th style={{ ...thStyle, width: 80 }}>SO 90d</th>
+                    <th style={{ ...thStyle, width: 70 }}>Piezas</th>
+                    <th style={{ ...thStyle, width: 90 }}>Precio</th>
+                    <th style={{ ...thStyle, width: 110 }}>Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filas.map((r) => (
-                    <tr key={r.sku} className="border-t border-gray-100" style={{ height: 32 }}>
-                      <td className="px-3 py-1 font-mono text-[10px] text-gray-700">{r.sku}</td>
-                      <td className="px-3 py-1 text-gray-800" style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
-                      <td className="px-3 py-1 text-right tabular-nums">{r.invCliente || 0}</td>
-                      <td className="px-3 py-1 text-right tabular-nums">{r.invActeck || 0}</td>
-                      <td className="px-3 py-1 text-right tabular-nums">{r.promSellout || 0}</td>
-                      <td className="px-3 py-1 text-right tabular-nums font-semibold">{r.piezas}</td>
-                      <td className="px-3 py-1 text-right tabular-nums">{formatMXN(r.precio)}</td>
-                      <td className="px-3 py-1 text-right tabular-nums font-semibold">{formatMXN((r.piezas || 0) * (r.precio || 0))}</td>
+                    <tr key={r.sku} style={{ borderTop: `1px solid ${theme.border}`, height: 30 }}>
+                      <td style={{ padding: '5px 10px', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, fontWeight: 600, color: theme.text }}>{r.sku}</td>
+                      <td style={{ padding: '5px 10px', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{r.invCliente || 0}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{r.invActeck || 0}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{r.promSellout || 0}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{r.piezas}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', color: theme.text, fontVariantNumeric: 'tabular-nums', fontSize: 11 }}>{formatMXN(r.precio)}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', fontSize: 12, letterSpacing: '-0.01em' }}>{formatMXN((r.piezas || 0) * (r.precio || 0))}</td>
                     </tr>
                   ))}
-                  <tr className="bg-gray-100 border-t-2 border-gray-300">
-                    <td colSpan={5} className="px-3 py-2 text-right font-bold text-gray-700">Total {cliente.key === 'digitalife' ? nombreGrupo.toLowerCase() : 'propuesta'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-bold">{piezasGrupo}</td>
+                  <tr style={{ background: theme.bg, borderTop: `2px solid ${theme.borderStrong || theme.border}` }}>
+                    <td colSpan={5} style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: theme.textMuted, letterSpacing: '-0.01em' }}>
+                      Total {cliente.key === 'digitalife' ? nombreGrupo.toLowerCase() : 'propuesta'}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{piezasGrupo}</td>
                     <td></td>
-                    <td className="px-3 py-2 text-right tabular-nums font-bold">{formatMXN(totalGrupo)}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{formatMXN(totalGrupo)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -620,25 +779,43 @@ function Paso5Revisar({ skus, propuesta, cliente, onPrev }) {
         );
       })}
 
-      <NavBotones onPrev={onPrev} hideNext />
+      <NavBotones theme={theme} onPrev={onPrev} hideNext />
     </div>
   );
 }
 
 // ═══ Navegación paso ═══
-function NavBotones({ onPrev, onSiguiente, labelNext = 'Siguiente →', disabledSiguiente = false, hideNext = false }) {
+function NavBotones({ theme, onPrev, onSiguiente, labelNext = 'Siguiente', disabledSiguiente = false, hideNext = false }) {
+  const P = paletteFromTheme(theme);
   return (
-    <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      marginTop: 20, paddingTop: 14, borderTop: `1px solid ${theme.border}`,
+    }}>
       <button onClick={onPrev}
-        className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900">
+        style={{
+          background: 'transparent', border: 0, padding: '8px 4px', color: theme.textMuted,
+          fontSize: 12, fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.color = theme.text}
+        onMouseLeave={(e) => e.currentTarget.style.color = theme.textMuted}>
         ← Atrás
       </button>
       {!hideNext && (
         <button onClick={onSiguiente} disabled={disabledSiguiente}
-          className={`px-5 py-2 text-sm font-semibold rounded-lg ${disabledSiguiente
-            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            : 'bg-black text-white hover:bg-gray-800 shadow-sm'}`}>
-          {labelNext}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '9px 18px', borderRadius: 999, border: 0,
+            background: disabledSiguiente ? (theme.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)') : P.accent,
+            color: disabledSiguiente ? theme.textMuted : '#FFFFFF',
+            fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
+            cursor: disabledSiguiente ? 'not-allowed' : 'pointer',
+            letterSpacing: '-0.01em',
+            transition: 'transform 120ms',
+          }}
+          onMouseEnter={(e) => { if (!disabledSiguiente) e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}>
+          {labelNext} <ChevronRight style={{ width: 12, height: 12 }} strokeWidth={2} />
         </button>
       )}
     </div>
@@ -668,7 +845,6 @@ async function fetchAll(clienteKey) {
       .eq('anio', MES_ACTUAL.anio).eq('mes', MES_ACTUAL.mes),
   ]);
 
-  // Índices
   const invAck = new Map();
   for (const r of invAckRes.data || []) {
     invAck.set(r.articulo, (invAck.get(r.articulo) || 0) + (Number(r.disponible) || 0));
@@ -707,7 +883,6 @@ async function fetchAll(clienteKey) {
   }));
   rows.sort((a, b) => b.sellout90 - a.sellout90);
 
-  // Contexto
   const cuota = (cuotaRes.data || []).reduce((s, r) => s + (Number(r.cuota_min) || Number(r.cuota_meta) || 0), 0);
   const facturado = selloutMes;
   const hoy = new Date();
@@ -743,7 +918,6 @@ async function fetchSelloutMesActual(clienteKey) {
       .limit(200000);
     return (data || []).reduce((s, r) => s + (Number(r.importe) || 0), 0);
   }
-  // pcel — usa sellout_pcel última semana con vta_mes_1 aprox del mes actual (imperfecto pero servible)
   return 0;
 }
 
