@@ -19,10 +19,30 @@ import { TrendingUp, AlertTriangle, Target, Package } from 'lucide-react';
  */
 
 const CLIENTES = [
-  { key: 'digitalife', nombre: 'Digitalife', marca: 'Acteck · Balam Rush', color: '#007AFF', letter: 'D' },
-  { key: 'pcel',       nombre: 'PCEL',       marca: 'Acteck',              color: '#FF3B30', letter: 'P' },
-  { key: 'dicotech',   nombre: 'Dicotech',   marca: 'Acteck · Balam Rush', color: '#AF52DE', letter: 'Di' },
+  { key: 'digitalife', nombre: 'Digitalife', marca: 'Acteck · Balam Rush', letter: 'D' },
+  { key: 'pcel',       nombre: 'PCEL',       marca: 'Acteck',              letter: 'P' },
+  { key: 'dicotech',   nombre: 'Dicotech',   marca: 'Acteck · Balam Rush', letter: 'Di' },
 ];
+
+// Paleta derivada del tema — Claro/Midnight usan iOS system colors;
+// Marfil usa la paleta editorial (cobalto/crimson/púrpura).
+function paletteFromTheme(theme) {
+  return {
+    accent:  theme.accent  || '#007AFF',
+    green:   theme.green   || '#34C759',
+    orange:  theme.orange  || '#FF9500',
+    red:     theme.red     || '#FF3B30',
+    purple:  theme.purple  || '#AF52DE',
+    teal:    theme.teal    || '#5AC8FA',
+    pink:    theme.pink    || '#FF2D55',
+  };
+}
+// Color de identidad por cliente por tema.
+function clienteColor(theme, key) {
+  const P = paletteFromTheme(theme);
+  const map = { digitalife: P.accent, pcel: P.red, dicotech: P.purple };
+  return map[key] || P.accent;
+}
 
 const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
@@ -429,14 +449,15 @@ function calcularAlertas(resumenes) {
 }
 
 // ────────── Estatus derivado (verde/amarillo/rojo) para la card ──────────
-function estatusCliente(resumen) {
+function estatusCliente(resumen, theme) {
+  const P = paletteFromTheme(theme);
   const c = resumen.cumplimientoMes ?? resumen.cumplimientoYTD;
   const venc = resumen.pctVencido || 0;
   const cob = resumen.coberturaDias;
-  if (venc > 15 || (c != null && c < 70) || (cob != null && cob < 15)) return { key: 'bad', label: 'Requiere atención', color: '#FF3B30' };
-  if ((c != null && c < 90) || (cob != null && cob < 30) || (venc > 5)) return { key: 'warn', label: 'Vigilar', color: '#FF9500' };
-  if (resumen.siYTD === 0) return { key: 'neutral', label: 'Sin datos aún', color: '#8E8E93' };
-  return { key: 'good', label: 'Al día', color: '#34C759' };
+  if (venc > 15 || (c != null && c < 70) || (cob != null && cob < 15)) return { key: 'bad', label: 'Requiere atención', color: P.red };
+  if ((c != null && c < 90) || (cob != null && cob < 30) || (venc > 5)) return { key: 'warn', label: 'Vigilar', color: P.orange };
+  if (resumen.siYTD === 0) return { key: 'neutral', label: 'Sin datos aún', color: theme.textMuted };
+  return { key: 'good', label: 'Al día', color: P.green };
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -487,7 +508,12 @@ export default function ResumenClientesTab({ onDrillDown }) {
   }
 
   const isDark = theme.mode === 'dark';
-  const BLUE = '#007AFF', GREEN = '#34C759', ORANGE = '#FF9500', RED = '#FF3B30', PURPLE = '#AF52DE', TEAL = '#5AC8FA';
+  const P = paletteFromTheme(theme);
+  const { accent: BLUE, green: GREEN, orange: ORANGE, red: RED, purple: PURPLE, teal: TEAL } = P;
+  const heroBg = theme.heroCardBg || '#1D1D1F';
+  const heroText = theme.heroCardText || '#F5F5F7';
+  const heroTextMuted = theme.textMutedOnDark || 'rgba(255,255,255,0.65)';
+  const heroTextSubtle = theme.textSubtleOnDark || 'rgba(255,255,255,0.5)';
 
   return (
     <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
@@ -509,24 +535,31 @@ export default function ResumenClientesTab({ onDrillDown }) {
 
       {/* ═══════════ Bento: hero + 4 insight cards ═══════════ */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gridTemplateRows: 'auto auto', gap: 8 }}>
-        {/* HERO negro */}
+        {/* HERO — theme.heroCardBg (negro en Claro/Midnight, cobalto en Marfil) */}
         <div style={{
           gridColumn: 1, gridRow: '1 / span 2',
-          background: '#1D1D1F', color: '#FFFFFF', borderRadius: 16, padding: 20,
+          background: heroBg, color: heroText, borderRadius: 16, padding: 20,
+          border: isDark ? `1px solid rgba(255,255,255,0.06)` : 'none',
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 20,
-          fontFamily: TYPO.fontText,
+          fontFamily: TYPO.fontText, position: 'relative', overflow: 'hidden',
         }}>
-          <div>
-            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.5)', fontWeight: 500, margin: 0 }}>
+          {isDark && (
+            <div style={{
+              position: 'absolute', top: '-20%', right: '-10%', width: '60%', height: '80%',
+              background: `radial-gradient(circle, ${BLUE}22 0%, transparent 70%)`, pointerEvents: 'none',
+            }} />
+          )}
+          <div style={{ position: 'relative' }}>
+            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: heroTextSubtle, fontWeight: 500, margin: 0 }}>
               Facturación consolidada · {MESES_CORTO[mesActual - 1]} {anioActual}
             </p>
             <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 42, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1, margin: '14px 0 6px', fontVariantNumeric: 'tabular-nums' }}>
               {fmtCompact(consolidado.siMes)}
             </div>
-            <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, lineHeight: 1.5, margin: 0, maxWidth: 520 }}>
+            <p style={{ color: heroTextMuted, fontSize: 12, lineHeight: 1.5, margin: 0, maxWidth: 520 }}>
               {cumplimientoConsol != null ? (
                 <>
-                  <strong style={{ color: '#fff', fontWeight: 500 }}>{cumplimientoConsol.toFixed(0)}% de la cuota mensual.</strong>
+                  <strong style={{ color: heroText, fontWeight: 500 }}>{cumplimientoConsol.toFixed(0)}% de la cuota mensual.</strong>
                   {' '}
                   {(() => {
                     const brecha = consolidado.cuotaMes - consolidado.siMes;
@@ -541,21 +574,21 @@ export default function ResumenClientesTab({ onDrillDown }) {
               )}
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', position: 'relative' }}>
             <div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>YTD acumulado</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, color: '#fff', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{fmtCompact(consolidado.siYTD)}</div>
+              <div style={{ fontSize: 10, color: heroTextSubtle, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>YTD acumulado</div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, color: heroText, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{fmtCompact(consolidado.siYTD)}</div>
             </div>
             {cumplimientoConsolYTD != null && (
               <div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>Cuota YTD</div>
+                <div style={{ fontSize: 10, color: heroTextSubtle, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>Cuota YTD</div>
                 <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, color: cumplimientoConsolYTD >= 90 ? GREEN : cumplimientoConsolYTD >= 80 ? ORANGE : RED, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{cumplimientoConsolYTD.toFixed(0)}%</div>
               </div>
             )}
             {share.shareMes != null && (
               <div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>Share vs empresa</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, color: TEAL, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{share.shareMes.toFixed(0)}%</div>
+                <div style={{ fontSize: 10, color: heroTextSubtle, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>Share vs empresa</div>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, color: theme.mode === 'dark' ? TEAL : theme.accentDark || TEAL, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{share.shareMes.toFixed(0)}%</div>
               </div>
             )}
           </div>
@@ -598,8 +631,8 @@ export default function ResumenClientesTab({ onDrillDown }) {
               <div key={id} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 4px 5px 12px',
                 borderRadius: 999, fontSize: 11, fontWeight: 500,
-                background: isAlta ? 'rgba(255,59,48,0.10)' : 'rgba(255,149,0,0.14)',
-                color: isAlta ? '#B00020' : '#8B4E00',
+                background: isAlta ? `${RED}${isDark ? '24' : '1A'}` : `${ORANGE}${isDark ? '2E' : '24'}`,
+                color: isAlta ? RED : ORANGE,
                 fontFamily: TYPO.fontText,
               }}>
                 <span style={{ width: 6, height: 6, borderRadius: 999, background: isAlta ? RED : ORANGE }} />
@@ -689,7 +722,8 @@ function TrendCard({ theme, trend, clienteFiltro, setClienteFiltro, isDark }) {
   const cuotaPath = trend.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.cuota).toFixed(1)}`).join(' ');
   const prevPath = trend.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.sell_in_prev).toFixed(1)}`).join(' ');
 
-  const BLUE = '#007AFF', GREEN = '#34C759', MUTED = theme.textMuted;
+  const P = paletteFromTheme(theme);
+  const BLUE = P.accent, GREEN = P.green, ORANGE = P.orange, RED = P.red, MUTED = theme.textMuted;
 
   return (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '12px 16px', fontFamily: TYPO.fontText, marginTop: 12 }}>
@@ -703,7 +737,7 @@ function TrendCard({ theme, trend, clienteFiltro, setClienteFiltro, isDark }) {
               <strong style={{ color: theme.text, fontWeight: 500 }}>{activePoint.label}:</strong>{' '}
               Sell-In {fmtCompact(activePoint.sell_in)} · Cuota {fmtCompact(activePoint.cuota)}
               {activePoint.sell_in_prev > 0 && <> · {anioActual - 1}: {fmtCompact(activePoint.sell_in_prev)}</>}
-              {activePoint.cuota > 0 && activePoint.sell_in > 0 && <> · <span style={{ color: (activePoint.sell_in / activePoint.cuota) >= 0.9 ? GREEN : (activePoint.sell_in / activePoint.cuota) >= 0.8 ? '#FF9500' : '#FF3B30' }}>{((activePoint.sell_in / activePoint.cuota) * 100).toFixed(0)}%</span></>}
+              {activePoint.cuota > 0 && activePoint.sell_in > 0 && <> · <span style={{ color: (activePoint.sell_in / activePoint.cuota) >= 0.9 ? GREEN : (activePoint.sell_in / activePoint.cuota) >= 0.8 ? ORANGE : RED }}>{((activePoint.sell_in / activePoint.cuota) * 100).toFixed(0)}%</span></>}
             </div>
           )}
         </div>
@@ -782,16 +816,17 @@ function TrendCard({ theme, trend, clienteFiltro, setClienteFiltro, isDark }) {
 
 // ────────── Cliente card ──────────
 function ClienteCard({ theme, cliente, resumen, onDrillDown, isDark }) {
-  const status = estatusCliente(resumen);
+  const status = estatusCliente(resumen, theme);
+  const P = paletteFromTheme(theme);
+  const { accent: BLUE, green: GREEN, orange: ORANGE, red: RED } = P;
+  const cliCol = clienteColor(theme, cliente.key);
   const cumpl = resumen.cumplimientoMes ?? resumen.cumplimientoYTD;
-  const cumplColor = cumpl == null ? theme.textMuted : cumpl >= 90 ? '#34C759' : cumpl >= 80 ? '#FF9500' : '#FF3B30';
-
-  const GREEN = '#34C759', RED = '#FF3B30', ORANGE = '#FF9500', BLUE = '#007AFF';
+  const cumplColor = cumpl == null ? theme.textMuted : cumpl >= 90 ? GREEN : cumpl >= 80 ? ORANGE : RED;
 
   return (
     <div style={{
       background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16,
-      borderLeft: `4px solid ${cliente.color}`,
+      borderLeft: `4px solid ${cliCol}`,
       overflow: 'hidden', fontFamily: TYPO.fontText,
       cursor: 'pointer', transition: 'transform 120ms, box-shadow 120ms',
     }}
@@ -805,7 +840,7 @@ function ClienteCard({ theme, cliente, resumen, onDrillDown, isDark }) {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
-            width: 36, height: 36, borderRadius: 10, background: cliente.color, color: '#FFFFFF',
+            width: 36, height: 36, borderRadius: 10, background: cliCol, color: '#FFFFFF',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 14, letterSpacing: '-0.02em',
           }}>{cliente.letter}</div>
