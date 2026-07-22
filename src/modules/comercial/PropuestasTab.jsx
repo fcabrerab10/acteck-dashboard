@@ -410,7 +410,7 @@ function Paso3Catalogo({ theme, skus, propuesta, setPropuesta, onSiguiente, onPr
   const [soloConInv, setSoloConInv] = useState(false);
   // { col: 'invCliente' | 'invActeck' | 'promSellout' | null, dir: 'asc' | 'desc' }
   // Default: sell-out 90d descendente (los más movidos primero)
-  const [orden, setOrden] = useState({ col: 'promSellout', dir: 'desc' });
+  const [orden, setOrden] = useState({ col: 'sellout90', dir: 'desc' });
 
   const familias = useMemo(() => {
     const s = new Set();
@@ -433,12 +433,12 @@ function Paso3Catalogo({ theme, skus, propuesta, setPropuesta, onSiguiente, onPr
     return arr;
   }, [skus, busqueda, filtroFamilia, soloConInv, orden]);
 
-  // Ciclo asc → desc → sin orden (vuelve al default sellout desc)
+  // Ciclo asc → desc → sin orden (vuelve al default sellout90 desc)
   const toggleOrden = (col) => {
     setOrden((prev) => {
       if (prev.col !== col) return { col, dir: 'desc' };
       if (prev.dir === 'desc') return { col, dir: 'asc' };
-      return { col: 'promSellout', dir: 'desc' };
+      return { col: 'sellout90', dir: 'desc' };
     });
   };
 
@@ -506,40 +506,55 @@ function Paso3Catalogo({ theme, skus, propuesta, setPropuesta, onSiguiente, onPr
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
             <thead>
               <tr>
-                <th style={{ ...thLeft, width: 32 }}></th>
                 <th style={{ ...thLeft, width: 110 }}>SKU</th>
                 <th style={thLeft}>Descripción</th>
                 <th style={{ ...thLeft, width: 120 }}>Familia</th>
-                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invCliente" width={60}>Inv cli</SortableTh>
-                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invActeck" width={60}>Inv Ack</SortableTh>
-                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="promSellout" width={70}>SO 90d</SortableTh>
-                <th style={{ ...thStyle, width: 80 }}>Precio ref.</th>
+                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invCliente" width={64}>Inv cli</SortableTh>
+                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invActeck" width={64}>Inv Ack</SortableTh>
+                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="sellout90" width={72}>SO 90d</SortableTh>
+                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="promSellout" width={72}>Prom 90d</SortableTh>
+                <th style={{ ...thStyle, width: 84 }}>Precio ref.</th>
+                <th style={{ ...thStyle, width: 42, textAlign: 'center' }}></th>
               </tr>
             </thead>
             <tbody>
               {filtrados.map((r) => {
                 const sel = r.sku in propuesta;
                 const precioRef = Object.values(r.precios)[0];
+                const fmtNum = (v) => v != null && v !== 0 ? Number(v).toLocaleString('es-MX') : null;
+                const invCli = fmtNum(r.invCliente);
+                const invAck = fmtNum(r.invActeck);
+                const so90 = fmtNum(r.sellout90);
+                const prom = fmtNum(r.promSellout);
                 return (
                   <tr key={r.sku}
                     onClick={() => toggleSku(r.sku)}
                     style={{
                       cursor: 'pointer',
-                      background: sel ? `${P.accent}${isDark ? '20' : '0F'}` : 'transparent',
-                      height: 30,
+                      background: sel ? `${P.accent}${isDark ? '1F' : '0D'}` : 'transparent',
+                      height: 32,
+                      transition: 'background 100ms',
                     }}
                     onMouseEnter={(e) => { if (!sel) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
                     onMouseLeave={(e) => { if (!sel) e.currentTarget.style.background = 'transparent'; }}>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <input type="checkbox" checked={sel} readOnly style={{ margin: 0, cursor: 'pointer', accentColor: P.accent }} />
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'left', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, fontWeight: 600, color: theme.text }}>{r.sku}</td>
-                    <td style={{ ...tdStyle, textAlign: 'left', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.descripcion}>{r.descripcion || '—'}</td>
-                    <td style={{ ...tdStyle, textAlign: 'left', color: theme.textMuted, fontSize: 10 }}>{r.familia || '—'}</td>
-                    <td style={tdStyle}>{r.invCliente || <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
-                    <td style={tdStyle}>{r.invActeck || <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
-                    <td style={{ ...tdStyle, fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text }}>{r.promSellout || <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}</td>
+                    <td style={{ ...tdStyle, textAlign: 'left', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: theme.text, paddingLeft: 12 }}>{r.sku}</td>
+                    <td style={{ ...tdStyle, textAlign: 'left', fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.descripcion}>{r.descripcion || '—'}</td>
+                    <td style={{ ...tdStyle, textAlign: 'left', color: theme.textMuted, fontSize: 10.5 }}>{r.familia || '—'}</td>
+                    <td style={tdStyle}>{invCli || <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
+                    <td style={tdStyle}>{invAck || <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
+                    <td style={{ ...tdStyle, fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text }}>{so90 || <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}</td>
+                    <td style={{ ...tdStyle, color: theme.textMuted }}>{prom || <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
                     <td style={{ ...tdStyle, color: theme.textMuted }}>{precioRef != null ? formatMXN(precioRef) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
+                    <td style={{ ...tdStyle, textAlign: 'center', paddingRight: 12 }}>
+                      <span aria-hidden style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 20, height: 20, borderRadius: 999,
+                        background: sel ? P.accent : 'transparent',
+                        border: sel ? `1px solid ${P.accent}` : `1.5px solid ${isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.20)'}`,
+                        color: '#FFFFFF', fontSize: 11, lineHeight: 1, fontWeight: 700,
+                        transition: 'background 120ms, border-color 120ms',
+                      }}>{sel ? '✓' : ''}</span>
+                    </td>
                   </tr>
                 );
               })}
@@ -620,6 +635,7 @@ function Paso4Ajustes({ theme, skus, propuesta, setPropuesta, cliente, onSiguien
               <th style={thLeft}>Descripción</th>
               <th style={{ ...thStyle, width: 60 }}>Inv cli</th>
               <th style={{ ...thStyle, width: 60 }}>Inv Ack</th>
+              <th style={{ ...thStyle, width: 66 }}>SO 90d</th>
               <th style={{ ...thStyle, width: 90 }}>Piezas</th>
               <th style={{ ...thLeft, width: 240 }}>Precio</th>
               <th style={{ ...thStyle, width: 110 }}>Total</th>
@@ -633,7 +649,7 @@ function Paso4Ajustes({ theme, skus, propuesta, setPropuesta, cliente, onSiguien
                 onRemove={() => removePropuesta(r.sku)} />
             ))}
             <tr style={{ background: isDark ? '#0F0F0F' : '#1D1D1F', color: '#FFFFFF' }}>
-              <td colSpan={4} style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, letterSpacing: '-0.01em' }}>Total propuesta</td>
+              <td colSpan={5} style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, letterSpacing: '-0.01em' }}>Total propuesta</td>
               <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{piezas.toLocaleString('es-MX')}</td>
               <td></td>
               <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{formatMXN(total)}</td>
@@ -677,8 +693,9 @@ function AjusteRow({ theme, P, r, onEdit, onRemove }) {
     <tr style={{ borderTop: `1px solid ${theme.border}` }}>
       <td style={{ padding: '6px 10px', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, fontWeight: 600, color: theme.text }}>{r.sku}</td>
       <td style={{ padding: '6px 10px', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
-      <td style={{ padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{r.invCliente || 0}</td>
-      <td style={{ padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{r.invActeck || 0}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{(r.invCliente || 0).toLocaleString('es-MX')}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{(r.invActeck || 0).toLocaleString('es-MX')}</td>
+      <td style={{ padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12 }}>{(r.sellout90 || 0).toLocaleString('es-MX')}</td>
       <td style={{ padding: '6px 10px' }}>
         <input type="number" min="0" value={r.piezas ?? ''}
           onChange={(e) => onEdit({ piezas: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
@@ -791,9 +808,10 @@ function Paso5Revisar({ theme, skus, propuesta, cliente, onPrev, isDark }) {
                   <tr style={{ background: heroBg }}>
                     <th style={{ ...thLeft, width: 110 }}>SKU</th>
                     <th style={thLeft}>Descripción</th>
-                    <th style={{ ...thStyle, width: 70 }}>Inv cli</th>
-                    <th style={{ ...thStyle, width: 70 }}>Inv Ack</th>
-                    <th style={{ ...thStyle, width: 80 }}>SO 90d</th>
+                    <th style={{ ...thStyle, width: 66 }}>Inv cli</th>
+                    <th style={{ ...thStyle, width: 66 }}>Inv Ack</th>
+                    <th style={{ ...thStyle, width: 72 }}>SO 90d</th>
+                    <th style={{ ...thStyle, width: 72 }}>Prom 90d</th>
                     <th style={{ ...thStyle, width: 70 }}>Piezas</th>
                     <th style={{ ...thStyle, width: 90 }}>Precio</th>
                     <th style={{ ...thStyle, width: 110 }}>Total</th>
@@ -804,16 +822,17 @@ function Paso5Revisar({ theme, skus, propuesta, cliente, onPrev, isDark }) {
                     <tr key={r.sku} style={{ borderTop: `1px solid ${theme.border}`, height: 30 }}>
                       <td style={{ padding: '5px 10px', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, fontWeight: 600, color: theme.text }}>{r.sku}</td>
                       <td style={{ padding: '5px 10px', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{r.invCliente || 0}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{r.invActeck || 0}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{r.promSellout || 0}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{(r.invCliente || 0).toLocaleString('es-MX')}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{(r.invActeck || 0).toLocaleString('es-MX')}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12 }}>{(r.sellout90 || 0).toLocaleString('es-MX')}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{(r.promSellout || 0).toLocaleString('es-MX')}</td>
                       <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{r.piezas}</td>
                       <td style={{ padding: '5px 10px', textAlign: 'right', color: theme.text, fontVariantNumeric: 'tabular-nums', fontSize: 11 }}>{formatMXN(r.precio)}</td>
                       <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', fontSize: 12, letterSpacing: '-0.01em' }}>{formatMXN((r.piezas || 0) * (r.precio || 0))}</td>
                     </tr>
                   ))}
                   <tr style={{ background: theme.bg, borderTop: `2px solid ${theme.borderStrong || theme.border}` }}>
-                    <td colSpan={5} style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: theme.textMuted, letterSpacing: '-0.01em' }}>
+                    <td colSpan={6} style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: theme.textMuted, letterSpacing: '-0.01em' }}>
                       Total {cliente.key === 'digitalife' ? nombreGrupo.toLowerCase() : 'propuesta'}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{piezasGrupo}</td>
@@ -897,6 +916,9 @@ async function fetchAll(clienteKey) {
   for (const r of invAckRes.data || []) {
     invAck.set(r.articulo, (invAck.get(r.articulo) || 0) + (Number(r.disponible) || 0));
   }
+  // Redondeo a entero: ERP tiene decimales de piezas heredados de conversiones
+  // (piezas por caja), pero para presentar mostramos siempre número cerrado.
+  for (const [k, v] of invAck.entries()) invAck.set(k, Math.round(v));
   const invCli = new Map();
   const invCliTitulos = new Map();
   for (const r of invCliRes.data || []) {
