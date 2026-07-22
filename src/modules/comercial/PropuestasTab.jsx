@@ -73,9 +73,13 @@ export default function PropuestasTab() {
   };
 
   const iniciar = (cli) => {
-    reiniciar();
+    // Limpia estado previo pero deja el paso avanzando al 2 (Contexto)
+    setPropuesta({});
+    setSkus([]);
+    setContexto(null);
+    setError(null);
     setClienteKey(cli);
-    setPaso(1);
+    setPaso(2);
   };
 
   const cliente = CLIENTES.find((c) => c.key === clienteKey);
