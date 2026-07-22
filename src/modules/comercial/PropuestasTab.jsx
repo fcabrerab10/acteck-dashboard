@@ -133,7 +133,7 @@ export default function PropuestasTab() {
       </div>
 
       {/* Stepper */}
-      <Stepper theme={theme} paso={paso} isDark={isDark} />
+      <Stepper theme={theme} paso={paso} isDark={isDark} onGoto={(n) => n <= paso && setPaso(n)} />
 
       {/* Contexto card (visible desde paso 2) */}
       {paso >= 2 && contexto && (
@@ -226,7 +226,7 @@ function Landing({ theme, onIniciar }) {
 }
 
 // ═══ Stepper — pills iOS ═══
-function Stepper({ theme, paso, isDark }) {
+function Stepper({ theme, paso, isDark, onGoto }) {
   const P = paletteFromTheme(theme);
   return (
     <div style={{
@@ -240,9 +240,24 @@ function Stepper({ theme, paso, isDark }) {
         const dotBg = state === 'done' ? P.green : state === 'active' ? P.accent : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)');
         const dotFg = state === 'pending' ? theme.textMuted : '#FFFFFF';
         const lblColor = state === 'done' ? P.green : state === 'active' ? theme.text : theme.textMuted;
+        const clickable = state !== 'pending';  // solo pasos completados/activo son clickables
         return (
           <React.Fragment key={label}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => clickable && onGoto?.(n)}
+              disabled={!clickable}
+              title={clickable && state === 'done' ? `Volver a ${label}` : undefined}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
+                background: 'transparent', border: 0, padding: '4px 6px', borderRadius: 999,
+                cursor: clickable && state === 'done' ? 'pointer' : 'default',
+                fontFamily: 'inherit', color: 'inherit',
+                transition: 'background 120ms',
+              }}
+              onMouseEnter={(e) => { if (clickable && state === 'done') e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
               <span style={{
                 width: 22, height: 22, borderRadius: 999, background: dotBg, color: dotFg,
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -252,7 +267,7 @@ function Stepper({ theme, paso, isDark }) {
                 fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: state === 'active' ? 600 : 500,
                 letterSpacing: '-0.01em', color: lblColor,
               }}>{label}</span>
-            </div>
+            </button>
             {i < PASOS.length - 1 && (
               <div style={{ flex: 1, minWidth: 20, height: 1, background: paso > n ? P.green : theme.border }} />
             )}
@@ -897,7 +912,7 @@ async function fetchAll(clienteKey) {
 
   const [roadmapRes, invAckRes, invCliRes, preciosRes, sellout90, selloutMes, cuotaRes] = await Promise.all([
     supabase.from('roadmap_sku').select('sku,marca,familia,categoria,descripcion,rdmp'),
-    supabase.from('inventario_acteck').select('articulo,disponible'),
+    supabase.from('inventario_acteck').select('articulo,disponible,no_almacen'),
     supabase.from('inventario_cliente').select('sku,stock,titulo,anio,semana').eq('cliente', clienteKey),
     supabase.from('precios_sku')
       .select('sku,lista,precio,anio,mes')
@@ -912,8 +927,12 @@ async function fetchAll(clienteKey) {
       .eq('anio', MES_ACTUAL.anio).eq('mes', MES_ACTUAL.mes),
   ]);
 
+  // Solo almacenes comerciales (mismo criterio que InventarioGlobal).
+  // Excluye NO COMERCIAL, ACTIVO FIJO, REMISIONES, REFACTURACION, MUESTRAS.
+  const ALMACENES_COMERCIALES = new Set([1, 2, 3, 6, 9, 12, 14, 15, 16, 17, 19, 25, 44, 64, 71]);
   const invAck = new Map();
   for (const r of invAckRes.data || []) {
+    if (!ALMACENES_COMERCIALES.has(Number(r.no_almacen))) continue;
     invAck.set(r.articulo, (invAck.get(r.articulo) || 0) + (Number(r.disponible) || 0));
   }
   // Redondeo a entero: ERP tiene decimales de piezas heredados de conversiones
