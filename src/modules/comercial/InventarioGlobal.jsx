@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../lib/themeContext';
+import { TYPO } from '../../lib/themeTokens';
 import {
   Activity, Boxes, MapPin, AlertTriangle, ArrowRightLeft, FileText,
+  Package, TrendingUp, Percent, ChevronRight, Search, Download,
 } from 'lucide-react';
 
 const PALETTE = {
@@ -118,10 +121,14 @@ const fmtInt = (n) => n == null || isNaN(n) ? '—' : Math.round(n).toLocaleStri
 const fmtPct = (n) => n == null || isNaN(n) ? '—' : n.toFixed(1) + '%';
 
 export default function InventarioGlobal() {
+  const { theme } = useTheme();
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [soloComerciales, setSoloComerciales] = useState(true);
   const [cedisFiltro, setCedisFiltro] = useState('TODOS');
+  const [busqueda, setBusqueda] = useState('');
+  const [skuAbierto, setSkuAbierto] = useState(null);
+  const [descripciones, setDescripciones] = useState(new Map());
 
   useEffect(() => {
     (async () => {
@@ -141,6 +148,21 @@ export default function InventarioGlobal() {
       }
       setFilas(acc);
       setLoading(false);
+
+      // Fetch descripciones SKUs (from roadmap_sku o compras_oc)
+      try {
+        const skus = Array.from(new Set(acc.map((r) => r.articulo).filter(Boolean)));
+        if (skus.length === 0) return;
+        const mapDesc = new Map();
+        const chunkBy = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, (i + 1) * n));
+        for (const chunk of chunkBy(skus, 200)) {
+          const { data } = await supabase.from('roadmap_sku').select('sku, descripcion, marca').in('sku', chunk);
+          (data || []).forEach((r) => {
+            if (!mapDesc.has(r.sku)) mapDesc.set(r.sku, { descripcion: r.descripcion || '', marca: r.marca || '' });
+          });
+        }
+        setDescripciones(mapDesc);
+      } catch (e) { /* opcional */ }
     })();
   }, []);
 
@@ -201,7 +223,115 @@ export default function InventarioGlobal() {
       .sort((a, b) => b.valor - a.valor);
   }, [filasEfectivas]);
 
-  // (Se quitaron: porAlmacen, concentración y topSkus a petición del usuario)
+  // ── Almacenes comerciales activos (para columnas dinámicas de la tabla) ──
+  const almacenesActivos = useMemo(() => {
+    const s = new Set();
+    filasEfectivas.forEach((r) => s.add(Number(r.no_almacen)));
+    return Array.from(s).sort((a, b) => a - b);
+  }, [filasEfectivas]);
+
+  // Etiqueta corta para columnas (max 10 chars)
+  const shortAlmacen = (n) => {
+    const nombre = NOMBRES_ALMACEN[n] || `Alm ${n}`;
+    return nombre
+      .replace('VENTAS GENERAL ', 'Gen ')
+      .replace('VENTAS RETAIL ', 'Retail ')
+      .replace('VENTAS DECME ', 'DECME ')
+      .replace('VENTAS APARTADO ', 'E-com ')
+      .replace('VENTAS CONSIGNACION MERCADO LIBRE', 'ML')
+      .replace('VENTAS PAGINA WEB DROSHIPPING', 'Web')
+      .replace('VENTAS EMPAQUE DANADO ', 'Dañ ')
+      .replace('VENTAS REFACCIONES', 'Refac')
+      .replace('GUADALAJARA', 'GDL')
+      .replace('MEXICO', 'MEX')
+      .replace('COLOTLAN', 'COL')
+      .replace('TULTITLAN', 'TUL')
+      .slice(0, 12);
+  };
+
+  // ── Tabla SKU × almacén ──
+  const filasTabla = useMemo(() => {
+    // Agrupar por SKU con desglose por almacén
+    const m = new Map();
+    filasEfectivas.forEach((r) => {
+      const sku = r.articulo;
+      if (!sku) return;
+      if (!m.has(sku)) m.set(sku, { sku, byAlm: {}, totalPz: 0, totalDisp: 0, totalRes: 0, valor: 0 });
+      const it = m.get(sku);
+      const alm = Number(r.no_almacen);
+      const pz = Number(r.inventario) || 0;
+      const disp = Number(r.disponible) || 0;
+      const res = Math.max(0, pz - disp);
+      const val = Number(r.costoinventario) || 0;
+      if (!it.byAlm[alm]) it.byAlm[alm] = { pz: 0, disp: 0, res: 0, valor: 0, cedis: r.cedis };
+      it.byAlm[alm].pz += pz;
+      it.byAlm[alm].disp += disp;
+      it.byAlm[alm].res += res;
+      it.byAlm[alm].valor += val;
+      it.totalPz += pz;
+      it.totalDisp += disp;
+      it.totalRes += res;
+      it.valor += val;
+    });
+    let arr = Array.from(m.values());
+    // Enriquecer con desc/marca
+    arr = arr.map((it) => {
+      const d = descripciones.get(it.sku) || {};
+      return { ...it, descripcion: d.descripcion || '', marca: d.marca || '' };
+    });
+    // Filtro por búsqueda
+    const q = busqueda.trim().toUpperCase();
+    if (q) {
+      arr = arr.filter((r) => {
+        const hay = `${r.sku} ${r.descripcion} ${r.marca}`.toUpperCase();
+        return hay.includes(q);
+      });
+    }
+    // Ordenar por valor descendente
+    return arr.sort((a, b) => b.valor - a.valor);
+  }, [filasEfectivas, descripciones, busqueda]);
+
+  const maxCelda = useMemo(() => {
+    let m = 0;
+    filasTabla.forEach((r) => {
+      almacenesActivos.forEach((a) => {
+        const v = r.byAlm[a]?.pz || 0;
+        if (v > m) m = v;
+      });
+    });
+    return m || 1;
+  }, [filasTabla, almacenesActivos]);
+
+  // Pill Apple para celda de valor
+  const isDark = theme.mode === 'dark';
+  const cellPill = (v) => {
+    if (v == null || v === 0) return null;
+    const r = v / maxCelda;
+    const b = theme.accent || (isDark ? '#0A84FF' : '#007AFF');
+    if (r > 0.75) return { bg: b, color: '#FFFFFF', weight: 600 };
+    if (r > 0.50) return { bg: isDark ? 'rgba(10,132,255,0.45)' : 'rgba(0,122,255,0.35)', color: isDark ? '#FFFFFF' : theme.text, weight: 600 };
+    if (r > 0.25) return { bg: isDark ? 'rgba(10,132,255,0.25)' : 'rgba(0,122,255,0.18)', color: theme.text };
+    return { bg: isDark ? 'rgba(10,132,255,0.12)' : 'rgba(0,122,255,0.08)', color: theme.textMuted };
+  };
+
+  // Insights auto ──
+  const insights = useMemo(() => {
+    const top = porCedis[0];
+    const reservado = filasEfectivas.reduce((s, r) => s + Math.max(0, (Number(r.inventario) || 0) - (Number(r.disponible) || 0)), 0);
+    const valorReservado = filasEfectivas.reduce((s, r) => {
+      const pz = Number(r.inventario) || 0;
+      const disp = Number(r.disponible) || 0;
+      const res = Math.max(0, pz - disp);
+      const cu = Number(r.costopromedio) || 0;
+      return s + res * cu;
+    }, 0);
+    return {
+      valor: kpis.valor, piezas: kpis.piezas, skus: kpis.skus,
+      topCedis: top,
+      reservado, valorReservado,
+      pctReservado: kpis.piezas > 0 ? (reservado / kpis.piezas) * 100 : 0,
+    };
+  }, [kpis, porCedis, filasEfectivas]);
 
   if (loading) {
     return (
@@ -221,35 +351,80 @@ export default function InventarioGlobal() {
     );
   }
 
+  // Colors iOS
+  const blue = theme.accent || '#007AFF';
+  const green = theme.green || '#34C759';
+  const orange = theme.orange || '#FF9500';
+  const purple = theme.purple || '#AF52DE';
+  const red = theme.red || '#FF3B30';
+  const teal = theme.teal || '#5AC8FA';
+  const pink = theme.pink || '#FF2D55';
+
+  const iosCanalCol = (cedis, i) => {
+    const map = { 'ALMACENES GUADALAJARA': blue, 'ALMACENES MEXICO': purple, 'ALMACENES COLOTLAN': teal };
+    return map[cedis] || [blue, purple, orange, teal, pink, green][i % 6];
+  };
+
+  const KpiApple = ({ Icon, iconColor, chip, kpi, kpiTone, headline }) => {
+    const kpiCol = kpiTone === 'pos' ? green : kpiTone === 'neg' ? red : kpiTone === 'warn' ? orange : theme.text;
+    return (
+      <div style={{
+        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
+        padding: 12, display: 'flex', flexDirection: 'column', gap: 4, minHeight: 108,
+        fontFamily: TYPO.fontText,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 9, background: `${iconColor}22`, color: iconColor,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Icon style={{ width: 15, height: 15 }} strokeWidth={1.8} />
+          </div>
+          {chip && (
+            <span style={{
+              fontSize: 9, padding: '2px 7px', borderRadius: 999,
+              background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+              color: theme.textMuted, fontWeight: 500,
+            }}>{chip}</span>
+          )}
+        </div>
+        <div style={{
+          fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em',
+          color: kpiCol, fontVariantNumeric: 'tabular-nums', marginTop: 4, lineHeight: 1,
+        }}>{kpi}</div>
+        <div style={{ fontSize: 11, color: theme.textMuted, lineHeight: 1.3, marginTop: 'auto' }}>{headline}</div>
+      </div>
+    );
+  };
+
   return (
-    <div className="max-w-none mx-auto p-6 space-y-4">
-      {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-4 px-1">
+    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
+      {/* Header apple */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, padding: '0 4px', marginBottom: 4, flexWrap: 'wrap' }}>
         <div>
-          <p className="text-[11px] uppercase tracking-widest text-gray-500 mb-1">
+          <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
             Dirección Comercial · Snapshot actual
           </p>
-          <h2 className="text-2xl font-medium text-gray-800">Inventario</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {fmtInt(filas.length)} combinaciones SKU × almacén cargadas
+          <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
+            Inventario Acteck.
+          </h2>
+          <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
+            <strong style={{ color: theme.text, fontWeight: 500 }}>{fmtCompact(kpis.valor)}</strong> · {fmtInt(kpis.skus)} SKUs · {kpis.almacenes} almacenes en {kpis.nCEDIS} CEDIS
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="inline-flex bg-gray-100 rounded-lg p-0.5 text-xs">
-            <button
-              onClick={() => setSoloComerciales(true)}
-              className={`px-3 py-1.5 rounded ${soloComerciales ? 'bg-white shadow text-gray-800' : 'text-gray-500'}`}
-            >Solo comerciales</button>
-            <button
-              onClick={() => setSoloComerciales(false)}
-              className={`px-3 py-1.5 rounded ${!soloComerciales ? 'bg-white shadow text-gray-800' : 'text-gray-500'}`}
-            >Todos</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'inline-flex', gap: 1, padding: 3, background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', borderRadius: 999 }}>
+            <button onClick={() => setSoloComerciales(true)}
+              style={{ padding: '6px 12px', borderRadius: 999, background: soloComerciales ? theme.surface : 'transparent', color: soloComerciales ? theme.text : theme.textMuted, fontWeight: soloComerciales ? 600 : 500, border: 0, fontFamily: 'inherit', fontSize: 12, cursor: 'pointer', boxShadow: soloComerciales ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}>
+              Solo comerciales
+            </button>
+            <button onClick={() => setSoloComerciales(false)}
+              style={{ padding: '6px 12px', borderRadius: 999, background: !soloComerciales ? theme.surface : 'transparent', color: !soloComerciales ? theme.text : theme.textMuted, fontWeight: !soloComerciales ? 600 : 500, border: 0, fontFamily: 'inherit', fontSize: 12, cursor: 'pointer', boxShadow: !soloComerciales ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}>
+              Todos
+            </button>
           </div>
-          <select
-            value={cedisFiltro}
-            onChange={(e) => setCedisFiltro(e.target.value)}
-            className="h-9 px-3 border border-gray-200 rounded-lg text-sm bg-white"
-          >
+          <select value={cedisFiltro} onChange={(e) => setCedisFiltro(e.target.value)}
+            style={{ height: 32, padding: '0 14px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999, fontSize: 12, color: theme.text, fontFamily: 'inherit', cursor: 'pointer' }}>
             <option value="TODOS">Todos los CEDIS</option>
             {Object.keys(CEDIS_CORTO).map((c) => (
               <option key={c} value={c}>{CEDIS_CORTO[c]}</option>
@@ -258,100 +433,249 @@ export default function InventarioGlobal() {
         </div>
       </div>
 
-      {/* KPIs globales */}
-      <div className="grid grid-cols-4 gap-2.5">
-        <KpiTile label="Valor inventario" valor={fmtCompact(kpis.valor)} subtitulo={`${fmtInt(kpis.piezas)} piezas`} />
-        <KpiTile label="SKUs con inventario" valor={fmtInt(kpis.skus)} subtitulo="referencias distintas" />
-        <KpiTile label="Almacenes activos" valor={String(kpis.almacenes)} subtitulo={`en ${kpis.nCEDIS} CEDIS`} />
-        <KpiTile
-          label="CEDIS principal"
-          valor={porCedis[0] ? (CEDIS_CORTO[porCedis[0].cedis] || porCedis[0].cedis) : '—'}
-          subtitulo={porCedis[0] ? `${fmtPct(porCedis[0].share)} del valor` : ''}
+      {/* 4 Insight cards Apple Fitness */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        <KpiApple Icon={Package} iconColor={blue} chip="Valor"
+          kpi={fmtCompact(insights.valor)}
+          headline={<>Total en stock · <strong style={{ color: theme.text }}>{fmtInt(insights.piezas)} piezas</strong> en {fmtInt(insights.skus)} SKUs.</>}
+        />
+        <KpiApple Icon={MapPin} iconColor={green} chip="Concentración"
+          kpi={insights.topCedis ? `${insights.topCedis.share.toFixed(0)}%` : '—'}
+          headline={insights.topCedis
+            ? <><strong style={{ color: theme.text }}>{CEDIS_CORTO[insights.topCedis.cedis] || insights.topCedis.cedis}</strong> concentra {insights.topCedis.share.toFixed(1)}% · {fmtCompact(insights.topCedis.valor)}.</>
+            : <>Sin CEDIS con datos.</>}
+        />
+        <KpiApple Icon={AlertTriangle} iconColor={orange} chip="Reservado"
+          kpi={`${insights.pctReservado.toFixed(1)}%`}
+          kpiTone="warn"
+          headline={<><strong style={{ color: theme.text }}>{fmtInt(insights.reservado)} piezas</strong> reservadas · {fmtCompact(insights.valorReservado)} en órdenes abiertas.</>}
+        />
+        <KpiApple Icon={Boxes} iconColor={purple} chip="Cobertura"
+          kpi={`${kpis.almacenes} alm`}
+          headline={<>Distribuidos en <strong style={{ color: theme.text }}>{kpis.nCEDIS} CEDIS</strong>. {porTipo[0]?.tipo || '—'} es el tipo dominante ({porTipo[0] ? porTipo[0].share.toFixed(0) : 0}%).</>}
         />
       </div>
 
-      {/* Distribución por CEDIS */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <div className="flex items-baseline justify-between mb-3">
-          <h3 className="text-sm font-medium text-gray-800 flex items-center gap-1.5">
-            <MapPin className="w-4 h-4" /> Distribución por CEDIS
-          </h3>
-          <span className="text-xs text-gray-500">
-            {soloComerciales ? 'Solo almacenes de venta' : 'Todos los almacenes'}
+      {/* Row 2-col: CEDIS barras + tipo funcional */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: 10 }}>
+        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '12px 16px', fontFamily: TYPO.fontText }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+            <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Distribución por CEDIS</h4>
+            <span style={{ fontSize: 10, color: theme.textMuted }}>{porCedis.length} activos · click filtra</span>
+          </div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {porCedis.map((c, i) => {
+              const col = iosCanalCol(c.cedis, i);
+              const max = porCedis[0]?.valor || 1;
+              const w = (c.valor / max) * 100;
+              const active = cedisFiltro === c.cedis;
+              return (
+                <div key={c.cedis}
+                  onClick={() => setCedisFiltro(active ? 'TODOS' : c.cedis)}
+                  style={{
+                    display: 'grid', gridTemplateColumns: '110px 1fr 90px', gap: 12, alignItems: 'center',
+                    padding: '6px 8px', borderRadius: 8, cursor: 'pointer',
+                    background: active ? (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)') : 'transparent',
+                  }}>
+                  <div>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 500, color: theme.text, letterSpacing: '-0.005em' }}>{CEDIS_CORTO[c.cedis] || c.cedis}</div>
+                    <div style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{fmtInt(c.skus)} SKUs · {c.almacenes} alm.</div>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 999, background: theme.border, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${w}%`, background: col, borderRadius: 999 }} />
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{fmtCompact(c.valor)}</div>
+                    <div style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{c.share.toFixed(1)}%</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '12px 16px', fontFamily: TYPO.fontText }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+            <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Por tipo funcional</h4>
+            <span style={{ fontSize: 10, color: theme.textMuted }}>{porTipo.length} tipos</span>
+          </div>
+          <div style={{ display: 'grid', gap: 4 }}>
+            {porTipo.map((t, i) => {
+              const iosTipoCol = [blue, purple, teal, orange, green, red, orange][i % 7];
+              return (
+                <div key={t.tipo} style={{ display: 'grid', gridTemplateColumns: '8px minmax(0,1fr) 60px 60px', gap: 10, alignItems: 'center', padding: '6px 6px', borderBottom: `1px dashed ${theme.border}` }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: iosTipoCol }} />
+                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 500, color: theme.text, textTransform: 'uppercase', letterSpacing: '-0.005em' }}>{t.tipo}</span>
+                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.text, letterSpacing: '-0.01em' }}>{fmtCompact(t.valor)}</span>
+                  <span style={{ fontSize: 10, color: theme.textMuted, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{t.share.toFixed(1)}% · {fmtInt(t.skus)} SKUs</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Tabla SKU × almacén */}
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 999, height: 30, flex: 1, maxWidth: 280 }}>
+            <Search style={{ width: 12, height: 12, color: theme.textMuted }} />
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar SKU o descripción…"
+              style={{ border: 0, outline: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 12, color: theme.text, flex: 1 }} />
+          </div>
+          <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 4 }}>
+            {fmtInt(filasTabla.length)} SKUs · {almacenesActivos.length} almacenes
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-2.5">
-          {porCedis.map((c) => {
-            const pal = CEDIS_COLOR[c.cedis] || PALETTE.gray;
-            return (
-              <button
-                key={c.cedis}
-                onClick={() => setCedisFiltro(cedisFiltro === c.cedis ? 'TODOS' : c.cedis)}
-                className="text-left rounded-xl p-4 transition-all"
-                style={{
-                  background: pal.bg,
-                  border: cedisFiltro === c.cedis ? `2px solid ${pal.mid}` : '2px solid transparent',
-                }}
-              >
-                <div className="text-[11px] font-medium uppercase tracking-wider" style={{ color: pal.mid }}>
-                  {CEDIS_CORTO[c.cedis] || c.cedis}
-                </div>
-                <div className="text-2xl font-medium mt-1" style={{ color: pal.text }}>{fmtCompact(c.valor)}</div>
-                <div className="text-[11px] mt-1" style={{ color: pal.mid }}>
-                  {fmtPct(c.share)} del total
-                </div>
-                <div className="text-[11px] mt-2 pt-2 border-t" style={{ borderColor: pal.soft, color: pal.text }}>
-                  {fmtInt(c.skus)} SKUs · {c.almacenes} almacenes · {fmtInt(c.piezas)} pz
-                </div>
-              </button>
-            );
-          })}
+
+        <div style={{ overflow: 'auto', maxHeight: '65vh' }}>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
+            <thead>
+              <tr>
+                <th style={{ position: 'sticky', top: 0, background: theme.surface, zIndex: 1, textAlign: 'left', padding: '8px 10px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap', width: 60 }}>Marca</th>
+                <th style={{ position: 'sticky', top: 0, background: theme.surface, zIndex: 1, textAlign: 'left', padding: '8px 6px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap', width: 100 }}>SKU</th>
+                <th style={{ position: 'sticky', top: 0, background: theme.surface, zIndex: 1, textAlign: 'left', padding: '8px 6px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap', minWidth: 200 }}>Descripción</th>
+                {almacenesActivos.map((a) => (
+                  <th key={a} style={{ position: 'sticky', top: 0, background: theme.surface, zIndex: 1, textAlign: 'right', padding: '8px 4px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap', width: 56 }} title={NOMBRES_ALMACEN[a]}>{shortAlmacen(a)}</th>
+                ))}
+                <th style={{ position: 'sticky', top: 0, background: theme.surface, zIndex: 1, textAlign: 'right', padding: '8px 6px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap', width: 70 }}>Total pz</th>
+                <th style={{ position: 'sticky', top: 0, background: theme.surface, zIndex: 1, textAlign: 'right', padding: '8px 6px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap', width: 80 }}>Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filasTabla.slice(0, 200).map((r) => {
+                const abierto = skuAbierto === r.sku;
+                return (
+                  <React.Fragment key={r.sku}>
+                    <tr onClick={() => setSkuAbierto(abierto ? null : r.sku)}
+                      style={{
+                        borderTop: `1px solid ${theme.border}`,
+                        background: abierto ? (isDark ? 'rgba(10,132,255,0.10)' : 'rgba(0,122,255,0.06)') : 'transparent',
+                        cursor: 'pointer',
+                      }}
+                      onMouseEnter={(e) => { if (!abierto) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
+                      onMouseLeave={(e) => { if (!abierto) e.currentTarget.style.background = 'transparent'; }}>
+                      <td style={{ padding: '4px 6px', color: theme.textMuted, fontSize: 10, whiteSpace: 'nowrap', width: 60 }}>{r.marca || '—'}</td>
+                      <td style={{ padding: '4px 6px', color: theme.text, fontSize: 10, fontWeight: 600, fontFamily: '-apple-system, "SF Mono", ui-monospace, monospace', whiteSpace: 'nowrap', width: 100 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <ChevronRight style={{ width: 12, height: 12, color: blue, flexShrink: 0, transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform 120ms' }} />
+                          {r.sku}
+                        </span>
+                      </td>
+                      <td style={{ padding: '4px 6px', color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 260 }} title={r.descripcion}>{r.descripcion || '—'}</td>
+                      {almacenesActivos.map((a) => {
+                        const v = r.byAlm[a]?.pz || 0;
+                        const h = cellPill(v);
+                        return (
+                          <td key={a} style={{ padding: '3px 3px', textAlign: 'right', whiteSpace: 'nowrap', width: 56 }}>
+                            {v > 0 ? (
+                              <span style={{
+                                display: 'inline-block', padding: '3px 8px', borderRadius: 999,
+                                fontFamily: TYPO.fontText, fontSize: 11,
+                                background: h?.bg || 'transparent',
+                                color: h?.color || theme.textMuted,
+                                fontWeight: h?.weight || 500,
+                                minWidth: 32, textAlign: 'center',
+                              }}>{fmtInt(v)}</span>
+                            ) : (
+                              <span style={{ color: theme.textSubtle, fontSize: 11 }}>—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td style={{ padding: '4px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', background: theme.bg, fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, letterSpacing: '-0.01em', width: 70 }}>{fmtInt(r.totalPz)}</td>
+                      <td style={{ padding: '4px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', background: theme.bg, fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, letterSpacing: '-0.01em', width: 80 }}>{fmtCompact(r.valor)}</td>
+                    </tr>
+                    {abierto && (
+                      <tr>
+                        <td colSpan={3 + almacenesActivos.length + 2} style={{ padding: 0, background: theme.bg, borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}` }}>
+                          <SkuDrillDown row={r} almacenes={almacenesActivos} theme={theme} colors={{ blue, green, orange, red, purple }} isDark={isDark} />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+              {filasTabla.length > 200 && (
+                <tr>
+                  <td colSpan={3 + almacenesActivos.length + 2} style={{ padding: '8px', textAlign: 'center', color: theme.textMuted, fontSize: 11, borderTop: `1px solid ${theme.border}` }}>
+                    Mostrando 200 de {fmtInt(filasTabla.length)} SKUs · usa el buscador para filtrar
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Distribución por tipo funcional */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <div className="flex items-baseline justify-between mb-3">
-          <h3 className="text-sm font-medium text-gray-800">Distribución por función</h3>
-          <span className="text-xs text-gray-500">valor por tipo de almacén</span>
-        </div>
-        <div className="grid grid-cols-4 gap-2">
-          {porTipo.map((t) => {
-            const pal = COLOR_TIPO[t.tipo] || PALETTE.gray;
-            return (
-              <div key={t.tipo} className="rounded-lg p-3" style={{ background: pal.bg }}>
-                <div className="text-[10px] font-medium uppercase tracking-wider" style={{ color: pal.mid }}>
-                  {t.tipo}
-                </div>
-                <div className="text-base font-medium mt-0.5" style={{ color: pal.text }}>
-                  {fmtCompact(t.valor)}
-                </div>
-                <div className="text-[10px] mt-0.5" style={{ color: pal.mid }}>
-                  {fmtPct(t.share)} · {fmtInt(t.skus)} SKUs
-                </div>
-              </div>
-            );
-          })}
-        </div>
+// ────────── SKU drill-down · desglose stock por almacén ──────────
+function SkuDrillDown({ row, almacenes, theme, colors, isDark }) {
+  const { blue, green, orange, red, purple } = colors;
+  const totalRes = row.totalRes;
+  const totalDisp = row.totalDisp;
+  const pctRes = row.totalPz > 0 ? (totalRes / row.totalPz) * 100 : 0;
+
+  const KBoxSku = ({ lbl, val, sub, subColor, color }) => (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'inherit' }}>
+      <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>{lbl}</p>
+      <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', color: color || theme.text, fontVariantNumeric: 'tabular-nums', margin: 0 }}>{val}</p>
+      <p style={{ fontSize: 10, color: subColor || theme.textMuted, fontVariantNumeric: 'tabular-nums', margin: 0 }}>{sub}</p>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 12, fontFamily: TYPO.fontText }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        <KBoxSku lbl="Total inventario" val={`${fmtInt(row.totalPz)} pz`} sub={`${fmtCompact(row.valor)} · ${almacenes.filter((a) => (row.byAlm[a]?.pz || 0) > 0).length} almacenes`} />
+        <KBoxSku lbl="Reservado" val={`${fmtInt(totalRes)} pz`} sub={`${pctRes.toFixed(1)}% del total`} color={orange} subColor={theme.textMuted} />
+        <KBoxSku lbl="Disponible" val={`${fmtInt(totalDisp)} pz`} sub={`${(100 - pctRes).toFixed(1)}% · listo para venta`} color={green} subColor={theme.textMuted} />
+        <KBoxSku lbl="Estatus" val={pctRes > 40 ? 'Alta reserva' : pctRes > 20 ? 'Normal' : 'Baja reserva'} sub={pctRes > 40 ? 'Alto compromiso' : 'Rotación saludable'} color={pctRes > 40 ? orange : pctRes > 20 ? blue : green} />
       </div>
 
-      {/* Placeholders: stock muerto + transferencias + reporte */}
-      <div className="grid grid-cols-3 gap-2.5">
-        <ProximoBloque
-          icon={AlertTriangle}
-          titulo="Stock muerto"
-          nota="SKUs con valor alto y sin movimiento en +90 días. Requiere ventas por SKU × CEDIS."
-        />
-        <ProximoBloque
-          icon={ArrowRightLeft}
-          titulo="Transferencias sugeridas"
-          nota="CEDIS con exceso vs otro agotado del mismo SKU. Requiere venta por CEDIS para priorizar."
-        />
-        <ProximoBloque
-          icon={FileText}
-          titulo="Reporte"
-          nota="Exportable a Excel/PDF con el detalle por almacén, CEDIS y SKU."
-        />
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border}`, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Desglose por almacén</h4>
+          <span style={{ fontSize: 10, color: theme.textMuted }}>Total / Reservado / Disponible · composición · CEDIS</span>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', padding: '6px 10px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}` }}>Almacén</th>
+              <th style={{ textAlign: 'left', padding: '6px 8px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}` }}>CEDIS</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: 70 }}>Total pz</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: 70 }}>Reservado</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: 70 }}>Disponible</th>
+              <th style={{ padding: '6px 8px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: 120 }}>Composición</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, width: 80 }}>Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {almacenes.filter((a) => (row.byAlm[a]?.pz || 0) > 0).map((a) => {
+              const d = row.byAlm[a];
+              const pctR = d.pz > 0 ? (d.res / d.pz) * 100 : 0;
+              const pctD = d.pz > 0 ? (d.disp / d.pz) * 100 : 0;
+              return (
+                <tr key={a}>
+                  <td style={{ padding: '5px 10px', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, borderBottom: `1px solid ${theme.border}` }}>{NOMBRES_ALMACEN[a] || `Alm ${a}`}</td>
+                  <td style={{ padding: '5px 8px', fontSize: 11, color: theme.textMuted, borderBottom: `1px solid ${theme.border}` }}>{CEDIS_CORTO[d.cedis] || d.cedis}</td>
+                  <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: theme.text, letterSpacing: '-0.01em', borderBottom: `1px solid ${theme.border}` }}>{fmtInt(d.pz)}</td>
+                  <td style={{ padding: '5px 8px', textAlign: 'right', fontSize: 11, color: d.res > 0 ? orange : theme.textMuted, fontWeight: 500, borderBottom: `1px solid ${theme.border}` }}>{d.res > 0 ? fmtInt(d.res) : '—'}</td>
+                  <td style={{ padding: '5px 8px', textAlign: 'right', fontSize: 11, color: green, fontWeight: 500, borderBottom: `1px solid ${theme.border}` }}>{fmtInt(d.disp)}</td>
+                  <td style={{ padding: '5px 8px', borderBottom: `1px solid ${theme.border}` }}>
+                    <div style={{ display: 'flex', height: 6, borderRadius: 999, overflow: 'hidden', background: theme.border }}>
+                      <span style={{ width: `${pctR}%`, background: orange }} />
+                      <span style={{ width: `${pctD}%`, background: green }} />
+                    </div>
+                  </td>
+                  <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 11, color: theme.text, letterSpacing: '-0.005em', borderBottom: `1px solid ${theme.border}` }}>{fmtCompact(d.valor)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
