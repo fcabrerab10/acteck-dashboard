@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState, Component } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
+import { useTheme } from '../../lib/themeContext';
+import { TYPO } from '../../lib/themeTokens';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { TrendingUp, Star, Percent, AlertTriangle } from 'lucide-react';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -47,6 +51,7 @@ export class DrillDownBoundary extends Component {
 }
 
 export default function SellInDrillDown(props) {
+  const { theme } = useTheme();
   const { sku, marca, descripcion, categoria, familia, rdmp, anioActual, anioPrev, mesActual } = props;
 
   // ── 1) State ──
@@ -220,259 +225,291 @@ export default function SellInDrillDown(props) {
   const rmpColor = ROADMAP_COLOR[rdmp] || { bg: '#F1EFE8', text: '#2C2C2A' };
   const mesActualLabel = MESES_LARGO[Math.max(0, Math.min(11, mesActual - 1))];
 
+  // ── Apple Fitness insights style · Opción 3 ──
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
+  const orange = theme.orange || '#FF9500';
+  const blue = theme.accent || '#007AFF';
+  const purple = theme.purple || '#AF52DE';
+
+  // Chart data para recharts
+  const serieChart = Array.from({ length: 12 }, (_, i) => ({
+    mes: MESES[i],
+    [`${anioActual}`]: i < puntos2026Hasta ? (serie2026[i]?.piezas || 0) : null,
+    [`${anioPrev}`]: serie2025[i]?.piezas || 0,
+  }));
+
+  // Insight helpers
+  const topCliente = topN[0] || null;
+  const yoyLabel = yoy6m == null ? '—' : `${yoy6m >= 0 ? '+' : ''}${yoy6m.toFixed(1)}%`;
+  const trendClass = yoy6m == null ? 'neutral' : yoy6m >= 0 ? 'pos' : 'neg';
+  const yieldClass = yieldPct == null ? 'neutral' : yieldPct >= 95 ? 'pos' : yieldPct >= 85 ? 'warn' : 'neg';
+
+  // Insight card helper
+  const InsightCard = ({ IconComp, tone, chip, kpi, kpiTone, headline }) => {
+    const iconBgMap = { blue: `${blue}22`, green: `${green}22`, orange: `${orange}22`, purple: `${purple}22`, red: `${red}22` };
+    const iconColMap = { blue, green, orange, purple, red };
+    const kpiColMap = { pos: green, neg: red, warn: orange, neutral: theme.text };
+    return (
+      <div style={{
+        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16,
+        padding: 14, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 128,
+        fontFamily: TYPO.fontText, cursor: 'default',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 10, background: iconBgMap[tone], color: iconColMap[tone],
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <IconComp style={{ width: 16, height: 16 }} strokeWidth={1.8} />
+          </div>
+          {chip && (
+            <span style={{
+              fontSize: 9, padding: '2px 7px', borderRadius: 999,
+              background: theme.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+              color: theme.textMuted, fontWeight: 500,
+            }}>{chip}</span>
+          )}
+        </div>
+        <div style={{
+          fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em',
+          color: kpiColMap[kpiTone] || theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 4, lineHeight: 1,
+        }}>{kpi}</div>
+        <div style={{
+          fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 500, color: theme.textMuted,
+          lineHeight: 1.3, marginTop: 'auto',
+        }}>{headline}</div>
+      </div>
+    );
+  };
+
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center gap-2 px-5 pt-3.5 pb-1 text-[11px] text-gray-500 flex-wrap">
-        <span className="font-semibold text-gray-800">{sku} · {descripcion || '—'}</span>
-        <span className="text-gray-300">·</span>
-        <span>{marca || '—'}</span>
-        {categoria && <><span className="text-gray-300">·</span><span>{categoria}</span></>}
-        {familia && <><span className="text-gray-300">·</span><span>{familia}</span></>}
+    <div style={{ background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, borderTop: `3px solid ${blue}` }}>
+      {/* Header inline compacto */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', borderBottom: `1px solid ${theme.border}`, flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: '-apple-system, "SF Mono", ui-monospace, monospace', fontSize: 12, fontWeight: 600, color: theme.text }}>{sku}</span>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 200 }}>{descripcion || '—'}</span>
+        <span style={{ fontSize: 11, color: theme.textMuted }}>· {marca || '—'}{categoria ? ` · ${categoria}` : ''}{familia ? ` · ${familia}` : ''}</span>
         {rdmp && (
-          <>
-            <span className="text-gray-300">·</span>
-            <span className="text-[9px] font-medium px-1 py-0.5 rounded"
-              style={{ background: rmpColor.bg, color: rmpColor.text }}>{rdmp}</span>
-          </>
+          <span style={{
+            fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
+            background: `${blue}22`, color: blue, textTransform: 'uppercase', letterSpacing: '0.06em',
+          }}>{rdmp}</span>
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 p-5 pt-2">
+      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* 4 Insight cards Apple Fitness */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+          <InsightCard
+            IconComp={TrendingUp} tone={yoy6m == null ? 'purple' : yoy6m >= 0 ? 'green' : 'red'}
+            chip="Tendencia"
+            kpi={yoyLabel}
+            kpiTone={trendClass}
+            headline={
+              yoy6m == null ? <>Sin comparativo YoY disponible.</>
+              : <>{yoy6m >= 0 ? 'Crece' : 'Cae'} {Math.abs(yoy6m).toFixed(1)}% YoY en piezas.<br/><span style={{ color: theme.text }}>{fmtInt(p6mAct)} vs {fmtInt(p6mPrev)}</span> acumulado {closedCount}m.</>
+            }
+          />
+          <InsightCard
+            IconComp={Star} tone="blue"
+            chip="Concentración"
+            kpi={`${(topCliente?.pct || 0).toFixed(0)}%`}
+            kpiTone="neutral"
+            headline={
+              topCliente ? <><strong style={{ color: theme.text }}>{topCliente.nombre}</strong> concentra {(topCliente.pct || 0).toFixed(1)}% de las ventas del SKU.</>
+              : <>Sin ventas registradas en {anioActual}.</>
+            }
+          />
+          <InsightCard
+            IconComp={Percent} tone={yieldClass === 'pos' ? 'green' : yieldClass === 'warn' ? 'orange' : yieldClass === 'neg' ? 'red' : 'purple'}
+            chip="Precio"
+            kpi={yieldPct != null ? `${yieldPct.toFixed(1)}%` : '—'}
+            kpiTone={yieldClass}
+            headline={
+              yieldPct == null ? <>Sin datos de precio AAA o de venta.</>
+              : <>Yield real vs AAA — vende {yieldPct >= 95 ? 'cerca del precio ideal' : yieldPct >= 85 ? 'ligeramente por debajo del ideal' : 'muy por debajo del ideal'}.</>
+            }
+          />
+          <InsightCard
+            IconComp={AlertTriangle} tone={covTone === 'bad' ? 'red' : covTone === 'warn' ? 'orange' : covTone === 'good' ? 'green' : 'purple'}
+            chip={cobertura == null ? 'Stock' : cobertura < 1.5 ? 'Alerta' : cobertura > 6 ? 'Alerta' : 'Stock'}
+            kpi={covLabel}
+            kpiTone={covTone === 'bad' ? 'neg' : covTone === 'warn' ? 'warn' : covTone === 'good' ? 'pos' : 'neutral'}
+            headline={
+              cobertura == null ? <>Sin ventas para calcular cobertura.</>
+              : cobertura < 1.5 ? <>Cobertura crítica. Programar reposición.</>
+              : cobertura > 6 ? <>Cobertura elevada. Frenar OC o activar promo.</>
+              : <>Cobertura sana en almacenes.</>
+            }
+          />
+        </div>
 
-        {/* COL 1 — Quién compra */}
-        <div className="lg:pr-5 lg:border-r border-gray-200">
-          <div className="flex items-baseline justify-between mb-3">
-            <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">Quién compra · YTD {anioActual}</span>
-            <span className="text-[10.5px] text-gray-400">
-              {clientesOcultos > 0 ? `${topN.length} de ${clientesAgregados.length} · share ≥ ${UMBRAL_SHARE}%` : `${clientesAgregados.length} clientes distintos`}
-            </span>
-          </div>
-          {topN.length === 0 ? (
-            <div className="text-xs text-gray-400 italic">Sin facturación en {anioActual}.</div>
-          ) : (
-            <>
-              <div className="flex flex-col gap-2">
+        {/* Detalle 2-col: chart + top clientes | precios + stock */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14 }}>
+          {/* Chart + top clientes */}
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+              <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Evolución 12 meses</p>
+              <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: blue }} />{anioActual}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anioPrev}</span>
+              </div>
+            </div>
+            <div style={{ width: '100%', height: 160 }}>
+              <ResponsiveContainer>
+                <AreaChart data={serieChart} margin={{ top: 6, right: 4, left: -8, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id={`fillSku-${String(sku).replace(/\W/g, '').slice(0, 20)}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={blue} stopOpacity={0.20} />
+                      <stop offset="100%" stopColor={blue} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
+                  <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
+                  <YAxis tickFormatter={(v) => v == null ? '' : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={36} />
+                  <Tooltip
+                    formatter={(v, name) => [fmtInt(v) + ' pz', name]}
+                    contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}
+                    labelStyle={{ color: theme.textMuted, fontWeight: 500 }}
+                  />
+                  <Area type="monotone" dataKey={`${anioPrev}`} stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
+                  <Area type="monotone" dataKey={`${anioActual}`} stroke={blue} strokeWidth={2.4} fill={`url(#fillSku-${String(sku).replace(/\W/g, '').slice(0, 20)})`} dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: blue, strokeWidth: 2.5 }} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '14px 0 8px' }}>
+              Top clientes · {clientesAgregados.length} distintos
+            </p>
+            {topN.length === 0 ? (
+              <p style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>Sin facturación en {anioActual}.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: 6 }}>
                 {topN.map((c) => {
                   const canalKey = String(c.canal || '').toUpperCase();
-                  const style = CANAL_STYLE[canalKey] || CANAL_STYLE.MAYOREO;
+                  const canalCol = canalKey === 'MAYOREO' ? purple : canalKey === 'DISTRIBUIDOR' ? blue : canalKey === 'E-COMMERCE' ? (theme.teal || '#5AC8FA') : canalKey === 'MOSTRADOR' ? green : theme.textMuted;
+                  const barW = Math.max(2, ((c.pct || 0) / maxPct) * 100);
                   return (
-                    <div key={c.nombre} className="pb-1.5 border-b border-dashed border-[#E5EAF0] last:border-b-0 last:pb-0">
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider"
-                          style={{ background: style.bg, color: style.color }}>{style.label}</span>
-                        <span className="text-[11.5px] font-medium text-gray-800 truncate flex-1">{c.nombre}</span>
-                        <span className="text-[11px] text-gray-500 font-medium tabular-nums">{(c.pct || 0).toFixed(1)}%</span>
+                    <div key={c.nombre} style={{ padding: '4px 0', borderBottom: `1px dashed ${theme.border}` }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 3 }}>
+                        <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 999, background: `${canalCol}22`, color: canalCol, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          {canalKey === 'E-COMMERCE' ? 'E-com' : (canalKey.charAt(0) + canalKey.slice(1).toLowerCase()).slice(0, 8)}
+                        </span>
+                        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 500, color: theme.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nombre}</span>
+                        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{(c.pct || 0).toFixed(1)}%</span>
                       </div>
-                      <div className="h-[3px] bg-[#E4EAF2] rounded-full overflow-hidden mt-1">
-                        <span className="block h-full rounded-full"
-                          style={{ width: `${((c.pct || 0) / maxPct * 100).toFixed(1)}%`, background: (c.pct || 0) >= 10 ? '#0EA5E9' : '#94A3B8' }} />
+                      <div style={{ height: 3, borderRadius: 999, background: theme.border, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${barW}%`, background: canalCol, borderRadius: 999 }} />
                       </div>
-                      <div className="flex justify-between text-[10px] text-gray-500 mt-1 tabular-nums">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
                         <span>{fmtInt(c.piezas)} pz · {formatMXN(c.monto)}</span>
                         {c.yoy != null ? (
-                          <span className={c.yoy >= 0 ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>
-                            {c.yoy >= 0 ? '+' : ''}{c.yoy.toFixed(0)}% YoY
-                          </span>
+                          <span style={{ color: c.yoy >= 0 ? green : red, fontWeight: 500 }}>{c.yoy >= 0 ? '+' : ''}{c.yoy.toFixed(0)}% YoY</span>
                         ) : c.piezas > 0 ? (
-                          <span className="text-emerald-700 font-semibold">nuevo</span>
+                          <span style={{ color: green, fontWeight: 500 }}>nuevo</span>
                         ) : null}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              <div className="flex justify-between items-end mt-3 pt-2.5 border-t border-gray-200">
+            )}
+            {topN.length > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: `1px solid ${theme.border}` }}>
                 <div>
-                  <div className="text-[15px] font-semibold tabular-nums">{top3Pct.toFixed(1)}%</div>
-                  <div className="text-[9.5px] uppercase tracking-widest text-gray-500">Top 3 concentran</div>
+                  <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', margin: 0 }}>{top3Pct.toFixed(1)}%</p>
+                  <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Top 3 concentran</p>
                 </div>
-                <div className="text-right">
-                  <div className="text-[15px] font-semibold tabular-nums">{clientesAgregados.length}</div>
-                  <div className="text-[9.5px] uppercase tracking-widest text-gray-500">Clientes distintos YTD</div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', margin: 0 }}>{clientesAgregados.length}</p>
+                  <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Clientes distintos</p>
                 </div>
               </div>
-            </>
-          )}
-        </div>
-
-        {/* COL 2 — Cuándo */}
-        <div className="lg:px-5 lg:border-r border-gray-200">
-          <div className="flex items-baseline justify-between mb-3">
-            <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">Cuándo lo compran · 12 meses</span>
-            <span className="text-[10.5px] text-gray-400">Piezas / mes</span>
+            )}
           </div>
-          <div className="relative">
-            <svg viewBox="0 0 400 88" preserveAspectRatio="none"
-              onMouseLeave={() => setHoverMes(null)}
-              onMouseMove={(e) => {
-                const r = e.currentTarget.getBoundingClientRect();
-                const xVb = ((e.clientX - r.left) / r.width) * 400;
-                const i = Math.round((xVb - 15) / 32.7);
-                if (i >= 0 && i < 12) setHoverMes(i); else setHoverMes(null);
-              }}
-              style={{ width: '100%', height: 88, display: 'block', cursor: 'crosshair' }}>
-              <line x1="0" y1="65" x2="400" y2="65" stroke="#E5EAF2" strokeWidth="1" />
-              {hoverMes != null && (
-                <line x1={svgX(hoverMes).toFixed(1)} y1="4" x2={svgX(hoverMes).toFixed(1)} y2="75"
-                  stroke="#94A3B8" strokeWidth="1" strokeDasharray="2 2" />
+
+          {/* Precios + Stock */}
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+              <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Precio · {mesActualLabel} {anioActual}</p>
+              {yieldPct != null && <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>Yield {yieldPct.toFixed(1)}%</span>}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {precioAAA != null && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '6px 10px', borderRadius: 8, background: `${blue}12` }}>
+                  <span style={{ fontSize: 11, color: theme.text, fontWeight: 500 }}>
+                    Mayoreo AAA <span style={{ fontSize: 10, color: theme.textMuted, marginLeft: 4, fontWeight: 400 }}>{promoEfectiva.pct > 0 ? 'neto' : 'lista'}</span>
+                  </span>
+                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{formatMXN(precioAAAneto)}</span>
+                </div>
               )}
-              {path2025 && <path d={path2025} stroke="#F59E0B" strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
-              {serie2025.map((p, i) => (
-                <circle key={`a${i}`} cx={svgX(i).toFixed(1)} cy={svgY(p.piezas)}
-                  r={hoverMes === i ? 3.5 : 2} fill="#F59E0B" />
-              ))}
-              {path2026 && <path d={path2026} stroke="#0EA5E9" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
-              {serie2026.slice(0, Math.max(0, puntos2026Hasta - 1)).map((p, i) => (
-                <circle key={`b${i}`} cx={svgX(i).toFixed(1)} cy={svgY(p.piezas)}
-                  r={hoverMes === i ? 4 : 2.6} fill="#0EA5E9" />
-              ))}
-              {puntos2026Hasta > 0 && serie2026[puntos2026Hasta - 1] && (
-                <circle cx={svgX(puntos2026Hasta - 1).toFixed(1)} cy={svgY(serie2026[puntos2026Hasta - 1].piezas)}
-                  r={hoverMes === puntos2026Hasta - 1 ? 4.5 : 3}
-                  fill="white" stroke="#0EA5E9" strokeWidth="2" />
-              )}
-            </svg>
-            {hoverMes != null && (() => {
-              const v25 = serie2025[hoverMes]?.piezas || 0;
-              const hasV26 = hoverMes < puntos2026Hasta;
-              const v26 = hasV26 ? (serie2026[hoverMes]?.piezas || 0) : null;
-              const delta = hasV26 && v25 > 0 ? ((v26 - v25) / v25 * 100) : null;
-              const leftPct = ((svgX(hoverMes) / 400) * 100).toFixed(1);
-              const alignRight = hoverMes >= 8;
-              return (
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: `${leftPct}%`,
-                  transform: alignRight ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)',
-                  pointerEvents: 'none',
-                }}>
-                  <div className="bg-white border border-gray-200 rounded-md shadow-md px-2.5 py-1.5 text-[10.5px] whitespace-nowrap">
-                    <div className="font-semibold text-gray-800 mb-1">{MESES[hoverMes]}</div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="inline-block w-2 h-2 rounded-sm" style={{ background: '#F59E0B' }} />
-                      <span className="text-gray-600">{anioPrev}</span>
-                      <span className="tabular-nums font-semibold text-gray-800 ml-auto">{fmtInt(v25)}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="inline-block w-2 h-2 rounded-sm" style={{ background: '#0EA5E9' }} />
-                      <span className="text-gray-600">{anioActual}</span>
-                      <span className="tabular-nums font-semibold text-gray-800 ml-auto">
-                        {hasV26 ? fmtInt(v26) : '—'}
-                      </span>
-                    </div>
-                    {delta != null && (
-                      <div className={`mt-1 pt-1 border-t border-gray-100 text-[10px] tabular-nums font-semibold ${delta >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                        {delta >= 0 ? '+' : ''}{delta.toFixed(1)}% YoY
-                      </div>
-                    )}
+              {['DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'].map((l) => (
+                precioMap[l] != null && (
+                  <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', fontSize: 11, color: theme.text }}>
+                    <span style={{ fontWeight: 500 }}>{l.replace(' PROVISIONAL', '')}</span>
+                    <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatMXN(precioMap[l])}</span>
                   </div>
-                </div>
-              );
-            })()}
-          </div>
-          <div className="grid mt-1 text-[9px] text-gray-400 tabular-nums" style={{ gridTemplateColumns: 'repeat(12, 1fr)' }}>
-            {MESES.map((m) => <span key={m} className="text-center">{m}</span>)}
-          </div>
-          <div className="flex gap-3 text-[10.5px] text-gray-500 mt-2">
-            <span><span className="inline-block w-2 h-0.5 mr-1 align-middle rounded-sm" style={{ background: '#F59E0B' }} />{anioPrev}</span>
-            <span><span className="inline-block w-2 h-0.5 mr-1 align-middle rounded-sm" style={{ background: '#0EA5E9' }} />{anioActual}</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 mt-4">
-            <div>
-              <div className="text-[9.5px] uppercase tracking-widest text-gray-500">YoY {closedCount}m</div>
-              <div className={`text-[17px] font-semibold tabular-nums ${yoy6m == null ? 'text-gray-400' : yoy6m >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                {yoy6m == null ? '—' : `${yoy6m >= 0 ? '+' : ''}${yoy6m.toFixed(1)}%`}
-              </div>
-              <div className="text-[10px] text-gray-400 tabular-nums">{fmtInt(p6mAct)} vs {fmtInt(p6mPrev)} pz</div>
+                )
+              ))}
+              {Object.keys(precioMap).length === 0 && (
+                <span style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>Sin precios cargados para este mes</span>
+              )}
             </div>
-            <div>
-              <div className="text-[9.5px] uppercase tracking-widest text-gray-500">Últ. 3m vs prev</div>
-              <div className={`text-[17px] font-semibold tabular-nums ${trend3m == null ? 'text-gray-400' : trend3m >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                {trend3m == null ? '—' : `${trend3m >= 0 ? '+' : ''}${trend3m.toFixed(1)}%`}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', marginTop: 12, paddingTop: 10, borderTop: `1px solid ${theme.border}` }}>
+              <div style={{ padding: '2px 12px 2px 0', borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column' }}>
+                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Prom real {anioActual}</p>
+                <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: yieldPct == null ? theme.textMuted : yieldPct >= 95 ? green : yieldPct >= 85 ? orange : red, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>
+                  {precioPromReal ? formatMXN(precioPromReal) : '—'}
+                </p>
+                <p style={{ fontSize: 10, color: theme.textMuted, margin: '2px 0 0' }}>{yieldPct ? `${yieldPct.toFixed(1)}% del AAA` : 'Sin venta YTD'}</p>
               </div>
-              <div className="text-[10px] text-gray-400 tabular-nums">{fmtInt(sum3act)} vs {fmtInt(sum3prev)} pz</div>
+              <div style={{ padding: '2px 0 2px 12px', display: 'flex', flexDirection: 'column' }}>
+                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Promo Julio</p>
+                <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: promoEfectiva.pct > 0 ? green : theme.textMuted, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>
+                  {promoEfectiva.pct > 0 ? `−${(promoEfectiva.pct * 100).toFixed(1)}%` : '—'}
+                </p>
+                <p style={{ fontSize: 10, color: theme.textMuted, margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={promoEfectiva.campanias.join(' · ')}>
+                  {promoEfectiva.campanias.length ? promoEfectiva.campanias.join(' · ') : 'Sin campaña este mes'}
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '14px 0 8px' }}>Stock</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+              <div style={{ padding: '2px 12px 2px 0', borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column' }}>
+                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Inventario</p>
+                <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: stockTotal <= 0 ? red : theme.text, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{fmtInt(stockTotal)} pz</p>
+                <p style={{ fontSize: 10, color: theme.textMuted, margin: '2px 0 0' }}>{numAlmacenes} almacenes</p>
+              </div>
+              <div style={{ padding: '2px 0 2px 12px', display: 'flex', flexDirection: 'column' }}>
+                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Cobertura</p>
+                <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: covTone === 'bad' ? red : covTone === 'warn' ? orange : covTone === 'good' ? green : theme.textMuted, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{covLabel}</p>
+                <p style={{ fontSize: 10, color: theme.textMuted, margin: '2px 0 0' }}>{covSub}</p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* COL 3 — Precio + Stock */}
-        <div className="lg:pl-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <span className="text-[9.5px] uppercase tracking-widest font-semibold text-gray-500">A qué precio · {mesActualLabel} {anioActual}</span>
-            {yieldPct != null && <span className="text-[10.5px] text-gray-400">Yield {yieldPct.toFixed(1)}%</span>}
-          </div>
-          <div className="flex flex-col gap-0.5 text-[11.5px]">
-            {precioAAA != null && (
-              <div className="flex justify-between items-baseline py-1 px-2 rounded" style={{ background: '#FEF9C3' }}>
-                <span className="text-gray-700 font-medium">Mayoreo AAA <span className="text-[10px] text-gray-500 font-normal">
-                  {promoEfectiva.pct > 0 ? 'neto' : 'lista'}
-                </span></span>
-                <span className="tabular-nums font-semibold">{formatMXN(precioAAAneto)}</span>
-              </div>
-            )}
-            {['DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'].map((l) => (
-              precioMap[l] != null && (
-                <div key={l} className="flex justify-between py-1 text-gray-700">
-                  <span className="font-medium">{l.replace(' PROVISIONAL', '')}</span>
-                  <span className="tabular-nums">{formatMXN(precioMap[l])}</span>
-                </div>
-              )
-            ))}
-            {Object.keys(precioMap).length === 0 && (
-              <span className="text-gray-400 italic text-[11px]">Sin precios cargados para este mes</span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 pt-2.5 mt-2.5 border-t border-gray-200">
+        {/* Alert compacta si aplica */}
+        {cobertura != null && (cobertura < 1.5 || cobertura > 6) && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12,
+            background: cobertura < 1.5 ? `${red}18` : `${orange}18`,
+            color: cobertura < 1.5 ? red : orange, fontSize: 12, fontWeight: 500,
+          }}>
+            <span style={{
+              width: 24, height: 24, borderRadius: 8,
+              background: cobertura < 1.5 ? `${red}28` : `${orange}28`,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 700,
+            }}>⚠</span>
             <div>
-              <div className="text-[9.5px] uppercase tracking-widest text-gray-500">Precio prom. real {anioActual}</div>
-              <div className={`text-[16px] font-semibold tabular-nums ${yieldPct == null ? 'text-gray-400' : yieldPct >= 95 ? 'text-emerald-700' : yieldPct >= 85 ? 'text-amber-700' : 'text-rose-700'}`}>
-                {precioPromReal ? formatMXN(precioPromReal) : '—'}
-              </div>
-              <div className="text-[10px] text-gray-400">{yieldPct ? `${yieldPct.toFixed(1)}% del AAA neto` : 'Sin venta YTD'}</div>
-            </div>
-            <div>
-              <div className="text-[9.5px] uppercase tracking-widest text-gray-500">Promo activa</div>
-              <div className={`text-[16px] font-semibold tabular-nums ${promoEfectiva.pct > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
-                {promoEfectiva.pct > 0 ? `−${(promoEfectiva.pct * 100).toFixed(1)}%` : '—'}
-              </div>
-              <div className="text-[10px] text-gray-400 truncate" title={promoEfectiva.campanias.join(' · ')}>
-                {promoEfectiva.campanias.length ? promoEfectiva.campanias.join(' · ') : 'Sin campaña este mes'}
-              </div>
+              <strong>{cobertura < 1.5 ? 'Cobertura crítica' : 'Cobertura elevada'}</strong>
+              <span style={{ fontWeight: 400, marginLeft: 4 }}>— {cobertura < 1.5 ? 'programar reposición inmediata' : 'considerar frenar OC o activar promo'}</span>
             </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-3 pt-2.5 mt-2.5 border-t border-gray-200">
-            <div>
-              <div className="text-[9.5px] uppercase tracking-widest text-gray-500">Inventario Acteck</div>
-              <div className={`text-[16px] font-semibold tabular-nums ${stockTotal <= 0 ? 'text-rose-700' : 'text-gray-800'}`}>
-                {fmtInt(stockTotal)} pz
-              </div>
-              <div className="text-[10px] text-gray-400">{numAlmacenes} almacenes</div>
-            </div>
-            <div>
-              <div className="text-[9.5px] uppercase tracking-widest text-gray-500">Días de cobertura</div>
-              <div className={`text-[16px] font-semibold tabular-nums ${covTone === 'bad' ? 'text-rose-700' : covTone === 'warn' ? 'text-amber-700' : covTone === 'good' ? 'text-emerald-700' : 'text-gray-400'}`}>
-                {covLabel}
-              </div>
-              <div className="text-[10px] text-gray-400">{covSub}</div>
-            </div>
-          </div>
-
-          {cobertura != null && (cobertura < 1.5 || cobertura > 6) && (
-            <div className="mt-3 px-2.5 py-2 rounded text-[11px] font-medium border-l-4"
-              style={cobertura < 1.5
-                ? { background: '#FEE2E2', color: '#991B1B', borderColor: '#EF4444' }
-                : { background: '#FEF3C7', color: '#92400E', borderColor: '#F59E0B' }}>
-              {cobertura < 1.5
-                ? 'Cobertura crítica · programar reposición'
-                : 'Cobertura elevada · considerar frenar OC / activar promo'}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
