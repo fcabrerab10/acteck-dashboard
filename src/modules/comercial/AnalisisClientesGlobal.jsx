@@ -701,7 +701,7 @@ export default function AnalisisClientesGlobal() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-4 gap-2.5">
         {clientesRanking.slice(0, limite).map((c, i) => (
           <TarjetaCliente
             key={c.cliente}
@@ -764,67 +764,63 @@ function KpiTile({ label, valor, delta, subtitulo, esWarning }) {
 
 function TarjetaCliente({ ranking, cliente, onClick }) {
   const { theme } = useTheme();
-  const pal = colorCanal(cliente.canal);
+  const canalCol = colorCanalIOS(theme, cliente.canal, ranking - 1);
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
   const deltaCol = cliente.deltaYoY == null ? theme.textMuted
-    : cliente.deltaYoY > 3 ? theme.green
-    : cliente.deltaYoY < -3 ? theme.red
+    : cliente.deltaYoY > 3 ? green
+    : cliente.deltaYoY < -3 ? red
     : theme.textMuted;
-  const DeltaIcon = cliente.deltaYoY == null ? Minus
-    : cliente.deltaYoY > 3 ? TrendingUp
-    : cliente.deltaYoY < -3 ? TrendingDown
-    : Minus;
+  const deltaArrow = cliente.deltaYoY == null ? '' : (cliente.deltaYoY >= 0 ? '↑' : '↓');
+
+  // Mini spark: interpola YTD prev → YTD actual con curva suave (visual, no datos por mes)
+  const startY = 20;
+  const endY = cliente.deltaYoY != null && cliente.deltaYoY >= 0
+    ? Math.max(4, 20 - Math.min(16, Math.abs(cliente.deltaYoY) * 0.6))
+    : Math.min(22, 20 + Math.min(6, Math.abs(cliente.deltaYoY || 0) * 0.15));
+  const midY = (startY + endY) / 2 + (cliente.deltaYoY >= 0 ? -3 : 3);
+  const sparkPath = `M0,${startY} Q60,${midY} 120,${endY}`;
+
   return (
     <button
       onClick={onClick}
       style={{
         textAlign: 'left', background: theme.surface,
-        border: `1px solid ${theme.border}`, borderLeft: `3px solid ${pal.mid}`,
-        borderRadius: 12, padding: 14, cursor: 'pointer', fontFamily: TYPO.fontText,
-        transition: 'border-color 160ms, box-shadow 160ms',
+        border: `1px solid ${theme.border}`,
+        borderRadius: 14, padding: '10px 12px', cursor: 'pointer', fontFamily: TYPO.fontText,
+        display: 'flex', flexDirection: 'column', gap: 4, minHeight: 128,
+        transition: 'border-color 160ms',
       }}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = theme.text)}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = theme.border)}
     >
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span style={{ fontSize: 10, color: theme.textSubtle, fontWeight: 500 }}>#{ranking}</span>
-          <span style={{ fontSize: 13, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cliente.cliente}</span>
-        </div>
-        <span
-          style={{
-            fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
-            background: `${pal.mid}18`, color: pal.mid, flexShrink: 0,
-            textTransform: 'uppercase', letterSpacing: '0.05em',
-          }}
-          title={cliente.canal}
-        >
-          {chipCanal(cliente.canal)}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <span style={{ fontSize: 10, color: theme.textSubtle, fontWeight: 600, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>#{ranking}</span>
+        <span style={{ width: 6, height: 6, borderRadius: 2, background: canalCol, flexShrink: 0 }} />
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.005em', color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={cliente.cliente}>
+          {cliente.cliente}
         </span>
       </div>
-      <div style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-        YTD · mes {fmtCompact(cliente.mes)}
-      </div>
+      <div style={{ fontSize: 9, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 }}>{cliente.canal}</div>
       <div style={{
-        fontSize: 20, fontWeight: 600, color: theme.text, lineHeight: 1.1,
-        letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay,
-        fontVariantNumeric: 'tabular-nums', marginTop: 2,
+        fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em',
+        color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2, lineHeight: 1,
       }}>
         {fmtCompact(cliente.ytd)}
       </div>
-      <div style={{ marginTop: 6 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3, fontVariantNumeric: 'tabular-nums' }}>
-          <span style={{ color: deltaCol, fontWeight: 500 }}>
-            <DeltaIcon className="w-3 h-3 inline -mt-0.5" /> {fmtPctDelta(cliente.deltaYoY)}
-          </span>
-          <span style={{ color: theme.textMuted, fontWeight: 500 }}>{fmtPct(cliente.share)} del total</span>
-        </div>
-        <div style={{ background: theme.divider, height: 3, borderRadius: 999, overflow: 'hidden' }}>
-          <div
-            style={{
-              height: '100%', borderRadius: 999,
-              background: pal.mid,
-              width: `${Math.min(100, Math.max(2, cliente.share * 6))}%`,
-            }}
-          />
-        </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 2, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+        {cliente.deltaYoY != null && (
+          <span style={{ color: deltaCol, fontWeight: 500 }}>{deltaArrow} {Math.abs(cliente.deltaYoY).toFixed(1)}%</span>
+        )}
+        {cliente.deltaYoY == null && <span style={{ color: theme.textMuted }}>—</span>}
+        <span style={{ color: theme.textMuted }}>vs {fmtCompact(cliente.ytdPrev)}</span>
+      </div>
+      <svg viewBox="0 0 120 24" style={{ display: 'block', width: '100%', height: 24, marginTop: 4 }} preserveAspectRatio="none">
+        <path d={sparkPath} fill="none" stroke={canalCol} strokeWidth="1.5" strokeLinecap="round" />
+        <circle cx="120" cy={endY} r="2" fill={canalCol} />
+      </svg>
+      <div style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginTop: 'auto' }}>
+        Mes {fmtCompact(cliente.mes)} · {fmtPct(cliente.share)} del total
       </div>
     </button>
   );
@@ -1004,168 +1000,198 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
     };
   }, [datos, anio, mesMax, costoPorSku]);
 
-  const pal = detalle ? colorCanal(detalle.canal) : PALETTE.gray;
+  return <ModalClienteContent
+    clienteNombre={clienteNombre} anio={anio} mesMax={mesMax} onClose={onClose}
+    detalle={detalle} cargando={cargando} descripciones={descripciones}
+  />;
+}
+
+function ModalClienteContent({ clienteNombre, anio, mesMax, onClose, detalle, cargando, descripciones }) {
+  const { theme } = useTheme();
+  const canalCol = detalle ? colorCanalIOS(theme, detalle.canal) : theme.textMuted;
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
+  const share = detalle && detalle.ytd > 0 ? null : null; // share depende del total, no lo tenemos aquí; skip
+
+  const KBox = ({ lbl, val, sub, subColor, last }) => (
+    <div style={{ padding: '2px 14px', borderRight: last ? 'none' : `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column' }}>
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>{lbl}</p>
+      <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', color: subColor || theme.text, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{val}</p>
+      {sub && <p style={{ fontSize: 10, color: subColor || theme.textMuted, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{sub}</p>}
+    </div>
+  );
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-8"
+        style={{
+          background: theme.surface, color: theme.text,
+          border: `1px solid ${theme.border}`, borderRadius: 18,
+          boxShadow: theme.mode === 'dark' ? '0 20px 60px rgba(0,0,0,0.5)' : '0 20px 60px rgba(0,0,0,0.15)',
+          width: '100%', maxWidth: 960, margin: '32px 0',
+          fontFamily: TYPO.fontText, overflow: 'hidden',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          className="px-5 py-4 flex items-center justify-between rounded-t-2xl"
-          style={{ background: pal.bg, borderBottom: `1px solid ${pal.soft}` }}
-        >
-          <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-widest" style={{ color: pal.mid }}>
-              {detalle?.canal || '—'}
-            </div>
-            <h3 className="text-lg font-medium truncate" style={{ color: pal.text }}>
-              {clienteNombre}
-            </h3>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/50">
-            <X className="w-5 h-5" style={{ color: pal.text }} />
+        {/* Header inline */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', borderBottom: `1px solid ${theme.border}` }}>
+          <span style={{ width: 10, height: 10, borderRadius: 3, background: canalCol, flexShrink: 0 }} />
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clienteNombre}</span>
+          {detalle && (
+            <span style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 4 }}>
+              · {detalle.canal || '—'} · {fmtCompact(detalle.ytd)} YTD
+            </span>
+          )}
+          <button onClick={onClose} style={{ marginLeft: 'auto', background: 'transparent', border: 0, color: theme.textMuted, cursor: 'pointer', padding: 4, lineHeight: 1 }}>
+            <X style={{ width: 18, height: 18 }} />
           </button>
         </div>
 
         {cargando || !detalle ? (
-          <div className="p-12 text-center text-gray-400">
-            <Activity className="w-8 h-8 mx-auto mb-2" />
+          <div style={{ padding: 48, textAlign: 'center', color: theme.textMuted }}>
+            <Activity style={{ width: 32, height: 32, margin: '0 auto 8px' }} />
             Cargando datos del cliente…
           </div>
         ) : (
-          <div className="p-5 space-y-4">
-            {/* KPIs principales */}
-            <div className="grid grid-cols-4 gap-2.5">
-              <KpiTile
-                label={`${MESES_FULL[mesMax - 1]} ${anio}`}
-                valor={fmtCompact(detalle.mesActual)}
-                delta={detalle.deltaMes}
-                subtitulo={`vs ${MESES_LBL[mesMax - 1]} ${anio - 1}: ${fmtCompact(detalle.mesActualPrev)}`}
+          <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* 4 KPIs sin bg */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
+              <KBox
+                lbl={`${MESES_FULL[mesMax - 1]} ${anio}`}
+                val={fmtCompact(detalle.mesActual)}
+                sub={detalle.deltaMes != null ? `${detalle.deltaMes >= 0 ? '↑' : '↓'} ${Math.abs(detalle.deltaMes).toFixed(1)}% vs ${MESES_LBL[mesMax - 1]} ${anio - 1}` : `vs ${fmtCompact(detalle.mesActualPrev)}`}
+                subColor={detalle.deltaMes == null ? theme.textMuted : detalle.deltaMes >= 0 ? green : red}
               />
-              <KpiTile
-                label={`Cierre ${mesMax >= 2 ? MESES_FULL[mesMax - 2] : '—'}`}
-                valor={mesMax >= 2 ? fmtCompact(detalle.cierreMesAnterior) : '—'}
-                delta={detalle.deltaCierre}
-                subtitulo={mesMax >= 2 ? `vs ${MESES_LBL[mesMax - 2]} ${anio - 1}: ${fmtCompact(detalle.cierreMesAnteriorPrev)}` : ''}
+              <KBox
+                lbl={mesMax >= 2 ? `Cierre ${MESES_FULL[mesMax - 2]}` : 'Cierre'}
+                val={mesMax >= 2 ? fmtCompact(detalle.cierreMesAnterior) : '—'}
+                sub={detalle.deltaCierre != null ? `${detalle.deltaCierre >= 0 ? '↑' : '↓'} ${Math.abs(detalle.deltaCierre).toFixed(1)}% YoY` : ''}
+                subColor={detalle.deltaCierre == null ? theme.textMuted : detalle.deltaCierre >= 0 ? green : red}
               />
-              <KpiTile
-                label={`YTD ${anio}`}
-                valor={fmtCompact(detalle.ytd)}
-                delta={detalle.deltaYTD}
-                subtitulo={`vs YTD ${anio - 1}: ${fmtCompact(detalle.ytdPrev)}`}
+              <KBox
+                lbl={`YTD ${anio}`}
+                val={fmtCompact(detalle.ytd)}
+                sub={detalle.deltaYTD != null ? `${detalle.deltaYTD >= 0 ? '↑' : '↓'} ${Math.abs(detalle.deltaYTD).toFixed(1)}% vs ${fmtCompact(detalle.ytdPrev)}` : `vs ${fmtCompact(detalle.ytdPrev)}`}
+                subColor={detalle.deltaYTD == null ? theme.textMuted : detalle.deltaYTD >= 0 ? green : red}
               />
-              <KpiTile
-                label="Actividad"
-                valor={`${detalle.mesesActivos} meses`}
-                delta={null}
-                subtitulo={`${detalle.skusDistintos} SKUs distintos`}
+              <KBox
+                lbl="Actividad"
+                val={`${detalle.mesesActivos} meses`}
+                sub={`${detalle.skusDistintos} SKUs distintos`}
+                last
               />
             </div>
 
-            {/* Sparkline / línea 12m */}
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-baseline justify-between mb-2">
-                <div className="text-sm font-medium text-gray-800">Facturación mensual</div>
-                <div className="text-[11px] text-gray-500">
-                  <span className="inline-block w-2 h-2 rounded-sm mr-1 align-middle" style={{ background: pal.mid }} />
-                  {anio}
-                  <span className="ml-3 inline-block w-2 h-2 rounded-sm mr-1 align-middle" style={{ background: pal.soft }} />
-                  {anio - 1}
+            {/* AreaChart Apple Health */}
+            <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '12px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+                <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Facturación mensual · vs {anio - 1}</p>
+                <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: canalCol }} />{anio}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anio - 1}</span>
                 </div>
               </div>
-              <ResponsiveContainer width="100%" height={180}>
-                <LineChart data={detalle.serie} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                  <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#888' }} />
-                  <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 10, fill: '#888' }} width={50} />
-                  <Tooltip formatter={(v) => fmtMoney(v)} />
-                  <Line type="monotone" dataKey={`${anio - 1}`} stroke={pal.soft} strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey={`${anio}`} stroke={pal.mid} strokeWidth={2.5} dot={{ r: 3, fill: pal.mid }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <div style={{ width: '100%', height: 148 }}>
+                <ResponsiveContainer>
+                  <AreaChart data={detalle.serie} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id={`fillCli-${String(clienteNombre).replace(/\W/g, '').slice(0, 20)}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={canalCol} stopOpacity={0.20} />
+                        <stop offset="100%" stopColor={canalCol} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
+                    <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
+                    <YAxis tickFormatter={(v) => v == null ? '' : (v/1e6 >= 1 ? '$' + (v/1e6).toFixed(0) + 'M' : '$' + (v/1e3).toFixed(0) + 'K')} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={40} />
+                    <Tooltip formatter={(v) => v != null ? fmtMoney(v) : '—'} contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }} labelStyle={{ color: theme.textMuted, fontWeight: 500 }} />
+                    <Area type="monotone" dataKey={`${anio - 1}`} stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
+                    <Area type="monotone" dataKey={`${anio}`}     stroke={canalCol} strokeWidth={2.2} fill={`url(#fillCli-${String(clienteNombre).replace(/\W/g, '').slice(0, 20)})`} dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: canalCol, strokeWidth: 2 }} isAnimationActive={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
-            {/* KPIs extras: SKUs últimos 3m + Margen + Categorías */}
-            <div className="grid grid-cols-3 gap-2.5">
-              <KpiTile
-                label="SKUs facturados últimos 3 meses"
-                valor={fmtInt(detalle.skusUlt3m)}
-                delta={null}
-                subtitulo={`${MESES_LBL[Math.max(0, mesMax - 3)]}–${MESES_LBL[mesMax - 1]} ${anio}`}
+            {/* 3 KPIs secundarios sin bg */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
+              <KBox
+                lbl="SKUs facturados últ. 3 meses"
+                val={fmtInt(detalle.skusUlt3m)}
+                sub={`${MESES_LBL[Math.max(0, mesMax - 3)]}–${MESES_LBL[mesMax - 1]} ${anio}`}
               />
               {detalle.margenPct != null && detalle.coberturaCosto >= 0.2 ? (
-                <KpiTile
-                  label="Margen promedio"
-                  valor={fmtPct(detalle.margenPct)}
-                  delta={null}
-                  subtitulo={`${fmtCompact(detalle.margenMonto)} · cobertura ${fmtPct(detalle.coberturaCosto * 100)}`}
+                <KBox
+                  lbl="Margen promedio YTD"
+                  val={fmtPct(detalle.margenPct)}
+                  sub={`${fmtCompact(detalle.margenMonto)} · cobertura ${fmtPct(detalle.coberturaCosto * 100)}`}
                 />
               ) : (
-                <ProximoKpi label="Margen promedio" nota={
-                  detalle.coberturaCosto > 0
-                    ? `Cobertura costo muy baja (${fmtPct(detalle.coberturaCosto * 100)})`
-                    : 'Sin costo en inventario_acteck'
-                } />
+                <div style={{ padding: '2px 14px', borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column' }}>
+                  <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Margen promedio YTD</p>
+                  <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 500, letterSpacing: '-0.02em', color: theme.textMuted, margin: '2px 0 0' }}>Próximamente</p>
+                  <p style={{ fontSize: 10, color: theme.textMuted, fontStyle: 'italic', margin: '2px 0 0' }}>
+                    {detalle.coberturaCosto > 0 ? `Cobertura ${fmtPct(detalle.coberturaCosto * 100)}` : 'Sin costo en inventario'}
+                  </p>
+                </div>
               )}
-              <ProximoKpi label="Categorías más fuertes" nota="Pendiente catálogo SKU→categoría" />
-            </div>
-
-            {/* Frecuencia mensual — calendario simple con monto visible */}
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-baseline justify-between mb-3">
-                <div className="text-sm font-medium text-gray-800">Frecuencia mensual</div>
-                <div className="text-[11px] text-gray-500">
-                  Compró {detalle.mesesActivos} de {mesMax} meses transcurridos {anio}
-                </div>
+              <div style={{ padding: '2px 14px', display: 'flex', flexDirection: 'column' }}>
+                <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Categorías más fuertes</p>
+                <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 500, letterSpacing: '-0.02em', color: theme.textMuted, margin: '2px 0 0' }}>Próximamente</p>
+                <p style={{ fontSize: 10, color: theme.textMuted, fontStyle: 'italic', margin: '2px 0 0' }}>Pendiente familia SKU</p>
               </div>
-              <FrecuenciaCalendario heatmap={detalle.heatmap} mesMax={mesMax} anio={anio} pal={pal} />
             </div>
 
-            {/* SKUs que crecen y caen */}
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="bg-gray-50 rounded-xl p-4">
-                <div className="text-sm font-medium text-emerald-700 mb-3 flex items-center gap-1.5">
-                  <TrendingUp className="w-4 h-4" /> Top SKUs que más crecen
-                </div>
+            {/* Calendario heatmap 12 meses */}
+            <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '12px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+                <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Frecuencia mensual</p>
+                <span style={{ fontSize: 10, color: theme.textMuted }}>Compró {detalle.mesesActivos} de {mesMax} meses transcurridos</span>
+              </div>
+              <FrecuenciaCalendarioApple heatmap={detalle.heatmap} mesMax={mesMax} anio={anio} canalCol={canalCol} />
+            </div>
+
+            {/* SKUs crecen / caen */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '12px 16px' }}>
+                <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '0 0 8px' }}>
+                  <span style={{ color: green, marginRight: 4 }}>▲</span> Top SKUs que más crecen
+                </p>
                 {detalle.crecen.length === 0 ? (
-                  <div className="text-xs text-gray-500">Sin movimiento positivo este año.</div>
+                  <p style={{ fontSize: 11, color: theme.textMuted, margin: 0 }}>Sin movimiento positivo este año.</p>
                 ) : (
-                  <SkuList items={detalle.crecen} descripciones={descripciones} positivo />
+                  <SkuListApple items={detalle.crecen} descripciones={descripciones} positivo />
                 )}
               </div>
-              <div className="bg-gray-50 rounded-xl p-4">
-                <div className="text-sm font-medium text-rose-700 mb-3 flex items-center gap-1.5">
-                  <TrendingDown className="w-4 h-4" /> Top SKUs que más caen
-                </div>
+              <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '12px 16px' }}>
+                <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '0 0 8px' }}>
+                  <span style={{ color: red, marginRight: 4 }}>▼</span> Top SKUs que más caen
+                </p>
                 {detalle.caen.length === 0 ? (
-                  <div className="text-xs text-gray-500">Sin caídas este año.</div>
+                  <p style={{ fontSize: 11, color: theme.textMuted, margin: 0 }}>Sin caídas este año.</p>
                 ) : (
-                  <SkuList items={detalle.caen} descripciones={descripciones} positivo={false} />
+                  <SkuListApple items={detalle.caen} descripciones={descripciones} positivo={false} />
                 )}
               </div>
             </div>
 
-            {/* Pestañas próximamente: Inventario del cliente y Sell Out */}
-            <div className="grid grid-cols-2 gap-2.5">
-              <ProximoBloque
-                titulo="Inventario del cliente"
-                nota="Stock que el cliente tiene en piso de venta — pendiente carga de datos por cliente."
-              />
-              <ProximoBloque
-                titulo="Sell Out del cliente"
-                nota="Ventas del cliente al consumidor final — pendiente integración por cliente."
-              />
+            {/* Placeholders futuros */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ background: theme.surface, border: `1px dashed ${theme.border}`, borderRadius: 12, padding: '14px 16px', textAlign: 'center' }}>
+                <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, margin: 0 }}>Inventario del cliente</p>
+                <p style={{ fontSize: 11, color: theme.textMuted, margin: '4px 0 0', fontStyle: 'italic' }}>Stock en piso de venta · pendiente ingesta por cliente</p>
+              </div>
+              <div style={{ background: theme.surface, border: `1px dashed ${theme.border}`, borderRadius: 12, padding: '14px 16px', textAlign: 'center' }}>
+                <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, margin: 0 }}>Sell Out del cliente</p>
+                <p style={{ fontSize: 11, color: theme.textMuted, margin: '4px 0 0', fontStyle: 'italic' }}>Ventas al consumidor final · pendiente integración</p>
+              </div>
             </div>
 
-            {/* Nota cuota */}
-            <div className="text-[11px] text-gray-500 px-1">
-              Cuota anual por cliente: pendiente de cargar.
-            </div>
+            <p style={{ fontSize: 10, color: theme.textMuted, margin: 0, padding: '0 4px', fontStyle: 'italic', textAlign: 'center' }}>
+              Cuota anual por cliente: pendiente de cargar
+            </p>
           </div>
         )}
       </div>
@@ -1223,6 +1249,65 @@ function ProximoBloque({ titulo, nota }) {
       <div className="text-sm font-medium text-gray-500">{titulo}</div>
       <div className="text-xs text-gray-400 mt-1.5">Próximamente</div>
       <div className="text-[11px] text-gray-400 mt-2 leading-relaxed">{nota}</div>
+    </div>
+  );
+}
+
+// ────────── Calendario iOS · 12 meses con intensidad por venta ──────────
+function FrecuenciaCalendarioApple({ heatmap, mesMax, anio, canalCol }) {
+  const { theme } = useTheme();
+  const pastMax = Math.max(...heatmap.slice(0, mesMax).map((h) => Number(h.act) || 0), 1);
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 4 }}>
+      {heatmap.map((h, i) => {
+        const esFuturo = i + 1 > mesMax;
+        const val = Number(h.act) || 0;
+        const intensidad = val > 0 ? Math.max(0.12, Math.min(1, val / pastMax)) : 0;
+        const superFuerte = intensidad >= 0.65;
+        return (
+          <div key={i} style={{
+            position: 'relative', aspectRatio: '1 / 1', borderRadius: 8,
+            background: esFuturo ? 'transparent' : (val > 0 ? `${canalCol}${Math.round(intensidad * 100).toString(16).padStart(2, '0')}` : theme.border),
+            border: esFuturo ? `1px dashed ${theme.border}` : 'none',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            opacity: esFuturo ? 0.5 : 1, fontVariantNumeric: 'tabular-nums',
+          }} title={esFuturo ? 'No transcurrido' : val > 0 ? `${MESES_FULL[i]} ${anio}: ${fmtMoney(val)}` : 'Sin compra'}>
+            <span style={{ fontSize: 9, color: superFuerte ? '#fff' : theme.textMuted, fontWeight: 600 }}>{MESES_LBL[i]}</span>
+            {!esFuturo && val > 0 && (
+              <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, color: superFuerte ? '#fff' : theme.text }}>
+                {fmtCompact(val)}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ────────── SkuList Apple compacto ──────────
+function SkuListApple({ items, descripciones, positivo }) {
+  const { theme } = useTheme();
+  const green = theme.green || '#34C759';
+  const red = theme.red || '#FF3B30';
+  return (
+    <div style={{ display: 'grid', gap: 4 }}>
+      {items.map((s, i) => {
+        const desc = descripciones.get(s.sku);
+        const nombre = desc ? `${s.sku} · ${desc}` : s.sku;
+        return (
+          <div key={s.sku} style={{ display: 'grid', gridTemplateColumns: '14px minmax(0, 1fr) 70px 50px', alignItems: 'center', gap: 8, padding: '3px 4px', borderRadius: 6 }}>
+            <span style={{ fontSize: 9, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{i + 1}</span>
+            <span style={{ fontFamily: '-apple-system, "SF Mono", ui-monospace, monospace', fontSize: 11, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={nombre}>{nombre}</span>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em', color: positivo ? green : red }}>
+              {positivo ? '+' : ''}{fmtCompact(s.delta)}
+            </span>
+            <span style={{ fontSize: 10, fontWeight: 500, color: positivo ? green : red, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+              {s.deltaPct != null ? `${s.deltaPct >= 0 ? '↑' : '↓'}${Math.abs(s.deltaPct).toFixed(0)}%` : ''}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
