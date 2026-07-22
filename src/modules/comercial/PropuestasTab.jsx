@@ -255,22 +255,16 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
   return (
     <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, padding: '0 4px', marginBottom: 12, flexWrap: 'wrap' }}>
-        <div>
-          <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
-            Dirección Comercial · Armador
-          </p>
-          <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
-            Propuestas.
-          </h2>
-          <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText }}>
-            Arma propuestas de venta por cliente con inventario, precios y sell-out.
-          </p>
-        </div>
-        <button onClick={onIniciar}
-          style={{ padding: '9px 18px', background: P.accent, color: '#FFFFFF', border: 0, borderRadius: 999, fontSize: 12, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', letterSpacing: '-0.01em' }}>
-          + Nueva propuesta
-        </button>
+      <div style={{ padding: '0 4px', marginBottom: 12 }}>
+        <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
+          Dirección Comercial · Armador
+        </p>
+        <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
+          Propuestas.
+        </h2>
+        <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText }}>
+          Arma propuestas de venta por cliente con inventario, precios y sell-out.
+        </p>
       </div>
 
       {/* Hero card */}
