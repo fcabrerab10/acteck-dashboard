@@ -124,6 +124,7 @@ export default function SellInCliente({ clienteKey }) {
   const [categoriaSel, setCategoriaSel] = useState(new Set());
   const [orden, setOrden] = useState({ col: null, dir: null }); // col: 'promedio' | 'total' | null
   const [skuAbierto, setSkuAbierto] = useState(null);
+  const [familiaSel, setFamiliaSel] = useState(null); // familia normalizada (Cap) o null = todas
 
   useEffect(() => {
     setLoading(true);
@@ -168,17 +169,27 @@ export default function SellInCliente({ clienteKey }) {
     return { min, ideal };
   }, [cuotas]);
 
+  // Facturación filtrada por familia seleccionada (todo lo demás intacto)
+  const familiaNormFor = (sku) => {
+    const fam = (roadmapMap.get(sku)?.familia || 'Sin familia').trim();
+    return fam.charAt(0).toUpperCase() + fam.slice(1).toLowerCase();
+  };
+  const facturacionFilt = useMemo(() => {
+    if (!familiaSel) return facturacion;
+    return facturacion.filter((r) => familiaNormFor(r.sku) === familiaSel);
+  }, [facturacion, familiaSel, roadmapMap]);
+
   const mensualPorAnio = useMemo(() => {
     const m = { [anioPrev]: Array(12).fill(0), [anioActual]: Array(12).fill(0) };
     const p = { [anioPrev]: Array(12).fill(0), [anioActual]: Array(12).fill(0) };
-    for (const r of facturacion) {
+    for (const r of facturacionFilt) {
       const y = r.anio, i = r.mes - 1;
       if (i < 0 || i > 11) continue;
       m[y][i] += Number(r.monto) || 0;
       p[y][i] += Number(r.piezas) || 0;
     }
     return { monto: m, piezas: p };
-  }, [facturacion, anioPrev, anioActual]);
+  }, [facturacionFilt, anioPrev, anioActual]);
 
   const chartData = useMemo(() => MESES.map((label, i) => {
     const cuota = cuotaPorMes.get(i + 1);
@@ -219,9 +230,9 @@ export default function SellInCliente({ clienteKey }) {
 
   const skusFacturados = useMemo(() => {
     const set = new Set();
-    for (const r of facturacion) if (r.anio === anioActual) set.add(r.sku);
+    for (const r of facturacionFilt) if (r.anio === anioActual) set.add(r.sku);
     return set;
-  }, [facturacion, anioActual]);
+  }, [facturacionFilt, anioActual]);
 
   const familiasYTD = useMemo(() => {
     const map = new Map();
@@ -253,13 +264,13 @@ export default function SellInCliente({ clienteKey }) {
 
   const matrizSku = useMemo(() => {
     const map = new Map();
-    for (const r of facturacion) {
+    for (const r of facturacionFilt) {
       if (r.anio !== anioActual) continue;
       if (!map.has(r.sku)) map.set(r.sku, Array(12).fill(0));
       map.get(r.sku)[r.mes - 1] += Number(r.piezas) || 0;
     }
     return map;
-  }, [facturacion, anioActual]);
+  }, [facturacionFilt, anioActual]);
 
   const roadmapOrdenado = useMemo(() => {
     if (!esGlobal) return roadmap;
@@ -283,6 +294,11 @@ export default function SellInCliente({ clienteKey }) {
       if (!esGlobal && !skusFacturados.has(r.sku)) continue;
       if (marcaSel.size > 0 && !marcaSel.has(r.marca)) continue;
       if (roadmapSel.size > 0 && !roadmapSel.has(r.rdmp)) continue;
+      if (familiaSel) {
+        const famNorm = ((r.familia || 'Sin familia').trim());
+        const famCap = famNorm.charAt(0).toUpperCase() + famNorm.slice(1).toLowerCase();
+        if (famCap !== familiaSel) continue;
+      }
       const catNorm = ((r.categoria || '').trim());
       const catCap = catNorm ? catNorm.charAt(0).toUpperCase() + catNorm.slice(1).toLowerCase() : '';
       if (categoriaSel.size > 0 && !categoriaSel.has(catCap)) continue;
@@ -320,7 +336,7 @@ export default function SellInCliente({ clienteKey }) {
       }
     }
     return rows;
-  }, [roadmapOrdenado, skusFacturados, busqueda, marcaSel, roadmapSel, categoriaSel, matrizSku, orden, esGlobal]);
+  }, [roadmapOrdenado, skusFacturados, busqueda, marcaSel, roadmapSel, categoriaSel, familiaSel, matrizSku, orden, esGlobal]);
 
   const totalesFila = useMemo(() => {
     const t = Array(12).fill(0);
@@ -591,35 +607,58 @@ export default function SellInCliente({ clienteKey }) {
 
           <div style={{ borderLeft: `1px solid ${theme.border}`, paddingLeft: 20 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-              <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>Composición familia.</h4>
-              <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{familiasYTD.length}</span>
+              <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>
+                Composición familia.
+                {familiaSel && (
+                  <button onClick={() => setFamiliaSel(null)}
+                    style={{ marginLeft: 8, background: theme.text, color: theme.surface, border: 0, borderRadius: 999, padding: '2px 10px', fontSize: 10, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {familiaSel} · ✕
+                  </button>
+                )}
+              </h4>
+              <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{familiasYTD.length} · click filtra</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '112px 1fr', gap: 12, alignItems: 'center' }}>
               <div style={{ position: 'relative', width: 112, height: 112 }}>
                 <ResponsiveContainer>
                   <PieChart>
-                    <Pie data={familiasYTD} dataKey="monto" cx="50%" cy="50%" innerRadius={36} outerRadius={54} paddingAngle={1} stroke="none">
-                      {familiasYTD.map((c, i) => <Cell key={i} fill={c.color} />)}
+                    <Pie data={familiasYTD} dataKey="monto" cx="50%" cy="50%" innerRadius={36} outerRadius={54} paddingAngle={1} stroke="none"
+                         onClick={(d) => setFamiliaSel(familiaSel === d.name ? null : d.name)}
+                         cursor="pointer" isAnimationActive={false}>
+                      {familiasYTD.map((c, i) => (
+                        <Cell key={i} fill={c.color}
+                              opacity={familiaSel && familiaSel !== c.name ? 0.25 : 1}
+                              stroke={familiaSel === c.name ? theme.text : 'none'}
+                              strokeWidth={familiaSel === c.name ? 2 : 0} />
+                      ))}
                     </Pie>
                     <Tooltip formatter={(v) => formatMXN(v)} contentStyle={{ fontSize: 11, borderRadius: 8, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text }} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                  <div style={{ fontSize: 8, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total</div>
+                  <div style={{ fontSize: 8, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{familiaSel || 'Total'}</div>
                   <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.025em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtMoneyShort(totalYTD.monto)}</div>
                 </div>
               </div>
               <div style={{ display: 'grid', gap: 3 }}>
-                {familiasYTD.slice(0, 5).map((c, i) => (
-                  <div key={c.name} style={{ display: 'grid', gridTemplateColumns: '12px 6px minmax(0, 1fr) 55px 40px', alignItems: 'center', gap: 6, padding: '2px 4px' }}>
-                    <span style={{ fontSize: 9, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{i + 1}</span>
-                    <span style={{ width: 6, height: 6, borderRadius: 2, background: c.color }} />
-                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.name}>{c.name}</span>
-                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtMoneyShort(c.monto)}</span>
-                    <span style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{c.pct.toFixed(1)}%</span>
-                  </div>
-                ))}
-                {familiasYTD.length > 5 && (
+                {familiasYTD.slice(0, 5).map((c, i) => {
+                  const active = familiaSel === c.name;
+                  const dim = familiaSel && !active;
+                  return (
+                    <div key={c.name}
+                      onClick={() => setFamiliaSel(active ? null : c.name)}
+                      style={{ display: 'grid', gridTemplateColumns: '12px 6px minmax(0, 1fr) 55px 40px', alignItems: 'center', gap: 6, padding: '2px 4px', borderRadius: 6, cursor: 'pointer',
+                        background: active ? (theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)') : 'transparent',
+                        opacity: dim ? 0.5 : 1, transition: 'background 120ms, opacity 120ms' }}>
+                      <span style={{ fontSize: 9, color: theme.textSubtle, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{i + 1}</span>
+                      <span style={{ width: 6, height: 6, borderRadius: 2, background: c.color }} />
+                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.name}>{c.name}</span>
+                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtMoneyShort(c.monto)}</span>
+                      <span style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{c.pct.toFixed(1)}%</span>
+                    </div>
+                  );
+                })}
+                {familiasYTD.length > 5 && !familiaSel && (
                   <div style={{ padding: '2px 4px', display: 'grid', gridTemplateColumns: '12px 6px 1fr', alignItems: 'center', gap: 6, opacity: 0.6 }}>
                     <span></span><span></span>
                     <span style={{ fontSize: 10, color: theme.textMuted, fontStyle: 'italic' }}>+ {familiasYTD.length - 5} familias más</span>
