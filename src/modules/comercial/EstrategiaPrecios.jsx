@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../lib/themeContext';
+import { TYPO } from '../../lib/themeTokens';
 import {
-  Activity, Search, X, TrendingUp, TrendingDown, AlertTriangle, Tag, Download, ChevronDown, ChevronRight, Check,
+  Activity, Search, X, TrendingUp, TrendingDown, AlertTriangle, Tag, Download, ChevronDown, ChevronRight, Check, Sparkles, ArrowRight, ArrowUp,
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import {
@@ -503,8 +505,11 @@ export default function EstrategiaPrecios() {
 }
 
 function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const anio = new Date().getFullYear();
 
   useEffect(() => {
@@ -645,177 +650,441 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
     ? precioAAA * (1 - Number(promo.promo_pct))
     : precioAAA;
 
+  // Delta precio Enero → mes actual
+  const deltaPrecioYTD = useMemo(() => {
+    if (!analisis?.serieMens?.length) return null;
+    const primero = analisis.serieMens.find((r) => r.precio != null);
+    const ultimo  = [...analisis.serieMens].reverse().find((r) => r.precio != null);
+    if (!primero || !ultimo || !primero.precio) return null;
+    return ((ultimo.precio - primero.precio) / primero.precio) * 100;
+  }, [analisis]);
+
+  // Recomendaciones del Copilot · data-driven
+  const recomendaciones = useMemo(() => {
+    if (!analisis) return [];
+    const recs = [];
+    // 1) Oportunidad · lista con delta más grande vs AAA con volumen relevante
+    const listasBajoAAA = Object.entries(precios || {})
+      .filter(([k, v]) => k !== 'Mayoreo AAA' && k !== PRECIO_BAJO_KEY && v != null && precioAAA > 0 && v < precioAAA)
+      .map(([k, v]) => ({ lista: k, precio: v, deltaAbs: precioAAA - v, deltaPct: ((v - precioAAA) / precioAAA) * 100 }))
+      .sort((a, b) => b.deltaAbs - a.deltaAbs);
+    if (listasBajoAAA.length > 0) {
+      const l = listasBajoAAA[0];
+      const impacto = l.deltaAbs * (analisis.piezasMesActual || 0);
+      recs.push({
+        id: 'op',
+        tag: 'Oportunidad',
+        tagColor: paletteFromTheme(theme).accent,
+        title: `Sube ${LISTAS_LBL[l.lista] || l.lista} ${Math.abs(Math.round(l.deltaPct))}%`,
+        desc: `Están $${Math.round(l.deltaAbs).toLocaleString('es-MX')} abajo de Mayoreo AAA. Impacto proyectado: $${Math.round(impacto).toLocaleString('es-MX')}/mes.`,
+      });
+    }
+    // 2) Revisar · cliente de mayor volumen con delta < -5%
+    const cli = analisis.clienteVolumen;
+    if (cli && cli.deltaLista != null && cli.deltaLista < -5) {
+      const impactoAnual = Math.abs(cli.deltaLista / 100) * cli.monto * (12 / (new Date().getMonth() + 1));
+      recs.push({
+        id: 'rev',
+        tag: 'Revisar',
+        tagColor: paletteFromTheme(theme).orange,
+        title: `${cli.cliente} renegociar precio`,
+        desc: `Paga ${Math.abs(cli.deltaLista).toFixed(1)}% bajo AAA con ${fmtInt(cli.piezas)} pz YTD. Impacto anualizado ~$${Math.round(impactoAnual / 1000).toLocaleString('es-MX')}K.`,
+      });
+    }
+    // 3) Alerta · si hay promo activa
+    if (promo && promo.campania) {
+      recs.push({
+        id: 'alert',
+        tag: 'Alerta',
+        tagColor: paletteFromTheme(theme).red,
+        title: `Promo "${promo.campania}" activa`,
+        desc: `Descuento vigente del ${Math.round(Number(promo.promo_pct) * 100)}%. Revisa la transición al terminar.`,
+      });
+    }
+    return recs;
+  }, [analisis, precios, precioAAA, promo, theme]);
+
+  // ═══ Estilo Apple para el drill-down ═══
+  const P = paletteFromTheme(theme);
+  const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
+  const heroText = theme.heroCardText || '#F5F5F7';
+  const heroMuted = 'rgba(255,255,255,0.7)';
+  const heroSubtle = 'rgba(255,255,255,0.55)';
+
   return (
-    <div className="border-t border-b border-gray-200 bg-white">
-      <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-100">
-        <div className="min-w-0 text-[10px]" style={{ color: PALETTE.blue.mid }}>
-          <span className="uppercase tracking-widest">{sku.categoria || 'Sin categoría'} · {sku.familia || '—'}</span>
-        </div>
-        <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-          <X className="w-3.5 h-3.5 text-gray-500" />
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16,
+      overflow: 'hidden', fontFamily: TYPO.fontText, marginTop: 4,
+    }}>
+      {/* Hero negro con precio héroe */}
+      <div style={{ position: 'relative', background: heroBg, color: heroText }}>
+        <button onClick={onClose}
+          style={{ position: 'absolute', top: 12, right: 14, background: 'transparent', border: 0, color: heroMuted, fontSize: 14, cursor: 'pointer', padding: '4px 8px', lineHeight: 1 }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#FFF'}
+          onMouseLeave={(e) => e.currentTarget.style.color = heroMuted}>
+          <X style={{ width: 14, height: 14 }} strokeWidth={2} />
         </button>
+        <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 24, alignItems: 'center' }}>
+          <div>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px',
+              borderRadius: 999, background: 'rgba(255,255,255,0.10)',
+              fontSize: 10, fontWeight: 500, color: heroMuted,
+              textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, fontFamily: TYPO.fontText,
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: P.teal }} />
+              {sku.categoria || 'Sin categoría'} · {sku.familia || '—'}
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: heroSubtle, marginLeft: 6 }}>{sku.sku}</span>
+            </div>
+            <h3 style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em',
+              color: '#FFF', margin: '4px 0 0', lineHeight: 1.2,
+            }}>
+              {sku.descripcion || sku.sku}
+            </h3>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSubtle, fontWeight: 500, marginTop: 12 }}>
+              Precio actual · Mayoreo AAA
+            </div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 38, fontWeight: 600, letterSpacing: '-0.03em',
+              margin: '6px 0 4px', fontVariantNumeric: 'tabular-nums', color: '#FFF',
+            }}>
+              {precioAAAneto != null ? fmtMoney(precioAAAneto) : '—'}
+              {promo && precioAAA != null && (
+                <span style={{ color: heroSubtle, textDecoration: 'line-through', fontSize: 20, marginLeft: 8, fontWeight: 500 }}>
+                  {fmtMoney(precioAAA)}
+                </span>
+              )}
+            </div>
+            <p style={{ fontSize: 11, color: heroMuted, lineHeight: 1.5, maxWidth: 340, margin: 0 }}>
+              {promo && (
+                <><strong style={{ color: '#FFF', fontWeight: 500 }}>{Math.round(Number(promo.promo_pct) * 100)}% de descuento activo ({promo.campania}).</strong> </>
+              )}
+              {deltaPrecioYTD != null && (
+                <>Precio {deltaPrecioYTD >= 0 ? 'subió' : 'bajó'} {Math.abs(deltaPrecioYTD).toFixed(1)}% en el año. </>
+              )}
+              {analisis?.clienteVolumen && analisis.clienteVolumen.deltaLista != null && (
+                <>El cliente de mayor volumen ({analisis.clienteVolumen.cliente}) paga {fmtMoney(analisis.clienteVolumen.precioProm)} — {analisis.clienteVolumen.deltaLista >= 0 ? '+' : ''}{analisis.clienteVolumen.deltaLista.toFixed(1)}% vs lista.</>
+              )}
+            </p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <HeroStat label="Piezas YTD" value={analisis ? fmtInt(analisis.piezasYTD) : '—'} />
+            <HeroStat label="Facturado YTD" value={analisis ? fmtCompact(analisis.montoYTD) : '—'} />
+            <HeroStat label={`Δ Precio ${anio}`} value={deltaPrecioYTD != null ? fmtPctDelta(deltaPrecioYTD) : '—'} valueColor={deltaPrecioYTD == null ? '#FFF' : deltaPrecioYTD >= 0 ? P.green : P.red} />
+            <HeroStat label={`Sellout ${analisis ? MESES_LBL[analisis.mesMax - 1] : ''}`} value={analisis ? `${fmtInt(analisis.piezasMesActual)} pz` : '—'} />
+          </div>
+        </div>
       </div>
 
       {cargando ? (
-        <div className="p-6 text-center text-gray-400 text-xs">
-          <Activity className="w-5 h-5 mx-auto mb-1" /> Cargando…
+        <div style={{ padding: 40, textAlign: 'center', color: theme.textMuted, fontSize: 12 }}>
+          <Activity style={{ width: 20, height: 20, marginBottom: 6 }} /> Cargando…
         </div>
       ) : (
-        <div className="p-3 grid grid-cols-3 gap-4">
-
-          <div>
-            <div className="text-[9px] uppercase tracking-wider text-gray-500 mb-1.5">Precios</div>
-            {bajo && (
-              <div className="mb-1.5" style={{ borderLeft: `2px solid ${PALETTE.red.mid}`, paddingLeft: 8 }}>
-                <div className="text-[9px]" style={{ color: PALETTE.red.mid }}>BAJO FACTURADO</div>
-                <div className="text-[15px] font-medium leading-tight" style={{ color: PALETTE.red.text }}>
-                  {fmtMoney(bajo.precio_bajo)}
-                </div>
-                <div className="text-[9px] text-gray-500">{bajo.cliente_bajo} · {fmtInt(bajo.piezas_bajo)} pz</div>
+        <>
+        {/* Body split · 2 paneles */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 0 }}>
+          {/* Panel izquierdo: precios + evolución */}
+          <div style={{ borderRight: `1px solid ${theme.border}`, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Precios por lista */}
+            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Precios por lista</h4>
+                <span style={{ fontSize: 10, color: theme.textMuted }}>orden de mayor a menor</span>
               </div>
-            )}
-            {precioAAA != null && (
-              <div className="mb-1.5" style={{ borderLeft: `2px solid ${PALETTE.blue.mid}`, paddingLeft: 8 }}>
-                <div className="text-[9px]" style={{ color: PALETTE.blue.mid }}>
-                  MAYOREO AAA
-                  {promo && (
-                    <span className="ml-1 px-1 py-0.5 rounded" style={{ background: PALETTE.amber.bg, color: PALETTE.amber.mid, fontSize: 8 }}>
-                      {promo.campania.slice(0, 12)} · {Math.round(Number(promo.promo_pct) * 100)}%
-                    </span>
-                  )}
-                </div>
-                <div className="text-[15px] font-medium leading-tight">
-                  {fmtMoney(precioAAAneto)}
-                  {promo && (
-                    <span className="ml-1.5 text-[10px] text-gray-400 line-through font-normal">{fmtMoney(precioAAA)}</span>
-                  )}
-                </div>
-              </div>
-            )}
-            {['DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'].map((l) => (
-              precios[l] != null ? (
-                <div key={l} className="flex justify-between items-baseline py-0.5 border-b border-gray-50 text-[11px]">
-                  <span className="text-gray-600">{LISTAS_LBL[l]}</span>
-                  <span className="font-medium">{fmtMoney(precios[l])}</span>
-                </div>
-              ) : null
-            ))}
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="text-[9px] uppercase tracking-wider text-gray-500">Evolución · {anio}</div>
-              <div className="flex items-center gap-1.5 text-[9px] text-gray-500">
-                <span><span style={{ display:'inline-block', width:8, height:2, background: PALETTE.blue.mid, verticalAlign:'middle', marginRight:2 }} />Precio</span>
-                <span><span style={{ display:'inline-block', width:8, height:8, background: PALETTE.amber.soft, verticalAlign:'middle', marginRight:2 }} />Piezas</span>
-              </div>
-            </div>
-            {analisis && analisis.serieMens.length > 0 ? (
-              <ResponsiveContainer width="100%" height={130}>
-                <ComposedChart data={analisis.serieMens} margin={{ top: 4, right: 2, left: -28, bottom: 0 }}>
-                  <XAxis dataKey="mes" tick={{ fontSize: 9, fill: '#888' }} interval={0} axisLine={false} tickLine={false} />
-                  <YAxis yAxisId="left" hide domain={['dataMin - 50', 'dataMax + 50']} />
-                  <YAxis yAxisId="right" orientation="right" hide />
-                  <Tooltip formatter={(v, name) => name === 'Precio' ? fmtMoney(v) : `${fmtInt(v)} pz`}
-                    labelStyle={{ fontSize: 10 }} contentStyle={{ fontSize: 10, padding: 6 }} />
-                  <Bar yAxisId="right" dataKey="piezas" name="Piezas" fill={PALETTE.amber.soft} radius={[2, 2, 0, 0]} />
-                  <Line yAxisId="left" type="monotone" dataKey="precio" name="Precio"
-                    stroke={PALETTE.blue.mid} strokeWidth={2} dot={{ r: 2.5, fill: PALETTE.blue.mid }} connectNulls />
-                </ComposedChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="text-[10px] text-gray-400 text-center py-6">Sin datos históricos</div>
-            )}
-            {analisis && (
-              <div className="mt-2 pt-2 border-t border-gray-100 text-[11px] space-y-0.5">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Sellout {MESES_LBL[analisis.mesMax - 1]}</span>
-                  <span>
-                    <span className="font-medium">{fmtInt(analisis.piezasMesActual)} pz</span>
-                    {analisis.deltaVsPrev3m != null && (
-                      <span className={`ml-1.5 text-[10px] ${
-                        analisis.deltaVsPrev3m >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                      }`}>
-                        {fmtPctDelta(analisis.deltaVsPrev3m)}
-                      </span>
+              {(() => {
+                const listasOrdenadas = ['Mayoreo AAA', 'DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL']
+                  .filter((l) => precios[l] != null)
+                  .map((l) => ({ lista: l, precio: precios[l] }))
+                  .sort((a, b) => b.precio - a.precio);
+                const maxPrecio = listasOrdenadas[0]?.precio || 1;
+                return (
+                  <>
+                    {bajo && (
+                      <ListaRow theme={theme} P={P} label="Precio bajo" precio={bajo.precio_bajo} maxPrecio={maxPrecio}
+                        subLabel={`${bajo.cliente_bajo} · ${fmtInt(bajo.piezas_bajo)}pz`} tone="orange" />
                     )}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">YTD</span>
-                  <span className="font-medium">{fmtInt(analisis.piezasYTD)} pz · {fmtCompact(analisis.montoYTD)}</span>
-                </div>
+                    {listasOrdenadas.map(({ lista, precio }) => (
+                      <ListaRow key={lista} theme={theme} P={P} label={LISTAS_LBL[lista] || lista}
+                        precio={precio} maxPrecio={maxPrecio}
+                        promoActiva={lista === 'Mayoreo AAA' && promo != null}
+                        tone={lista === 'Mayoreo AAA' ? 'accent' : null} />
+                    ))}
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Evolución 12 meses */}
+            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Evolución {anio} · precio + piezas</h4>
+                <span style={{ fontSize: 9.5, color: theme.textMuted }}>
+                  <span style={{ display: 'inline-block', width: 10, height: 2, background: P.accent, verticalAlign: 'middle', marginRight: 4 }} />Precio
+                  <span style={{ display: 'inline-block', width: 10, height: 8, background: `${P.accent}33`, verticalAlign: 'middle', marginLeft: 10, marginRight: 4 }} />Piezas
+                </span>
               </div>
-            )}
+              {analisis && analisis.serieMens.length > 0 ? (
+                <ResponsiveContainer width="100%" height={160}>
+                  <ComposedChart data={analisis.serieMens} margin={{ top: 6, right: 4, left: -24, bottom: 0 }}>
+                    <CartesianGrid stroke={theme.border} strokeDasharray="2 4" vertical={false} />
+                    <XAxis dataKey="mes" tick={{ fontSize: 9.5, fill: theme.textMuted }} interval={0} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="left" hide domain={['dataMin - 50', 'dataMax + 50']} />
+                    <YAxis yAxisId="right" orientation="right" hide />
+                    <Tooltip
+                      formatter={(v, name) => name === 'Precio' ? fmtMoney(v) : `${fmtInt(v)} pz`}
+                      labelStyle={{ fontSize: 10, color: theme.textMuted }}
+                      contentStyle={{ fontSize: 10, padding: 8, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8, fontFamily: TYPO.fontText }} />
+                    <Bar yAxisId="right" dataKey="piezas" name="Piezas" fill={`${P.accent}33`} radius={[3, 3, 0, 0]} />
+                    <Line yAxisId="left" type="monotone" dataKey="precio" name="Precio"
+                      stroke={P.accent} strokeWidth={2.5} dot={{ r: 3, fill: theme.surface, stroke: P.accent, strokeWidth: 2 }} connectNulls />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', padding: '24px 0' }}>Sin datos históricos</div>
+              )}
+            </div>
           </div>
 
-          <div>
-            <div className="text-[9px] uppercase tracking-wider text-gray-500 mb-1.5">Top clientes · YTD</div>
-            {!analisis || analisis.clientes.length === 0 ? (
-              <div className="text-[10px] text-gray-400">Sin facturación este año.</div>
-            ) : (
-              <>
-                {analisis.clientes.map((c, i) => {
-                  const critico = c.deltaLista != null && c.deltaLista < -10;
-                  return (
-                    <div key={c.cliente} className="flex justify-between items-baseline text-[11px] py-0.5 border-b border-gray-50">
-                      <span className="text-gray-800 truncate" style={{ maxWidth: 130 }} title={c.cliente}>
-                        <span className="text-gray-400 mr-1">{i + 1}.</span>{c.cliente}
+          {/* Panel derecho: clientes + promos */}
+          <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Top clientes */}
+            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Top clientes YTD</h4>
+                <span style={{ fontSize: 10, color: theme.textMuted }}>precio · Δ vs AAA</span>
+              </div>
+              {!analisis || analisis.clientes.length === 0 ? (
+                <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', padding: '12px 0' }}>Sin facturación este año.</div>
+              ) : (
+                <>
+                  {analisis.clientes.map((c, i) => {
+                    const critico = c.deltaLista != null && c.deltaLista < -8;
+                    const deltaColor = c.deltaLista == null || Math.abs(c.deltaLista) < 0.5 ? theme.textMuted
+                      : critico ? P.red
+                      : c.deltaLista < 0 ? P.orange : P.green;
+                    return (
+                      <div key={c.cliente} style={{
+                        display: 'grid', gridTemplateColumns: '20px 1fr auto 60px', gap: 8, alignItems: 'center',
+                        padding: '6px 4px', fontSize: 11,
+                      }}>
+                        <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 10, color: theme.textMuted, textAlign: 'center' }}>{i + 1}</span>
+                        <div>
+                          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.cliente}</div>
+                          <div style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{fmtInt(c.piezas)} pz · {fmtCompact(c.monto)}</div>
+                        </div>
+                        <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 11.5, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>
+                          {fmtMoney(c.precioProm)}
+                        </span>
+                        <span style={{ fontSize: 10, color: deltaColor, fontWeight: 500, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {c.deltaLista == null ? '—' :
+                            Math.abs(c.deltaLista) < 0.5 ? '=' :
+                            (c.deltaLista < 0 ? `▼ ${Math.abs(c.deltaLista).toFixed(1)}%` : `▲ ${c.deltaLista.toFixed(1)}%`)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {analisis.clientesRestantes.length > 0 && (
+                    <div style={{ textAlign: 'center', fontSize: 10, color: theme.textMuted, padding: '6px 0 0', borderTop: `1px dashed ${theme.border}`, marginTop: 4 }}>
+                      + {analisis.clientesRestantes.length} más · {fmtInt(analisis.clientesRestantes.reduce((s, c) => s + c.piezas, 0))} pz
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Promos timeline */}
+            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Promos aplicadas</h4>
+                <span style={{ fontSize: 10, color: theme.textMuted }}>
+                  {analisis && analisis.promosCount > 0 ? `${analisis.promosHist.length} de ${analisis.promosCount}` : '—'}
+                </span>
+              </div>
+              {!analisis || analisis.promosHist.length === 0 ? (
+                <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', padding: '12px 0' }}>Sin promociones registradas.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {analisis.promosHist.map((p, i) => (
+                    <div key={i} style={{
+                      display: 'grid', gridTemplateColumns: '58px 1fr auto', gap: 10, alignItems: 'center',
+                      padding: '6px 4px', fontSize: 11,
+                      borderBottom: i < analisis.promosHist.length - 1 ? `1px dashed ${theme.border}` : 'none',
+                    }}>
+                      <span style={{ fontSize: 9.5, color: theme.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {MESES_LBL[Number(p.mes) - 1]} {String(p.anio).slice(-2)}
                       </span>
-                      <span className="whitespace-nowrap">
-                        <span className="text-gray-700">{fmtInt(c.piezas)} pz</span>
-                        {c.deltaLista != null && (
-                          <span className={`ml-1.5 text-[10px] ${
-                            critico ? 'text-rose-700 font-medium'
-                            : c.deltaLista < 0 ? 'text-gray-500'
-                            : 'text-emerald-700'
-                          }`}>
-                            {fmtPctDelta(c.deltaLista)}
-                          </span>
-                        )}
+                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.campania}
+                      </span>
+                      <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: P.orange, textAlign: 'right', letterSpacing: '-0.01em' }}>
+                        {Math.round(Number(p.promo_pct) * 100)}%
                       </span>
                     </div>
-                  );
-                })}
-                {analisis.clientesRestantes.length > 0 && (
-                  <div className="text-[10px] text-gray-400 text-center py-1">
-                    + {analisis.clientesRestantes.length} más · {fmtInt(analisis.clientesRestantes.reduce((s, c) => s + c.piezas, 0))} pz
-                  </div>
-                )}
-              </>
-            )}
-
-            <div className="text-[9px] uppercase tracking-wider text-gray-500 mt-3 mb-1.5">
-              Promos aplicadas {analisis && analisis.promosCount > 0 && <span className="normal-case tracking-normal text-gray-400">· {analisis.promosCount}</span>}
+                  ))}
+                </div>
+              )}
             </div>
-            {!analisis || analisis.promosHist.length === 0 ? (
-              <div className="text-[10px] text-gray-400">Sin promociones registradas.</div>
-            ) : (
-              analisis.promosHist.map((p, i) => (
-                <div key={i} className="flex justify-between items-baseline text-[11px] py-0.5 border-b border-gray-50">
-                  <span>
-                    <span className="text-gray-500 mr-1">{MESES_LBL[Number(p.mes) - 1]} {String(p.anio).slice(-2)}</span>
-                    <span className={p.tipo === 'lista' ? 'text-blue-700' : 'text-gray-800'}>
-                      {p.campania}
-                    </span>
-                  </span>
-                  <span className="text-amber-800 font-medium">{Math.round(Number(p.promo_pct) * 100)}%</span>
-                </div>
-              ))
-            )}
-
-            {analisis && analisis.clienteVolumen && analisis.clienteVolumen.deltaLista != null && analisis.clienteVolumen.deltaLista < -8 && (
-              <div className="mt-3 rounded px-2 py-1.5 flex items-center gap-1.5" style={{ background: '#FEF3C7', color: '#78350F' }}>
-                <AlertTriangle className="w-3 h-3 shrink-0" />
-                <div className="text-[10px]">
-                  <span className="font-medium">{analisis.clienteVolumen.cliente}</span> pagó {Math.abs(analisis.clienteVolumen.deltaLista).toFixed(1)}% menos que Mayoreo AAA
-                </div>
-              </div>
-            )}
           </div>
-
         </div>
+
+        {/* Copilot Pricing · expandible */}
+        <CopilotPricing theme={theme} isDark={isDark} P={P} open={copilotOpen} setOpen={setCopilotOpen} recs={recomendaciones} />
+        </>
       )}
     </div>
   );
+}
+
+// ═══ Hero stat pill ═══
+function HeroStat({ label, value, valueColor }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>{label}</span>
+      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, marginTop: 3, fontVariantNumeric: 'tabular-nums', color: valueColor || '#FFF', letterSpacing: '-0.02em' }}>{value}</span>
+    </div>
+  );
+}
+
+// ═══ Fila de lista con barra ═══
+function ListaRow({ theme, P, label, precio, maxPrecio, subLabel, promoActiva, tone }) {
+  const width = maxPrecio > 0 ? Math.max(4, (precio / maxPrecio) * 100) : 0;
+  const barCol = tone === 'orange' ? P.orange : tone === 'accent' ? P.accent : P.accent;
+  const labelCol = tone === 'orange' ? P.orange : theme.text;
+  const priceCol = tone === 'orange' ? P.orange : theme.text;
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '100px 1fr auto 80px', gap: 8, alignItems: 'center',
+      padding: '6px 4px', fontSize: 11, borderBottom: `1px dashed ${theme.border}`,
+    }}>
+      <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 500, color: labelCol, letterSpacing: '-0.005em' }}>
+        {label}
+      </span>
+      <div style={{ height: 4, background: `${P.accent}1A`, borderRadius: 999, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${width}%`, background: barCol, borderRadius: 999 }} />
+      </div>
+      <span style={{
+        fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: priceCol,
+        letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', textAlign: 'right',
+      }}>
+        {fmtMoney(precio)}
+        {promoActiva && (
+          <span style={{
+            display: 'inline-block', padding: '1px 6px', borderRadius: 999,
+            fontSize: 8.5, fontWeight: 700, background: `${P.purple}22`, color: P.purple,
+            marginLeft: 6, letterSpacing: '0.02em',
+          }}>PROMO</span>
+        )}
+      </span>
+      <span style={{ fontSize: 10, color: theme.textMuted, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+        {subLabel || ''}
+      </span>
+    </div>
+  );
+}
+
+// ═══ Copilot Pricing · expandible ═══
+function CopilotPricing({ theme, isDark, P, open, setOpen, recs }) {
+  const grad = `linear-gradient(135deg, ${P.accent}0F, ${P.purple}0F)`;
+  return (
+    <div style={{
+      borderTop: `1px solid ${theme.border}`,
+      background: grad,
+      transition: 'all 200ms ease',
+    }}>
+      <button onClick={() => setOpen((o) => !o)}
+        style={{
+          width: '100%', padding: '12px 20px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: 'transparent', border: 0, cursor: 'pointer', fontFamily: 'inherit',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = `${P.accent}0A`}
+        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            width: 26, height: 26, borderRadius: 8,
+            background: `linear-gradient(135deg, ${P.accent}, ${P.purple})`,
+            color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Sparkles style={{ width: 13, height: 13 }} strokeWidth={2} />
+          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12.5, letterSpacing: '-0.01em', color: theme.text }}>Copilot Pricing</span>
+            <span style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>
+              {recs.length === 0 ? (
+                <>Sin recomendaciones para este SKU · click para chat</>
+              ) : (
+                <><strong style={{ color: P.accent, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{recs.length} recomendaci{recs.length === 1 ? 'ón' : 'ones'}</strong> para este SKU · click para {open ? 'plegar' : 'ver'}</>
+              )}
+            </span>
+          </div>
+        </div>
+        <span style={{
+          width: 24, height: 24, borderRadius: 999,
+          background: open ? `${P.accent}1A` : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'),
+          color: open ? P.accent : theme.textMuted,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'transform 200ms, background 200ms, color 200ms',
+          transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+        }}>
+          <ChevronDown style={{ width: 14, height: 14 }} strokeWidth={2.5} />
+        </span>
+      </button>
+
+      <div style={{
+        maxHeight: open ? 500 : 0, overflow: 'hidden',
+        transition: 'max-height 250ms ease',
+        borderTop: open ? `1px solid ${P.accent}22` : '1px solid transparent',
+      }}>
+        <div style={{ padding: '14px 20px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {recs.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(recs.length, 3)}, 1fr)`, gap: 10 }}>
+              {recs.map((r) => (
+                <div key={r.id} style={{
+                  background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12,
+                  padding: '12px 14px', cursor: 'pointer', transition: 'border-color 120ms',
+                }}
+                  onMouseEnter={(e) => e.currentTarget.style.borderColor = P.accent}
+                  onMouseLeave={(e) => e.currentTarget.style.borderColor = theme.border}>
+                  <span style={{
+                    display: 'inline-block', padding: '2px 8px', borderRadius: 999,
+                    fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
+                    background: `${r.tagColor}22`, color: r.tagColor, marginBottom: 6,
+                  }}>{r.tag}</span>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text, marginBottom: 4 }}>
+                    {r.title}
+                  </div>
+                  <p style={{ fontSize: 11, color: theme.textMuted, margin: 0, lineHeight: 1.4 }}>{r.desc}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
+            background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999, marginTop: recs.length > 0 ? 4 : 0,
+          }}>
+            <Sparkles style={{ width: 12, height: 12, color: P.accent }} strokeWidth={2} />
+            <input
+              placeholder="Pregúntame algo sobre este SKU (próximamente)…"
+              disabled
+              style={{ border: 0, outline: 0, background: 'transparent', font: 'inherit', fontSize: 12, flex: 1, color: theme.text, opacity: 0.6, cursor: 'not-allowed' }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══ Palette helper (mismo criterio que otras pestañas) ═══
+function paletteFromTheme(theme) {
+  return {
+    accent: theme.accent || '#007AFF',
+    green:  theme.green  || '#34C759',
+    orange: theme.orange || '#FF9500',
+    red:    theme.red    || '#FF3B30',
+    purple: theme.purple || '#AF52DE',
+    teal:   theme.teal   || '#5AC8FA',
+  };
 }
