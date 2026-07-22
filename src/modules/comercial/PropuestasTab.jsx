@@ -408,6 +408,9 @@ function Paso3Catalogo({ theme, skus, propuesta, setPropuesta, onSiguiente, onPr
   const [busqueda, setBusqueda] = useState('');
   const [filtroFamilia, setFiltroFamilia] = useState('todas');
   const [soloConInv, setSoloConInv] = useState(false);
+  // { col: 'invCliente' | 'invActeck' | 'promSellout' | null, dir: 'asc' | 'desc' }
+  // Default: sell-out 90d descendente (los más movidos primero)
+  const [orden, setOrden] = useState({ col: 'promSellout', dir: 'desc' });
 
   const familias = useMemo(() => {
     const s = new Set();
@@ -417,13 +420,27 @@ function Paso3Catalogo({ theme, skus, propuesta, setPropuesta, onSiguiente, onPr
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toUpperCase();
-    return skus.filter((r) => {
+    const arr = skus.filter((r) => {
       if (filtroFamilia !== 'todas' && r.familia !== filtroFamilia) return false;
       if (soloConInv && (r.invActeck || 0) <= 0) return false;
       if (q && !(String(r.sku).toUpperCase().includes(q) || String(r.descripcion).toUpperCase().includes(q))) return false;
       return true;
     });
-  }, [skus, busqueda, filtroFamilia, soloConInv]);
+    if (orden.col) {
+      const mult = orden.dir === 'asc' ? 1 : -1;
+      arr.sort((a, b) => ((Number(a[orden.col]) || 0) - (Number(b[orden.col]) || 0)) * mult);
+    }
+    return arr;
+  }, [skus, busqueda, filtroFamilia, soloConInv, orden]);
+
+  // Ciclo asc → desc → sin orden (vuelve al default sellout desc)
+  const toggleOrden = (col) => {
+    setOrden((prev) => {
+      if (prev.col !== col) return { col, dir: 'desc' };
+      if (prev.dir === 'desc') return { col, dir: 'asc' };
+      return { col: 'promSellout', dir: 'desc' };
+    });
+  };
 
   const toggleSku = (sku) => {
     setPropuesta((prev) => {
@@ -493,9 +510,9 @@ function Paso3Catalogo({ theme, skus, propuesta, setPropuesta, onSiguiente, onPr
                 <th style={{ ...thLeft, width: 110 }}>SKU</th>
                 <th style={thLeft}>Descripción</th>
                 <th style={{ ...thLeft, width: 120 }}>Familia</th>
-                <th style={{ ...thStyle, width: 60 }}>Inv cli</th>
-                <th style={{ ...thStyle, width: 60 }}>Inv Ack</th>
-                <th style={{ ...thStyle, width: 70 }}>SO 90d</th>
+                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invCliente" width={60}>Inv cli</SortableTh>
+                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invActeck" width={60}>Inv Ack</SortableTh>
+                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="promSellout" width={70}>SO 90d</SortableTh>
                 <th style={{ ...thStyle, width: 80 }}>Precio ref.</th>
               </tr>
             </thead>
@@ -535,6 +552,37 @@ function Paso3Catalogo({ theme, skus, propuesta, setPropuesta, onSiguiente, onPr
         disabledSiguiente={seleccionados === 0}
         labelNext={`Ajustar precios (${seleccionados})`} />
     </div>
+  );
+}
+
+// ═══ Header ordenable (asc / desc / clear) ═══
+function SortableTh({ theme, P, orden, onToggle, col, width, children }) {
+  const active = orden.col === col;
+  const dir = active ? orden.dir : null;
+  const color = active ? P.accent : theme.textMuted;
+  const arrow = dir === 'asc' ? '▲' : dir === 'desc' ? '▼' : '↕';
+  return (
+    <th
+      onClick={() => onToggle(col)}
+      style={{
+        position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
+        textAlign: 'right', padding: '8px 6px',
+        fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase',
+        letterSpacing: '0.06em', color,
+        borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap',
+        width, cursor: 'pointer', userSelect: 'none',
+      }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = theme.text; }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = theme.textMuted; }}
+      title={active
+        ? (dir === 'desc' ? 'Ordenado de mayor a menor · click para invertir' : 'Ordenado de menor a mayor · click para quitar')
+        : 'Ordenar por esta columna'}
+    >
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {children}
+        <span style={{ fontSize: 8, opacity: active ? 1 : 0.4, fontWeight: 700 }}>{arrow}</span>
+      </span>
+    </th>
   );
 }
 
