@@ -245,23 +245,23 @@ export default function SellInDrillDown(props) {
   const trendClass = yoy6m == null ? 'neutral' : yoy6m >= 0 ? 'pos' : 'neg';
   const yieldClass = yieldPct == null ? 'neutral' : yieldPct >= 95 ? 'pos' : yieldPct >= 85 ? 'warn' : 'neg';
 
-  // Insight card helper
+  // Insight card helper · más compacto
   const InsightCard = ({ IconComp, tone, chip, kpi, kpiTone, headline }) => {
     const iconBgMap = { blue: `${blue}22`, green: `${green}22`, orange: `${orange}22`, purple: `${purple}22`, red: `${red}22` };
     const iconColMap = { blue, green, orange, purple, red };
     const kpiColMap = { pos: green, neg: red, warn: orange, neutral: theme.text };
     return (
       <div style={{
-        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16,
-        padding: 14, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 128,
+        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12,
+        padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 92,
         fontFamily: TYPO.fontText, cursor: 'default',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{
-            width: 32, height: 32, borderRadius: 10, background: iconBgMap[tone], color: iconColMap[tone],
+            width: 26, height: 26, borderRadius: 8, background: iconBgMap[tone], color: iconColMap[tone],
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <IconComp style={{ width: 16, height: 16 }} strokeWidth={1.8} />
+            <IconComp style={{ width: 13, height: 13 }} strokeWidth={1.8} />
           </div>
           {chip && (
             <span style={{
@@ -272,11 +272,11 @@ export default function SellInDrillDown(props) {
           )}
         </div>
         <div style={{
-          fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em',
-          color: kpiColMap[kpiTone] || theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 4, lineHeight: 1,
+          fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em',
+          color: kpiColMap[kpiTone] || theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2, lineHeight: 1,
         }}>{kpi}</div>
         <div style={{
-          fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 500, color: theme.textMuted,
+          fontSize: 11, fontWeight: 400, color: theme.textMuted,
           lineHeight: 1.3, marginTop: 'auto',
         }}>{headline}</div>
       </div>
@@ -284,12 +284,12 @@ export default function SellInDrillDown(props) {
   };
 
   return (
-    <div style={{ background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, borderTop: `3px solid ${blue}` }}>
-      {/* Header inline compacto */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', borderBottom: `1px solid ${theme.border}`, flexWrap: 'wrap' }}>
-        <span style={{ fontFamily: '-apple-system, "SF Mono", ui-monospace, monospace', fontSize: 12, fontWeight: 600, color: theme.text }}>{sku}</span>
-        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 200 }}>{descripcion || '—'}</span>
-        <span style={{ fontSize: 11, color: theme.textMuted }}>· {marca || '—'}{categoria ? ` · ${categoria}` : ''}{familia ? ` · ${familia}` : ''}</span>
+    <div style={{ background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, borderTop: `3px solid ${blue}` }}>
+      {/* Header inline compacto sobre bg gris */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: theme.surface, borderBottom: `1px solid ${theme.border}`, flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: '-apple-system, "SF Mono", ui-monospace, monospace', fontSize: 11, fontWeight: 600, color: theme.text }}>{sku}</span>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 200 }}>{descripcion || '—'}</span>
+        <span style={{ fontSize: 10, color: theme.textMuted }}>· {marca || '—'}{categoria ? ` · ${categoria}` : ''}{familia ? ` · ${familia}` : ''}</span>
         {rdmp && (
           <span style={{
             fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
@@ -298,7 +298,7 @@ export default function SellInDrillDown(props) {
         )}
       </div>
 
-      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* 4 Insight cards Apple Fitness */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
           <InsightCard
@@ -346,9 +346,9 @@ export default function SellInDrillDown(props) {
         </div>
 
         {/* Detalle 2-col: chart + top clientes | precios + stock */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 10 }}>
           {/* Chart + top clientes */}
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '14px 16px' }}>
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '10px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
               <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Evolución 12 meses</p>
               <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
@@ -356,7 +356,7 @@ export default function SellInDrillDown(props) {
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anioPrev}</span>
               </div>
             </div>
-            <div style={{ width: '100%', height: 160 }}>
+            <div style={{ width: '100%', height: 128 }}>
               <ResponsiveContainer>
                 <AreaChart data={serieChart} margin={{ top: 6, right: 4, left: -8, bottom: 0 }}>
                   <defs>
@@ -430,7 +430,7 @@ export default function SellInDrillDown(props) {
           </div>
 
           {/* Precios + Stock */}
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '14px 16px' }}>
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '10px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
               <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Precio · {mesActualLabel} {anioActual}</p>
               {yieldPct != null && <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>Yield {yieldPct.toFixed(1)}%</span>}
