@@ -166,10 +166,10 @@ export const THEMES = {
   marfil: {
     key: 'marfil',
     label: '🎨 Marfil',
-    desc: 'apple.com/newsroom. Cream warm, azul cobalto profundo, terracotta.',
+    desc: 'apple.com/newsroom. Cream warm + hero cobalto como signature; acentos y semaforos iOS.',
     mode: 'light',
     // Superficies · patrón AirPods warm (bg cream + cards blancas + inverse dark)
-    bg: '#F7F3EC',           // cream warm
+    bg: '#F7F3EC',           // cream warm — signature del tema
     bgAlt: '#EEE7DA',
     surface: '#FFFFFF',      // cards blancas puras
     surfaceHover: 'rgba(26,26,26,0.03)',
@@ -179,32 +179,32 @@ export const THEMES = {
     text: '#1A1A1A',
     textOnInverse: '#F7F3EC',
     textOnDark: '#F7F3EC',
-    textMuted: '#575757',
+    textMuted: '#6E6E73',       // mismo que Claro (iOS neutral)
     textMutedOnInverse: '#7BB3EC',
-    textSubtle: '#8A7F6C',
+    textSubtle: '#86868B',      // mismo que Claro
     textMutedOnDark: 'rgba(247,243,236,0.7)',
     textSubtleOnDark: 'rgba(247,243,236,0.5)',
     // Bordes
     border: 'rgba(26,26,26,0.08)',
     borderStrong: '#1A1A1A',
     divider: 'rgba(26,26,26,0.08)',
-    // Acentos · Editorial (cobalto + terracotta) — diferenciador vs Claro/Midnight
-    accent:       '#0055B5',  // Azul cobalto profundo (no iOS blue)
-    accentHover:  '#004599',
-    accentDark:   '#7BB3EC',
-    accentSoft:   'rgba(0,85,181,0.10)',
-    eyebrowColor: '#A34209',  // Terracotta editorial
-    eyebrowSoft:  'rgba(196,82,13,0.10)',
-    // Semánticos · Paleta editorial deliberada
-    green:        '#1F7A3D',  // Verde bosque editorial
-    red:          '#B00020',  // Crimson editorial
-    orange:       '#A34209',  // Terracotta oscuro
-    orangeSoft:   '#C4520D',
-    pink:         '#B62755',  // Magenta oscuro
-    purple:       '#6E44A6',  // Púrpura editorial
-    teal:         '#0F6E56',  // Teal profundo
-    indigo:       '#3D2E7A',
-    yellow:       '#B25000',
+    // Acentos · iOS system colors — mismos que Claro
+    accent:       '#007AFF',  // iOS blue (era cobalto editorial)
+    accentHover:  '#0055B5',
+    accentDark:   '#2997FF',
+    accentSoft:   'rgba(0,122,255,0.10)',
+    eyebrowColor: '#6E6E73',  // muted gris (era terracotta editorial)
+    eyebrowSoft:  'rgba(0,0,0,0.05)',
+    // Semánticos · iOS palette (mismos que Claro)
+    green:        '#34C759',
+    red:          '#FF3B30',
+    orange:       '#FF9500',
+    orangeSoft:   '#FFB84D',
+    pink:         '#FF2D55',
+    purple:       '#AF52DE',
+    teal:         '#5AC8FA',
+    indigo:       '#5856D6',
+    yellow:       '#FFCC00',
     // Sombras — Marfil evita sombras, separa con color de superficie
     shadow: 'none',
     shadowHover: 'none',
