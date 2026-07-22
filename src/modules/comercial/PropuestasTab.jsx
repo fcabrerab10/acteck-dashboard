@@ -1,18 +1,18 @@
 // PropuestasTab.jsx — Armador de propuestas de venta por cliente.
-// Flujo wizard: landing → cliente → contexto → catálogo → ajustes → revisar.
+// Flujo: landing (con recientes) → cliente picker → one-page + copilot → revisar.
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { ClipboardList, Search, ChevronRight, Download, X } from 'lucide-react';
+import { ClipboardList, Search, ChevronRight, Download, X, Sparkles, ArrowLeft, Save } from 'lucide-react';
 
 // ═══ Constantes ═══
 const CLIENTES = [
-  { key: 'digitalife', label: 'Digitalife', iniciales: 'D' },
-  { key: 'pcel',       label: 'PCEL',       iniciales: 'P' },
-  { key: 'dicotech',   label: 'Dicotech',   iniciales: 'Di' },
+  { key: 'digitalife', label: 'Digitalife', iniciales: 'D', marca: 'Acteck · Balam Rush' },
+  { key: 'pcel',       label: 'PCEL',       iniciales: 'P', marca: 'Acteck' },
+  { key: 'dicotech',   label: 'Dicotech',   iniciales: 'Di', marca: 'Acteck · Balam Rush' },
 ];
 
 const FAMILIA_DIGITALIFE_HOJA = {
@@ -20,8 +20,6 @@ const FAMILIA_DIGITALIFE_HOJA = {
   'Sillas y Mesas': 'Sillas',
 };
 const familiaHoja = (familia) => FAMILIA_DIGITALIFE_HOJA[familia] || 'Todo lo demás';
-
-const PASOS = ['Cliente', 'Contexto', 'Catálogo', 'Ajustes', 'Revisar'];
 
 // Meses cerrados anteriores al actual (los últimos 3)
 function mesesCerrados() {
@@ -52,27 +50,66 @@ function clienteColor(theme, key) {
   const map = { digitalife: P.accent, pcel: P.red, dicotech: P.purple };
   return map[key] || P.accent;
 }
+function fmtInt(n) { return Number(n || 0).toLocaleString('es-MX'); }
+function fmtCompact(n) {
+  const v = Number(n) || 0;
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000) return `$${(v / 1_000_000).toFixed(v >= 10_000_000 ? 1 : 2)}M`;
+  if (abs >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
+  return `$${Math.round(v)}`;
+}
 
-// ═══ Componente principal ═══
+// ═══ Persistencia local de recientes ═══
+const STORAGE_KEY = 'propuestas_recientes_v1';
+function loadRecientes() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+function saveReciente(entry) {
+  try {
+    const all = loadRecientes().filter((r) => r.id !== entry.id);
+    all.unshift(entry);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all.slice(0, 24)));
+  } catch {}
+}
+function removeReciente(id) {
+  try {
+    const all = loadRecientes().filter((r) => r.id !== id);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+  } catch {}
+}
+function nuevaPropuestaId() {
+  return `prp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// COMPONENTE PRINCIPAL
+// ════════════════════════════════════════════════════════════════════
 export default function PropuestasTab() {
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';
 
-  // Estados del wizard
-  const [paso, setPaso] = useState(0); // 0 = landing, 1..5 = pasos
+  // Vistas: 0 = Landing, 1 = Cliente picker, 2 = One-Page, 3 = Revisar
+  const [vista, setVista] = useState(0);
   const [clienteKey, setClienteKey] = useState(null);
-  const [propuesta, setPropuesta] = useState({}); // { sku: { piezas, precio, listaSel } }
+  const [propuesta, setPropuesta] = useState({});
+  const [propuestaId, setPropuestaId] = useState(null);
 
-  // Data
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [skus, setSkus] = useState([]);
   const [contexto, setContexto] = useState(null);
+  const [recientesTick, setRecientesTick] = useState(0); // fuerza re-render de landing tras guardar
 
-  // Fetch al pasar de paso 1 → 2
+  // Fetch al entrar a la vista One-Page
   useEffect(() => {
-    if (paso < 2 || !clienteKey) return;
+    if (vista < 2 || !clienteKey) return;
     if (skus.length > 0) return;
+    setLoading(true);
     fetchAll(clienteKey).then(({ skus: rows, contexto: ctx }) => {
       setSkus(rows);
       setContexto(ctx);
@@ -82,349 +119,364 @@ export default function PropuestasTab() {
       setError(e.message || 'Error al cargar');
       setLoading(false);
     });
-    setLoading(true);
-  }, [paso, clienteKey, skus.length]);
+  }, [vista, clienteKey, skus.length]);
 
   const reiniciar = () => {
-    setPaso(0);
+    setVista(0);
     setClienteKey(null);
     setPropuesta({});
+    setPropuestaId(null);
     setSkus([]);
     setContexto(null);
     setError(null);
   };
 
-  const iniciar = (cli) => {
+  const iniciarCliente = (cli) => {
     setPropuesta({});
+    setPropuestaId(nuevaPropuestaId());
     setSkus([]);
     setContexto(null);
     setError(null);
     setClienteKey(cli);
-    setPaso(2);
+    setVista(2);
+  };
+
+  const abrirReciente = (r) => {
+    setPropuestaId(r.id);
+    setClienteKey(r.clienteKey);
+    setPropuesta(r.propuesta || {});
+    setSkus([]);
+    setContexto(null);
+    setError(null);
+    setVista(2);
+  };
+
+  const guardarBorrador = () => {
+    if (!clienteKey || !propuestaId) return;
+    const cli = CLIENTES.find((c) => c.key === clienteKey);
+    const propuestaLista = Object.entries(propuesta)
+      .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
+      .filter((r) => r.sku);
+    const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
+    const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+    saveReciente({
+      id: propuestaId,
+      clienteKey,
+      clienteLabel: cli?.label || clienteKey,
+      estado: 'Borrador',
+      tstamp: Date.now(),
+      propuesta,
+      resumen: { skus: propuestaLista.length, piezas, total },
+    });
+    setRecientesTick((t) => t + 1);
   };
 
   const cliente = CLIENTES.find((c) => c.key === clienteKey);
+  const P = paletteFromTheme(theme);
 
-  // ═══ Landing ═══
-  if (paso === 0) {
-    return <Landing theme={theme} onIniciar={() => setPaso(1)} />;
+  // ── Landing ──
+  if (vista === 0) {
+    return <Landing theme={theme} isDark={isDark} onIniciar={() => setVista(1)} onAbrirReciente={abrirReciente} tick={recientesTick} />;
   }
 
+  // ── Cliente picker ──
+  if (vista === 1) {
+    return <VistaClientePicker theme={theme} isDark={isDark} onElegir={iniciarCliente} onBack={reiniciar} />;
+  }
+
+  // ── Loading / error ──
+  if (loading) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center', color: theme.textMuted, fontSize: 12, fontFamily: TYPO.fontText }}>
+        Cargando data de {cliente?.label}…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div style={{ padding: 20, fontFamily: TYPO.fontText }}>
+        <div style={{ padding: 14, background: `${P.red}14`, border: `1px solid ${P.red}40`, borderRadius: 12, color: P.red, fontSize: 12 }}>
+          {error}
+        </div>
+      </div>
+    );
+  }
+
+  // ── One-Page ──
+  if (vista === 2) {
+    return <VistaOnePage
+      theme={theme} isDark={isDark}
+      cliente={cliente} contexto={contexto} skus={skus}
+      propuesta={propuesta} setPropuesta={setPropuesta}
+      onBack={reiniciar}
+      onGuardar={guardarBorrador}
+      onRevisar={() => { guardarBorrador(); setVista(3); }}
+    />;
+  }
+
+  // ── Revisar ──
+  if (vista === 3) {
+    return <VistaRevisar
+      theme={theme} isDark={isDark}
+      cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta}
+      onBack={() => setVista(2)}
+      onGuardar={guardarBorrador}
+    />;
+  }
+
+  return null;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// LANDING · Header + Hero + Recientes
+// ════════════════════════════════════════════════════════════════════
+function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
+  const P = paletteFromTheme(theme);
+  const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
+  const heroText = theme.heroCardText || '#F5F5F7';
+  const heroMuted = theme.textMutedOnDark || 'rgba(255,255,255,0.65)';
+  const heroSub = theme.textSubtleOnDark || 'rgba(255,255,255,0.5)';
+  const [recientes, setRecientes] = useState(() => loadRecientes());
+  useEffect(() => { setRecientes(loadRecientes()); }, [tick]);
+
+  const timeAgo = (ts) => {
+    const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+    if (s < 60) return `hace ${s}s`;
+    if (s < 3600) return `hace ${Math.floor(s / 60)}m`;
+    if (s < 86400) return `hace ${Math.floor(s / 3600)}h`;
+    return `hace ${Math.floor(s / 86400)}d`;
+  };
+  const estadoPill = (est) => {
+    if (est === 'Enviada') return { bg: `${P.green}22`, color: P.green };
+    if (est === 'Cerrada') return { bg: `${P.accent}22`, color: P.accent };
+    return { bg: `${P.orange}22`, color: P.orange };
+  };
+
   return (
-    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
+    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, padding: '0 4px', marginBottom: 4, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, padding: '0 4px', marginBottom: 12, flexWrap: 'wrap' }}>
         <div>
-          <button onClick={reiniciar}
-            style={{ background: 'transparent', border: 0, padding: 0, fontSize: 11, color: theme.textMuted, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-            onMouseEnter={(e) => e.currentTarget.style.color = theme.text}
-            onMouseLeave={(e) => e.currentTarget.style.color = theme.textMuted}>
+          <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
+            Dirección Comercial · Armador
+          </p>
+          <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
+            Propuestas.
+          </h2>
+          <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText }}>
+            Arma propuestas de venta por cliente con inventario, precios y sell-out.
+          </p>
+        </div>
+        <button onClick={onIniciar}
+          style={{ padding: '9px 18px', background: P.accent, color: '#FFFFFF', border: 0, borderRadius: 999, fontSize: 12, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', letterSpacing: '-0.01em' }}>
+          + Nueva propuesta
+        </button>
+      </div>
+
+      {/* Hero card */}
+      <div style={{
+        background: heroBg, color: heroText, borderRadius: 20, padding: '20px 24px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, marginBottom: 20,
+        position: 'relative', overflow: 'hidden', flexWrap: 'wrap',
+        border: isDark ? '1px solid rgba(255,255,255,0.06)' : 'none',
+      }}>
+        {isDark && (
+          <div style={{
+            position: 'absolute', top: '-30%', right: '-10%', width: '60%', height: '100%',
+            background: `radial-gradient(circle, ${P.accent}22 0%, transparent 70%)`, pointerEvents: 'none',
+          }} />
+        )}
+        <div style={{ position: 'relative', maxWidth: 520 }}>
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: heroSub, fontWeight: 500, margin: 0 }}>
+            Cierra el mes
+          </p>
+          <h2 style={{ fontFamily: TYPO.fontDisplay, fontSize: 24, fontWeight: 600, letterSpacing: '-0.025em', color: heroText, margin: '4px 0 6px' }}>
+            Empújalo con una propuesta ganadora.
+          </h2>
+          <p style={{ color: heroMuted, fontSize: 12, lineHeight: 1.5, margin: 0 }}>
+            El mes cierra pronto. Arma una propuesta con las recomendaciones del Copilot y déjala lista antes del corte.
+          </p>
+        </div>
+        <button onClick={onIniciar}
+          style={{ padding: '11px 22px', background: P.accent, color: '#FFFFFF', border: 0, borderRadius: 999, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', letterSpacing: '-0.01em', position: 'relative' }}>
+          + Nueva propuesta
+        </button>
+      </div>
+
+      {/* Recientes */}
+      <div style={{ padding: '0 4px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+          <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>
+            Propuestas recientes
+          </h3>
+          <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+            {recientes.length === 0 ? 'sin propuestas aún' : `${recientes.length} guardada${recientes.length === 1 ? '' : 's'}`}
+          </span>
+        </div>
+        {recientes.length === 0 ? (
+          <div style={{
+            background: theme.surface, border: `1px dashed ${theme.border}`, borderRadius: 14,
+            padding: 32, textAlign: 'center', color: theme.textMuted, fontSize: 12,
+          }}>
+            Al guardar borradores aparecerán aquí para volver a abrirlos con un click.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
+            {recientes.map((r) => {
+              const cli = CLIENTES.find((c) => c.key === r.clienteKey);
+              const col = clienteColor(theme, r.clienteKey);
+              const pill = estadoPill(r.estado);
+              return (
+                <div key={r.id} onClick={() => onAbrirReciente(r)}
+                  style={{
+                    background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
+                    padding: '14px 16px', cursor: 'pointer', transition: 'transform 120ms, border-color 120ms',
+                    fontFamily: TYPO.fontText,
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.borderColor = col; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = theme.border; }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: 8, background: col, color: '#FFF',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, letterSpacing: '-0.02em',
+                    }}>{cli?.iniciales || '?'}</div>
+                    <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', background: pill.bg, color: pill.color }}>{r.estado || 'Borrador'}</span>
+                  </div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>
+                    Propuesta {cli?.label || r.clienteLabel}
+                  </div>
+                  <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+                    {timeAgo(r.tstamp)}
+                  </div>
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>
+                      {r.resumen?.skus || 0} SKUs · {fmtInt(r.resumen?.piezas || 0)}pz
+                    </span>
+                    <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.015em', fontSize: 15, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtCompact(r.resumen?.total || 0)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// VISTA CLIENTE PICKER
+// ════════════════════════════════════════════════════════════════════
+function VistaClientePicker({ theme, isDark, onElegir, onBack }) {
+  const [kpis, setKpis] = useState({}); // { clienteKey: { cuota, facturado, gap } }
+
+  useEffect(() => {
+    (async () => {
+      const anio = MES_ACTUAL.anio, mes = MES_ACTUAL.mes;
+      const [cuotas, ventas] = await Promise.all([
+        supabase.from('cuotas_mensuales').select('cliente,cuota_min,cuota_meta').eq('anio', anio).eq('mes', mes),
+        supabase.from('v_ventas_mensuales_agg').select('cliente,sell_in').eq('anio', anio).eq('mes', mes),
+      ]);
+      const out = {};
+      (cuotas.data || []).forEach((r) => {
+        if (!out[r.cliente]) out[r.cliente] = { cuota: 0, facturado: 0 };
+        out[r.cliente].cuota += Number(r.cuota_min || r.cuota_meta || 0);
+      });
+      (ventas.data || []).forEach((r) => {
+        if (!out[r.cliente]) out[r.cliente] = { cuota: 0, facturado: 0 };
+        out[r.cliente].facturado += Number(r.sell_in || 0);
+      });
+      Object.values(out).forEach((v) => { v.gap = Math.max(0, v.cuota - v.facturado); });
+      setKpis(out);
+    })();
+  }, []);
+
+  const P = paletteFromTheme(theme);
+
+  return (
+    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, padding: '0 4px', marginBottom: 20, flexWrap: 'wrap' }}>
+        <div>
+          <button onClick={onBack}
+            style={{ background: 'transparent', border: 0, padding: 0, fontSize: 11, color: theme.textMuted, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             ← Propuestas
           </button>
           <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
             Nueva propuesta.
           </h2>
-          {cliente && (
-            <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
-              Para <strong style={{ color: theme.text, fontWeight: 500 }}>{cliente.label}</strong> · {MES_LABEL[MES_ACTUAL.mes - 1]} {MES_ACTUAL.anio}
-            </p>
-          )}
         </div>
       </div>
 
-      {/* Stepper */}
-      <Stepper theme={theme} paso={paso} isDark={isDark} onGoto={(n) => n <= paso && setPaso(n)} />
-
-      {/* Contexto card (visible desde paso 2) */}
-      {paso >= 2 && contexto && (
-        <ContextoCard theme={theme} cliente={cliente} contexto={contexto} isDark={isDark} />
-      )}
-
-      {loading && (
-        <div style={{ padding: 40, textAlign: 'center', color: theme.textMuted, fontSize: 12 }}>
-          Cargando data de {cliente?.label}…
-        </div>
-      )}
-      {error && (
-        <div style={{ padding: 14, background: `${paletteFromTheme(theme).red}14`, border: `1px solid ${paletteFromTheme(theme).red}40`, borderRadius: 12, color: paletteFromTheme(theme).red, fontSize: 12 }}>
-          {error}
-        </div>
-      )}
-
-      {/* Contenido por paso */}
-      {!loading && !error && paso === 1 && (
-        <Paso1Cliente theme={theme} onElegir={iniciar} isDark={isDark} />
-      )}
-      {!loading && !error && paso === 2 && contexto && (
-        <Paso2Contexto theme={theme} contexto={contexto} onSiguiente={() => setPaso(3)} onPrev={() => setPaso(1)} />
-      )}
-      {!loading && !error && paso === 3 && (
-        <Paso3Catalogo theme={theme} skus={skus} propuesta={propuesta} setPropuesta={setPropuesta}
-          onSiguiente={() => setPaso(4)} onPrev={() => setPaso(2)} isDark={isDark} />
-      )}
-      {!loading && !error && paso === 4 && (
-        <Paso4Ajustes theme={theme} skus={skus} propuesta={propuesta} setPropuesta={setPropuesta}
-          cliente={cliente} onSiguiente={() => setPaso(5)} onPrev={() => setPaso(3)} isDark={isDark} />
-      )}
-      {!loading && !error && paso === 5 && (
-        <Paso5Revisar theme={theme} skus={skus} propuesta={propuesta} cliente={cliente}
-          onPrev={() => setPaso(4)} isDark={isDark} />
-      )}
-    </div>
-  );
-}
-
-// ═══ Landing ═══
-function Landing({ theme, onIniciar }) {
-  const P = paletteFromTheme(theme);
-  const isDark = theme.mode === 'dark';
-  return (
-    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
-      <div style={{ padding: '0 4px', marginBottom: 20 }}>
-        <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
-          Dirección Comercial · Armador
-        </p>
-        <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
-          Propuestas.
-        </h2>
-        <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText }}>
-          Arma propuestas de venta por cliente con inventario, precios y sell-out en un solo flujo.
-        </p>
-      </div>
-
-      <div style={{
-        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 20,
-        padding: '48px 32px', textAlign: 'center', maxWidth: 640, margin: '32px auto',
-        fontFamily: TYPO.fontText,
-      }}>
-        <div style={{
-          width: 56, height: 56, borderRadius: 16, background: `${P.accent}18`, color: P.accent,
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
-        }}>
-          <ClipboardList style={{ width: 26, height: 26 }} strokeWidth={1.5} />
-        </div>
-        <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
-          Iniciar una propuesta nueva
+      <div style={{ padding: '20px 20px 40px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+        <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: theme.text, margin: '4px 0 6px' }}>
+          ¿Para qué cliente?
         </h3>
-        <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 8, marginBottom: 28, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
-          Elige el cliente, revisa su contexto de venta y arma la propuesta paso a paso.
+        <p style={{ fontSize: 13, color: theme.textMuted, marginBottom: 28, maxWidth: 420, lineHeight: 1.5 }}>
+          Elige el cliente y arma la propuesta con el Copilot en la siguiente pantalla.
         </p>
-        <button onClick={onIniciar}
-          style={{
-            padding: '11px 24px', background: P.accent, color: '#FFFFFF',
-            border: 0, borderRadius: 999, fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-            cursor: 'pointer', letterSpacing: '-0.01em',
-            transition: 'transform 120ms',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-1px)'}
-          onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}>
-          Nueva propuesta
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ═══ Stepper — pills iOS ═══
-function Stepper({ theme, paso, isDark, onGoto }) {
-  const P = paletteFromTheme(theme);
-  return (
-    <div style={{
-      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
-      padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 4,
-      overflowX: 'auto', fontFamily: TYPO.fontText,
-    }}>
-      {PASOS.map((label, i) => {
-        const n = i + 1;
-        const state = paso > n ? 'done' : paso === n ? 'active' : 'pending';
-        const dotBg = state === 'done' ? P.green : state === 'active' ? P.accent : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)');
-        const dotFg = state === 'pending' ? theme.textMuted : '#FFFFFF';
-        const lblColor = state === 'done' ? P.green : state === 'active' ? theme.text : theme.textMuted;
-        const clickable = state !== 'pending';  // solo pasos completados/activo son clickables
-        return (
-          <React.Fragment key={label}>
-            <button
-              type="button"
-              onClick={() => clickable && onGoto?.(n)}
-              disabled={!clickable}
-              title={clickable && state === 'done' ? `Volver a ${label}` : undefined}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
-                background: 'transparent', border: 0, padding: '4px 6px', borderRadius: 999,
-                cursor: clickable && state === 'done' ? 'pointer' : 'default',
-                fontFamily: 'inherit', color: 'inherit',
-                transition: 'background 120ms',
-              }}
-              onMouseEnter={(e) => { if (clickable && state === 'done') e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-            >
-              <span style={{
-                width: 22, height: 22, borderRadius: 999, background: dotBg, color: dotFg,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 10, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.01em',
-              }}>{state === 'done' ? '✓' : n}</span>
-              <span style={{
-                fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: state === 'active' ? 600 : 500,
-                letterSpacing: '-0.01em', color: lblColor,
-              }}>{label}</span>
-            </button>
-            {i < PASOS.length - 1 && (
-              <div style={{ flex: 1, minWidth: 20, height: 1, background: paso > n ? P.green : theme.border }} />
-            )}
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-// ═══ Card contexto cliente (persiste en pasos 2-5) ═══
-function ContextoCard({ theme, cliente, contexto, isDark }) {
-  const P = paletteFromTheme(theme);
-  const col = clienteColor(theme, cliente.key);
-  const cuotaPct = contexto.cuota > 0 ? (contexto.facturado / contexto.cuota * 100) : 0;
-  const toneGap = cuotaPct >= 100 ? P.green : cuotaPct >= 70 ? P.orange : P.red;
-
-  return (
-    <div style={{
-      background: theme.surface, border: `1px solid ${theme.border}`, borderLeft: `4px solid ${col}`,
-      borderRadius: 14, padding: '12px 14px', fontFamily: TYPO.fontText,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 10, background: col, color: '#FFFFFF',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, letterSpacing: '-0.02em',
-          }}>{cliente.iniciales}</div>
-          <div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>{cliente.label}</div>
-            <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{MES_LABEL[MES_ACTUAL.mes - 1]} {MES_ACTUAL.anio}</div>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, maxWidth: 780, width: '100%' }}>
+          {CLIENTES.map((c) => {
+            const col = clienteColor(theme, c.key);
+            const k = kpis[c.key];
+            const gap = k?.gap ?? 0;
+            const gapCol = gap > 300000 ? P.red : gap > 100000 ? P.orange : P.green;
+            return (
+              <button key={c.key} onClick={() => onElegir(c.key)}
+                style={{
+                  padding: 22, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16,
+                  cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+                  transition: 'transform 120ms, border-color 120ms, background 120ms',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.borderColor = col;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.borderColor = theme.border;
+                }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12, background: col, color: '#FFFFFF',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 16, letterSpacing: '-0.02em', marginBottom: 12,
+                }}>{c.iniciales}</div>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>{c.label}</div>
+                <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 3 }}>{c.marca}</div>
+                {k && (
+                  <div style={{
+                    marginTop: 14, paddingTop: 12, borderTop: `1px dashed ${theme.border}`,
+                    display: 'flex', justifyContent: 'space-between', fontSize: 10, color: theme.textMuted,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    <span>Cuota <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtCompact(k.cuota)}</strong></span>
+                    <span>Gap <strong style={{ color: gapCol, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtCompact(k.gap)}</strong></span>
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </div>
-        <span style={{ fontSize: 10, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 }}>
-          Contexto de venta del mes
-        </span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
-        <KpiMini theme={theme} label="Cuota" value={formatMXN(contexto.cuota)} />
-        <KpiMini theme={theme} label="Facturado" value={formatMXN(contexto.facturado)} sub={`${cuotaPct.toFixed(0)}% cuota`} />
-        <KpiMini theme={theme} label="Gap" value={formatMXN(Math.max(0, contexto.cuota - contexto.facturado))} color={toneGap} />
-        <KpiMini theme={theme} label="Días restantes" value={String(contexto.diasRestantes)} sub="para cerrar mes" />
-        <KpiMini theme={theme} label="SKUs disponibles" value={contexto.skusConInv?.toLocaleString('es-MX') || '—'} sub="con inv Acteck" />
-      </div>
-      {contexto.topVendidos && contexto.topVendidos.length > 0 && (
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${theme.border}`, fontSize: 11, color: theme.textMuted }}>
-          <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginRight: 10 }}>
-            Top 5 vendidos 90d:
-          </span>
-          {contexto.topVendidos.slice(0, 5).map((s, i) => (
-            <span key={s.sku}>
-              {i > 0 && <span style={{ color: theme.textSubtle || theme.textMuted, margin: '0 6px' }}>·</span>}
-              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 500, color: theme.text }}>{s.sku}</span>
-              <span style={{ color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}> ({s.piezas}pz)</span>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function KpiMini({ theme, label, value, sub, color }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: color || theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{sub}</div>}
-    </div>
-  );
-}
-
-// ═══ Paso 1: Elegir cliente ═══
-function Paso1Cliente({ theme, onElegir, isDark }) {
-  return (
-    <div style={{
-      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16,
-      padding: '32px 24px', textAlign: 'center', fontFamily: TYPO.fontText,
-    }}>
-      <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
-        ¿Para qué cliente?
-      </h3>
-      <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 6, marginBottom: 24 }}>
-        Selecciona el cliente para el que armarás la propuesta.
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, maxWidth: 720, margin: '0 auto' }}>
-        {CLIENTES.map((c) => {
-          const col = clienteColor(theme, c.key);
-          return (
-            <button key={c.key} onClick={() => onElegir(c.key)}
-              style={{
-                padding: 20, background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 14,
-                textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
-                transition: 'transform 120ms, border-color 120ms, background 120ms',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.borderColor = col;
-                e.currentTarget.style.background = `${col}0A`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'none';
-                e.currentTarget.style.borderColor = theme.border;
-                e.currentTarget.style.background = theme.bg;
-              }}>
-              <div style={{
-                width: 40, height: 40, borderRadius: 12, background: col, color: '#FFFFFF',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 15, letterSpacing: '-0.02em',
-                marginBottom: 12,
-              }}>{c.iniciales}</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, color: theme.text, letterSpacing: '-0.02em' }}>{c.label}</div>
-              <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                Iniciar propuesta <ChevronRight style={{ width: 12, height: 12 }} strokeWidth={2} />
-              </div>
-            </button>
-          );
-        })}
       </div>
     </div>
   );
 }
 
-// ═══ Paso 2: Confirmar contexto ═══
-function Paso2Contexto({ theme, contexto, onSiguiente, onPrev }) {
-  return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '18px 20px', fontFamily: TYPO.fontText }}>
-      <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
-        Contexto del cliente
-      </h3>
-      <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 6, marginBottom: 14, lineHeight: 1.5 }}>
-        Revisa la información de venta antes de elegir SKUs. La card de arriba muestra cuota, facturado, gap y los
-        productos con más movimiento en los últimos 90 días.
-      </p>
-      <div style={{
-        background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12,
-        padding: '12px 14px', fontSize: 11, color: theme.textMuted, display: 'grid', gap: 5,
-      }}>
-        <div><strong style={{ color: theme.text, fontWeight: 500 }}>Cuota del mes:</strong> lo que te propusiste facturar en {MES_LABEL[MES_ACTUAL.mes - 1]}.</div>
-        <div><strong style={{ color: theme.text, fontWeight: 500 }}>Facturado:</strong> lo que llevas facturado hasta hoy.</div>
-        <div><strong style={{ color: theme.text, fontWeight: 500 }}>Gap:</strong> lo que falta para cerrar la cuota.</div>
-        <div><strong style={{ color: theme.text, fontWeight: 500 }}>Top vendidos 90d:</strong> productos con más venta en los últimos 3 meses cerrados.</div>
-      </div>
-      <NavBotones theme={theme} onPrev={onPrev} onSiguiente={onSiguiente} labelNext="Ver catálogo" />
-    </div>
-  );
-}
-
-// ═══ Paso 3: Elegir SKUs ═══
-function Paso3Catalogo({ theme, skus, propuesta, setPropuesta, onSiguiente, onPrev, isDark }) {
+// ════════════════════════════════════════════════════════════════════
+// VISTA ONE-PAGE + COPILOT
+// ════════════════════════════════════════════════════════════════════
+function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPropuesta, onBack, onGuardar, onRevisar }) {
   const P = paletteFromTheme(theme);
+  const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
+  const heroText = theme.heroCardText || '#F5F5F7';
+  const heroSub = theme.textSubtleOnDark || 'rgba(255,255,255,0.5)';
+  const cliCol = clienteColor(theme, cliente.key);
+
   const [busqueda, setBusqueda] = useState('');
   const [filtroFamilia, setFiltroFamilia] = useState('todas');
-  const [soloConInv, setSoloConInv] = useState(false);
-  // { col: 'invCliente' | 'invActeck' | 'promSellout' | null, dir: 'asc' | 'desc' }
-  // Default: sell-out 90d descendente (los más movidos primero)
+  const [soloConInv, setSoloConInv] = useState(true);
   const [orden, setOrden] = useState({ col: 'sellout90', dir: 'desc' });
 
   const familias = useMemo(() => {
@@ -448,7 +500,6 @@ function Paso3Catalogo({ theme, skus, propuesta, setPropuesta, onSiguiente, onPr
     return arr;
   }, [skus, busqueda, filtroFamilia, soloConInv, orden]);
 
-  // Ciclo asc → desc → sin orden (vuelve al default sellout90 desc)
   const toggleOrden = (col) => {
     setOrden((prev) => {
       if (prev.col !== col) return { col, dir: 'desc' };
@@ -473,119 +524,456 @@ function Paso3Catalogo({ theme, skus, propuesta, setPropuesta, onSiguiente, onPr
     });
   };
 
-  const seleccionados = Object.keys(propuesta).length;
+  const editarSku = (sku, cambios) => {
+    setPropuesta((prev) => {
+      if (!(sku in prev)) return prev;
+      return { ...prev, [sku]: { ...prev[sku], ...cambios } };
+    });
+  };
 
-  const thStyle = { position: 'sticky', top: 0, background: theme.surface, zIndex: 1, textAlign: 'right', padding: '8px 6px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap' };
-  const thLeft = { ...thStyle, textAlign: 'left' };
-  const tdStyle = { padding: '5px 6px', borderTop: `1px solid ${theme.border}`, fontSize: 11, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
+  const aplicarPaquete = (skusIds) => {
+    setPropuesta((prev) => {
+      const next = { ...prev };
+      skusIds.forEach((sku) => {
+        if (sku in next) return;
+        const meta = skus.find((r) => r.sku === sku);
+        if (!meta) return;
+        const precioDefault = Object.values(meta.precios)[0] || 0;
+        const listaDefault = Object.keys(meta.precios)[0] || '';
+        next[sku] = {
+          piezas: Math.max(1, meta.promSellout || 1),
+          precio: precioDefault,
+          listaSel: listaDefault,
+        };
+      });
+      return next;
+    });
+  };
+
+  const propuestaLista = useMemo(() => Object.entries(propuesta)
+    .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
+    .filter((r) => r.sku), [propuesta, skus]);
+  const totalPropuesta = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
+  const piezasTotal = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+
+  const cuotaPct = contexto?.cuota > 0 ? Math.min(100, Math.round((contexto.facturado / contexto.cuota) * 100)) : 0;
+
+  const thBase = {
+    position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
+    textAlign: 'right', padding: '8px 6px',
+    fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase',
+    letterSpacing: '0.06em', color: theme.textMuted,
+    borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap',
+  };
+  const thLeft = { ...thBase, textAlign: 'left' };
 
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 14px', fontFamily: TYPO.fontText }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-        <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
-          Elige los productos
-        </h3>
-        <div style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-          <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{seleccionados}</strong> seleccionado{seleccionados !== 1 ? 's' : ''}
+    <div style={{ background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Header sticky */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 20,
+        background: `color-mix(in srgb, ${theme.surface} 92%, transparent)`,
+        backdropFilter: 'blur(20px) saturate(180%)',
+        borderBottom: `1px solid ${theme.border}`,
+        padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={onBack} title="Volver"
+            style={{ background: 'transparent', border: 0, padding: 4, color: theme.textMuted, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: 'inherit' }}>
+            <ArrowLeft style={{ width: 14, height: 14 }} strokeWidth={2} /> Propuestas
+          </button>
+          <div style={{ width: 1, height: 24, background: theme.border, margin: '0 4px' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 10, background: cliCol, color: '#FFF',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, letterSpacing: '-0.02em',
+            }}>{cliente.iniciales}</div>
+            <div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>
+                Propuesta · {cliente.label}
+              </div>
+              <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>
+                {MES_LABEL[MES_ACTUAL.mes - 1]} {MES_ACTUAL.anio} · borrador
+              </div>
+            </div>
+          </div>
         </div>
+        {contexto && (
+          <div style={{ display: 'flex', gap: 22, alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Cuota</div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{fmtCompact(contexto.cuota)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Facturado · {cuotaPct}%</div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{fmtCompact(contexto.facturado)}</div>
+              <div style={{ height: 5, background: theme.divider || theme.border, borderRadius: 999, overflow: 'hidden', marginTop: 4, width: 160 }}>
+                <div style={{ height: '100%', width: `${cuotaPct}%`, background: P.accent, borderRadius: 999 }} />
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Gap</div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: contexto.gap > 0 ? P.orange : P.green, fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{fmtCompact(contexto.gap)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Días</div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{contexto.diasRestantes}d</div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 999, height: 32, flex: 1, minWidth: 240, maxWidth: 320 }}>
-          <Search style={{ width: 12, height: 12, color: theme.textMuted }} strokeWidth={2} />
-          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar SKU o descripción…"
-            style={{ border: 0, outline: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 12, color: theme.text, flex: 1 }} />
-        </div>
-        <select value={filtroFamilia} onChange={(e) => setFiltroFamilia(e.target.value)}
-          style={{ height: 32, padding: '0 14px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999, fontSize: 12, color: theme.text, fontFamily: 'inherit', cursor: 'pointer' }}>
-          {familias.map((f) => <option key={f} value={f}>{f === 'todas' ? 'Todas las familias' : f}</option>)}
-        </select>
-        <label style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 14px',
-          background: soloConInv ? `${P.accent}18` : theme.surface, border: `1px solid ${soloConInv ? P.accent : theme.border}`,
-          borderRadius: 999, fontSize: 12, color: soloConInv ? P.accent : theme.text, cursor: 'pointer', fontWeight: soloConInv ? 600 : 500,
-        }}>
-          <input type="checkbox" checked={soloConInv} onChange={(e) => setSoloConInv(e.target.checked)} style={{ margin: 0 }} />
-          Solo con inventario
-        </label>
-        <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 'auto' }}>
-          {filtrados.length.toLocaleString('es-MX')} SKUs
-        </span>
-      </div>
+      {/* Body: catálogo (izq) + copilot (der) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', flex: 1, minHeight: 0 }}>
+        {/* Catálogo */}
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          {/* Toolbar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: `1px solid ${theme.border}`, background: theme.surface, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 999, height: 30, flex: 1, maxWidth: 260 }}>
+              <Search style={{ width: 12, height: 12, color: theme.textMuted }} />
+              <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar SKU o descripción…"
+                style={{ border: 0, outline: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 11, color: theme.text, flex: 1 }} />
+            </div>
+            <select value={filtroFamilia} onChange={(e) => setFiltroFamilia(e.target.value)}
+              style={{ height: 30, padding: '0 12px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999, fontSize: 11, color: theme.text, fontFamily: 'inherit', cursor: 'pointer' }}>
+              {familias.map((f) => <option key={f} value={f}>{f === 'todas' ? 'Todas las familias' : f}</option>)}
+            </select>
+            <button onClick={() => setSoloConInv((v) => !v)}
+              style={{
+                height: 30, padding: '0 12px', border: `1px solid ${soloConInv ? P.accent : theme.border}`, borderRadius: 999,
+                fontSize: 11, color: soloConInv ? P.accent : theme.text, fontFamily: 'inherit', cursor: 'pointer',
+                background: soloConInv ? `${P.accent}18` : theme.surface,
+                fontWeight: soloConInv ? 600 : 500,
+              }}>
+              Solo con inventario
+            </button>
+            <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 'auto' }}>
+              <strong style={{ color: P.accent, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{propuestaLista.length} sel</strong> · {fmtInt(filtrados.length)} SKUs
+            </span>
+          </div>
 
-      {/* Tabla */}
-      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
-        <div style={{ maxHeight: 'calc(100vh - 480px)', overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-            <thead>
-              <tr>
-                <th style={{ ...thLeft, width: 110 }}>SKU</th>
-                <th style={thLeft}>Descripción</th>
-                <th style={{ ...thLeft, width: 120 }}>Familia</th>
-                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invCliente" width={64}>Inv cli</SortableTh>
-                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invActeck" width={64}>Inv Ack</SortableTh>
-                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="sellout90" width={72}>SO 90d</SortableTh>
-                <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="promSellout" width={72}>Prom 90d</SortableTh>
-                <th style={{ ...thStyle, width: 84 }}>Precio ref.</th>
-                <th style={{ ...thStyle, width: 42, textAlign: 'center' }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtrados.map((r) => {
-                const sel = r.sku in propuesta;
-                const precioRef = Object.values(r.precios)[0];
-                const fmtNum = (v) => v != null && v !== 0 ? Number(v).toLocaleString('es-MX') : null;
-                const invCli = fmtNum(r.invCliente);
-                const invAck = fmtNum(r.invActeck);
-                const so90 = fmtNum(r.sellout90);
-                const prom = fmtNum(r.promSellout);
-                return (
-                  <tr key={r.sku}
-                    onClick={() => toggleSku(r.sku)}
-                    style={{
-                      cursor: 'pointer',
-                      background: sel ? `${P.accent}${isDark ? '1F' : '0D'}` : 'transparent',
-                      height: 32,
-                      transition: 'background 100ms',
-                    }}
-                    onMouseEnter={(e) => { if (!sel) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
-                    onMouseLeave={(e) => { if (!sel) e.currentTarget.style.background = 'transparent'; }}>
-                    <td style={{ ...tdStyle, textAlign: 'left', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: theme.text, paddingLeft: 12 }}>{r.sku}</td>
-                    <td style={{ ...tdStyle, textAlign: 'left', fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.descripcion}>{r.descripcion || '—'}</td>
-                    <td style={{ ...tdStyle, textAlign: 'left', color: theme.textMuted, fontSize: 10.5 }}>{r.familia || '—'}</td>
-                    <td style={tdStyle}>{invCli || <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
-                    <td style={tdStyle}>{invAck || <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
-                    <td style={{ ...tdStyle, fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text }}>{so90 || <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}</td>
-                    <td style={{ ...tdStyle, color: theme.textMuted }}>{prom || <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
-                    <td style={{ ...tdStyle, color: theme.textMuted }}>{precioRef != null ? formatMXN(precioRef) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
-                    <td style={{ ...tdStyle, textAlign: 'center', paddingRight: 12 }}>
-                      <span aria-hidden style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        width: 20, height: 20, borderRadius: 999,
-                        background: sel ? P.accent : 'transparent',
-                        border: sel ? `1px solid ${P.accent}` : `1.5px solid ${isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.20)'}`,
-                        color: '#FFFFFF', fontSize: 11, lineHeight: 1, fontWeight: 700,
-                        transition: 'background 120ms, border-color 120ms',
-                      }}>{sel ? '✓' : ''}</span>
+          {/* Tabla */}
+          <div style={{ flex: 1, overflow: 'auto', background: theme.surface, minHeight: 400 }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thLeft, width: 96 }}>SKU</th>
+                  <th style={thLeft}>Descripción</th>
+                  <th style={{ ...thLeft, width: 110 }}>Familia</th>
+                  <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invCliente" width={60}>Inv cli</SortableTh>
+                  <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invActeck" width={60}>Inv Ack</SortableTh>
+                  <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="sellout90" width={64}>SO 90d</SortableTh>
+                  <th style={{ ...thBase, width: 80 }}>Piezas</th>
+                  <th style={{ ...thLeft, width: 170 }}>Precio</th>
+                  <th style={{ ...thBase, width: 92 }}>Total</th>
+                  <th style={{ ...thBase, width: 40, textAlign: 'center' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtrados.slice(0, 300).map((r) => {
+                  const sel = r.sku in propuesta;
+                  const val = propuesta[r.sku] || {};
+                  const listasKeys = Object.keys(r.precios);
+                  const precioActual = Number(val.precio || 0);
+                  const totalFila = (Number(val.piezas) || 0) * precioActual;
+                  return (
+                    <tr key={r.sku}
+                      style={{
+                        background: sel ? `${P.accent}${isDark ? '1F' : '0D'}` : 'transparent',
+                        transition: 'background 100ms',
+                        borderTop: `1px solid ${theme.border}`,
+                      }}>
+                      <td style={{ padding: '6px 6px 6px 12px', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: theme.text }}>{r.sku}</td>
+                      <td style={{ padding: '6px 6px', fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
+                      <td style={{ padding: '6px 6px', color: theme.textMuted, fontSize: 10.5 }}>{r.familia || '—'}</td>
+                      <td style={{ padding: '6px 6px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{r.invCliente ? fmtInt(r.invCliente) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
+                      <td style={{ padding: '6px 6px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{r.invActeck ? fmtInt(r.invActeck) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
+                      <td style={{ padding: '6px 6px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{r.sellout90 ? fmtInt(r.sellout90) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}</td>
+                      {/* Piezas (editable si sel) */}
+                      <td style={{ padding: '4px 6px', textAlign: 'right' }}>
+                        {sel ? (
+                          <input type="number" min="0" value={val.piezas ?? ''}
+                            onChange={(e) => editarSku(r.sku, { piezas: Number(e.target.value) || 0 })}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ width: 62, padding: '4px 8px', textAlign: 'right', fontSize: 11, fontFamily: 'inherit', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, color: theme.text, outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
+                        ) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
+                      </td>
+                      {/* Precio (select lista + custom si sel) */}
+                      <td style={{ padding: '4px 6px' }}>
+                        {sel ? (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <select value={val.listaSel || ''}
+                              onChange={(e) => {
+                                const lst = e.target.value;
+                                editarSku(r.sku, { listaSel: lst, precio: lst === '__custom' ? val.precio : (r.precios[lst] || 0) });
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ flex: 1, minWidth: 0, padding: '4px 6px', fontSize: 10, fontFamily: 'inherit', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, color: theme.text, outline: 'none', cursor: 'pointer' }}>
+                              {listasKeys.map((k) => <option key={k} value={k}>{k} · {formatMXN(r.precios[k])}</option>)}
+                              <option value="__custom">Personalizado</option>
+                            </select>
+                            {val.listaSel === '__custom' && (
+                              <input type="number" min="0" step="0.01" value={val.precio ?? ''}
+                                onChange={(e) => editarSku(r.sku, { precio: Number(e.target.value) || 0 })}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ width: 68, padding: '4px 6px', textAlign: 'right', fontSize: 10.5, fontFamily: 'inherit', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, color: theme.text, outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ paddingLeft: 8, fontSize: 10, color: theme.textSubtle || theme.textMuted }}>Marcar para editar</span>
+                        )}
+                      </td>
+                      {/* Total */}
+                      <td style={{ padding: '6px 6px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: sel ? theme.text : (theme.textSubtle || theme.textMuted), fontSize: 12, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>
+                        {sel ? formatMXN(totalFila) : '—'}
+                      </td>
+                      {/* Check */}
+                      <td style={{ padding: '4px 4px 4px 4px', textAlign: 'center', paddingRight: 12 }}>
+                        <span onClick={() => toggleSku(r.sku)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            width: 22, height: 22, borderRadius: 999, cursor: 'pointer',
+                            background: sel ? P.accent : 'transparent',
+                            border: sel ? `1px solid ${P.accent}` : `1.5px solid ${isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.20)'}`,
+                            color: '#FFF', fontSize: 12, fontWeight: 700, lineHeight: 1,
+                            transition: 'background 120ms, border-color 120ms',
+                          }}>{sel ? '✓' : ''}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filtrados.length > 300 && (
+                  <tr>
+                    <td colSpan={10} style={{ padding: 12, textAlign: 'center', fontSize: 11, color: theme.textMuted, borderTop: `1px solid ${theme.border}` }}>
+                      Mostrando 300 de {fmtInt(filtrados.length)} · usa el buscador para filtrar
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                )}
+              </tbody>
+            </table>
+          </div>
 
-      <NavBotones theme={theme} onPrev={onPrev} onSiguiente={onSiguiente}
-        disabledSiguiente={seleccionados === 0}
-        labelNext={`Ajustar precios (${seleccionados})`} />
+          {/* Footer sticky negro Apple */}
+          <div style={{
+            position: 'sticky', bottom: 0, zIndex: 20,
+            background: heroBg, color: heroText,
+            borderTop: isDark ? '1px solid rgba(255,255,255,0.08)' : 'none',
+            padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+          }}>
+            <div style={{ display: 'flex', gap: 32 }}>
+              <div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>SKUs</div>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{propuestaLista.length}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>Piezas</div>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtInt(piezasTotal)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>Total propuesta</div>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{formatMXN(totalPropuesta)}</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={onGuardar}
+                style={{ padding: '9px 18px', background: 'rgba(255,255,255,0.12)', border: 0, borderRadius: 999, color: '#FFF', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Save style={{ width: 12, height: 12 }} strokeWidth={2} />
+                Guardar borrador
+              </button>
+              <button onClick={onRevisar} disabled={propuestaLista.length === 0}
+                style={{
+                  padding: '9px 20px',
+                  background: propuestaLista.length === 0 ? 'rgba(255,255,255,0.10)' : P.accent,
+                  color: propuestaLista.length === 0 ? heroSub : '#FFF',
+                  border: 0, borderRadius: 999, fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
+                  cursor: propuestaLista.length === 0 ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 6, letterSpacing: '-0.01em',
+                }}>
+                Revisar <ChevronRight style={{ width: 12, height: 12 }} strokeWidth={2} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Copilot lateral derecha */}
+        <Copilot theme={theme} isDark={isDark} P={P} cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta} onAplicarPaquete={aplicarPaquete} />
+      </div>
     </div>
   );
 }
 
-// ═══ Header ordenable (asc / desc / clear) ═══
+// ════════════════════════════════════════════════════════════════════
+// COPILOT · sugerencias inteligentes
+// ════════════════════════════════════════════════════════════════════
+function Copilot({ theme, isDark, P, cliente, contexto, skus, propuesta, onAplicarPaquete }) {
+  const [aplicadas, setAplicadas] = useState(new Set());
+
+  const sugerencias = useMemo(() => {
+    if (!skus || skus.length === 0) return [];
+    // 1) Top 12 SO 90d con inv comercial
+    const topSO = skus
+      .filter((r) => (r.sellout90 || 0) > 0 && (r.invActeck || 0) > 100)
+      .slice(0, 12);
+    const topSOTotal = topSO.reduce((s, r) => {
+      const p = Object.values(r.precios || {})[0] || 0;
+      return s + (r.promSellout || 1) * p;
+    }, 0);
+
+    // 2) Cobertura baja del cliente (invCliente < promSellout · con inv Acteck > 0)
+    const covBaja = skus
+      .filter((r) => (r.promSellout || 0) > 0 && (r.invCliente || 0) < (r.promSellout || 0) && (r.invActeck || 0) > 0)
+      .sort((a, b) => (a.invCliente || 0) - (b.invCliente || 0))
+      .slice(0, 10);
+    const covBajaTotal = covBaja.reduce((s, r) => {
+      const p = Object.values(r.precios || {})[0] || 0;
+      const suggPz = Math.max(1, (r.promSellout || 1) * 2 - (r.invCliente || 0));
+      return s + suggPz * p;
+    }, 0);
+
+    // 3) Skus con múltiples listas de precios — precio más agresivo
+    const multiLista = skus
+      .filter((r) => Object.keys(r.precios || {}).length > 1 && (r.sellout90 || 0) > 0 && (r.invActeck || 0) > 0)
+      .slice(0, 8);
+    const multiTotal = multiLista.reduce((s, r) => {
+      const listaB = Object.values(r.precios || {}).sort((a, b) => a - b)[0] || 0;
+      return s + (r.promSellout || 1) * listaB;
+    }, 0);
+
+    return [
+      {
+        id: 'top-so',
+        tag: 'Top movidos',
+        tagColor: P.green,
+        title: `Top ${topSO.length} SO 90d con inv`,
+        desc: 'Los más movidos con stock comercial suficiente para empujar sin agotar CEDIS.',
+        skus: topSO.length,
+        piezas: topSO.reduce((s, r) => s + (r.promSellout || 1), 0),
+        monto: topSOTotal,
+        applyIds: topSO.map((r) => r.sku),
+      },
+      {
+        id: 'cov-baja',
+        tag: 'Reposición',
+        tagColor: P.orange,
+        title: 'Cobertura baja del cliente',
+        desc: `${covBaja.length} SKUs donde ${cliente.label} tiene menos inventario del que vende. Repón hasta cubrir 60 días.`,
+        skus: covBaja.length,
+        piezas: covBaja.reduce((s, r) => s + Math.max(1, (r.promSellout || 1) * 2 - (r.invCliente || 0)), 0),
+        monto: covBajaTotal,
+        applyIds: covBaja.map((r) => r.sku),
+      },
+      {
+        id: 'multi-lista',
+        tag: 'Oportunidad',
+        tagColor: P.accent,
+        title: 'Precio agresivo (múltiples listas)',
+        desc: `${multiLista.length} SKUs con varias listas — puedes negociar la más baja para volumen.`,
+        skus: multiLista.length,
+        piezas: multiLista.reduce((s, r) => s + (r.promSellout || 1), 0),
+        monto: multiTotal,
+        applyIds: multiLista.map((r) => r.sku),
+      },
+    ].filter((s) => s.skus > 0);
+  }, [skus, cliente.label, P]);
+
+  const aplicar = (sug) => {
+    onAplicarPaquete(sug.applyIds);
+    setAplicadas((prev) => new Set([...prev, sug.id]));
+  };
+
+  const totalAplicables = sugerencias.reduce((s, x) => s + x.skus, 0);
+
+  return (
+    <div style={{
+      background: theme.surface, borderLeft: `1px solid ${theme.border}`,
+      display: 'flex', flexDirection: 'column', minWidth: 0,
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '14px 16px', borderBottom: `1px solid ${theme.border}`,
+        background: `linear-gradient(135deg, ${P.accent}0F, ${P.purple}0F)`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 9,
+            background: `linear-gradient(135deg, ${P.accent}, ${P.purple})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF',
+          }}>
+            <Sparkles style={{ width: 14, height: 14 }} strokeWidth={2} />
+          </div>
+          <div>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, letterSpacing: '-0.015em', color: theme.text }}>
+              Copilot
+            </div>
+            <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>
+              {cliente.label} · {sugerencias.length} sugerencia{sugerencias.length === 1 ? '' : 's'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ padding: 12, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+        {sugerencias.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: theme.textMuted, fontSize: 11, lineHeight: 1.5 }}>
+            Sin sugerencias con los datos actuales. Prueba usar el buscador o desactivar "Solo con inventario".
+          </div>
+        ) : sugerencias.map((sug) => {
+          const applied = aplicadas.has(sug.id);
+          return (
+            <div key={sug.id} onClick={() => !applied && aplicar(sug)}
+              style={{
+                background: applied ? `${P.green}0F` : theme.bg,
+                border: `1px solid ${applied ? P.green : theme.border}`,
+                borderRadius: 12, padding: '12px 14px',
+                cursor: applied ? 'default' : 'pointer',
+                transition: 'border-color 120ms',
+                fontFamily: TYPO.fontText,
+              }}
+              onMouseEnter={(e) => { if (!applied) e.currentTarget.style.borderColor = P.accent; }}
+              onMouseLeave={(e) => { if (!applied) e.currentTarget.style.borderColor = theme.border; }}>
+              <span style={{
+                display: 'inline-block', padding: '2px 8px', borderRadius: 999,
+                fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
+                background: applied ? `${P.green}22` : `${sug.tagColor}22`,
+                color: applied ? P.green : sug.tagColor,
+                marginBottom: 6,
+              }}>{applied ? 'Aplicada' : sug.tag}</span>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, marginBottom: 4 }}>
+                {sug.title}
+              </div>
+              <p style={{ fontSize: 11, color: theme.textMuted, margin: '0 0 8px', lineHeight: 1.4 }}>
+                {sug.desc}
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', paddingTop: 6, borderTop: `1px dashed ${theme.divider || theme.border}` }}>
+                <span>{sug.skus} SKUs · {fmtInt(sug.piezas)}pz</span>
+                <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtCompact(sug.monto)}</strong>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Input placeholder (todavía no funcional) */}
+      <div style={{ padding: 12, borderTop: `1px solid ${theme.border}`, background: theme.bg }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+          background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999,
+        }}>
+          <Sparkles style={{ width: 12, height: 12, color: P.accent }} strokeWidth={2} />
+          <input placeholder="Chat con el Copilot (próximamente)"
+            disabled
+            style={{ border: 0, outline: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 11, color: theme.text, flex: 1, cursor: 'not-allowed', opacity: 0.6 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SortableTh — header ordenable
+// ════════════════════════════════════════════════════════════════════
 function SortableTh({ theme, P, orden, onToggle, col, width, children }) {
   const active = orden.col === col;
   const dir = active ? orden.dir : null;
@@ -603,11 +991,7 @@ function SortableTh({ theme, P, orden, onToggle, col, width, children }) {
         width, cursor: 'pointer', userSelect: 'none',
       }}
       onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = theme.text; }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = theme.textMuted; }}
-      title={active
-        ? (dir === 'desc' ? 'Ordenado de mayor a menor · click para invertir' : 'Ordenado de menor a mayor · click para quitar')
-        : 'Ordenar por esta columna'}
-    >
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = theme.textMuted; }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
         {children}
         <span style={{ fontSize: 8, opacity: active ? 1 : 0.4, fontWeight: 700 }}>{arrow}</span>
@@ -616,143 +1000,23 @@ function SortableTh({ theme, P, orden, onToggle, col, width, children }) {
   );
 }
 
-// ═══ Paso 4: Ajustar piezas y precio ═══
-function Paso4Ajustes({ theme, skus, propuesta, setPropuesta, cliente, onSiguiente, onPrev, isDark }) {
+// ════════════════════════════════════════════════════════════════════
+// VISTA REVISAR · Hero total + KPIs Fitness + agrupación por familia
+// ════════════════════════════════════════════════════════════════════
+function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, onBack, onGuardar }) {
   const P = paletteFromTheme(theme);
+  const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
+  const heroText = theme.heroCardText || '#F5F5F7';
+  const heroMuted = theme.textMutedOnDark || 'rgba(255,255,255,0.65)';
+  const heroSub = theme.textSubtleOnDark || 'rgba(255,255,255,0.5)';
+  const cliCol = clienteColor(theme, cliente.key);
+
   const propuestaLista = useMemo(() => Object.entries(propuesta)
     .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
     .filter((r) => r.sku), [propuesta, skus]);
   const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
   const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
-
-  const editPropuesta = (sku, patch) => setPropuesta((prev) => ({ ...prev, [sku]: { ...(prev[sku] || {}), ...patch } }));
-  const removePropuesta = (sku) => setPropuesta((prev) => { const n = { ...prev }; delete n[sku]; return n; });
-
-  const thStyle = { textAlign: 'right', padding: '8px 10px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap' };
-  const thLeft = { ...thStyle, textAlign: 'left' };
-
-  return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 14px', fontFamily: TYPO.fontText }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-        <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
-          Ajusta piezas y precio
-        </h3>
-        <div style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-          {propuestaLista.length} SKU · {piezas.toLocaleString('es-MX')} pz · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{formatMXN(total)}</strong>
-        </div>
-      </div>
-
-      <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-          <thead>
-            <tr>
-              <th style={{ ...thLeft, width: 110 }}>SKU</th>
-              <th style={thLeft}>Descripción</th>
-              <th style={{ ...thStyle, width: 60 }}>Inv cli</th>
-              <th style={{ ...thStyle, width: 60 }}>Inv Ack</th>
-              <th style={{ ...thStyle, width: 66 }}>SO 90d</th>
-              <th style={{ ...thStyle, width: 90 }}>Piezas</th>
-              <th style={{ ...thLeft, width: 240 }}>Precio</th>
-              <th style={{ ...thStyle, width: 110 }}>Total</th>
-              <th style={{ ...thStyle, width: 32 }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {propuestaLista.map((r) => (
-              <AjusteRow key={r.sku} theme={theme} P={P} r={r}
-                onEdit={(patch) => editPropuesta(r.sku, patch)}
-                onRemove={() => removePropuesta(r.sku)} />
-            ))}
-            <tr style={{ background: isDark ? '#0F0F0F' : '#1D1D1F', color: '#FFFFFF' }}>
-              <td colSpan={5} style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, letterSpacing: '-0.01em' }}>Total propuesta</td>
-              <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{piezas.toLocaleString('es-MX')}</td>
-              <td></td>
-              <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{formatMXN(total)}</td>
-              <td></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <NavBotones theme={theme} onPrev={onPrev} onSiguiente={onSiguiente}
-        disabledSiguiente={propuestaLista.length === 0} labelNext="Revisar propuesta" />
-    </div>
-  );
-}
-
-function AjusteRow({ theme, P, r, onEdit, onRemove }) {
-  const listas = Object.entries(r.precios);
-  const [modo, setModo] = useState(r.listaSel === 'personalizado' || !r.listaSel ? 'personalizado' : r.listaSel);
-  const subtotal = (Number(r.piezas) || 0) * (Number(r.precio) || 0);
-
-  const setLista = (l) => {
-    setModo(l);
-    if (l === 'personalizado') { onEdit({ listaSel: 'personalizado' }); return; }
-    const precio = r.precios[l];
-    if (precio != null) onEdit({ listaSel: l, precio });
-    else onEdit({ listaSel: l });
-  };
-
-  const inputStyle = {
-    width: '100%', padding: '5px 8px', textAlign: 'right', fontSize: 11, fontFamily: 'inherit',
-    background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, color: theme.text,
-    outline: 'none', fontVariantNumeric: 'tabular-nums',
-  };
-  const selectStyle = {
-    flex: 1, minWidth: 0, padding: '5px 8px', fontSize: 10, fontFamily: 'inherit',
-    background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, color: theme.text,
-    outline: 'none', cursor: 'pointer',
-  };
-
-  return (
-    <tr style={{ borderTop: `1px solid ${theme.border}` }}>
-      <td style={{ padding: '6px 10px', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, fontWeight: 600, color: theme.text }}>{r.sku}</td>
-      <td style={{ padding: '6px 10px', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
-      <td style={{ padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{(r.invCliente || 0).toLocaleString('es-MX')}</td>
-      <td style={{ padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{(r.invActeck || 0).toLocaleString('es-MX')}</td>
-      <td style={{ padding: '6px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12 }}>{(r.sellout90 || 0).toLocaleString('es-MX')}</td>
-      <td style={{ padding: '6px 10px' }}>
-        <input type="number" min="0" value={r.piezas ?? ''}
-          onChange={(e) => onEdit({ piezas: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
-          style={inputStyle} />
-      </td>
-      <td style={{ padding: '6px 10px' }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <select value={modo} onChange={(e) => setLista(e.target.value)} style={selectStyle}>
-            {listas.map(([l, p]) => (
-              <option key={l} value={l}>{l} · ${Math.round(p).toLocaleString('es-MX')}</option>
-            ))}
-            <option value="personalizado">Personalizado…</option>
-          </select>
-          {modo === 'personalizado' && (
-            <input type="number" min="0" step="0.01" value={r.precio ?? ''}
-              onChange={(e) => onEdit({ precio: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })}
-              placeholder="$" style={{ ...inputStyle, width: 80 }} />
-          )}
-        </div>
-      </td>
-      <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{formatMXN(subtotal)}</td>
-      <td style={{ padding: '6px 10px', textAlign: 'center' }}>
-        <button onClick={onRemove}
-          style={{ background: 'transparent', border: 0, padding: 4, color: theme.textMuted, cursor: 'pointer', borderRadius: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = P.red; e.currentTarget.style.background = `${P.red}14`; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = theme.textMuted; e.currentTarget.style.background = 'transparent'; }}
-          title="Quitar SKU">
-          <X style={{ width: 12, height: 12 }} strokeWidth={2} />
-        </button>
-      </td>
-    </tr>
-  );
-}
-
-// ═══ Paso 5: Revisar + Exportar ═══
-function Paso5Revisar({ theme, skus, propuesta, cliente, onPrev, isDark }) {
-  const P = paletteFromTheme(theme);
-  const propuestaLista = useMemo(() => Object.entries(propuesta)
-    .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
-    .filter((r) => r.sku), [propuesta, skus]);
-  const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
-  const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+  const precioProm = piezas > 0 ? Math.round(total / piezas) : 0;
 
   const grupos = useMemo(() => {
     if (cliente.key !== 'digitalife') return { 'Propuesta': propuestaLista };
@@ -761,150 +1025,209 @@ function Paso5Revisar({ theme, skus, propuesta, cliente, onPrev, isDark }) {
     return g;
   }, [propuestaLista, cliente]);
 
-  const exportar = () => alert('Export Excel — próximo push. Ya podemos verificar el flujo.');
-
-  const thStyle = { textAlign: 'right', padding: '8px 10px', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#FFFFFF', whiteSpace: 'nowrap' };
-  const thLeft = { ...thStyle, textAlign: 'left' };
-  const heroBg = isDark ? '#0F0F0F' : '#1D1D1F';
+  const gap = contexto?.gap || 0;
+  const cierraGapPct = gap > 0 ? Math.round((total / gap) * 100) : null;
+  const exportar = () => alert('Export Excel — próximo push.');
 
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '12px 14px', fontFamily: TYPO.fontText }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-        <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
-          Revisar propuesta
-        </h3>
-        <button onClick={exportar}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px',
-            background: P.accent, color: '#FFFFFF', border: 0, borderRadius: 999,
-            fontSize: 12, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', letterSpacing: '-0.01em',
-          }}>
-          <Download style={{ width: 12, height: 12 }} strokeWidth={2} />
-          Exportar Excel
-        </button>
-      </div>
-
-      {/* Resumen KPIs */}
+    <div style={{ padding: '10px 6px 40px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
+      {/* Header sticky */}
       <div style={{
-        background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12,
-        padding: '14px 16px', marginBottom: 14, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20,
+        position: 'sticky', top: 0, zIndex: 10,
+        background: `color-mix(in srgb, ${theme.surface} 92%, transparent)`,
+        backdropFilter: 'blur(20px) saturate(180%)',
+        borderBottom: `1px solid ${theme.border}`, padding: '12px 20px', marginBottom: 16,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
       }}>
-        <div>
-          <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>SKUs</div>
-          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 4 }}>{propuestaLista.length}</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Piezas</div>
-          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 4 }}>{piezas.toLocaleString('es-MX')}</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Total propuesta</div>
-          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 4 }}>{formatMXN(total)}</div>
-        </div>
-      </div>
-
-      {Object.entries(grupos).map(([nombreGrupo, filas]) => {
-        if (filas.length === 0) return null;
-        const totalGrupo = filas.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
-        const piezasGrupo = filas.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
-        return (
-          <div key={nombreGrupo} style={{ marginBottom: 14 }}>
-            {cliente.key === 'digitalife' && (
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, marginBottom: 6, padding: '0 4px' }}>
-                {nombreGrupo}
-                <span style={{ color: theme.textMuted, fontWeight: 400, marginLeft: 6, fontVariantNumeric: 'tabular-nums' }}>
-                  · {filas.length} SKU · {piezasGrupo}pz · {formatMXN(totalGrupo)}
-                </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={onBack} title="Volver a editar"
+            style={{ background: 'transparent', border: 0, padding: 4, color: theme.textMuted, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: 'inherit' }}>
+            <ArrowLeft style={{ width: 14, height: 14 }} strokeWidth={2} /> Editar
+          </button>
+          <div style={{ width: 1, height: 24, background: theme.border }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 10, background: cliCol, color: '#FFF',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, letterSpacing: '-0.02em',
+            }}>{cliente.iniciales}</div>
+            <div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em' }}>
+                Revisar · {cliente.label}
               </div>
-            )}
-            <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                <thead>
-                  <tr style={{ background: heroBg }}>
-                    <th style={{ ...thLeft, width: 110 }}>SKU</th>
-                    <th style={thLeft}>Descripción</th>
-                    <th style={{ ...thStyle, width: 66 }}>Inv cli</th>
-                    <th style={{ ...thStyle, width: 66 }}>Inv Ack</th>
-                    <th style={{ ...thStyle, width: 72 }}>SO 90d</th>
-                    <th style={{ ...thStyle, width: 72 }}>Prom 90d</th>
-                    <th style={{ ...thStyle, width: 70 }}>Piezas</th>
-                    <th style={{ ...thStyle, width: 90 }}>Precio</th>
-                    <th style={{ ...thStyle, width: 110 }}>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filas.map((r) => (
-                    <tr key={r.sku} style={{ borderTop: `1px solid ${theme.border}`, height: 30 }}>
-                      <td style={{ padding: '5px 10px', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, fontWeight: 600, color: theme.text }}>{r.sku}</td>
-                      <td style={{ padding: '5px 10px', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{(r.invCliente || 0).toLocaleString('es-MX')}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{(r.invActeck || 0).toLocaleString('es-MX')}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12 }}>{(r.sellout90 || 0).toLocaleString('es-MX')}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, fontSize: 11 }}>{(r.promSellout || 0).toLocaleString('es-MX')}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{r.piezas}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right', color: theme.text, fontVariantNumeric: 'tabular-nums', fontSize: 11 }}>{formatMXN(r.precio)}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', fontSize: 12, letterSpacing: '-0.01em' }}>{formatMXN((r.piezas || 0) * (r.precio || 0))}</td>
-                    </tr>
-                  ))}
-                  <tr style={{ background: theme.bg, borderTop: `2px solid ${theme.borderStrong || theme.border}` }}>
-                    <td colSpan={6} style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: theme.textMuted, letterSpacing: '-0.01em' }}>
-                      Total {cliente.key === 'digitalife' ? nombreGrupo.toLowerCase() : 'propuesta'}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{piezasGrupo}</td>
-                    <td></td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{formatMXN(totalGrupo)}</td>
-                  </tr>
-                </tbody>
-              </table>
+              <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>Listo para enviar</div>
             </div>
           </div>
-        );
-      })}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onGuardar}
+            style={{ padding: '8px 16px', background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text, fontWeight: 500, fontFamily: 'inherit', borderRadius: 999, fontSize: 12, cursor: 'pointer' }}>
+            Guardar borrador
+          </button>
+          <button onClick={exportar}
+            style={{ padding: '8px 18px', background: P.accent, border: 0, color: '#FFF', fontWeight: 600, fontFamily: 'inherit', borderRadius: 999, fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Download style={{ width: 12, height: 12 }} strokeWidth={2} />
+            Exportar Excel
+          </button>
+        </div>
+      </div>
 
-      <NavBotones theme={theme} onPrev={onPrev} hideNext />
+      <div style={{ padding: '0 4px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Hero total */}
+        <div style={{
+          background: heroBg, color: heroText, borderRadius: 16, padding: '20px 24px',
+          display: 'grid', gridTemplateColumns: '1fr auto', gap: 20, alignItems: 'center',
+          position: 'relative', overflow: 'hidden',
+          border: isDark ? '1px solid rgba(255,255,255,0.06)' : 'none',
+        }}>
+          {isDark && (
+            <div style={{
+              position: 'absolute', top: '-30%', right: '-10%', width: '60%', height: '100%',
+              background: `radial-gradient(circle, ${P.accent}22 0%, transparent 70%)`, pointerEvents: 'none',
+            }} />
+          )}
+          <div style={{ position: 'relative' }}>
+            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: heroSub, fontWeight: 500, margin: 0 }}>
+              Total de la propuesta
+            </p>
+            <h2 style={{ fontFamily: TYPO.fontDisplay, fontSize: 32, fontWeight: 600, letterSpacing: '-0.03em', color: heroText, margin: '6px 0', fontVariantNumeric: 'tabular-nums' }}>
+              {formatMXN(total)}
+            </h2>
+            <p style={{ fontSize: 12, color: heroMuted, margin: 0, maxWidth: 480, lineHeight: 1.5 }}>
+              <strong style={{ color: heroText, fontWeight: 500 }}>{propuestaLista.length} SKUs · {fmtInt(piezas)} piezas.</strong>
+              {' '}
+              {cierraGapPct != null
+                ? <>Cierra el gap del mes en <strong style={{ color: heroText }}>{cierraGapPct}%</strong> — te da margen para negociar cierres.</>
+                : <>El gap del mes ya está cerrado; esta propuesta suma a tu YTD.</>}
+            </p>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, textAlign: 'right', position: 'relative' }}>
+            {cierraGapPct != null && (
+              <div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>Cierra gap</div>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', fontSize: 20, marginTop: 2, color: cierraGapPct >= 100 ? P.green : P.orange }}>
+                  ▲ {cierraGapPct}%
+                </div>
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>Precio promedio</div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', fontSize: 18, marginTop: 2, color: heroText }}>
+                {formatMXN(precioProm)}/pz
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* KPIs Fitness */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+          <KpiFit theme={theme} P={P} icon="🧾" iconBg={`${P.accent}22`} iconColor={P.accent} chip="SKUs" value={String(propuestaLista.length)} note="Productos incluidos en la propuesta." />
+          <KpiFit theme={theme} P={P} icon="📦" iconBg={`${P.green}22`} iconColor={P.green} chip="Piezas" value={fmtInt(piezas)} note={<>Suma total de <strong style={{ color: theme.text }}>{propuestaLista.length} SKUs</strong>.</>} />
+          <KpiFit theme={theme} P={P} icon="💰" iconBg={`${P.orange}22`} iconColor={P.orange} chip="Total" value={fmtCompact(total)} note={<>Precio promedio <strong style={{ color: theme.text }}>{formatMXN(precioProm)}</strong>/pz.</>} />
+          <KpiFit theme={theme} P={P} icon="🎯" iconBg={`${P.purple}22`} iconColor={P.purple} chip="Vs Gap"
+            value={cierraGapPct != null ? `▲ ${cierraGapPct}%` : '—'}
+            valueColor={cierraGapPct != null && cierraGapPct >= 100 ? P.green : cierraGapPct != null ? P.orange : theme.text}
+            note={gap > 0 ? <>Gap era <strong style={{ color: theme.text }}>{fmtCompact(gap)}</strong>.</> : <>Sin gap pendiente.</>} />
+        </div>
+
+        {/* Grupos */}
+        {Object.entries(grupos).map(([nombreGrupo, filas]) => {
+          if (filas.length === 0) return null;
+          const totalGrupo = filas.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
+          const piezasGrupo = filas.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+          return (
+            <div key={nombreGrupo} style={{
+              background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden',
+            }}>
+              <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${theme.border}` }}>
+                <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: 0 }}>
+                  {nombreGrupo}
+                  <span style={{ color: theme.textMuted, fontFamily: TYPO.fontText, fontWeight: 500, marginLeft: 8, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+                    · {filas.length} SKUs · {fmtInt(piezasGrupo)}pz
+                  </span>
+                </h4>
+                <span style={{
+                  padding: '4px 12px', borderRadius: 999,
+                  background: theme.bg, fontFamily: TYPO.fontDisplay, fontWeight: 600,
+                  fontSize: 12, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: theme.text,
+                }}>{formatMXN(totalGrupo)}</span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                  <thead>
+                    <tr style={{ background: heroBg }}>
+                      <th style={{ textAlign: 'left', padding: '8px 10px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 100 }}>SKU</th>
+                      <th style={{ textAlign: 'left', padding: '8px 10px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>Descripción</th>
+                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 60 }}>Inv cli</th>
+                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 60 }}>Inv Ack</th>
+                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 68 }}>SO 90d</th>
+                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 66 }}>Piezas</th>
+                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 86 }}>Precio</th>
+                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 100 }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filas.map((r) => (
+                      <tr key={r.sku} style={{ borderTop: `1px solid ${theme.border}`, height: 30 }}>
+                        <td style={{ padding: '5px 10px', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: theme.text }}>{r.sku}</td>
+                        <td style={{ padding: '5px 10px', fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(r.invCliente || 0)}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(r.invActeck || 0)}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(r.sellout90 || 0)}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(r.piezas || 0)}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'right', color: r.listaSel === '__custom' ? P.accent : theme.text, fontWeight: r.listaSel === '__custom' ? 600 : 400, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{formatMXN(r.precio)}</td>
+                        <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>{formatMXN((r.piezas || 0) * (r.precio || 0))}</td>
+                      </tr>
+                    ))}
+                    <tr style={{ background: theme.bg, borderTop: `2px solid ${theme.borderStrong || theme.border}` }}>
+                      <td colSpan={5} style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: theme.textMuted, letterSpacing: '-0.01em' }}>
+                        Total {nombreGrupo.toLowerCase()}
+                      </td>
+                      <td style={{ padding: '10px 8px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{fmtInt(piezasGrupo)}</td>
+                      <td></td>
+                      <td style={{ padding: '10px 8px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{formatMXN(totalGrupo)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-// ═══ Navegación paso ═══
-function NavBotones({ theme, onPrev, onSiguiente, labelNext = 'Siguiente', disabledSiguiente = false, hideNext = false }) {
-  const P = paletteFromTheme(theme);
+function KpiFit({ theme, P, icon, iconBg, iconColor, chip, value, valueColor, note }) {
   return (
     <div style={{
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      marginTop: 20, paddingTop: 14, borderTop: `1px solid ${theme.border}`,
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
+      padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4,
+      fontFamily: TYPO.fontText,
     }}>
-      <button onClick={onPrev}
-        style={{
-          background: 'transparent', border: 0, padding: '8px 4px', color: theme.textMuted,
-          fontSize: 12, fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.color = theme.text}
-        onMouseLeave={(e) => e.currentTarget.style.color = theme.textMuted}>
-        ← Atrás
-      </button>
-      {!hideNext && (
-        <button onClick={onSiguiente} disabled={disabledSiguiente}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '9px 18px', borderRadius: 999, border: 0,
-            background: disabledSiguiente ? (theme.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)') : P.accent,
-            color: disabledSiguiente ? theme.textMuted : '#FFFFFF',
-            fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
-            cursor: disabledSiguiente ? 'not-allowed' : 'pointer',
-            letterSpacing: '-0.01em',
-            transition: 'transform 120ms',
-          }}
-          onMouseEnter={(e) => { if (!disabledSiguiente) e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}>
-          {labelNext} <ChevronRight style={{ width: 12, height: 12 }} strokeWidth={2} />
-        </button>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{
+          width: 28, height: 28, borderRadius: 8, background: iconBg, color: iconColor,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
+        }}>{icon}</span>
+        <span style={{
+          fontSize: 9, padding: '2px 7px', borderRadius: 999,
+          background: theme.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+          color: theme.textMuted, fontWeight: 500,
+        }}>{chip}</span>
+      </div>
+      <div style={{
+        fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.03em',
+        color: valueColor || theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 6, lineHeight: 1,
+      }}>{value}</div>
+      <div style={{ fontSize: 10, color: theme.textMuted, lineHeight: 1.4, marginTop: 6 }}>{note}</div>
     </div>
   );
 }
 
-// ═══ Fetch principal ═══
+// ════════════════════════════════════════════════════════════════════
+// fetchAll y helpers async — preservados
+// ════════════════════════════════════════════════════════════════════
 async function fetchAll(clienteKey) {
   const mm = mesesCerrados();
   const anioMin = Math.min(...mm.map((m) => m.anio));
@@ -927,17 +1250,14 @@ async function fetchAll(clienteKey) {
       .eq('anio', MES_ACTUAL.anio).eq('mes', MES_ACTUAL.mes),
   ]);
 
-  // Solo almacenes comerciales (mismo criterio que InventarioGlobal).
-  // Excluye NO COMERCIAL, ACTIVO FIJO, REMISIONES, REFACTURACION, MUESTRAS.
   const ALMACENES_COMERCIALES = new Set([1, 2, 3, 6, 9, 12, 14, 15, 16, 17, 19, 25, 44, 64, 71]);
   const invAck = new Map();
   for (const r of invAckRes.data || []) {
     if (!ALMACENES_COMERCIALES.has(Number(r.no_almacen))) continue;
     invAck.set(r.articulo, (invAck.get(r.articulo) || 0) + (Number(r.disponible) || 0));
   }
-  // Redondeo a entero: ERP tiene decimales de piezas heredados de conversiones
-  // (piezas por caja), pero para presentar mostramos siempre número cerrado.
   for (const [k, v] of invAck.entries()) invAck.set(k, Math.round(v));
+
   const invCli = new Map();
   const invCliTitulos = new Map();
   for (const r of invCliRes.data || []) {
