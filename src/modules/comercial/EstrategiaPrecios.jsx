@@ -70,7 +70,10 @@ async function fetchAll(table, select, extra = (q) => q) {
   return acc;
 }
 
-function MultiSelect({ label, options, selected, onChange, width = 180 }) {
+function MultiSelect({ label, options, selected, onChange, width = 140 }) {
+  const { theme } = useTheme();
+  const P = paletteFromTheme(theme);
+  const isDark = theme.mode === 'dark';
   const [open, setOpen] = useState(false);
   const ref = React.useRef(null);
   useEffect(() => {
@@ -79,38 +82,74 @@ function MultiSelect({ label, options, selected, onChange, width = 180 }) {
     return () => document.removeEventListener('mousedown', h);
   }, []);
   const isAll = selected.size === 0;
-  const summary = isAll ? `${label}: todas` : `${label}: ${selected.size}`;
+  const activo = !isAll;
   const toggle = (v) => {
     const next = new Set(selected);
     if (next.has(v)) next.delete(v); else next.add(v);
     onChange(next);
   };
   return (
-    <div className="relative" ref={ref} style={{ width }}>
+    <div style={{ position: 'relative', width, fontFamily: TYPO.fontText }} ref={ref}>
       <button onClick={() => setOpen((o) => !o)}
-        className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm bg-white flex items-center justify-between gap-2 hover:border-gray-300">
-        <span className="truncate text-gray-700">{summary}</span>
-        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        style={{
+          width: '100%', height: 32, padding: '0 12px',
+          background: activo ? `${P.accent}1A` : theme.surface,
+          border: `1px solid ${activo ? P.accent : theme.border}`, borderRadius: 999,
+          fontSize: 11, color: activo ? P.accent : theme.text,
+          fontWeight: activo ? 600 : 500, fontFamily: 'inherit', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+        }}
+        onMouseEnter={(e) => { if (!activo) e.currentTarget.style.borderColor = theme.textMuted; }}
+        onMouseLeave={(e) => { if (!activo) e.currentTarget.style.borderColor = theme.border; }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {label}
+          {activo && <span style={{ marginLeft: 4, fontWeight: 700 }}>· {selected.size}</span>}
+        </span>
+        <ChevronDown style={{ width: 12, height: 12, opacity: 0.7, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 120ms' }} strokeWidth={2.2} />
       </button>
       {open && (
-        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-auto">
-          <div className="flex items-center justify-between px-2 py-1.5 text-[11px] border-b border-gray-100 sticky top-0 bg-white">
-            <button className="text-blue-600 hover:underline" onClick={() => onChange(new Set(options))}>Todas</button>
-            <button className="text-gray-500 hover:underline" onClick={() => onChange(new Set())}>Limpiar</button>
+        <div style={{
+          position: 'absolute', zIndex: 20, marginTop: 4, width: '100%',
+          background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12,
+          boxShadow: isDark ? '0 8px 24px rgba(0,0,0,0.4)' : '0 8px 24px rgba(0,0,0,0.08)',
+          maxHeight: 280, overflow: 'auto', fontFamily: TYPO.fontText,
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '6px 10px', fontSize: 10, borderBottom: `1px solid ${theme.border}`,
+            position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
+          }}>
+            <button style={{ background: 'transparent', border: 0, color: P.accent, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 2 }}
+              onClick={() => onChange(new Set(options))}>Todas</button>
+            <button style={{ background: 'transparent', border: 0, color: theme.textMuted, fontSize: 10.5, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', padding: 2 }}
+              onClick={() => onChange(new Set())}>Limpiar</button>
           </div>
           {options.map((o) => {
             const sel = selected.has(o);
             return (
               <button key={o} onClick={() => toggle(o)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-gray-50 text-left">
-                <span className={`w-4 h-4 border rounded flex items-center justify-center flex-shrink-0 ${sel ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
-                  {sel && <Check className="w-3 h-3 text-white" />}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '6px 10px', fontSize: 11.5, background: 'transparent',
+                  border: 0, color: theme.text, cursor: 'pointer', fontFamily: 'inherit',
+                  textAlign: 'left',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                <span style={{
+                  width: 16, height: 16, borderRadius: 999,
+                  border: sel ? `1px solid ${P.accent}` : `1.5px solid ${isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.20)'}`,
+                  background: sel ? P.accent : 'transparent',
+                  color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0, transition: 'all 120ms',
+                }}>
+                  {sel && <Check style={{ width: 10, height: 10 }} strokeWidth={3} />}
                 </span>
-                <span className="truncate">{o}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o}</span>
               </button>
             );
           })}
-          {options.length === 0 && <div className="px-2 py-2 text-xs text-gray-400">Sin opciones</div>}
+          {options.length === 0 && <div style={{ padding: '10px 12px', fontSize: 11, color: theme.textMuted }}>Sin opciones</div>}
         </div>
       )}
     </div>
@@ -118,6 +157,9 @@ function MultiSelect({ label, options, selected, onChange, width = 180 }) {
 }
 
 export default function EstrategiaPrecios() {
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
+  const P = paletteFromTheme(theme);
   const [loading, setLoading] = useState(true);
   const [roadmap, setRoadmap] = useState([]);
   const [precios, setPrecios] = useState([]);
@@ -317,83 +359,141 @@ export default function EstrategiaPrecios() {
 
   if (loading) {
     return (
-      <div className="p-12 text-center text-gray-400">
-        <Activity className="w-10 h-10 mx-auto mb-3" />
-        Cargando estrategia de precios…
+      <div style={{ padding: 60, textAlign: 'center', color: theme.textMuted, fontFamily: TYPO.fontText }}>
+        <Activity style={{ width: 32, height: 32, marginBottom: 12 }} />
+        <div style={{ fontSize: 12 }}>Cargando estrategia de precios…</div>
       </div>
     );
   }
 
+  // KPIs consolidados
+  const skusConPrecio = filas.filter((r) => Object.keys(r.precios).length > 0).length;
+  const skusPrecioBajo = filas.filter((r) => {
+    if (!r.bajo?.precio_bajo) return false;
+    const listasVals = Object.values(r.precios || {}).filter((v) => v != null);
+    if (!listasVals.length) return false;
+    return r.bajo.precio_bajo < Math.min(...listasVals);
+  }).length;
+  const promosPorCliente = new Map();
+  promos.forEach((p) => {
+    const c = p.campania || 'General';
+    promosPorCliente.set(c, (promosPorCliente.get(c) || 0) + 1);
+  });
+  const topPromo = [...promosPorCliente.entries()].sort((a, b) => b[1] - a[1])[0];
+
   return (
-    <div className="max-w-none mx-auto p-6 space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-4 px-1">
-        <div>
-          <p className="text-[11px] uppercase tracking-widest text-gray-500 mb-1">Dirección Comercial</p>
-          <h2 className="text-2xl font-medium text-gray-800">Estrategia de precios</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {fmtInt(roadmap.length)} SKUs · {precios.length} precios cargados · {promos.length} promos vigentes
-          </p>
-        </div>
+    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
+      {/* Header */}
+      <div style={{ padding: '0 4px', marginBottom: 4 }}>
+        <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
+          Dirección Comercial
+        </p>
+        <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
+          Estrategia de Precios.
+        </h2>
+        <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
+          <strong style={{ color: theme.text, fontWeight: 500 }}>{fmtInt(roadmap.length)} SKUs</strong> · {fmtInt(precios.length)} precios · {promos.length} promos vigentes
+        </p>
       </div>
 
-      <div className="flex gap-2 items-center">
-        <div className="flex-1 flex items-center gap-2 px-3 bg-white border border-gray-200 rounded-lg h-10">
-          <Search className="w-4 h-4 text-gray-400" />
-          <input
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+      {/* 4 KPI cards Apple Fitness */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        <KpiCardEP theme={theme} P={P} icon={Tag} iconColor={P.accent} chip="SKUs"
+          value={fmtInt(roadmap.length)}
+          note={<><strong style={{ color: theme.text }}>{fmtInt(skusConPrecio)}</strong> con precio en al menos 1 lista.</>}
+        />
+        <KpiCardEP theme={theme} P={P} icon={Sparkles} iconColor={P.purple} chip="Promos"
+          value={fmtInt(promos.length)}
+          note={topPromo ? <><strong style={{ color: theme.text }}>{topPromo[0]}</strong> concentra {topPromo[1]}.</> : <>Sin promos vigentes.</>}
+        />
+        <KpiCardEP theme={theme} P={P} icon={TrendingUp} iconColor={P.green} chip="Listas activas"
+          value={fmtInt(LISTAS_MOSTRAR.length)}
+          note={<>Mayoreo AAA + <strong style={{ color: theme.text }}>{LISTAS_MOSTRAR.length - 1} listas cliente</strong> configuradas.</>}
+        />
+        <KpiCardEP theme={theme} P={P} icon={AlertTriangle} iconColor={P.orange} chip="Precio bajo"
+          value={fmtInt(skusPrecioBajo)}
+          valueColor={skusPrecioBajo > 0 ? P.orange : theme.text}
+          note={<>SKUs facturados <strong style={{ color: theme.text }}>debajo</strong> de todas las listas.</>}
+        />
+      </div>
+
+      {/* Toolbar iOS pill */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{
+          flex: 1, minWidth: 240, maxWidth: 380, display: 'flex', alignItems: 'center', gap: 8,
+          padding: '0 12px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999, height: 32,
+        }}>
+          <Search style={{ width: 12, height: 12, color: theme.textMuted }} strokeWidth={2.2} />
+          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar SKU o descripción (AC-943154, monitor SP270…)"
-            className="flex-1 outline-none text-sm bg-transparent"
-          />
+            style={{ border: 0, outline: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 12, color: theme.text, flex: 1 }} />
           {busqueda && (
-            <button onClick={() => setBusqueda('')} className="text-gray-400 hover:text-gray-600">
-              <X className="w-4 h-4" />
+            <button onClick={() => setBusqueda('')}
+              style={{ background: 'transparent', border: 0, color: theme.textMuted, cursor: 'pointer', padding: 2, display: 'flex' }}>
+              <X style={{ width: 12, height: 12 }} strokeWidth={2} />
             </button>
           )}
         </div>
-        <MultiSelect label="Marcas" options={marcasOpciones} selected={marcaSel} onChange={setMarcaSel} width={160} />
-        <MultiSelect label="Categorías" options={categoriasOpciones} selected={categoriaSel} onChange={setCategoriaSel} width={180} />
-        <MultiSelect label="Roadmap" options={roadmapOpciones} selected={roadmapSel} onChange={setRoadmapSel} width={140} />
-        <MultiSelect label="Listas" options={OPCIONES_LISTAS} selected={listasSel} onChange={setListasSel} width={180} />
-      </div>
-
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs text-gray-500">
-          {fmtInt(filas.length)} SKUs en orden del roadmap
-        </span>
-        <button
-          onClick={exportarExcel}
-          disabled={filas.length === 0}
-          className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed">
-          <Download className="w-3.5 h-3.5" />
-          Exportar Excel ({fmtInt(filas.length)} filas)
+        <MultiSelect label="Marcas" options={marcasOpciones} selected={marcaSel} onChange={setMarcaSel} width={140} />
+        <MultiSelect label="Categorías" options={categoriasOpciones} selected={categoriaSel} onChange={setCategoriaSel} width={150} />
+        <MultiSelect label="Roadmap" options={roadmapOpciones} selected={roadmapSel} onChange={setRoadmapSel} width={130} />
+        <MultiSelect label="Listas" options={OPCIONES_LISTAS} selected={listasSel} onChange={setListasSel} width={140} />
+        <button onClick={exportarExcel} disabled={filas.length === 0}
+          style={{
+            marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '6px 14px', height: 32, borderRadius: 999,
+            background: filas.length === 0 ? theme.bg : P.accent,
+            color: filas.length === 0 ? theme.textMuted : '#FFFFFF',
+            border: filas.length === 0 ? `1px solid ${theme.border}` : 0,
+            fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+            cursor: filas.length === 0 ? 'not-allowed' : 'pointer', letterSpacing: '-0.01em',
+          }}>
+          <Download style={{ width: 12, height: 12 }} strokeWidth={2} />
+          Exportar ({fmtInt(filas.length)})
         </button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="overflow-auto" style={{ maxHeight: '70vh' }}>
-          <table className="w-full text-[11px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px' }}>
+        <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+          <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtInt(filas.length)}</strong> SKUs en orden del roadmap
+        </span>
+        <span style={{ fontSize: 10, color: theme.textMuted }}>Click en fila para drill-down</span>
+      </div>
+
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ overflow: 'auto', maxHeight: '70vh' }}>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
             <thead>
-              <tr className="text-gray-500 bg-gray-50">
+              <tr>
                 {[
-                  { label: 'Marca',        cls: 'text-left'  },
-                  { label: 'SKU',          cls: 'text-left'  },
-                  { label: 'Descripción',  cls: 'text-left'  },
-                  { label: 'Roadmap',      cls: 'text-center' },
-                  ...(verPrecioBajo ? [{ label: 'Precio bajo\nfacturado', cls: 'text-right' }] : []),
-                  ...listasVisibles.map((l) => ({ label: LISTAS_LBL[l], cls: 'text-right' })),
+                  { label: 'Marca',        align: 'left'   },
+                  { label: 'SKU',          align: 'left'   },
+                  { label: 'Descripción',  align: 'left'   },
+                  { label: 'Roadmap',      align: 'center' },
+                  ...(verPrecioBajo ? [{ label: 'Precio bajo', sub: 'facturado', align: 'right' }] : []),
+                  ...listasVisibles.map((l) => ({ label: LISTAS_LBL[l], align: 'right' })),
                 ].map((h, i) => (
                   <th key={i}
-                    className={`${h.cls} py-1.5 px-2 font-medium uppercase tracking-wider text-[9px] whitespace-pre-line`}
-                    style={{ position: 'sticky', top: 0, background: '#F9FAFB', zIndex: 1, borderBottom: '1px solid #E5E7EB' }}>
+                    style={{
+                      position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
+                      textAlign: h.align, padding: '9px 8px',
+                      fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9,
+                      textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted,
+                      borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap',
+                    }}>
                     {h.label}
+                    {h.sub && (
+                      <span style={{ display: 'block', fontSize: 7.5, fontWeight: 500, letterSpacing: '0.04em', color: theme.textSubtle, textTransform: 'uppercase', marginTop: 1 }}>
+                        {h.sub}
+                      </span>
+                    )}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filas.map((r) => {
-                const rmapPal = ROADMAP_COLOR[r.rdmp] || { bg:'#F1EFE8', text:'#2C2C2A' };
+                const rmapChip = roadmapChip(theme, P, r.rdmp);
                 const promo = r.promo;
                 const precioAAA = r.precios['Mayoreo AAA'];
                 const precioAAAneto = promo && precioAAA != null
@@ -407,42 +507,50 @@ export default function EstrategiaPrecios() {
                 const mostrarBajo = r.bajo?.precio_bajo != null && minLista != null && r.bajo.precio_bajo < minLista;
                 return (
                   <React.Fragment key={r.sku}>
-                    <tr
-                      onClick={() => setSkuAbierto(abierto ? null : r.sku)}
-                      className={`border-t border-gray-100 cursor-pointer ${abierto ? 'bg-blue-50/60' : 'hover:bg-gray-50'}`}
-                      style={{ height: 32 }}>
-                      <td className="py-1 px-1.5 text-gray-600 whitespace-nowrap text-[10px]" style={{ width: 70 }}>{r.marca || '—'}</td>
-                      <td className="py-1 px-1.5 font-mono text-gray-700 whitespace-nowrap text-[10px]" style={{ width: 90 }}>
-                        <span className="inline-flex items-center gap-1">
+                    <tr onClick={() => setSkuAbierto(abierto ? null : r.sku)}
+                      style={{
+                        cursor: 'pointer',
+                        background: abierto ? `${P.accent}${isDark ? '1A' : '0D'}` : 'transparent',
+                        height: 36, transition: 'background 100ms',
+                      }}
+                      onMouseEnter={(e) => { if (!abierto) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
+                      onMouseLeave={(e) => { if (!abierto) e.currentTarget.style.background = 'transparent'; }}>
+                      <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, color: theme.textMuted, fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap', width: 68 }}>{r.marca || '—'}</td>
+                      <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: theme.text, whiteSpace: 'nowrap', width: 100, paddingLeft: 14 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                           <ChevronRight
-                            className="w-3 h-3 text-gray-400 transition-transform flex-shrink-0"
-                            style={{ transform: abierto ? 'rotate(90deg)' : 'none' }}
+                            style={{ width: 11, height: 11, color: P.accent, flexShrink: 0, transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform 120ms' }}
+                            strokeWidth={2.4}
                           />
                           {r.sku}
                         </span>
                       </td>
-                      <td className="py-1 px-1.5 text-gray-800"
-                        style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        title={r.descripcion}>
-                        {r.descripcion || '—'}
-                      </td>
-                      <td className="py-1 px-1.5 text-center whitespace-nowrap" style={{ width: 60 }}>
+                      <td style={{
+                        padding: '7px 8px', borderTop: `1px solid ${theme.border}`,
+                        fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text,
+                        maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }} title={r.descripcion}>{r.descripcion || '—'}</td>
+                      <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, textAlign: 'center', whiteSpace: 'nowrap', width: 70 }}>
                         {r.rdmp && (
-                          <span className="text-[9px] font-medium px-1 py-0.5 rounded"
-                            style={{ background: rmapPal.bg, color: rmapPal.text }}>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 999,
+                            fontSize: 10, fontWeight: 600, letterSpacing: '-0.005em',
+                            fontFamily: TYPO.fontDisplay, background: rmapChip.bg, color: rmapChip.fg,
+                          }}>
                             {r.rdmp}
                           </span>
                         )}
                       </td>
                       {verPrecioBajo && (
-                        <td className="py-1 px-1.5 text-right whitespace-nowrap" style={{ width: 110 }}>
+                        <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, textAlign: 'right', whiteSpace: 'nowrap', width: 96 }}>
                           {mostrarBajo ? (
-                            <span className="font-medium text-rose-800 text-[10px]"
-                              title={`${r.bajo.cliente_bajo} · ${fmtInt(r.bajo.piezas_bajo)} pz`}>
+                            <span
+                              title={`${r.bajo.cliente_bajo} · ${fmtInt(r.bajo.piezas_bajo)} pz`}
+                              style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 11.5, color: P.orange, letterSpacing: '-0.01em' }}>
                               {fmtMoney(r.bajo.precio_bajo)}
                             </span>
                           ) : (
-                            <span className="text-gray-400">—</span>
+                            <span style={{ color: theme.textSubtle }}>—</span>
                           )}
                         </td>
                       )}
@@ -453,36 +561,46 @@ export default function EstrategiaPrecios() {
                               + (promo.promos || []).map((p) => `${p.campania}: ${Math.round(Number(p.promo_pct) * 100)}%`).join('\n')
                             : undefined;
                           return (
-                            <td key={l} className="py-1.5 px-2 text-right whitespace-nowrap"
-                              style={promo ? { background: PALETTE.emerald.bg } : undefined}
+                            <td key={l}
+                              style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, textAlign: 'right', whiteSpace: 'nowrap' }}
                               title={promoTooltip}>
                               {precioAAA != null ? (
-                                <span className="font-semibold inline-flex items-center gap-1 justify-end"
-                                  style={{ color: promo ? PALETTE.emerald.text : '#1f2937' }}>
+                                <span style={{
+                                  fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.01em',
+                                  color: theme.text, fontVariantNumeric: 'tabular-nums',
+                                  display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end',
+                                }}>
                                   {fmtMoney(precioAAAneto)}
                                   {promo && (
-                                    <span className="text-[9px] font-semibold px-1 py-0.5 rounded"
-                                      style={{ background: PALETTE.emerald.mid, color: '#fff' }}>
+                                    <span style={{
+                                      display: 'inline-block', padding: '1px 6px', borderRadius: 999,
+                                      fontSize: 8.5, fontWeight: 700, background: `${P.purple}22`, color: P.purple,
+                                      letterSpacing: '0.02em',
+                                    }}>
                                       −{(Number(promo.promo_pct) * 100).toFixed(0)}%
                                     </span>
                                   )}
                                 </span>
                               ) : (
-                                <span className="text-gray-400">—</span>
+                                <span style={{ color: theme.textSubtle }}>—</span>
                               )}
                             </td>
                           );
                         }
                         return (
-                          <td key={l} className="py-1.5 px-2 text-right text-gray-600 whitespace-nowrap">
-                            {r.precios[l] != null ? fmtMoney(r.precios[l]) : <span className="text-gray-400">—</span>}
+                          <td key={l} style={{
+                            padding: '7px 8px', borderTop: `1px solid ${theme.border}`, textAlign: 'right',
+                            fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 500, color: theme.text,
+                            fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.005em', whiteSpace: 'nowrap',
+                          }}>
+                            {r.precios[l] != null ? fmtMoney(r.precios[l]) : <span style={{ color: theme.textSubtle, fontWeight: 400 }}>—</span>}
                           </td>
                         );
                       })}
                     </tr>
                     {abierto && (
                       <tr>
-                        <td colSpan={4 + (verPrecioBajo ? 1 : 0) + listasVisibles.length} style={{ padding: 0, background: '#F8FAFC' }}>
+                        <td colSpan={4 + (verPrecioBajo ? 1 : 0) + listasVisibles.length} style={{ padding: 0, background: theme.bg, borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}` }}>
                           <DetalleSKU
                             sku={r}
                             promo={promo}
@@ -1077,6 +1195,17 @@ function CopilotPricing({ theme, isDark, P, open, setOpen, recs }) {
   );
 }
 
+// ═══ Roadmap chip colors — iOS uniforme en 3 temas ═══
+function roadmapChip(theme, P, rdmp) {
+  const map = {
+    RMI:  { bg: `${P.teal}22`,   fg: theme.mode === 'dark' ? P.teal   : '#0F6E56' },
+    RML:  { bg: `${P.purple}22`, fg: theme.mode === 'dark' ? P.purple : '#6E44A6' },
+    RMS:  { bg: `${P.pink || P.red}22`, fg: theme.mode === 'dark' ? (P.pink || P.red) : '#B03050' },
+    2026: { bg: `${P.orange}22`, fg: theme.mode === 'dark' ? P.orange : '#8B4E00' },
+  };
+  return map[rdmp] || { bg: `${theme.textMuted}18`, fg: theme.textMuted };
+}
+
 // ═══ Palette helper (mismo criterio que otras pestañas) ═══
 function paletteFromTheme(theme) {
   return {
@@ -1086,5 +1215,37 @@ function paletteFromTheme(theme) {
     red:    theme.red    || '#FF3B30',
     purple: theme.purple || '#AF52DE',
     teal:   theme.teal   || '#5AC8FA',
+    pink:   theme.pink   || '#FF2D55',
   };
+}
+
+// ═══ KPI card Apple Fitness para EstrategiaPrecios ═══
+function KpiCardEP({ theme, P, icon: Icon, iconColor, chip, value, valueColor, note }) {
+  const isDark = theme.mode === 'dark';
+  return (
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
+      padding: '12px 14px', minHeight: 108,
+      display: 'flex', flexDirection: 'column', gap: 4, fontFamily: TYPO.fontText,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 8, background: `${iconColor}22`, color: iconColor,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Icon style={{ width: 14, height: 14 }} strokeWidth={1.8} />
+        </div>
+        <span style={{
+          fontSize: 9, padding: '2px 7px', borderRadius: 999,
+          background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+          color: theme.textMuted, fontWeight: 500,
+        }}>{chip}</span>
+      </div>
+      <div style={{
+        fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.03em',
+        color: valueColor || theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 6, lineHeight: 1,
+      }}>{value}</div>
+      <div style={{ fontSize: 11, color: theme.textMuted, lineHeight: 1.35, marginTop: 'auto' }}>{note}</div>
+    </div>
+  );
 }
