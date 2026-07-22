@@ -24,11 +24,19 @@ const CLIENTES_META = {
 };
 const CAT_COLORS = ['#0EA5E9', '#6366F1', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#94A3B8', '#F97316'];
 
+// ROADMAP colors iOS · mismo mapeo semántico, palette Apple system
 const ROADMAP_COLOR = {
-  RMI:  { bg:'#E1F5EE', text:'#085041' },
-  RML:  { bg:'#EEEDFE', text:'#3C3489' },
-  2026: { bg:'#FAEEDA', text:'#854F0B' },
-  RMS:  { bg:'#FBEAF0', text:'#993556' },
+  RMI:  { bg: 'rgba(90,200,250,0.18)', text: '#0E5A80' },   // iOS teal
+  RML:  { bg: 'rgba(175,82,222,0.14)', text: '#6B2F94' },   // iOS purple
+  2026: { bg: 'rgba(255,149,0,0.14)',  text: '#8A4A00' },   // iOS orange
+  RMS:  { bg: 'rgba(255,45,85,0.14)',  text: '#8F1330' },   // iOS pink
+};
+// Versiones para dark mode
+const ROADMAP_COLOR_DARK = {
+  RMI:  { bg: 'rgba(100,210,255,0.20)', text: '#7DDEFF' },
+  RML:  { bg: 'rgba(191,90,242,0.20)',  text: '#D9A2FF' },
+  2026: { bg: 'rgba(255,159,10,0.20)',  text: '#FFBB4D' },
+  RMS:  { bg: 'rgba(255,55,95,0.20)',   text: '#FF7A99' },
 };
 
 const fmtInt = (n) => (n == null || !isFinite(n) ? '—' : Math.round(n).toLocaleString('es-MX'));
@@ -374,13 +382,20 @@ export default function SellInCliente({ clienteKey }) {
     return m || 1;
   }, [filasTabla]);
 
+  // Pill Apple · iOS blue con 4 niveles de intensidad
+  const isDarkTable = theme.mode === 'dark';
   const heatClass = (v) => {
-    if (!v) return null;
+    if (v == null || v === 0) return null;
+    if (v < 0) {
+      // Negativos = rojo iOS
+      return { bg: isDarkTable ? 'rgba(255,69,58,0.22)' : 'rgba(255,59,48,0.16)', color: theme.red || '#FF3B30', weight: 600 };
+    }
     const r = v / maxCelda;
-    if (r > 0.75) return { bg: '#7DD3FC', color: '#082F49', weight: 600 };
-    if (r > 0.50) return { bg: '#BAE6FD', color: '#0C4A6E', weight: 500 };
-    if (r > 0.25) return { bg: '#E0F2FE', color: '#0C4A6E' };
-    return { bg: '#F0F9FF', color: '#334155' };
+    const b = theme.accent || (isDarkTable ? '#0A84FF' : '#007AFF');
+    if (r > 0.75) return { bg: b, color: '#FFFFFF', weight: 600 };
+    if (r > 0.50) return { bg: isDarkTable ? 'rgba(10,132,255,0.45)' : 'rgba(0,122,255,0.35)', color: isDarkTable ? '#FFFFFF' : theme.text, weight: 600 };
+    if (r > 0.25) return { bg: isDarkTable ? 'rgba(10,132,255,0.25)' : 'rgba(0,122,255,0.18)', color: theme.text };
+    return { bg: isDarkTable ? 'rgba(10,132,255,0.12)' : 'rgba(0,122,255,0.08)', color: theme.textMuted };
   };
 
   const exportarExcel = () => {
@@ -517,7 +532,7 @@ export default function SellInCliente({ clienteKey }) {
   );
 
   return (
-    <div style={{ padding: 12, background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
+    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
       {/* Header apple */}
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, padding: '0 4px', marginBottom: 4 }}>
         <div>
@@ -671,8 +686,8 @@ export default function SellInCliente({ clienteKey }) {
       </div>
 
       {/* Tabla detalle SKU */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between gap-3 p-3 border-b border-gray-200 bg-gray-50/60">
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, background: theme.surface, flexWrap: 'wrap' }}>
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <div className="flex items-center gap-1.5 px-2 bg-white border border-gray-200 rounded-lg h-8 flex-1 min-w-0 max-w-xs">
               <Search className="w-3.5 h-3.5 text-gray-400" />
@@ -714,11 +729,12 @@ export default function SellInCliente({ clienteKey }) {
                   { label: 'Total',    align: 'right', sort: 'total' },
                 ].map((h, i) => (
                   <th key={i}
-                    className="py-1.5 px-2 font-medium uppercase tracking-wider text-[9px] text-gray-500"
                     style={{
-                      textAlign: h.align,
-                      position: 'sticky', top: 0, background: '#F9FAFB', zIndex: 1, borderBottom: '1px solid #E5E7EB',
-                      whiteSpace: 'nowrap',
+                      textAlign: h.align, padding: '8px 6px',
+                      fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9,
+                      textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted,
+                      position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
+                      borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap',
                     }}>
                     {h.sort ? <SortHeader col={h.sort} label={h.label} /> : h.label}
                   </th>
@@ -727,55 +743,74 @@ export default function SellInCliente({ clienteKey }) {
             </thead>
             <tbody>
               {filasTabla.map((r) => {
-                const rmp = ROADMAP_COLOR[r.rdmp] || { bg: '#F1EFE8', text: '#2C2C2A' };
+                const rmpTheme = isDarkTable ? ROADMAP_COLOR_DARK : ROADMAP_COLOR;
+                const rmp = rmpTheme[r.rdmp] || { bg: 'rgba(0,0,0,0.05)', text: theme.textMuted };
                 const abierto = esGlobal && skuAbierto === r.sku;
                 return (
                   <React.Fragment key={r.sku}>
                     <tr
                       onClick={esGlobal ? () => setSkuAbierto(abierto ? null : r.sku) : undefined}
-                      className={`border-t border-gray-100 ${esGlobal ? `cursor-pointer ${abierto ? 'bg-sky-50' : 'hover:bg-gray-50'}` : 'hover:bg-gray-50'}`}>
-                      <td className="py-1 px-1.5 text-gray-600 text-[10px] whitespace-nowrap" style={{ width: esGlobal ? 60 : 70 }}>{r.marca || '—'}</td>
-                      <td className="py-1 px-1.5 font-mono text-gray-700 text-[10px] whitespace-nowrap" style={{ width: esGlobal ? 88 : 96 }}>
+                      style={{
+                        borderTop: `1px solid ${theme.border}`,
+                        background: abierto ? (isDarkTable ? 'rgba(10,132,255,0.10)' : 'rgba(0,122,255,0.06)') : 'transparent',
+                        cursor: esGlobal ? 'pointer' : 'default',
+                      }}
+                      onMouseEnter={(e) => { if (!abierto) e.currentTarget.style.background = isDarkTable ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
+                      onMouseLeave={(e) => { if (!abierto) e.currentTarget.style.background = 'transparent'; }}>
+                      <td style={{ padding: '4px 6px', color: theme.textMuted, fontSize: 10, whiteSpace: 'nowrap', fontFamily: TYPO.fontText, width: esGlobal ? 60 : 70 }}>{r.marca || '—'}</td>
+                      <td style={{ padding: '4px 6px', color: theme.text, fontSize: 10, fontWeight: 600, fontFamily: '-apple-system, "SF Mono", ui-monospace, monospace', whiteSpace: 'nowrap', width: esGlobal ? 88 : 96 }}>
                         {esGlobal ? (
-                          <span className="inline-flex items-center gap-1">
-                            <ChevronRight className="w-3 h-3 text-sky-500 flex-shrink-0 transition-transform"
-                              style={{ transform: abierto ? 'rotate(90deg)' : 'none' }} />
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <ChevronRight style={{ width: 12, height: 12, color: theme.accent || '#007AFF', flexShrink: 0, transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform 120ms' }} />
                             {r.sku}
                           </span>
                         ) : r.sku}
                       </td>
-                      <td className="py-1 px-1.5 text-gray-800 truncate" style={{ maxWidth: esGlobal ? 180 : 240 }} title={r.descripcion}>
+                      <td style={{ padding: '4px 6px', color: theme.text, fontSize: 11, fontWeight: 500, fontFamily: TYPO.fontDisplay, letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: esGlobal ? 220 : 280 }} title={r.descripcion}>
                         {r.descripcion || '—'}
                       </td>
-                      <td className="py-1 px-1.5 text-center" style={{ width: 70 }}>
+                      <td style={{ padding: '4px 6px', textAlign: 'center', width: 70 }}>
                         {r.rdmp && (
-                          <span className="text-[9px] font-medium px-1 py-0.5 rounded"
-                            style={{ background: rmp.bg, color: rmp.text }}>{r.rdmp}</span>
+                          <span style={{
+                            fontFamily: TYPO.fontText, fontSize: 9, fontWeight: 600,
+                            padding: '3px 8px', borderRadius: 999,
+                            background: rmp.bg, color: rmp.text,
+                            textTransform: 'uppercase', letterSpacing: '0.06em',
+                            display: 'inline-block',
+                          }}>{r.rdmp}</span>
                         )}
                       </td>
                       {r.piezas.map((v, i) => {
                         const h = heatClass(v);
                         return (
-                          <td key={i} className={`py-1 ${esGlobal ? 'px-1' : 'px-1.5'} text-right tabular-nums whitespace-nowrap`}
-                            style={{
-                              background: h?.bg,
-                              color: h?.color || '#9CA3AF',
-                              fontWeight: h?.weight || 400,
-                              width: esGlobal ? 44 : 56,
-                            }}>
-                            {v ? fmtInt(v) : '—'}
+                          <td key={i} style={{
+                            padding: '3px 3px', textAlign: 'right', whiteSpace: 'nowrap',
+                            width: esGlobal ? 44 : 56, fontVariantNumeric: 'tabular-nums',
+                          }}>
+                            {v ? (
+                              <span style={{
+                                display: 'inline-block', padding: '3px 8px', borderRadius: 999,
+                                fontFamily: TYPO.fontText, fontSize: 11,
+                                background: h?.bg || 'transparent',
+                                color: h?.color || theme.textMuted,
+                                fontWeight: h?.weight || 500,
+                                minWidth: 32, textAlign: 'center',
+                              }}>{fmtInt(v)}</span>
+                            ) : (
+                              <span style={{ color: theme.textSubtle, fontFamily: TYPO.fontText, fontSize: 11 }}>—</span>
+                            )}
                           </td>
                         );
                       })}
                       {esGlobal && (
-                        <td className="py-1 px-0.5 text-center" style={{ width: 56 }}>
+                        <td style={{ padding: '3px 2px', textAlign: 'center', width: 56 }}>
                           <RowSparkline piezas={r.piezas} mesActual={mesActual} />
                         </td>
                       )}
-                      <td className="py-1 px-1.5 text-right tabular-nums text-gray-700 bg-gray-50/60" style={{ width: esGlobal ? 60 : 70 }}>
+                      <td style={{ padding: '4px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.textMuted, background: theme.bg, fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 500, width: esGlobal ? 60 : 70 }}>
                         {r.promedio ? fmtInt(r.promedio) : '—'}
                       </td>
-                      <td className="py-1 px-1.5 text-right tabular-nums font-semibold text-gray-800 bg-gray-50" style={{ width: esGlobal ? 64 : 70 }}>
+                      <td style={{ padding: '4px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: theme.text, background: theme.bg, fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.01em', width: esGlobal ? 64 : 70 }}>
                         {fmtInt(r.total)}
                       </td>
                     </tr>
@@ -801,20 +836,26 @@ export default function SellInCliente({ clienteKey }) {
                   </React.Fragment>
                 );
               })}
-              <tr className="font-semibold text-gray-800 bg-gray-50" style={{ borderTop: '2px solid #E5E7EB' }}>
-                <td colSpan={4} className="py-1.5 px-2 text-[10px] uppercase tracking-wider text-gray-600">Total · {filasTabla.length} SKUs</td>
+              <tr style={{ borderTop: `2px solid ${theme.border}`, background: theme.bg }}>
+                <td colSpan={4} style={{ padding: '8px 10px', fontFamily: TYPO.fontText, fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.text }}>
+                  Total · {filasTabla.length} SKUs
+                </td>
                 {totalesFila.mes.map((v, i) => (
-                  <td key={i} className="py-1.5 px-1.5 text-right tabular-nums">{v ? fmtInt(v) : '—'}</td>
+                  <td key={i} style={{ padding: '8px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: v ? theme.text : theme.textSubtle, letterSpacing: '-0.005em' }}>
+                    {v ? fmtInt(v) : '—'}
+                  </td>
                 ))}
                 {esGlobal && (
-                  <td className="py-1.5 px-1 text-center">
+                  <td style={{ padding: '8px 2px', textAlign: 'center' }}>
                     <RowSparkline piezas={totalesFila.mes} mesActual={mesActual} />
                   </td>
                 )}
-                <td className="py-1.5 px-2 text-right tabular-nums">
+                <td style={{ padding: '8px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text }}>
                   {totalesFila.promedio ? fmtInt(totalesFila.promedio) : '—'}
                 </td>
-                <td className="py-1.5 px-2 text-right tabular-nums">{fmtInt(totalesFila.total)}</td>
+                <td style={{ padding: '8px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 700, color: theme.text, letterSpacing: '-0.01em' }}>
+                  {fmtInt(totalesFila.total)}
+                </td>
               </tr>
             </tbody>
           </table>
