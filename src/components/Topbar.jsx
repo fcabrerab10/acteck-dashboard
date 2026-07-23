@@ -376,7 +376,7 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
           {/* Copilot pill · hermana del pill de módulos */}
           <button
             onClick={() => setCopilotOpen(true)}
-            title="Copilot general"
+            title="Pídele ayuda a Ferru AI"
             style={{
               ...pillStyle,
               padding: '0 12px 0 10px', gap: 6, cursor: 'pointer',
@@ -387,7 +387,7 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
             }}
           >
             <Sparkles size={13} style={{ color: theme.accent }} />
-            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, color: theme.text, letterSpacing: '-0.005em' }}>Copilot</span>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, color: theme.text, letterSpacing: '-0.005em' }}>Ferru AI</span>
           </button>
         </div>
 
@@ -1003,10 +1003,10 @@ function SearchOverlay({ theme, isMidnight, onClose }) {
 function CopilotOverlay({ theme, isMidnight, onClose }) {
   const [msg, setMsg] = useState('');
   const suggestions = [
-    '¿Qué OCs están más atrasadas esta semana?',
-    'Resumen de fill del mes por cliente',
-    '¿Cuánto tardamos en promedio de recibir a entregar?',
-    '¿Qué cliente tuvo mayor crecimiento en junio?',
+    'Oye Ferru, ¿qué OCs están más atrasadas esta semana?',
+    'Ferru, dame el fill del mes por cliente',
+    '¿Cuánto tardamos de recibir a entregar, Ferru?',
+    'Ferru, ¿qué cliente creció más en junio?',
   ];
   return (
     <div onClick={onClose}
@@ -1038,8 +1038,8 @@ function CopilotOverlay({ theme, isMidnight, onClose }) {
             <Sparkles size={16} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>Copilot general</div>
-            <div style={{ fontFamily: TYPO.fontText, fontSize: 11.5, color: theme.textMuted, marginTop: 1 }}>Pregúntame lo que quieras sobre tu operación</div>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>Ferru AI</div>
+            <div style={{ fontFamily: TYPO.fontText, fontSize: 11.5, color: theme.textMuted, marginTop: 1 }}>Pídele ayuda al Ferru · él sabe todo de tu operación</div>
           </div>
           <button onClick={onClose} style={{
             width: 28, height: 28, border: 0, background: 'transparent', borderRadius: 999, cursor: 'pointer',
@@ -1059,7 +1059,7 @@ function CopilotOverlay({ theme, isMidnight, onClose }) {
             autoFocus
             value={msg}
             onChange={(e) => setMsg(e.target.value)}
-            placeholder="Pregúntame algo…"
+            placeholder="Oye Ferru, ¿qué…?"
             rows={1}
             style={{
               flex: 1, border: 0, background: 'transparent', outline: 'none', resize: 'none',
@@ -1103,7 +1103,7 @@ function CopilotOverlay({ theme, isMidnight, onClose }) {
           borderTop: `1px solid ${isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
           fontFamily: TYPO.fontText, fontSize: 11, color: theme.textMuted, textAlign: 'center',
         }}>
-          El motor de Copilot está en preparación · próximamente respuestas en vivo
+          El Ferru todavía está calentando motores · pronto responde en vivo
         </div>
       </div>
     </div>
