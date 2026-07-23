@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import {
-  BarChart, Bar, LineChart, Line, ComposedChart, XAxis, YAxis, Tooltip,
+  BarChart, Bar, LineChart, Line, ComposedChart, Area, XAxis, YAxis, Tooltip,
   CartesianGrid, ResponsiveContainer, Legend,
 } from 'recharts';
 
@@ -972,22 +972,37 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
               </div>
               {analisis && analisis.serieMens.length > 0 ? (
                 <ResponsiveContainer width="100%" height={120}>
-                  <ComposedChart data={analisis.serieMens} margin={{ top: 6, right: 4, left: -24, bottom: 0 }}>
+                  <ComposedChart data={analisis.serieMens} margin={{ top: 8, right: 6, left: -24, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id={`epFill-${sku.sku}`} x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stopColor={P.accent} stopOpacity={isDark ? 0.32 : 0.20} />
+                        <stop offset="100%" stopColor={P.accent} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid stroke={theme.border} strokeDasharray="2 4" vertical={false} />
-                    <XAxis dataKey="mes" tick={{ fontSize: 9.5, fill: theme.textMuted }} interval={0} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="left" hide domain={['dataMin - 50', 'dataMax + 50']} />
-                    <YAxis yAxisId="right" orientation="right" hide />
+                    <XAxis dataKey="mes" tick={{ fontSize: 9.5, fill: theme.textMuted, fontFamily: TYPO.fontText }} interval={0} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="left" hide domain={['auto', 'auto']} />
+                    <YAxis yAxisId="right" orientation="right" hide domain={[0, 'auto']} />
                     <Tooltip
                       formatter={(v, name) => name === 'Precio' ? fmtMoney(v) : `${fmtInt(v)} pz`}
-                      labelStyle={{ fontSize: 10, color: theme.textMuted }}
-                      contentStyle={{ fontSize: 10, padding: 8, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8, fontFamily: TYPO.fontText }} />
-                    <Bar yAxisId="right" dataKey="piezas" name="Piezas" fill={`${P.accent}33`} radius={[3, 3, 0, 0]} />
-                    <Line yAxisId="left" type="monotone" dataKey="precio" name="Precio"
-                      stroke={P.accent} strokeWidth={2.5} dot={{ r: 3, fill: theme.surface, stroke: P.accent, strokeWidth: 2 }} connectNulls />
+                      labelStyle={{ fontSize: 10, color: theme.textMuted, fontFamily: TYPO.fontText, fontWeight: 500 }}
+                      contentStyle={{
+                        fontSize: 10, padding: '6px 10px',
+                        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10,
+                        fontFamily: TYPO.fontText, boxShadow: isDark ? 'none' : '0 4px 12px rgba(0,0,0,0.08)',
+                      }}
+                      cursor={{ stroke: theme.border, strokeDasharray: '3 3' }} />
+                    <Bar yAxisId="right" dataKey="piezas" name="Piezas" fill={`${P.accent}1F`} radius={[4, 4, 0, 0]} maxBarSize={26} />
+                    <Area yAxisId="left" type="monotone" dataKey="precio" name="Precio"
+                      stroke={P.accent} strokeWidth={2.5}
+                      fill={`url(#epFill-${sku.sku})`}
+                      dot={false}
+                      activeDot={{ r: 4, fill: theme.surface, stroke: P.accent, strokeWidth: 2.5 }}
+                      connectNulls />
                   </ComposedChart>
                 </ResponsiveContainer>
               ) : (
-                <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', padding: '24px 0' }}>Sin datos históricos</div>
+                <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', padding: '24px 0', fontFamily: TYPO.fontText }}>Sin datos históricos</div>
               )}
             </div>
           </div>
