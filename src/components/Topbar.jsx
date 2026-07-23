@@ -150,8 +150,9 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
   const { theme, setThemeKey } = useTheme();
   const [openMenuId, setOpenMenuId] = useState(null); // null · 'general' · 'comercial' · 'admin' · 'axon' · 'update' · 'notif' · 'user'
   const [clienteExpanded, setClienteExpanded] = useState(null); // cliente expandido dentro del menu comercial
-  const [searchOpen, setSearchOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [ferrutekBusy, setFerrutekBusy] = useState(false);
+  const [ferrutekQuery, setFerrutekQuery] = useState('');
   const [notifs, setNotifs] = useState([]);
   const [silenciadas, setSilenciadas] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('notif_silenciadas') || '[]')); }
@@ -221,8 +222,8 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
   // ─ Shortcuts ─
   useEffect(() => {
     const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(v => !v); }
-      if (e.key === 'Escape') { setSearchOpen(false); setOpenMenuId(null); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setCopilotOpen(v => !v); }
+      if (e.key === 'Escape') { setCopilotOpen(false); setOpenMenuId(null); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -306,6 +307,10 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
 
   return (
     <>
+      <style>{`
+        @keyframes ferrutekBusyRing { 0% { transform: scale(0.9); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
+        @keyframes ferrutekThink { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.2); } }
+      `}</style>
       <div
         ref={rootRef}
         style={{
@@ -386,32 +391,54 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
               border: `1px solid ${isMidnight ? 'rgba(100,210,255,0.24)' : 'rgba(0,122,255,0.20)'}`,
             }}
           >
-            <Sparkles size={13} style={{ color: theme.accent }} />
+            {/* Mini fantasmita en lugar del sparkle */}
+            <span style={{ position: 'relative', display: 'inline-flex', width: 20, height: 20, alignItems: 'center', justifyContent: 'center' }}>
+              <FerrutekGhost outfit={detectarOutfit()} size={20} />
+              {ferrutekBusy && (
+                <span aria-hidden style={{
+                  position: 'absolute', inset: -3, borderRadius: 999,
+                  border: `1.5px solid ${theme.accent}`,
+                  animation: 'ferrutekBusyRing 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite',
+                }} />
+              )}
+            </span>
             <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, color: theme.text, letterSpacing: '-0.005em' }}>Ferruteck</span>
+            {ferrutekBusy && (
+              <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center', marginLeft: 4 }}>
+                <span style={{ width: 3, height: 3, borderRadius: 999, background: theme.accent, animation: 'ferrutekThink 1.2s ease-in-out infinite' }}/>
+                <span style={{ width: 3, height: 3, borderRadius: 999, background: theme.accent, animation: 'ferrutekThink 1.2s ease-in-out 0.2s infinite' }}/>
+                <span style={{ width: 3, height: 3, borderRadius: 999, background: theme.accent, animation: 'ferrutekThink 1.2s ease-in-out 0.4s infinite' }}/>
+              </span>
+            )}
           </button>
         </div>
 
-        {/* ═══ PILL CENTRAL · Search ═══ */}
+        {/* ═══ PILL CENTRAL · Search + Ferruteck ═══ */}
         <button
-          onClick={() => setSearchOpen(true)}
+          onClick={() => { setFerrutekQuery(''); setCopilotOpen(true); }}
           style={{
             ...pillStyle,
             justifySelf: 'center', width: '100%', maxWidth: 460,
-            padding: '0 12px', gap: 8, cursor: 'pointer', pointerEvents: 'auto',
+            padding: '0 8px 0 12px', gap: 8, cursor: 'pointer', pointerEvents: 'auto',
           }}
           onMouseEnter={(e) => e.currentTarget.style.borderColor = isMidnight ? 'rgba(100,210,255,0.3)' : 'rgba(0,0,0,0.12)'}
           onMouseLeave={(e) => e.currentTarget.style.borderColor = isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}
         >
           <Search size={13} style={{ color: theme.textMuted }} />
           <span style={{ flex: 1, textAlign: 'left', fontFamily: TYPO.fontText, fontSize: 11.5, color: theme.textMuted }}>
-            Buscar OC, SKU, cliente…
+            Busca OC, SKU, cliente · o pregúntale a Ferruteck
           </span>
-          <span style={{
-            fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9,
-            color: theme.textSubtle || theme.textMuted,
-            background: isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-            padding: '1px 5px', borderRadius: 4,
-          }}>⌘K</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, paddingLeft: 4, borderLeft: `1px solid ${isMidnight ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'}` }}>
+            <span style={{ display: 'inline-flex', width: 18, height: 18 }}>
+              <FerrutekGhost outfit={detectarOutfit()} size={18} />
+            </span>
+            <span style={{
+              fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9,
+              color: theme.textSubtle || theme.textMuted,
+              background: isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+              padding: '1px 5px', borderRadius: 4,
+            }}>⌘K</span>
+          </span>
         </button>
 
         {/* ═══ PILL DERECHA · Actualizar + Notif + Avatar ═══ */}
@@ -502,11 +529,13 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
         </div>
       </div>
 
-      {searchOpen && (
-        <SearchOverlay theme={theme} isMidnight={isMidnight} onClose={() => setSearchOpen(false)} />
-      )}
       {copilotOpen && (
-        <CopilotOverlay theme={theme} isMidnight={isMidnight} onClose={() => setCopilotOpen(false)} />
+        <CopilotOverlay
+          theme={theme} isMidnight={isMidnight}
+          onClose={() => setCopilotOpen(false)}
+          initialQuery={ferrutekQuery}
+          onBusyChange={setFerrutekBusy}
+        />
       )}
     </>
   );
@@ -1068,10 +1097,22 @@ function FerrutekGhost({ outfit = 'default', size = 140 }) {
   );
 }
 
-function CopilotOverlay({ theme, isMidnight, onClose }) {
-  const [msg, setMsg] = useState('');
+function CopilotOverlay({ theme, isMidnight, onClose, initialQuery = '', onBusyChange }) {
+  const [msg, setMsg] = useState(initialQuery);
+  const [thinking, setThinking] = useState(false);
   const [outfit] = useState(detectarOutfit);
   const chivasDay = outfit === 'chivas';
+
+  const enviar = () => {
+    if (!msg.trim() || thinking) return;
+    setThinking(true);
+    onBusyChange?.(true);
+    // Simula procesamiento — cuando conectemos IA, reemplazar por await
+    setTimeout(() => {
+      setThinking(false);
+      onBusyChange?.(false);
+    }, 2400);
+  };
 
   const suggestions = [
     { ico: '⚡', txt: 'Oye Ferruteck, ¿qué OCs están más atrasadas?' },
@@ -1223,21 +1264,34 @@ function CopilotOverlay({ theme, isMidnight, onClose }) {
             autoFocus
             value={msg}
             onChange={(e) => setMsg(e.target.value)}
-            placeholder="Oye Ferruteck, ¿qué…?"
+            onKeyDown={(e) => { if (e.key === 'Enter') enviar(); }}
+            placeholder={thinking ? 'Ferruteck está pensando…' : 'Oye Ferruteck, ¿qué…?'}
+            disabled={thinking}
             style={{
               flex: 1, border: 0, background: 'transparent', outline: 'none',
               fontFamily: TYPO.fontText, fontSize: 13.5, color: '#FFF',
+              opacity: thinking ? 0.6 : 1,
             }}
           />
-          <button style={{
-            width: 32, height: 32, borderRadius: 999, border: 0, cursor: 'pointer',
-            background: msg.trim()
-              ? (chivasDay ? 'linear-gradient(135deg, #EF4444, #FBBF24)' : 'linear-gradient(135deg, #AF52DE, #64D2FF)')
-              : 'rgba(255,255,255,0.10)',
-            color: '#FFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: msg.trim() ? '0 4px 12px rgba(175,82,222,0.4)' : 'none',
-            transition: 'background 200ms',
-          }}>
+          {thinking && (
+            <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center', paddingRight: 4 }}>
+              <span style={{ width: 4, height: 4, borderRadius: 999, background: '#BF5AF2', animation: 'ferrutekThink 1.2s ease-in-out infinite' }}/>
+              <span style={{ width: 4, height: 4, borderRadius: 999, background: '#BF5AF2', animation: 'ferrutekThink 1.2s ease-in-out 0.2s infinite' }}/>
+              <span style={{ width: 4, height: 4, borderRadius: 999, background: '#BF5AF2', animation: 'ferrutekThink 1.2s ease-in-out 0.4s infinite' }}/>
+            </span>
+          )}
+          <button
+            onClick={enviar}
+            disabled={!msg.trim() || thinking}
+            style={{
+              width: 32, height: 32, borderRadius: 999, border: 0, cursor: (!msg.trim() || thinking) ? 'default' : 'pointer',
+              background: (msg.trim() && !thinking)
+                ? (chivasDay ? 'linear-gradient(135deg, #EF4444, #FBBF24)' : 'linear-gradient(135deg, #AF52DE, #64D2FF)')
+                : 'rgba(255,255,255,0.10)',
+              color: '#FFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: (msg.trim() && !thinking) ? '0 4px 12px rgba(175,82,222,0.4)' : 'none',
+              transition: 'background 200ms',
+            }}>
             <Send size={13} />
           </button>
         </div>
@@ -1255,6 +1309,7 @@ function CopilotOverlay({ theme, isMidnight, onClose }) {
           @keyframes ferrutekShadow { 0%,100% { width: 78px; opacity: 0.5; } 50% { width: 58px; opacity: 0.3; } }
           @keyframes ferrutekSpeech { from { opacity: 0; transform: translateY(6px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
           @keyframes ferrutekTwinkle { 0%,100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.4); } }
+          @keyframes ferrutekThink { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.2); } }
         `}</style>
       </div>
     </div>
