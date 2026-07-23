@@ -65,6 +65,8 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   useEffect(() => {
     let cancel = false;
     (async () => {
+      const anioIni = `${anio}-01-01`;
+      const anioAntIni = `${anio - 1}-01-01`;
       const [vAct, vAnt, cR, ecR, siR, prR, soR] = await Promise.all([
         supabase.from('ventas_mensuales').select('*').eq('cliente', clienteKey).eq('anio', anio).order('mes'),
         supabase.from('ventas_mensuales').select('*').eq('cliente', clienteKey).eq('anio', anio - 1).order('mes'),
@@ -72,7 +74,7 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
         supabase.from('estados_cuenta').select('id').eq('cliente', clienteKey).order('fecha_corte', { ascending: false }).limit(1),
         supabase.from('sell_in_sku').select('sku, mes, monto_pesos, piezas').eq('cliente', clienteKey).eq('anio', anio),
         supabase.from('productos_cliente').select('sku, marca, precio_venta').eq('cliente', clienteKey),
-        supabase.from('sellout_detalle').select('total, marca, mes, cantidad').eq('cliente', clienteKey).gte('anio', anio),
+        supabase.from('sellout_detalle').select('fecha, total, cantidad, no_parte, marca').eq('cliente', clienteKey).gte('fecha', anioAntIni),
       ]);
       if (cancel) return;
       setVentasActual(vAct.data || []);
@@ -185,38 +187,40 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   }, [ventasActual, mesActual]);
 
   const ratioGlobal = useMemo(() => {
-    const activos = sivsoTemporal.filter(x => !x.futuro && x.sellIn > 0);
-    const totSI = activos.reduce((s, x) => s + x.sellIn, 0);
-    const totSO = activos.reduce((s, x) => s + x.sellOut, 0);
-    const activosAnt = ventasAnt.filter(v => v.sell_in > 0);
+    // Ratio SO/SI año actual usando ventas_mensuales del año actual
+    const activos = ventasActual.filter(v => Number(v.mes) <= mesActual && Number(v.sell_in) > 0);
+    const totSI = activos.reduce((s, v) => s + (Number(v.sell_in) || 0), 0);
+    const totSO = activos.reduce((s, v) => s + (Number(v.sell_out) || 0), 0);
+    const activosAnt = ventasAnt.filter(v => Number(v.sell_in) > 0);
     const totSIAnt = activosAnt.reduce((s, v) => s + (Number(v.sell_in) || 0), 0);
     const totSOAnt = activosAnt.reduce((s, v) => s + (Number(v.sell_out) || 0), 0);
     const ratio = totSI > 0 ? (totSO / totSI * 100) : null;
     const ratioAnt = totSIAnt > 0 ? (totSOAnt / totSIAnt * 100) : null;
     return { ratio, ratioAnt, deltaPP: ratio != null && ratioAnt != null ? ratio - ratioAnt : null };
-  }, [sivsoTemporal, ventasAnt]);
+  }, [ventasActual, ventasAnt, mesActual]);
 
   // ═════ Sell In vs Sell Out por marca ═════
+  // sellout_detalle no tiene mes/anio, se derivan de fecha
   const marcasSIvsSO = useMemo(() => {
     const meses = Q_MESES[marcaRango] || Q_MESES.anio;
-    // Mapa SKU → marca + precio_venta
+
+    // Sell In agregado por marca (sell_in_sku joined con productos_cliente por sku)
     const skuMap = {};
     productos.forEach(p => { skuMap[String(p.sku)] = p; });
-
-    // Sell In agregado por marca (usando sell_in_sku × precio_venta desde productos)
     const siByMarca = {};
     sellInSku.forEach(r => {
       if (!meses.includes(Number(r.mes))) return;
-      const prod = skuMap[String(r.sku)];
-      const marca = prod?.marca || 'Sin Marca';
-      const monto = Number(r.monto_pesos) || 0;
-      siByMarca[marca] = (siByMarca[marca] || 0) + monto;
+      const marca = (skuMap[String(r.sku)]?.marca) || 'Sin Marca';
+      siByMarca[marca] = (siByMarca[marca] || 0) + (Number(r.monto_pesos) || 0);
     });
 
-    // Sell Out agregado por marca (desde sellout_detalle)
+    // Sell Out agregado por marca (sellout_detalle: derivar mes+anio de fecha)
     const soByMarca = {};
     sellOutDetalle.forEach(r => {
-      if (!meses.includes(Number(r.mes))) return;
+      if (!r.fecha) return;
+      const d = new Date(r.fecha);
+      if (d.getFullYear() !== anio) return;
+      if (!meses.includes(d.getMonth() + 1)) return;
       const marca = r.marca || 'Sin Marca';
       soByMarca[marca] = (soByMarca[marca] || 0) + (Number(r.total) || 0);
     });
@@ -226,11 +230,10 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
     marcas.forEach(m => {
       const si = siByMarca[m] || 0;
       const so = soByMarca[m] || 0;
-      const ratio = si > 0 ? (so / si * 100) : null;
-      arr.push({ marca: m, si, so, ratio });
+      arr.push({ marca: m, si, so, ratio: si > 0 ? (so / si * 100) : null });
     });
     return arr.sort((a, b) => (b.si + b.so) - (a.si + a.so)).slice(0, 6);
-  }, [sellInSku, sellOutDetalle, productos, marcaRango]);
+  }, [sellInSku, sellOutDetalle, productos, marcaRango, anio]);
 
   // ═════ Copilot recos ═════
   const copilotRecos = useMemo(() => {
@@ -267,7 +270,9 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   }, [inventarioDias, inventarioValor, aging, pctCuota, cuotaIdeal, sellInMes]);
 
   // ═════ Estilos ═════
-  const heroBg = isDark ? '#0A0A0C' : (theme.key === 'marfil' ? '#0055B5' : '#1C1C1E');
+  // Hero usa el token semántico del tema (respeta las 3 identidades):
+  // Claro: negro #000, Midnight: negro OLED, Marfil: cobalto #0055B5
+  const heroBg = theme.heroCardBg || theme.surfaceInverse || '#1C1C1E';
 
   return (
     <div style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -326,23 +331,23 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
         <CobranzaCard theme={theme} P={P} aging={aging} />
       </div>
 
-      {/* Timeline lineal */}
-      <TimelineLineal
-        theme={theme} P={P}
-        data={timelineMeses}
-        sums={timelineSums}
-        rango={rango}
-        onChangeRango={setRango}
-      />
-
-      {/* Fila: Sell In vs Sell Out temporal + Ferruteck cósmico */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 10 }}>
-        <SIvsSOTemporal theme={theme} P={P} data={sivsoTemporal} ratioGlobal={ratioGlobal} mesActual={mesActual} />
+      {/* Fila: Timeline lineal (más compacto) + Ferruteck cósmico */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: 10 }}>
+        <TimelineLineal
+          theme={theme} P={P}
+          data={timelineMeses}
+          sums={timelineSums}
+          rango={rango}
+          onChangeRango={setRango}
+        />
         <FerruteckCosmicCard recos={copilotRecos} />
       </div>
 
       {/* Sell In vs Sell Out por marca */}
       <MarcasSIvsSOCard theme={theme} P={P} marcas={marcasSIvsSO} rango={marcaRango} onChangeRango={setMarcaRango} />
+
+      {/* Sell In vs Sell Out temporal (al fondo, ancho completo) */}
+      <SIvsSOTemporal theme={theme} P={P} data={sivsoTemporal} ratioGlobal={ratioGlobal} mesActual={mesActual} />
     </div>
   );
 }
@@ -526,8 +531,8 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango }) {
   ];
 
   // Escalas
-  const W = 600, H = 200;
-  const padL = 30, padR = 20, padT = 15, padB = 25;
+  const W = 600, H = 140;
+  const padL = 26, padR = 16, padT = 12, padB = 20;
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
 
@@ -569,7 +574,7 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango }) {
       </div>
 
       {/* Sums row */}
-      <div style={{ display: 'flex', gap: 16, padding: '8px 0 10px', flexWrap: 'wrap', borderBottom: `1px solid ${theme.divider || theme.border}`, marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 12, padding: '6px 0 8px', flexWrap: 'wrap', borderBottom: `1px solid ${theme.divider || theme.border}`, marginBottom: 6 }}>
         <SumStat theme={theme} k={<><Dot color={theme.textMuted} />Sell In {anio - 1}</>} v={fmtMoney(sums.s2025)} vColor={theme.textMuted} />
         <SumStat theme={theme} k={<><Dot color={P.accent} />Sell In {anio}</>} v={fmtMoney(sums.s2026)} vColor={theme.text} />
         <SumStat theme={theme} k={<><Dot color={P.orange} dashed />Cuota {anio}</>} v={fmtMoney(sums.cuota)} vColor={theme.text} />
@@ -583,7 +588,7 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango }) {
 
       {/* Chart */}
       <div style={{ position: 'relative' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 200, display: 'block' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 140, display: 'block' }}>
           {/* Grid */}
           {[0.25, 0.5, 0.75].map(f => (
             <line key={f} x1={padL} y1={padT + chartH * f} x2={W - padR} y2={padT + chartH * f}
@@ -656,8 +661,8 @@ function Dot({ color, dashed }) {
 function SumStat({ theme, k, v, vColor }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>{k}</div>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: vColor || theme.text, fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>{k}</div>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: vColor || theme.text, fontVariantNumeric: 'tabular-nums' }}>{v}</div>
     </div>
   );
 }
