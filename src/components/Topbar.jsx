@@ -150,6 +150,7 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
   const { theme, setThemeKey } = useTheme();
   const [openMenuId, setOpenMenuId] = useState(null); // null · 'general' · 'comercial' · 'admin' · 'axon' · 'update' · 'notif' · 'user'
   const [clienteExpanded, setClienteExpanded] = useState(null); // cliente expandido dentro del menu comercial
+  const [searchOpen, setSearchOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [ferrutekBusy, setFerrutekBusy] = useState(false);
   const [ferrutekQuery, setFerrutekQuery] = useState('');
@@ -222,8 +223,8 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
   // ─ Shortcuts ─
   useEffect(() => {
     const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setCopilotOpen(v => !v); }
-      if (e.key === 'Escape') { setCopilotOpen(false); setOpenMenuId(null); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(v => !v); }
+      if (e.key === 'Escape') { setSearchOpen(false); setCopilotOpen(false); setOpenMenuId(null); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -310,6 +311,7 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
       <style>{`
         @keyframes ferrutekBusyRing { 0% { transform: scale(0.9); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
         @keyframes ferrutekThink { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.2); } }
+        @keyframes ferrutekIn { from { opacity: 0; transform: translateY(12px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
       `}</style>
       <div
         ref={rootRef}
@@ -385,10 +387,13 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
             style={{
               ...pillStyle,
               padding: '0 12px 0 10px', gap: 6, cursor: 'pointer',
-              background: isMidnight
-                ? 'linear-gradient(135deg, rgba(100,210,255,0.14), rgba(191,90,242,0.12))'
-                : 'linear-gradient(135deg, rgba(0,122,255,0.10), rgba(175,82,222,0.08))',
-              border: `1px solid ${isMidnight ? 'rgba(100,210,255,0.24)' : 'rgba(0,122,255,0.20)'}`,
+              background: `
+                radial-gradient(circle at 20% 30%, rgba(191,90,242,0.35) 0%, transparent 55%),
+                radial-gradient(circle at 80% 70%, rgba(100,210,255,0.25) 0%, transparent 55%),
+                linear-gradient(180deg, #1e1e2e 0%, #0d0d19 100%)`,
+              border: '1px solid rgba(255,255,255,0.10)',
+              color: '#FFF',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)',
             }}
           >
             {/* Mini fantasmita en lugar del sparkle */}
@@ -402,7 +407,7 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
                 }} />
               )}
             </span>
-            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, color: theme.text, letterSpacing: '-0.005em' }}>Ferruteck</span>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, color: '#FFF', letterSpacing: '-0.005em' }}>Ferruteck</span>
             {ferrutekBusy && (
               <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center', marginLeft: 4 }}>
                 <span style={{ width: 3, height: 3, borderRadius: 999, background: theme.accent, animation: 'ferrutekThink 1.2s ease-in-out infinite' }}/>
@@ -413,9 +418,9 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
           </button>
         </div>
 
-        {/* ═══ PILL CENTRAL · Search + Ferruteck ═══ */}
+        {/* ═══ PILL CENTRAL · Search (con opción de escalar a Ferruteck) ═══ */}
         <button
-          onClick={() => { setFerrutekQuery(''); setCopilotOpen(true); }}
+          onClick={() => setSearchOpen(true)}
           style={{
             ...pillStyle,
             justifySelf: 'center', width: '100%', maxWidth: 460,
@@ -529,10 +534,17 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
         </div>
       </div>
 
+      {searchOpen && (
+        <SearchOverlay
+          theme={theme} isMidnight={isMidnight}
+          onClose={() => setSearchOpen(false)}
+          onAskFerruteck={(q) => { setSearchOpen(false); setFerrutekQuery(q); setCopilotOpen(true); }}
+        />
+      )}
       {copilotOpen && (
         <CopilotOverlay
           theme={theme} isMidnight={isMidnight}
-          onClose={() => setCopilotOpen(false)}
+          onClose={() => { setCopilotOpen(false); setFerrutekQuery(''); }}
           initialQuery={ferrutekQuery}
           onBusyChange={setFerrutekBusy}
         />
@@ -990,38 +1002,105 @@ function UserMenu({ theme, isMidnight, setThemeKey, perfil, modoPresent, onToggl
   );
 }
 
-// ═══════════════ Search overlay ═══════════════
-function SearchOverlay({ theme, isMidnight, onClose }) {
+// ═══════════════ Search overlay · buscador normal + escalar a Ferruteck ═══════════════
+function SearchOverlay({ theme, isMidnight, onClose, onAskFerruteck }) {
+  const [q, setQ] = useState('');
+  const outfit = detectarOutfit();
+  const handleAskFerruteck = () => onAskFerruteck?.(q.trim());
   return (
     <div onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 100,
-        background: isMidnight ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.25)',
-        backdropFilter: 'blur(4px)',
+        background: isMidnight ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)',
+        backdropFilter: 'blur(6px)',
         display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-        paddingTop: '15vh', paddingLeft: 16, paddingRight: 16,
+        paddingTop: '12vh', paddingLeft: 16, paddingRight: 16,
       }}
     >
       <div onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%', maxWidth: 560,
-          background: isMidnight ? 'rgba(40,40,45,0.92)' : 'rgba(255,255,255,0.95)',
+          background: isMidnight ? 'rgba(40,40,45,0.92)' : 'rgba(255,255,255,0.96)',
           backdropFilter: 'saturate(180%) blur(30px)',
-          border: `1px solid ${isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+          border: `1px solid ${isMidnight ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'}`,
           borderRadius: 16,
           boxShadow: isMidnight ? '0 20px 60px rgba(0,0,0,0.6)' : '0 20px 60px rgba(0,0,0,0.15)',
           padding: 8, fontFamily: TYPO.fontText,
+          animation: 'ferrutekIn 300ms cubic-bezier(0.32, 0.72, 0, 1) both',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
+        {/* Input de búsqueda */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px' }}>
           <Search size={16} style={{ color: theme.textMuted }} />
-          <input autoFocus placeholder="Buscar OC, SKU, cliente…"
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleAskFerruteck(); }
+              else if (e.key === 'Escape') onClose();
+            }}
+            placeholder="Buscar OC, SKU, cliente…"
             style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', fontFamily: TYPO.fontText, fontSize: 15, color: theme.text }}
           />
           <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, background: isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', padding: '2px 6px', borderRadius: 5 }}>ESC</span>
         </div>
-        <div style={{ borderTop: `1px solid ${isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, padding: '14px 16px', color: theme.textMuted, fontSize: 12 }}>
-          Búsqueda universal próximamente
+
+        {/* Cuerpo de resultados */}
+        <div style={{ borderTop: `1px solid ${isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, padding: '14px 16px 8px' }}>
+          {q.trim().length === 0 ? (
+            <div style={{ color: theme.textMuted, fontSize: 12, textAlign: 'center', padding: '18px 8px' }}>
+              Empieza a escribir para buscar en OCs, SKUs y clientes
+            </div>
+          ) : (
+            <div style={{ color: theme.textMuted, fontSize: 12, padding: '16px 8px 10px', textAlign: 'center' }}>
+              <div style={{ marginBottom: 4 }}>Sin resultados para <strong style={{ color: theme.text }}>"{q}"</strong></div>
+              <div style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted }}>
+                La búsqueda universal está en preparación
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer: CTA para escalar a Ferruteck */}
+        <div style={{
+          borderTop: `1px solid ${isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
+          padding: 8,
+        }}>
+          <button
+            onClick={handleAskFerruteck}
+            style={{
+              width: '100%', border: 0, cursor: 'pointer',
+              padding: '10px 14px', borderRadius: 12,
+              background: `
+                radial-gradient(circle at 20% 30%, rgba(191,90,242,0.35) 0%, transparent 55%),
+                radial-gradient(circle at 80% 70%, rgba(100,210,255,0.28) 0%, transparent 55%),
+                linear-gradient(180deg, #1e1e2e 0%, #0d0d19 100%)`,
+              display: 'flex', alignItems: 'center', gap: 12,
+              color: '#FFF',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)',
+              transition: 'transform 200ms',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; }}
+          >
+            <span style={{ display: 'inline-flex', width: 22, height: 22 }}>
+              <FerrutekGhost outfit={outfit} size={22} />
+            </span>
+            <span style={{ flex: 1, textAlign: 'left' }}>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.005em' }}>
+                {q.trim() ? `Preguntarle a Ferruteck sobre "${q.length > 32 ? q.slice(0, 32) + '…' : q}"` : 'Pídele ayuda a Ferruteck'}
+              </div>
+              <div style={{ fontFamily: TYPO.fontText, fontSize: 10.5, color: 'rgba(255,255,255,0.55)', marginTop: 1 }}>
+                {q.trim() ? 'Escala a tu asistente inteligente' : 'Resúmenes, comparativas, fútbol y más'}
+              </div>
+            </span>
+            <span style={{
+              fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9,
+              color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.10)',
+              padding: '2px 6px', borderRadius: 5,
+            }}>⌘ ↵</span>
+          </button>
         </div>
       </div>
     </div>
@@ -1034,8 +1113,8 @@ function SearchOverlay({ theme, isMidnight, onClose }) {
 // TODO: reemplazar con API real de fixtures Liga MX
 function detectarOutfit() {
   const d = new Date();
-  const day = d.getDay(); // 0=dom, 6=sab
-  if (day === 0 || day === 6) return 'chivas'; // fines de semana = modo Chivas
+  const day = d.getDay(); // 0=dom, 5=vie, 6=sab
+  if (day === 5 || day === 6 || day === 0) return 'chivas'; // vie/sab/dom = modo Chivas
   return 'default';
 }
 
