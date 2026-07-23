@@ -116,3 +116,34 @@ body {
 
 [data-theme="marfil"] .border-gray-100 { border-color: var(--t-border) !important; }
 [data-theme="marfil"] .border-gray-200 { border-color: var(--t-border) !important; }
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* APPLE BUTTON HOVER · scale sutil (uniforme en todo el dashboard) */
+/*                                                                 */
+/* Usa :where() para specificity 0 → cualquier style inline o clase */
+/* de componentes específicos SIEMPRE gana. No rompe nada existente.*/
+/*                                                                 */
+/* Se excluye:                                                     */
+/*  - :disabled                                                    */
+/*  - Recharts internals (evita transform en axis/tooltip)         */
+/*  - Elementos SVG (input inputs sí, svg no)                     */
+/*  - .no-scale-hover (escape hatch para casos puntuales)          */
+/* ═══════════════════════════════════════════════════════════════ */
+:where(button, [role="button"], a.btn):not(:disabled):not(.no-scale-hover):not(.recharts-surface):not(.recharts-legend-item) {
+  transition: transform 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+:where(button, [role="button"], a.btn):not(:disabled):not(.no-scale-hover):not(.recharts-surface):not(.recharts-legend-item):hover {
+  transform: scale(1.03);
+}
+:where(button, [role="button"], a.btn):not(:disabled):not(.no-scale-hover):not(.recharts-surface):not(.recharts-legend-item):active {
+  transform: scale(0.98);
+  transition: transform 60ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Respeta el usuario que prefiere menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  :where(button, [role="button"], a.btn):hover,
+  :where(button, [role="button"], a.btn):active {
+    transform: none !important;
+  }
+}
