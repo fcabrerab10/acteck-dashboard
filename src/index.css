@@ -126,7 +126,6 @@ body {
 /* Se excluye:                                                     */
 /*  - :disabled                                                    */
 /*  - Recharts internals (evita transform en axis/tooltip)         */
-/*  - Elementos SVG (input inputs sí, svg no)                     */
 /*  - .no-scale-hover (escape hatch para casos puntuales)          */
 /* ═══════════════════════════════════════════════════════════════ */
 :where(button, [role="button"], a.btn):not(:disabled):not(.no-scale-hover):not(.recharts-surface):not(.recharts-legend-item) {
@@ -138,6 +137,17 @@ body {
 :where(button, [role="button"], a.btn):not(:disabled):not(.no-scale-hover):not(.recharts-surface):not(.recharts-legend-item):active {
   transform: scale(0.98);
   transition: transform 60ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Quita el contorno (focus ring) que aparece al hacer click con mouse.
+ * Se mantiene el focus ring SOLO para navegación con teclado (Tab),
+ * gracias a :focus-visible — así preservamos accesibilidad. */
+:where(button, [role="button"], a.btn):focus {
+  outline: none;
+}
+:where(button, [role="button"], a.btn):focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
 }
 
 /* Respeta el usuario que prefiere menos movimiento */

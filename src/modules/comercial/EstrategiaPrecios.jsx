@@ -99,8 +99,8 @@ function MultiSelect({ label, options, selected, onChange, width = 140 }) {
           fontWeight: activo ? 600 : 500, fontFamily: 'inherit', cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
         }}
-        onMouseEnter={(e) => { if (!activo) e.currentTarget.style.borderColor = theme.textMuted; }}
-        onMouseLeave={(e) => { if (!activo) e.currentTarget.style.borderColor = theme.border; }}>
+>
+{/* Sin cambio de border-color en hover — el scale global ya da el feedback */}
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {label}
           {activo && <span style={{ marginLeft: 4, fontWeight: 700 }}>· {selected.size}</span>}
