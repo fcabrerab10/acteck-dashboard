@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, AlertCircle, Info, X } from "lucide-react";
 
 /**
- * Toast system — minimal pub/sub, sin dependencias.
+ * Toast system estilo Apple — pill frosted centrado con slide-down.
  *
  * Uso:
  *   import { toast } from "../lib/toast";
@@ -11,6 +11,7 @@ import { CheckCircle2, AlertCircle, Info, X } from "lucide-react";
  *   toast.info("Mensaje informativo");
  *
  * En el árbol de la app, incluir <Toaster /> una sola vez (en App.jsx).
+ * Los colores respetan los 3 temas vía CSS vars --t-*.
  */
 
 let listeners = [];
@@ -18,7 +19,7 @@ let counter = 0;
 
 function emit(type, message, opts = {}) {
   const id = ++counter;
-  const toastObj = { id, type, message, duration: opts.duration || 3000 };
+  const toastObj = { id, type, message, duration: opts.duration || 3200 };
   listeners.forEach((l) => l(toastObj));
   return id;
 }
@@ -35,16 +36,12 @@ const ICONS = {
   info:    Info,
 };
 
-const STYLES = {
-  success: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  error:   "bg-red-50 text-red-800 border-red-200",
-  info:    "bg-blue-50 text-blue-800 border-blue-200",
-};
-
-const ICON_COLORS = {
-  success: "text-emerald-600",
-  error:   "text-red-600",
-  info:    "text-blue-600",
+// Colores semánticos iOS que se leen de las CSS vars del theme (si existen)
+// con fallback a los system colors light por default.
+const ICON_COLOR_VAR = {
+  success: 'var(--t-green, #34C759)',
+  error:   'var(--t-red, #FF3B30)',
+  info:    'var(--t-accent, #007AFF)',
 };
 
 export function Toaster() {
@@ -62,34 +59,82 @@ export function Toaster() {
   }, []);
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none max-w-sm">
+    <div
+      style={{
+        position: 'fixed',
+        top: 68, // debajo del topbar sticky (~54px + gap)
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 200,
+        display: 'flex', flexDirection: 'column', gap: 8,
+        pointerEvents: 'none',
+        maxWidth: 'calc(100vw - 32px)',
+      }}
+    >
       {items.map((t) => {
         const Icon = ICONS[t.type] || Info;
+        const iconColor = ICON_COLOR_VAR[t.type] || ICON_COLOR_VAR.info;
         return (
           <div
             key={t.id}
-            className={[
-              "pointer-events-auto flex items-start gap-2 px-3 py-2.5 rounded-lg border shadow-lg text-sm animate-slide-in-right",
-              STYLES[t.type] || STYLES.info,
-            ].join(" ")}
-            style={{ animation: "slideInRight 0.2s ease-out" }}
+            role="status"
+            aria-live="polite"
+            style={{
+              pointerEvents: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '9px 14px 9px 12px',
+              borderRadius: 999,
+              // Frosted glass — usa CSS vars del theme
+              background: 'var(--t-surface, rgba(255,255,255,0.95))',
+              border: '1px solid var(--t-border, rgba(0,0,0,0.08))',
+              boxShadow:
+                '0 10px 40px rgba(0,0,0,0.15), 0 2px 6px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.08)',
+              backdropFilter: 'saturate(180%) blur(30px)',
+              WebkitBackdropFilter: 'saturate(180%) blur(30px)',
+              color: 'var(--t-text, #1D1D1F)',
+              fontFamily: '"SF Pro Text", -apple-system, BlinkMacSystemFont, "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif',
+              fontSize: 13,
+              fontWeight: 500,
+              letterSpacing: '-0.005em',
+              maxWidth: 480,
+              animation: 'toastPop 320ms cubic-bezier(0.32, 0.72, 0, 1.4) both',
+            }}
           >
-            <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${ICON_COLORS[t.type] || ICON_COLORS.info}`} />
-            <div className="flex-1">{t.message}</div>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+              color: iconColor,
+            }}>
+              <Icon size={16} strokeWidth={2.4} />
+            </span>
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {t.message}
+            </span>
             <button
               onClick={() => setItems((prev) => prev.filter((x) => x.id !== t.id))}
-              className="shrink-0 opacity-50 hover:opacity-100"
               aria-label="Cerrar"
+              style={{
+                width: 20, height: 20, borderRadius: 999,
+                border: 0, cursor: 'pointer', background: 'transparent',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--t-textMuted, #6E6E73)',
+                flexShrink: 0, marginLeft: 2,
+                transition: 'background 160ms',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--t-surfaceHover, rgba(0,0,0,0.06))'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
-              <X className="w-3.5 h-3.5" />
+              <X size={12} strokeWidth={2.4} />
             </button>
           </div>
         );
       })}
       <style>{`
-        @keyframes slideInRight {
-          from { transform: translateX(100%); opacity: 0; }
-          to   { transform: translateX(0); opacity: 1; }
+        @keyframes toastPop {
+          from { opacity: 0; transform: translateY(-12px) scale(0.94); }
+          to   { opacity: 1; transform: translateY(0)    scale(1); }
         }
       `}</style>
     </div>
