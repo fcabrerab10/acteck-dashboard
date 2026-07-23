@@ -449,7 +449,7 @@ export default function App() {
           )}
           <div className="w-full" style={{
             padding: mobile ? '12px 16px' : '4px 24px 16px',
-          }}>}
+          }}>
           <PageTransition keyId={vistaActual === 'configuracion' ? 'configuracion' : `${clienteActivo || 'g'}-${paginaActiva}`}>
           {vistaActual === "configuracion" ? (
             puedeVerConfig ? <Configuracion session={{user: authUser, perfil}} /> : <SinAcceso motivo="Solo el Super Admin puede ver Configuración." />
