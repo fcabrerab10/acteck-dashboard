@@ -7,6 +7,8 @@ import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { ClipboardList, Search, ChevronRight, Download, X, Sparkles, ArrowLeft, Save } from 'lucide-react';
+import * as XLSX from 'xlsx-js-style';
+import { toast } from '../../lib/toast';
 
 // ═══ Constantes ═══
 const CLIENTES = [
@@ -152,23 +154,101 @@ export default function PropuestasTab() {
   };
 
   const guardarBorrador = () => {
-    if (!clienteKey || !propuestaId) return;
-    const cli = CLIENTES.find((c) => c.key === clienteKey);
-    const propuestaLista = Object.entries(propuesta)
-      .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
-      .filter((r) => r.sku);
-    const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
-    const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
-    saveReciente({
-      id: propuestaId,
-      clienteKey,
-      clienteLabel: cli?.label || clienteKey,
-      estado: 'Borrador',
-      tstamp: Date.now(),
-      propuesta,
-      resumen: { skus: propuestaLista.length, piezas, total },
-    });
-    setRecientesTick((t) => t + 1);
+    // Auto-genera propuestaId si no existe (defensivo: nunca perder trabajo)
+    let pid = propuestaId;
+    if (!pid) {
+      pid = nuevaPropuestaId();
+      setPropuestaId(pid);
+    }
+    if (!clienteKey) {
+      toast.error('No se pudo guardar: selecciona un cliente primero');
+      return;
+    }
+    try {
+      const cli = CLIENTES.find((c) => c.key === clienteKey);
+      const propuestaLista = Object.entries(propuesta)
+        .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
+        .filter((r) => r.sku);
+      const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
+      const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+      saveReciente({
+        id: pid,
+        clienteKey,
+        clienteLabel: cli?.label || clienteKey,
+        estado: 'Borrador',
+        tstamp: Date.now(),
+        propuesta,
+        resumen: { skus: propuestaLista.length, piezas, total },
+      });
+      setRecientesTick((t) => t + 1);
+      toast.success(`Borrador guardado · ${propuestaLista.length} SKUs · ${formatMXN(total)}`);
+    } catch (e) {
+      console.error('[Propuestas] Error guardando borrador:', e);
+      toast.error('Error al guardar borrador: ' + (e?.message || 'desconocido'));
+    }
+  };
+
+  // ═══ Export Excel real ═══
+  const exportarExcel = () => {
+    if (!clienteKey) {
+      toast.error('Selecciona un cliente para exportar');
+      return;
+    }
+    try {
+      const cli = CLIENTES.find((c) => c.key === clienteKey);
+      const propuestaLista = Object.entries(propuesta)
+        .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
+        .filter((r) => r.sku && Number(r.piezas) > 0);
+      if (propuestaLista.length === 0) {
+        toast.error('La propuesta no tiene SKUs con piezas');
+        return;
+      }
+      // Filas
+      const rows = propuestaLista.map((r) => ({
+        SKU: r.sku || '',
+        Descripción: r.descripcion || '',
+        Marca: r.marca || '',
+        Familia: r.familia || '',
+        Roadmap: r.roadmap || '',
+        Piezas: Number(r.piezas) || 0,
+        'Precio unitario': Number(r.precio) || 0,
+        'Total línea': (Number(r.piezas) || 0) * (Number(r.precio) || 0),
+      }));
+      const total = rows.reduce((s, r) => s + r['Total línea'], 0);
+      const piezasTot = rows.reduce((s, r) => s + r.Piezas, 0);
+      // Totales al final
+      rows.push({
+        SKU: '', Descripción: '', Marca: '', Familia: '', Roadmap: 'TOTAL',
+        Piezas: piezasTot, 'Precio unitario': '', 'Total línea': total,
+      });
+      const ws = XLSX.utils.json_to_sheet(rows);
+      // Formato de columnas
+      ws['!cols'] = [
+        { wch: 16 }, { wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 10 },
+        { wch: 10 }, { wch: 14 }, { wch: 16 },
+      ];
+      // Header bold
+      const headerRange = XLSX.utils.decode_range(ws['!ref']);
+      for (let c = headerRange.s.c; c <= headerRange.e.c; c++) {
+        const addr = XLSX.utils.encode_cell({ r: 0, c });
+        if (ws[addr]) {
+          ws[addr].s = {
+            font: { bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { fgColor: { rgb: '1D1D1F' } },
+            alignment: { horizontal: 'left' },
+          };
+        }
+      }
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Propuesta');
+      const fecha = new Date().toISOString().slice(0, 10);
+      const clienteSafe = (cli?.label || clienteKey).replace(/[^\w-]/g, '_');
+      XLSX.writeFile(wb, `Propuesta_${clienteSafe}_${fecha}.xlsx`);
+      toast.success(`Excel exportado · ${propuestaLista.length} SKUs · ${formatMXN(total)}`);
+    } catch (e) {
+      console.error('[Propuestas] Error exportando Excel:', e);
+      toast.error('Error al exportar: ' + (e?.message || 'desconocido'));
+    }
   };
 
   const cliente = CLIENTES.find((c) => c.key === clienteKey);
@@ -221,6 +301,7 @@ export default function PropuestasTab() {
       cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta}
       onBack={() => setVista(2)}
       onGuardar={guardarBorrador}
+      onExportar={exportarExcel}
     />;
   }
 
@@ -997,7 +1078,7 @@ function SortableTh({ theme, P, orden, onToggle, col, width, children }) {
 // ════════════════════════════════════════════════════════════════════
 // VISTA REVISAR · Hero total + KPIs Fitness + agrupación por familia
 // ════════════════════════════════════════════════════════════════════
-function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, onBack, onGuardar }) {
+function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, onBack, onGuardar, onExportar }) {
   const P = paletteFromTheme(theme);
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
   const heroText = theme.heroCardText || '#F5F5F7';
@@ -1021,7 +1102,7 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, onBac
 
   const gap = contexto?.gap || 0;
   const cierraGapPct = gap > 0 ? Math.round((total / gap) * 100) : null;
-  const exportar = () => alert('Export Excel — próximo push.');
+  const exportar = () => (onExportar ? onExportar() : null);
 
   return (
     <div style={{ padding: '10px 6px 40px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
