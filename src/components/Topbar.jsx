@@ -150,10 +150,12 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
   const { theme, setThemeKey } = useTheme();
   const [openMenuId, setOpenMenuId] = useState(null); // null · 'general' · 'comercial' · 'admin' · 'axon' · 'update' · 'notif' · 'user'
   const [clienteExpanded, setClienteExpanded] = useState(null); // cliente expandido dentro del menu comercial
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [ferrutekBusy, setFerrutekBusy] = useState(false);
   const [ferrutekQuery, setFerrutekQuery] = useState('');
+  const searchInputRef = useRef(null);
   const [notifs, setNotifs] = useState([]);
   const [silenciadas, setSilenciadas] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('notif_silenciadas') || '[]')); }
@@ -223,8 +225,15 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
   // ─ Shortcuts ─
   useEffect(() => {
     const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(v => !v); }
-      if (e.key === 'Escape') { setSearchOpen(false); setCopilotOpen(false); setOpenMenuId(null); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (e.key === 'Escape') {
+        setSearchFocused(false);
+        searchInputRef.current?.blur();
+        setCopilotOpen(false); setOpenMenuId(null);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -418,33 +427,80 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
           </button>
         </div>
 
-        {/* ═══ PILL CENTRAL · Search (con opción de escalar a Ferruteck) ═══ */}
-        <button
-          onClick={() => setSearchOpen(true)}
-          style={{
+        {/* ═══ PILL CENTRAL · Search inline (con dropdown al enfocar) ═══ */}
+        <div style={{
+          justifySelf: 'center', width: '100%', maxWidth: 460,
+          position: 'relative', pointerEvents: 'auto',
+        }}>
+          <label style={{
             ...pillStyle,
-            justifySelf: 'center', width: '100%', maxWidth: 460,
-            padding: '0 8px 0 12px', gap: 8, cursor: 'pointer', pointerEvents: 'auto',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.borderColor = isMidnight ? 'rgba(100,210,255,0.3)' : 'rgba(0,0,0,0.12)'}
-          onMouseLeave={(e) => e.currentTarget.style.borderColor = isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}
-        >
-          <Search size={13} style={{ color: theme.textMuted }} />
-          <span style={{ flex: 1, textAlign: 'left', fontFamily: TYPO.fontText, fontSize: 11.5, color: theme.textMuted }}>
-            Busca OC, SKU, cliente · o pregúntale a Ferruteck
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, paddingLeft: 4, borderLeft: `1px solid ${isMidnight ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'}` }}>
-            <span style={{ display: 'inline-flex', width: 18, height: 18 }}>
-              <FerrutekGhost outfit={detectarOutfit()} size={18} />
+            width: '100%', padding: '0 8px 0 12px', gap: 8, cursor: 'text',
+            borderColor: searchFocused ? theme.accent : (isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
+            boxShadow: searchFocused ? `0 0 0 3px ${theme.accent}22` : (isMidnight ? '0 2px 10px rgba(0,0,0,0.3)' : '0 2px 10px rgba(0,0,0,0.06)'),
+            transition: 'border-color 200ms, box-shadow 200ms',
+            display: 'flex', alignItems: 'center',
+          }}>
+            <Search size={13} style={{ color: searchFocused ? theme.accent : theme.textMuted, flexShrink: 0 }} />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 180)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                  e.preventDefault();
+                  setFerrutekQuery(searchQuery.trim());
+                  setCopilotOpen(true);
+                  setSearchQuery('');
+                  setSearchFocused(false);
+                }
+              }}
+              placeholder="Busca OC, SKU, cliente · o pregúntale a Ferruteck"
+              style={{
+                flex: 1, border: 0, background: 'transparent', outline: 'none',
+                fontFamily: TYPO.fontText, fontSize: 11.5, color: theme.text,
+                minWidth: 0,
+              }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => { setSearchQuery(''); searchInputRef.current?.focus(); }}
+                style={{
+                  width: 18, height: 18, borderRadius: 999, border: 0, cursor: 'pointer',
+                  background: isMidnight ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
+                  color: theme.textMuted,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}
+              ><X size={10} /></button>
+            )}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, paddingLeft: 6, borderLeft: `1px solid ${isMidnight ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'}`, flexShrink: 0 }}>
+              <span style={{ display: 'inline-flex', width: 18, height: 18 }}>
+                <FerrutekGhost outfit={detectarOutfit()} size={18} />
+              </span>
+              <span style={{
+                fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9,
+                color: theme.textSubtle || theme.textMuted,
+                background: isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                padding: '1px 5px', borderRadius: 4,
+              }}>⌘K</span>
             </span>
-            <span style={{
-              fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9,
-              color: theme.textSubtle || theme.textMuted,
-              background: isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-              padding: '1px 5px', borderRadius: 4,
-            }}>⌘K</span>
-          </span>
-        </button>
+          </label>
+
+          {searchFocused && (
+            <SearchDropdown
+              theme={theme} isMidnight={isMidnight}
+              query={searchQuery}
+              onAskFerruteck={() => {
+                setFerrutekQuery(searchQuery.trim());
+                setCopilotOpen(true);
+                setSearchQuery('');
+                setSearchFocused(false);
+              }}
+            />
+          )}
+        </div>
 
         {/* ═══ PILL DERECHA · Actualizar + Notif + Avatar ═══ */}
         <div
@@ -534,13 +590,6 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
         </div>
       </div>
 
-      {searchOpen && (
-        <SearchOverlay
-          theme={theme} isMidnight={isMidnight}
-          onClose={() => setSearchOpen(false)}
-          onAskFerruteck={(q) => { setSearchOpen(false); setFerrutekQuery(q); setCopilotOpen(true); }}
-        />
-      )}
       {copilotOpen && (
         <CopilotOverlay
           theme={theme} isMidnight={isMidnight}
@@ -1002,106 +1051,78 @@ function UserMenu({ theme, isMidnight, setThemeKey, perfil, modoPresent, onToggl
   );
 }
 
-// ═══════════════ Search overlay · buscador normal + escalar a Ferruteck ═══════════════
-function SearchOverlay({ theme, isMidnight, onClose, onAskFerruteck }) {
-  const [q, setQ] = useState('');
+// ═══════════════ Search dropdown · anclado debajo del pill central ═══════════════
+function SearchDropdown({ theme, isMidnight, query, onAskFerruteck }) {
+  const q = query.trim();
   const outfit = detectarOutfit();
-  const handleAskFerruteck = () => onAskFerruteck?.(q.trim());
   return (
-    <div onClick={onClose}
+    <div
+      onMouseDown={(e) => e.preventDefault()} // no roba el foco del input
       style={{
-        position: 'fixed', inset: 0, zIndex: 100,
-        background: isMidnight ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)',
-        backdropFilter: 'blur(6px)',
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-        paddingTop: '12vh', paddingLeft: 16, paddingRight: 16,
+        position: 'absolute', top: 42, left: 0, right: 0, zIndex: 41,
+        background: isMidnight ? 'rgba(40,40,45,0.92)' : 'rgba(255,255,255,0.96)',
+        backdropFilter: 'saturate(180%) blur(30px)',
+        border: `1px solid ${isMidnight ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'}`,
+        borderRadius: 14,
+        boxShadow: isMidnight ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.14)',
+        padding: 6, fontFamily: TYPO.fontText,
+        animation: 'ferrutekIn 220ms cubic-bezier(0.32, 0.72, 0, 1) both',
       }}
     >
-      <div onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 560,
-          background: isMidnight ? 'rgba(40,40,45,0.92)' : 'rgba(255,255,255,0.96)',
-          backdropFilter: 'saturate(180%) blur(30px)',
-          border: `1px solid ${isMidnight ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'}`,
-          borderRadius: 16,
-          boxShadow: isMidnight ? '0 20px 60px rgba(0,0,0,0.6)' : '0 20px 60px rgba(0,0,0,0.15)',
-          padding: 8, fontFamily: TYPO.fontText,
-          animation: 'ferrutekIn 300ms cubic-bezier(0.32, 0.72, 0, 1) both',
-        }}
-      >
-        {/* Input de búsqueda */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px' }}>
-          <Search size={16} style={{ color: theme.textMuted }} />
-          <input
-            autoFocus
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleAskFerruteck(); }
-              else if (e.key === 'Escape') onClose();
-            }}
-            placeholder="Buscar OC, SKU, cliente…"
-            style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', fontFamily: TYPO.fontText, fontSize: 15, color: theme.text }}
-          />
-          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, background: isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', padding: '2px 6px', borderRadius: 5 }}>ESC</span>
-        </div>
-
-        {/* Cuerpo de resultados */}
-        <div style={{ borderTop: `1px solid ${isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, padding: '14px 16px 8px' }}>
-          {q.trim().length === 0 ? (
-            <div style={{ color: theme.textMuted, fontSize: 12, textAlign: 'center', padding: '18px 8px' }}>
-              Empieza a escribir para buscar en OCs, SKUs y clientes
+      {/* Cuerpo de resultados */}
+      <div style={{ padding: '12px 14px 10px' }}>
+        {q.length === 0 ? (
+          <div style={{ color: theme.textMuted, fontSize: 11.5, textAlign: 'center', padding: '10px 4px' }}>
+            Empieza a escribir para buscar en OCs, SKUs y clientes
+          </div>
+        ) : (
+          <div style={{ color: theme.textMuted, fontSize: 11.5, padding: '8px 4px', textAlign: 'center' }}>
+            <div style={{ marginBottom: 4 }}>
+              Sin resultados para <strong style={{ color: theme.text }}>"{q.length > 40 ? q.slice(0, 40) + '…' : q}"</strong>
             </div>
-          ) : (
-            <div style={{ color: theme.textMuted, fontSize: 12, padding: '16px 8px 10px', textAlign: 'center' }}>
-              <div style={{ marginBottom: 4 }}>Sin resultados para <strong style={{ color: theme.text }}>"{q}"</strong></div>
-              <div style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted }}>
-                La búsqueda universal está en preparación
-              </div>
+            <div style={{ fontSize: 10.5, color: theme.textSubtle || theme.textMuted }}>
+              La búsqueda universal está en preparación · escala a Ferruteck para preguntarle
             </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
 
-        {/* Footer: CTA para escalar a Ferruteck */}
-        <div style={{
-          borderTop: `1px solid ${isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
-          padding: 8,
-        }}>
-          <button
-            onClick={handleAskFerruteck}
-            style={{
-              width: '100%', border: 0, cursor: 'pointer',
-              padding: '10px 14px', borderRadius: 12,
-              background: `
-                radial-gradient(circle at 20% 30%, rgba(191,90,242,0.35) 0%, transparent 55%),
-                radial-gradient(circle at 80% 70%, rgba(100,210,255,0.28) 0%, transparent 55%),
-                linear-gradient(180deg, #1e1e2e 0%, #0d0d19 100%)`,
-              display: 'flex', alignItems: 'center', gap: 12,
-              color: '#FFF',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)',
-              transition: 'transform 200ms',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; }}
-          >
-            <span style={{ display: 'inline-flex', width: 22, height: 22 }}>
-              <FerrutekGhost outfit={outfit} size={22} />
-            </span>
-            <span style={{ flex: 1, textAlign: 'left' }}>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.005em' }}>
-                {q.trim() ? `Preguntarle a Ferruteck sobre "${q.length > 32 ? q.slice(0, 32) + '…' : q}"` : 'Pídele ayuda a Ferruteck'}
-              </div>
-              <div style={{ fontFamily: TYPO.fontText, fontSize: 10.5, color: 'rgba(255,255,255,0.55)', marginTop: 1 }}>
-                {q.trim() ? 'Escala a tu asistente inteligente' : 'Resúmenes, comparativas, fútbol y más'}
-              </div>
-            </span>
-            <span style={{
-              fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9,
-              color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.10)',
-              padding: '2px 6px', borderRadius: 5,
-            }}>⌘ ↵</span>
-          </button>
-        </div>
+      {/* CTA: escalar a Ferruteck */}
+      <div style={{ borderTop: `1px solid ${isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, padding: 6 }}>
+        <button
+          onClick={onAskFerruteck}
+          style={{
+            width: '100%', border: 0, cursor: 'pointer',
+            padding: '10px 12px', borderRadius: 10,
+            background: `
+              radial-gradient(circle at 20% 30%, rgba(191,90,242,0.35) 0%, transparent 55%),
+              radial-gradient(circle at 80% 70%, rgba(100,210,255,0.28) 0%, transparent 55%),
+              linear-gradient(180deg, #1e1e2e 0%, #0d0d19 100%)`,
+            display: 'flex', alignItems: 'center', gap: 12,
+            color: '#FFF',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)',
+            transition: 'transform 180ms',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; }}
+        >
+          <span style={{ display: 'inline-flex', width: 22, height: 22, flexShrink: 0 }}>
+            <FerrutekGhost outfit={outfit} size={22} />
+          </span>
+          <span style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {q ? `Preguntarle a Ferruteck sobre "${q.length > 28 ? q.slice(0, 28) + '…' : q}"` : 'Pídele ayuda a Ferruteck'}
+            </div>
+            <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: 'rgba(255,255,255,0.55)', marginTop: 1 }}>
+              {q ? 'Escala a tu asistente inteligente' : 'Resúmenes, comparativas, fútbol y más'}
+            </div>
+          </span>
+          <span style={{
+            fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9,
+            color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.10)',
+            padding: '2px 6px', borderRadius: 5, flexShrink: 0,
+          }}>⌘ ↵</span>
+        </button>
       </div>
     </div>
   );
