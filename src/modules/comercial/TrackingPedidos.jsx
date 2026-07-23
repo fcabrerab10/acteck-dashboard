@@ -34,6 +34,16 @@ const ALMACENES = ['GDL', 'CDMX'];
 const PAQUETERIAS = ['DHL', 'Estafeta', 'Fedex', 'Redpack', 'Paquetexpress', 'Otra'];
 const UMBRAL_DIAS_ALERTA = 3;
 
+// Metas SLA por etapa (días) — usadas por el módulo de métricas
+const METAS_DIAS = { recepcion: 2, procesamiento: 2, envio: 2, total: 9 };
+const isoWeek = (d) => {
+  const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  dt.setUTCDate(dt.getUTCDate() + 4 - (dt.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
+  return `${dt.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+};
+
 const fmtDate = (iso) => {
   if (!iso) return '—';
   try { return new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }); }
@@ -150,6 +160,7 @@ export default function TrackingPedidos() {
   const [envioModal, setEnvioModal] = useState(null);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [alertasSilenciadas, setAlertasSilenciadas] = useState(new Set());
+  const [etapaExpandida, setEtapaExpandida] = useState('total');
 
   const cargar = async () => {
     setLoading(true);
@@ -238,6 +249,67 @@ export default function TrackingPedidos() {
       conEnvioMes: conEnvioMes.length,
       fillMes, piezasOrdMes, piezasSurMes,
       tiempoPromedio, nEntregadas: entregadas.length,
+    };
+  }, [enriquecidas]);
+
+  // ═════ Métricas de tiempo por etapa (rings Apple Fitness) ═════
+  const metricas = useMemo(() => {
+    const ahora = new Date();
+    const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+    const inicioMesAnt = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1);
+    const finMesAnt = new Date(ahora.getFullYear(), ahora.getMonth(), 0, 23, 59, 59);
+    const mk = () => ({ current: [], prev: [], porCliente: {}, porSemana: {} });
+    const buckets = { recepcion: mk(), procesamiento: mk(), envio: mk(), total: mk() };
+    for (const oc of enriquecidas) {
+      const fSur = fechaEtapaOc(oc, oc.envios, 'surtida');
+      const fEnt = fechaEtapaOc(oc, oc.envios, 'entregada');
+      const val = {
+        recepcion: dias(oc.fecha_recibida, oc.fecha_procesada),
+        procesamiento: dias(oc.fecha_procesada, fSur),
+        envio: dias(fSur, fEnt),
+        total: dias(oc.fecha_recibida, fEnt),
+      };
+      const fBase = fEnt || fSur || oc.fecha_procesada || oc.fecha_recibida;
+      if (!fBase) continue;
+      const d = new Date(fBase);
+      const enMesActual = d >= inicioMes;
+      const enMesAnt = d >= inicioMesAnt && d <= finMesAnt;
+      const sem = isoWeek(d);
+      for (const k of ['recepcion', 'procesamiento', 'envio', 'total']) {
+        const v = val[k];
+        if (v == null || v < 0) continue;
+        const b = buckets[k];
+        if (enMesActual) b.current.push(v);
+        if (enMesAnt) b.prev.push(v);
+        (b.porCliente[oc.cliente_key] ||= []).push(v);
+        (b.porSemana[sem] ||= []).push(v);
+      }
+    }
+    const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
+    const mkRing = (key, label, meta) => {
+      const b = buckets[key];
+      const cur = avg(b.current);
+      const prev = avg(b.prev);
+      const delta = cur != null && prev != null ? cur - prev : null;
+      const pctMeta = cur != null ? Math.min(120, (cur / meta) * 100) : 0;
+      return {
+        key, label, meta,
+        avg: cur, avgAnt: prev, delta, pctMeta,
+        count: b.current.length,
+        porCliente: Object.fromEntries(
+          Object.entries(b.porCliente).map(([k, arr]) => [k, { avg: avg(arr), count: arr.length }])
+        ),
+        porSemana: Object.entries(b.porSemana)
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .slice(-4)
+          .map(([sem, arr]) => ({ sem, avg: avg(arr), count: arr.length })),
+      };
+    };
+    return {
+      recepcion:     mkRing('recepcion',     'Recepción',     METAS_DIAS.recepcion),
+      procesamiento: mkRing('procesamiento', 'Procesamiento', METAS_DIAS.procesamiento),
+      envio:         mkRing('envio',         'Envío',         METAS_DIAS.envio),
+      total:         mkRing('total',         'Total E2E',     METAS_DIAS.total),
     };
   }, [enriquecidas]);
 
@@ -401,17 +473,13 @@ export default function TrackingPedidos() {
         </div>
       </div>
 
-      {/* ═════ Alertas con acciones ═════ */}
-      {alertasVisibles.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {alertasVisibles.map((oc) => (
-            <AlertBar key={oc.id} theme={theme} P={P} oc={oc}
-              onIrOC={() => setOcAbierta(oc.id)}
-              onNuevoEnvio={() => setEnvioModal({ ocId: oc.id, envio: null, ocContext: oc })}
-              onSilenciar={() => silenciarAlerta(oc.id)} />
-          ))}
-        </div>
-      )}
+      {/* ═════ Métricas de tiempo por etapa (rings Apple Fitness) ═════ */}
+      <MetricasRings
+        metricas={metricas}
+        expandida={etapaExpandida}
+        onExpand={(k) => setEtapaExpandida((cur) => (cur === k ? null : k))}
+        theme={theme} P={P}
+      />
 
       {/* ═════ Chart tiempos por etapa ═════ */}
       {tiemposPorCliente.some((t) => t.total > 0) && (
@@ -1646,6 +1714,183 @@ function InputPrefix({ theme, prefix, mono, value, onChange, placeholder }) {
           fontSize: 12, color: theme.text, flex: 1, fontVariantNumeric: 'tabular-nums',
           width: '100%',
         }} />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Métricas · rings Apple Fitness + drill panel
+// ═══════════════════════════════════════════════════════════════════
+function MetricasRings({ metricas, expandida, onExpand, theme, P }) {
+  const rings = ['recepcion', 'procesamiento', 'envio', 'total'];
+  const active = expandida && metricas[expandida];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+        {rings.map((k) => (
+          <RingCard key={k} data={metricas[k]} theme={theme} P={P}
+            active={expandida === k}
+            onClick={() => onExpand(k)} />
+        ))}
+      </div>
+      {active && <DrillPanel data={active} theme={theme} P={P} />}
+    </div>
+  );
+}
+
+function RingCard({ data, active, onClick, theme, P }) {
+  const [hover, setHover] = React.useState(false);
+  const isDark = theme.mode === 'dark';
+  const overMeta = data.avg != null && data.avg > data.meta;
+  const ringColor = overMeta ? P.orange : P.green;
+  const CIRC = 2 * Math.PI * 42;
+  const pct = Math.min(100, Math.max(0, data.pctMeta || 0));
+  const dashOffset = CIRC * (1 - pct / 100);
+  const goodDelta = data.delta != null && data.delta < 0;
+  return (
+    <div onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        background: theme.surface, borderRadius: 14, padding: 14, cursor: 'pointer',
+        border: `${active ? 1.5 : 1}px solid ${active ? P.accent : theme.border}`,
+        boxShadow: active ? `0 4px 20px ${P.accent}22` : hover ? `0 2px 10px ${theme.text}0F` : 'none',
+        transform: hover && !active ? 'translateY(-2px)' : 'none',
+        transition: 'transform 200ms cubic-bezier(0.32, 0.72, 0, 1), border-color 200ms, box-shadow 200ms',
+        display: 'flex', flexDirection: 'column', gap: 8,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.text }}>{data.label}</span>
+        {data.delta != null && (
+          <span style={{
+            fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700,
+            padding: '2px 6px', borderRadius: 999,
+            background: goodDelta ? `${P.green}1E` : `${P.red}1E`,
+            color: goodDelta ? P.green : P.red, letterSpacing: '-0.005em',
+          }}>{goodDelta ? '▼' : '▲'} {Math.abs(data.delta).toFixed(1)}d</span>
+        )}
+      </div>
+      <div style={{ position: 'relative', margin: '4px auto 4px', width: 88, height: 88 }}>
+        <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+          <circle cx="50" cy="50" r="42" fill="none" stroke={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} strokeWidth="8" />
+          <circle cx="50" cy="50" r="42" fill="none" stroke={ringColor} strokeWidth="8" strokeLinecap="round"
+            strokeDasharray={CIRC} strokeDashoffset={dashOffset}
+            style={{ transition: 'stroke-dashoffset 500ms cubic-bezier(0.32, 0.72, 0, 1)' }} />
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.03em', color: theme.text, lineHeight: 1 }}>
+            {data.avg != null ? data.avg.toFixed(1) : '—'}
+          </div>
+          <div style={{ fontFamily: TYPO.fontText, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: theme.textMuted, fontWeight: 600, marginTop: 2 }}>días</div>
+        </div>
+      </div>
+      <div style={{ textAlign: 'center', fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textMuted, lineHeight: 1.3 }}>
+        meta <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{data.meta}d</strong> · {data.count} OC{data.count === 1 ? '' : 's'}
+      </div>
+    </div>
+  );
+}
+
+function DrillPanel({ data, theme, P }) {
+  const clientesArr = Object.entries(data.porCliente).map(([k, v]) => ({
+    key: k, nombre: NOMBRE_CLIENTE[k] || k, avg: v.avg, count: v.count,
+  })).sort((a, b) => (b.avg || 0) - (a.avg || 0));
+  const maxCli = Math.max(1, ...clientesArr.map((c) => c.avg || 0));
+  const maxSem = Math.max(1, ...data.porSemana.map((s) => s.avg || 0));
+  const barColor = (v) => (v != null && v > data.meta ? P.orange : P.green);
+  return (
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
+      padding: '14px 16px 12px',
+      animation: 'drillFadeIn 260ms cubic-bezier(0.32, 0.72, 0, 1)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <span style={{
+          padding: '2px 8px', borderRadius: 999,
+          background: `${P.accent}1E`, color: P.accent,
+          fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600,
+          textTransform: 'uppercase', letterSpacing: '0.08em',
+        }}>{data.label}</span>
+        <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
+          Desglose · {data.avg != null ? `${data.avg.toFixed(1)}d promedio` : 'sin datos aún'}
+        </h5>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 20 }}>
+        <DrillCol theme={theme} title="Por cliente">
+          {clientesArr.length === 0 && <DrillEmpty theme={theme}>Sin datos aún</DrillEmpty>}
+          {clientesArr.map((c) => (
+            <DrillRow key={c.key} theme={theme}
+              lbl={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 999, background: clienteColor(theme, c.key) }} />
+                {c.nombre}
+              </span>}
+              barPct={c.avg ? (c.avg / maxCli * 100) : 0}
+              barColor={barColor(c.avg)}
+              val={c.avg != null ? `${c.avg.toFixed(1)}d` : '—'}
+            />
+          ))}
+        </DrillCol>
+        <DrillCol theme={theme} title="Por encargado">
+          <div style={{ padding: '20px 4px', textAlign: 'center', fontSize: 11, color: theme.textMuted, fontFamily: TYPO.fontText, lineHeight: 1.5 }}>
+            <span style={{
+              display: 'inline-block', padding: '2px 8px', borderRadius: 999,
+              background: `${theme.textMuted}18`, color: theme.textMuted,
+              fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em',
+              marginBottom: 8,
+            }}>Próximamente</span>
+            <div>Necesitamos agregar el campo <strong style={{ color: theme.text }}>encargado</strong> a la tabla OCs.</div>
+          </div>
+        </DrillCol>
+        <DrillCol theme={theme} title="Por semana (últimas 4)">
+          {data.porSemana.length === 0 && <DrillEmpty theme={theme}>Sin datos aún</DrillEmpty>}
+          {data.porSemana.map((s) => (
+            <DrillRow key={s.sem} theme={theme}
+              lbl={s.sem.replace(/^\d{4}-W/, 'Sem ')}
+              barPct={s.avg ? (s.avg / maxSem * 100) : 0}
+              barColor={barColor(s.avg)}
+              val={s.avg != null ? `${s.avg.toFixed(1)}d` : '—'}
+            />
+          ))}
+        </DrillCol>
+      </div>
+      <style>{`@keyframes drillFadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+    </div>
+  );
+}
+
+function DrillCol({ theme, title, children }) {
+  return (
+    <div>
+      <div style={{
+        fontFamily: TYPO.fontText, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.08em',
+        color: theme.textMuted, fontWeight: 600, marginBottom: 8,
+      }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function DrillRow({ theme, lbl, barPct, barColor, val }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '5px 0', borderBottom: `1px solid ${theme.divider || theme.border}`,
+      fontSize: 11.5,
+    }}>
+      <span style={{ flex: 1, fontFamily: TYPO.fontText, color: theme.text, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lbl}</span>
+      <span style={{ width: 60, height: 4, borderRadius: 999, background: `${theme.text}0F`, overflow: 'hidden' }}>
+        <span style={{ display: 'block', height: '100%', background: barColor, borderRadius: 999, width: `${Math.min(100, barPct)}%`, transition: 'width 400ms cubic-bezier(0.32, 0.72, 0, 1)' }} />
+      </span>
+      <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, fontWeight: 600, color: theme.text, minWidth: 34, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{val}</span>
+    </div>
+  );
+}
+
+function DrillEmpty({ theme, children }) {
+  return (
+    <div style={{ padding: '12px 4px', fontSize: 11, color: theme.textMuted, fontFamily: TYPO.fontText, textAlign: 'center' }}>
+      {children}
     </div>
   );
 }
