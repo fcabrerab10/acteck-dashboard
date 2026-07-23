@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
+import { FerrutekLoader } from '../../components';
 import { ChevronRight, Sparkles, AlertTriangle, Clock, TrendingUp } from 'lucide-react';
 
 const NOMBRES_MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -45,6 +46,7 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   const anio = new Date().getFullYear();
   const mesActual = new Date().getMonth() + 1;
 
+  const [loading, setLoading] = useState(true);
   const [ventasActual, setVentasActual] = useState([]);
   const [ventasAnt, setVentasAnt] = useState([]);
   const [cuotasMes, setCuotasMes] = useState([]);
@@ -112,19 +114,40 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
       } else {
         setAging({ total: 0, vencido: 0, alDia: 0, buckets: { d1_30: [], d31_60: [], d61_90: [], mas90: [] } });
       }
+      if (!cancel) setLoading(false);
     })();
     return () => { cancel = true; };
   }, [clienteKey, anio]);
 
+  // Sell Out por mes desde sellout_detalle (calculado una vez, reusado en todo el módulo)
+  const sellOutByMes = useMemo(() => {
+    const cur = new Map(), prev = new Map();
+    sellOutDetalle.forEach(r => {
+      if (!r.fecha) return;
+      const d = new Date(r.fecha);
+      const y = d.getFullYear();
+      const m = d.getMonth() + 1;
+      const monto = Number(r.total) || 0;
+      if (y === anio) cur.set(m, (cur.get(m) || 0) + monto);
+      else if (y === anio - 1) prev.set(m, (prev.get(m) || 0) + monto);
+    });
+    return { cur, prev };
+  }, [sellOutDetalle, anio]);
+  const sellOutByMesRaw = sellOutByMes.cur;
+
   // ═════ KPIs ═════
   const sellInMes = Number(ventasActual.find(v => Number(v.mes) === mesActual)?.sell_in) || cliente?.kpis?.sellInMes || 0;
-  const sellOutMes = Number(ventasActual.find(v => Number(v.mes) === mesActual)?.sell_out) || cliente?.kpis?.sellOut || 0;
+  const sellOutMesDetalle = sellOutByMesRaw.get(mesActual) || 0;
+  const sellOutMesVentas = Number(ventasActual.find(v => Number(v.mes) === mesActual)?.sell_out) || 0;
+  const sellOutMes = sellOutMesDetalle > 0 ? sellOutMesDetalle : (sellOutMesVentas || cliente?.kpis?.sellOut || 0);
   const cuotaMesActual = cuotasMes.find(c => Number(c.mes) === mesActual);
   const cuotaIdeal = Number(cuotaMesActual?.cuota_ideal) || cliente?.kpis?.cuotaMes || 0;
   const pctCuota = cuotaIdeal > 0 ? (sellInMes / cuotaIdeal * 100) : 0;
   const sellInMesAnt = Number(ventasActual.find(v => Number(v.mes) === mesActual - 1)?.sell_in) || 0;
   const deltaSellIn = sellInMesAnt > 0 ? ((sellInMes - sellInMesAnt) / sellInMesAnt * 100) : null;
-  const sellOutMesAnt = Number(ventasActual.find(v => Number(v.mes) === mesActual - 1)?.sell_out) || 0;
+  const sellOutMesAntDet = sellOutByMesRaw.get(mesActual - 1) || 0;
+  const sellOutMesAntVen = Number(ventasActual.find(v => Number(v.mes) === mesActual - 1)?.sell_out) || 0;
+  const sellOutMesAnt = sellOutMesAntDet > 0 ? sellOutMesAntDet : sellOutMesAntVen;
   const deltaSellOut = sellOutMesAnt > 0 ? ((sellOutMes - sellOutMesAnt) / sellOutMesAnt * 100) : null;
   const inventarioDias = Number(cliente?.kpis?.diasInventario) || 0;
   const inventarioValor = Number(cliente?.kpis?.inventarioValor) || 0;
@@ -176,28 +199,40 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
     const arr = [];
     for (let m = 1; m <= 12; m++) {
       const v = ventasActual.find(x => Number(x.mes) === m);
+      // Prioriza sell out desde sellout_detalle (más granular), fallback a ventas_mensuales
+      const soDetalle = sellOutByMes.cur.get(m) || 0;
+      const soVentas = Number(v?.sell_out) || 0;
       arr.push({
         mes: m,
         sellIn: Number(v?.sell_in) || 0,
-        sellOut: Number(v?.sell_out) || 0,
+        sellOut: soDetalle > 0 ? soDetalle : soVentas,
         futuro: m > mesActual,
       });
     }
     return arr;
-  }, [ventasActual, mesActual]);
+  }, [ventasActual, sellOutByMes, mesActual]);
 
   const ratioGlobal = useMemo(() => {
-    // Ratio SO/SI año actual usando ventas_mensuales del año actual
-    const activos = ventasActual.filter(v => Number(v.mes) <= mesActual && Number(v.sell_in) > 0);
-    const totSI = activos.reduce((s, v) => s + (Number(v.sell_in) || 0), 0);
-    const totSO = activos.reduce((s, v) => s + (Number(v.sell_out) || 0), 0);
-    const activosAnt = ventasAnt.filter(v => Number(v.sell_in) > 0);
-    const totSIAnt = activosAnt.reduce((s, v) => s + (Number(v.sell_in) || 0), 0);
-    const totSOAnt = activosAnt.reduce((s, v) => s + (Number(v.sell_out) || 0), 0);
+    // Ratio SO/SI año actual: SI de ventas_mensuales, SO de sellout_detalle (fallback ventas_mensuales)
+    const totSI = ventasActual
+      .filter(v => Number(v.mes) <= mesActual)
+      .reduce((s, v) => s + (Number(v.sell_in) || 0), 0);
+    let totSO = 0;
+    sellOutByMes.cur.forEach((val, m) => { if (m <= mesActual) totSO += val; });
+    if (totSO === 0) {
+      totSO = ventasActual.filter(v => Number(v.mes) <= mesActual)
+        .reduce((s, v) => s + (Number(v.sell_out) || 0), 0);
+    }
+    const totSIAnt = ventasAnt.reduce((s, v) => s + (Number(v.sell_in) || 0), 0);
+    let totSOAnt = 0;
+    sellOutByMes.prev.forEach(val => { totSOAnt += val; });
+    if (totSOAnt === 0) {
+      totSOAnt = ventasAnt.reduce((s, v) => s + (Number(v.sell_out) || 0), 0);
+    }
     const ratio = totSI > 0 ? (totSO / totSI * 100) : null;
     const ratioAnt = totSIAnt > 0 ? (totSOAnt / totSIAnt * 100) : null;
     return { ratio, ratioAnt, deltaPP: ratio != null && ratioAnt != null ? ratio - ratioAnt : null };
-  }, [ventasActual, ventasAnt, mesActual]);
+  }, [ventasActual, ventasAnt, sellOutByMes, mesActual]);
 
   // ═════ Sell In vs Sell Out por marca ═════
   // sellout_detalle no tiene mes/anio, se derivan de fecha
@@ -273,6 +308,10 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   // Hero usa el token semántico del tema (respeta las 3 identidades):
   // Claro: negro #000, Midnight: negro OLED, Marfil: cobalto #0055B5
   const heroBg = theme.heroCardBg || theme.surfaceInverse || '#1C1C1E';
+
+  if (loading) {
+    return <FerrutekLoader label="Cargando Digitalife…" sub="Trayendo Sell In, Sell Out, cobranza y marcas" minHeight={480} />;
+  }
 
   return (
     <div style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10 }}>

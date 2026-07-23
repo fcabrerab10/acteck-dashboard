@@ -8,3 +8,4 @@ export { TarjetaMinuta } from './TarjetaMinuta';
 export { BarraCuota } from './BarraCuota';
 export { default as Sidebar } from './Sidebar';
 export { default as Topbar } from './Topbar';
+export { default as FerrutekLoader, FerrutekLoaderInline, FerrutekLoaderCard } from './FerrutekLoader';

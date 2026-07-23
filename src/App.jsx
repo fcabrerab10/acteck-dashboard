@@ -36,7 +36,8 @@ import {
 } from './lib/permisos';
 import { PerfilContext } from './lib/perfilContext';
 import { ThemeProvider } from './lib/themeContext';
-import { AppleLoaderFullscreen, PageTransition } from './components/apple/AppleLoader';
+import { PageTransition } from './components/apple/AppleLoader';
+import { FerrutekLoader } from './components';
 import { useBreakpoint, isMobile } from './lib/useBreakpoint';
 import MobileNav from './components/MobileNav';
 
@@ -404,7 +405,7 @@ export default function App() {
   ]
 
   
-  if (authLoading) return <AppleLoaderFullscreen label="Cargando…" />;
+  if (authLoading) return <FerrutekLoader fullscreen label="Cargando…" sub="Ferruteck está iniciando el dashboard" />;
   if (!authUser || !perfil) return <LoginPage onLogin={handleLogin} />;
 
 
