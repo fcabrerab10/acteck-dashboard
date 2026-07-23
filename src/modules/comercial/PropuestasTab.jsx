@@ -310,17 +310,20 @@ export default function PropuestasTab() {
       // Blindaje: si skus no está cargado, exportar con lo que tengamos en el
       // objeto propuesta (evita perder trabajo del usuario por fetch tardío)
       const skusIdx = new Map(skus.map((r) => [r.sku, r]));
+      // IVA MX 16%
+      const IVA = 0.16;
       const propuestaLista = Object.entries(propuesta)
         .map(([sku, val]) => {
           const dataSku = skusIdx.get(sku) || {};
+          const precioBase = Number(val.precio) || 0;
+          const piezas = Number(val.piezas) || 0;
+          const precioIVA = +(precioBase * (1 + IVA)).toFixed(2);
+          const total = +(piezas * precioIVA).toFixed(2);
           return {
             sku,
             descripcion: dataSku.descripcion || val.descripcion || '',
-            marca:       dataSku.marca       || val.marca       || '',
             familia:     dataSku.familia     || val.familia     || '',
-            roadmap:     dataSku.roadmap     || val.roadmap     || '',
-            piezas:      Number(val.piezas) || 0,
-            precio:      Number(val.precio) || 0,
+            piezas, precioBase, precioIVA, total,
           };
         })
         .filter((r) => r.sku && r.piezas > 0);
@@ -329,45 +332,176 @@ export default function PropuestasTab() {
         toast.error('La propuesta no tiene SKUs con piezas · guarda el borrador antes de exportar');
         return;
       }
-      // Filas
-      const rows = propuestaLista.map((r) => ({
-        SKU: r.sku || '',
-        Descripción: r.descripcion || '',
-        Marca: r.marca || '',
-        Familia: r.familia || '',
-        Roadmap: r.roadmap || '',
-        Piezas: Number(r.piezas) || 0,
-        'Precio unitario': Number(r.precio) || 0,
-        'Total línea': (Number(r.piezas) || 0) * (Number(r.precio) || 0),
-      }));
-      const total = rows.reduce((s, r) => s + r['Total línea'], 0);
-      const piezasTot = rows.reduce((s, r) => s + r.Piezas, 0);
-      // Totales al final
-      rows.push({
-        SKU: '', Descripción: '', Marca: '', Familia: '', Roadmap: 'TOTAL',
-        Piezas: piezasTot, 'Precio unitario': '', 'Total línea': total,
-      });
-      const ws = XLSX.utils.json_to_sheet(rows);
-      // Formato de columnas
-      ws['!cols'] = [
-        { wch: 16 }, { wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 10 },
-        { wch: 10 }, { wch: 14 }, { wch: 16 },
-      ];
-      // Header bold
-      const headerRange = XLSX.utils.decode_range(ws['!ref']);
-      for (let c = headerRange.s.c; c <= headerRange.e.c; c++) {
-        const addr = XLSX.utils.encode_cell({ r: 0, c });
-        if (ws[addr]) {
-          ws[addr].s = {
-            font: { bold: true, color: { rgb: 'FFFFFF' } },
-            fill: { fgColor: { rgb: '1D1D1F' } },
-            alignment: { horizontal: 'left' },
-          };
-        }
-      }
+
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Propuesta');
-      // Formato: Propuesta (Cliente) (Nombre del Borrador) (Mes Actual) (Año Actual)
+      const CURRENCY = '"$"#,##0.00';
+
+      // ═══ Helper para hoja de detalle ═══
+      // Columnas: SKU · Descripción · Familia · Piezas · Precio + IVA (money) · Total (money)
+      const buildDetalleSheet = (filas, sheetName) => {
+        if (!filas || filas.length === 0) return;
+        const dataRows = filas.map((r) => ({
+          SKU: r.sku,
+          'Descripción': r.descripcion,
+          Familia: r.familia,
+          Piezas: r.piezas,
+          'Precio + IVA': r.precioIVA,
+          Total: r.total,
+        }));
+        const totalPiezas = filas.reduce((s, r) => s + r.piezas, 0);
+        const totalMonto  = filas.reduce((s, r) => s + r.total, 0);
+        dataRows.push({
+          SKU: '', 'Descripción': '', Familia: 'TOTAL',
+          Piezas: totalPiezas, 'Precio + IVA': '', Total: totalMonto,
+        });
+        const ws = XLSX.utils.json_to_sheet(dataRows);
+        ws['!cols'] = [
+          { wch: 16 }, { wch: 44 }, { wch: 18 }, { wch: 10 }, { wch: 16 }, { wch: 18 },
+        ];
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        // Header (fila 0): bold blanco sobre fondo negro
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const addr = XLSX.utils.encode_cell({ r: 0, c });
+          if (ws[addr]) {
+            ws[addr].s = {
+              font: { bold: true, color: { rgb: 'FFFFFF' }, name: 'Calibri', sz: 11 },
+              fill: { fgColor: { rgb: '1D1D1F' } },
+              alignment: { horizontal: c >= 3 ? 'right' : 'left', vertical: 'center' },
+            };
+          }
+        }
+        // Filas de datos + total: formato moneda en columnas E (Precio + IVA) y F (Total)
+        for (let R = 1; R <= range.e.r; R++) {
+          const isTotal = R === range.e.r;
+          ['E', 'F'].forEach((col) => {
+            const addr = `${col}${R + 1}`;
+            if (ws[addr] && typeof ws[addr].v === 'number') {
+              ws[addr].z = CURRENCY;
+              ws[addr].s = {
+                numFmt: CURRENCY,
+                alignment: { horizontal: 'right' },
+                font: isTotal ? { bold: true } : undefined,
+                fill: isTotal ? { fgColor: { rgb: 'F0F0F0' } } : undefined,
+              };
+            }
+          });
+          // Piezas col D — right align
+          const addrD = `D${R + 1}`;
+          if (ws[addrD]) {
+            ws[addrD].s = {
+              alignment: { horizontal: 'right' },
+              font: isTotal ? { bold: true } : undefined,
+              fill: isTotal ? { fgColor: { rgb: 'F0F0F0' } } : undefined,
+            };
+          }
+          if (isTotal) {
+            // Bold en columnas A-C también
+            ['A', 'B', 'C'].forEach((col) => {
+              const addr = `${col}${R + 1}`;
+              if (ws[addr]) {
+                ws[addr].s = {
+                  font: { bold: true },
+                  fill: { fgColor: { rgb: 'F0F0F0' } },
+                };
+              }
+            });
+          }
+        }
+        // Sheet name sanitize (Excel máx 31 chars, sin []:*?/\)
+        const safeName = String(sheetName).replace(/[[\]:*?/\\]/g, '').slice(0, 31);
+        XLSX.utils.book_append_sheet(wb, ws, safeName);
+      };
+
+      // ═══ Hoja Resumen ═══
+      const buildResumen = (bloques) => {
+        // bloques = [{ nombre, skus, piezas, total }]
+        const rows = bloques.map((b) => ({
+          'Nombre de la propuesta': b.nombre,
+          'Cantidad de SKUs': b.skus,
+          'Piezas totales': b.piezas,
+          'Monto total': b.total,
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = [{ wch: 40 }, { wch: 18 }, { wch: 16 }, { wch: 20 }];
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        // Header
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const addr = XLSX.utils.encode_cell({ r: 0, c });
+          if (ws[addr]) {
+            ws[addr].s = {
+              font: { bold: true, color: { rgb: 'FFFFFF' }, name: 'Calibri', sz: 11 },
+              fill: { fgColor: { rgb: '1D1D1F' } },
+              alignment: { horizontal: c >= 1 ? 'right' : 'left', vertical: 'center' },
+            };
+          }
+        }
+        // Monto total col D como currency
+        for (let R = 1; R <= range.e.r; R++) {
+          const addr = `D${R + 1}`;
+          if (ws[addr] && typeof ws[addr].v === 'number') {
+            ws[addr].z = CURRENCY;
+            ws[addr].s = { numFmt: CURRENCY, alignment: { horizontal: 'right' } };
+          }
+          // Right align números
+          ['B', 'C'].forEach((col) => {
+            const a = `${col}${R + 1}`;
+            if (ws[a]) ws[a].s = { alignment: { horizontal: 'right' } };
+          });
+        }
+        // Fila TOTAL general (última) en gris + bold
+        if (bloques.length > 1) {
+          const totalRow = range.e.r + 1;
+          const totalSKUs   = bloques.reduce((s, b) => s + b.skus, 0);
+          const totalPiezas = bloques.reduce((s, b) => s + b.piezas, 0);
+          const totalMonto  = bloques.reduce((s, b) => s + b.total, 0);
+          ws[`A${totalRow + 1}`] = { t: 's', v: 'TOTAL GENERAL' };
+          ws[`B${totalRow + 1}`] = { t: 'n', v: totalSKUs };
+          ws[`C${totalRow + 1}`] = { t: 'n', v: totalPiezas };
+          ws[`D${totalRow + 1}`] = { t: 'n', v: totalMonto, z: CURRENCY };
+          ['A', 'B', 'C', 'D'].forEach((col) => {
+            const a = `${col}${totalRow + 1}`;
+            ws[a].s = {
+              font: { bold: true },
+              fill: { fgColor: { rgb: 'D0D0D0' } },
+              alignment: col === 'A' ? { horizontal: 'left' } : { horizontal: 'right' },
+              numFmt: col === 'D' ? CURRENCY : undefined,
+            };
+          });
+          ws['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 3, r: totalRow } });
+        }
+        XLSX.utils.book_append_sheet(wb, ws, 'Resumen');
+      };
+
+      const nombrePropuesta = (nombreBorrador || '').trim() || `Propuesta ${cli?.label || clienteKey}`;
+
+      // Construcción según cliente
+      if (clienteKey === 'digitalife') {
+        // Digitalife: 3 hojas de familia + Resumen
+        const grupos = { 'Monitores': [], 'Sillas': [], 'Todo lo demás': [] };
+        for (const r of propuestaLista) grupos[familiaHoja(r.familia)].push(r);
+        // Resumen con un renglón por hoja
+        const bloques = Object.entries(grupos).filter(([, filas]) => filas.length > 0).map(([nombre, filas]) => ({
+          nombre: `${nombrePropuesta} · ${nombre}`,
+          skus: filas.length,
+          piezas: filas.reduce((s, r) => s + r.piezas, 0),
+          total: filas.reduce((s, r) => s + r.total, 0),
+        }));
+        buildResumen(bloques);
+        Object.entries(grupos).forEach(([nombre, filas]) => {
+          if (filas.length > 0) buildDetalleSheet(filas, nombre);
+        });
+      } else {
+        // Otros clientes: 1 hoja Resumen + 1 hoja Propuesta
+        buildResumen([{
+          nombre: nombrePropuesta,
+          skus: propuestaLista.length,
+          piezas: propuestaLista.reduce((s, r) => s + r.piezas, 0),
+          total: propuestaLista.reduce((s, r) => s + r.total, 0),
+        }]);
+        buildDetalleSheet(propuestaLista, 'Propuesta');
+      }
+
+      // Filename: Propuesta (Cliente) (Nombre del Borrador) (Mes) (Año)
       const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
       const now = new Date();
       const mesEs = MESES_ES[now.getMonth()];
@@ -379,7 +513,8 @@ export default function PropuestasTab() {
       partes.push(mesEs, String(anioNum));
       const filename = partes.join(' ') + '.xlsx';
       XLSX.writeFile(wb, filename);
-      toast.success(`Excel exportado · ${propuestaLista.length} SKUs · ${formatMXN(total)}`);
+      const totalGlobal = propuestaLista.reduce((s, r) => s + r.total, 0);
+      toast.success(`Excel exportado · ${propuestaLista.length} SKUs · ${formatMXN(totalGlobal)}`);
     } catch (e) {
       console.error('[Propuestas] Error exportando Excel:', e);
       toast.error('Error al exportar: ' + (e?.message || 'desconocido'));
@@ -544,55 +679,94 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
             {recientes.length === 0 ? 'sin propuestas aún' : `${recientes.length} guardada${recientes.length === 1 ? '' : 's'}`}
           </span>
         </div>
-        {recientes.length === 0 ? (
-          <div style={{
-            background: theme.surface, border: `1px dashed ${theme.border}`, borderRadius: 14,
-            padding: 32, textAlign: 'center', color: theme.textMuted, fontSize: 12,
-          }}>
-            Al guardar borradores aparecerán aquí para volver a abrirlos con un click.
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
-            {recientes.map((r) => {
-              const cli = CLIENTES.find((c) => c.key === r.clienteKey);
-              const col = clienteColor(theme, r.clienteKey);
-              const pill = estadoPill(r.estado);
-              return (
-                <div key={r.id} onClick={() => onAbrirReciente(r)}
-                  style={{
-                    background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
-                    padding: '14px 16px', cursor: 'pointer', transition: 'transform 120ms, border-color 120ms',
-                    fontFamily: TYPO.fontText,
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.borderColor = col; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = theme.border; }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                    <div style={{
-                      width: 28, height: 28, borderRadius: 8, background: col, color: '#FFF',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, letterSpacing: '-0.02em',
-                    }}>{cli?.iniciales || '?'}</div>
-                    <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', background: pill.bg, color: pill.color }}>{r.estado || 'Borrador'}</span>
-                  </div>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>
-                    Propuesta {cli?.label || r.clienteLabel}
-                  </div>
-                  <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-                    {timeAgo(r.tstamp)}
-                  </div>
-                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>
-                      {r.resumen?.skus || 0} SKUs · {fmtInt(r.resumen?.piezas || 0)}pz
+        {(() => {
+          // Split: últimos 30 días = "Recientes", más viejas = "Anteriores"
+          const CUTOFF = 30 * 86400 * 1000;
+          const now = Date.now();
+          const rec = recientes.filter((r) => now - (r.tstamp || 0) <= CUTOFF);
+          const ant = recientes.filter((r) => now - (r.tstamp || 0) > CUTOFF);
+
+          if (recientes.length === 0) {
+            return (
+              <div style={{
+                background: theme.surface, border: `1px dashed ${theme.border}`, borderRadius: 14,
+                padding: 32, textAlign: 'center', color: theme.textMuted, fontSize: 12,
+              }}>
+                Al guardar borradores aparecerán aquí para volver a abrirlos con un click.
+              </div>
+            );
+          }
+
+          return (
+            <>
+              {/* Recientes (últimos 30 días) */}
+              {rec.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10, marginBottom: ant.length > 0 ? 20 : 0 }}>
+                  {rec.map((r) => (
+                    <PropuestaCard key={r.id} r={r} theme={theme} timeAgo={timeAgo} estadoPill={estadoPill} onAbrirReciente={onAbrirReciente} />
+                  ))}
+                </div>
+              )}
+              {/* Anteriores (más de 30 días) */}
+              {ant.length > 0 && (
+                <div style={{ marginTop: rec.length > 0 ? 4 : 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>
+                      Propuestas anteriores
+                    </h3>
+                    <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                      {ant.length} · más de 30 días
                     </span>
-                    <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.015em', fontSize: 15, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>
-                      {fmtCompact(r.resumen?.total || 0)}
-                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10, opacity: 0.85 }}>
+                    {ant.map((r) => (
+                      <PropuestaCard key={r.id} r={r} theme={theme} timeAgo={timeAgo} estadoPill={estadoPill} onAbrirReciente={onAbrirReciente} historico />
+                    ))}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+            </>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
+function PropuestaCard({ r, theme, timeAgo, estadoPill, onAbrirReciente, historico }) {
+  const cli = CLIENTES.find((c) => c.key === r.clienteKey);
+  const col = clienteColor(theme, r.clienteKey);
+  const pill = estadoPill(r.estado);
+  return (
+    <div onClick={() => onAbrirReciente(r)}
+      style={{
+        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
+        padding: '14px 16px', cursor: 'pointer', transition: 'transform 120ms, border-color 120ms',
+        fontFamily: TYPO.fontText,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.borderColor = col; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = theme.border; }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 8, background: col, color: '#FFF',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, letterSpacing: '-0.02em',
+        }}>{cli?.iniciales || '?'}</div>
+        <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', background: pill.bg, color: pill.color }}>{r.estado || 'Borrador'}</span>
+      </div>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>
+        {r.nombre ? r.nombre : `Propuesta ${cli?.label || r.clienteLabel}`}
+      </div>
+      <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+        {r.nombre ? `${cli?.label || r.clienteLabel} · ${timeAgo(r.tstamp)}` : timeAgo(r.tstamp)}
+      </div>
+      <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>
+          {r.resumen?.skus || 0} SKUs · {fmtInt(r.resumen?.piezas || 0)}pz
+        </span>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.015em', fontSize: 15, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>
+          {fmtCompact(r.resumen?.total || 0)}
+        </span>
       </div>
     </div>
   );
