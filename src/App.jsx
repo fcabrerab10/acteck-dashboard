@@ -4,7 +4,7 @@ import { apiFetch } from './lib/apiFetch';
 import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_MES, ML_SELLOUT_DEFAULT, clientes } from './lib/constants';
 import { formatMXN, formatUSD, formatFecha, diasRestantes, calcularSalud, loadSheetJS } from './lib/utils';
 import { useTelemetry, telemetria } from './lib/telemetry';
-import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, Sidebar } from './components';
+import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, Sidebar, Topbar } from './components';
 import { CLIENTES as SIDEBAR_CLIENTES } from './components/Sidebar';
 import { Toaster } from './lib/toast';
 import {
@@ -445,10 +445,18 @@ export default function App() {
         paddingBottom: 'calc(60px + env(safe-area-inset-bottom) + 16px)',
         minHeight: '100vh',
       } : undefined}>
+          {!mobile && (
+            <Topbar
+              clienteActivo={clienteActivo}
+              paginaActiva={paginaActiva}
+              vistaActual={vistaActual}
+              onNavegar={handleNavegar}
+              perfilUsuario={perfil}
+            />
+          )}
           <div className="w-full" style={{
-            padding: mobile ? '12px 16px' : '16px 24px',
-          }}>
-          {!mobile && <Breadcrumb clienteActivo={clienteActivo} paginaActiva={paginaActiva} vistaActual={vistaActual} />}
+            padding: mobile ? '12px 16px' : '4px 24px 16px',
+          }}>}
           <PageTransition keyId={vistaActual === 'configuracion' ? 'configuracion' : `${clienteActivo || 'g'}-${paginaActiva}`}>
           {vistaActual === "configuracion" ? (
             puedeVerConfig ? <Configuracion session={{user: authUser, perfil}} /> : <SinAcceso motivo="Solo el Super Admin puede ver Configuración." />

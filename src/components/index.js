@@ -7,3 +7,4 @@ export { TarjetaPromociones } from './TarjetaPromociones';
 export { TarjetaMinuta } from './TarjetaMinuta';
 export { BarraCuota } from './BarraCuota';
 export { default as Sidebar } from './Sidebar';
+export { default as Topbar } from './Topbar';
