@@ -417,17 +417,7 @@ export default function App() {
       height: '100vh',
     }}>
 
-      {/* SIDEBAR — sólo desktop/laptop/tablet ≥768 */}
-      {!mobile && (
-        <Sidebar
-          clienteActivo={clienteActivo}
-          paginaActiva={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva}
-          onNavegar={handleNavegar}
-          onCerrarSesion={handleLogout}
-          perfilUsuario={perfil}
-          modoPresent={false}
-        />
-      )}
+      {/* Sidebar desktop eliminada — la navegación vive en Topbar */}
 
       {/* MOBILE NAV — top bar + bottom tab bar + drawer, sólo mobile */}
       {mobile && (
@@ -451,7 +441,10 @@ export default function App() {
               paginaActiva={paginaActiva}
               vistaActual={vistaActual}
               onNavegar={handleNavegar}
+              onCerrarSesion={handleLogout}
               perfilUsuario={perfil}
+              modoPresent={modoPresent}
+              onToggleModoPresent={() => setModoPresent(v => !v)}
             />
           )}
           <div className="w-full" style={{
