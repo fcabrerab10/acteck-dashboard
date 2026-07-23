@@ -62,27 +62,84 @@ function fmtCompact(n) {
 }
 
 // ═══ Persistencia local de recientes ═══
+// Blindaje multi-capa contra pérdida de datos:
+//   · propuestas_recientes_v1        · principal (24 más recientes)
+//   · propuestas_recientes_v1_bak    · backup rolling (24 más recientes, se actualiza SOLO si el principal se pudo leer)
+//   · propuestas_recientes_v1_last   · último snapshot antes de cada save (rollback de emergencia)
 const STORAGE_KEY = 'propuestas_recientes_v1';
+const BACKUP_KEY  = 'propuestas_recientes_v1_bak';
+const LAST_KEY    = 'propuestas_recientes_v1_last';
+
 function loadRecientes() {
+  // Intenta principal, si falla o está vacío intenta backup
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : [];
-  } catch { return []; }
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr;
+    }
+  } catch (e) { console.warn('[Propuestas] fallo lectura principal', e); }
+  try {
+    const raw = localStorage.getItem(BACKUP_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        console.warn('[Propuestas] cargando desde BACKUP · principal corrupto o vacío');
+        return arr;
+      }
+    }
+  } catch {}
+  return [];
 }
+
 function saveReciente(entry) {
   try {
-    const all = loadRecientes().filter((r) => r.id !== entry.id);
+    const prev = loadRecientes();
+    // Snapshot rollback: guarda estado previo antes de sobrescribir
+    try {
+      localStorage.setItem(LAST_KEY, JSON.stringify({ tstamp: Date.now(), data: prev }));
+    } catch {}
+
+    const all = prev.filter((r) => r.id !== entry.id);
     all.unshift(entry);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(all.slice(0, 24)));
-  } catch {}
+    const nextStr = JSON.stringify(all.slice(0, 24));
+    localStorage.setItem(STORAGE_KEY, nextStr);
+    // Backup copy solo si la escritura principal succeed
+    try { localStorage.setItem(BACKUP_KEY, nextStr); } catch {}
+    return true;
+  } catch (e) {
+    console.error('[Propuestas] Error guardando en localStorage:', e);
+    return false;
+  }
 }
+
 function removeReciente(id) {
   try {
     const all = loadRecientes().filter((r) => r.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+    const nextStr = JSON.stringify(all);
+    // Snapshot antes de borrar
+    try { localStorage.setItem(LAST_KEY, JSON.stringify({ tstamp: Date.now(), data: loadRecientes() })); } catch {}
+    localStorage.setItem(STORAGE_KEY, nextStr);
+    try { localStorage.setItem(BACKUP_KEY, nextStr); } catch {}
   } catch {}
+}
+
+// Export helper: descarga snapshot completo como JSON (rescate de emergencia)
+function exportarSnapshot() {
+  try {
+    const data = { tstamp: new Date().toISOString(), recientes: loadRecientes() };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `propuestas_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    return true;
+  } catch (e) {
+    console.error('[Propuestas] fallo snapshot', e);
+    return false;
+  }
 }
 function nuevaPropuestaId() {
   return `prp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -107,6 +164,7 @@ export default function PropuestasTab() {
   const [skus, setSkus] = useState([]);
   const [contexto, setContexto] = useState(null);
   const [recientesTick, setRecientesTick] = useState(0); // fuerza re-render de landing tras guardar
+  const lastAutoSaveRef = React.useRef(0);
 
   // Fetch al entrar a la vista One-Page
   useEffect(() => {
@@ -157,6 +215,53 @@ export default function PropuestasTab() {
     setVista(2);
   };
 
+  // Guarda silencioso (sin toast) — usado por autosave
+  const guardarSilencioso = React.useCallback(() => {
+    if (!clienteKey) return false;
+    let pid = propuestaId;
+    if (!pid) { pid = nuevaPropuestaId(); setPropuestaId(pid); }
+    try {
+      const cli = CLIENTES.find((c) => c.key === clienteKey);
+      const propuestaLista = Object.entries(propuesta)
+        .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
+        .filter((r) => r.sku);
+      const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
+      const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+      const ok = saveReciente({
+        id: pid,
+        clienteKey,
+        clienteLabel: cli?.label || clienteKey,
+        nombre: nombreBorrador,
+        estado: 'Borrador',
+        tstamp: Date.now(),
+        propuesta,
+        resumen: { skus: propuestaLista.length, piezas, total },
+      });
+      if (ok) setRecientesTick((t) => t + 1);
+      return ok;
+    } catch (e) {
+      console.error('[Propuestas] autosave falló', e);
+      return false;
+    }
+  }, [clienteKey, propuestaId, propuesta, skus, nombreBorrador]);
+
+  // Auto-save cada 15 segundos si hay cambios y estamos editando
+  useEffect(() => {
+    if (vista !== 2 && vista !== 3) return;
+    if (!clienteKey) return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      // Solo si pasaron 15s desde el último autosave
+      if (now - lastAutoSaveRef.current > 15000) {
+        const propuestaCount = Object.keys(propuesta).length;
+        if (propuestaCount === 0 && !nombreBorrador) return; // nada que guardar
+        const ok = guardarSilencioso();
+        if (ok) lastAutoSaveRef.current = now;
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [vista, clienteKey, propuesta, nombreBorrador, guardarSilencioso]);
+
   const guardarBorrador = () => {
     // Auto-genera propuestaId si no existe (defensivo: nunca perder trabajo)
     let pid = propuestaId;
@@ -199,13 +304,29 @@ export default function PropuestasTab() {
       toast.error('Selecciona un cliente para exportar');
       return;
     }
+    console.log('[Propuestas] export inicia', { clienteKey, propuestaKeys: Object.keys(propuesta).length, skusLoaded: skus.length, nombreBorrador });
     try {
       const cli = CLIENTES.find((c) => c.key === clienteKey);
+      // Blindaje: si skus no está cargado, exportar con lo que tengamos en el
+      // objeto propuesta (evita perder trabajo del usuario por fetch tardío)
+      const skusIdx = new Map(skus.map((r) => [r.sku, r]));
       const propuestaLista = Object.entries(propuesta)
-        .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
-        .filter((r) => r.sku && Number(r.piezas) > 0);
+        .map(([sku, val]) => {
+          const dataSku = skusIdx.get(sku) || {};
+          return {
+            sku,
+            descripcion: dataSku.descripcion || val.descripcion || '',
+            marca:       dataSku.marca       || val.marca       || '',
+            familia:     dataSku.familia     || val.familia     || '',
+            roadmap:     dataSku.roadmap     || val.roadmap     || '',
+            piezas:      Number(val.piezas) || 0,
+            precio:      Number(val.precio) || 0,
+          };
+        })
+        .filter((r) => r.sku && r.piezas > 0);
       if (propuestaLista.length === 0) {
-        toast.error('La propuesta no tiene SKUs con piezas');
+        console.warn('[Propuestas] export sin filas · propuesta state:', propuesta, 'skus loaded:', skus.length);
+        toast.error('La propuesta no tiene SKUs con piezas · guarda el borrador antes de exportar');
         return;
       }
       // Filas
@@ -351,16 +472,36 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
   return (
     <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
       {/* Header */}
-      <div style={{ padding: '0 4px', marginBottom: 12 }}>
-        <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
-          Dirección Comercial · Armador
-        </p>
-        <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
-          Propuestas.
-        </h2>
-        <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText }}>
-          Arma propuestas de venta por cliente con inventario, precios y sell-out.
-        </p>
+      <div style={{ padding: '0 4px', marginBottom: 12, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
+            Dirección Comercial · Armador
+          </p>
+          <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
+            Propuestas.
+          </h2>
+          <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText }}>
+            Arma propuestas de venta por cliente con inventario, precios y sell-out.
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            const ok = exportarSnapshot();
+            if (ok) toast.success(`Snapshot descargado · ${recientes.length} borradores respaldados`);
+            else toast.error('No se pudo descargar el snapshot');
+          }}
+          title="Descarga un JSON con TODOS tus borradores (rescate manual)"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '6px 12px', borderRadius: 999,
+            background: theme.surface, border: `1px solid ${theme.border}`,
+            color: theme.textMuted, fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 500,
+            cursor: 'pointer', flexShrink: 0,
+          }}
+        >
+          <Download style={{ width: 12, height: 12 }} strokeWidth={2} />
+          Backup JSON
+        </button>
       </div>
 
       {/* Hero card */}
