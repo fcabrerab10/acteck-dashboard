@@ -449,6 +449,8 @@ export default function App() {
           )}
           <div className="w-full" style={{
             padding: mobile ? '12px 16px' : '4px 24px 16px',
+            maxWidth: mobile ? '100%' : 1600,
+            margin: '0 auto',
           }}>
           <PageTransition keyId={vistaActual === 'configuracion' ? 'configuracion' : `${clienteActivo || 'g'}-${paginaActiva}`}>
           {vistaActual === "configuracion" ? (

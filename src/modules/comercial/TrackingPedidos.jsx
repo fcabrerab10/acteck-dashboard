@@ -1726,7 +1726,7 @@ function MetricasRings({ metricas, expandida, onExpand, theme, P }) {
   const active = expandida && metricas[expandida];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
         {rings.map((k) => (
           <RingCard key={k} data={metricas[k]} theme={theme} P={P}
             active={expandida === k}
@@ -1816,7 +1816,7 @@ function DrillPanel({ data, theme, P }) {
           Desglose · {data.avg != null ? `${data.avg.toFixed(1)}d promedio` : 'sin datos aún'}
         </h5>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20 }}>
         <DrillCol theme={theme} title="Por cliente">
           {clientesArr.length === 0 && <DrillEmpty theme={theme}>Sin datos aún</DrillEmpty>}
           {clientesArr.map((c) => (

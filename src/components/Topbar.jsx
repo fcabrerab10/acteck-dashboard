@@ -7,7 +7,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Bell, Search, Check, ChevronDown, X, RefreshCw, LogOut, Settings, Eye,
-  AlertTriangle, Clock, Sparkles, Sun, Moon, Palette,
+  AlertTriangle, Clock, Sparkles, Sun, Moon, Palette, Wand2, Send,
   Home, TrendingUp, Megaphone, Wallet, CreditCard,
   BarChart3, Target, ClipboardList, FileCheck, Calculator, Building2,
   Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins,
@@ -97,6 +97,22 @@ const PAGINA_LABEL = {
   axonMexico: 'Axon de México', configuracion: 'Configuración', actualizacion: 'Actualización de datos',
 };
 
+// ¿El módulo tiene al menos un item visible para este perfil?
+// Se usa para ocultar el pill del módulo entero si no hay nada permitido.
+function itemVisible(it, perfil) {
+  if (!it.permiso) return true;
+  if (it.permiso === '__super_admin__') return !!perfil?.es_super_admin;
+  return puedeVerPestanaGlobal(perfil, it.permiso);
+}
+function moduloEsVisible(m, perfil) {
+  if (!perfil) return false;
+  const grupos = m.grupos || [{ items: m.items }];
+  return grupos.some((g) => {
+    if (g.clientes) return ['digitalife', 'pcel', 'dicotech'].some((cid) => puedeVerCliente(perfil, cid));
+    return (g.items || []).some((it) => itemVisible(it, perfil));
+  });
+}
+
 // Cuál módulo pertenece a cada página (para marcar el activo en la pill izquierda)
 const PAGINA_A_MODULO = {
   estadoResultados: 'direccion',
@@ -135,6 +151,7 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
   const [openMenuId, setOpenMenuId] = useState(null); // null · 'general' · 'comercial' · 'admin' · 'axon' · 'update' · 'notif' · 'user'
   const [clienteExpanded, setClienteExpanded] = useState(null); // cliente expandido dentro del menu comercial
   const [searchOpen, setSearchOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const [notifs, setNotifs] = useState([]);
   const [silenciadas, setSilenciadas] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('notif_silenciadas') || '[]')); }
@@ -294,6 +311,7 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
         style={{
           position: 'sticky', top: 0, zIndex: 40,
           padding: '10px 14px',
+          maxWidth: 1600, margin: '0 auto', width: '100%',
           display: 'grid',
           gridTemplateColumns: 'auto 1fr auto',
           gap: 10,
@@ -301,14 +319,14 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
           pointerEvents: 'none',
         }}
       >
-        {/* ═══ PILL IZQUIERDA · 4 menu-módulo ═══ */}
+        {/* ═══ PILL IZQUIERDA · menu-módulo (filtrado por permisos) + Copilot ═══ */}
         <div
-          style={{ position: 'relative', pointerEvents: 'auto' }}
+          style={{ position: 'relative', pointerEvents: 'auto', display: 'flex', gap: 8 }}
           onMouseLeave={() => scheduleClose(openMenuId)}
           onMouseEnter={() => { if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; } }}
         >
           <div style={{ ...pillStyle, padding: '0 4px', gap: 2 }}>
-            {MODULOS.map(m => {
+            {MODULOS.filter((m) => moduloEsVisible(m, perfilUsuario)).map(m => {
               const active = moduloActivo === m.id;
               const isOpen = openMenuId === m.id;
               return (
@@ -354,6 +372,23 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
               onMouseLeave={() => scheduleClose(openMenuId)}
             />
           )}
+
+          {/* Copilot pill · hermana del pill de módulos */}
+          <button
+            onClick={() => setCopilotOpen(true)}
+            title="Copilot general"
+            style={{
+              ...pillStyle,
+              padding: '0 12px 0 10px', gap: 6, cursor: 'pointer',
+              background: isMidnight
+                ? 'linear-gradient(135deg, rgba(100,210,255,0.14), rgba(191,90,242,0.12))'
+                : 'linear-gradient(135deg, rgba(0,122,255,0.10), rgba(175,82,222,0.08))',
+              border: `1px solid ${isMidnight ? 'rgba(100,210,255,0.24)' : 'rgba(0,122,255,0.20)'}`,
+            }}
+          >
+            <Sparkles size={13} style={{ color: theme.accent }} />
+            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, color: theme.text, letterSpacing: '-0.005em' }}>Copilot</span>
+          </button>
         </div>
 
         {/* ═══ PILL CENTRAL · Search ═══ */}
@@ -469,6 +504,9 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
 
       {searchOpen && (
         <SearchOverlay theme={theme} isMidnight={isMidnight} onClose={() => setSearchOpen(false)} />
+      )}
+      {copilotOpen && (
+        <CopilotOverlay theme={theme} isMidnight={isMidnight} onClose={() => setCopilotOpen(false)} />
       )}
     </>
   );
@@ -955,6 +993,117 @@ function SearchOverlay({ theme, isMidnight, onClose }) {
         </div>
         <div style={{ borderTop: `1px solid ${isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, padding: '14px 16px', color: theme.textMuted, fontSize: 12 }}>
           Búsqueda universal próximamente
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════ Copilot general ═══════════════
+function CopilotOverlay({ theme, isMidnight, onClose }) {
+  const [msg, setMsg] = useState('');
+  const suggestions = [
+    '¿Qué OCs están más atrasadas esta semana?',
+    'Resumen de fill del mes por cliente',
+    '¿Cuánto tardamos en promedio de recibir a entregar?',
+    '¿Qué cliente tuvo mayor crecimiento en junio?',
+  ];
+  return (
+    <div onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: isMidnight ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)',
+        backdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        paddingTop: '10vh', paddingLeft: 16, paddingRight: 16,
+      }}
+    >
+      <div onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 640,
+          background: isMidnight ? 'rgba(30,30,32,0.95)' : 'rgba(255,255,255,0.98)',
+          backdropFilter: 'saturate(180%) blur(30px)',
+          border: `1px solid ${isMidnight ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'}`,
+          borderRadius: 18,
+          boxShadow: isMidnight ? '0 20px 60px rgba(0,0,0,0.7)' : '0 20px 60px rgba(0,0,0,0.18)',
+          padding: 20, fontFamily: TYPO.fontText,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 999,
+            background: `linear-gradient(135deg, ${theme.accent}, ${theme.purple || '#AF52DE'})`,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#FFF',
+          }}>
+            <Sparkles size={16} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>Copilot general</div>
+            <div style={{ fontFamily: TYPO.fontText, fontSize: 11.5, color: theme.textMuted, marginTop: 1 }}>Pregúntame lo que quieras sobre tu operación</div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 28, height: 28, border: 0, background: 'transparent', borderRadius: 999, cursor: 'pointer',
+            color: theme.textMuted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }} onMouseEnter={(e) => e.currentTarget.style.background = isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
+             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          ><X size={15} /></button>
+        </div>
+
+        <div style={{
+          margin: '16px 0 12px', padding: 12, borderRadius: 12,
+          background: isMidnight ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+          border: `1px solid ${isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'}`,
+          display: 'flex', gap: 8, alignItems: 'center',
+        }}>
+          <textarea
+            autoFocus
+            value={msg}
+            onChange={(e) => setMsg(e.target.value)}
+            placeholder="Pregúntame algo…"
+            rows={1}
+            style={{
+              flex: 1, border: 0, background: 'transparent', outline: 'none', resize: 'none',
+              fontFamily: TYPO.fontText, fontSize: 14, color: theme.text, lineHeight: 1.4,
+            }}
+          />
+          <button style={{
+            width: 32, height: 32, borderRadius: 999, border: 0, cursor: 'pointer',
+            background: msg.trim() ? theme.accent : (isMidnight ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'),
+            color: msg.trim() ? '#FFF' : theme.textMuted,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background 200ms',
+          }}>
+            <Send size={14} />
+          </button>
+        </div>
+
+        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: theme.textMuted, margin: '10px 0 6px' }}>
+          Sugerencias
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {suggestions.map((s, i) => (
+            <button key={i} onClick={() => setMsg(s)}
+              style={{
+                width: '100%', textAlign: 'left', border: 0, background: 'transparent', cursor: 'pointer',
+                padding: '9px 10px', borderRadius: 8,
+                fontFamily: TYPO.fontText, fontSize: 12.5, color: theme.text,
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,113,227,0.06)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <Sparkles size={11} style={{ color: theme.textMuted, flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>{s}</span>
+            </button>
+          ))}
+        </div>
+
+        <div style={{
+          marginTop: 14, paddingTop: 12,
+          borderTop: `1px solid ${isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
+          fontFamily: TYPO.fontText, fontSize: 11, color: theme.textMuted, textAlign: 'center',
+        }}>
+          El motor de Copilot está en preparación · próximamente respuestas en vivo
         </div>
       </div>
     </div>
