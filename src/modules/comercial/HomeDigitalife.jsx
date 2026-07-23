@@ -66,32 +66,34 @@ export default function HomeDigitalife({ cliente, clienteKey, onUploadComplete }
       setCuotasMes(cR.data || []);
 
       // Aging desde estados_cuenta_detalle del último corte
+      // Alineado con CreditoCobranza: buckets SOLO incluyen facturas vencidas.
+      // Las al día (fecha_vencimiento aún no llega) se cuentan aparte.
       const ecActualId = (ecR.data || [])[0]?.id;
       if (ecActualId) {
         const { data: det } = await supabase
           .from('estados_cuenta_detalle')
-          .select('saldo_actual, vencimiento')
+          .select('*')
           .eq('estado_cuenta_id', ecActualId);
         if (cancel) return;
         const now = Date.now();
-        const buckets = { d0_30: 0, d31_60: 0, d61_90: 0, mas90: 0 };
+        const buckets = { d1_30: [], d31_60: [], d61_90: [], mas90: [] };
         let total = 0, vencido = 0, alDia = 0;
         (det || []).forEach(f => {
           const saldo = Number(f.saldo_actual) || 0;
           if (saldo <= 0) return;
           total += saldo;
-          if (!f.vencimiento) { alDia += saldo; buckets.d0_30 += saldo; return; }
+          if (!f.vencimiento) { alDia += saldo; return; }
           const v = new Date(f.vencimiento + 'T00:00:00').getTime();
           const dias = Math.floor((now - v) / 86400000);
-          if (dias <= 0) { alDia += saldo; buckets.d0_30 += saldo; }
-          else if (dias <= 30) { vencido += saldo; buckets.d0_30 += saldo; }
-          else if (dias <= 60) { vencido += saldo; buckets.d31_60 += saldo; }
-          else if (dias <= 90) { vencido += saldo; buckets.d61_90 += saldo; }
-          else { vencido += saldo; buckets.mas90 += saldo; }
+          if (dias <= 0) alDia += saldo;
+          else if (dias <= 30) { vencido += saldo; buckets.d1_30.push({ ...f, dias, saldo }); }
+          else if (dias <= 60) { vencido += saldo; buckets.d31_60.push({ ...f, dias, saldo }); }
+          else if (dias <= 90) { vencido += saldo; buckets.d61_90.push({ ...f, dias, saldo }); }
+          else { vencido += saldo; buckets.mas90.push({ ...f, dias, saldo }); }
         });
         setAging({ total, vencido, alDia, buckets });
       } else {
-        setAging({ total: 0, vencido: 0, alDia: 0, buckets: { d0_30: 0, d31_60: 0, d61_90: 0, mas90: 0 } });
+        setAging({ total: 0, vencido: 0, alDia: 0, buckets: { d1_30: [], d31_60: [], d61_90: [], mas90: [] } });
       }
 
       // Marca share últimos 30 días
@@ -168,10 +170,13 @@ export default function HomeDigitalife({ cliente, clienteKey, onUploadComplete }
       });
     }
     if (aging && aging.vencido > 0) {
+      const riesgo61 = (aging.buckets.d61_90 || []).reduce((s, f) => s + (f.saldo || 0), 0);
+      const riesgo90 = (aging.buckets.mas90  || []).reduce((s, f) => s + (f.saldo || 0), 0);
+      const enRiesgo = riesgo61 + riesgo90;
       arr.push({
         sev: aging.vencido > (aging.total || 0) * 0.15 ? 'urgente' : 'warn',
         title: `${fmtMoney(aging.vencido)} de cobranza vencida`,
-        sub: `${fmtMoney(aging.buckets.d61_90 + aging.buckets.mas90)} > 60d en riesgo`,
+        sub: enRiesgo > 0 ? `${fmtMoney(enRiesgo)} > 60d en riesgo` : `Revisa las facturas para cobrar antes de que envejezcan`,
       });
     }
     if (pctCuota >= 100) {
@@ -192,7 +197,7 @@ export default function HomeDigitalife({ cliente, clienteKey, onUploadComplete }
 
   // ═════ Estilos ═════
   const surface = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14 };
-  const heroBg = isDark ? 'linear-gradient(135deg, #1C1C1E, #0A0A0C)' : (theme.key === 'marfil' ? 'linear-gradient(135deg, #0055B5, #003D80)' : '#1C1C1E');
+  const heroBg = isDark ? '#0A0A0C' : (theme.key === 'marfil' ? '#0055B5' : '#1C1C1E');
   const heroText = '#FFF';
   const heroEyebrow = 'rgba(255,255,255,0.55)';
   const heroNarr = 'rgba(255,255,255,0.7)';
@@ -373,11 +378,11 @@ function SplitCard({ theme, P, eyebrow, title, big, bigColor, sub, series, highl
               <div key={i}
                 style={{
                   flex: 1,
-                  background: `linear-gradient(180deg, ${useHighlight ? (highlightColor || baseColor) : baseColor}, ${useHighlight ? (highlightColor || baseColor) : baseColor}AA)`,
+                  background: useHighlight ? (highlightColor || baseColor) : baseColor,
                   borderRadius: '3px 3px 0 0',
                   height: `${Math.max(4, (v / max) * 100)}%`,
                   minHeight: 4,
-                  opacity: v > 0 ? 1 : 0.2,
+                  opacity: v > 0 ? (useHighlight ? 1 : 0.55) : 0.15,
                 }} />
             );
           })}
@@ -412,10 +417,20 @@ function SoonCard({ theme, P, eyebrow, title }) {
 }
 
 function CobranzaCard({ theme, P, aging }) {
+  const [expanded, setExpanded] = useState(null);
   const total = aging?.total || 0;
   const vencido = aging?.vencido || 0;
-  const buckets = aging?.buckets || { d0_30: 0, d31_60: 0, d61_90: 0, mas90: 0 };
-  const maxB = Math.max(1, buckets.d0_30, buckets.d31_60, buckets.d61_90, buckets.mas90);
+  const alDia = aging?.alDia || 0;
+  const buckets = aging?.buckets || { d1_30: [], d31_60: [], d61_90: [], mas90: [] };
+  const bucketSum = (arr) => (arr || []).reduce((s, f) => s + (f.saldo || 0), 0);
+  const sumD1 = bucketSum(buckets.d1_30);
+  const sumD2 = bucketSum(buckets.d31_60);
+  const sumD3 = bucketSum(buckets.d61_90);
+  const sumD4 = bucketSum(buckets.mas90);
+  const maxB = Math.max(1, sumD1, sumD2, sumD3, sumD4);
+  const expandedBucket = expanded ? buckets[expanded] || [] : [];
+  const expandedTop = [...expandedBucket].sort((a, b) => b.saldo - a.saldo).slice(0, 3);
+
   return (
     <div style={{
       background: theme.surface, border: `1px solid ${theme.border}`,
@@ -433,29 +448,67 @@ function CobranzaCard({ theme, P, aging }) {
           <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1, color: P.green }}>
             {fmtMoney(total)}
           </div>
-          <div style={{ fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textMuted, marginTop: 4, maxWidth: 200 }}>
-            Total cartera{vencido > 0 && (
+          <div style={{ fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textMuted, marginTop: 4, maxWidth: 220 }}>
+            Total cartera · <strong style={{ color: P.green, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtMoney(alDia)} al día</strong>
+            {vencido > 0 && (
               <> · <strong style={{ color: P.red, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtMoney(vencido)} vencido</strong></>
             )}
           </div>
         </div>
         <div>
-          <AgingRow theme={theme} label="0-30 d" val={buckets.d0_30} pct={buckets.d0_30 / maxB * 100} color={P.green} />
-          <AgingRow theme={theme} label="31-60 d" val={buckets.d31_60} pct={buckets.d31_60 / maxB * 100} color={P.orange} />
-          <AgingRow theme={theme} label="61-90 d" val={buckets.d61_90} pct={buckets.d61_90 / maxB * 100} color={P.red} />
-          <AgingRow theme={theme} label="+ 90 d" val={buckets.mas90} pct={buckets.mas90 / maxB * 100} color={P.red} />
+          <AgingRow theme={theme} label="1-30 d" val={sumD1} count={buckets.d1_30.length} pct={sumD1 / maxB * 100} color={P.orange} active={expanded === 'd1_30'} onClick={() => setExpanded(expanded === 'd1_30' ? null : 'd1_30')} />
+          <AgingRow theme={theme} label="31-60 d" val={sumD2} count={buckets.d31_60.length} pct={sumD2 / maxB * 100} color={P.orange} active={expanded === 'd31_60'} onClick={() => setExpanded(expanded === 'd31_60' ? null : 'd31_60')} />
+          <AgingRow theme={theme} label="61-90 d" val={sumD3} count={buckets.d61_90.length} pct={sumD3 / maxB * 100} color={P.red} active={expanded === 'd61_90'} onClick={() => setExpanded(expanded === 'd61_90' ? null : 'd61_90')} />
+          <AgingRow theme={theme} label="+ 90 d" val={sumD4} count={buckets.mas90.length} pct={sumD4 / maxB * 100} color={P.red} active={expanded === 'mas90'} onClick={() => setExpanded(expanded === 'mas90' ? null : 'mas90')} />
         </div>
       </div>
+
+      {expanded && expandedTop.length > 0 && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${theme.divider || theme.border}` }}>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: theme.textMuted, fontWeight: 600, marginBottom: 6 }}>
+            Top 3 en este bucket
+          </div>
+          {expandedTop.map((f, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, padding: '4px 0', fontSize: 11, alignItems: 'center' }}>
+              <span style={{ fontFamily: TYPO.fontText, color: theme.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {f.factura || f.folio || 'Factura'}
+              </span>
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted }}>{f.dias}d</span>
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.text, fontWeight: 600 }}>{fmtMoney(f.saldo)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {expanded && expandedTop.length === 0 && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${theme.divider || theme.border}`, textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>
+          Sin facturas en este bucket
+        </div>
+      )}
     </div>
   );
 }
 
-function AgingRow({ theme, label, val, pct, color }) {
+function AgingRow({ theme, label, val, count, pct, color, active, onClick }) {
+  const [hover, setHover] = useState(false);
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr 60px', gap: 8, alignItems: 'center', padding: '5px 0', fontSize: 11 }}>
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'grid', gridTemplateColumns: '60px 1fr 30px 68px', gap: 8, alignItems: 'center',
+        padding: '5px 8px', margin: '2px -8px', borderRadius: 7,
+        fontSize: 11, cursor: 'pointer',
+        background: active ? `${color}14` : hover ? `${theme.text}06` : 'transparent',
+        transition: 'background 200ms',
+      }}
+    >
       <span style={{ fontFamily: TYPO.fontText, color: theme.textMuted, fontWeight: 500 }}>{label}</span>
       <span style={{ height: 5, background: `${theme.text}0F`, borderRadius: 999, overflow: 'hidden' }}>
         <span style={{ display: 'block', height: '100%', background: color, borderRadius: 999, width: `${Math.min(100, pct)}%`, transition: 'width 400ms cubic-bezier(0.32, 0.72, 0, 1)' }} />
+      </span>
+      <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, textAlign: 'right' }}>
+        {count > 0 ? `${count}` : '—'}
       </span>
       <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, textAlign: 'right', color: theme.text, fontWeight: 600 }}>{fmtMoney(val)}</span>
     </div>
@@ -463,9 +516,13 @@ function AgingRow({ theme, label, val, pct, color }) {
 }
 
 function TimelineChart({ data, max, theme, P }) {
-  const cuotaMedia = data.filter(d => d.cuota > 0).reduce((s, d) => s + d.cuota, 0) / Math.max(1, data.filter(d => d.cuota > 0).length);
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const cuotaValores = data.filter(d => d.cuota > 0);
+  const cuotaMedia = cuotaValores.length > 0 ? cuotaValores.reduce((s, d) => s + d.cuota, 0) / cuotaValores.length : 0;
   const cuotaTop = cuotaMedia > 0 ? (1 - cuotaMedia / max) * 100 : 50;
   const isDark = theme.mode === 'dark';
+  const hovered = hoverIdx != null ? data[hoverIdx] : null;
+
   return (
     <div style={{ position: 'relative', height: 200, padding: '20px 12px 4px' }}>
       <div style={{ position: 'absolute', inset: '20px 12px 20px', borderLeft: `1px solid ${theme.divider || theme.border}`, borderBottom: `1px solid ${theme.divider || theme.border}` }}>
@@ -487,19 +544,25 @@ function TimelineChart({ data, max, theme, P }) {
       <div style={{ position: 'absolute', inset: '20px 20px 20px', display: 'flex', alignItems: 'flex-end', gap: 4 }}>
         {data.map((d, i) => {
           const alt = (d.sellIn / max) * 100;
+          const isHover = hoverIdx === i;
+          const barColor = d.actual ? P.green : d.futuro ? theme.textMuted : P.accent;
           return (
-            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            <div key={i}
+              onMouseEnter={() => setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx(null)}
+              style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                cursor: d.futuro ? 'default' : 'pointer', height: '100%',
+                justifyContent: 'flex-end',
+              }}>
               <div style={{
                 width: '100%',
-                background: d.actual
-                  ? `linear-gradient(180deg, ${P.green}, ${P.green}88)`
-                  : `linear-gradient(180deg, ${P.accent}, ${P.accent}88)`,
+                background: barColor,
                 borderRadius: '4px 4px 0 0',
                 position: 'relative', minHeight: 3,
                 height: `${d.futuro ? 0 : Math.max(3, alt)}%`,
-                opacity: d.futuro ? 0.15 : 1,
-                boxShadow: d.actual ? `0 -2px 8px ${P.green}66` : 'none',
-                transition: 'height 500ms cubic-bezier(0.32, 0.72, 0, 1)',
+                opacity: d.futuro ? 0.15 : (isHover ? 1 : (d.actual ? 1 : 0.85)),
+                transition: 'height 500ms cubic-bezier(0.32, 0.72, 0, 1), opacity 200ms',
               }} />
               <span style={{
                 fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9,
@@ -512,6 +575,48 @@ function TimelineChart({ data, max, theme, P }) {
           );
         })}
       </div>
+      {hovered && !hovered.futuro && (
+        <div style={{
+          position: 'absolute',
+          top: 8,
+          left: `${(hoverIdx / data.length) * 100 + (50 / data.length)}%`,
+          transform: 'translateX(-50%)',
+          background: theme.surface,
+          border: `1px solid ${theme.border}`,
+          borderRadius: 8,
+          padding: '8px 12px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+          pointerEvents: 'none',
+          zIndex: 5,
+          minWidth: 140,
+          maxWidth: 200,
+        }}>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, letterSpacing: '-0.005em' }}>
+            {hovered.label} · {new Date().getFullYear()}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textMuted, marginTop: 3 }}>
+            <span>Sell In</span>
+            <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmtMoney(hovered.sellIn)}</span>
+          </div>
+          {hovered.cuota > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textMuted, marginTop: 2 }}>
+              <span>Cuota</span>
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmtMoney(hovered.cuota)}</span>
+            </div>
+          )}
+          {hovered.cuota > 0 && hovered.sellIn > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: TYPO.fontText, fontSize: 10.5, marginTop: 4, paddingTop: 4, borderTop: `1px dashed ${theme.divider || theme.border}` }}>
+              <span style={{ color: theme.textMuted }}>vs cuota</span>
+              <span style={{
+                fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 700,
+                color: hovered.sellIn >= hovered.cuota ? P.green : P.orange,
+              }}>
+                {hovered.sellIn >= hovered.cuota ? '+' : ''}{Math.round(((hovered.sellIn - hovered.cuota) / hovered.cuota) * 100)}%
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -549,20 +654,17 @@ function MarcasCard({ theme, P, marcas }) {
 }
 
 function CopilotCard({ theme, P, recos }) {
-  const isDark = theme.mode === 'dark';
   return (
     <div style={{
-      background: isDark
-        ? `linear-gradient(135deg, ${P.accent}12, ${P.purple}0E)`
-        : `linear-gradient(135deg, ${P.accent}0F, ${P.purple}0A)`,
-      border: `1px solid ${P.accent}26`,
+      background: theme.surface,
+      border: `1px solid ${P.accent}30`,
       borderRadius: 14, padding: '16px 18px',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <span style={{
           padding: '3px 10px', borderRadius: 999,
-          background: `linear-gradient(135deg, ${P.accent}, ${P.purple})`,
-          color: '#FFF', fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600,
+          background: P.accent, color: '#FFF',
+          fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600,
           textTransform: 'uppercase', letterSpacing: '0.08em', display: 'inline-flex', alignItems: 'center', gap: 4,
         }}>
           <Sparkles size={10} /> Ferruteck
@@ -584,17 +686,15 @@ function CopilotCard({ theme, P, recos }) {
 }
 
 function CopilotRow({ theme, P, r, first }) {
-  const grad = r.sev === 'urgente' ? `linear-gradient(135deg, ${P.red}, #C22B22)`
-    : r.sev === 'warn' ? `linear-gradient(135deg, ${P.orange}, #C56E00)`
-    : `linear-gradient(135deg, ${P.accent}, ${P.accent}AA)`;
+  const bg = r.sev === 'urgente' ? P.red : r.sev === 'warn' ? P.orange : P.accent;
   const Icon = r.sev === 'urgente' ? AlertTriangle : r.sev === 'warn' ? Clock : TrendingUp;
   return (
     <div style={{
       display: 'grid', gridTemplateColumns: '32px 1fr auto', gap: 12,
-      padding: '8px 0', borderTop: first ? 'none' : `1px solid ${P.accent}1E`,
+      padding: '8px 0', borderTop: first ? 'none' : `1px solid ${theme.divider || theme.border}`,
       alignItems: 'center',
     }}>
-      <span style={{ width: 32, height: 32, borderRadius: 8, background: grad, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#FFF' }}>
+      <span style={{ width: 32, height: 32, borderRadius: 8, background: bg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#FFF' }}>
         <Icon size={15} strokeWidth={2.4} />
       </span>
       <div style={{ minWidth: 0 }}>
