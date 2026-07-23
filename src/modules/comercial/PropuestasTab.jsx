@@ -109,9 +109,10 @@ function loadRecientes() {
 
 // Import Excel: lee un .xlsx exportado por la app, extrae SKUs + piezas +
 // precio (deshaciendo el IVA), detecta cliente por filename o hoja de
-// Resumen, y crea un nuevo borrador con esos datos.
+// Resumen. Si se pasa existingEntry, actualiza esa propuesta (mismo id +
+// clienteKey). Si no, crea una nueva.
 // Retorna { ok, entry?, msg? }
-async function importarExcel(file) {
+async function importarExcel(file, existingEntry = null) {
   try {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
@@ -184,7 +185,11 @@ async function importarExcel(file) {
     if (skusCount === 0) {
       return { ok: false, msg: 'No se encontraron SKUs con piezas en el Excel' };
     }
-    if (!clienteKeyResuelto) {
+    // Si estamos actualizando una existente, forzamos el clienteKey de la
+    // existente (aunque el filename lo cambie) y validamos consistencia.
+    if (existingEntry) {
+      clienteKeyResuelto = existingEntry.clienteKey;
+    } else if (!clienteKeyResuelto) {
       return { ok: false, msg: 'No pude detectar el cliente. Renombra el archivo a "Propuesta {Cliente} …" o crea la propuesta desde cero' };
     }
 
@@ -193,17 +198,24 @@ async function importarExcel(file) {
     const total  = Object.values(propuesta).reduce((s, v) => s + (v.piezas || 0) * (v.precio || 0), 0);
 
     const entry = {
-      id: nuevaPropuestaId(),
+      id: existingEntry?.id || nuevaPropuestaId(),
       clienteKey: clienteKeyResuelto,
       clienteLabel: cli?.label || clienteKeyResuelto,
-      nombre: filenameNombre || `Importado ${new Date().toLocaleDateString('es-MX')}`,
-      estado: 'Borrador',
+      nombre: existingEntry?.nombre || filenameNombre || `Importado ${new Date().toLocaleDateString('es-MX')}`,
+      estado: existingEntry ? existingEntry.estado : 'Borrador',
       tstamp: Date.now(),
+      // Si estamos actualizando desde Excel, marcamos también updatedFromExcelAt
+      // y preservamos exportedAt/exportFilename originales
+      ...(existingEntry ? {
+        exportedAt: existingEntry.exportedAt,
+        exportFilename: existingEntry.exportFilename,
+        updatedFromExcelAt: Date.now(),
+      } : {}),
       propuesta,
       resumen: { skus: skusCount, piezas, total },
     };
     saveReciente(entry);
-    return { ok: true, entry, sheetsLeidas };
+    return { ok: true, entry, sheetsLeidas, updated: !!existingEntry };
   } catch (e) {
     console.error('[Propuestas] importarExcel falló', e);
     return { ok: false, msg: e?.message || 'Error leyendo el Excel' };
@@ -658,6 +670,27 @@ export default function PropuestasTab() {
       const filename = partes.join(' ') + '.xlsx';
       XLSX.writeFile(wb, filename);
       const totalGlobal = propuestaLista.reduce((s, r) => s + r.total, 0);
+      // Marcar la propuesta como "exportada" para que aparezca en la sección
+      // "Propuestas exportadas" del Landing
+      try {
+        const cliEntry = CLIENTES.find((c) => c.key === clienteKey);
+        const piezasEntry = propuestaLista.reduce((s, r) => s + r.piezas, 0);
+        let pidEntry = propuestaId;
+        if (!pidEntry) { pidEntry = nuevaPropuestaId(); setPropuestaId(pidEntry); }
+        saveReciente({
+          id: pidEntry,
+          clienteKey,
+          clienteLabel: cliEntry?.label || clienteKey,
+          nombre: nombreBorrador,
+          estado: 'Exportada',
+          tstamp: Date.now(),
+          exportedAt: Date.now(),
+          exportFilename: filename,
+          propuesta,
+          resumen: { skus: propuestaLista.length, piezas: piezasEntry, total: totalGlobal },
+        });
+        setRecientesTick((t) => t + 1);
+      } catch (e) { console.warn('[Propuestas] no se pudo marcar como exportada', e); }
       toast.success(`Excel exportado · ${propuestaLista.length} SKUs · ${formatMXN(totalGlobal)}`);
     } catch (e) {
       console.error('[Propuestas] Error exportando Excel:', e);
@@ -765,39 +798,6 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <label
-            title="Sube un Excel exportado y crea/actualiza el borrador con los cambios"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '6px 12px', borderRadius: 999,
-              background: P.accent, border: `1px solid ${P.accent}`,
-              color: '#FFF', fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            ↑ Importar Excel
-            <input type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              style={{ display: 'none' }}
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) { return; }
-                try {
-                  const res = await importarExcel(file);
-                  if (res.ok) {
-                    setRecientes(loadRecientes());
-                    toast.success(`Excel importado · ${res.entry.resumen.skus} SKUs · ${fmtCompact(res.entry.resumen.total)} · click para abrir`);
-                    // Abrir automáticamente el borrador recién creado para que el usuario vea el resultado
-                    onAbrirReciente?.(res.entry);
-                  } else {
-                    toast.error(res.msg || 'No se pudo importar el Excel');
-                  }
-                } catch (err) {
-                  toast.error('Error importando Excel: ' + (err?.message || 'desconocido'));
-                }
-                e.target.value = '';
-              }}
-            />
-          </label>
-          <label
             title="Sube un JSON de backup para restaurar propuestas"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -894,11 +894,17 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
           </span>
         </div>
         {(() => {
-          // Split: últimos 30 días = "Recientes", más viejas = "Anteriores"
+          // Split en 3 buckets:
+          //   · exportadas: tienen exportedAt (independiente de edad)
+          //   · recientes: sin exportedAt, últimos 30 días
+          //   · anteriores: sin exportedAt, más de 30 días
           const CUTOFF = 30 * 86400 * 1000;
           const now = Date.now();
-          const rec = recientes.filter((r) => now - (r.tstamp || 0) <= CUTOFF);
-          const ant = recientes.filter((r) => now - (r.tstamp || 0) > CUTOFF);
+          const exportadas = recientes.filter((r) => !!r.exportedAt)
+            .sort((a, b) => (b.exportedAt || 0) - (a.exportedAt || 0));
+          const noExportadas = recientes.filter((r) => !r.exportedAt);
+          const rec = noExportadas.filter((r) => now - (r.tstamp || 0) <= CUTOFF);
+          const ant = noExportadas.filter((r) => now - (r.tstamp || 0) > CUTOFF);
 
           if (recientes.length === 0) {
             return (
@@ -911,19 +917,56 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
             );
           }
 
+          const handleActualizarExcel = async (entryExistente, file) => {
+            try {
+              const res = await importarExcel(file, entryExistente);
+              if (res.ok) {
+                setRecientes(loadRecientes());
+                toast.success(`Excel actualizado · ${res.entry.resumen.skus} SKUs · ${fmtCompact(res.entry.resumen.total)}`);
+              } else {
+                toast.error(res.msg || 'No se pudo actualizar');
+              }
+            } catch (err) {
+              toast.error('Error: ' + (err?.message || 'desconocido'));
+            }
+          };
+
           return (
             <>
-              {/* Recientes (últimos 30 días) */}
+              {/* Recientes (borradores últimos 30 días, sin exportar) */}
               {rec.length > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10, marginBottom: ant.length > 0 ? 20 : 0 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10, marginBottom: 20 }}>
                   {rec.map((r) => (
                     <PropuestaCard key={r.id} r={r} theme={theme} timeAgo={timeAgo} estadoPill={estadoPill} onAbrirReciente={onAbrirReciente} />
                   ))}
                 </div>
               )}
-              {/* Anteriores (más de 30 días) */}
+
+              {/* Propuestas exportadas */}
+              {exportadas.length > 0 && (
+                <div style={{ marginBottom: ant.length > 0 ? 20 : 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>
+                      Propuestas exportadas
+                    </h3>
+                    <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                      {exportadas.length} · sube el Excel modificado para actualizar
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+                    {exportadas.map((r) => (
+                      <PropuestaCard key={r.id} r={r} theme={theme} timeAgo={timeAgo} estadoPill={estadoPill}
+                        onAbrirReciente={onAbrirReciente}
+                        onActualizarExcel={(file) => handleActualizarExcel(r, file)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Anteriores (más de 30 días, sin exportar) */}
               {ant.length > 0 && (
-                <div style={{ marginTop: rec.length > 0 ? 4 : 0 }}>
+                <div>
                   <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
                     <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>
                       Propuestas anteriores
@@ -947,16 +990,20 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
   );
 }
 
-function PropuestaCard({ r, theme, timeAgo, estadoPill, onAbrirReciente, historico }) {
+function PropuestaCard({ r, theme, timeAgo, estadoPill, onAbrirReciente, onActualizarExcel, historico }) {
   const cli = CLIENTES.find((c) => c.key === r.clienteKey);
   const col = clienteColor(theme, r.clienteKey);
   const pill = estadoPill(r.estado);
+  const P = paletteFromTheme(theme);
+  const exported = !!r.exportedAt;
+  const updated  = !!r.updatedFromExcelAt;
   return (
-    <div onClick={() => onAbrirReciente(r)}
+    <div
+      onClick={() => onAbrirReciente(r)}
       style={{
         background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
         padding: '14px 16px', cursor: 'pointer', transition: 'transform 120ms, border-color 120ms',
-        fontFamily: TYPO.fontText,
+        fontFamily: TYPO.fontText, position: 'relative',
       }}
       onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.borderColor = col; }}
       onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = theme.border; }}>
@@ -973,6 +1020,12 @@ function PropuestaCard({ r, theme, timeAgo, estadoPill, onAbrirReciente, histori
       </div>
       <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
         {r.nombre ? `${cli?.label || r.clienteLabel} · ${timeAgo(r.tstamp)}` : timeAgo(r.tstamp)}
+        {exported && (
+          <> · <span style={{ color: P.green, fontWeight: 600 }}>exportada {timeAgo(r.exportedAt)}</span></>
+        )}
+        {updated && (
+          <> · <span style={{ color: P.accent, fontWeight: 600 }}>actualizada {timeAgo(r.updatedFromExcelAt)}</span></>
+        )}
       </div>
       <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>
@@ -982,6 +1035,37 @@ function PropuestaCard({ r, theme, timeAgo, estadoPill, onAbrirReciente, histori
           {fmtCompact(r.resumen?.total || 0)}
         </span>
       </div>
+
+      {onActualizarExcel && (
+        <label
+          onClick={(e) => e.stopPropagation()}
+          title="Sube el Excel modificado y actualiza esta propuesta con los cambios"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            marginTop: 10, padding: '7px 10px', borderRadius: 10,
+            background: `${P.accent}14`, border: `1px solid ${P.accent}40`,
+            color: P.accent, fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 600,
+            cursor: 'pointer',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = `${P.accent}22`; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = `${P.accent}14`; }}
+        >
+          <Download style={{ width: 12, height: 12, transform: 'rotate(180deg)' }} strokeWidth={2} />
+          Actualizar desde Excel
+          <input
+            type="file"
+            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            style={{ display: 'none' }}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              e.stopPropagation();
+              const file = e.target.files?.[0];
+              if (file) onActualizarExcel(file);
+              e.target.value = '';
+            }}
+          />
+        </label>
+      )}
     </div>
   );
 }
