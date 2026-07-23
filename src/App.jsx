@@ -12,7 +12,7 @@ import {
   BarChart3, Target, ClipboardList, Settings as SettingsIcon, Building2,
   Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator,
 } from 'lucide-react';
-import { HomeCliente, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente, TrackingPedidos, SellOutCliente } from './modules/comercial';
+import { HomeCliente, HomeDigitalife, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente, TrackingPedidos, SellOutCliente } from './modules/comercial';
 import EstadoResultados from './modules/general/EstadoResultados';
 import VisionGeneral from './modules/comercial/VisionGeneral';
 import ReporteTab from './modules/comercial/ReporteTab';
@@ -569,7 +569,11 @@ export default function App() {
           <SinAcceso motivo={`No tienes acceso a esta pestaña de ${clienteActivo}.`} />
         ) : (
           <>
-        {paginaActiva === "home"    && <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />}
+        {paginaActiva === "home" && (
+          clienteActivo === 'digitalife'
+            ? <HomeDigitalife cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
+            : <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
+        )}
         {clienteActivo && paginaActiva === "sellIn"  && <SellInCliente clienteKey={clienteActivo} />}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} clienteKey={clienteActivo} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}

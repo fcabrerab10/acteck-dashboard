@@ -1,4 +1,5 @@
 export { default as HomeCliente } from './HomeCliente';
+export { default as HomeDigitalife } from './HomeDigitalife';
 export { default as CreditoCobranza } from './CreditoCobranza';
 export { default as PagosCliente } from './PagosCliente';
 export { default as EstrategiaProducto } from './EstrategiaProducto';
