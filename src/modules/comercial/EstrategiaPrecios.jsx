@@ -399,7 +399,7 @@ export default function EstrategiaPrecios() {
       {/* Hero editorial · narrativa del mes + 2×2 stats */}
       <div style={{
         display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 20,
-        background: heroBg, color: heroText, borderRadius: 16, padding: '18px 22px',
+        background: heroBg, color: heroText, borderRadius: 14, padding: '14px 18px',
         alignItems: 'center', position: 'relative', overflow: 'hidden',
         border: isDark ? `1px solid rgba(255,255,255,0.06)` : 'none',
       }}>
@@ -411,31 +411,31 @@ export default function EstrategiaPrecios() {
         )}
         <div style={{ position: 'relative' }}>
           <p style={{
-            fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em',
+            fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em',
             color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText, margin: 0,
           }}>
             Dirección Comercial · {nombreMes} {anioActual}
           </p>
           <h2 style={{
-            fontFamily: TYPO.fontDisplay, fontSize: 24, fontWeight: 600, letterSpacing: '-0.025em',
-            color: heroText, margin: '6px 0 8px', lineHeight: 1.15,
+            fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em',
+            color: heroText, margin: '4px 0 6px', lineHeight: 1.15,
           }}>
             Estrategia de Precios.
           </h2>
           <p style={{
-            color: heroMuted, fontSize: 12, lineHeight: 1.55, margin: 0, maxWidth: 480,
+            color: heroMuted, fontSize: 11.5, lineHeight: 1.5, margin: 0, maxWidth: 460,
             fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums',
           }}>
-            <strong style={{ color: heroText, fontWeight: 500 }}>{fmtInt(skusConPrecio)} SKUs con precio</strong> de {fmtInt(roadmap.length)} en catálogo.
+            <strong style={{ color: heroText, fontWeight: 500 }}>{fmtInt(skusConPrecio)} SKUs con precio</strong> de {fmtInt(roadmap.length)}.
             {promos.length > 0 && (
-              <> Hay <strong style={{ color: heroText, fontWeight: 500 }}>{promos.length} promo{promos.length !== 1 ? 's' : ''}</strong> vigentes{familiasConPromo.size > 0 && <> cubriendo <strong style={{ color: heroText, fontWeight: 500 }}>{familiasConPromo.size} familia{familiasConPromo.size !== 1 ? 's' : ''}</strong></>}.</>
+              <> <strong style={{ color: heroText, fontWeight: 500 }}>{promos.length} promo{promos.length !== 1 ? 's' : ''}</strong> vigentes{familiasConPromo.size > 0 && <> en <strong style={{ color: heroText, fontWeight: 500 }}>{familiasConPromo.size} familia{familiasConPromo.size !== 1 ? 's' : ''}</strong></>}.</>
             )}
             {skusPrecioBajo > 0 && (
-              <> Hay <strong style={{ color: heroText, fontWeight: 500 }}>{skusPrecioBajo} SKUs</strong> facturados debajo de la lista base — considera revisar los de mayor volumen.</>
+              <> <strong style={{ color: heroText, fontWeight: 500 }}>{skusPrecioBajo}</strong> facturados debajo de lista base — revisa los de mayor volumen.</>
             )}
           </p>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, position: 'relative' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', position: 'relative' }}>
           <HeroStatEP theme={theme} label="SKUs con precio" value={fmtInt(skusConPrecio)} sub={`de ${fmtInt(roadmap.length)}`} heroSubtle={heroSubtle} />
           <HeroStatEP theme={theme} label="Promos vigentes" value={fmtInt(promos.length)} heroSubtle={heroSubtle} />
           <HeroStatEP theme={theme} label="Listas activas" value={fmtInt(LISTAS_MOSTRAR.length)} heroSubtle={heroSubtle} />
@@ -1251,15 +1251,15 @@ function HeroStatEP({ label, value, sub, valueColor, heroSubtle }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       <span style={{
-        fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em',
+        fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em',
         color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText,
       }}>{label}</span>
       <span style={{
-        fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em',
-        marginTop: 3, fontVariantNumeric: 'tabular-nums', color: valueColor || '#FFF',
+        fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em',
+        marginTop: 2, fontVariantNumeric: 'tabular-nums', color: valueColor || '#FFF',
       }}>
         {value}
-        {sub && <span style={{ color: heroSubtle, fontSize: 11, marginLeft: 4, fontWeight: 500 }}>{sub}</span>}
+        {sub && <span style={{ color: heroSubtle, fontSize: 10, marginLeft: 3, fontWeight: 500 }}>{sub}</span>}
       </span>
     </div>
   );

@@ -213,7 +213,7 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
   return (
     <aside className="flex flex-col shrink-0"
       style={{
-        width: 264,
+        width: 228,
         background: 'var(--t-sidebar, #FFFFFF)',
         borderRight: '1px solid var(--t-sidebarBorder, rgba(0,0,0,0.06))',
         color: 'var(--t-sidebarText, #1D1D1F)',
