@@ -380,14 +380,18 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
         </button>
 
         {/* ═══ PILL DERECHA · Actualizar + Notif + Avatar ═══ */}
-        <div style={{ position: 'relative', pointerEvents: 'auto' }}>
+        <div
+          style={{ position: 'relative', pointerEvents: 'auto' }}
+          onMouseLeave={() => scheduleClose(openMenuId)}
+          onMouseEnter={() => { if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; } }}
+        >
           <div style={{ ...pillStyle, padding: '0 6px', gap: 2 }}>
             <button
               onClick={() => setOpenMenuId(openMenuId === 'update' ? null : 'update')}
+              onMouseEnter={(e) => { openOnHover('update'); e.currentTarget.style.background = isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               title="Actualizar datos"
               style={miniBtnStyle}
-              onMouseEnter={(e) => e.currentTarget.style.background = isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
             >
               <RefreshCw size={13} />
               <span style={{
@@ -399,10 +403,10 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
             </button>
             <button
               onClick={() => setOpenMenuId(openMenuId === 'notif' ? null : 'notif')}
+              onMouseEnter={(e) => { openOnHover('notif'); e.currentTarget.style.background = isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               title="Notificaciones"
               style={miniBtnStyle}
-              onMouseEnter={(e) => e.currentTarget.style.background = isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
             >
               <Bell size={13} />
               {notifsVisibles.length > 0 && (
@@ -418,6 +422,7 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
             </button>
             <button
               onClick={() => setOpenMenuId(openMenuId === 'user' ? null : 'user')}
+              onMouseEnter={() => openOnHover('user')}
               title={perfilUsuario?.nombre || 'Usuario'}
               style={{
                 width: 22, height: 22, borderRadius: 999, marginLeft: 4, border: 0, padding: 0,
@@ -429,7 +434,11 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
           </div>
 
           {openMenuId === 'update' && (
-            <UpdatePanel theme={theme} isMidnight={isMidnight} onClose={closeMenu} />
+            <UpdatePanel
+              theme={theme} isMidnight={isMidnight} onClose={closeMenu}
+              onMouseEnter={() => { if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; } }}
+              onMouseLeave={() => scheduleClose('update')}
+            />
           )}
           {openMenuId === 'notif' && (
             <NotifPanel
@@ -437,6 +446,8 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
               urgentes={urgentes} warns={warns} infos={infos}
               onGo={(navegarA) => { closeMenu(); navegarA(); }}
               onSilenciar={silenciar} onMarcarTodo={marcarTodo}
+              onMouseEnter={() => { if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; } }}
+              onMouseLeave={() => scheduleClose('notif')}
             />
           )}
           {openMenuId === 'user' && (
@@ -449,6 +460,8 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
               onConfig={() => { closeMenu(); onNavegar(null, 'configuracion'); }}
               onUpdate={() => { closeMenu(); setOpenMenuId('update'); }}
               onLogout={() => { closeMenu(); onCerrarSesion?.(); }}
+              onMouseEnter={() => { if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; } }}
+              onMouseLeave={() => scheduleClose('user')}
             />
           )}
         </div>
@@ -604,7 +617,7 @@ function ClientesList({ perfil, theme, isMidnight, clienteActivo, paginaActiva, 
 }
 
 // ═══════════════ Panel Actualizar datos ═══════════════
-function UpdatePanel({ theme, isMidnight, onClose }) {
+function UpdatePanel({ theme, isMidnight, onClose, onMouseEnter, onMouseLeave }) {
   const [fuentes, setFuentes] = useState([]);
   const [lastUpdate, setLastUpdate] = useState(null);
 
@@ -626,18 +639,18 @@ function UpdatePanel({ theme, isMidnight, onClose }) {
   }, []);
 
   const cardStyle = {
-    position: 'absolute', top: 42, right: 0, zIndex: 41, width: 340,
+    position: 'absolute', top: 38, right: 0, zIndex: 41, width: 340,
     background: isMidnight ? 'rgba(40,40,45,0.90)' : 'rgba(255,255,255,0.92)',
     backdropFilter: 'saturate(180%) blur(30px)',
     WebkitBackdropFilter: 'saturate(180%) blur(30px)',
     border: `1px solid ${isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
     borderRadius: 14,
     boxShadow: isMidnight ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.12)',
-    padding: 10, fontFamily: TYPO.fontText,
+    padding: 10, paddingTop: 14, marginTop: -4, fontFamily: TYPO.fontText,
   };
 
   return (
-    <div style={cardStyle}>
+    <div style={cardStyle} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '4px 8px 8px' }}>
         <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, color: theme.text, letterSpacing: '-0.02em' }}>Actualizar datos</div>
         {lastUpdate && (
@@ -686,18 +699,18 @@ function UpdatePanel({ theme, isMidnight, onClose }) {
 }
 
 // ═══════════════ Notification Center ═══════════════
-function NotifPanel({ theme, isMidnight, urgentes, warns, infos, onGo, onSilenciar, onMarcarTodo }) {
+function NotifPanel({ theme, isMidnight, urgentes, warns, infos, onGo, onSilenciar, onMarcarTodo, onMouseEnter, onMouseLeave }) {
   const total = urgentes.length + warns.length + infos.length;
   return (
-    <div style={{
-      position: 'absolute', top: 42, right: 0, zIndex: 41, width: 360,
+    <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} style={{
+      position: 'absolute', top: 38, right: 0, zIndex: 41, width: 360,
       background: isMidnight ? 'rgba(40,40,45,0.90)' : 'rgba(255,255,255,0.92)',
       backdropFilter: 'saturate(180%) blur(30px)',
       WebkitBackdropFilter: 'saturate(180%) blur(30px)',
       border: `1px solid ${isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
       borderRadius: 14,
       boxShadow: isMidnight ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.12)',
-      padding: 10, fontFamily: TYPO.fontText, maxHeight: '80vh', overflowY: 'auto',
+      padding: 10, paddingTop: 14, marginTop: -4, fontFamily: TYPO.fontText, maxHeight: '80vh', overflowY: 'auto',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 6px 8px' }}>
         <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, color: theme.text, letterSpacing: '-0.02em' }}>Notificaciones</div>
@@ -781,21 +794,21 @@ function NotifItem({ n, theme, isMidnight, onGo, onSilenciar }) {
 }
 
 // ═══════════════ Menú de usuario ═══════════════
-function UserMenu({ theme, isMidnight, setThemeKey, perfil, modoPresent, onToggleModoPresent, onConfig, onUpdate, onLogout }) {
+function UserMenu({ theme, isMidnight, setThemeKey, perfil, modoPresent, onToggleModoPresent, onConfig, onUpdate, onLogout, onMouseEnter, onMouseLeave }) {
   const puedeConfig = puedeConfigurar(perfil);
   const puedeActualizar = puedeActualizarDatos(perfil);
   const iniciales = (perfil?.nombre || 'U').split(' ').filter(Boolean).slice(0, 2).map(s => s[0].toUpperCase()).join('');
   const rolLabel = { super_admin: 'Super Admin', admin: 'Administrador', asistente: 'Asistente', cliente: 'Cliente', viewer: 'Viewer' }[perfil?.rol] || perfil?.rol;
 
   const cardStyle = {
-    position: 'absolute', top: 42, right: 0, zIndex: 41, minWidth: 280,
+    position: 'absolute', top: 38, right: 0, zIndex: 41, minWidth: 280,
     background: isMidnight ? 'rgba(40,40,45,0.90)' : 'rgba(255,255,255,0.92)',
     backdropFilter: 'saturate(180%) blur(30px)',
     WebkitBackdropFilter: 'saturate(180%) blur(30px)',
     border: `1px solid ${isMidnight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
     borderRadius: 12,
     boxShadow: isMidnight ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.12)',
-    padding: 6, fontFamily: TYPO.fontText,
+    padding: 6, paddingTop: 10, marginTop: -4, fontFamily: TYPO.fontText,
   };
   const rowStyle = (danger) => ({
     display: 'flex', alignItems: 'center', gap: 8, width: '100%',
@@ -815,7 +828,7 @@ function UserMenu({ theme, isMidnight, setThemeKey, perfil, modoPresent, onToggl
   });
 
   return (
-    <div style={cardStyle}>
+    <div style={cardStyle} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       {/* Header con perfil */}
       {perfil?.nombre && (
         <div style={{
