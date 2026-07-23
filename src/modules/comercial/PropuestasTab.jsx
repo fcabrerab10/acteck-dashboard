@@ -71,25 +71,66 @@ const BACKUP_KEY  = 'propuestas_recientes_v1_bak';
 const LAST_KEY    = 'propuestas_recientes_v1_last';
 
 function loadRecientes() {
-  // Intenta principal, si falla o está vacío intenta backup
+  // Fallback 3 capas: principal → backup → snapshot antes del último save
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return arr;
+      if (Array.isArray(arr) && arr.length > 0) {
+        console.log('[Propuestas] cargadas desde principal:', arr.length);
+        return arr;
+      }
     }
   } catch (e) { console.warn('[Propuestas] fallo lectura principal', e); }
   try {
     const raw = localStorage.getItem(BACKUP_KEY);
     if (raw) {
       const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        console.warn('[Propuestas] cargando desde BACKUP · principal corrupto o vacío');
+      if (Array.isArray(arr) && arr.length > 0) {
+        console.warn('[Propuestas] cargando desde BACKUP · principal vacío/corrupto', arr.length);
         return arr;
       }
     }
   } catch {}
+  try {
+    const raw = localStorage.getItem(LAST_KEY);
+    if (raw) {
+      const snap = JSON.parse(raw);
+      const arr = snap?.data;
+      if (Array.isArray(arr) && arr.length > 0) {
+        console.warn('[Propuestas] cargando desde SNAPSHOT _last · principal + backup vacíos', arr.length);
+        return arr;
+      }
+    }
+  } catch {}
+  console.log('[Propuestas] sin propuestas en ninguna capa');
   return [];
+}
+
+// Import: restaura propuestas desde un JSON descargado previamente
+function importarBackup(json) {
+  try {
+    let arr = null;
+    if (Array.isArray(json)) arr = json;
+    else if (json?.recientes && Array.isArray(json.recientes)) arr = json.recientes;
+    else if (json?.data && Array.isArray(json.data)) arr = json.data;
+    if (!arr || arr.length === 0) return { ok: false, count: 0, msg: 'El JSON no tiene propuestas' };
+    // Merge con lo existente por id (import gana en caso de conflicto)
+    const existentes = loadRecientes();
+    const map = new Map(existentes.map((r) => [r.id, r]));
+    arr.forEach((r) => { if (r && r.id) map.set(r.id, r); });
+    const merged = Array.from(map.values())
+      .filter((r) => r && r.id)
+      .sort((a, b) => (b.tstamp || 0) - (a.tstamp || 0))
+      .slice(0, 100); // ampliamos límite para permitir historial más largo
+    const str = JSON.stringify(merged);
+    localStorage.setItem(STORAGE_KEY, str);
+    try { localStorage.setItem(BACKUP_KEY, str); } catch {}
+    return { ok: true, count: merged.length, added: merged.length - existentes.length };
+  } catch (e) {
+    console.error('[Propuestas] importarBackup falló', e);
+    return { ok: false, count: 0, msg: e?.message || 'error desconocido' };
+  }
 }
 
 function saveReciente(entry) {
@@ -619,24 +660,61 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
             Arma propuestas de venta por cliente con inventario, precios y sell-out.
           </p>
         </div>
-        <button
-          onClick={() => {
-            const ok = exportarSnapshot();
-            if (ok) toast.success(`Snapshot descargado · ${recientes.length} borradores respaldados`);
-            else toast.error('No se pudo descargar el snapshot');
-          }}
-          title="Descarga un JSON con TODOS tus borradores (rescate manual)"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '6px 12px', borderRadius: 999,
-            background: theme.surface, border: `1px solid ${theme.border}`,
-            color: theme.textMuted, fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 500,
-            cursor: 'pointer', flexShrink: 0,
-          }}
-        >
-          <Download style={{ width: 12, height: 12 }} strokeWidth={2} />
-          Backup JSON
-        </button>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <label
+            title="Sube un JSON de backup para restaurar propuestas"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', borderRadius: 999,
+              background: theme.surface, border: `1px solid ${theme.border}`,
+              color: theme.textMuted, fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            ↑ Importar backup
+            <input type="file" accept="application/json,.json" style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                  try {
+                    const json = JSON.parse(String(ev.target?.result || 'null'));
+                    const res = importarBackup(json);
+                    if (res.ok) {
+                      setRecientes(loadRecientes());
+                      toast.success(`Backup importado · ${res.count} propuestas en total${res.added > 0 ? ` (+${res.added} nuevas)` : ''}`);
+                    } else {
+                      toast.error(res.msg || 'No se pudo importar');
+                    }
+                  } catch (err) {
+                    toast.error('JSON inválido: ' + (err?.message || 'error'));
+                  }
+                  e.target.value = ''; // permite re-subir el mismo archivo
+                };
+                reader.readAsText(file);
+              }}
+            />
+          </label>
+          <button
+            onClick={() => {
+              const ok = exportarSnapshot();
+              if (ok) toast.success(`Snapshot descargado · ${recientes.length} borradores respaldados`);
+              else toast.error('No se pudo descargar el snapshot');
+            }}
+            title="Descarga un JSON con TODOS tus borradores (rescate manual)"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', borderRadius: 999,
+              background: theme.surface, border: `1px solid ${theme.border}`,
+              color: theme.textMuted, fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            <Download style={{ width: 12, height: 12 }} strokeWidth={2} />
+            Backup JSON
+          </button>
+        </div>
       </div>
 
       {/* Hero card */}
