@@ -27,46 +27,43 @@ import {
 // ═════════ Config de módulos (migrado del Sidebar) ═════════
 const MODULOS = [
   {
-    id: 'general', label: 'General',
+    id: 'direccion', label: 'Dirección',
     items: [
       { id: 'estadoResultados', label: 'Estado de Resultados', icon: Calculator, permiso: 'estado_resultados' },
     ],
   },
   {
     id: 'comercial', label: 'Comercial',
-    grupos: [
-      {
-        label: 'Dirección Comercial',
-        items: [
-          { id: 'visionGeneral',    label: 'Visión General',       icon: Activity,     permiso: 'vision_general' },
-          { id: 'analisisClientes', label: 'Análisis por Cliente', icon: PieChart,     permiso: 'analisis_clientes' },
-          { id: 'sellIn',           label: 'Sell In',              icon: ShoppingCart, permiso: 'sell_in' },
-          { id: 'sellOut',          label: 'Sell Out',             icon: ShoppingBag,  permiso: 'sell_out' },
-          { id: 'inventarioGlobal', label: 'Inventario',           icon: Boxes,        permiso: 'inventario_global' },
-          { id: 'cobranzaGlobal',   label: 'Cobranza',             icon: HandCoins,    permiso: 'cobranza_global' },
-          { id: 'forecastClientes', label: 'S&OP',                 icon: Target,       permiso: 'forecast_clientes' },
-        ],
-      },
-      {
-        label: 'Clientes Propios',
-        items: [
-          { id: 'resumenClientes',  label: 'Resumen de Clientes',    icon: BarChart3,    permiso: 'resumen_clientes' },
-          { id: 'propuestas',       label: 'Propuestas',              icon: ClipboardList,permiso: 'propuestas' },
-          { id: 'estrategiaPrecios',label: 'Estrategia de Precios',   icon: TrendingUp,   permiso: 'estrategia_precios' },
-          { id: 'ordenesCompra',    label: 'Tracking Pedidos',        icon: FileCheck,    permiso: 'ordenes_compra' },
-        ],
-      },
-      {
-        label: 'Clientes',
-        clientes: true, // marker especial — renderiza clientes expandibles
-      },
+    items: [
+      { id: 'visionGeneral',    label: 'Visión General',       icon: Activity,     permiso: 'vision_general' },
+      { id: 'analisisClientes', label: 'Análisis por Cliente', icon: PieChart,     permiso: 'analisis_clientes' },
+      { id: 'sellIn',           label: 'Sell In',              icon: ShoppingCart, permiso: 'sell_in' },
+      { id: 'sellOut',          label: 'Sell Out',             icon: ShoppingBag,  permiso: 'sell_out' },
+      { id: 'inventarioGlobal', label: 'Inventario',           icon: Boxes,        permiso: 'inventario_global' },
+      { id: 'cobranzaGlobal',   label: 'Cobranza',             icon: HandCoins,    permiso: 'cobranza_global' },
+      { id: 'forecastClientes', label: 'S&OP',                 icon: Target,       permiso: 'forecast_clientes' },
     ],
   },
   {
-    id: 'admin', label: 'Admin',
-    items: [
-      { id: 'adminInterna', label: 'Pendientes & Calendario', icon: ClipboardList, permiso: 'admin_interna' },
-      { id: 'telemetria',   label: 'Actividad del equipo',    icon: Activity,      permiso: '__super_admin__' },
+    id: 'interno', label: 'Interno',
+    grupos: [
+      {
+        label: 'Clientes Propios',
+        items: [
+          { id: 'resumenClientes',   label: 'Resumen de Clientes',   icon: BarChart3,     permiso: 'resumen_clientes' },
+          { id: 'propuestas',        label: 'Propuestas',            icon: ClipboardList, permiso: 'propuestas' },
+          { id: 'estrategiaPrecios', label: 'Estrategia de Precios', icon: TrendingUp,    permiso: 'estrategia_precios' },
+          { id: 'ordenesCompra',     label: 'Tracking Pedidos',      icon: FileCheck,     permiso: 'ordenes_compra' },
+        ],
+      },
+      { label: 'Clientes', clientes: true },
+      {
+        label: 'Administración',
+        items: [
+          { id: 'adminInterna', label: 'Pendientes & Calendario', icon: ClipboardList, permiso: 'admin_interna' },
+          { id: 'telemetria',   label: 'Actividad del equipo',    icon: Activity,      permiso: '__super_admin__' },
+        ],
+      },
     ],
   },
   {
@@ -102,14 +99,14 @@ const PAGINA_LABEL = {
 
 // Cuál módulo pertenece a cada página (para marcar el activo en la pill izquierda)
 const PAGINA_A_MODULO = {
-  estadoResultados: 'general',
+  estadoResultados: 'direccion',
   visionGeneral: 'comercial', analisisClientes: 'comercial', sellIn: 'comercial', sellOut: 'comercial',
   inventarioGlobal: 'comercial', cobranzaGlobal: 'comercial', forecastClientes: 'comercial',
-  resumenClientes: 'comercial', propuestas: 'comercial', estrategiaPrecios: 'comercial', ordenesCompra: 'comercial',
-  adminInterna: 'admin', telemetria: 'admin',
+  resumenClientes: 'interno', propuestas: 'interno', estrategiaPrecios: 'interno', ordenesCompra: 'interno',
+  adminInterna: 'interno', telemetria: 'interno',
   axonMexico: 'axon',
-  home: 'comercial', analisis: 'comercial', marketing: 'comercial', pagos: 'comercial', cartera: 'comercial',
-  estrategia: 'comercial',
+  home: 'interno', analisis: 'interno', marketing: 'interno', pagos: 'interno', cartera: 'interno',
+  estrategia: 'interno',
 };
 
 const UMBRAL_DIAS_ALERTA = 3;
@@ -224,6 +221,20 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
+  // ─ Hover-to-open (estilo apple.com) — con delay al cerrar ─
+  const closeTimerRef = useRef(null);
+  const openOnHover = (id) => {
+    if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
+    setOpenMenuId(id);
+  };
+  const scheduleClose = (id) => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
+      setOpenMenuId(cur => (cur === id ? null : cur));
+      closeTimerRef.current = null;
+    }, 220);
+  };
+
   const silenciar = (id) => {
     setSilenciadas(prev => {
       const next = new Set(prev); next.add(id);
@@ -291,7 +302,11 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
         }}
       >
         {/* ═══ PILL IZQUIERDA · 4 menu-módulo ═══ */}
-        <div style={{ position: 'relative', pointerEvents: 'auto' }}>
+        <div
+          style={{ position: 'relative', pointerEvents: 'auto' }}
+          onMouseLeave={() => scheduleClose(openMenuId)}
+          onMouseEnter={() => { if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; } }}
+        >
           <div style={{ ...pillStyle, padding: '0 4px', gap: 2 }}>
             {MODULOS.map(m => {
               const active = moduloActivo === m.id;
@@ -300,6 +315,13 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
                 <button
                   key={m.id}
                   onClick={() => setOpenMenuId(isOpen ? null : m.id)}
+                  onMouseEnter={(e) => {
+                    openOnHover(m.id);
+                    if (!active) { e.currentTarget.style.background = isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'; e.currentTarget.style.color = theme.text; }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = theme.textMuted; }
+                  }}
                   style={{
                     border: 0, background: active ? theme.text : 'transparent',
                     padding: '5px 10px', borderRadius: 999, cursor: 'pointer',
@@ -309,8 +331,6 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
                     letterSpacing: '-0.005em',
                     display: 'inline-flex', alignItems: 'center', gap: 4,
                   }}
-                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = isMidnight ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'; if (!active) e.currentTarget.style.color = theme.text; }}
-                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; if (!active) e.currentTarget.style.color = theme.textMuted; }}
                 >
                   {m.label}
                   <ChevronDown size={9} style={{ opacity: 0.6, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 200ms' }} />
@@ -330,6 +350,8 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
               onExpandCliente={setClienteExpanded}
               onSelect={handleSelect}
               onSelectCliente={handleSelectCliente}
+              onMouseEnter={() => { if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; } }}
+              onMouseLeave={() => scheduleClose(openMenuId)}
             />
           )}
         </div>
@@ -440,7 +462,7 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
 }
 
 // ═══════════════ Dropdown de módulo ═══════════════
-function ModuloDropdown({ modulo, theme, isMidnight, perfil, paginaActiva, clienteActivo, clienteExpanded, onExpandCliente, onSelect, onSelectCliente }) {
+function ModuloDropdown({ modulo, theme, isMidnight, perfil, paginaActiva, clienteActivo, clienteExpanded, onExpandCliente, onSelect, onSelectCliente, onMouseEnter, onMouseLeave }) {
   const permitido = (it) => {
     if (!it.permiso) return true;
     if (it.permiso === '__super_admin__') return !!perfil?.es_super_admin;
@@ -448,7 +470,7 @@ function ModuloDropdown({ modulo, theme, isMidnight, perfil, paginaActiva, clien
   };
 
   const cardStyle = {
-    position: 'absolute', top: 42, left: 0, zIndex: 41, minWidth: 260, maxWidth: 320,
+    position: 'absolute', top: 38, left: 0, zIndex: 41, minWidth: 260, maxWidth: 320,
     background: isMidnight ? 'rgba(40,40,45,0.90)' : 'rgba(255,255,255,0.92)',
     backdropFilter: 'saturate(180%) blur(30px)',
     WebkitBackdropFilter: 'saturate(180%) blur(30px)',
@@ -456,11 +478,13 @@ function ModuloDropdown({ modulo, theme, isMidnight, perfil, paginaActiva, clien
     borderRadius: 12,
     boxShadow: isMidnight ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.12)',
     padding: 6, fontFamily: TYPO.fontText,
+    // Invisible top bridge para que el hover no se rompa al cruzar
+    paddingTop: 10, marginTop: -4,
   };
 
   const grupos = modulo.grupos || [{ items: modulo.items }];
   return (
-    <div style={cardStyle}>
+    <div style={cardStyle} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       {grupos.map((g, gi) => (
         <div key={gi} style={{ marginBottom: gi < grupos.length - 1 ? 6 : 0 }}>
           {g.label && (
