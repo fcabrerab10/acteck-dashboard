@@ -381,40 +381,66 @@ export default function EstrategiaPrecios() {
   });
   const topPromo = [...promosPorCliente.entries()].sort((a, b) => b[1] - a[1])[0];
 
+  const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
+  const heroText = theme.heroCardText || '#F5F5F7';
+  const heroMuted = 'rgba(255,255,255,0.72)';
+  const heroSubtle = 'rgba(255,255,255,0.55)';
+  const nombreMes = MESES_LARGO[new Date().getMonth()];
+  const anioActual = new Date().getFullYear();
+  // Narrativa: cuántas familias con promo, cliente principal con promo, etc.
+  const familiasConPromo = new Set();
+  promos.forEach((p) => {
+    const sku = roadmap.find((r) => r.sku === p.sku);
+    if (sku?.familia) familiasConPromo.add(sku.familia);
+  });
+
   return (
     <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
-      {/* Header */}
-      <div style={{ padding: '0 4px', marginBottom: 4 }}>
-        <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
-          Dirección Comercial
-        </p>
-        <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
-          Estrategia de Precios.
-        </h2>
-        <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
-          <strong style={{ color: theme.text, fontWeight: 500 }}>{fmtInt(roadmap.length)} SKUs</strong> · {fmtInt(precios.length)} precios · {promos.length} promos vigentes
-        </p>
-      </div>
-
-      {/* 4 KPI cards Apple Fitness */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-        <KpiCardEP theme={theme} P={P} icon={Tag} iconColor={P.accent} chip="SKUs"
-          value={fmtInt(roadmap.length)}
-          note={<><strong style={{ color: theme.text }}>{fmtInt(skusConPrecio)}</strong> con precio en al menos 1 lista.</>}
-        />
-        <KpiCardEP theme={theme} P={P} icon={Sparkles} iconColor={P.purple} chip="Promos"
-          value={fmtInt(promos.length)}
-          note={topPromo ? <><strong style={{ color: theme.text }}>{topPromo[0]}</strong> concentra {topPromo[1]}.</> : <>Sin promos vigentes.</>}
-        />
-        <KpiCardEP theme={theme} P={P} icon={TrendingUp} iconColor={P.green} chip="Listas activas"
-          value={fmtInt(LISTAS_MOSTRAR.length)}
-          note={<>Mayoreo AAA + <strong style={{ color: theme.text }}>{LISTAS_MOSTRAR.length - 1} listas cliente</strong> configuradas.</>}
-        />
-        <KpiCardEP theme={theme} P={P} icon={AlertTriangle} iconColor={P.orange} chip="Precio bajo"
-          value={fmtInt(skusPrecioBajo)}
-          valueColor={skusPrecioBajo > 0 ? P.orange : theme.text}
-          note={<>SKUs facturados <strong style={{ color: theme.text }}>debajo</strong> de todas las listas.</>}
-        />
+      {/* Hero editorial · narrativa del mes + 2×2 stats */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 20,
+        background: heroBg, color: heroText, borderRadius: 16, padding: '18px 22px',
+        alignItems: 'center', position: 'relative', overflow: 'hidden',
+        border: isDark ? `1px solid rgba(255,255,255,0.06)` : 'none',
+      }}>
+        {isDark && (
+          <div style={{
+            position: 'absolute', top: '-30%', right: '-10%', width: '50%', height: '100%',
+            background: `radial-gradient(circle, ${P.accent}1F 0%, transparent 70%)`, pointerEvents: 'none',
+          }} />
+        )}
+        <div style={{ position: 'relative' }}>
+          <p style={{
+            fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em',
+            color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText, margin: 0,
+          }}>
+            Dirección Comercial · {nombreMes} {anioActual}
+          </p>
+          <h2 style={{
+            fontFamily: TYPO.fontDisplay, fontSize: 24, fontWeight: 600, letterSpacing: '-0.025em',
+            color: heroText, margin: '6px 0 8px', lineHeight: 1.15,
+          }}>
+            Estrategia de Precios.
+          </h2>
+          <p style={{
+            color: heroMuted, fontSize: 12, lineHeight: 1.55, margin: 0, maxWidth: 480,
+            fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums',
+          }}>
+            <strong style={{ color: heroText, fontWeight: 500 }}>{fmtInt(skusConPrecio)} SKUs con precio</strong> de {fmtInt(roadmap.length)} en catálogo.
+            {promos.length > 0 && (
+              <> Hay <strong style={{ color: heroText, fontWeight: 500 }}>{promos.length} promo{promos.length !== 1 ? 's' : ''}</strong> vigentes{familiasConPromo.size > 0 && <> cubriendo <strong style={{ color: heroText, fontWeight: 500 }}>{familiasConPromo.size} familia{familiasConPromo.size !== 1 ? 's' : ''}</strong></>}.</>
+            )}
+            {skusPrecioBajo > 0 && (
+              <> Hay <strong style={{ color: heroText, fontWeight: 500 }}>{skusPrecioBajo} SKUs</strong> facturados debajo de la lista base — considera revisar los de mayor volumen.</>
+            )}
+          </p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, position: 'relative' }}>
+          <HeroStatEP theme={theme} label="SKUs con precio" value={fmtInt(skusConPrecio)} sub={`de ${fmtInt(roadmap.length)}`} heroSubtle={heroSubtle} />
+          <HeroStatEP theme={theme} label="Promos vigentes" value={fmtInt(promos.length)} heroSubtle={heroSubtle} />
+          <HeroStatEP theme={theme} label="Listas activas" value={fmtInt(LISTAS_MOSTRAR.length)} heroSubtle={heroSubtle} />
+          <HeroStatEP theme={theme} label="Precio bajo" value={fmtInt(skusPrecioBajo)} valueColor={skusPrecioBajo > 0 ? P.orange : heroText} heroSubtle={heroSubtle} />
+        </div>
       </div>
 
       {/* Toolbar iOS pill */}
@@ -696,8 +722,9 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
         };
       })
       .sort((a, b) => b.piezas - a.piezas);
-    const clientes = clientesAll.slice(0, 5);
-    const clientesRestantes = clientesAll.slice(5);
+    // Compactación: 3 clientes por default (con "+ N más" al pie)
+    const clientes = clientesAll.slice(0, 3);
+    const clientesRestantes = clientesAll.slice(3);
     const clienteVolumen = clientes[0];
 
     const mesActual = new Date().getMonth() + 1;
@@ -758,7 +785,7 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
       piezasMesActual, promPrev3m,
       deltaVsPrev3m: promPrev3m > 0 ? ((piezasMesActual - promPrev3m) / promPrev3m) * 100 : null,
       piezasYTD, montoYTD,
-      promosHist: promosUnificadas.slice(0, 6),
+      promosHist: promosUnificadas.slice(0, 3),
       promosCount: promosUnificadas.length,
     };
   }, [datos, anio, precios]);
@@ -842,53 +869,53 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
           onMouseLeave={(e) => e.currentTarget.style.color = heroMuted}>
           <X style={{ width: 14, height: 14 }} strokeWidth={2} />
         </button>
-        <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 24, alignItems: 'center' }}>
+        <div style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, alignItems: 'center' }}>
           <div>
             <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px',
+              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 8px',
               borderRadius: 999, background: 'rgba(255,255,255,0.10)',
-              fontSize: 10, fontWeight: 500, color: heroMuted,
-              textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, fontFamily: TYPO.fontText,
+              fontSize: 9, fontWeight: 500, color: heroMuted,
+              textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: TYPO.fontText,
             }}>
-              <span style={{ width: 6, height: 6, borderRadius: 999, background: P.teal }} />
+              <span style={{ width: 5, height: 5, borderRadius: 999, background: P.teal }} />
               {sku.categoria || 'Sin categoría'} · {sku.familia || '—'}
-              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: heroSubtle, marginLeft: 6 }}>{sku.sku}</span>
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: heroSubtle, marginLeft: 4 }}>{sku.sku}</span>
             </div>
             <h3 style={{
-              fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em',
-              color: '#FFF', margin: '4px 0 0', lineHeight: 1.2,
+              fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em',
+              color: '#FFF', margin: '3px 0 0', lineHeight: 1.2,
             }}>
               {sku.descripcion || sku.sku}
             </h3>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSubtle, fontWeight: 500, marginTop: 12 }}>
-              Precio actual · Mayoreo AAA
+            <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: heroSubtle, fontWeight: 500, marginTop: 8, fontFamily: TYPO.fontText }}>
+              Precio Mayoreo AAA
             </div>
             <div style={{
-              fontFamily: TYPO.fontDisplay, fontSize: 38, fontWeight: 600, letterSpacing: '-0.03em',
-              margin: '6px 0 4px', fontVariantNumeric: 'tabular-nums', color: '#FFF',
+              fontFamily: TYPO.fontDisplay, fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em',
+              margin: '2px 0 4px', fontVariantNumeric: 'tabular-nums', color: '#FFF',
             }}>
               {precioAAAneto != null ? fmtMoney(precioAAAneto) : '—'}
               {promo && precioAAA != null && (
-                <span style={{ color: heroSubtle, textDecoration: 'line-through', fontSize: 20, marginLeft: 8, fontWeight: 500 }}>
+                <span style={{ color: heroSubtle, textDecoration: 'line-through', fontSize: 14, marginLeft: 6, fontWeight: 500 }}>
                   {fmtMoney(precioAAA)}
                 </span>
               )}
             </div>
-            <p style={{ fontSize: 11, color: heroMuted, lineHeight: 1.5, maxWidth: 340, margin: 0 }}>
+            <p style={{ fontSize: 10.5, color: heroMuted, lineHeight: 1.45, maxWidth: 300, margin: 0, fontFamily: TYPO.fontText }}>
               {promo && (
-                <><strong style={{ color: '#FFF', fontWeight: 500 }}>{Math.round(Number(promo.promo_pct) * 100)}% de descuento activo ({promo.campania}).</strong> </>
+                <><strong style={{ color: '#FFF', fontWeight: 500 }}>{Math.round(Number(promo.promo_pct) * 100)}% desc activo ({promo.campania}).</strong> </>
               )}
               {deltaPrecioYTD != null && (
-                <>Precio {deltaPrecioYTD >= 0 ? 'subió' : 'bajó'} {Math.abs(deltaPrecioYTD).toFixed(1)}% en el año. </>
+                <>Precio {deltaPrecioYTD >= 0 ? '+' : '−'}{Math.abs(deltaPrecioYTD).toFixed(1)}% en el año. </>
               )}
               {analisis?.clienteVolumen && analisis.clienteVolumen.deltaLista != null && (
-                <>El cliente de mayor volumen ({analisis.clienteVolumen.cliente}) paga {fmtMoney(analisis.clienteVolumen.precioProm)} — {analisis.clienteVolumen.deltaLista >= 0 ? '+' : ''}{analisis.clienteVolumen.deltaLista.toFixed(1)}% vs lista.</>
+                <>{analisis.clienteVolumen.cliente} paga {fmtMoney(analisis.clienteVolumen.precioProm)} ({analisis.clienteVolumen.deltaLista >= 0 ? '+' : ''}{analisis.clienteVolumen.deltaLista.toFixed(1)}% vs lista).</>
               )}
             </p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px' }}>
             <HeroStat label="Piezas YTD" value={analisis ? fmtInt(analisis.piezasYTD) : '—'} />
-            <HeroStat label="Facturado YTD" value={analisis ? fmtCompact(analisis.montoYTD) : '—'} />
+            <HeroStat label="Facturado" value={analisis ? fmtCompact(analisis.montoYTD) : '—'} />
             <HeroStat label={`Δ Precio ${anio}`} value={deltaPrecioYTD != null ? fmtPctDelta(deltaPrecioYTD) : '—'} valueColor={deltaPrecioYTD == null ? '#FFF' : deltaPrecioYTD >= 0 ? P.green : P.red} />
             <HeroStat label={`Sellout ${analisis ? MESES_LBL[analisis.mesMax - 1] : ''}`} value={analisis ? `${fmtInt(analisis.piezasMesActual)} pz` : '—'} />
           </div>
@@ -904,9 +931,9 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
         {/* Body split · 2 paneles */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 0 }}>
           {/* Panel izquierdo: precios + evolución */}
-          <div style={{ borderRight: `1px solid ${theme.border}`, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ borderRight: `1px solid ${theme.border}`, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {/* Precios por lista */}
-            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '9px 11px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
                 <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Precios por lista</h4>
                 <span style={{ fontSize: 10, color: theme.textMuted }}>orden de mayor a menor</span>
@@ -935,7 +962,7 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
             </div>
 
             {/* Evolución 12 meses */}
-            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '9px 11px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
                 <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Evolución {anio} · precio + piezas</h4>
                 <span style={{ fontSize: 9.5, color: theme.textMuted }}>
@@ -944,7 +971,7 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
                 </span>
               </div>
               {analisis && analisis.serieMens.length > 0 ? (
-                <ResponsiveContainer width="100%" height={160}>
+                <ResponsiveContainer width="100%" height={120}>
                   <ComposedChart data={analisis.serieMens} margin={{ top: 6, right: 4, left: -24, bottom: 0 }}>
                     <CartesianGrid stroke={theme.border} strokeDasharray="2 4" vertical={false} />
                     <XAxis dataKey="mes" tick={{ fontSize: 9.5, fill: theme.textMuted }} interval={0} axisLine={false} tickLine={false} />
@@ -966,9 +993,9 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
           </div>
 
           {/* Panel derecho: clientes + promos */}
-          <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {/* Top clientes */}
-            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '9px 11px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
                 <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Top clientes YTD</h4>
                 <span style={{ fontSize: 10, color: theme.textMuted }}>precio · Δ vs AAA</span>
@@ -1013,7 +1040,7 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
             </div>
 
             {/* Promos timeline */}
-            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '9px 11px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
                 <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Promos aplicadas</h4>
                 <span style={{ fontSize: 10, color: theme.textMuted }}>
@@ -1055,12 +1082,12 @@ function DetalleSKU({ sku, promo, bajo, precios, onClose }) {
   );
 }
 
-// ═══ Hero stat pill ═══
+// ═══ Hero stat pill (drill-down) ═══
 function HeroStat({ label, value, valueColor }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>{label}</span>
-      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, marginTop: 3, fontVariantNumeric: 'tabular-nums', color: valueColor || '#FFF', letterSpacing: '-0.02em' }}>{value}</span>
+      <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'rgba(255,255,255,0.55)', fontWeight: 500, fontFamily: TYPO.fontText }}>{label}</span>
+      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, marginTop: 2, fontVariantNumeric: 'tabular-nums', color: valueColor || '#FFF', letterSpacing: '-0.015em' }}>{value}</span>
     </div>
   );
 }
@@ -1217,6 +1244,25 @@ function paletteFromTheme(theme) {
     teal:   theme.teal   || '#5AC8FA',
     pink:   theme.pink   || '#FF2D55',
   };
+}
+
+// ═══ Hero stat pill (para el hero editorial) ═══
+function HeroStatEP({ label, value, sub, valueColor, heroSubtle }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span style={{
+        fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em',
+        color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText,
+      }}>{label}</span>
+      <span style={{
+        fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em',
+        marginTop: 3, fontVariantNumeric: 'tabular-nums', color: valueColor || '#FFF',
+      }}>
+        {value}
+        {sub && <span style={{ color: heroSubtle, fontSize: 11, marginLeft: 4, fontWeight: 500 }}>{sub}</span>}
+      </span>
+    </div>
+  );
 }
 
 // ═══ KPI card Apple Fitness para EstrategiaPrecios ═══
