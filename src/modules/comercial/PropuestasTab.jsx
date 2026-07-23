@@ -100,6 +100,7 @@ export default function PropuestasTab() {
   const [clienteKey, setClienteKey] = useState(null);
   const [propuesta, setPropuesta] = useState({});
   const [propuestaId, setPropuestaId] = useState(null);
+  const [nombreBorrador, setNombreBorrador] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -128,6 +129,7 @@ export default function PropuestasTab() {
     setClienteKey(null);
     setPropuesta({});
     setPropuestaId(null);
+    setNombreBorrador('');
     setSkus([]);
     setContexto(null);
     setError(null);
@@ -136,6 +138,7 @@ export default function PropuestasTab() {
   const iniciarCliente = (cli) => {
     setPropuesta({});
     setPropuestaId(nuevaPropuestaId());
+    setNombreBorrador('');
     setSkus([]);
     setContexto(null);
     setError(null);
@@ -147,6 +150,7 @@ export default function PropuestasTab() {
     setPropuestaId(r.id);
     setClienteKey(r.clienteKey);
     setPropuesta(r.propuesta || {});
+    setNombreBorrador(r.nombre || '');
     setSkus([]);
     setContexto(null);
     setError(null);
@@ -175,6 +179,7 @@ export default function PropuestasTab() {
         id: pid,
         clienteKey,
         clienteLabel: cli?.label || clienteKey,
+        nombre: nombreBorrador,
         estado: 'Borrador',
         tstamp: Date.now(),
         propuesta,
@@ -241,9 +246,18 @@ export default function PropuestasTab() {
       }
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Propuesta');
-      const fecha = new Date().toISOString().slice(0, 10);
-      const clienteSafe = (cli?.label || clienteKey).replace(/[^\w-]/g, '_');
-      XLSX.writeFile(wb, `Propuesta_${clienteSafe}_${fecha}.xlsx`);
+      // Formato: Propuesta (Cliente) (Nombre del Borrador) (Mes Actual) (Año Actual)
+      const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+      const now = new Date();
+      const mesEs = MESES_ES[now.getMonth()];
+      const anioNum = now.getFullYear();
+      const clienteSafe = (cli?.label || clienteKey).replace(/[^\w\sáéíóúüñÁÉÍÓÚÜÑ-]/g, '').trim();
+      const nombreSafe = (nombreBorrador || '').replace(/[^\w\sáéíóúüñÁÉÍÓÚÜÑ-]/g, '').trim();
+      const partes = ['Propuesta', clienteSafe];
+      if (nombreSafe) partes.push(nombreSafe);
+      partes.push(mesEs, String(anioNum));
+      const filename = partes.join(' ') + '.xlsx';
+      XLSX.writeFile(wb, filename);
       toast.success(`Excel exportado · ${propuestaLista.length} SKUs · ${formatMXN(total)}`);
     } catch (e) {
       console.error('[Propuestas] Error exportando Excel:', e);
@@ -299,6 +313,7 @@ export default function PropuestasTab() {
     return <VistaRevisar
       theme={theme} isDark={isDark}
       cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta}
+      nombreBorrador={nombreBorrador} onChangeNombre={setNombreBorrador}
       onBack={() => setVista(2)}
       onGuardar={guardarBorrador}
       onExportar={exportarExcel}
@@ -1078,7 +1093,7 @@ function SortableTh({ theme, P, orden, onToggle, col, width, children }) {
 // ════════════════════════════════════════════════════════════════════
 // VISTA REVISAR · Hero total + KPIs Fitness + agrupación por familia
 // ════════════════════════════════════════════════════════════════════
-function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, onBack, onGuardar, onExportar }) {
+function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombreBorrador, onChangeNombre, onBack, onGuardar, onExportar }) {
   const P = paletteFromTheme(theme);
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
   const heroText = theme.heroCardText || '#F5F5F7';
@@ -1132,6 +1147,23 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, onBac
               </div>
               <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>Listo para enviar</div>
             </div>
+          </div>
+          <div style={{ width: 1, height: 24, background: theme.border }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: theme.textMuted, fontWeight: 600 }}>Nombre del borrador</label>
+            <input
+              type="text"
+              value={nombreBorrador || ''}
+              onChange={(e) => onChangeNombre?.(e.target.value)}
+              placeholder="ej. Kickoff Q3, Promo verano…"
+              style={{
+                background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8,
+                padding: '5px 10px', fontSize: 12, fontFamily: TYPO.fontText, color: theme.text,
+                minWidth: 200, outline: 'none',
+              }}
+              onFocus={(e) => e.target.style.borderColor = P.accent}
+              onBlur={(e) => e.target.style.borderColor = theme.border}
+            />
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
