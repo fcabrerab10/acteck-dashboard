@@ -107,6 +107,109 @@ function loadRecientes() {
   return [];
 }
 
+// Import Excel: lee un .xlsx exportado por la app, extrae SKUs + piezas +
+// precio (deshaciendo el IVA), detecta cliente por filename o hoja de
+// Resumen, y crea un nuevo borrador con esos datos.
+// Retorna { ok, entry?, msg? }
+async function importarExcel(file) {
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    // Detectar cliente por filename: "Propuesta <Cliente> [Nombre] <Mes> <Año>.xlsx"
+    // Formato robusto: quitamos extensión y "Propuesta ", luego separamos por
+    // el mes en español si aparece.
+    const rawName = file.name.replace(/\.xlsx?$/i, '').trim();
+    let filenameCliente = '';
+    let filenameNombre = '';
+    const prefixMatch = rawName.match(/^Propuesta\s+(.+)$/i);
+    if (prefixMatch) {
+      const resto = prefixMatch[1];
+      // Buscamos el primer mes que aparezca
+      const mesIdx = MESES_ES.findIndex((m) => resto.toLowerCase().includes(m.toLowerCase()));
+      if (mesIdx >= 0) {
+        const mesPos = resto.toLowerCase().indexOf(MESES_ES[mesIdx].toLowerCase());
+        const antes = resto.slice(0, mesPos).trim(); // "Cliente Nombre"
+        // Intentamos matchear cliente conocido al inicio de "antes"
+        const cliMatch = CLIENTES.find((c) => antes.toLowerCase().startsWith(c.label.toLowerCase()));
+        if (cliMatch) {
+          filenameCliente = cliMatch.key;
+          filenameNombre = antes.slice(cliMatch.label.length).trim();
+        } else {
+          filenameCliente = antes;
+        }
+      }
+    }
+
+    // Fallback: detectar cliente por celda A2 de la hoja Resumen ("Nombre propuesta · Familia")
+    let clienteKeyResuelto = filenameCliente;
+    if (!CLIENTES.find((c) => c.key === clienteKeyResuelto)) {
+      // Busca por label
+      const cli = CLIENTES.find((c) => c.key.toLowerCase() === (filenameCliente || '').toLowerCase()
+                                     || c.label.toLowerCase() === (filenameCliente || '').toLowerCase());
+      clienteKeyResuelto = cli?.key || '';
+    }
+
+    // Leer hojas de detalle (todas menos Resumen)
+    const propuesta = {};
+    let sheetsLeidas = 0;
+    wb.SheetNames.forEach((sn) => {
+      if (sn.toLowerCase() === 'resumen') return;
+      const sheet = wb.Sheets[sn];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      rows.forEach((row) => {
+        const sku = String(row.SKU || '').trim();
+        if (!sku) return;
+        const familia = String(row.Familia || '').trim();
+        if (familia === 'TOTAL') return; // fila resumen
+        const piezas = Number(row.Piezas) || 0;
+        const precioConIVA = Number(row['Precio + IVA']) || 0;
+        if (piezas <= 0 || precioConIVA <= 0) return;
+        // Deshacer IVA 16% para volver al precio base
+        const precioBase = +(precioConIVA / 1.16).toFixed(2);
+        // Guardamos también descripcion y familia para que la restauración
+        // no dependa del fetch de skus del cliente
+        propuesta[sku] = {
+          piezas,
+          precio: precioBase,
+          descripcion: String(row['Descripción'] || row.Descripcion || '').trim(),
+          familia,
+        };
+      });
+      sheetsLeidas += 1;
+    });
+
+    const skusCount = Object.keys(propuesta).length;
+    if (skusCount === 0) {
+      return { ok: false, msg: 'No se encontraron SKUs con piezas en el Excel' };
+    }
+    if (!clienteKeyResuelto) {
+      return { ok: false, msg: 'No pude detectar el cliente. Renombra el archivo a "Propuesta {Cliente} …" o crea la propuesta desde cero' };
+    }
+
+    const cli = CLIENTES.find((c) => c.key === clienteKeyResuelto);
+    const piezas = Object.values(propuesta).reduce((s, v) => s + (v.piezas || 0), 0);
+    const total  = Object.values(propuesta).reduce((s, v) => s + (v.piezas || 0) * (v.precio || 0), 0);
+
+    const entry = {
+      id: nuevaPropuestaId(),
+      clienteKey: clienteKeyResuelto,
+      clienteLabel: cli?.label || clienteKeyResuelto,
+      nombre: filenameNombre || `Importado ${new Date().toLocaleDateString('es-MX')}`,
+      estado: 'Borrador',
+      tstamp: Date.now(),
+      propuesta,
+      resumen: { skus: skusCount, piezas, total },
+    };
+    saveReciente(entry);
+    return { ok: true, entry, sheetsLeidas };
+  } catch (e) {
+    console.error('[Propuestas] importarExcel falló', e);
+    return { ok: false, msg: e?.message || 'Error leyendo el Excel' };
+  }
+}
+
 // Import: restaura propuestas desde un JSON descargado previamente
 function importarBackup(json) {
   try {
@@ -660,7 +763,40 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
             Arma propuestas de venta por cliente con inventario, precios y sell-out.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <label
+            title="Sube un Excel exportado y crea/actualiza el borrador con los cambios"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', borderRadius: 999,
+              background: P.accent, border: `1px solid ${P.accent}`,
+              color: '#FFF', fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            ↑ Importar Excel
+            <input type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              style={{ display: 'none' }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) { return; }
+                try {
+                  const res = await importarExcel(file);
+                  if (res.ok) {
+                    setRecientes(loadRecientes());
+                    toast.success(`Excel importado · ${res.entry.resumen.skus} SKUs · ${fmtCompact(res.entry.resumen.total)} · click para abrir`);
+                    // Abrir automáticamente el borrador recién creado para que el usuario vea el resultado
+                    onAbrirReciente?.(res.entry);
+                  } else {
+                    toast.error(res.msg || 'No se pudo importar el Excel');
+                  }
+                } catch (err) {
+                  toast.error('Error importando Excel: ' + (err?.message || 'desconocido'));
+                }
+                e.target.value = '';
+              }}
+            />
+          </label>
           <label
             title="Sube un JSON de backup para restaurar propuestas"
             style={{
