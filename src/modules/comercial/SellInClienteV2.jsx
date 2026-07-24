@@ -185,7 +185,17 @@ export default function SellInClienteV2({ clienteKey }) {
   }, [cuotaPorMes, mesActual]);
 
   const pctMTD = mesActualData.cuota?.ideal ? (mesActualData.monto / mesActualData.cuota.ideal * 100) : null;
+  const pctMTDmin = mesActualData.cuota?.min ? (mesActualData.monto / mesActualData.cuota.min * 100) : null;
   const pctYTD = cuotaYTD.ideal ? (totalYTD.monto / cuotaYTD.ideal * 100) : null;
+  const pctYTDmin = cuotaYTD.min ? (totalYTD.monto / cuotaYTD.min * 100) : null;
+
+  // Proyección mes actual anualizada: si estamos a mitad de Jul, escalamos al mes completo
+  const hoyDate = new Date();
+  const diasTranscurridos = (hoyDate.getFullYear() === anio && hoyDate.getMonth() + 1 === mesActual) ? hoyDate.getDate() : new Date(anio, mesActual, 0).getDate();
+  const diasDelMes = new Date(anio, mesActual, 0).getDate();
+  const factorProy = diasTranscurridos > 0 ? diasDelMes / diasTranscurridos : 1;
+  const sellInMesProyectado = mesActualData.monto * factorProy;
+  const yoyProyectado = mesActualData.prevMonto > 0 ? ((sellInMesProyectado - mesActualData.prevMonto) / mesActualData.prevMonto * 100) : null;
   const yoyMonto = mesActualData.prevMonto ? ((mesActualData.monto - mesActualData.prevMonto) / mesActualData.prevMonto * 100) : null;
   const yoyPiezasDelta = mesActualData.prevPiezas ? mesActualData.piezas - mesActualData.prevPiezas : null;
   const momIdx = mesActual - 2;
@@ -374,28 +384,38 @@ export default function SellInClienteV2({ clienteKey }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
         <KpiCard theme={theme} P={P}
           eyebrow={`MTD · ${MESES[mesActual - 1]}`}
-          badge={pctMTD != null ? { l: `${Math.round(pctMTD)}%`, tone: pctMTD >= 100 ? 'good' : pctMTD >= 85 ? 'neutral' : 'warn' } : null}
+          badge={pctMTD != null ? { l: `${Math.round(pctMTD)}% ideal`, tone: pctMTD >= 100 ? 'good' : pctMTD >= 85 ? 'neutral' : 'warn' } : null}
           title="vs cuota mensual"
           big={fmt.money(mesActualData.monto)}
-          bigSmall={mesActualData.cuota?.ideal ? `/ ${fmt.money(mesActualData.cuota.ideal)}` : ''}
-          sub={<>{fmt.int(mesActualData.piezas)} pzs · {yoyPiezasDelta != null ? <><strong style={{ color: yoyPiezasDelta >= 0 ? P.green : P.red, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{yoyPiezasDelta >= 0 ? '+' : ''}{fmt.int(yoyPiezasDelta)}</strong> vs {anioPrev}</> : ''}</>}
+          bigSmall={mesActualData.cuota?.min ? `/ ${fmt.money(mesActualData.cuota.min)} mín · ${fmt.money(mesActualData.cuota.ideal)} ideal` : ''}
+          sub={<>{fmt.int(mesActualData.piezas)} pzs · {pctMTDmin != null ? <><strong style={{ color: pctMTDmin >= 100 ? P.green : pctMTDmin >= 85 ? theme.text : P.orange, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{Math.round(pctMTDmin)}%</strong> mín</> : ''}{yoyPiezasDelta != null ? <> · <strong style={{ color: yoyPiezasDelta >= 0 ? P.green : P.red, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{yoyPiezasDelta >= 0 ? '+' : ''}{fmt.int(yoyPiezasDelta)}</strong>pz vs {anioPrev}</> : ''}</>}
           progress={pctMTD}
+          progressSecondary={pctMTDmin}
         />
         <KpiCard theme={theme} P={P}
-          eyebrow={`YTD · ${anio}`}
-          badge={pctYTD != null ? { l: `${Math.round(pctYTD)}%`, tone: pctYTD >= 100 ? 'good' : pctYTD >= 85 ? 'neutral' : 'warn' } : null}
-          title="acumulado del año"
+          eyebrow={`YTD Sell In · ${anio}`}
+          badge={pctYTD != null ? { l: `${Math.round(pctYTD)}% ideal`, tone: pctYTD >= 100 ? 'good' : pctYTD >= 85 ? 'neutral' : 'warn' } : null}
+          title="Facturación acumulada"
           big={fmt.money(totalYTD.monto)}
-          bigSmall={cuotaYTD.ideal ? `/ ${fmt.money(cuotaYTD.ideal)}` : ''}
-          sub={<>{fmt.int(totalYTD.piezas)} pzs · {filasSKU.length} SKUs</>}
+          bigSmall={cuotaYTD.min ? `/ ${fmt.money(cuotaYTD.min)} mín · ${fmt.money(cuotaYTD.ideal)} ideal` : ''}
+          sub={<>{fmt.int(totalYTD.piezas)} pzs · {filasSKU.length} SKUs · {pctYTDmin != null ? <><strong style={{ color: pctYTDmin >= 100 ? P.green : pctYTDmin >= 85 ? theme.text : P.orange, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{Math.round(pctYTDmin)}%</strong> mín</> : ''}</>}
           progress={pctYTD}
+          progressSecondary={pctYTDmin}
         />
         <KpiCard theme={theme} P={P}
           eyebrow={`YoY · ${MESES[mesActual - 1]}`}
           title={`vs ${anioPrev}`}
           big={yoyMonto != null ? `${yoyMonto >= 0 ? '+' : ''}${yoyMonto.toFixed(1)}%` : '—'}
           bigColor={yoyMonto == null ? theme.text : yoyMonto >= 0 ? P.green : P.red}
-          sub={<><strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(mesActualData.monto)}</strong> vs {fmt.money(mesActualData.prevMonto)}</>}
+          sub={<>
+            <div><strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(mesActualData.monto)}</strong> vs {fmt.money(mesActualData.prevMonto)}</div>
+            {yoyProyectado != null && factorProy > 1.05 && (
+              <div style={{ marginTop: 2 }}>
+                Proyec. mes completo: <strong style={{ color: yoyProyectado >= 0 ? P.green : P.red, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{yoyProyectado >= 0 ? '+' : ''}{yoyProyectado.toFixed(1)}%</strong>
+                <span style={{ color: theme.textSubtle || theme.textMuted }}> ({fmt.money(sellInMesProyectado)})</span>
+              </div>
+            )}
+          </>}
         />
         <KpiCard theme={theme} P={P}
           eyebrow={`MoM · vs ${momLabel}`}
@@ -407,7 +427,7 @@ export default function SellInClienteV2({ clienteKey }) {
       </div>
 
       {/* Fila: Timeline lineal + Composición familia */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 10, alignItems: 'start' }}>
         <TimelineLineal theme={theme} P={P} data={timelineMeses} sums={timelineSums} rango={rango} onChangeRango={setRango} anio={anio} anioPrev={anioPrev} mesActual={mesActual} />
         <FamiliaCard theme={theme} P={P} familias={familiasYTD} totalYTD={totalYTD} selected={familiaFilter} onSelect={setFamiliaFilter} />
       </div>
@@ -452,7 +472,7 @@ function HeroStat({ k, v, sub, valColor }) {
   );
 }
 
-function KpiCard({ theme, P, eyebrow, badge, title, big, bigSmall, bigColor, sub, progress }) {
+function KpiCard({ theme, P, eyebrow, badge, title, big, bigSmall, bigColor, sub, progress, progressSecondary }) {
   const [hover, setHover] = useState(false);
   const badgeTone = badge?.tone;
   const badgeBg = badgeTone === 'good' ? `${P.green}22` : badgeTone === 'warn' ? `${P.orange}22` : `${theme.text}0F`;
@@ -485,8 +505,11 @@ function KpiCard({ theme, P, eyebrow, badge, title, big, bigSmall, bigColor, sub
       </div>
       {sub && <div style={{ fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textMuted, marginTop: 4 }}>{sub}</div>}
       {progress != null && (
-        <div style={{ marginTop: 8, height: 3, background: `${theme.text}0F`, borderRadius: 999, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, progress))}%`, background: progColor, borderRadius: 999, transition: 'width 400ms' }} />
+        <div style={{ marginTop: 8, position: 'relative', height: progressSecondary != null ? 8 : 3, background: `${theme.text}0F`, borderRadius: 999, overflow: 'hidden' }}>
+          {progressSecondary != null && (
+            <div title="vs cuota mínima" style={{ position: 'absolute', top: 0, left: 0, height: 3, width: `${Math.min(100, Math.max(0, progressSecondary))}%`, background: progressSecondary >= 100 ? P.green : progressSecondary >= 85 ? theme.text : P.orange, borderRadius: 999, transition: 'width 400ms', opacity: 0.55 }} />
+          )}
+          <div title="vs cuota ideal" style={{ position: 'absolute', bottom: 0, left: 0, height: 3, width: `${Math.min(100, Math.max(0, progress))}%`, background: progColor, borderRadius: 999, transition: 'width 400ms' }} />
         </div>
       )}
     </div>
