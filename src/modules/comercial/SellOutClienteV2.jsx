@@ -119,7 +119,7 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
         fetchAll('v_sellout_digitalife_sku_mes', 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anio])),
         fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp,sort_order'),
-        fetchAll('inventario_cliente', 'sku,stock,valor,precio_venta,costo_convenio,anio,semana,fecha_ultima_venta,dias_sin_venta',
+        fetchAll('inventario_cliente', 'sku,stock,valor,precio_venta,costo_promedio,costo_convenio,anio,semana,fecha_ultima_venta,dias_sin_venta',
           (q) => q.eq('cliente', clienteKey)),
         fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
           (q) => q.eq('cliente', clienteKey)),
@@ -219,9 +219,15 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
       const key = (Number(r.anio) || 0) * 100 + (Number(r.semana) || 0);
       const prev = m.get(r.sku);
       if (!prev || key > prev._key) {
+        const stock = Number(r.stock) || 0;
+        const valorRaw = Number(r.valor) || 0;
+        const costoProm = Number(r.costo_promedio) || 0;
+        // Si valor viene 0 en DB, calcular con stock × costo_promedio
+        const valor = valorRaw > 0 ? valorRaw : stock * costoProm;
         m.set(r.sku, {
-          stock: Number(r.stock) || 0,
-          valor: Number(r.valor) || 0,
+          stock,
+          valor,
+          costo_promedio: costoProm,
           precio_venta: Number(r.precio_venta) || 0,
           fecha_ultima_venta: r.fecha_ultima_venta,
           dias_sin_venta: Number(r.dias_sin_venta) || null,
@@ -281,13 +287,10 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
       if (!map.has(key)) map.set(key, { name: key, stock: 0, valor: 0, skus: 0 });
       const it = map.get(key);
       it.stock += inv.stock;
-      // valor puede venir 0/null en DB → si es 0, aproximamos con stock * precio_venta
-      const v = inv.valor || (inv.stock * (inv.precio_venta || 0));
-      it.valor += v;
+      it.valor += inv.valor; // ya calculado (stock × costo_promedio si valor=0)
       it.skus += 1;
     }
-    // Ordenar por STOCK (siempre existe) — evita ordenación vacía cuando valor=0
-    const arr = Array.from(map.values()).sort((a, b) => b.stock - a.stock);
+    const arr = Array.from(map.values()).sort((a, b) => b.valor - a.valor);
     return arr.map((v, i) => ({ ...v, color: CAT_COLORS[i % CAT_COLORS.length] }));
   }, [inventarioMap, roadmapMap]);
   const familiasInvTot = useMemo(() => {
@@ -806,8 +809,8 @@ function TimelineTooltip({ theme, P, data, anio, anioPrev, xPct }) {
 // ═══════════════ Sucursal Card (interactiva: click filtra tabla) ═══════════════
 // ═══════════════ Inventario por familia · donut ring + leyenda ═══════════════
 function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, onSelect }) {
-  // Usa STOCK para proporciones — valor puede venir 0 en DB
-  const total = familias.reduce((s, f) => s + f.stock, 0);
+  // Usa VALOR ($) para proporciones — con fallback stock × costo_promedio
+  const total = familias.reduce((s, f) => s + f.valor, 0);
   const anySelected = selected != null;
   const size = 180, cx = size / 2, cy = size / 2, rOuter = 78, rInner = 54;
   const arcs = [];
@@ -815,7 +818,7 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
     let acc = 0;
     for (const f of familias) {
       const startAng = (acc / total) * Math.PI * 2 - Math.PI / 2;
-      acc += f.stock;
+      acc += f.valor;
       const endAng = (acc / total) * Math.PI * 2 - Math.PI / 2;
       const large = (endAng - startAng) > Math.PI ? 1 : 0;
       const x1 = cx + rOuter * Math.cos(startAng), y1 = cy + rOuter * Math.sin(startAng);
@@ -859,19 +862,19 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
               {anySelected ? (() => {
                 const f = familias.find(x => x.name === selected);
-                const pct = f && total > 0 ? (f.stock / total * 100) : 0;
+                const pct = f && total > 0 ? (f.valor / total * 100) : 0;
                 return (
                   <>
                     <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600, textAlign: 'center', padding: '0 6px' }}>{selected}</div>
                     <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: theme.text, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(0)}%</div>
-                    <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{f ? `${fmt.int(f.stock)} pz` : '—'}</div>
+                    <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{f ? fmt.money(f.valor) : '—'}</div>
                   </>
                 );
               })() : (
                 <>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>Stock total</div>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '-0.025em', color: theme.text, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{fmt.int(totalStock)}</div>
-                  <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, marginTop: 1 }}>pz · {familias.length} familias</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>Costo total</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '-0.025em', color: theme.text, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(totalValor)}</div>
+                  <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{fmt.int(totalStock)} pz · {familias.length}</div>
                 </>
               )}
             </div>
@@ -881,7 +884,7 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
             {familias.map((f, i) => {
               const isActive = selected === f.name;
               const isDim = anySelected && !isActive;
-              const pct = total > 0 ? (f.stock / total * 100) : 0;
+              const pct = total > 0 ? (f.valor / total * 100) : 0;
               return (
                 <div key={f.name}
                   onClick={() => onSelect(isActive ? null : f.name)}
@@ -897,7 +900,7 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
                   <span style={{ width: 10, height: 10, borderRadius: 3, background: f.color }} />
                   <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: isActive ? 700 : 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
                   <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
-                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.text, fontWeight: 600, textAlign: 'right', minWidth: 56, fontVariantNumeric: 'tabular-nums' }}>{fmt.int(f.stock)} pz</span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.text, fontWeight: 600, textAlign: 'right', minWidth: 56, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(f.valor)}</span>
                 </div>
               );
             })}
