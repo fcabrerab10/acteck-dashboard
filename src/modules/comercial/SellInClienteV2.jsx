@@ -77,7 +77,7 @@ export default function SellInClienteV2({ clienteKey }) {
   const [selloutDet, setSelloutDet] = useState([]);
   const [rango, setRango] = useState(getCurrentQ(mesActual));
   const [busqueda, setBusqueda] = useState('');
-  const [orden, setOrden] = useState({ col: 'montoSI', dir: 'desc' });
+  const [orden, setOrden] = useState({ col: 'total', dir: 'desc' });
 
   function getCurrentQ(m) {
     if (m <= 3) return 'Q1';
@@ -230,52 +230,66 @@ export default function SellInClienteV2({ clienteKey }) {
     return arr.slice(0, 8).map((v, i) => ({ ...v, color: palette[i % palette.length] }));
   }, [facturacion, roadmapMap, anio, mesActual, P, theme]);
 
-  // Sell In + Sell Out por SKU
+  // Sell In matriz mensual + totales + Sell Out YTD por SKU
   const filasSKU = useMemo(() => {
     const acc = new Map();
-    // Sell In
+    // Matriz Sell In por mes (piezas) + montoSI YTD
     for (const r of facturacion) {
       if (Number(r.anio) !== anio) continue;
-      if (!acc.has(r.sku)) acc.set(r.sku, { sku: r.sku, montoSI: 0, piezasSI: 0, montoSO: 0, piezasSO: 0 });
-      const it = acc.get(r.sku);
+      const sku = r.sku;
+      if (!acc.has(sku)) acc.set(sku, { sku, piezas: Array(12).fill(0), montoSI: 0, piezasSI: 0, montoSO: 0, piezasSO: 0 });
+      const it = acc.get(sku);
+      const mIdx = Number(r.mes) - 1;
+      if (mIdx >= 0 && mIdx < 12) it.piezas[mIdx] += Number(r.piezas) || 0;
       it.montoSI += Number(r.monto) || 0;
       it.piezasSI += Number(r.piezas) || 0;
     }
-    // Sell Out (join por sku)
+    // Sell Out por sku (join)
     selloutBySku.forEach((v, sku) => {
-      if (!acc.has(sku)) acc.set(sku, { sku, montoSI: 0, piezasSI: 0, montoSO: 0, piezasSO: 0 });
+      if (!acc.has(sku)) acc.set(sku, { sku, piezas: Array(12).fill(0), montoSI: 0, piezasSI: 0, montoSO: 0, piezasSO: 0 });
       const it = acc.get(sku);
       it.montoSO = v.monto;
       it.piezasSO = v.piezas;
     });
-    // Enriquecer con roadmap
+    // Enriquecer con roadmap + calcular promedio y total
     const q = busqueda.trim().toUpperCase();
     const rows = [];
     acc.forEach((it) => {
       const rm = roadmapMap.get(it.sku) || {};
       const descripcion = rm.descripcion || '';
       const marca = rm.marca || '';
+      const categoriaRaw = rm.categoria || '';
+      const categoria = categoriaRaw ? categoriaRaw.charAt(0).toUpperCase() + categoriaRaw.slice(1).toLowerCase() : '';
       const familia = rm.familia || 'Sin familia';
       const rdmp = rm.rdmp || '';
       if (q) {
-        const hay = `${it.sku} ${descripcion} ${marca}`.toUpperCase();
+        const hay = `${it.sku} ${descripcion} ${marca} ${categoria}`.toUpperCase();
         if (!hay.includes(q)) return;
       }
-      // Ratio SO/SI
+      // Total = sum meses; Promedio = avg de meses cerrados con venta
+      const total = it.piezas.reduce((a, b) => a + b, 0);
+      const cerrados = it.piezas.slice(0, mesActual - 1);
+      const conVenta = cerrados.filter((v) => v > 0);
+      const promedio = conVenta.length ? conVenta.reduce((a, b) => a + b, 0) / conVenta.length : 0;
       const ratio = it.montoSI > 0 ? (it.montoSO / it.montoSI * 100) : null;
-      rows.push({ ...it, descripcion, marca, familia, rdmp, ratio });
+      rows.push({ ...it, descripcion, marca, categoria, familia, rdmp, total, promedio, ratio });
     });
     // Sort
     if (orden.col && orden.dir) {
       const factor = orden.dir === 'asc' ? 1 : -1;
-      const isString = ['sku', 'descripcion', 'marca', 'familia', 'rdmp'].includes(orden.col);
-      rows.sort((a, b) => {
-        if (isString) return String(a[orden.col] || '').localeCompare(String(b[orden.col] || '')) * factor;
-        return ((a[orden.col] || 0) - (b[orden.col] || 0)) * factor;
-      });
+      const isString = ['sku', 'descripcion', 'marca', 'categoria', 'familia', 'rdmp'].includes(orden.col);
+      const mesMatch = /^mes-(\d+)$/.exec(orden.col);
+      if (isString) {
+        rows.sort((a, b) => String(a[orden.col] || '').localeCompare(String(b[orden.col] || '')) * factor);
+      } else if (mesMatch) {
+        const i = Number(mesMatch[1]);
+        rows.sort((a, b) => ((a.piezas[i] || 0) - (b.piezas[i] || 0)) * factor);
+      } else {
+        rows.sort((a, b) => ((a[orden.col] || 0) - (b[orden.col] || 0)) * factor);
+      }
     }
     return rows;
-  }, [facturacion, selloutBySku, roadmapMap, busqueda, orden, anio]);
+  }, [facturacion, selloutBySku, roadmapMap, busqueda, orden, anio, mesActual]);
 
   const toggleSort = (col) => {
     setOrden((prev) => {
@@ -741,21 +755,33 @@ function FerruStars() {
 }
 
 // ═══════════════ Tabla SKU ═══════════════
+// Devuelve las columnas originales del SellInCliente: Marca · SKU · Descripción
+// · Categoría · Roadmap · 12 meses (piezas SI heat map) · Promedio · Total
+// Al final agrega Sell Out YTD: Pzs SO · Monto SO · Ratio SO/SI
 function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort }) {
   const isDark = theme.mode === 'dark';
-  const maxSI = Math.max(1, ...rows.map(r => r.montoSI));
-  const heat = (v) => {
-    if (v == null || v <= 0) return { bg: `${P.accent}0F`, color: theme.textMuted };
-    const r = v / maxSI;
-    if (r > 0.75) return { bg: P.red, color: '#FFF', l: 'HOT' };
-    if (r > 0.50) return { bg: `${P.orange}80`, color: '#FFF', l: 'WARM' };
-    if (r > 0.20) return { bg: `${P.accent}66`, color: '#FFF', l: 'MED' };
-    return { bg: `${P.accent}22`, color: P.accent, l: 'COLD' };
+  // Max celda (piezas mensuales) para heat coloring
+  const maxCelda = useMemo(() => {
+    let m = 0;
+    for (const r of rows) for (const v of r.piezas) if (v > m) m = v;
+    return m || 1;
+  }, [rows]);
+
+  // Heat pill · Apple iOS blue con 4 intensidades
+  const heatCell = (v) => {
+    if (v == null || v === 0) return null;
+    if (v < 0) return { bg: `${P.red}22`, color: P.red, weight: 600 };
+    const r = v / maxCelda;
+    const b = P.accent;
+    if (r > 0.75) return { bg: b, color: '#FFF', weight: 600 };
+    if (r > 0.50) return { bg: isDark ? 'rgba(10,132,255,0.45)' : `${b}59`, color: '#FFF', weight: 600 };
+    if (r > 0.25) return { bg: `${b}2E`, color: theme.text };
+    return { bg: `${b}14`, color: theme.textMuted };
   };
 
   const roadmapChip = (r) => {
     if (!r) return null;
-    const key = r.toUpperCase();
+    const key = String(r).toUpperCase();
     const map = {
       RMI:  { bg: `${P.teal}22`,   color: P.teal },
       RML:  { bg: `${P.purple}22`, color: P.purple },
@@ -791,33 +817,53 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
           <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs
         </span>
       </div>
-      <div style={{ overflow: 'auto', maxHeight: '60vh' }}>
+      <div style={{ overflow: 'auto', maxHeight: '65vh' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
           <thead>
             <tr>
+              <SortableHeader theme={theme} col="marca" label="Marca" orden={orden} onToggleSort={onToggleSort} align="left" width={90} />
               <SortableHeader theme={theme} col="sku" label="SKU" orden={orden} onToggleSort={onToggleSort} align="left" width={100} />
               <SortableHeader theme={theme} col="descripcion" label="Descripción" orden={orden} onToggleSort={onToggleSort} align="left" />
-              <SortableHeader theme={theme} col="familia" label="Familia" orden={orden} onToggleSort={onToggleSort} align="left" width={120} />
+              <SortableHeader theme={theme} col="categoria" label="Categoría" orden={orden} onToggleSort={onToggleSort} align="left" width={110} />
               <SortableHeader theme={theme} col="rdmp" label="Roadmap" orden={orden} onToggleSort={onToggleSort} align="left" width={80} />
-              <SortableHeader theme={theme} col="piezasSI" label="Pzs SI" orden={orden} onToggleSort={onToggleSort} align="right" width={70} />
-              <SortableHeader theme={theme} col="montoSI" label="Monto SI" orden={orden} onToggleSort={onToggleSort} align="right" width={90} />
+              {MESES.map((m, i) => (
+                <SortableHeader key={m} theme={theme} col={`mes-${i}`} label={m} orden={orden} onToggleSort={onToggleSort} align="right" width={54} />
+              ))}
+              <SortableHeader theme={theme} col="promedio" label="Prom." orden={orden} onToggleSort={onToggleSort} align="right" width={64} />
+              <SortableHeader theme={theme} col="total" label="Total" orden={orden} onToggleSort={onToggleSort} align="right" width={70} />
               <SortableHeader theme={theme} col="piezasSO" label="Pzs SO" orden={orden} onToggleSort={onToggleSort} align="right" width={70} />
               <SortableHeader theme={theme} col="montoSO" label="Monto SO" orden={orden} onToggleSort={onToggleSort} align="right" width={90} />
-              <SortableHeader theme={theme} col="ratio" label="Ratio SO/SI" orden={orden} onToggleSort={onToggleSort} align="right" width={80} />
+              <SortableHeader theme={theme} col="ratio" label="SO/SI" orden={orden} onToggleSort={onToggleSort} align="right" width={70} />
             </tr>
           </thead>
           <tbody>
             {rows.slice(0, 500).map((r) => {
-              const h = heat(r.montoSI);
               const ratioColor = r.ratio == null ? theme.textMuted : r.ratio >= 80 ? P.green : r.ratio >= 60 ? P.orange : P.red;
               return (
                 <tr key={r.sku} style={{ borderTop: `1px solid ${theme.divider || theme.border}` }}>
+                  <td style={cellStyle(theme, 'left')}>{r.marca || '—'}</td>
                   <td style={cellStyle(theme, 'left')}>{r.sku}</td>
-                  <td style={{ ...cellStyle(theme, 'left'), maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
-                  <td style={cellStyle(theme, 'left')}>{r.familia}</td>
+                  <td style={{ ...cellStyle(theme, 'left'), maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
+                  <td style={cellStyle(theme, 'left')}>{r.categoria || '—'}</td>
                   <td style={cellStyle(theme, 'left')}>{roadmapChip(r.rdmp) || '—'}</td>
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{fmt.int(r.piezasSI) || '—'}</td>
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{fmt.money(r.montoSI) || '—'}</td>
+                  {r.piezas.map((v, i) => {
+                    const h = heatCell(v);
+                    return (
+                      <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '4px 6px', fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                        {h ? (
+                          <span style={{
+                            display: 'inline-block', padding: '3px 7px', borderRadius: 6,
+                            background: h.bg, color: h.color, fontWeight: h.weight || 500,
+                            minWidth: 34, textAlign: 'right',
+                          }}>{fmt.int(v)}</span>
+                        ) : (
+                          <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmt.int(Math.round(r.promedio)) : '—'}</td>
+                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmt.int(r.total) : '—'}</td>
                   <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', color: r.piezasSO > 0 ? theme.text : theme.textMuted }}>{r.piezasSO > 0 ? fmt.int(r.piezasSO) : '—'}</td>
                   <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: r.montoSO > 0 ? theme.text : theme.textMuted }}>{r.montoSO > 0 ? fmt.money(r.montoSO) : '—'}</td>
                   <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 700, color: ratioColor }}>
