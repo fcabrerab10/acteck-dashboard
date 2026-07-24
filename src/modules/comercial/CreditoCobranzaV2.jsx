@@ -91,9 +91,6 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
     });
   }, [estado]);
 
-  const saldoActual = Number(estado?.saldo_actual) || 0;
-  const saldoVencido = Number(estado?.saldo_vencido) || 0;
-  const saldoAVencer = Number(estado?.saldo_a_vencer) || 0;
   const notasCredito = Math.abs(Number(estado?.notas_credito) || 0);
   const tipoCambio = Number(estado?.tipo_cambio) || 0;
 
@@ -120,6 +117,27 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
   };
 
   const facturasConSaldo = useMemo(() => (detalle || []).filter(f => Number(f.saldo_actual) > 0), [detalle]);
+
+  // Saldos: preferir header del corte; si están vacíos, calcular desde detalle
+  const saldoActualDet = useMemo(() => facturasConSaldo.reduce((s, f) => s + (Number(f.saldo_actual) || 0), 0), [facturasConSaldo]);
+  const saldoActual = Number(estado?.saldo_actual) > 0 ? Number(estado.saldo_actual) : saldoActualDet;
+  const saldoVencidoDet = useMemo(() => facturasConSaldo.filter(f => diasAtraso(f) > 0).reduce((s, f) => s + (Number(f.saldo_actual) || 0), 0), [facturasConSaldo]);
+  const saldoVencido = Number(estado?.saldo_vencido) > 0 ? Number(estado.saldo_vencido) : saldoVencidoDet;
+  const saldoAVencerDet = useMemo(() => facturasConSaldo.filter(f => diasAtraso(f) === 0).reduce((s, f) => s + (Number(f.saldo_actual) || 0), 0), [facturasConSaldo]);
+  const saldoAVencer = Number(estado?.saldo_a_vencer) > 0 ? Number(estado.saldo_a_vencer) : saldoAVencerDet;
+
+  const saldoActualPrevDet = useMemo(() => (detallePrev || []).filter(f => Number(f.saldo_actual) > 0).reduce((s, f) => s + (Number(f.saldo_actual) || 0), 0), [detallePrev]);
+  const saldoVencidoPrevDet = useMemo(() => {
+    const refMs = estadoPrev?.fecha_corte ? new Date(estadoPrev.fecha_corte + 'T00:00:00').getTime() : hoyMs;
+    return (detallePrev || []).filter(f => {
+      if (!f.vencimiento) return false;
+      if (Number(f.saldo_actual) <= 0) return false;
+      const v = new Date(f.vencimiento + 'T00:00:00').getTime();
+      return refMs > v;
+    }).reduce((s, f) => s + (Number(f.saldo_actual) || 0), 0);
+  }, [detallePrev, estadoPrev]);
+  const saldoActualPrev = Number(estadoPrev?.saldo_actual) > 0 ? Number(estadoPrev.saldo_actual) : saldoActualPrevDet;
+  const saldoVencidoPrev = Number(estadoPrev?.saldo_vencido) > 0 ? Number(estadoPrev.saldo_vencido) : saldoVencidoPrevDet;
 
   const aging = useMemo(() => {
     const b = { d0_30: 0, d31_60: 0, d61_90: 0, d91_180: 0, mas180: 0 };
@@ -169,9 +187,9 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
   const vencidas = useMemo(() => facturasConSaldo.filter(f => diasAtraso(f) > 0), [facturasConSaldo]);
 
   // Deltas vs corte anterior
-  const deltaSaldo = estadoPrev ? saldoActual - (Number(estadoPrev.saldo_actual) || 0) : null;
-  const deltaSaldoPct = estadoPrev && Number(estadoPrev.saldo_actual) > 0 ? Math.round((deltaSaldo / Number(estadoPrev.saldo_actual)) * 100) : null;
-  const deltaVencido = estadoPrev ? saldoVencido - (Number(estadoPrev.saldo_vencido) || 0) : null;
+  const deltaSaldo = estadoPrev ? saldoActual - saldoActualPrev : null;
+  const deltaSaldoPct = estadoPrev && saldoActualPrev > 0 ? Math.round((deltaSaldo / saldoActualPrev) * 100) : null;
+  const deltaVencido = estadoPrev ? saldoVencido - saldoVencidoPrev : null;
   const deltaDso = dsoRealPrev != null && dso != null ? dso - dsoRealPrev : null;
 
   // Factura más atrasada
