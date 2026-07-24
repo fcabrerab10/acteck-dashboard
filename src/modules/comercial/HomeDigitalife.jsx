@@ -69,17 +69,32 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
     let cancel = false;
     (async () => {
       const anioAntIni = `${anio - 1}-01-01`;
-      const [facR, cR, ecHistR, siR, prR, soR, invR] = await Promise.all([
-        // Sell In real desde facturacion_clientes (año actual + anterior)
+
+      // Helper: paginación (Supabase limita a 1000 por default; sellout_detalle tiene 20K+ rows)
+      const fetchAll = async (table, select, applyFilter) => {
+        const PAGE = 1000; let acc = [], from = 0;
+        while (true) {
+          let q = supabase.from(table).select(select).range(from, from + PAGE - 1);
+          q = applyFilter(q);
+          const { data, error } = await q;
+          if (error || !data || data.length === 0) break;
+          acc = acc.concat(data);
+          if (data.length < PAGE) break;
+          from += PAGE;
+        }
+        return acc;
+      };
+
+      const [facR, cR, ecHistR, siR, prR, soRaw, invRaw] = await Promise.all([
         supabase.from('facturacion_clientes').select('sku,anio,mes,piezas,monto').eq('cliente_key', clienteKey).in('anio', [anio - 1, anio]),
         supabase.from('cuotas_mensuales').select('*').eq('cliente', clienteKey).eq('anio', anio),
-        // Historial de cortes de estados_cuenta para calcular cobranza mensual
         supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true }),
         supabase.from('sell_in_sku').select('sku, mes, monto_pesos, piezas').eq('cliente', clienteKey).eq('anio', anio),
         supabase.from('productos_cliente').select('sku, marca, precio_venta').eq('cliente', clienteKey),
-        supabase.from('sellout_detalle').select('fecha, total, cantidad, no_parte, marca').eq('cliente', clienteKey).gte('fecha', anioAntIni),
-        // Inventario real (snapshot más reciente)
-        supabase.from('inventario_cliente').select('sku, stock, valor, precio_venta, costo_convenio, anio, semana').eq('cliente', clienteKey),
+        // Sell out con paginación (Digitalife tiene ~20K rows)
+        fetchAll('sellout_detalle', 'fecha, total, cantidad, no_parte, marca', (q) => q.eq('cliente', clienteKey).gte('fecha', anioAntIni)),
+        // Inventario con paginación (por si crece a >1000 SKUs)
+        fetchAll('inventario_cliente', 'sku, stock, valor, precio_venta, costo_convenio, anio, semana', (q) => q.eq('cliente', clienteKey)),
       ]);
       if (cancel) return;
       setFacturacion(facR.data || []);
@@ -87,9 +102,8 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
       setCortesHist(ecHistR.data || []);
       setSellInSku(siR.data || []);
       setProductos(prR.data || []);
-      setSellOutDetalle(soR.data || []);
-      setInventario(invR.data || []);
-      // Último corte para aging
+      setSellOutDetalle(soRaw || []);
+      setInventario(invRaw || []);
       const ecActualId = (ecHistR.data || []).slice(-1)[0]?.id;
 
       // Aging (mismo cálculo que antes, buckets sólo vencidos)
@@ -345,7 +359,17 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   }, [ventasActual, ventasAnt, sellOutByMes, mesActual]);
 
   // ═════ Sell In vs Sell Out por marca ═════
-  // sellout_detalle no tiene mes/anio, se derivan de fecha
+  // Normaliza marcas para que "Balam Rush" (productos) y "BALAM RUSH" (sellout) hagan match
+  const normMarca = (m) => {
+    const s = String(m || '').trim().toUpperCase();
+    if (!s) return 'SIN MARCA';
+    // Aliases → nombre canónico display
+    if (s === 'BALAM RUSH' || s === 'BALAM') return 'Balam Rush';
+    if (s === 'ACTECK') return 'Acteck';
+    if (s === 'VORAGO') return 'Vorago';
+    // Capitaliza título por default
+    return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+  };
   const marcasSIvsSO = useMemo(() => {
     const meses = Q_MESES[marcaRango] || Q_MESES.anio;
 
@@ -355,7 +379,7 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
     const siByMarca = {};
     sellInSku.forEach(r => {
       if (!meses.includes(Number(r.mes))) return;
-      const marca = (skuMap[String(r.sku)]?.marca) || 'Sin Marca';
+      const marca = normMarca(skuMap[String(r.sku)]?.marca);
       siByMarca[marca] = (siByMarca[marca] || 0) + (Number(r.monto_pesos) || 0);
     });
 
@@ -366,7 +390,7 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
       const d = new Date(r.fecha);
       if (d.getFullYear() !== anio) return;
       if (!meses.includes(d.getMonth() + 1)) return;
-      const marca = r.marca || 'Sin Marca';
+      const marca = normMarca(r.marca);
       soByMarca[marca] = (soByMarca[marca] || 0) + (Number(r.total) || 0);
     });
 
