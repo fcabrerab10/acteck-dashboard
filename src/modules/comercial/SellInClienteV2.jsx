@@ -396,7 +396,7 @@ export default function SellInClienteV2({ clienteKey }) {
       </div>
 
       {/* Fila: Timeline lineal + Composición familia */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 10 }}>
         <TimelineLineal theme={theme} P={P} data={timelineMeses} sums={timelineSums} rango={rango} onChangeRango={setRango} anio={anio} anioPrev={anioPrev} mesActual={mesActual} />
         <FamiliaCard theme={theme} P={P} familias={familiasYTD} totalYTD={totalYTD} selected={familiaFilter} onSelect={setFamiliaFilter} />
       </div>
@@ -486,7 +486,7 @@ function KpiCard({ theme, P, eyebrow, badge, title, big, bigSmall, bigColor, sub
 function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anioPrev, mesActual }) {
   const [hoverIdx, setHoverIdx] = useState(null);
   const isDark = theme.mode === 'dark';
-  const W = 600, H = 140;
+  const W = 600, H = 220;
   const padL = 26, padR = 16, padT = 12, padB = 20;
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
@@ -535,7 +535,7 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anio
         )}
       </div>
       <div style={{ position: 'relative' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 140, display: 'block' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 220, display: 'block' }}>
           {[0.25, 0.5, 0.75].map(f => (
             <line key={f} x1={padL} y1={padT + chartH * f} x2={W - padR} y2={padT + chartH * f}
               stroke={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'} strokeDasharray="3 4" />
