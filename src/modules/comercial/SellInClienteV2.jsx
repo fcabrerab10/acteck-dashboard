@@ -78,6 +78,7 @@ export default function SellInClienteV2({ clienteKey }) {
   const [rango, setRango] = useState(getCurrentQ(mesActual));
   const [busqueda, setBusqueda] = useState('');
   const [orden, setOrden] = useState({ col: 'total', dir: 'desc' });
+  const [familiaFilter, setFamiliaFilter] = useState(null); // click en familia filtra la tabla
 
   function getCurrentQ(m) {
     if (m <= 3) return 'Q1';
@@ -266,6 +267,12 @@ export default function SellInClienteV2({ clienteKey }) {
         const hay = `${it.sku} ${descripcion} ${marca} ${categoria}`.toUpperCase();
         if (!hay.includes(q)) return;
       }
+      // Filtro por familia (click en Composición por familia)
+      if (familiaFilter) {
+        const famNorm = (familia || 'Sin familia').trim();
+        const famCap = famNorm.charAt(0).toUpperCase() + famNorm.slice(1).toLowerCase();
+        if (famCap !== familiaFilter) return;
+      }
       // Total = sum meses; Promedio = avg de meses cerrados con venta
       const total = it.piezas.reduce((a, b) => a + b, 0);
       const cerrados = it.piezas.slice(0, mesActual - 1);
@@ -289,7 +296,7 @@ export default function SellInClienteV2({ clienteKey }) {
       }
     }
     return rows;
-  }, [facturacion, selloutBySku, roadmapMap, busqueda, orden, anio, mesActual]);
+  }, [facturacion, selloutBySku, roadmapMap, busqueda, orden, anio, mesActual, familiaFilter]);
 
   const toggleSort = (col) => {
     setOrden((prev) => {
@@ -391,7 +398,7 @@ export default function SellInClienteV2({ clienteKey }) {
       {/* Fila: Timeline lineal + Composición familia */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: 10 }}>
         <TimelineLineal theme={theme} P={P} data={timelineMeses} sums={timelineSums} rango={rango} onChangeRango={setRango} anio={anio} anioPrev={anioPrev} mesActual={mesActual} />
-        <FamiliaCard theme={theme} P={P} familias={familiasYTD} totalYTD={totalYTD} />
+        <FamiliaCard theme={theme} P={P} familias={familiasYTD} totalYTD={totalYTD} selected={familiaFilter} onSelect={setFamiliaFilter} />
       </div>
 
       {/* Ferruteck cosmic strip */}
@@ -402,6 +409,7 @@ export default function SellInClienteV2({ clienteKey }) {
         rows={filasSKU}
         busqueda={busqueda} onChangeBusqueda={setBusqueda}
         orden={orden} onToggleSort={toggleSort}
+        familiaFilter={familiaFilter} onClearFamilia={() => setFamiliaFilter(null)}
       />
     </div>
   );
@@ -626,39 +634,67 @@ function TimelineTooltip({ theme, P, data, anio, anioPrev, xPct }) {
   );
 }
 
-// ═══════════════ Familia Card ═══════════════
-function FamiliaCard({ theme, P, familias, totalYTD }) {
+// ═══════════════ Familia Card (interactiva: click filtra tabla) ═══════════════
+function FamiliaCard({ theme, P, familias, totalYTD, selected, onSelect }) {
   const total = familias.reduce((s, f) => s + f.monto, 0);
+  const anySelected = selected != null;
   return (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
         <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
           Composición por familia · YTD
         </h5>
+        {anySelected && (
+          <button onClick={() => onSelect(null)}
+            style={{
+              background: 'transparent', border: 0, cursor: 'pointer',
+              fontFamily: TYPO.fontText, fontSize: 10.5, fontWeight: 500, color: P.accent,
+              padding: '2px 8px', borderRadius: 999,
+            }}
+            title="Quitar filtro"
+          >Ver todas ›</button>
+        )}
       </div>
       <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: theme.text }}>
         {fmt.money(totalYTD.monto)}
         <span style={{ fontFamily: TYPO.fontText, fontSize: 11, color: theme.textMuted, fontWeight: 500, marginLeft: 6 }}>
-          {fmt.int(totalYTD.piezas)}pz · {familias.length} familias
+          {fmt.int(totalYTD.piezas)}pz · {familias.length} familias · <span style={{ color: theme.textSubtle || theme.textMuted, fontStyle: 'italic' }}>click filtra tabla</span>
         </span>
       </div>
       <div style={{ marginTop: 8 }}>
         {familias.length === 0 && (
           <div style={{ padding: '18px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>Sin datos aún</div>
         )}
-        {familias.map((f, i) => (
-          <div key={f.name} style={{ display: 'grid', gridTemplateColumns: '18px 1fr 1fr 60px', gap: 8, alignItems: 'center', padding: '5px 0', fontSize: 11, borderTop: `1px solid ${theme.divider || theme.border}` }}>
-            <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted, textAlign: 'right', fontWeight: 600 }}>#{i + 1}</span>
-            <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              <span style={{ width: 8, height: 8, borderRadius: 3, background: f.color, flexShrink: 0 }} />
-              {f.name}
-            </span>
-            <span style={{ height: 5, background: `${theme.text}0F`, borderRadius: 999, overflow: 'hidden' }}>
-              <span style={{ display: 'block', height: '100%', background: f.color, borderRadius: 999, width: `${total > 0 ? (f.monto / total * 100) : 0}%`, transition: 'width 400ms' }} />
-            </span>
-            <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.text, fontWeight: 600, textAlign: 'right' }}>{fmt.money(f.monto)}</span>
-          </div>
-        ))}
+        {familias.map((f, i) => {
+          const isActive = selected === f.name;
+          const isDim = anySelected && !isActive;
+          return (
+            <div
+              key={f.name}
+              onClick={() => onSelect(isActive ? null : f.name)}
+              style={{
+                display: 'grid', gridTemplateColumns: '18px 1fr 1fr 60px', gap: 8, alignItems: 'center',
+                padding: '6px 8px', margin: '0 -8px', fontSize: 11,
+                borderTop: `1px solid ${theme.divider || theme.border}`, borderRadius: 6,
+                cursor: 'pointer', opacity: isDim ? 0.45 : 1,
+                background: isActive ? `${f.color}18` : 'transparent',
+                transition: 'background 160ms, opacity 160ms',
+              }}
+              onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = `${theme.text}05`; }}
+              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+            >
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted, textAlign: 'right', fontWeight: 600 }}>#{i + 1}</span>
+              <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: isActive ? 700 : 600, color: theme.text, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ width: 8, height: 8, borderRadius: 3, background: f.color, flexShrink: 0 }} />
+                {f.name}
+              </span>
+              <span style={{ height: 5, background: `${theme.text}0F`, borderRadius: 999, overflow: 'hidden' }}>
+                <span style={{ display: 'block', height: '100%', background: f.color, borderRadius: 999, width: `${total > 0 ? (f.monto / total * 100) : 0}%`, transition: 'width 400ms' }} />
+              </span>
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.text, fontWeight: 600, textAlign: 'right' }}>{fmt.money(f.monto)}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -758,7 +794,7 @@ function FerruStars() {
 // Devuelve las columnas originales del SellInCliente: Marca · SKU · Descripción
 // · Categoría · Roadmap · 12 meses (piezas SI heat map) · Promedio · Total
 // Al final agrega Sell Out YTD: Pzs SO · Monto SO · Ratio SO/SI
-function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort }) {
+function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia }) {
   const isDark = theme.mode === 'dark';
   // Max celda (piezas mensuales) para heat coloring
   const maxCelda = useMemo(() => {
@@ -802,6 +838,23 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
         <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
           Detalle por SKU
         </h5>
+        {familiaFilter && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '4px 10px 4px 10px', borderRadius: 999,
+            background: `${P.accent}18`, border: `1px solid ${P.accent}40`,
+            color: P.accent, fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600,
+          }}>
+            Familia: {familiaFilter}
+            <button onClick={onClearFamilia}
+              style={{
+                background: 'transparent', border: 0, cursor: 'pointer', padding: 0,
+                color: P.accent, fontSize: 14, lineHeight: 1, marginLeft: 2,
+              }}
+              title="Quitar filtro"
+            >×</button>
+          </span>
+        )}
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px',
           background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
@@ -831,14 +884,10 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
               ))}
               <SortableHeader theme={theme} col="promedio" label="Prom." orden={orden} onToggleSort={onToggleSort} align="right" width={64} />
               <SortableHeader theme={theme} col="total" label="Total" orden={orden} onToggleSort={onToggleSort} align="right" width={70} />
-              <SortableHeader theme={theme} col="piezasSO" label="Pzs SO" orden={orden} onToggleSort={onToggleSort} align="right" width={70} />
-              <SortableHeader theme={theme} col="montoSO" label="Monto SO" orden={orden} onToggleSort={onToggleSort} align="right" width={90} />
-              <SortableHeader theme={theme} col="ratio" label="SO/SI" orden={orden} onToggleSort={onToggleSort} align="right" width={70} />
             </tr>
           </thead>
           <tbody>
             {rows.slice(0, 500).map((r) => {
-              const ratioColor = r.ratio == null ? theme.textMuted : r.ratio >= 80 ? P.green : r.ratio >= 60 ? P.orange : P.red;
               return (
                 <tr key={r.sku} style={{ borderTop: `1px solid ${theme.divider || theme.border}` }}>
                   <td style={cellStyle(theme, 'left')}>{r.marca || '—'}</td>
@@ -864,11 +913,6 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                   })}
                   <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmt.int(Math.round(r.promedio)) : '—'}</td>
                   <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmt.int(r.total) : '—'}</td>
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', color: r.piezasSO > 0 ? theme.text : theme.textMuted }}>{r.piezasSO > 0 ? fmt.int(r.piezasSO) : '—'}</td>
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: r.montoSO > 0 ? theme.text : theme.textMuted }}>{r.montoSO > 0 ? fmt.money(r.montoSO) : '—'}</td>
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 700, color: ratioColor }}>
-                    {r.ratio != null ? fmt.pct(r.ratio) : '—'}
-                  </td>
                 </tr>
               );
             })}
