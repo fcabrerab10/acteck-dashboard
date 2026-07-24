@@ -98,7 +98,6 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
   const lineaMXNPagare = Number(config?.linea_credito_mxn_pagare) || 0;
   const PLAZO = Number(config?.plazo_dias_credito) || 90;
   const lineaMXN = lineaUSD * tipoCambio + lineaMXNPagare;
-  const usoPct = lineaMXN > 0 ? Math.min(Math.round((saldoActual / lineaMXN) * 100), 999) : null;
 
   const diasAtraso = (f) => {
     if (!f.vencimiento) return 0;
@@ -125,6 +124,8 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
   const saldoVencido = Number(estado?.saldo_vencido) > 0 ? Number(estado.saldo_vencido) : saldoVencidoDet;
   const saldoAVencerDet = useMemo(() => facturasConSaldo.filter(f => diasAtraso(f) === 0).reduce((s, f) => s + (Number(f.saldo_actual) || 0), 0), [facturasConSaldo]);
   const saldoAVencer = Number(estado?.saldo_a_vencer) > 0 ? Number(estado.saldo_a_vencer) : saldoAVencerDet;
+
+  const usoPct = lineaMXN > 0 ? Math.min(Math.round((saldoActual / lineaMXN) * 100), 999) : null;
 
   const saldoActualPrevDet = useMemo(() => (detallePrev || []).filter(f => Number(f.saldo_actual) > 0).reduce((s, f) => s + (Number(f.saldo_actual) || 0), 0), [detallePrev]);
   const saldoVencidoPrevDet = useMemo(() => {
