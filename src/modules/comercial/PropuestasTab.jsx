@@ -766,7 +766,30 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
   const heroMuted = theme.textMutedOnDark || 'rgba(255,255,255,0.65)';
   const heroSub = theme.textSubtleOnDark || 'rgba(255,255,255,0.5)';
   const [recientes, setRecientes] = useState(() => loadRecientes());
+  const [showPegarJSON, setShowPegarJSON] = useState(false);
+  const [pegadoText, setPegadoText] = useState('');
   useEffect(() => { setRecientes(loadRecientes()); }, [tick]);
+
+  const procesarPegado = () => {
+    if (!pegadoText.trim()) {
+      toast.error('Pega un JSON válido');
+      return;
+    }
+    try {
+      const json = JSON.parse(pegadoText.trim());
+      const res = importarBackup(json);
+      if (res.ok) {
+        setRecientes(loadRecientes());
+        toast.success(`JSON pegado · ${res.count} propuestas en total${res.added > 0 ? ` (+${res.added} nuevas)` : ''}`);
+        setShowPegarJSON(false);
+        setPegadoText('');
+      } else {
+        toast.error(res.msg || 'JSON válido pero sin propuestas');
+      }
+    } catch (err) {
+      toast.error('JSON inválido: ' + (err?.message || 'error de parseo'));
+    }
+  };
 
   const timeAgo = (ts) => {
     const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
@@ -783,6 +806,64 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
 
   return (
     <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
+      {showPegarJSON && (
+        <div
+          onClick={() => { setShowPegarJSON(false); setPegadoText(''); }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, backdropFilter: 'blur(6px)',
+          }}
+        >
+          <div onClick={(e) => e.stopPropagation()}
+            style={{
+              background: theme.surface, border: `1px solid ${theme.border}`,
+              borderRadius: 16, padding: 20, maxWidth: 640, width: '90%',
+              maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: 10,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', margin: 0, color: theme.text }}>
+                  Pegar JSON manualmente
+                </h3>
+                <p style={{ fontSize: 11.5, color: theme.textMuted, margin: '4px 0 0', lineHeight: 1.4 }}>
+                  Útil para restaurar desde DevTools: <code style={{ background: theme.bg, padding: '1px 5px', borderRadius: 4, fontFamily: TYPO.fontText, fontSize: 11, border: `1px solid ${theme.border}` }}>Application → Local Storage → propuestas_recientes_v1</code>
+                </p>
+              </div>
+              <button onClick={() => { setShowPegarJSON(false); setPegadoText(''); }}
+                style={{ background: 'transparent', border: 0, color: theme.textMuted, cursor: 'pointer', padding: 4, borderRadius: 6, fontSize: 18, lineHeight: 1 }}>×</button>
+            </div>
+            <textarea
+              value={pegadoText}
+              onChange={(e) => setPegadoText(e.target.value)}
+              placeholder='Pega aquí el JSON completo (array de propuestas o snapshot con &quot;data&quot;/&quot;recientes&quot;)'
+              spellCheck={false}
+              style={{
+                width: '100%', minHeight: 260, maxHeight: '50vh',
+                padding: 12, borderRadius: 10, border: `1px solid ${theme.border}`,
+                background: theme.bg, color: theme.text,
+                fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, lineHeight: 1.5,
+                resize: 'vertical', outline: 'none',
+              }}
+              onFocus={(e) => e.target.style.borderColor = P.accent}
+              onBlur={(e) => e.target.style.borderColor = theme.border}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setShowPegarJSON(false); setPegadoText(''); }}
+                style={{ padding: '8px 16px', background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text, fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 500, borderRadius: 999, cursor: 'pointer' }}>
+                Cancelar
+              </button>
+              <button onClick={procesarPegado}
+                style={{ padding: '8px 18px', background: P.accent, border: 0, color: '#FFF', fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 600, borderRadius: 999, cursor: 'pointer' }}>
+                Restaurar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ padding: '0 4px', marginBottom: 12, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -797,6 +878,19 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => setShowPegarJSON(true)}
+            title="Pega un JSON de propuestas (útil para restaurar desde DevTools localStorage)"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', borderRadius: 999,
+              background: theme.surface, border: `1px solid ${theme.border}`,
+              color: theme.textMuted, fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            📋 Pegar JSON
+          </button>
           <label
             title="Sube un JSON de backup para restaurar propuestas"
             style={{
