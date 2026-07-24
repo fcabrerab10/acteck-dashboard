@@ -192,7 +192,7 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
     const out = [];
     if (facturaMasAtrasada && facturaMasAtrasada.dias > 0) {
       const f = facturaMasAtrasada.factura;
-      out.push({ icon: '⚠️', t: `${f.numero_factura || f.folio || 'Factura'} con ${facturaMasAtrasada.dias}d de atraso · ${fmt$(f.saldo_actual)}`, s: `Emitida ${fmtFechaCorta(f.fecha_emision)}${f.vencimiento ? ` · vencida ${fmtFechaCorta(f.vencimiento)}` : ''}` });
+      out.push({ icon: '⚠️', t: `${f.movimiento || f.referencia || 'Factura'} con ${facturaMasAtrasada.dias}d de atraso · ${fmt$(f.saldo_actual)}`, s: `Emitida ${fmtFechaCorta(f.fecha_emision)}${f.vencimiento ? ` · vencida ${fmtFechaCorta(f.vencimiento)}` : ''}` });
     }
     if (deltaVencido != null && deltaVencido > 0) {
       out.push({ icon: '📈', t: `Vencido subió ${fmt$(deltaVencido)} vs corte anterior`, s: `De ${fmt$(saldoVencido - deltaVencido)} a ${fmt$(saldoVencido)}` });
@@ -253,8 +253,9 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
       return { f, dAtraso, dParaVenc, importe, saldo, pctPagado };
     });
     const filtered = q ? rows.filter(r => {
-      const num = String(r.f.numero_factura || r.f.folio || '').toLowerCase();
-      return num.includes(q);
+      const mov = String(r.f.movimiento || '').toLowerCase();
+      const ref = String(r.f.referencia || '').toLowerCase();
+      return mov.includes(q) || ref.includes(q);
     }) : rows;
     if (orden.col && orden.dir) {
       const factor = orden.dir === 'asc' ? 1 : -1;
@@ -387,7 +388,7 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
           <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>Facturas con saldo · ordenadas por atraso</h5>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: bgAlt, border: `1px solid ${theme.border}`, borderRadius: 999, height: 28, fontSize: 11, color: theme.textMuted, flex: 1, maxWidth: 260 }}>
             <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar folio…"
+              placeholder="Buscar folio o referencia…"
               style={{ border: 0, outline: 0, background: 'transparent', flex: 1, fontFamily: TYPO.fontText, fontSize: 11, color: theme.text }} />
           </div>
           <span style={{ marginLeft: 'auto', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
@@ -420,7 +421,10 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
                   : { bg: 'rgba(255,59,48,0.28)', color: '#7B0000', label: `${r.dAtraso}d` };
                 return (
                   <tr key={i}>
-                    <td style={cellStyle(theme)}><span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.f.numero_factura || r.f.folio || '—'}</span></td>
+                    <td style={cellStyle(theme)}>
+                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text }}>{r.f.movimiento || '—'}</div>
+                      {r.f.referencia && <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textSubtle || theme.textMuted, marginTop: 1 }}>{r.f.referencia}</div>}
+                    </td>
                     <td style={{ ...cellStyle(theme), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{fmtFechaCorta(r.f.fecha_emision)}</td>
                     <td style={{ ...cellStyle(theme), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{fmtFechaCorta(r.f.vencimiento)}</td>
                     <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{fmt$Full(r.importe)}</td>
