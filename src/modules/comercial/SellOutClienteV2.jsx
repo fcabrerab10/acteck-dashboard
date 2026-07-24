@@ -119,7 +119,7 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
         fetchAll('v_sellout_digitalife_sku_mes', 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anio])),
         fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp,sort_order'),
-        fetchAll('inventario_cliente', 'sku,stock,valor,precio_venta,costo_promedio,costo_convenio,anio,semana,fecha_ultima_venta,dias_sin_venta',
+        fetchAll('inventario_cliente', 'sku,stock,valor,precio_venta,costo_convenio,anio,semana,fecha_ultima_venta,dias_sin_venta',
           (q) => q.eq('cliente', clienteKey)),
         fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
           (q) => q.eq('cliente', clienteKey)),
@@ -221,14 +221,15 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
       if (!prev || key > prev._key) {
         const stock = Number(r.stock) || 0;
         const valorRaw = Number(r.valor) || 0;
-        const costoProm = Number(r.costo_promedio) || 0;
-        // Si valor viene 0 en DB, calcular con stock × costo_promedio
-        const valor = valorRaw > 0 ? valorRaw : stock * costoProm;
+        const costoConv = Number(r.costo_convenio) || 0;
+        const precioVta = Number(r.precio_venta) || 0;
+        // Si valor viene 0 en DB, aproximar con stock × costo_convenio o precio_venta
+        const valor = valorRaw > 0 ? valorRaw : stock * (costoConv || precioVta);
         m.set(r.sku, {
           stock,
           valor,
-          costo_promedio: costoProm,
-          precio_venta: Number(r.precio_venta) || 0,
+          costo_convenio: costoConv,
+          precio_venta: precioVta,
           fecha_ultima_venta: r.fecha_ultima_venta,
           dias_sin_venta: Number(r.dias_sin_venta) || null,
           _key: key,
