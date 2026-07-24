@@ -427,7 +427,7 @@ export default function SellInClienteV2({ clienteKey }) {
       </div>
 
       {/* Fila: Timeline lineal + Composición familia */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 10, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 10 }}>
         <TimelineLineal theme={theme} P={P} data={timelineMeses} sums={timelineSums} rango={rango} onChangeRango={setRango} anio={anio} anioPrev={anioPrev} mesActual={mesActual} />
         <FamiliaCard theme={theme} P={P} familias={familiasYTD} totalYTD={totalYTD} selected={familiaFilter} onSelect={setFamiliaFilter} />
       </div>
@@ -771,7 +771,7 @@ function FamiliaCard({ theme, P, familias, totalYTD, selected, onSelect }) {
   const total = familias.reduce((s, f) => s + f.monto, 0);
   const anySelected = selected != null;
   // Donut geometry
-  const size = 180, cx = size / 2, cy = size / 2, rOuter = 78, rInner = 54;
+  const size = 240, cx = size / 2, cy = size / 2, rOuter = 108, rInner = 76;
   const arcs = [];
   if (total > 0) {
     let acc = 0;
@@ -790,7 +790,7 @@ function FamiliaCard({ theme, P, familias, totalYTD, selected, onSelect }) {
   }
   const top1 = familias[0];
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
         <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
           Composición por familia · YTD
@@ -809,7 +809,7 @@ function FamiliaCard({ theme, P, familias, totalYTD, selected, onSelect }) {
       {familias.length === 0 ? (
         <div style={{ padding: '30px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>Sin datos aún</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: `${size + 12}px 1fr`, gap: 14, alignItems: 'center', marginTop: 4 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `${size + 12}px 1fr`, gap: 18, alignItems: 'center', marginTop: 4, flex: 1 }}>
           {/* Ring */}
           <div style={{ position: 'relative', width: size, height: size }}>
             <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
@@ -832,22 +832,22 @@ function FamiliaCard({ theme, P, familias, totalYTD, selected, onSelect }) {
                 const pct = f && total > 0 ? (f.monto / total * 100) : 0;
                 return (
                   <>
-                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>{selected}</div>
-                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: theme.text, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(0)}%</div>
-                    <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{f ? fmt.money(f.monto) : '—'}</div>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>{selected}</div>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: theme.text, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(0)}%</div>
+                    <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{f ? fmt.money(f.monto) : '—'}</div>
                   </>
                 );
               })() : (
                 <>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>YTD</div>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '-0.025em', color: theme.text, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(totalYTD.monto)}</div>
-                  <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{familias.length} familias</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>YTD</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 700, letterSpacing: '-0.025em', color: theme.text, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(totalYTD.monto)}</div>
+                  <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{familias.length} familias</div>
                 </>
               )}
             </div>
           </div>
-          {/* Leyenda */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 200, overflowY: 'auto' }}>
+          {/* Leyenda · las filas se distribuyen para llenar la altura disponible */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignSelf: 'stretch', height: '100%' }}>
             <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontStyle: 'italic', marginBottom: 2 }}>click filtra tabla</div>
             {familias.map((f, i) => {
               const isActive = selected === f.name;
@@ -857,18 +857,19 @@ function FamiliaCard({ theme, P, familias, totalYTD, selected, onSelect }) {
                 <div key={f.name}
                   onClick={() => onSelect(isActive ? null : f.name)}
                   style={{
-                    display: 'grid', gridTemplateColumns: '10px 1fr auto auto', gap: 8, alignItems: 'center',
-                    padding: '4px 8px', margin: '0 -8px', borderRadius: 6,
+                    display: 'grid', gridTemplateColumns: '12px 1fr auto auto', gap: 10, alignItems: 'center',
+                    padding: '6px 10px', margin: '0 -10px', borderRadius: 8,
                     cursor: 'pointer', opacity: isDim ? 0.45 : 1,
                     background: isActive ? `${f.color}18` : 'transparent',
                     transition: 'background 160ms, opacity 160ms',
+                    flex: 1, minHeight: 34,
                   }}
                   onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = `${theme.text}05`; }}
                   onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 3, background: f.color }} />
-                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: isActive ? 700 : 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
-                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.text, fontWeight: 600, textAlign: 'right', minWidth: 56, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(f.monto)}</span>
+                  <span style={{ width: 12, height: 12, borderRadius: 4, background: f.color }} />
+                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: isActive ? 700 : 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 12, color: theme.text, fontWeight: 600, textAlign: 'right', minWidth: 64, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(f.monto)}</span>
                 </div>
               );
             })}
