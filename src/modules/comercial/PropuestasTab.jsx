@@ -1037,34 +1037,46 @@ function PropuestaCard({ r, theme, timeAgo, estadoPill, onAbrirReciente, onActua
       </div>
 
       {onActualizarExcel && (
-        <label
-          onClick={(e) => e.stopPropagation()}
-          title="Sube el Excel modificado y actualiza esta propuesta con los cambios"
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            marginTop: 10, padding: '7px 10px', borderRadius: 10,
-            background: `${P.accent}14`, border: `1px solid ${P.accent}40`,
-            color: P.accent, fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 600,
-            cursor: 'pointer',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = `${P.accent}22`; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = `${P.accent}14`; }}
-        >
-          <Download style={{ width: 12, height: 12, transform: 'rotate(180deg)' }} strokeWidth={2} />
-          Actualizar desde Excel
-          <input
-            type="file"
-            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            style={{ display: 'none' }}
+        <>
+          <label
             onClick={(e) => e.stopPropagation()}
-            onChange={(e) => {
-              e.stopPropagation();
-              const file = e.target.files?.[0];
-              if (file) onActualizarExcel(file);
-              e.target.value = '';
+            title="Sube el Excel modificado y actualiza esta propuesta con los cambios"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              marginTop: 10, padding: '7px 10px', borderRadius: 10,
+              background: `${P.accent}14`, border: `1px solid ${P.accent}40`,
+              color: P.accent, fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 600,
+              cursor: 'pointer',
             }}
-          />
-        </label>
+            onMouseEnter={(e) => { e.currentTarget.style.background = `${P.accent}22`; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = `${P.accent}14`; }}
+          >
+            <Download style={{ width: 12, height: 12, transform: 'rotate(180deg)' }} strokeWidth={2} />
+            Actualizar desde Excel
+            <input
+              type="file"
+              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              style={{ display: 'none' }}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                e.stopPropagation();
+                const file = e.target.files?.[0];
+                if (file) onActualizarExcel(file);
+                e.target.value = '';
+              }}
+            />
+          </label>
+          {r.exportFilename && (
+            <div style={{
+              marginTop: 6, textAlign: 'center',
+              fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5,
+              color: theme.textSubtle || theme.textMuted,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }} title={r.exportFilename}>
+              {r.exportFilename}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
