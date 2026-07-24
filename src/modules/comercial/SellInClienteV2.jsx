@@ -486,17 +486,32 @@ function KpiCard({ theme, P, eyebrow, badge, title, big, bigSmall, bigColor, sub
 function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anioPrev, mesActual }) {
   const [hoverIdx, setHoverIdx] = useState(null);
   const isDark = theme.mode === 'dark';
-  const W = 600, H = 220;
-  const padL = 26, padR = 16, padT = 12, padB = 20;
+  const W = 700, H = 260;
+  const padL = 46, padR = 20, padT = 32, padB = 28;
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
-  const maxV = Math.max(1, ...data.map(d => Math.max(d.sellIn, d.sellInPrev, d.cuota)));
+  const maxRaw = Math.max(1, ...data.map(d => Math.max(d.sellIn, d.sellInPrev, d.cuota)));
+  const niceStep = (v) => {
+    const pow = Math.pow(10, Math.floor(Math.log10(v)));
+    const norm = v / pow;
+    const nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+    return nice * pow;
+  };
+  const maxV = niceStep(maxRaw * 1.15);
   const xOf = (i) => padL + (i / Math.max(1, data.length - 1)) * chartW;
   const yOf = (v) => padT + chartH - (v / maxV) * chartH;
-  const line2026 = data.filter(d => !d.futuro).map((d, i) => `${xOf(i)},${yOf(d.sellIn)}`).join(' ');
+  const idxActual = data.findIndex(d => d.actual);
+  const cerrados = data.filter(d => !d.futuro);
+  const area2026 = cerrados.length > 0
+    ? `M ${xOf(0)},${yOf(cerrados[0].sellIn)} ${cerrados.map((d, i) => `L ${xOf(i)},${yOf(d.sellIn)}`).join(' ')} L ${xOf(cerrados.length - 1)},${padT + chartH} L ${xOf(0)},${padT + chartH} Z`
+    : '';
+  const line2026 = cerrados.map((d, i) => `${xOf(i)},${yOf(d.sellIn)}`).join(' ');
   const line2025 = data.map((d, i) => `${xOf(i)},${yOf(d.sellInPrev)}`).join(' ');
   const lineCuota = data.map((d, i) => `${xOf(i)},${yOf(d.cuota)}`).join(' ');
   const hovered = hoverIdx != null ? data[hoverIdx] : null;
+  const currentDatum = idxActual >= 0 ? data[idxActual] : null;
+  const yTicks = [0, 0.25, 0.50, 0.75, 1].map(f => ({ v: maxV * f, y: padT + chartH * (1 - f) }));
+  const gradId = `siArea-${anio}`;
 
   const filtros = [
     { k: 'Q1', l: 'Q1' }, { k: 'Q2', l: 'Q2' }, { k: 'Q3', l: 'Q3' }, { k: 'Q4', l: 'Q4' }, { k: 'anio', l: 'Año' },
@@ -535,20 +550,44 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anio
         )}
       </div>
       <div style={{ position: 'relative' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 220, display: 'block' }}>
-          {[0.25, 0.5, 0.75].map(f => (
-            <line key={f} x1={padL} y1={padT + chartH * f} x2={W - padR} y2={padT + chartH * f}
-              stroke={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'} strokeDasharray="3 4" />
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 260, display: 'block' }}>
+          <defs>
+            <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={P.accent} stopOpacity="0.28" />
+              <stop offset="100%" stopColor={P.accent} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {yTicks.map((t, i) => (
+            <g key={i}>
+              <line x1={padL} y1={t.y} x2={W - padR} y2={t.y}
+                stroke={i === 0 ? (theme.divider || theme.border) : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)')}
+                strokeDasharray={i === 0 ? undefined : '3 4'} />
+              <text x={padL - 8} y={t.y + 3} textAnchor="end"
+                fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9" fill={theme.textMuted}>
+                {fmt.money(t.v)}
+              </text>
+            </g>
           ))}
-          <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke={theme.divider || theme.border} />
+          {area2026 && <path d={area2026} fill={`url(#${gradId})`} />}
           <polyline points={line2025} fill="none" stroke={theme.textMuted} strokeWidth="2" opacity="0.55" />
           <polyline points={lineCuota} fill="none" stroke={P.orange} strokeWidth="2" strokeDasharray="5 4" opacity="0.85" />
-          <polyline points={line2026} fill="none" stroke={P.accent} strokeWidth="2.5" />
-          {data.map((d, i) => !d.futuro && (
-            <circle key={`p-${i}`} cx={xOf(i)} cy={yOf(d.sellIn)} r={d.actual ? 5 : 3.5}
-              fill={d.actual ? P.green : P.accent}
-              stroke={theme.surface} strokeWidth={d.actual ? 2 : 1.5} />
-          ))}
+          <polyline points={line2026} fill="none" stroke={P.accent} strokeWidth="3" />
+          {cerrados.map((d, i) => {
+            const cx = xOf(i), cy = yOf(d.sellIn);
+            return (
+              <g key={`p-${i}`}>
+                <circle cx={cx} cy={cy} r={d.actual ? 6 : 4}
+                  fill={d.actual ? P.green : P.accent}
+                  stroke={theme.surface} strokeWidth={d.actual ? 2.5 : 2} />
+                {!d.actual && (
+                  <text x={cx} y={cy - 10} textAnchor="middle"
+                    fontFamily={TYPO.fontDisplay} fontSize="10" fontWeight="600" fill={theme.text}>
+                    {fmt.money(d.sellIn)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
           {data.map((d, i) => (
             <rect key={`h-${i}`}
               x={xOf(i) - chartW / (data.length * 2)}
@@ -566,7 +605,7 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anio
               stroke={theme.textMuted} strokeWidth="1" strokeDasharray="2 3" opacity="0.4" />
           )}
           {data.map((d, i) => (
-            <text key={`x-${i}`} x={xOf(i)} y={H - 6} textAnchor="middle"
+            <text key={`x-${i}`} x={xOf(i)} y={H - 8} textAnchor="middle"
               fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9"
               fill={d.actual ? P.green : theme.textMuted}
               fontWeight={d.actual ? 700 : 500}
@@ -574,10 +613,32 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anio
               {d.label}
             </text>
           ))}
+          {currentDatum && idxActual >= 0 && hoverIdx == null && (() => {
+            const cx = xOf(idxActual);
+            const cy = yOf(currentDatum.sellIn);
+            const yoyPct = currentDatum.sellInPrev > 0 ? ((currentDatum.sellIn - currentDatum.sellInPrev) / currentDatum.sellInPrev * 100) : null;
+            const boxW = 130;
+            const boxX = Math.max(padL, Math.min(W - padR - boxW, cx - boxW / 2));
+            const boxY = Math.max(4, cy - 44);
+            return (
+              <g pointerEvents="none">
+                <line x1={cx} y1={cy - 8} x2={cx} y2={boxY + 32} stroke={theme.text} strokeWidth="1" opacity="0.15" />
+                <rect x={boxX} y={boxY} width={boxW} height={32} rx="6" fill="#0A0A0C" />
+                <text x={boxX + boxW / 2} y={boxY + 13} textAnchor="middle"
+                  fontFamily={TYPO.fontDisplay} fontSize="10.5" fontWeight="600" fill="#FFF">
+                  {currentDatum.label} · {fmt.money(currentDatum.sellIn)}
+                </text>
+                <text x={boxX + boxW / 2} y={boxY + 25} textAnchor="middle"
+                  fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9" fill="rgba(255,255,255,0.65)">
+                  {yoyPct != null ? `${yoyPct >= 0 ? '+' : ''}${yoyPct.toFixed(1)}% YoY` : 'sin comparativo'}
+                </text>
+              </g>
+            );
+          })()}
         </svg>
         {hovered && !hovered.futuro && (
           <TimelineTooltip theme={theme} P={P} data={hovered} anio={anio} anioPrev={anioPrev}
-            xPct={(hoverIdx / (data.length - 1)) * 100} />
+            xPct={((hoverIdx * chartW / Math.max(1, data.length - 1)) + padL) / W * 100} />
         )}
       </div>
     </div>
@@ -634,10 +695,29 @@ function TimelineTooltip({ theme, P, data, anio, anioPrev, xPct }) {
   );
 }
 
-// ═══════════════ Familia Card (interactiva: click filtra tabla) ═══════════════
+// ═══════════════ Familia Card · donut ring + leyenda ═══════════════
 function FamiliaCard({ theme, P, familias, totalYTD, selected, onSelect }) {
   const total = familias.reduce((s, f) => s + f.monto, 0);
   const anySelected = selected != null;
+  // Donut geometry
+  const size = 180, cx = size / 2, cy = size / 2, rOuter = 78, rInner = 54;
+  const arcs = [];
+  if (total > 0) {
+    let acc = 0;
+    for (const f of familias) {
+      const startAng = (acc / total) * Math.PI * 2 - Math.PI / 2;
+      acc += f.monto;
+      const endAng = (acc / total) * Math.PI * 2 - Math.PI / 2;
+      const large = (endAng - startAng) > Math.PI ? 1 : 0;
+      const x1 = cx + rOuter * Math.cos(startAng), y1 = cy + rOuter * Math.sin(startAng);
+      const x2 = cx + rOuter * Math.cos(endAng),   y2 = cy + rOuter * Math.sin(endAng);
+      const x3 = cx + rInner * Math.cos(endAng),   y3 = cy + rInner * Math.sin(endAng);
+      const x4 = cx + rInner * Math.cos(startAng), y4 = cy + rInner * Math.sin(startAng);
+      const d = `M ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${rInner} ${rInner} 0 ${large} 0 ${x4} ${y4} Z`;
+      arcs.push({ d, color: f.color, name: f.name });
+    }
+  }
+  const top1 = familias[0];
   return (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
@@ -655,47 +735,75 @@ function FamiliaCard({ theme, P, familias, totalYTD, selected, onSelect }) {
           >Ver todas ›</button>
         )}
       </div>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: theme.text }}>
-        {fmt.money(totalYTD.monto)}
-        <span style={{ fontFamily: TYPO.fontText, fontSize: 11, color: theme.textMuted, fontWeight: 500, marginLeft: 6 }}>
-          {fmt.int(totalYTD.piezas)}pz · {familias.length} familias · <span style={{ color: theme.textSubtle || theme.textMuted, fontStyle: 'italic' }}>click filtra tabla</span>
-        </span>
-      </div>
-      <div style={{ marginTop: 8 }}>
-        {familias.length === 0 && (
-          <div style={{ padding: '18px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>Sin datos aún</div>
-        )}
-        {familias.map((f, i) => {
-          const isActive = selected === f.name;
-          const isDim = anySelected && !isActive;
-          return (
-            <div
-              key={f.name}
-              onClick={() => onSelect(isActive ? null : f.name)}
-              style={{
-                display: 'grid', gridTemplateColumns: '18px 1fr 1fr 60px', gap: 8, alignItems: 'center',
-                padding: '6px 8px', margin: '0 -8px', fontSize: 11,
-                borderTop: `1px solid ${theme.divider || theme.border}`, borderRadius: 6,
-                cursor: 'pointer', opacity: isDim ? 0.45 : 1,
-                background: isActive ? `${f.color}18` : 'transparent',
-                transition: 'background 160ms, opacity 160ms',
-              }}
-              onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = `${theme.text}05`; }}
-              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-            >
-              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted, textAlign: 'right', fontWeight: 600 }}>#{i + 1}</span>
-              <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: isActive ? 700 : 600, color: theme.text, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                <span style={{ width: 8, height: 8, borderRadius: 3, background: f.color, flexShrink: 0 }} />
-                {f.name}
-              </span>
-              <span style={{ height: 5, background: `${theme.text}0F`, borderRadius: 999, overflow: 'hidden' }}>
-                <span style={{ display: 'block', height: '100%', background: f.color, borderRadius: 999, width: `${total > 0 ? (f.monto / total * 100) : 0}%`, transition: 'width 400ms' }} />
-              </span>
-              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.text, fontWeight: 600, textAlign: 'right' }}>{fmt.money(f.monto)}</span>
+      {familias.length === 0 ? (
+        <div style={{ padding: '30px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>Sin datos aún</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: `${size + 12}px 1fr`, gap: 14, alignItems: 'center', marginTop: 4 }}>
+          {/* Ring */}
+          <div style={{ position: 'relative', width: size, height: size }}>
+            <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
+              {arcs.map((a, i) => {
+                const isActive = selected === a.name;
+                const isDim = anySelected && !isActive;
+                return (
+                  <path key={i} d={a.d} fill={a.color}
+                    opacity={isDim ? 0.35 : 1}
+                    stroke={theme.surface} strokeWidth={isActive ? 2 : 1}
+                    style={{ cursor: 'pointer', transition: 'opacity 160ms' }}
+                    onClick={() => onSelect(isActive ? null : a.name)} />
+                );
+              })}
+            </svg>
+            {/* Centro */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+              {anySelected ? (() => {
+                const f = familias.find(x => x.name === selected);
+                const pct = f && total > 0 ? (f.monto / total * 100) : 0;
+                return (
+                  <>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>{selected}</div>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: theme.text, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(0)}%</div>
+                    <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{f ? fmt.money(f.monto) : '—'}</div>
+                  </>
+                );
+              })() : (
+                <>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>YTD</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '-0.025em', color: theme.text, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(totalYTD.monto)}</div>
+                  <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{familias.length} familias</div>
+                </>
+              )}
             </div>
-          );
-        })}
-      </div>
+          </div>
+          {/* Leyenda */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 200, overflowY: 'auto' }}>
+            <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontStyle: 'italic', marginBottom: 2 }}>click filtra tabla</div>
+            {familias.map((f, i) => {
+              const isActive = selected === f.name;
+              const isDim = anySelected && !isActive;
+              const pct = total > 0 ? (f.monto / total * 100) : 0;
+              return (
+                <div key={f.name}
+                  onClick={() => onSelect(isActive ? null : f.name)}
+                  style={{
+                    display: 'grid', gridTemplateColumns: '10px 1fr auto auto', gap: 8, alignItems: 'center',
+                    padding: '4px 8px', margin: '0 -8px', borderRadius: 6,
+                    cursor: 'pointer', opacity: isDim ? 0.45 : 1,
+                    background: isActive ? `${f.color}18` : 'transparent',
+                    transition: 'background 160ms, opacity 160ms',
+                  }}
+                  onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = `${theme.text}05`; }}
+                  onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 3, background: f.color }} />
+                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: isActive ? 700 : 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.text, fontWeight: 600, textAlign: 'right', minWidth: 56, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(f.monto)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
