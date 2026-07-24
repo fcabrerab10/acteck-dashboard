@@ -531,7 +531,7 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
       </div>
 
       {/* Fila: Timeline + Inventario por familia */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 10, alignItems: 'start' }}>
         <TimelineLineal theme={theme} P={P} isDark={isDark}
           data={timelineMeses} sums={timelineSums} rango={rango} onChangeRango={setRango}
           anio={anio} anioPrev={anioPrev} mesActual={mesActual} />
@@ -838,9 +838,13 @@ function TimelineTooltip({ theme, P, data, anio, anioPrev, xPct }) {
 // ═══════════════ Sucursal Card (interactiva: click filtra tabla) ═══════════════
 // ═══════════════ Inventario por familia · donut ring + leyenda ═══════════════
 function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, onSelect }) {
+  const [expanded, setExpanded] = useState(false);
+  const TOP_N = 7; // familias visibles antes del "Ver más"
   // Usa VALOR ($) para proporciones — con fallback stock × costo_promedio
   const total = familias.reduce((s, f) => s + f.valor, 0);
   const anySelected = selected != null;
+  const visibles = expanded ? familias : familias.slice(0, TOP_N);
+  const ocultas = familias.length - TOP_N;
   const size = 240, cx = size / 2, cy = size / 2, rOuter = 108, rInner = 76;
   const arcs = [];
   if (total > 0) {
@@ -873,7 +877,7 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
       {familias.length === 0 ? (
         <div style={{ padding: '30px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>Sin inventario</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: `${size + 12}px 1fr`, gap: 18, alignItems: 'center', marginTop: 4, flex: 1 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `${size + 12}px 1fr`, gap: 18, alignItems: 'center', marginTop: 4 }}>
           <div style={{ position: 'relative', width: size, height: size }}>
             <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
               {arcs.map((a, i) => {
@@ -908,9 +912,9 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
               )}
             </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignSelf: 'stretch', height: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignSelf: 'stretch' }}>
             <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontStyle: 'italic', marginBottom: 2 }}>click filtra tabla</div>
-            {familias.map((f, i) => {
+            {visibles.map((f, i) => {
               const isActive = selected === f.name;
               const isDim = anySelected && !isActive;
               const pct = total > 0 ? (f.valor / total * 100) : 0;
@@ -919,21 +923,34 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
                   onClick={() => onSelect(isActive ? null : f.name)}
                   style={{
                     display: 'grid', gridTemplateColumns: '12px 1fr auto auto', gap: 10, alignItems: 'center',
-                    padding: '6px 10px', margin: '0 -10px', borderRadius: 8,
+                    padding: '5px 10px', margin: '0 -10px', borderRadius: 8,
                     cursor: 'pointer', opacity: isDim ? 0.45 : 1,
                     background: isActive ? `${f.color}18` : 'transparent',
                     transition: 'background 160ms, opacity 160ms',
-                    flex: 1, minHeight: 34,
                   }}
                   onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = `${theme.text}05`; }}
                   onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
                   <span style={{ width: 12, height: 12, borderRadius: 4, background: f.color }} />
-                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: isActive ? 700 : 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
-                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 12, color: theme.text, fontWeight: 600, textAlign: 'right', minWidth: 64, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(f.valor)}</span>
+                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: isActive ? 700 : 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11.5, color: theme.text, fontWeight: 600, textAlign: 'right', minWidth: 60, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(f.valor)}</span>
                 </div>
               );
             })}
+            {ocultas > 0 && (
+              <button onClick={() => setExpanded(x => !x)}
+                style={{
+                  marginTop: 6, padding: '6px 10px', borderRadius: 8, border: 0,
+                  background: `${theme.text}06`, color: theme.textMuted, cursor: 'pointer',
+                  fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                  transition: 'background 160ms',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = `${theme.text}10`; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = `${theme.text}06`; }}>
+                {expanded ? `Ver menos ▴` : `+ ${ocultas} categorías más ▾`}
+              </button>
+            )}
           </div>
         </div>
       )}
