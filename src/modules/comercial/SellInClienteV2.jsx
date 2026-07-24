@@ -202,22 +202,25 @@ export default function SellInClienteV2({ clienteKey }) {
       label: MESES[m - 1],
       sellIn: mensualPorAnio.monto[anio][m - 1],
       sellInPrev: mensualPorAnio.monto[anioPrev][m - 1],
-      cuota: cuotaPorMes.get(m)?.ideal || 0,
+      cuota: cuotaPorMes.get(m)?.ideal || 0,       // 30M · meta ideal
+      cuotaMin: cuotaPorMes.get(m)?.min || 0,      // 25M · mínimo
       actual: m === mesActual,
       futuro: m > mesActual,
     }));
   }, [mensualPorAnio, anio, anioPrev, cuotaPorMes, mesesRango, mesActual]);
 
   const timelineSums = useMemo(() => {
-    let s2026 = 0, s2025 = 0, cuota = 0;
+    let s2026 = 0, s2025 = 0, cuota = 0, cuotaMin = 0;
     mesesRango.forEach(m => {
       s2026 += mensualPorAnio.monto[anio][m - 1];
       s2025 += mensualPorAnio.monto[anioPrev][m - 1];
       cuota += cuotaPorMes.get(m)?.ideal || 0;
+      cuotaMin += cuotaPorMes.get(m)?.min || 0;
     });
     const deltaYoY = s2025 > 0 ? ((s2026 - s2025) / s2025 * 100) : null;
     const deltaCuota = cuota > 0 ? ((s2026 - cuota) / cuota * 100) : null;
-    return { s2026, s2025, cuota, deltaYoY, deltaCuota };
+    const deltaCuotaMin = cuotaMin > 0 ? ((s2026 - cuotaMin) / cuotaMin * 100) : null;
+    return { s2026, s2025, cuota, cuotaMin, deltaYoY, deltaCuota, deltaCuotaMin };
   }, [mensualPorAnio, cuotaPorMes, mesesRango, anio, anioPrev]);
 
   // Familias YTD
@@ -498,7 +501,7 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anio
   const padL = 46, padR = 20, padT = 32, padB = 28;
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
-  const maxRaw = Math.max(1, ...data.map(d => Math.max(d.sellIn, d.sellInPrev, d.cuota)));
+  const maxRaw = Math.max(1, ...data.map(d => Math.max(d.sellIn, d.sellInPrev, d.cuota, d.cuotaMin || 0)));
   const niceStep = (v) => {
     const pow = Math.pow(10, Math.floor(Math.log10(v)));
     const norm = v / pow;
@@ -516,6 +519,7 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anio
   const line2026 = cerrados.map((d, i) => `${xOf(i)},${yOf(d.sellIn)}`).join(' ');
   const line2025 = data.map((d, i) => `${xOf(i)},${yOf(d.sellInPrev)}`).join(' ');
   const lineCuota = data.map((d, i) => `${xOf(i)},${yOf(d.cuota)}`).join(' ');
+  const lineCuotaMin = data.map((d, i) => `${xOf(i)},${yOf(d.cuotaMin || 0)}`).join(' ');
   const hovered = hoverIdx != null ? data[hoverIdx] : null;
   const currentDatum = idxActual >= 0 ? data[idxActual] : null;
   const yTicks = [0, 0.25, 0.50, 0.75, 1].map(f => ({ v: maxV * f, y: padT + chartH * (1 - f) }));
@@ -574,12 +578,16 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anio
       <div style={{ display: 'flex', gap: 12, padding: '6px 0 8px', flexWrap: 'wrap', borderBottom: `1px solid ${theme.divider || theme.border}`, marginBottom: 6 }}>
         <SumStat theme={theme} k={<><Dot color={theme.textMuted} />SI {anioPrev}</>} v={fmt.money(sums.s2025)} vColor={theme.textMuted} />
         <SumStat theme={theme} k={<><Dot color={P.accent} />SI {anio}</>} v={fmt.money(sums.s2026)} vColor={theme.text} />
-        <SumStat theme={theme} k={<><Dot color={P.orange} dashed />Cuota {anio}</>} v={fmt.money(sums.cuota)} vColor={theme.text} />
+        <SumStat theme={theme} k={<><Dot color={P.orange} dashed />Cuota mín</>} v={fmt.money(sums.cuotaMin)} vColor={theme.text} />
+        <SumStat theme={theme} k={<><Dot color={P.orange} dashed />Cuota ideal</>} v={fmt.money(sums.cuota)} vColor={theme.text} />
         {sums.deltaYoY != null && (
           <SumStat theme={theme} k="Δ YoY" v={`${sums.deltaYoY >= 0 ? '+' : ''}${sums.deltaYoY.toFixed(1)}%`} vColor={sums.deltaYoY >= 0 ? P.green : P.red} />
         )}
+        {sums.deltaCuotaMin != null && (
+          <SumStat theme={theme} k="Δ vs mín" v={`${sums.deltaCuotaMin >= 0 ? '+' : ''}${sums.deltaCuotaMin.toFixed(1)}%`} vColor={sums.deltaCuotaMin >= 0 ? P.green : P.red} />
+        )}
         {sums.deltaCuota != null && (
-          <SumStat theme={theme} k="Δ vs cuota" v={`${sums.deltaCuota >= 0 ? '+' : ''}${sums.deltaCuota.toFixed(1)}%`} vColor={sums.deltaCuota >= 0 ? P.green : P.red} />
+          <SumStat theme={theme} k="Δ vs ideal" v={`${sums.deltaCuota >= 0 ? '+' : ''}${sums.deltaCuota.toFixed(1)}%`} vColor={sums.deltaCuota >= 0 ? P.green : P.red} />
         )}
       </div>
       <div style={{ position: 'relative' }}>
@@ -603,6 +611,7 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anio
           ))}
           {area2026 && <path d={area2026} fill={`url(#${gradId})`} />}
           <polyline points={line2025} fill="none" stroke={theme.textMuted} strokeWidth="2" opacity="0.55" />
+          <polyline points={lineCuotaMin} fill="none" stroke={P.orange} strokeWidth="1.5" strokeDasharray="2 4" opacity="0.55" />
           <polyline points={lineCuota} fill="none" stroke={P.orange} strokeWidth="2" strokeDasharray="5 4" opacity="0.85" />
           <polyline points={line2026} fill="none" stroke={P.accent} strokeWidth="3" />
           {cerrados.map((d, i) => {
@@ -710,9 +719,15 @@ function TimelineTooltip({ theme, P, data, anio, anioPrev, xPct }) {
         <span style={{ color: theme.textMuted }}>SI {anioPrev}</span>
         <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmt.money(data.sellInPrev)}</span>
       </div>
+      {data.cuotaMin > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 2 }}>
+          <span style={{ color: theme.textMuted }}>Cuota mín</span>
+          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmt.money(data.cuotaMin)}</span>
+        </div>
+      )}
       {data.cuota > 0 && (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 2 }}>
-          <span style={{ color: theme.textMuted }}>Cuota</span>
+          <span style={{ color: theme.textMuted }}>Cuota ideal</span>
           <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmt.money(data.cuota)}</span>
         </div>
       )}
