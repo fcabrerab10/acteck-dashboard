@@ -789,9 +789,24 @@ const PARSERS = {
     }
 
     // ── Formato A (original semanal) ──
-    // Year + week + fecha_corte del header F6 ("Estado de cuenta de la Semana X Del DD/MM/YYYY al DD/MM/YYYY")
+    // Year + week + fecha_corte del header "Estado de cuenta de la Semana X Del DD/MM/YYYY al DD/MM/YYYY"
+    // AUTO-DETECT filas: el formato puede tener 0 o 1 rows extra al principio.
+    // Escaneamos las primeras 15 filas buscando: "Estado de cuenta", "Saldo Actual" (header), y "Movimientos" (header detalle)
+    const scan = XLSX.utils.sheet_to_json(sh, { header: 1, defval: null, range: 0 }).slice(0, 20);
+    let rowEncabezado = -1, rowSaldoHead = -1, rowSaldoVals = -1, rowMovHead = -1;
+    for (let i = 0; i < scan.length; i++) {
+      const row = scan[i] || [];
+      const joined = row.map(c => String(c || '')).join('|').toLowerCase();
+      if (rowEncabezado < 0 && joined.includes('estado de cuenta de la semana')) rowEncabezado = i;
+      if (rowSaldoHead < 0 && joined.includes('saldo actual') && joined.includes('saldo vencido')) rowSaldoHead = i;
+      if (rowMovHead < 0 && (joined.startsWith('movimientos|') || joined.includes('|movimiento|') || joined.includes('|movimientos|'))) rowMovHead = i;
+    }
+    // La fila de valores del saldo está inmediatamente debajo de la fila de headers
+    if (rowSaldoHead >= 0) rowSaldoVals = rowSaldoHead + 1;
+
     let semana = null, fecha_corte = null, year = new Date().getFullYear();
-    const mm = f6.match(/Semana\s+(\d+)\s+Del\s+(\d{2}\/\d{2}\/\d{4})\s+al\s+(\d{2}\/\d{2}\/\d{4})/i);
+    const encabezadoTexto = rowEncabezado >= 0 ? scan[rowEncabezado].map(c => String(c || '')).join(' ') : '';
+    const mm = encabezadoTexto.match(/Semana\s+(\d+)\s+Del\s+(\d{2}\/\d{2}\/\d{4})\s+al\s+(\d{2}\/\d{2}\/\d{4})/i);
     if (mm) {
       semana = parseInt(mm[1], 10);
       const parts = mm[3].split('/');
@@ -803,17 +818,35 @@ const PARSERS = {
       fecha_corte = new Date().toISOString().slice(0,10);
     }
 
-    // Razón social: B8
-    const razon_social = toStr(cellVal('B8')) || (cliente==='pcel'?'PC ONLINE':cliente==='dicotech'?'REVKO TECHNOLOGY SA DE CV':'API GLOBAL');
+    // Razón social: primer texto no vacío en la fila donde también hay razón social (típicamente col B, misma fila que valores de saldo)
+    let razon_social = null;
+    if (rowSaldoVals >= 0) {
+      const r = scan[rowSaldoVals] || [];
+      for (let c = 0; c < r.length; c++) {
+        const v = toStr(r[c]);
+        if (v && typeof v === 'string' && v.length > 4 && !/^\d+([.,]\d+)?$/.test(v)) { razon_social = v; break; }
+      }
+    }
+    if (!razon_social) razon_social = (cliente==='pcel'?'PC ONLINE':cliente==='dicotech'?'REVKO TECHNOLOGY SA DE CV':'API GLOBAL');
 
-    // Resumen
-    const saldo_actual   = toNum(cellVal('F8')) || 0;
-    const saldo_vencido  = toNum(cellVal('G8')) || 0;
-    const notas_credito  = toNum(cellVal('H8')) || 0;
-    const saldo_a_vencer = toNum(cellVal('I8')) || 0;
+    // Resumen · leemos los 4 valores de la fila detectada (posiciones relativas a header)
+    let saldo_actual = 0, saldo_vencido = 0, notas_credito = 0, saldo_a_vencer = 0;
+    if (rowSaldoHead >= 0 && rowSaldoVals >= 0) {
+      const heads = (scan[rowSaldoHead] || []).map(c => String(c || '').toLowerCase());
+      const vals = scan[rowSaldoVals] || [];
+      const idxSA = heads.findIndex(h => h.includes('saldo actual'));
+      const idxSV = heads.findIndex(h => h.includes('saldo vencido'));
+      const idxNC = heads.findIndex(h => h.includes('notas credito') || h.includes('notas crédito'));
+      const idxSAV = heads.findIndex(h => h.includes('saldo a vencer'));
+      saldo_actual   = idxSA  >= 0 ? (toNum(vals[idxSA])  || 0) : 0;
+      saldo_vencido  = idxSV  >= 0 ? (toNum(vals[idxSV])  || 0) : 0;
+      notas_credito  = idxNC  >= 0 ? (toNum(vals[idxNC])  || 0) : 0;
+      saldo_a_vencer = idxSAV >= 0 ? (toNum(vals[idxSAV]) || 0) : 0;
+    }
 
-    // Detail rows: headers on row 10 (range: 9)
-    const rows = XLSX.utils.sheet_to_json(sh, {defval:null, range: 9});
+    // Detail rows: headers en la fila detectada (range = rowMovHead) - fallback a 9 (formato original)
+    const detailRange = rowMovHead >= 0 ? rowMovHead : 9;
+    const rows = XLSX.utils.sheet_to_json(sh, {defval:null, range: detailRange});
     const detalle = [];
     let aging_d0_30 = 0, aging_d31_60 = 0, aging_d61_90 = 0, aging_mas90 = 0;
     const vencMesMap = {}; // YYYY-MM -> monto
@@ -823,6 +856,10 @@ const PARSERS = {
       const importe = toNum(obj.importe_factura ?? obj.importe);
       const saldo = toNum(obj.saldo_actual ?? obj.saldo) || 0;
       if (!obj.movimientos && !importe && !saldo) continue;
+      // Filtrar filas SUBTOTAL / TOTAL que vienen sin folio en Movimientos
+      // (el Excel de Digitalife tiene 1 subtotal a mitad de tabla + 1 total al final)
+      const movStr = String(obj.movimientos || obj.movimiento || '').trim();
+      if (!movStr && (importe || saldo)) continue;
       const ag_corr   = toNum(obj.corriente) || 0;
       const ag_01_30  = toNum(obj['01_30_dias'] ?? obj._01_30_dias) || 0;
       const ag_31_60  = toNum(obj['31_60_dias'] ?? obj._31_60_dias) || 0;
