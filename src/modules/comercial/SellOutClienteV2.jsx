@@ -105,7 +105,7 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
   const [inventarioCliente, setInventarioCliente] = useState([]);
   const [inventarioSucursal, setInventarioSucursal] = useState([]);
   const [marcaMes, setMarcaMes] = useState([]);
-  const [rango, setRango] = useState('Q3');
+  const [rango, setRango] = useState(() => new Set(['Q3']));
   const [busqueda, setBusqueda] = useState('');
   const [orden, setOrden] = useState({ col: 'total', dir: 'desc' });
   const [marcaFilter, setMarcaFilter] = useState(null);
@@ -144,11 +144,17 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
   }, [mensual, anio]);
 
   useEffect(() => {
-    if (mesActual <= 3) setRango('Q1');
-    else if (mesActual <= 6) setRango('Q2');
-    else if (mesActual <= 9) setRango('Q3');
-    else setRango('Q4');
+    const q = mesActual <= 3 ? 'Q1' : mesActual <= 6 ? 'Q2' : mesActual <= 9 ? 'Q3' : 'Q4';
+    setRango(new Set([q]));
   }, [mesActual]);
+
+  // Meses seleccionados a partir del Set (soporta multi-Q · empty = Año)
+  const mesesRango = useMemo(() => {
+    if (!rango || typeof rango.has !== 'function' || rango.size === 0) return Q_MESES.anio;
+    const set = new Set();
+    for (const q of rango) (Q_MESES[q] || []).forEach(m => set.add(m));
+    return Array.from(set).sort((a, b) => a - b);
+  }, [rango]);
 
   const roadmapMap = useMemo(() => {
     const m = new Map();
@@ -334,7 +340,7 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
 
   // Timeline data
   const timelineMeses = useMemo(() => {
-    const rangoMeses = Q_MESES[rango] || Q_MESES.anio;
+    const rangoMeses = mesesRango;
     return rangoMeses.map((m) => {
       const i = m - 1;
       const so2026 = mensualPorAnio.monto[anio][i] || 0;
@@ -349,7 +355,7 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
         futuro: m > mesActual,
       };
     });
-  }, [rango, mensualPorAnio, anio, anioPrev, mesActual]);
+  }, [mesesRango, mensualPorAnio, anio, anioPrev, mesActual]);
 
   const timelineSums = useMemo(() => {
     let s2026 = 0, s2025 = 0;
@@ -623,9 +629,18 @@ function TimelineLineal({ theme, P, isDark, data, sums, rango, onChangeRango, an
   // Ticks Y (0, 25%, 50%, 75%, 100%)
   const yTicks = [0, 0.25, 0.50, 0.75, 1].map(f => ({ f, v: maxV * f, y: padT + chartH * (1 - f) }));
 
-  const filtros = [
-    { k: 'Q1', l: 'Q1' }, { k: 'Q2', l: 'Q2' }, { k: 'Q3', l: 'Q3' }, { k: 'Q4', l: 'Q4' }, { k: 'anio', l: 'Año' },
-  ];
+  // rango puede ser Set (multi-select) o string (compat)
+  const isSet = rango && typeof rango.has === 'function';
+  const isActiveQ = (q) => isSet ? rango.has(q) : rango === q;
+  const isActiveAnio = isSet ? rango.size === 4 || rango.size === 0 : rango === 'anio';
+  const toggleQ = (q) => {
+    if (!isSet) { onChangeRango(new Set([q])); return; }
+    const next = new Set(rango);
+    if (next.has(q)) next.delete(q); else next.add(q);
+    onChangeRango(next);
+  };
+  const setAnio = () => onChangeRango(new Set(['Q1', 'Q2', 'Q3', 'Q4']));
+  const filtros = [{ k: 'Q1', l: 'Q1' }, { k: 'Q2', l: 'Q2' }, { k: 'Q3', l: 'Q3' }, { k: 'Q4', l: 'Q4' }];
 
   const gradId = `soArea-${anio}`;
 
@@ -634,20 +649,33 @@ function TimelineLineal({ theme, P, isDark, data, sums, rango, onChangeRango, an
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
         <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
           Evolución mensual · Sell Out
+          <span style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontWeight: 500, fontStyle: 'italic', marginLeft: 8 }}>
+            Combina trimestres para sumar
+          </span>
         </h5>
         <div style={{ display: 'inline-flex', background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 8, padding: 2 }}>
           {filtros.map(f => (
-            <button key={f.k} onClick={() => onChangeRango(f.k)}
+            <button key={f.k} onClick={() => toggleQ(f.k)}
               style={{
-                border: 0, background: rango === f.k ? theme.surface : 'transparent',
+                border: 0, background: isActiveQ(f.k) ? theme.surface : 'transparent',
                 padding: '4px 10px', borderRadius: 6,
-                fontFamily: rango === f.k ? TYPO.fontDisplay : TYPO.fontText,
-                fontSize: 10.5, color: rango === f.k ? theme.text : theme.textMuted,
-                fontWeight: rango === f.k ? 600 : 500, cursor: 'pointer',
-                boxShadow: rango === f.k ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                borderWidth: 1, borderStyle: 'solid', borderColor: rango === f.k ? theme.border : 'transparent',
+                fontFamily: isActiveQ(f.k) ? TYPO.fontDisplay : TYPO.fontText,
+                fontSize: 10.5, color: isActiveQ(f.k) ? theme.text : theme.textMuted,
+                fontWeight: isActiveQ(f.k) ? 600 : 500, cursor: 'pointer',
+                boxShadow: isActiveQ(f.k) ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                borderWidth: 1, borderStyle: 'solid', borderColor: isActiveQ(f.k) ? theme.border : 'transparent',
               }}>{f.l}</button>
           ))}
+          <button onClick={setAnio}
+            style={{
+              border: 0, background: isActiveAnio ? theme.surface : 'transparent',
+              padding: '4px 10px', borderRadius: 6,
+              fontFamily: isActiveAnio ? TYPO.fontDisplay : TYPO.fontText,
+              fontSize: 10.5, color: isActiveAnio ? theme.text : theme.textMuted,
+              fontWeight: isActiveAnio ? 600 : 500, cursor: 'pointer',
+              boxShadow: isActiveAnio ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              borderWidth: 1, borderStyle: 'solid', borderColor: isActiveAnio ? theme.border : 'transparent',
+            }}>Año</button>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 14, padding: '6px 0 8px', flexWrap: 'wrap', borderBottom: `1px solid ${theme.divider || theme.border}`, marginBottom: 6 }}>
@@ -813,7 +841,7 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
   // Usa VALOR ($) para proporciones — con fallback stock × costo_promedio
   const total = familias.reduce((s, f) => s + f.valor, 0);
   const anySelected = selected != null;
-  const size = 180, cx = size / 2, cy = size / 2, rOuter = 78, rInner = 54;
+  const size = 240, cx = size / 2, cy = size / 2, rOuter = 108, rInner = 76;
   const arcs = [];
   if (total > 0) {
     let acc = 0;
@@ -831,7 +859,7 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
     }
   }
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
         <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
           Inventario por familia
@@ -845,7 +873,7 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
       {familias.length === 0 ? (
         <div style={{ padding: '30px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>Sin inventario</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: `${size + 12}px 1fr`, gap: 14, alignItems: 'center', marginTop: 4 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `${size + 12}px 1fr`, gap: 18, alignItems: 'center', marginTop: 4, flex: 1 }}>
           <div style={{ position: 'relative', width: size, height: size }}>
             <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
               {arcs.map((a, i) => {
@@ -866,21 +894,21 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
                 const pct = f && total > 0 ? (f.valor / total * 100) : 0;
                 return (
                   <>
-                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600, textAlign: 'center', padding: '0 6px' }}>{selected}</div>
-                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: theme.text, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(0)}%</div>
-                    <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{f ? fmt.money(f.valor) : '—'}</div>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600, textAlign: 'center', padding: '0 6px' }}>{selected}</div>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: theme.text, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(0)}%</div>
+                    <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{f ? fmt.money(f.valor) : '—'}</div>
                   </>
                 );
               })() : (
                 <>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>Costo total</div>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '-0.025em', color: theme.text, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(totalValor)}</div>
-                  <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{fmt.int(totalStock)} pz · {familias.length}</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>Costo total</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 700, letterSpacing: '-0.025em', color: theme.text, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(totalValor)}</div>
+                  <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{fmt.int(totalStock)} pz · {familias.length}</div>
                 </>
               )}
             </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 220, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignSelf: 'stretch', height: '100%' }}>
             <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontStyle: 'italic', marginBottom: 2 }}>click filtra tabla</div>
             {familias.map((f, i) => {
               const isActive = selected === f.name;
@@ -890,18 +918,19 @@ function InvFamiliaCard({ theme, P, familias, totalStock, totalValor, selected, 
                 <div key={f.name}
                   onClick={() => onSelect(isActive ? null : f.name)}
                   style={{
-                    display: 'grid', gridTemplateColumns: '10px 1fr auto auto', gap: 8, alignItems: 'center',
-                    padding: '4px 8px', margin: '0 -8px', borderRadius: 6,
+                    display: 'grid', gridTemplateColumns: '12px 1fr auto auto', gap: 10, alignItems: 'center',
+                    padding: '6px 10px', margin: '0 -10px', borderRadius: 8,
                     cursor: 'pointer', opacity: isDim ? 0.45 : 1,
                     background: isActive ? `${f.color}18` : 'transparent',
                     transition: 'background 160ms, opacity 160ms',
+                    flex: 1, minHeight: 34,
                   }}
                   onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = `${theme.text}05`; }}
                   onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 3, background: f.color }} />
-                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: isActive ? 700 : 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
-                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.text, fontWeight: 600, textAlign: 'right', minWidth: 56, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(f.valor)}</span>
+                  <span style={{ width: 12, height: 12, borderRadius: 4, background: f.color }} />
+                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: isActive ? 700 : 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 12, color: theme.text, fontWeight: 600, textAlign: 'right', minWidth: 64, fontVariantNumeric: 'tabular-nums' }}>{fmt.money(f.valor)}</span>
                 </div>
               );
             })}
