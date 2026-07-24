@@ -47,13 +47,14 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   const mesActual = new Date().getMonth() + 1;
 
   const [loading, setLoading] = useState(true);
-  const [ventasActual, setVentasActual] = useState([]);
-  const [ventasAnt, setVentasAnt] = useState([]);
+  const [facturacion, setFacturacion] = useState([]);       // facturacion_clientes (Sell In real, año actual + anterior)
   const [cuotasMes, setCuotasMes] = useState([]);
   const [aging, setAging] = useState(null);
   const [sellInSku, setSellInSku] = useState([]);
   const [sellOutDetalle, setSellOutDetalle] = useState([]);
   const [productos, setProductos] = useState([]);
+  const [inventario, setInventario] = useState([]);         // inventario_cliente (fuente real)
+  const [cortesHist, setCortesHist] = useState([]);         // estados_cuenta históricos para cobranza
   const [rango, setRango] = useState(getCurrentQ(mesActual));
   const [marcaRango, setMarcaRango] = useState(getCurrentQ(mesActual));
 
@@ -67,27 +68,31 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   useEffect(() => {
     let cancel = false;
     (async () => {
-      const anioIni = `${anio}-01-01`;
       const anioAntIni = `${anio - 1}-01-01`;
-      const [vAct, vAnt, cR, ecR, siR, prR, soR] = await Promise.all([
-        supabase.from('ventas_mensuales').select('*').eq('cliente', clienteKey).eq('anio', anio).order('mes'),
-        supabase.from('ventas_mensuales').select('*').eq('cliente', clienteKey).eq('anio', anio - 1).order('mes'),
+      const [facR, cR, ecHistR, siR, prR, soR, invR] = await Promise.all([
+        // Sell In real desde facturacion_clientes (año actual + anterior)
+        supabase.from('facturacion_clientes').select('sku,anio,mes,piezas,monto').eq('cliente_key', clienteKey).in('anio', [anio - 1, anio]),
         supabase.from('cuotas_mensuales').select('*').eq('cliente', clienteKey).eq('anio', anio),
-        supabase.from('estados_cuenta').select('id').eq('cliente', clienteKey).order('fecha_corte', { ascending: false }).limit(1),
+        // Historial de cortes de estados_cuenta para calcular cobranza mensual
+        supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true }),
         supabase.from('sell_in_sku').select('sku, mes, monto_pesos, piezas').eq('cliente', clienteKey).eq('anio', anio),
         supabase.from('productos_cliente').select('sku, marca, precio_venta').eq('cliente', clienteKey),
         supabase.from('sellout_detalle').select('fecha, total, cantidad, no_parte, marca').eq('cliente', clienteKey).gte('fecha', anioAntIni),
+        // Inventario real (snapshot más reciente)
+        supabase.from('inventario_cliente').select('sku, stock, valor, precio_venta, costo_convenio, anio, semana').eq('cliente', clienteKey),
       ]);
       if (cancel) return;
-      setVentasActual(vAct.data || []);
-      setVentasAnt(vAnt.data || []);
+      setFacturacion(facR.data || []);
       setCuotasMes(cR.data || []);
+      setCortesHist(ecHistR.data || []);
       setSellInSku(siR.data || []);
       setProductos(prR.data || []);
       setSellOutDetalle(soR.data || []);
+      setInventario(invR.data || []);
+      // Último corte para aging
+      const ecActualId = (ecHistR.data || []).slice(-1)[0]?.id;
 
       // Aging (mismo cálculo que antes, buckets sólo vencidos)
-      const ecActualId = (ecR.data || [])[0]?.id;
       if (ecActualId) {
         const { data: det } = await supabase
           .from('estados_cuenta_detalle')
@@ -119,6 +124,110 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
     return () => { cancel = true; };
   }, [clienteKey, anio]);
 
+  // ═════ Sell In real: agregado por mes desde facturacion_clientes ═════
+  // Reconstruye la forma [{mes, sell_in, sell_out}] que usa el resto del componente
+  const ventasActual = useMemo(() => {
+    const mp = new Map();
+    facturacion.forEach(r => {
+      if (Number(r.anio) !== anio) return;
+      const m = Number(r.mes);
+      mp.set(m, (mp.get(m) || 0) + (Number(r.monto) || 0));
+    });
+    return Array.from(mp.entries()).map(([mes, sell_in]) => ({ mes, sell_in, sell_out: 0 }));
+  }, [facturacion, anio]);
+  const ventasAnt = useMemo(() => {
+    const mp = new Map();
+    facturacion.forEach(r => {
+      if (Number(r.anio) !== anio - 1) return;
+      const m = Number(r.mes);
+      mp.set(m, (mp.get(m) || 0) + (Number(r.monto) || 0));
+    });
+    return Array.from(mp.entries()).map(([mes, sell_in]) => ({ mes, sell_in, sell_out: 0 }));
+  }, [facturacion, anio]);
+
+  // ═════ Inventario real: snapshot más reciente por SKU ═════
+  const invSnapshot = useMemo(() => {
+    const bySku = new Map();
+    inventario.forEach(r => {
+      const key = (Number(r.anio) || 0) * 100 + (Number(r.semana) || 0);
+      const prev = bySku.get(r.sku);
+      if (!prev || key > prev._key) {
+        bySku.set(r.sku, {
+          stock: Number(r.stock) || 0,
+          valor: Number(r.valor) || 0,
+          precio_venta: Number(r.precio_venta) || 0,
+          costo_convenio: Number(r.costo_convenio) || 0,
+          _key: key,
+        });
+      }
+    });
+    let stockTot = 0, valorTot = 0;
+    for (const [, v] of bySku) {
+      stockTot += v.stock;
+      // Fallback: si valor viene 0, usar stock × costo_convenio (o precio_venta)
+      const val = v.valor > 0 ? v.valor : v.stock * (v.costo_convenio || v.precio_venta || 0);
+      valorTot += val;
+    }
+    // Última semana snapshot (para saber cuán fresco es el dato)
+    let lastKey = 0, lastAnio = null, lastSemana = null;
+    inventario.forEach(r => {
+      const k = (Number(r.anio) || 0) * 100 + (Number(r.semana) || 0);
+      if (k > lastKey) { lastKey = k; lastAnio = r.anio; lastSemana = r.semana; }
+    });
+    return { stock: stockTot, valor: valorTot, skus: bySku.size, anio: lastAnio, semana: lastSemana };
+  }, [inventario]);
+
+  // Días de inventario = stock / demanda diaria promedio (últimos 90 días de sell out)
+  const diasInventarioReal = useMemo(() => {
+    const now = Date.now();
+    const cutoff = now - 90 * 86400000;
+    let piezasSO = 0;
+    sellOutDetalle.forEach(r => {
+      if (!r.fecha) return;
+      const t = new Date(r.fecha).getTime();
+      if (t >= cutoff && t <= now) piezasSO += Number(r.cantidad) || 0;
+    });
+    const demandaDiaria = piezasSO / 90;
+    if (demandaDiaria <= 0) return null;
+    return Math.round(invSnapshot.stock / demandaDiaria);
+  }, [sellOutDetalle, invSnapshot.stock]);
+
+  // ═════ Cobranza mensual real: derivada de estados_cuenta históricos ═════
+  // Cobranza mes N = facturación acumulada hasta N + saldo_actual(N-1) − saldo_actual(N)
+  // Simplificación práctica: usamos delta de saldo entre cortes de mismo mes
+  // y facturación del mes desde facturacion_clientes.
+  const cobranzaByMes = useMemo(() => {
+    // Toma el último corte de cada mes del año actual
+    const ultimoPorMes = new Map();
+    cortesHist.forEach(c => {
+      if (!c.fecha_corte) return;
+      const d = new Date(c.fecha_corte + 'T00:00:00');
+      if (d.getFullYear() !== anio) return;
+      const m = d.getMonth() + 1;
+      const prev = ultimoPorMes.get(m);
+      if (!prev || new Date(prev.fecha_corte).getTime() < d.getTime()) ultimoPorMes.set(m, c);
+    });
+    // Facturación mensual (año actual) desde el useMemo anterior
+    const facByMes = new Map();
+    ventasActual.forEach(v => facByMes.set(Number(v.mes), Number(v.sell_in) || 0));
+    // Cobranza[m] = fac[m] + saldo[m-1] − saldo[m]
+    const map = new Map();
+    for (let m = 1; m <= 12; m++) {
+      const cM = ultimoPorMes.get(m);
+      if (!cM) continue;
+      const cMprev = ultimoPorMes.get(m - 1);
+      const fac = facByMes.get(m) || 0;
+      const saldoM = Number(cM.saldo_actual) || 0;
+      const saldoMprev = cMprev ? (Number(cMprev.saldo_actual) || 0) : saldoM; // si no hay previo, delta 0
+      const cobranza = fac + saldoMprev - saldoM;
+      map.set(m, cobranza > 0 ? cobranza : 0);
+    }
+    return map;
+  }, [cortesHist, ventasActual, anio]);
+  const cobranzaMesActual = cobranzaByMes.get(mesActual) || 0;
+  const cobranzaMesAnt = cobranzaByMes.get(mesActual - 1) || 0;
+  const deltaCobranza = cobranzaMesAnt > 0 ? ((cobranzaMesActual - cobranzaMesAnt) / cobranzaMesAnt * 100) : null;
+
   // Sell Out por mes desde sellout_detalle (calculado una vez, reusado en todo el módulo)
   const sellOutByMes = useMemo(() => {
     const cur = new Map(), prev = new Map();
@@ -149,23 +258,24 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   const sellOutMesAntVen = Number(ventasActual.find(v => Number(v.mes) === mesActual - 1)?.sell_out) || 0;
   const sellOutMesAnt = sellOutMesAntDet > 0 ? sellOutMesAntDet : sellOutMesAntVen;
   const deltaSellOut = sellOutMesAnt > 0 ? ((sellOutMes - sellOutMesAnt) / sellOutMesAnt * 100) : null;
-  const inventarioDias = Number(cliente?.kpis?.diasInventario) || 0;
-  const inventarioValor = Number(cliente?.kpis?.inventarioValor) || 0;
+  // Inventario real desde inventario_cliente
+  const inventarioDias = diasInventarioReal != null ? diasInventarioReal : (Number(cliente?.kpis?.diasInventario) || 0);
+  const inventarioValor = invSnapshot.valor > 0 ? invSnapshot.valor : (Number(cliente?.kpis?.inventarioValor) || 0);
   const metaInvDias = 45;
 
-  // Mini series (últimos 7 meses)
+  // Mini series (últimos 7 meses) · sell in, sell out, inventario snapshot, cobranza real
   const mini = useMemo(() => {
     const arr = { si: [], so: [], inv: [], cb: [] };
     for (let i = 6; i >= 0; i--) {
       const m = mesActual - i;
       const v = m >= 1 ? ventasActual.find(x => Number(x.mes) === m) : null;
       arr.si.push(Number(v?.sell_in) || 0);
-      arr.so.push(Number(v?.sell_out) || 0);
-      arr.inv.push(Number(v?.inventario_dias) || 0);
-      arr.cb.push(Number(v?.sell_in) * 0.6 || 0); // proxy cobranza
+      arr.so.push(sellOutByMesRaw.get(m) || 0);
+      arr.inv.push(invSnapshot.stock); // días son puntuales; el sparkline muestra tendencia de stock
+      arr.cb.push(cobranzaByMes.get(m) || 0); // cobranza real
     }
     return arr;
-  }, [ventasActual, mesActual]);
+  }, [ventasActual, mesActual, sellOutByMesRaw, invSnapshot.stock, cobranzaByMes]);
 
   // ═════ Timeline lineal ═════
   const timelineMeses = useMemo(() => {
