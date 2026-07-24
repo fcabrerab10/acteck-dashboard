@@ -75,7 +75,9 @@ export default function SellInClienteV2({ clienteKey }) {
   const [roadmap, setRoadmap] = useState([]);
   const [cuotas, setCuotas] = useState([]);
   const [selloutDet, setSelloutDet] = useState([]);
-  const [rango, setRango] = useState(getCurrentQ(mesActual));
+  // rango es un Set de trimestres seleccionados: subset de {'Q1','Q2','Q3','Q4'}
+  // Un set vacío significa "Año completo"
+  const [rango, setRango] = useState(() => new Set([getCurrentQ(mesActual)]));
   const [busqueda, setBusqueda] = useState('');
   const [orden, setOrden] = useState({ col: 'total', dir: 'desc' });
   const [familiaFilter, setFamiliaFilter] = useState(null); // click en familia filtra la tabla
@@ -86,6 +88,14 @@ export default function SellInClienteV2({ clienteKey }) {
     if (m <= 9) return 'Q3';
     return 'Q4';
   }
+
+  // Meses seleccionados a partir del Set de rangos
+  const mesesRango = useMemo(() => {
+    if (!rango || rango.size === 0) return Q_MESES.anio;
+    const set = new Set();
+    for (const q of rango) (Q_MESES[q] || []).forEach(m => set.add(m));
+    return Array.from(set).sort((a, b) => a - b);
+  }, [rango]);
 
   useEffect(() => {
     setLoading(true);
@@ -187,8 +197,7 @@ export default function SellInClienteV2({ clienteKey }) {
 
   // Timeline data
   const timelineMeses = useMemo(() => {
-    const meses = Q_MESES[rango] || Q_MESES.anio;
-    return meses.map(m => ({
+    return mesesRango.map(m => ({
       mes: m,
       label: MESES[m - 1],
       sellIn: mensualPorAnio.monto[anio][m - 1],
@@ -197,12 +206,11 @@ export default function SellInClienteV2({ clienteKey }) {
       actual: m === mesActual,
       futuro: m > mesActual,
     }));
-  }, [mensualPorAnio, anio, anioPrev, cuotaPorMes, rango, mesActual]);
+  }, [mensualPorAnio, anio, anioPrev, cuotaPorMes, mesesRango, mesActual]);
 
   const timelineSums = useMemo(() => {
-    const meses = Q_MESES[rango] || Q_MESES.anio;
     let s2026 = 0, s2025 = 0, cuota = 0;
-    meses.forEach(m => {
+    mesesRango.forEach(m => {
       s2026 += mensualPorAnio.monto[anio][m - 1];
       s2025 += mensualPorAnio.monto[anioPrev][m - 1];
       cuota += cuotaPorMes.get(m)?.ideal || 0;
@@ -210,7 +218,7 @@ export default function SellInClienteV2({ clienteKey }) {
     const deltaYoY = s2025 > 0 ? ((s2026 - s2025) / s2025 * 100) : null;
     const deltaCuota = cuota > 0 ? ((s2026 - cuota) / cuota * 100) : null;
     return { s2026, s2025, cuota, deltaYoY, deltaCuota };
-  }, [mensualPorAnio, cuotaPorMes, rango, anio, anioPrev]);
+  }, [mensualPorAnio, cuotaPorMes, mesesRango, anio, anioPrev]);
 
   // Familias YTD
   const familiasYTD = useMemo(() => {
@@ -513,8 +521,20 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anio
   const yTicks = [0, 0.25, 0.50, 0.75, 1].map(f => ({ v: maxV * f, y: padT + chartH * (1 - f) }));
   const gradId = `siArea-${anio}`;
 
+  // Rango puede ser Set (nuevo · multi-select) o string (compat)
+  const isSet = rango && typeof rango.has === 'function';
+  const isActiveQ = (q) => isSet ? rango.has(q) : rango === q;
+  const isActiveAnio = isSet ? rango.size === 4 || rango.size === 0 : rango === 'anio';
+  const toggleQ = (q) => {
+    if (!isSet) { onChangeRango(new Set([q])); return; }
+    const next = new Set(rango);
+    if (next.has(q)) next.delete(q); else next.add(q);
+    // Si queda vacío o con los 4, tratamos como "Año"
+    onChangeRango(next);
+  };
+  const setAnio = () => onChangeRango(new Set(['Q1', 'Q2', 'Q3', 'Q4']));
   const filtros = [
-    { k: 'Q1', l: 'Q1' }, { k: 'Q2', l: 'Q2' }, { k: 'Q3', l: 'Q3' }, { k: 'Q4', l: 'Q4' }, { k: 'anio', l: 'Año' },
+    { k: 'Q1', l: 'Q1' }, { k: 'Q2', l: 'Q2' }, { k: 'Q3', l: 'Q3' }, { k: 'Q4', l: 'Q4' },
   ];
 
   return (
@@ -522,20 +542,33 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango, anio, anio
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
         <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
           Evolución mensual · Sell In
+          <span style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontWeight: 500, fontStyle: 'italic', marginLeft: 8 }}>
+            Combina trimestres para sumar
+          </span>
         </h5>
         <div style={{ display: 'inline-flex', background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 8, padding: 2 }}>
           {filtros.map(f => (
-            <button key={f.k} onClick={() => onChangeRango(f.k)}
+            <button key={f.k} onClick={() => toggleQ(f.k)}
               style={{
-                border: 0, background: rango === f.k ? theme.surface : 'transparent',
+                border: 0, background: isActiveQ(f.k) ? theme.surface : 'transparent',
                 padding: '4px 10px', borderRadius: 6,
-                fontFamily: rango === f.k ? TYPO.fontDisplay : TYPO.fontText,
-                fontSize: 10.5, color: rango === f.k ? theme.text : theme.textMuted,
-                fontWeight: rango === f.k ? 600 : 500, cursor: 'pointer',
-                boxShadow: rango === f.k ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                borderWidth: 1, borderStyle: 'solid', borderColor: rango === f.k ? theme.border : 'transparent',
+                fontFamily: isActiveQ(f.k) ? TYPO.fontDisplay : TYPO.fontText,
+                fontSize: 10.5, color: isActiveQ(f.k) ? theme.text : theme.textMuted,
+                fontWeight: isActiveQ(f.k) ? 600 : 500, cursor: 'pointer',
+                boxShadow: isActiveQ(f.k) ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                borderWidth: 1, borderStyle: 'solid', borderColor: isActiveQ(f.k) ? theme.border : 'transparent',
               }}>{f.l}</button>
           ))}
+          <button onClick={setAnio}
+            style={{
+              border: 0, background: isActiveAnio ? theme.surface : 'transparent',
+              padding: '4px 10px', borderRadius: 6,
+              fontFamily: isActiveAnio ? TYPO.fontDisplay : TYPO.fontText,
+              fontSize: 10.5, color: isActiveAnio ? theme.text : theme.textMuted,
+              fontWeight: isActiveAnio ? 600 : 500, cursor: 'pointer',
+              boxShadow: isActiveAnio ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              borderWidth: 1, borderStyle: 'solid', borderColor: isActiveAnio ? theme.border : 'transparent',
+            }}>Año</button>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 12, padding: '6px 0 8px', flexWrap: 'wrap', borderBottom: `1px solid ${theme.divider || theme.border}`, marginBottom: 6 }}>
