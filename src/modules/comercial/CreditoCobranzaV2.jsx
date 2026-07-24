@@ -11,7 +11,6 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
 import { Sparkles, AlertTriangle, TrendingUp, Calendar, CreditCard } from 'lucide-react';
-import { fetchSelloutSku } from '../../lib/pcelAdapter';
 
 const NOMBRES_MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
