@@ -35,12 +35,17 @@ const metaSuc = (name) => SUCURSAL_META[name] || { label: name, tipo: 'virtual',
 const MARCA_COLORS = { 'Acteck': '#0071E3', 'Balam Rush': '#BF5AF2', 'Balam': '#BF5AF2', 'Vorago': '#FF9F0A' };
 const marcaColor = (m) => MARCA_COLORS[m] || '#94A3B8';
 
-const ROADMAP_COLOR = {
-  RMI:  { bg:'#E1F5EE', text:'#085041' },
-  RML:  { bg:'#EEEDFE', text:'#3C3489' },
-  2026: { bg:'#FAEEDA', text:'#854F0B' },
-  RMS:  { bg:'#FBEAF0', text:'#993556' },
-};
+// Roadmap chip · colores iOS del palette (mismo mapping que SI V2)
+function roadmapChipStyle(rdmp, P, theme) {
+  const key = String(rdmp || '').toUpperCase();
+  const map = {
+    RMI:  { bg: `${P.teal}22`,   color: P.teal },
+    RML:  { bg: `${P.purple}22`, color: P.purple },
+    RMS:  { bg: `${P.pink}22`,   color: P.pink },
+    '2026': { bg: `${P.orange}22`, color: P.orange },
+  };
+  return map[key] || { bg: `${theme.text}0F`, color: theme.textMuted };
+}
 
 function paletteFromTheme(theme) {
   return {
@@ -575,20 +580,40 @@ function KpiCard({ theme, P, eyebrow, badge, title, big, bigSmall, bigColor, sub
 // ═══════════════ Timeline Lineal ═══════════════
 function TimelineLineal({ theme, P, isDark, data, sums, rango, onChangeRango, anio, anioPrev, mesActual }) {
   const [hoverIdx, setHoverIdx] = useState(null);
-  const W = 600, H = 220;
-  const padL = 26, padR = 16, padT = 12, padB = 20;
+  const W = 700, H = 260;
+  const padL = 46, padR = 20, padT = 32, padB = 28;
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
-  const maxV = Math.max(1, ...data.map(d => Math.max(d.sellIn, d.sellInPrev)));
+  const maxRaw = Math.max(1, ...data.map(d => Math.max(d.sellIn, d.sellInPrev)));
+  // Redondear a "1M" superior más cercano para tener ticks limpios
+  const niceStep = (v) => {
+    const pow = Math.pow(10, Math.floor(Math.log10(v)));
+    const norm = v / pow;
+    const nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+    return nice * pow;
+  };
+  const maxV = niceStep(maxRaw * 1.15);
   const xOf = (i) => padL + (i / Math.max(1, data.length - 1)) * chartW;
   const yOf = (v) => padT + chartH - (v / maxV) * chartH;
-  const line2026 = data.filter(d => !d.futuro).map((d, i) => `${xOf(i)},${yOf(d.sellIn)}`).join(' ');
+  const idxActual = data.findIndex(d => d.actual);
+  const cerrados = data.filter(d => !d.futuro);
+  // Área bajo la línea 2026
+  const area2026 = cerrados.length > 0
+    ? `M ${xOf(0)},${yOf(cerrados[0].sellIn)} ${cerrados.map((d, i) => `L ${xOf(i)},${yOf(d.sellIn)}`).join(' ')} L ${xOf(cerrados.length - 1)},${padT + chartH} L ${xOf(0)},${padT + chartH} Z`
+    : '';
+  const line2026 = cerrados.map((d, i) => `${xOf(i)},${yOf(d.sellIn)}`).join(' ');
   const line2025 = data.map((d, i) => `${xOf(i)},${yOf(d.sellInPrev)}`).join(' ');
   const hovered = hoverIdx != null ? data[hoverIdx] : null;
+  const currentDatum = idxActual >= 0 ? data[idxActual] : null;
+
+  // Ticks Y (0, 25%, 50%, 75%, 100%)
+  const yTicks = [0, 0.25, 0.50, 0.75, 1].map(f => ({ f, v: maxV * f, y: padT + chartH * (1 - f) }));
 
   const filtros = [
     { k: 'Q1', l: 'Q1' }, { k: 'Q2', l: 'Q2' }, { k: 'Q3', l: 'Q3' }, { k: 'Q4', l: 'Q4' }, { k: 'anio', l: 'Año' },
   ];
+
+  const gradId = `soArea-${anio}`;
 
   return (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
@@ -619,19 +644,53 @@ function TimelineLineal({ theme, P, isDark, data, sums, rango, onChangeRango, an
         )}
       </div>
       <div style={{ position: 'relative' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 220, display: 'block' }}>
-          {[0.25, 0.5, 0.75].map(f => (
-            <line key={f} x1={padL} y1={padT + chartH * f} x2={W - padR} y2={padT + chartH * f}
-              stroke={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'} strokeDasharray="3 4" />
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 260, display: 'block' }}>
+          <defs>
+            <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={P.accent} stopOpacity="0.28" />
+              <stop offset="100%" stopColor={P.accent} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+
+          {/* Y ticks + labels */}
+          {yTicks.map((t, i) => (
+            <g key={i}>
+              <line x1={padL} y1={t.y} x2={W - padR} y2={t.y}
+                stroke={i === 0 ? (theme.divider || theme.border) : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)')}
+                strokeDasharray={i === 0 ? undefined : '3 4'} />
+              <text x={padL - 8} y={t.y + 3} textAnchor="end"
+                fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9" fill={theme.textMuted}>
+                {fmt.money(t.v)}
+              </text>
+            </g>
           ))}
-          <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke={theme.divider || theme.border} />
+
+          {/* Área 2026 */}
+          {area2026 && <path d={area2026} fill={`url(#${gradId})`} />}
+          {/* Línea 2025 gris */}
           <polyline points={line2025} fill="none" stroke={theme.textMuted} strokeWidth="2" opacity="0.55" />
-          <polyline points={line2026} fill="none" stroke={P.accent} strokeWidth="2.5" />
-          {data.map((d, i) => !d.futuro && (
-            <circle key={`p-${i}`} cx={xOf(i)} cy={yOf(d.sellIn)} r={d.actual ? 5 : 3.5}
-              fill={d.actual ? P.green : P.accent}
-              stroke={theme.surface} strokeWidth={d.actual ? 2 : 1.5} />
-          ))}
+          {/* Línea 2026 accent grueso */}
+          <polyline points={line2026} fill="none" stroke={P.accent} strokeWidth="3" />
+
+          {/* Puntos + etiqueta de valor arriba */}
+          {cerrados.map((d, i) => {
+            const cx = xOf(i), cy = yOf(d.sellIn);
+            return (
+              <g key={`p-${i}`}>
+                <circle cx={cx} cy={cy} r={d.actual ? 6 : 4}
+                  fill={d.actual ? P.green : P.accent}
+                  stroke={theme.surface} strokeWidth={d.actual ? 2.5 : 2} />
+                {!d.actual && (
+                  <text x={cx} y={cy - 10} textAnchor="middle"
+                    fontFamily={TYPO.fontDisplay} fontSize="10" fontWeight="600" fill={theme.text}>
+                    {fmt.money(d.sellIn)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+
+          {/* Hover overlays */}
           {data.map((d, i) => (
             <rect key={`h-${i}`}
               x={xOf(i) - chartW / (data.length * 2)}
@@ -648,8 +707,10 @@ function TimelineLineal({ theme, P, isDark, data, sums, rango, onChangeRango, an
             <line x1={xOf(hoverIdx)} y1={padT} x2={xOf(hoverIdx)} y2={H - padB}
               stroke={theme.textMuted} strokeWidth="1" strokeDasharray="2 3" opacity="0.4" />
           )}
+
+          {/* X labels */}
           {data.map((d, i) => (
-            <text key={`x-${i}`} x={xOf(i)} y={H - 6} textAnchor="middle"
+            <text key={`x-${i}`} x={xOf(i)} y={H - 8} textAnchor="middle"
               fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9"
               fill={d.actual ? P.green : theme.textMuted}
               fontWeight={d.actual ? 700 : 500}
@@ -657,10 +718,34 @@ function TimelineLineal({ theme, P, isDark, data, sums, rango, onChangeRango, an
               {d.label}
             </text>
           ))}
+
+          {/* Tooltip permanente sobre mes actual */}
+          {currentDatum && idxActual >= 0 && hoverIdx == null && (() => {
+            const cx = xOf(idxActual);
+            const cy = yOf(currentDatum.sellIn);
+            const yoyPct = currentDatum.sellInPrev > 0 ? ((currentDatum.sellIn - currentDatum.sellInPrev) / currentDatum.sellInPrev * 100) : null;
+            const boxW = 130;
+            const boxX = Math.max(padL, Math.min(W - padR - boxW, cx - boxW / 2));
+            const boxY = Math.max(4, cy - 44);
+            return (
+              <g pointerEvents="none">
+                <line x1={cx} y1={cy - 8} x2={cx} y2={boxY + 32} stroke={theme.text} strokeWidth="1" opacity="0.15" />
+                <rect x={boxX} y={boxY} width={boxW} height={32} rx="6" fill="#0A0A0C" />
+                <text x={boxX + boxW / 2} y={boxY + 13} textAnchor="middle"
+                  fontFamily={TYPO.fontDisplay} fontSize="10.5" fontWeight="600" fill="#FFF">
+                  {currentDatum.label} · {fmt.money(currentDatum.sellIn)}
+                </text>
+                <text x={boxX + boxW / 2} y={boxY + 25} textAnchor="middle"
+                  fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9" fill="rgba(255,255,255,0.65)">
+                  {yoyPct != null ? `${yoyPct >= 0 ? '+' : ''}${yoyPct.toFixed(1)}% YoY` : 'sin comparativo'}
+                </text>
+              </g>
+            );
+          })()}
         </svg>
         {hovered && !hovered.futuro && (
           <TimelineTooltip theme={theme} P={P} data={hovered} anio={anio} anioPrev={anioPrev}
-            xPct={(hoverIdx / (data.length - 1)) * 100} />
+            xPct={((hoverIdx * chartW / Math.max(1, data.length - 1)) + padL) / W * 100} />
         )}
       </div>
     </div>
@@ -771,13 +856,21 @@ function SucursalCard({ theme, P, sucursales, totalStock, totalValor, selected, 
   );
 }
 
-// ═══════════════ Marca Card (interactiva) ═══════════════
+// ═══════════════ Marca Card · tarjetas grandes con brand color ═══════════════
 function MarcaCard({ theme, P, marcas, totalYTD, selected, onSelect }) {
   const total = marcas.reduce((s, x) => s + x.monto, 0);
   const anySelected = selected != null;
+  const shade = (hex, pct) => {
+    // Oscurece un hex #RRGGBB en pct (0..1)
+    const h = hex.replace('#', '');
+    const r = Math.max(0, Math.min(255, Math.round(parseInt(h.slice(0, 2), 16) * (1 - pct))));
+    const g = Math.max(0, Math.min(255, Math.round(parseInt(h.slice(2, 4), 16) * (1 - pct))));
+    const b = Math.max(0, Math.min(255, Math.round(parseInt(h.slice(4, 6), 16) * (1 - pct))));
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+  };
   return (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 8 }}>
         <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
           Sell Out por marca · YTD
         </h5>
@@ -794,34 +887,44 @@ function MarcaCard({ theme, P, marcas, totalYTD, selected, onSelect }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(marcas.length, 4))}, 1fr)`, gap: 10 }}>
         {marcas.length === 0 && (
-          <div style={{ padding: '18px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>Sin datos de marca</div>
+          <div style={{ padding: '18px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11, gridColumn: '1 / -1' }}>Sin datos de marca</div>
         )}
         {marcas.map((m, i) => {
           const isActive = selected === m.name;
           const isDim = anySelected && !isActive;
           const pct = total > 0 ? (m.monto / total * 100) : 0;
+          const dark = shade(m.color, 0.28);
+          const yoyStr = m.yoy != null ? `${m.yoy >= 0 ? '+' : ''}${m.yoy.toFixed(0)}% YoY` : '—';
           return (
             <div
               key={m.name}
               onClick={() => onSelect(isActive ? null : m.name)}
               style={{
-                display: 'grid', gridTemplateColumns: '18px 1fr 1fr 70px', gap: 8, alignItems: 'center',
-                padding: '8px 12px', fontSize: 11, borderRadius: 8,
+                padding: '14px 16px', borderRadius: 12,
+                background: `linear-gradient(135deg, ${m.color} 0%, ${dark} 100%)`,
+                border: `1px solid ${isActive ? 'rgba(255,255,255,0.6)' : 'transparent'}`,
+                boxShadow: isActive ? '0 6px 18px rgba(0,0,0,0.14)' : '0 1px 3px rgba(0,0,0,0.06)',
                 cursor: 'pointer', opacity: isDim ? 0.45 : 1,
-                background: isActive ? `${m.color}18` : `${theme.text}05`,
-                border: `1px solid ${isActive ? m.color + '40' : theme.border}`,
-                transition: 'background 160ms, opacity 160ms, border-color 160ms',
+                color: '#FFF', transition: 'transform 160ms, box-shadow 160ms, opacity 160ms',
+                position: 'relative', overflow: 'hidden',
               }}
+              onMouseEnter={(e) => { if (!isDim) e.currentTarget.style.transform = 'translateY(-1px)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
             >
-              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted, textAlign: 'right', fontWeight: 600 }}>#{i + 1}</span>
-              <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: isActive ? 700 : 600, color: theme.text, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                <span style={{ width: 8, height: 8, borderRadius: 3, background: m.color, flexShrink: 0 }} />
-                {m.name}
-              </span>
-              <span style={{ height: 5, background: `${theme.text}0F`, borderRadius: 999, overflow: 'hidden' }}>
-                <span style={{ display: 'block', height: '100%', background: m.color, borderRadius: 999, width: `${pct}%`, transition: 'width 400ms' }} />
-              </span>
-              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.text, fontWeight: 600, textAlign: 'right' }}>{fmt.money(m.monto)}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, fontWeight: 700, opacity: 0.55 }}>#{i + 1}</span>
+                {m.yoy != null && (
+                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.20)', color: '#FFF' }}>{yoyStr}</span>
+                )}
+              </div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em' }}>{m.name}</div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', marginTop: 2 }}>{fmt.money(m.monto)}</div>
+              <div style={{ fontFamily: TYPO.fontText, fontSize: 10.5, color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>
+                {pct.toFixed(0)}% de la mezcla · {fmt.int(m.piezas)} pz{m.skus ? ` · ${m.skus} SKUs` : ''}
+              </div>
+              <div style={{ marginTop: 10, height: 5, background: 'rgba(255,255,255,0.20)', borderRadius: 999, overflow: 'hidden' }}>
+                <div style={{ height: '100%', background: '#FFF', borderRadius: 999, width: `${pct}%`, transition: 'width 400ms' }} />
+              </div>
             </div>
           );
         })}
@@ -859,13 +962,16 @@ function FerruteckStrip({ recos }) {
 
 // ═══════════════ Tabla SKU ═══════════════
 function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, marcaFilter, onClearMarca, sucFilter, onClearSuc }) {
+  // Heat pill · idéntico a SI V2 (4 niveles Apple iOS blue)
   const heatCell = (v) => {
-    if (!v) return { color: theme.textMuted, bg: 'transparent', weight: 500 };
+    if (v == null || v === 0) return null;
+    if (v < 0) return { bg: `${P.red}22`, color: P.red, weight: 600 };
     const r = v / maxCelda;
-    if (r > 0.75) return { bg: `${P.accent}A6`, color: '#FFF', weight: 700 };
-    if (r > 0.50) return { bg: `${P.accent}66`, color: isDark ? '#FFF' : '#003D80', weight: 600 };
-    if (r > 0.25) return { bg: `${P.accent}38`, color: P.accent, weight: 600 };
-    return { bg: `${P.accent}1A`, color: P.accent, weight: 500 };
+    const b = P.accent;
+    if (r > 0.75) return { bg: b, color: '#FFF', weight: 600 };
+    if (r > 0.50) return { bg: isDark ? 'rgba(10,132,255,0.45)' : `${b}59`, color: '#FFF', weight: 600 };
+    if (r > 0.25) return { bg: `${b}2E`, color: theme.text };
+    return { bg: `${b}14`, color: theme.textMuted };
   };
   const sucLabel = sucFilter ? (metaSuc(sucFilter).label || sucFilter) : null;
 
@@ -918,22 +1024,26 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
               <tr><td colSpan={5 + MESES.length + 3} style={{ padding: '32px', textAlign: 'center', color: theme.textMuted }}>Sin SKUs para los filtros seleccionados.</td></tr>
             )}
             {rows.slice(0, 500).map((r) => {
-              const rmp = ROADMAP_COLOR[r.rdmp] || null;
+              const rmpStyle = r.rdmp ? roadmapChipStyle(r.rdmp, P, theme) : null;
               return (
                 <tr key={r.sku}>
                   <td style={cellStyle(theme)}><span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, color: marcaColor(r.marca) }}>{r.marca || '—'}</span></td>
                   <td style={{ ...cellStyle(theme), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.sku}</td>
                   <td style={{ ...cellStyle(theme), color: theme.textMuted, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
                   <td style={{ ...cellStyle(theme), textAlign: 'center' }}>
-                    {rmp ? <span style={{ display: 'inline-block', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, padding: '2px 6px', borderRadius: 5, background: rmp.bg, color: rmp.text }}>{r.rdmp}</span>
-                      : (r.rdmp ? <span style={{ color: theme.textMuted, fontSize: 10 }}>{r.rdmp}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>)}
+                    {rmpStyle ? <span style={{ display: 'inline-block', fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '2px 6px', borderRadius: 4, background: rmpStyle.bg, color: rmpStyle.color }}>{r.rdmp}</span>
+                      : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
                   </td>
                   {r.piezas.map((v, i) => {
                     const h = heatCell(v);
                     return (
-                      <td key={i} style={{ ...cellStyle(theme, 'right'), opacity: i + 1 > mesActual ? 0.5 : 1 }}>
-                        {v > 0 ? (
-                          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: h.weight, background: h.bg, color: h.color, padding: '2px 5px', borderRadius: 5, display: 'inline-block', minWidth: 30 }}>{fmt.int(v)}</span>
+                      <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '4px 6px', fontFamily: '"SF Mono", ui-monospace, monospace', opacity: i + 1 > mesActual ? 0.5 : 1 }}>
+                        {h ? (
+                          <span style={{
+                            display: 'inline-block', padding: '3px 7px', borderRadius: 6,
+                            background: h.bg, color: h.color, fontWeight: h.weight || 500,
+                            minWidth: 34, textAlign: 'right',
+                          }}>{fmt.int(v)}</span>
                         ) : (
                           <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
                         )}
