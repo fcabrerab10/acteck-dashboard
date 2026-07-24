@@ -127,7 +127,24 @@ export default function MarketingClienteV2({ cliente, clienteKey }) {
   const [actividades, setActividades] = useState([]);
   const [loading, setLoading] = useState(true);
   const [anio, setAnio] = useState(new Date().getFullYear());
-  const [mesSel, setMesSel] = useState(new Date().getMonth() + 1);
+  const [mesesSel, setMesesSel] = useState(() => new Set([new Date().getMonth() + 1]));
+  // Mes primario para vistas de un solo mes (calendario, agenda, MoM, cerrar mes)
+  const mesSel = useMemo(() => {
+    if (!mesesSel || mesesSel.size === 0) return new Date().getMonth() + 1;
+    return Math.min(...mesesSel);
+  }, [mesesSel]);
+  const isSingleMes = mesesSel.size === 1;
+  const toggleMes = (m) => {
+    const next = new Set(mesesSel);
+    if (next.has(m)) {
+      if (next.size > 1) next.delete(m); // no permitir vacío
+    } else {
+      next.add(m);
+    }
+    setMesesSel(next);
+  };
+  const setSoloMes = (m) => setMesesSel(new Set([m]));
+  const setMesSel = (m) => setSoloMes(m); // compat con call sites existentes
   const [filterTipo, setFilterTipo] = useState('todos');
   const [filterMarca, setFilterMarca] = useState('todas');
   const [calVista, setCalVista] = useState('mes');
@@ -164,19 +181,22 @@ export default function MarketingClienteV2({ cliente, clienteKey }) {
       const aMes = pf ? pf.m : Number(a.mes) || 0;
       const aAnio = pf ? pf.y : Number(a.anio) || 0;
       if (aAnio !== anio) return false;
-      if (aMes !== mesSel) return false;
+      if (!mesesSel.has(aMes)) return false;
       if (filterTipo !== 'todos' && a.tipo !== filterTipo) return false;
       if (filterMarca !== 'todas' && a.marca !== filterMarca) return false;
-      if (diaSel && pf && pf.d !== diaSel) return false;
+      if (diaSel && pf && (pf.d !== diaSel || pf.m !== mesSel)) return false;
       return true;
     }).sort((a, b) => {
       const pa = parseFecha(a.fecha), pb = parseFecha(b.fecha);
+      // Ordenar por mes primero (para multi-mes), luego por día
+      const mA = pa ? pa.m : 0, mB = pb ? pb.m : 0;
+      if (mA !== mB) return mA - mB;
       return (pa ? pa.d : 0) - (pb ? pb.d : 0);
     });
     const activas = applyFilters(actividades.filter(a => a.estatus !== 'completado' && a.estatus !== 'archivado'));
     const completadas = applyFilters(actividades.filter(a => a.estatus === 'completado' || a.estatus === 'archivado'));
     return { activasFiltradas: activas, completadasFiltradas: completadas };
-  }, [actividades, anio, mesSel, filterTipo, filterMarca, diaSel]);
+  }, [actividades, anio, mesesSel, mesSel, filterTipo, filterMarca, diaSel]);
 
   const actividadesDelMes = useMemo(() => actividades.filter(a => {
     const pf = parseFecha(a.fecha);
@@ -509,10 +529,35 @@ export default function MarketingClienteV2({ cliente, clienteKey }) {
         </Segmented>
         <Eyebrow theme={theme} style={{ marginLeft: 8 }}>Mes</Eyebrow>
         <Segmented theme={theme} bgAlt={bgAlt} wrap>
-          {MESES_CORTOS.map((m, i) => (
-            <SegBtn key={m} theme={theme} active={mesSel === i + 1} onClick={() => { setMesSel(i + 1); setDiaSel(null); }}>{m}</SegBtn>
-          ))}
+          {MESES_CORTOS.map((m, i) => {
+            const mesN = i + 1;
+            const active = mesesSel.has(mesN);
+            return (
+              <SegBtn key={m} theme={theme} active={active}
+                onClick={(e) => {
+                  // Shift/Cmd/Ctrl click → toggle; click normal → seleccionar solo ese mes
+                  if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                    toggleMes(mesN);
+                  } else {
+                    setSoloMes(mesN);
+                    setDiaSel(null);
+                  }
+                }}>
+                {m}
+              </SegBtn>
+            );
+          })}
         </Segmented>
+        {mesesSel.size > 1 && (
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, color: theme.textMuted, fontStyle: 'italic', marginLeft: 4 }}>
+            {mesesSel.size} meses · <button onClick={() => setSoloMes(mesSel)} style={{ background: 'transparent', border: 0, color: theme.accent, cursor: 'pointer', fontFamily: TYPO.fontText, fontSize: 10, padding: 0, textDecoration: 'underline' }}>solo {MESES_CORTOS[mesSel - 1]}</button>
+          </span>
+        )}
+        {mesesSel.size === 1 && (
+          <span style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontStyle: 'italic', marginLeft: 4 }}>
+            ⌘/Shift+click para combinar
+          </span>
+        )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           {canEdit && kpis.sinPago > 0 && kpis.inversionSinPago > 0 && (
             <button className="mkv2-btn mkv2-btn-solid" onClick={() => setConfirmClose(true)}
