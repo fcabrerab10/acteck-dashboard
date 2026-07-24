@@ -12,7 +12,7 @@ import {
   BarChart3, Target, ClipboardList, Settings as SettingsIcon, Building2,
   Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator,
 } from 'lucide-react';
-import { HomeCliente, HomeDigitalife, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente, TrackingPedidos, SellOutCliente } from './modules/comercial';
+import { HomeCliente, HomeDigitalife, CreditoCobranza, PagosCliente, EstrategiaProducto, MarketingCliente, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente, SellInClienteV2, TrackingPedidos, SellOutCliente } from './modules/comercial';
 import EstadoResultados from './modules/general/EstadoResultados';
 import VisionGeneral from './modules/comercial/VisionGeneral';
 import ReporteTab from './modules/comercial/ReporteTab';
@@ -575,7 +575,11 @@ export default function App() {
             ? <HomeDigitalife cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
             : <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
         )}
-        {clienteActivo && paginaActiva === "sellIn"  && <SellInCliente clienteKey={clienteActivo} />}
+        {clienteActivo && paginaActiva === "sellIn"  && (
+          clienteActivo === 'digitalife'
+            ? <SellInClienteV2 clienteKey={clienteActivo} />
+            : <SellInCliente clienteKey={clienteActivo} />
+        )}
         {paginaActiva === "cartera" && <CreditoCobranza cliente={c} clienteKey={clienteActivo} />}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
