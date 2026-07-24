@@ -12,4 +12,5 @@ export { default as SellInCliente } from './SellInCliente';
 export { default as SellInClienteV2 } from './SellInClienteV2';
 export { default as TrackingPedidos } from './TrackingPedidos';
 export { default as SellOutCliente } from './SellOutCliente';
+export { default as SellOutClienteV2 } from './SellOutClienteV2';
 export { default as ForecastCliente } from './ForecastCliente';
