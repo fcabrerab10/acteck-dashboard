@@ -55,7 +55,7 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   const [productos, setProductos] = useState([]);
   const [inventario, setInventario] = useState([]);         // inventario_cliente (fuente real)
   const [cortesHist, setCortesHist] = useState([]);         // estados_cuenta históricos para cobranza
-  const [rango, setRango] = useState(getCurrentQ(mesActual));
+  const [rango, setRango] = useState(() => new Set([getCurrentQ(mesActual)]));
   const [marcaRango, setMarcaRango] = useState(getCurrentQ(mesActual));
 
   function getCurrentQ(m) {
@@ -64,6 +64,16 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
     if (m <= 9) return 'Q3';
     return 'Q4';
   }
+
+  // Meses seleccionados a partir del Set de rangos (soporta Set o string por compat)
+  const mesesRango = useMemo(() => {
+    if (!rango) return Q_MESES.anio;
+    if (typeof rango === 'string') return Q_MESES[rango] || Q_MESES.anio;
+    if (rango.size === 0) return Q_MESES.anio;
+    const set = new Set();
+    for (const q of rango) (Q_MESES[q] || []).forEach(m => set.add(m));
+    return Array.from(set).sort((a, b) => a - b);
+  }, [rango]);
 
   useEffect(() => {
     let cancel = false;
@@ -265,7 +275,9 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   const sellOutMes = sellOutMesDetalle > 0 ? sellOutMesDetalle : (sellOutMesVentas || cliente?.kpis?.sellOut || 0);
   const cuotaMesActual = cuotasMes.find(c => Number(c.mes) === mesActual);
   const cuotaIdeal = Number(cuotaMesActual?.cuota_ideal) || cliente?.kpis?.cuotaMes || 0;
+  const cuotaMin = Number(cuotaMesActual?.cuota_min) || 0;
   const pctCuota = cuotaIdeal > 0 ? (sellInMes / cuotaIdeal * 100) : 0;
+  const pctCuotaMin = cuotaMin > 0 ? (sellInMes / cuotaMin * 100) : 0;
   const sellInMesAnt = Number(ventasActual.find(v => Number(v.mes) === mesActual - 1)?.sell_in) || 0;
   const deltaSellIn = sellInMesAnt > 0 ? ((sellInMes - sellInMesAnt) / sellInMesAnt * 100) : null;
   const sellOutMesAntDet = sellOutByMesRaw.get(mesActual - 1) || 0;
@@ -292,31 +304,37 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   }, [ventasActual, mesActual, sellOutByMesRaw, invSnapshot.stock, cobranzaByMes]);
 
   // ═════ Timeline lineal ═════
+  const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const timelineMeses = useMemo(() => {
-    const meses = Q_MESES[rango] || Q_MESES.anio;
-    return meses.map(m => ({
-      mes: m,
-      label: NOMBRES_MES[m - 1],
-      sellIn2026: Number(ventasActual.find(v => Number(v.mes) === m)?.sell_in) || 0,
-      sellIn2025: Number(ventasAnt.find(v => Number(v.mes) === m)?.sell_in) || 0,
-      cuota: Number(cuotasMes.find(c => Number(c.mes) === m)?.cuota_ideal) || 0,
-      actual: m === mesActual,
-      futuro: m > mesActual,
-    }));
-  }, [ventasActual, ventasAnt, cuotasMes, rango, mesActual]);
+    return mesesRango.map(m => {
+      const cuotaRow = cuotasMes.find(c => Number(c.mes) === m);
+      return {
+        mes: m,
+        label: MESES_CORTOS[m - 1],
+        sellIn: Number(ventasActual.find(v => Number(v.mes) === m)?.sell_in) || 0,
+        sellInPrev: Number(ventasAnt.find(v => Number(v.mes) === m)?.sell_in) || 0,
+        cuota: Number(cuotaRow?.cuota_ideal) || 0,
+        cuotaMin: Number(cuotaRow?.cuota_min) || 0,
+        actual: m === mesActual,
+        futuro: m > mesActual,
+      };
+    });
+  }, [ventasActual, ventasAnt, cuotasMes, mesesRango, mesActual]);
 
   const timelineSums = useMemo(() => {
-    const meses = Q_MESES[rango] || Q_MESES.anio;
-    let s2026 = 0, s2025 = 0, cuota = 0;
-    meses.forEach(m => {
+    let s2026 = 0, s2025 = 0, cuota = 0, cuotaMin = 0;
+    mesesRango.forEach(m => {
       s2026 += Number(ventasActual.find(v => Number(v.mes) === m)?.sell_in) || 0;
       s2025 += Number(ventasAnt.find(v => Number(v.mes) === m)?.sell_in) || 0;
-      cuota += Number(cuotasMes.find(c => Number(c.mes) === m)?.cuota_ideal) || 0;
+      const cuotaRow = cuotasMes.find(c => Number(c.mes) === m);
+      cuota += Number(cuotaRow?.cuota_ideal) || 0;
+      cuotaMin += Number(cuotaRow?.cuota_min) || 0;
     });
     const deltaYoY = s2025 > 0 ? ((s2026 - s2025) / s2025 * 100) : null;
     const deltaCuota = cuota > 0 ? ((s2026 - cuota) / cuota * 100) : null;
-    return { s2026, s2025, cuota, deltaYoY, deltaCuota };
-  }, [ventasActual, ventasAnt, cuotasMes, rango]);
+    const deltaCuotaMin = cuotaMin > 0 ? ((s2026 - cuotaMin) / cuotaMin * 100) : null;
+    return { s2026, s2025, cuota, cuotaMin, deltaYoY, deltaCuota, deltaCuotaMin };
+  }, [ventasActual, ventasAnt, cuotasMes, mesesRango]);
 
   // ═════ Sell In vs Sell Out global (todos los meses del año) ═════
   const sivsoTemporal = useMemo(() => {
@@ -472,10 +490,15 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
 
       {/* Fila 1: 4 KPIs compactas */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-        <KpiCard theme={theme} P={P} eyebrow="Sell In" title="vs cuota mensual"
+        <KpiCard theme={theme} P={P} eyebrow={`Sell In · ${NOMBRES_MES[mesActual - 1]}`} title="vs cuota mensual"
           big={fmtMoney(sellInMes)}
           bigColor={pctCuota >= 100 ? P.green : pctCuota >= 85 ? theme.text : P.orange}
-          sub={<><strong style={{ color: pctCuota >= 100 ? P.green : P.orange, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{pctCuota > 0 ? fmtPct(pctCuota) : '—'}</strong> · meta {fmtMoney(cuotaIdeal)}</>}
+          sub={<>
+            <strong style={{ color: pctCuota >= 100 ? P.green : P.orange, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{pctCuota > 0 ? fmtPct(pctCuota) : '—'}</strong> ideal
+            {cuotaMin > 0 && (<> · <strong style={{ color: pctCuotaMin >= 100 ? P.green : pctCuotaMin >= 85 ? theme.text : P.orange, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtPct(pctCuotaMin)}</strong> mín</>)}
+            <br />
+            <span style={{ color: theme.textMuted }}>{cuotaMin > 0 ? `${fmtMoney(cuotaMin)} mín · ` : ''}{fmtMoney(cuotaIdeal)} ideal</span>
+          </>}
           series={mini.si} baseColor={P.accent} highlightColor={P.green}
         />
         <KpiCard theme={theme} P={P} eyebrow="Sell Out" title="últimos 30 días"
@@ -693,99 +716,147 @@ function AgingMini({ theme, label, val, count, pct, color, active, onClick }) {
   );
 }
 
-// ═══════════════ Timeline lineal (año-vs-año + cuota) ═══════════════
+// ═══════════════ Timeline lineal · área + labels + Y ticks + tooltip + multi-Q + cuota min+ideal ═══════════════
 function TimelineLineal({ theme, P, data, sums, rango, onChangeRango }) {
   const [hoverIdx, setHoverIdx] = useState(null);
   const isDark = theme.mode === 'dark';
-
   const anio = new Date().getFullYear();
-  const filtros = [
-    { k: 'Q1', l: 'Q1' }, { k: 'Q2', l: 'Q2' }, { k: 'Q3', l: 'Q3' }, { k: 'Q4', l: 'Q4' }, { k: 'anio', l: 'Año' },
-  ];
+  const anioPrev = anio - 1;
 
-  // Escalas
-  const W = 600, H = 140;
-  const padL = 26, padR = 16, padT = 12, padB = 20;
+  const W = 700, H = 260;
+  const padL = 46, padR = 20, padT = 32, padB = 28;
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
-
-  const maxV = Math.max(1,
-    ...data.map(d => d.sellIn2026),
-    ...data.map(d => d.sellIn2025),
-    ...data.map(d => d.cuota)
-  );
-
+  const maxRaw = Math.max(1, ...data.map(d => Math.max(d.sellIn, d.sellInPrev, d.cuota, d.cuotaMin || 0)));
+  const niceStep = (v) => {
+    const pow = Math.pow(10, Math.floor(Math.log10(v)));
+    const norm = v / pow;
+    const nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+    return nice * pow;
+  };
+  const maxV = niceStep(maxRaw * 1.15);
   const xOf = (i) => padL + (i / Math.max(1, data.length - 1)) * chartW;
   const yOf = (v) => padT + chartH - (v / maxV) * chartH;
-
-  const line2026 = data.filter(d => !d.futuro).map((d, i) => `${xOf(i)},${yOf(d.sellIn2026)}`).join(' ');
-  const line2025 = data.map((d, i) => `${xOf(i)},${yOf(d.sellIn2025)}`).join(' ');
+  const idxActual = data.findIndex(d => d.actual);
+  const cerrados = data.filter(d => !d.futuro);
+  const area2026 = cerrados.length > 0
+    ? `M ${xOf(0)},${yOf(cerrados[0].sellIn)} ${cerrados.map((d, i) => `L ${xOf(i)},${yOf(d.sellIn)}`).join(' ')} L ${xOf(cerrados.length - 1)},${padT + chartH} L ${xOf(0)},${padT + chartH} Z`
+    : '';
+  const line2026 = cerrados.map((d, i) => `${xOf(i)},${yOf(d.sellIn)}`).join(' ');
+  const line2025 = data.map((d, i) => `${xOf(i)},${yOf(d.sellInPrev)}`).join(' ');
   const lineCuota = data.map((d, i) => `${xOf(i)},${yOf(d.cuota)}`).join(' ');
-  const areaLastIdx = data.findIndex(d => d.futuro) - 1;
-  const areaEndIdx = areaLastIdx >= 0 ? areaLastIdx : data.length - 1;
+  const lineCuotaMin = data.map((d, i) => `${xOf(i)},${yOf(d.cuotaMin || 0)}`).join(' ');
+  const hovered = hoverIdx != null ? data[hoverIdx] : null;
+  const currentDatum = idxActual >= 0 ? data[idxActual] : null;
+  const yTicks = [0, 0.25, 0.50, 0.75, 1].map(f => ({ v: maxV * f, y: padT + chartH * (1 - f) }));
+  const gradId = `siAreaHome-${anio}`;
+
+  // rango puede ser Set (multi-select) o string (compat)
+  const isSet = rango && typeof rango.has === 'function';
+  const isActiveQ = (q) => isSet ? rango.has(q) : rango === q;
+  const isActiveAnio = isSet ? rango.size === 4 || rango.size === 0 : rango === 'anio';
+  const toggleQ = (q) => {
+    if (!isSet) { onChangeRango(new Set([q])); return; }
+    const next = new Set(rango);
+    if (next.has(q)) next.delete(q); else next.add(q);
+    onChangeRango(next);
+  };
+  const setAnio = () => onChangeRango(new Set(['Q1', 'Q2', 'Q3', 'Q4']));
+  const filtros = [{ k: 'Q1', l: 'Q1' }, { k: 'Q2', l: 'Q2' }, { k: 'Q3', l: 'Q3' }, { k: 'Q4', l: 'Q4' }];
 
   return (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
         <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
           Evolución mensual · Sell In
+          <span style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontWeight: 500, fontStyle: 'italic', marginLeft: 8 }}>
+            Combina trimestres para sumar
+          </span>
         </h5>
         <div style={{ display: 'inline-flex', background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 8, padding: 2 }}>
           {filtros.map(f => (
-            <button key={f.k} onClick={() => onChangeRango(f.k)}
+            <button key={f.k} onClick={() => toggleQ(f.k)}
               style={{
-                border: 0, background: rango === f.k ? theme.surface : 'transparent',
+                border: 0, background: isActiveQ(f.k) ? theme.surface : 'transparent',
                 padding: '4px 10px', borderRadius: 6,
-                fontFamily: rango === f.k ? TYPO.fontDisplay : TYPO.fontText,
-                fontSize: 10.5, color: rango === f.k ? theme.text : theme.textMuted,
-                fontWeight: rango === f.k ? 600 : 500, cursor: 'pointer',
-                boxShadow: rango === f.k ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                borderWidth: 1, borderStyle: 'solid', borderColor: rango === f.k ? theme.border : 'transparent',
+                fontFamily: isActiveQ(f.k) ? TYPO.fontDisplay : TYPO.fontText,
+                fontSize: 10.5, color: isActiveQ(f.k) ? theme.text : theme.textMuted,
+                fontWeight: isActiveQ(f.k) ? 600 : 500, cursor: 'pointer',
+                boxShadow: isActiveQ(f.k) ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                borderWidth: 1, borderStyle: 'solid', borderColor: isActiveQ(f.k) ? theme.border : 'transparent',
               }}>{f.l}</button>
           ))}
+          <button onClick={setAnio}
+            style={{
+              border: 0, background: isActiveAnio ? theme.surface : 'transparent',
+              padding: '4px 10px', borderRadius: 6,
+              fontFamily: isActiveAnio ? TYPO.fontDisplay : TYPO.fontText,
+              fontSize: 10.5, color: isActiveAnio ? theme.text : theme.textMuted,
+              fontWeight: isActiveAnio ? 600 : 500, cursor: 'pointer',
+              boxShadow: isActiveAnio ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              borderWidth: 1, borderStyle: 'solid', borderColor: isActiveAnio ? theme.border : 'transparent',
+            }}>Año</button>
         </div>
       </div>
 
       {/* Sums row */}
-      <div style={{ display: 'flex', gap: 12, padding: '6px 0 8px', flexWrap: 'wrap', borderBottom: `1px solid ${theme.divider || theme.border}`, marginBottom: 6 }}>
-        <SumStat theme={theme} k={<><Dot color={theme.textMuted} />Sell In {anio - 1}</>} v={fmtMoney(sums.s2025)} vColor={theme.textMuted} />
-        <SumStat theme={theme} k={<><Dot color={P.accent} />Sell In {anio}</>} v={fmtMoney(sums.s2026)} vColor={theme.text} />
-        <SumStat theme={theme} k={<><Dot color={P.orange} dashed />Cuota {anio}</>} v={fmtMoney(sums.cuota)} vColor={theme.text} />
+      <div style={{ display: 'flex', gap: 14, padding: '6px 0 8px', flexWrap: 'wrap', borderBottom: `1px solid ${theme.divider || theme.border}`, marginBottom: 6 }}>
+        <SumStat theme={theme} k={<><Dot color={theme.textMuted} />SI {anioPrev}</>} v={fmtMoney(sums.s2025)} vColor={theme.textMuted} />
+        <SumStat theme={theme} k={<><Dot color={P.accent} />SI {anio}</>} v={fmtMoney(sums.s2026)} vColor={theme.text} />
+        <SumStat theme={theme} k={<><Dot color={P.orange} dashed />Cuota mín</>} v={fmtMoney(sums.cuotaMin)} vColor={theme.text} />
+        <SumStat theme={theme} k={<><Dot color={P.orange} dashed />Cuota ideal</>} v={fmtMoney(sums.cuota)} vColor={theme.text} />
         {sums.deltaYoY != null && (
-          <SumStat theme={theme} k="Δ año-vs-año" v={`${sums.deltaYoY >= 0 ? '+' : ''}${sums.deltaYoY.toFixed(1)}%`} vColor={sums.deltaYoY >= 0 ? P.green : P.red} />
+          <SumStat theme={theme} k="Δ YoY" v={`${sums.deltaYoY >= 0 ? '+' : ''}${sums.deltaYoY.toFixed(1)}%`} vColor={sums.deltaYoY >= 0 ? P.green : P.red} />
+        )}
+        {sums.deltaCuotaMin != null && (
+          <SumStat theme={theme} k="Δ vs mín" v={`${sums.deltaCuotaMin >= 0 ? '+' : ''}${sums.deltaCuotaMin.toFixed(1)}%`} vColor={sums.deltaCuotaMin >= 0 ? P.green : P.red} />
         )}
         {sums.deltaCuota != null && (
-          <SumStat theme={theme} k="Δ vs cuota" v={`${sums.deltaCuota >= 0 ? '+' : ''}${sums.deltaCuota.toFixed(1)}%`} vColor={sums.deltaCuota >= 0 ? P.green : P.red} />
+          <SumStat theme={theme} k="Δ vs ideal" v={`${sums.deltaCuota >= 0 ? '+' : ''}${sums.deltaCuota.toFixed(1)}%`} vColor={sums.deltaCuota >= 0 ? P.green : P.red} />
         )}
       </div>
 
       {/* Chart */}
       <div style={{ position: 'relative' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 140, display: 'block' }}>
-          {/* Grid */}
-          {[0.25, 0.5, 0.75].map(f => (
-            <line key={f} x1={padL} y1={padT + chartH * f} x2={W - padR} y2={padT + chartH * f}
-              stroke={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'} strokeDasharray="3 4" />
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 260, display: 'block' }}>
+          <defs>
+            <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={P.accent} stopOpacity="0.28" />
+              <stop offset="100%" stopColor={P.accent} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {yTicks.map((t, i) => (
+            <g key={i}>
+              <line x1={padL} y1={t.y} x2={W - padR} y2={t.y}
+                stroke={i === 0 ? (theme.divider || theme.border) : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)')}
+                strokeDasharray={i === 0 ? undefined : '3 4'} />
+              <text x={padL - 8} y={t.y + 3} textAnchor="end"
+                fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9" fill={theme.textMuted}>
+                {fmtMoney(t.v)}
+              </text>
+            </g>
           ))}
-          <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke={theme.divider || theme.border} />
-
-          {/* Sell In 2025 (línea gris, referencia) */}
+          {area2026 && <path d={area2026} fill={`url(#${gradId})`} />}
           <polyline points={line2025} fill="none" stroke={theme.textMuted} strokeWidth="2" opacity="0.55" />
-
-          {/* Cuota 2026 dashed naranja */}
+          <polyline points={lineCuotaMin} fill="none" stroke={P.orange} strokeWidth="1.5" strokeDasharray="2 4" opacity="0.55" />
           <polyline points={lineCuota} fill="none" stroke={P.orange} strokeWidth="2" strokeDasharray="5 4" opacity="0.85" />
-
-          {/* Sell In 2026 azul */}
-          <polyline points={line2026} fill="none" stroke={P.accent} strokeWidth="2.5" />
-
-          {/* Dots 2026 */}
-          {data.map((d, i) => !d.futuro && (
-            <circle key={`p-${i}`} cx={xOf(i)} cy={yOf(d.sellIn2026)} r={d.actual ? 5 : 3.5}
-              fill={d.actual ? P.green : P.accent}
-              stroke={theme.surface} strokeWidth={d.actual ? 2 : 1.5} />
-          ))}
-
-          {/* Hover overlay: rectángulos invisibles por columna */}
+          <polyline points={line2026} fill="none" stroke={P.accent} strokeWidth="3" />
+          {cerrados.map((d, i) => {
+            const cx = xOf(i), cy = yOf(d.sellIn);
+            return (
+              <g key={`p-${i}`}>
+                <circle cx={cx} cy={cy} r={d.actual ? 6 : 4}
+                  fill={d.actual ? P.green : P.accent}
+                  stroke={theme.surface} strokeWidth={d.actual ? 2.5 : 2} />
+                {!d.actual && (
+                  <text x={cx} y={cy - 10} textAnchor="middle"
+                    fontFamily={TYPO.fontDisplay} fontSize="10" fontWeight="600" fill={theme.text}>
+                    {fmtMoney(d.sellIn)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
           {data.map((d, i) => (
             <rect key={`h-${i}`}
               x={xOf(i) - chartW / (data.length * 2)}
@@ -798,14 +869,10 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango }) {
               style={{ cursor: 'pointer' }}
             />
           ))}
-
-          {/* Guía vertical hover */}
           {hoverIdx != null && (
             <line x1={xOf(hoverIdx)} y1={padT} x2={xOf(hoverIdx)} y2={H - padB}
               stroke={theme.textMuted} strokeWidth="1" strokeDasharray="2 3" opacity="0.4" />
           )}
-
-          {/* X labels */}
           {data.map((d, i) => (
             <text key={`x-${i}`} x={xOf(i)} y={H - 8} textAnchor="middle"
               fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9"
@@ -815,11 +882,32 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango }) {
               {d.label}
             </text>
           ))}
+          {currentDatum && idxActual >= 0 && hoverIdx == null && (() => {
+            const cx = xOf(idxActual);
+            const cy = yOf(currentDatum.sellIn);
+            const yoyPct = currentDatum.sellInPrev > 0 ? ((currentDatum.sellIn - currentDatum.sellInPrev) / currentDatum.sellInPrev * 100) : null;
+            const boxW = 130;
+            const boxX = Math.max(padL, Math.min(W - padR - boxW, cx - boxW / 2));
+            const boxY = Math.max(4, cy - 44);
+            return (
+              <g pointerEvents="none">
+                <line x1={cx} y1={cy - 8} x2={cx} y2={boxY + 32} stroke={theme.text} strokeWidth="1" opacity="0.15" />
+                <rect x={boxX} y={boxY} width={boxW} height={32} rx="6" fill="#0A0A0C" />
+                <text x={boxX + boxW / 2} y={boxY + 13} textAnchor="middle"
+                  fontFamily={TYPO.fontDisplay} fontSize="10.5" fontWeight="600" fill="#FFF">
+                  {currentDatum.label} · {fmtMoney(currentDatum.sellIn)}
+                </text>
+                <text x={boxX + boxW / 2} y={boxY + 25} textAnchor="middle"
+                  fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9" fill="rgba(255,255,255,0.65)">
+                  {yoyPct != null ? `${yoyPct >= 0 ? '+' : ''}${yoyPct.toFixed(1)}% YoY` : 'sin comparativo'}
+                </text>
+              </g>
+            );
+          })()}
         </svg>
-
-        {hoverIdx != null && (
-          <TimelineTooltip theme={theme} P={P} data={data[hoverIdx]} anio={anio}
-            xPct={(hoverIdx / (data.length - 1)) * 100} />
+        {hovered && !hovered.futuro && (
+          <TimelineTooltip theme={theme} P={P} data={hovered} anio={anio}
+            xPct={((hoverIdx * chartW / Math.max(1, data.length - 1)) + padL) / W * 100} />
         )}
       </div>
     </div>
@@ -841,144 +929,211 @@ function SumStat({ theme, k, v, vColor }) {
 }
 
 function TimelineTooltip({ theme, P, data, anio, xPct }) {
-  const delta2025 = data.sellIn2025 > 0 ? ((data.sellIn2026 - data.sellIn2025) / data.sellIn2025 * 100) : null;
-  const deltaCuota = data.cuota > 0 ? ((data.sellIn2026 - data.cuota) / data.cuota * 100) : null;
+  const anioPrev = anio - 1;
+  const delta = data.sellInPrev > 0 ? ((data.sellIn - data.sellInPrev) / data.sellInPrev * 100) : null;
   return (
     <div style={{
       position: 'absolute', top: 8, left: `${xPct}%`, transform: 'translateX(-50%)',
       background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8,
       padding: '8px 12px', boxShadow: '0 4px 12px rgba(0,0,0,0.12)', pointerEvents: 'none',
-      zIndex: 5, minWidth: 160, maxWidth: 220,
+      zIndex: 5, minWidth: 150, maxWidth: 220,
     }}>
       <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, letterSpacing: '-0.005em' }}>{data.label} · {anio}</div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 3 }}>
-        <span style={{ color: theme.textMuted }}>Sell In {anio}</span>
-        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmtMoney(data.sellIn2026)}</span>
+        <span style={{ color: theme.textMuted }}>SI {anio}</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmtMoney(data.sellIn)}</span>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 2 }}>
-        <span style={{ color: theme.textMuted }}>Sell In {anio - 1}</span>
-        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmtMoney(data.sellIn2025)}</span>
+        <span style={{ color: theme.textMuted }}>SI {anioPrev}</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmtMoney(data.sellInPrev)}</span>
       </div>
+      {data.cuotaMin > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 2 }}>
+          <span style={{ color: theme.textMuted }}>Cuota mín</span>
+          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmtMoney(data.cuotaMin)}</span>
+        </div>
+      )}
       {data.cuota > 0 && (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 2 }}>
-          <span style={{ color: theme.textMuted }}>Cuota</span>
+          <span style={{ color: theme.textMuted }}>Cuota ideal</span>
           <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmtMoney(data.cuota)}</span>
         </div>
       )}
-      {(delta2025 != null || deltaCuota != null) && (
-        <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px dashed ${theme.divider || theme.border}` }}>
-          {delta2025 != null && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-              <span style={{ color: theme.textMuted }}>Δ vs {anio - 1}</span>
-              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 700, color: delta2025 >= 0 ? P.green : P.red }}>
-                {delta2025 >= 0 ? '+' : ''}{delta2025.toFixed(1)}%
-              </span>
-            </div>
-          )}
-          {deltaCuota != null && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginTop: 1 }}>
-              <span style={{ color: theme.textMuted }}>Δ vs cuota</span>
-              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 700, color: deltaCuota >= 0 ? P.green : P.orange }}>
-                {deltaCuota >= 0 ? '+' : ''}{deltaCuota.toFixed(1)}%
-              </span>
-            </div>
-          )}
+      {delta != null && (
+        <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px dashed ${theme.divider || theme.border}`, display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
+          <span style={{ color: theme.textMuted }}>Δ YoY</span>
+          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 700, color: delta >= 0 ? P.green : P.red }}>
+            {delta >= 0 ? '+' : ''}{delta.toFixed(1)}%
+          </span>
         </div>
       )}
     </div>
   );
 }
 
-// ═══════════════ Sell In vs Sell Out temporal ═══════════════
+// ═══════════════ Sell In vs Sell Out temporal · área + labels + Y ticks + tooltip ═══════════════
 function SIvsSOTemporal({ theme, P, data, ratioGlobal, mesActual }) {
   const [hoverIdx, setHoverIdx] = useState(null);
   const isDark = theme.mode === 'dark';
+  const anio = new Date().getFullYear();
+  const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
-  const W = 500, H = 160;
-  const padL = 25, padR = 20, padT = 12, padB = 22;
+  const W = 700, H = 260;
+  const padL = 46, padR = 20, padT = 32, padB = 28;
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
-
-  const maxV = Math.max(1, ...data.map(d => Math.max(d.sellIn, d.sellOut)));
+  const maxRaw = Math.max(1, ...data.map(d => Math.max(d.sellIn, d.sellOut)));
+  const niceStep = (v) => {
+    const pow = Math.pow(10, Math.floor(Math.log10(v)));
+    const norm = v / pow;
+    const nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+    return nice * pow;
+  };
+  const maxV = niceStep(maxRaw * 1.15);
   const xOf = (i) => padL + (i / Math.max(1, data.length - 1)) * chartW;
   const yOf = (v) => padT + chartH - (v / maxV) * chartH;
-
-  const lineSI = data.filter(d => !d.futuro).map((d, i) => `${xOf(i)},${yOf(d.sellIn)}`).join(' ');
-  const lineSO = data.filter(d => !d.futuro).map((d, i) => `${xOf(i)},${yOf(d.sellOut)}`).join(' ');
+  const idxActual = data.findIndex(d => d.mes === mesActual);
+  const cerrados = data.filter(d => !d.futuro);
+  const areaSI = cerrados.length > 0
+    ? `M ${xOf(0)},${yOf(cerrados[0].sellIn)} ${cerrados.map((d, i) => `L ${xOf(i)},${yOf(d.sellIn)}`).join(' ')} L ${xOf(cerrados.length - 1)},${padT + chartH} L ${xOf(0)},${padT + chartH} Z`
+    : '';
+  const lineSI = cerrados.map((d, i) => `${xOf(i)},${yOf(d.sellIn)}`).join(' ');
+  const lineSO = cerrados.map((d, i) => `${xOf(i)},${yOf(d.sellOut)}`).join(' ');
   const hovered = hoverIdx != null ? data[hoverIdx] : null;
+  const currentDatum = idxActual >= 0 ? data[idxActual] : null;
+  const yTicks = [0, 0.25, 0.50, 0.75, 1].map(f => ({ v: maxV * f, y: padT + chartH * (1 - f) }));
+  const gradId = `sivsoArea-${anio}`;
 
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px', position: 'relative' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
         <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
-          Sell In vs Sell Out · {new Date().getFullYear()}
+          Sell In vs Sell Out · {anio}
         </h5>
         {ratioGlobal.ratio != null && (
           <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
             Ratio SO/SI: <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtPct(ratioGlobal.ratio)}</strong>
             {ratioGlobal.deltaPP != null && (
-              <> · <strong style={{ color: ratioGlobal.deltaPP >= 0 ? P.green : P.red, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{ratioGlobal.deltaPP >= 0 ? '+' : ''}{ratioGlobal.deltaPP.toFixed(1)}pp</strong> vs {new Date().getFullYear() - 1}</>
+              <> · <strong style={{ color: ratioGlobal.deltaPP >= 0 ? P.green : P.red, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{ratioGlobal.deltaPP >= 0 ? '+' : ''}{ratioGlobal.deltaPP.toFixed(1)}pp</strong> vs {anio - 1}</>
             )}
           </div>
         )}
       </div>
-      <div style={{ display: 'flex', gap: 12, fontSize: 10, color: theme.textMuted, marginBottom: 6 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 14, height: 2, background: P.accent, borderRadius: 1 }} /> Sell In</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 14, height: 2, background: P.green, borderRadius: 1 }} /> Sell Out</span>
+      {/* Leyenda */}
+      <div style={{ display: 'flex', gap: 14, padding: '6px 0 8px', flexWrap: 'wrap', borderBottom: `1px solid ${theme.divider || theme.border}`, marginBottom: 6 }}>
+        <SumStat theme={theme} k={<><Dot color={P.accent} />Sell In</>} v={fmtMoney(cerrados.reduce((s, d) => s + d.sellIn, 0))} vColor={theme.text} />
+        <SumStat theme={theme} k={<><Dot color={P.green} />Sell Out</>} v={fmtMoney(cerrados.reduce((s, d) => s + d.sellOut, 0))} vColor={theme.text} />
+        <SumStat theme={theme} k="Meses" v={String(cerrados.length)} vColor={theme.text} />
       </div>
+
       <div style={{ position: 'relative' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 160, display: 'block' }}>
-          {[0.25, 0.5, 0.75].map(f => (
-            <line key={f} x1={padL} y1={padT + chartH * f} x2={W - padR} y2={padT + chartH * f}
-              stroke={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'} strokeDasharray="3 4" />
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 260, display: 'block' }}>
+          <defs>
+            <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={P.accent} stopOpacity="0.22" />
+              <stop offset="100%" stopColor={P.accent} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {yTicks.map((t, i) => (
+            <g key={i}>
+              <line x1={padL} y1={t.y} x2={W - padR} y2={t.y}
+                stroke={i === 0 ? (theme.divider || theme.border) : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)')}
+                strokeDasharray={i === 0 ? undefined : '3 4'} />
+              <text x={padL - 8} y={t.y + 3} textAnchor="end"
+                fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9" fill={theme.textMuted}>
+                {fmtMoney(t.v)}
+              </text>
+            </g>
           ))}
-          <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke={theme.divider || theme.border} />
-
-          <polyline points={lineSI} fill="none" stroke={P.accent} strokeWidth="2.5" />
+          {areaSI && <path d={areaSI} fill={`url(#${gradId})`} />}
           <polyline points={lineSO} fill="none" stroke={P.green} strokeWidth="2.5" />
-
-          {data.map((d, i) => !d.futuro && (
-            <React.Fragment key={`p-${i}`}>
-              <circle cx={xOf(i)} cy={yOf(d.sellIn)} r={i === mesActual - 1 ? 4 : 2.5} fill={P.accent} stroke={theme.surface} strokeWidth="1.5" />
-              <circle cx={xOf(i)} cy={yOf(d.sellOut)} r={i === mesActual - 1 ? 4 : 2.5} fill={P.green} stroke={theme.surface} strokeWidth="1.5" />
-            </React.Fragment>
-          ))}
-
+          <polyline points={lineSI} fill="none" stroke={P.accent} strokeWidth="3" />
+          {cerrados.map((d, i) => {
+            const isActual = d.mes === mesActual;
+            const cxP = xOf(i);
+            return (
+              <g key={`p-${i}`}>
+                <circle cx={cxP} cy={yOf(d.sellIn)} r={isActual ? 6 : 4} fill={isActual ? P.green : P.accent} stroke={theme.surface} strokeWidth={isActual ? 2.5 : 2} />
+                <circle cx={cxP} cy={yOf(d.sellOut)} r={isActual ? 5 : 3.5} fill={P.green} stroke={theme.surface} strokeWidth={isActual ? 2 : 1.5} />
+                {!isActual && (
+                  <text x={cxP} y={yOf(d.sellIn) - 10} textAnchor="middle"
+                    fontFamily={TYPO.fontDisplay} fontSize="10" fontWeight="600" fill={theme.text}>
+                    {fmtMoney(d.sellIn)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
           {data.map((d, i) => (
             <rect key={`h-${i}`}
-              x={xOf(i) - chartW / (data.length * 2)} y={padT} width={chartW / data.length} height={chartH}
+              x={xOf(i) - chartW / (data.length * 2)}
+              y={padT}
+              width={chartW / data.length}
+              height={chartH}
               fill="transparent"
-              onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)}
-              style={{ cursor: 'pointer' }} />
+              onMouseEnter={() => setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx(null)}
+              style={{ cursor: 'pointer' }}
+            />
           ))}
-          {hoverIdx != null && !data[hoverIdx].futuro && (
-            <line x1={xOf(hoverIdx)} y1={padT} x2={xOf(hoverIdx)} y2={H - padB} stroke={theme.textMuted} strokeWidth="1" strokeDasharray="2 3" opacity="0.4" />
+          {hoverIdx != null && (
+            <line x1={xOf(hoverIdx)} y1={padT} x2={xOf(hoverIdx)} y2={H - padB}
+              stroke={theme.textMuted} strokeWidth="1" strokeDasharray="2 3" opacity="0.4" />
           )}
-
           {data.map((d, i) => (
-            <text key={`x-${i}`} x={xOf(i)} y={H - 6} textAnchor="middle"
-              fontFamily='"SF Mono", ui-monospace, monospace' fontSize="8.5"
-              fill={theme.textMuted} opacity={d.futuro ? 0.4 : 1}>{MES_INICIAL[d.mes - 1]}</text>
+            <text key={`x-${i}`} x={xOf(i)} y={H - 8} textAnchor="middle"
+              fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9"
+              fill={d.mes === mesActual ? P.green : theme.textMuted}
+              fontWeight={d.mes === mesActual ? 700 : 500}
+              opacity={d.futuro ? 0.4 : 1}>
+              {MESES_CORTOS[d.mes - 1]}
+            </text>
           ))}
+          {currentDatum && idxActual >= 0 && hoverIdx == null && (() => {
+            const cx = xOf(idxActual);
+            const cy = yOf(currentDatum.sellIn);
+            const ratio = currentDatum.sellIn > 0 ? (currentDatum.sellOut / currentDatum.sellIn * 100) : null;
+            const boxW = 148;
+            const boxX = Math.max(padL, Math.min(W - padR - boxW, cx - boxW / 2));
+            const boxY = Math.max(4, cy - 44);
+            return (
+              <g pointerEvents="none">
+                <line x1={cx} y1={cy - 8} x2={cx} y2={boxY + 32} stroke={theme.text} strokeWidth="1" opacity="0.15" />
+                <rect x={boxX} y={boxY} width={boxW} height={32} rx="6" fill="#0A0A0C" />
+                <text x={boxX + boxW / 2} y={boxY + 13} textAnchor="middle"
+                  fontFamily={TYPO.fontDisplay} fontSize="10.5" fontWeight="600" fill="#FFF">
+                  SI {fmtMoney(currentDatum.sellIn)} · SO {fmtMoney(currentDatum.sellOut)}
+                </text>
+                <text x={boxX + boxW / 2} y={boxY + 25} textAnchor="middle"
+                  fontFamily='"SF Mono", ui-monospace, monospace' fontSize="9" fill="rgba(255,255,255,0.65)">
+                  {ratio != null ? `SO/SI ${ratio.toFixed(1)}%` : 'sin SI'}
+                </text>
+              </g>
+            );
+          })()}
         </svg>
         {hovered && !hovered.futuro && (
           <div style={{
-            position: 'absolute', top: 4, left: `${((hoverIdx) / (data.length - 1)) * 100}%`, transform: 'translateX(-50%)',
+            position: 'absolute',
+            top: 8,
+            left: `${((hoverIdx * chartW / Math.max(1, data.length - 1)) + padL) / W * 100}%`,
+            transform: 'translateX(-50%)',
             background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8,
-            padding: '6px 10px', boxShadow: '0 4px 12px rgba(0,0,0,0.12)', pointerEvents: 'none', zIndex: 5, minWidth: 130,
+            padding: '8px 12px', boxShadow: '0 4px 12px rgba(0,0,0,0.12)', pointerEvents: 'none',
+            zIndex: 5, minWidth: 150, maxWidth: 220,
           }}>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, color: theme.text }}>{NOMBRES_MES[hovered.mes - 1]}</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, letterSpacing: '-0.005em' }}>{NOMBRES_MES[hovered.mes - 1]} · {anio}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 3 }}>
               <span style={{ color: P.accent }}>Sell In</span>
-              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: theme.text }}>{fmtMoney(hovered.sellIn)}</span>
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmtMoney(hovered.sellIn)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 2 }}>
               <span style={{ color: P.green }}>Sell Out</span>
-              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: theme.text }}>{fmtMoney(hovered.sellOut)}</span>
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmtMoney(hovered.sellOut)}</span>
             </div>
             {hovered.sellIn > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, paddingTop: 3, marginTop: 3, borderTop: `1px dashed ${theme.divider || theme.border}` }}>
-                <span style={{ color: theme.textMuted }}>SO/SI</span>
+              <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px dashed ${theme.divider || theme.border}`, display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
+                <span style={{ color: theme.textMuted }}>Ratio SO/SI</span>
                 <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 700, color: theme.text }}>{fmtPct(hovered.sellOut / hovered.sellIn * 100)}</span>
               </div>
             )}
