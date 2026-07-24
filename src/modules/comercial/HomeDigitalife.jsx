@@ -539,11 +539,11 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
         <FerruteckCosmicCard recos={copilotRecos} />
       </div>
 
-      {/* Sell In vs Sell Out por marca */}
-      <MarcasSIvsSOCard theme={theme} P={P} marcas={marcasSIvsSO} rango={marcaRango} onChangeRango={setMarcaRango} />
-
-      {/* Sell In vs Sell Out temporal (al fondo, ancho completo) */}
-      <SIvsSOTemporal theme={theme} P={P} data={sivsoTemporal} ratioGlobal={ratioGlobal} mesActual={mesActual} />
+      {/* Sell In vs Sell Out: por marca + temporal lado a lado */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)', gap: 10, alignItems: 'stretch' }}>
+        <MarcasSIvsSOCard theme={theme} P={P} marcas={marcasSIvsSO} rango={marcaRango} onChangeRango={setMarcaRango} />
+        <SIvsSOTemporal theme={theme} P={P} data={sivsoTemporal} ratioGlobal={ratioGlobal} mesActual={mesActual} />
+      </div>
     </div>
   );
 }
