@@ -13,7 +13,17 @@ import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaCliente } from '../../lib/permisos';
-import { Sparkles, Search } from 'lucide-react';
+import { Sparkles, Search, Mail, Video, Image as ImageIcon, Smartphone, PartyPopper, Check, Pencil, Trash2, RotateCcw, Calendar, DollarSign, User, Lock } from 'lucide-react';
+
+// Íconos SF-style outline por tipo (lucide-react)
+const TIPO_ICON = {
+  mailing: Mail,
+  reel: Video,
+  banner: ImageIcon,
+  meta_ads: Smartphone,
+  google_ads: Search,
+  evento: PartyPopper,
+};
 
 // ═══════════ CONFIG (idéntico a V1) ═══════════════════════
 const TIPOS = {
@@ -566,31 +576,36 @@ export default function MarketingClienteV2({ cliente, clienteKey }) {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, fontFamily: TYPO.fontDisplay, fontSize: 9.5, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.09em', fontWeight: 600, marginBottom: 4 }}>
                 {DIAS_SEMANA.map(d => <div key={d} style={{ textAlign: 'center', padding: '2px 0' }}>{d}</div>)}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
                 {calendario.map((cell, i) => {
-                  if (!cell) return <div key={i} style={{ minHeight: 72 }} />;
+                  if (!cell) return <div key={i} style={{ minHeight: 44 }} />;
                   const isSel = cell.day === diaSel;
                   const isHoy = cell.day === hoyDia;
+                  const hasActs = cell.actividades.length > 0;
                   return (
                     <div key={i} onClick={() => setDiaSel(cell.day === diaSel ? null : cell.day)}
                       style={{
-                        minHeight: 72,
-                        border: isSel ? `2px solid ${theme.accent}` : `1px solid ${theme.divider || theme.border}`,
-                        background: isSel ? `${theme.accent}0F` : isHoy ? `${theme.accent}08` : 'transparent',
-                        borderRadius: 8, padding: 6, display: 'flex', flexDirection: 'column', gap: 4,
+                        minHeight: 44,
+                        borderRadius: 6, padding: '4px 5px',
+                        display: 'flex', flexDirection: 'column', gap: 2,
                         cursor: 'pointer', transition: 'background 160ms',
+                        background: isSel ? `${theme.accent}1A` : isHoy ? `${theme.accent}0A` : (hasActs ? (theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)') : 'transparent'),
+                        boxShadow: isSel ? `inset 0 0 0 1.5px ${theme.accent}` : 'none',
+                        position: 'relative',
                       }}
                     >
-                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: isHoy || isSel ? 700 : 600, color: isHoy || isSel ? theme.accent : theme.textMuted }}>{cell.day}</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                        {cell.actividades.slice(0, 5).map(a => (
-                          <span key={a.id} title={`${TIPOS[a.tipo]?.label || a.tipo}: ${a.nombre || ''}`}
-                            style={{ width: 7, height: 7, borderRadius: 99, background: TIPOS[a.tipo]?.color || theme.textMuted }} />
-                        ))}
-                        {cell.actividades.length > 5 && (
-                          <span style={{ fontSize: 9, color: theme.textMuted, fontFamily: 'SF Mono, ui-monospace, monospace' }}>+{cell.actividades.length - 5}</span>
-                        )}
-                      </div>
+                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: isHoy || isSel ? 700 : 600, color: isHoy || isSel ? theme.accent : theme.textMuted, lineHeight: 1 }}>{cell.day}</div>
+                      {hasActs && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, marginTop: 'auto', alignItems: 'center' }}>
+                          {cell.actividades.slice(0, 4).map(a => (
+                            <span key={a.id} title={`${TIPOS[a.tipo]?.label || a.tipo}: ${a.nombre || ''}`}
+                              style={{ width: 5, height: 5, borderRadius: 99, background: TIPOS[a.tipo]?.color || theme.textMuted }} />
+                          ))}
+                          {cell.actividades.length > 4 && (
+                            <span style={{ fontSize: 8.5, color: theme.textMuted, fontFamily: 'SF Mono, ui-monospace, monospace', lineHeight: 1 }}>+{cell.actividades.length - 4}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -642,19 +657,24 @@ export default function MarketingClienteV2({ cliente, clienteKey }) {
           ) : (
             <>
               {agendaDia.actividades.map(a => {
-                const t = TIPOS[a.tipo] || { label: a.tipo, color: theme.textMuted, icon: '📌' };
+                const t = TIPOS[a.tipo] || { label: a.tipo, color: theme.textMuted };
+                const Icon = TIPO_ICON[a.tipo] || Mail;
                 const m = MARCAS[a.marca];
                 return (
                   <div key={a.id} onClick={() => openEdit(a)}
-                    style={{ borderRadius: 10, padding: '9px 10px', marginBottom: 6, display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'center', background: bgAlt, cursor: 'pointer', border: `1px solid ${theme.divider || theme.border}` }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 8, background: `${t.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{t.icon}</div>
-                    <div>
-                      <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 12, letterSpacing: '-0.005em', color: theme.text }}>{a.nombre || 'Sin nombre'}</div>
+                    style={{ borderRadius: 8, padding: '8px 10px', marginBottom: 4, display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'center', background: 'transparent', cursor: 'pointer', transition: 'background 160ms' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = bgAlt; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: `${t.color}1F`, color: t.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Icon size={14} strokeWidth={2} />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, letterSpacing: '-0.005em', color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nombre || 'Sin nombre'}</div>
                       <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 1 }}>
-                        {t.label}{m ? ` · ${m.label}` : ''}{a.responsable ? ` · ${a.responsable}` : ''}
+                        <span style={{ color: t.color, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{t.label}</span>{m ? ` · ${m.label}` : ''}{a.responsable ? ` · ${a.responsable}` : ''}
                       </div>
                     </div>
-                    <div style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 600, color: theme.green }}>{a.inversion > 0 ? fmt$(a.inversion) : '—'}</div>
+                    <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11.5, fontWeight: 600, color: a.inversion > 0 ? theme.green : theme.textSubtle || theme.textMuted }}>{a.inversion > 0 ? fmt$(a.inversion) : '—'}</div>
                   </div>
                 );
               })}
@@ -866,7 +886,8 @@ function FerruteckStrip({ recos }) {
 }
 
 function ActivityCard({ a, theme, canEdit, onEdit, onDelete, onToggle }) {
-  const t = TIPOS[a.tipo] || { label: a.tipo || '?', color: theme.textMuted, icon: '📌', metricas: [] };
+  const t = TIPOS[a.tipo] || { label: a.tipo || '?', color: theme.textMuted, metricas: [] };
+  const Icon = TIPO_ICON[a.tipo] || Mail;
   const marca = MARCAS[a.marca];
   const rs = a.red_social ? REDES_SOCIALES[a.red_social] : null;
   const metricas = a.metricas || {};
@@ -875,62 +896,109 @@ function ActivityCard({ a, theme, canEdit, onEdit, onDelete, onToggle }) {
     return pf ? `${pf.d} ${MESES_CORTOS[pf.m - 1]}` : '';
   })() : '';
   const isCompleted = a.estatus === 'completado' || a.estatus === 'archivado';
+  // Solo las métricas rellenadas se muestran como chips
+  const metricasChips = t.metricas
+    .map(m => ({ ...m, v: metricas[m.key] }))
+    .filter(m => m.v != null && m.v !== '');
+
+  const iconBtnStyle = {
+    width: 26, height: 26, borderRadius: 8, border: 0, background: 'transparent',
+    color: theme.textMuted, cursor: 'pointer',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'background 160ms, color 160ms, transform 160ms cubic-bezier(0.34,1.56,0.64,1)',
+  };
+
   return (
     <div style={{
       background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12,
-      borderTop: `3px solid ${t.color}`, overflow: 'hidden', display: 'flex', flexDirection: 'column',
-      opacity: isCompleted ? 0.72 : 1,
+      padding: '12px 14px 10px', display: 'flex', flexDirection: 'column', gap: 8,
+      opacity: isCompleted ? 0.68 : 1,
+      transition: 'transform 160ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 160ms',
     }}>
-      <div style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: `${t.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>{t.icon}</div>
-          <div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, color: t.color }}>{t.label}{rs ? ` · ${rs.icon} ${rs.label}` : ''}</div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 700, letterSpacing: '-0.01em', color: theme.text }}>{a.nombre || 'Sin nombre'}</div>
+      {/* Head: ícono outline + nombre + marca */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'flex-start' }}>
+        <div style={{ width: 32, height: 32, borderRadius: 10, background: `${t.color}1F`, color: t.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon size={16} strokeWidth={2} />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.005em', lineHeight: 1.25, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nombre || 'Sin nombre'}</div>
+          <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 2, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: t.color }}>{t.label}</span>
+            {rs && (<><span style={{ color: theme.textSubtle || theme.textMuted }}>·</span><span>{rs.icon} {rs.label}</span></>)}
           </div>
         </div>
-        {marca && <span style={{ padding: '2px 8px', borderRadius: 999, fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, background: `${marca.color}22`, color: marca.color }}>{marca.label}</span>}
+        {marca && (
+          <span style={{ padding: '2px 8px', borderRadius: 999, fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, background: `${marca.color}1F`, color: marca.color, whiteSpace: 'nowrap' }}>{marca.label}</span>
+        )}
       </div>
-      <div style={{ display: 'flex', gap: 10, padding: '0 14px 8px', fontSize: 11, color: theme.textMuted, flexWrap: 'wrap' }}>
-        {fechaTxt && <span>📆 {fechaTxt}</span>}
-        {Number(a.inversion) > 0 && <span style={{ fontWeight: 600, color: theme.green }}>💰 {fmt$Full(a.inversion)}</span>}
-        {a.responsable && <span>👤 {a.responsable}</span>}
-        {a.pago_id && <span style={{ background: `${theme.green}22`, color: theme.green, padding: '1px 8px', borderRadius: 999, fontWeight: 600 }}>🔒 En pago</span>}
-      </div>
-      {a.mensaje && <div style={{ padding: '0 14px 8px', fontSize: 11.5, color: theme.textMuted, fontStyle: 'italic' }}>"{a.mensaje}"</div>}
-      {t.metricas.length > 0 && (
-        <div style={{ padding: '8px 14px', background: theme.bgAlt || `${theme.text}05`, borderTop: `1px solid ${theme.divider || theme.border}`, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 6 }}>
-          {t.metricas.map(m => {
-            const v = metricas[m.key];
-            const display = v != null && v !== '' ? (m.money ? fmt$Full(v) : fmtN(v)) : '—';
-            return (
-              <div key={m.key} style={{ borderRadius: 6, padding: '5px 8px', background: theme.surface }}>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textSubtle || theme.textMuted, fontWeight: 600 }}>{m.label}</div>
-                <div style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 12, fontWeight: 600, color: v != null && v !== '' ? theme.text : theme.textMuted }}>{display}</div>
-              </div>
-            );
-          })}
-        </div>
+
+      {/* Mensaje (si existe) */}
+      {a.mensaje && (
+        <div style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>"{a.mensaje}"</div>
       )}
+
+      {/* Meta row: fecha, inversión, responsable, en pago */}
+      <div style={{ display: 'flex', gap: 10, fontSize: 10.5, color: theme.textMuted, flexWrap: 'wrap', alignItems: 'center' }}>
+        {fechaTxt && (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Calendar size={11} strokeWidth={2} />{fechaTxt}</span>)}
+        {Number(a.inversion) > 0 && (
+          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: theme.green }}>{fmt$Full(a.inversion)}</span>
+        )}
+        {a.responsable && (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><User size={11} strokeWidth={2} />{a.responsable}</span>)}
+        {a.pago_id && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: `${theme.green}1F`, color: theme.green, padding: '1px 8px', borderRadius: 999, fontWeight: 600, fontSize: 10 }}><Lock size={10} strokeWidth={2.5} />En pago</span>
+        )}
+      </div>
+
+      {/* Solo métricas rellenadas · chips pill */}
+      {metricasChips.length > 0 ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+          {metricasChips.map(m => (
+            <span key={m.key} style={{ display: 'inline-flex', gap: 5, alignItems: 'baseline', padding: '2px 8px', borderRadius: 999, background: theme.bgAlt || `${theme.text}08`, fontSize: 10.5 }}>
+              <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>{m.label.replace(/\s*\(.*?\)\s*/g, '').trim()}</span>
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: theme.text }}>{m.money ? fmt$(m.v) : fmtN(m.v)}</span>
+            </span>
+          ))}
+        </div>
+      ) : t.metricas.length > 0 && (
+        <div style={{ fontSize: 10.5, color: theme.textSubtle || theme.textMuted, fontStyle: 'italic' }}>Sin métricas capturadas</div>
+      )}
+
+      {/* Detalle evento */}
       {a.tipo === 'evento' && (a.evento_sucursal || a.evento_pop) && (
-        <div style={{ margin: '0 14px 8px', padding: '6px 8px', background: `${TIPOS.evento.color}0F`, borderRadius: 6, fontSize: 11, color: theme.text }}>
-          {a.evento_sucursal && <div>🏢 Sucursal: <strong>{a.evento_sucursal}</strong></div>}
-          {a.evento_pop && <div>🎁 POP: {a.evento_pop}</div>}
+        <div style={{ background: theme.bgAlt || `${theme.text}05`, borderRadius: 6, padding: '5px 8px', fontSize: 10.5, color: theme.text, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {a.evento_sucursal && <div><strong>📍 {a.evento_sucursal}</strong></div>}
+          {a.evento_pop && <div style={{ color: theme.textMuted }}>POP: {a.evento_pop}</div>}
         </div>
       )}
-      <div style={{ padding: '8px 14px', borderTop: `1px solid ${theme.divider || theme.border}`, display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, paddingTop: 6, marginTop: 2, borderTop: `1px solid ${theme.divider || theme.border}` }}>
         {canEdit ? (
           <button className="mkv2-btn" onClick={() => onToggle(a)}
-            style={{ padding: '4px 10px', borderRadius: 6, fontSize: 10.5, fontFamily: TYPO.fontText, fontWeight: 500, border: 0, cursor: 'pointer', background: isCompleted ? `${theme.orange}18` : `${theme.green}18`, color: isCompleted ? theme.orange : theme.green }}>
-            {isCompleted ? '↺ Reactivar' : '✓ Completar'}
+            style={{
+              padding: '3px 10px', borderRadius: 999, border: 0, cursor: 'pointer',
+              fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600,
+              background: isCompleted ? `${theme.orange}1F` : `${theme.green}1F`,
+              color: isCompleted ? theme.orange : theme.green,
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}>
+            {isCompleted
+              ? <><RotateCcw size={11} strokeWidth={2.5} />Reactivar</>
+              : <><Check size={11} strokeWidth={2.5} />Completar</>}
           </button>
         ) : <span />}
         {canEdit && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className="mkv2-btn mkv2-btn-ghost" onClick={() => onEdit(a)}
-              style={{ padding: '4px 10px', borderRadius: 6, fontSize: 10.5, border: 0, background: 'transparent', color: theme.textMuted, cursor: 'pointer' }}>✏️ Editar</button>
-            <button className="mkv2-btn" onClick={() => onDelete(a.id, a.nombre)}
-              style={{ padding: '4px 10px', borderRadius: 6, fontSize: 10.5, border: 0, background: 'transparent', color: theme.red, cursor: 'pointer' }}>🗑</button>
+          <div style={{ display: 'flex', gap: 2 }}>
+            <button className="mkv2-btn" onClick={() => onEdit(a)} title="Editar" style={iconBtnStyle}
+              onMouseEnter={(e) => { e.currentTarget.style.background = `${theme.text}0A`; e.currentTarget.style.color = theme.text; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = theme.textMuted; }}>
+              <Pencil size={13} strokeWidth={2} />
+            </button>
+            <button className="mkv2-btn" onClick={() => onDelete(a.id, a.nombre)} title="Eliminar" style={iconBtnStyle}
+              onMouseEnter={(e) => { e.currentTarget.style.background = `${theme.red}12`; e.currentTarget.style.color = theme.red; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = theme.textMuted; }}>
+              <Trash2 size={13} strokeWidth={2} />
+            </button>
           </div>
         )}
       </div>
