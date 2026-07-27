@@ -420,6 +420,20 @@ export default function TrackingPedidos() {
   return (
     <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
 
+      {/* ═════ Botón Nueva OC · SEPARADO del hero (flex row propio) ═════ */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: -4 }}>
+        <button type="button" onClick={() => setShowNuevaOC(true)}
+          style={{
+            background: P.accent, border: 0, color: '#FFF',
+            padding: '8px 16px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+            cursor: 'pointer', fontFamily: TYPO.fontText,
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            boxShadow: '0 2px 8px rgba(0,113,227,0.24)',
+          }}>
+          <Plus style={{ width: 14, height: 14 }} strokeWidth={2.5} /> Nueva OC
+        </button>
+      </div>
+
       {/* ═════ Hero editorial ═════ */}
       <div style={{
         display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 20,
@@ -433,15 +447,6 @@ export default function TrackingPedidos() {
             background: `radial-gradient(circle, ${P.accent}1F 0%, transparent 70%)`, pointerEvents: 'none',
           }} />
         )}
-        <button onClick={() => setShowNuevaOC(true)}
-          style={{
-            position: 'absolute', top: 14, right: 16,
-            background: 'rgba(255,255,255,0.12)', border: 0, color: heroText,
-            padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 600,
-            cursor: 'pointer', fontFamily: TYPO.fontText, display: 'inline-flex', alignItems: 'center', gap: 5,
-          }}>
-          <Plus style={{ width: 12, height: 12 }} strokeWidth={2.5} /> Nueva OC
-        </button>
         <div style={{ position: 'relative' }}>
           <p style={{
             fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em',
@@ -465,7 +470,7 @@ export default function TrackingPedidos() {
             {kpis.atrasadas > 0 && <> · Hay <strong style={{ color: heroText, fontWeight: 500 }}>{kpis.atrasadas} atrasadas</strong> más de {UMBRAL_DIAS_ALERTA} días — revisa las urgentes.</>}
           </p>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', position: 'relative' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
           <HeroStat label="OCs abiertas" value={fmtInt(kpis.abiertas)} sub={fmtCompact(kpis.abiertasMonto)} heroSub={heroSub} heroText={heroText} />
           <HeroStat label="Fill mes" value={kpis.fillMes != null ? `${kpis.fillMes.toFixed(1)}%` : '—'} valueColor={kpis.fillMes == null ? heroText : kpis.fillMes >= 95 ? P.green : kpis.fillMes >= 85 ? P.orange : P.red} heroSub={heroSub} heroText={heroText} />
           <HeroStat label="Tiempo prom." value={kpis.tiempoPromedio != null ? `${kpis.tiempoPromedio.toFixed(1)}d` : '—'} sub={`${kpis.nEntregadas} entregadas`} heroSub={heroSub} heroText={heroText} />
@@ -1611,14 +1616,14 @@ function ModalShell({ theme, P, isDark, wide, eyebrow, title, contexto, heroExtr
           {isDark && (
             <div style={{ position: 'absolute', top: '-40%', right: '-8%', width: '45%', height: '100%', background: `radial-gradient(circle, ${P.accent}29 0%, transparent 70%)`, pointerEvents: 'none' }} />
           )}
-          <div style={{ position: 'relative', minWidth: 0, flex: 1 }}>
+          <div style={{ position: 'relative', minWidth: 0, flex: 1, paddingRight: heroExtra ? 4 : 0 }}>
             {eyebrow && <p style={{ fontFamily: TYPO.fontText, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: heroSub, fontWeight: 500, margin: 0 }}>{eyebrow}</p>}
-            <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', color: heroText, margin: '4px 0 4px', lineHeight: 1.15 }}>{title}</h3>
+            <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', color: heroText, margin: '4px 0 4px', lineHeight: 1.15, wordBreak: 'break-word' }}>{title}</h3>
             {contexto && (
-              <p style={{ fontFamily: TYPO.fontText, fontSize: 11.5, color: heroMuted, lineHeight: 1.5, margin: 0, fontVariantNumeric: 'tabular-nums' }}>
+              <p style={{ fontFamily: TYPO.fontText, fontSize: 11.5, color: heroMuted, lineHeight: 1.5, margin: 0, fontVariantNumeric: 'tabular-nums', wordBreak: 'break-word', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
                 {typeof contexto === 'string' ? contexto : React.Children.map(contexto, (child) => {
                   if (typeof child === 'string') return child;
-                  if (child?.type === 'code') return <code style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, background: 'rgba(255,255,255,0.10)', padding: '1px 6px', borderRadius: 6, color: heroText }}>{child.props.children}</code>;
+                  if (child?.type === 'code') return <code style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, background: 'rgba(255,255,255,0.10)', padding: '1px 6px', borderRadius: 6, color: heroText, whiteSpace: 'normal', wordBreak: 'break-word' }}>{child.props.children}</code>;
                   if (child?.type === 'strong') return <strong style={{ color: heroText, fontWeight: 500 }}>{child.props.children}</strong>;
                   return child;
                 })}

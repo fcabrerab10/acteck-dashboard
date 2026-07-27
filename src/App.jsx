@@ -12,7 +12,7 @@ import {
   BarChart3, Target, ClipboardList, Settings as SettingsIcon, Building2,
   Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator,
 } from 'lucide-react';
-import { HomeCliente, HomeDigitalife, HomeDicotech, CreditoCobranza, CreditoCobranzaV2, PagosCliente, EstrategiaProducto, MarketingCliente, MarketingClienteV2, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente, SellInClienteV2, TrackingPedidos, SellOutCliente, SellOutClienteV2 } from './modules/comercial';
+import { HomeCliente, HomeDigitalife, HomeDicotech, CreditoCobranza, CreditoCobranzaV2, PagosCliente, EstrategiaProducto, MarketingCliente, MarketingClienteV2, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente, SellInClienteV2, SellInDicotech, TrackingPedidos, SellOutCliente, SellOutClienteV2, SellOutDicotech } from './modules/comercial';
 import EstadoResultados from './modules/general/EstadoResultados';
 import VisionGeneral from './modules/comercial/VisionGeneral';
 import ReporteTab from './modules/comercial/ReporteTab';
@@ -580,7 +580,9 @@ export default function App() {
         {clienteActivo && paginaActiva === "sellIn"  && (
           clienteActivo === 'digitalife'
             ? <SellInClienteV2 clienteKey={clienteActivo} />
-            : <SellInCliente clienteKey={clienteActivo} />
+            : clienteActivo === 'dicotech'
+              ? <SellInDicotech clienteKey={clienteActivo} />
+              : <SellInCliente clienteKey={clienteActivo} />
         )}
         {paginaActiva === "cartera" && (
           clienteActivo === 'digitalife'
@@ -592,9 +594,11 @@ export default function App() {
             {paginaActiva === "estrategia" && (
               clienteActivo === 'digitalife'
                 ? <SellOutClienteV2 clienteKey={clienteActivo} />
-                : (clienteActivo === 'dicotech' || clienteActivo === 'pcel')
-                  ? <SellOutCliente clienteKey={clienteActivo} />
-                  : <EstrategiaProducto cliente={c.nombre} clienteKey={clienteActivo} />
+                : clienteActivo === 'dicotech'
+                  ? <SellOutDicotech clienteKey={clienteActivo} />
+                  : clienteActivo === 'pcel'
+                    ? <SellOutCliente clienteKey={clienteActivo} />
+                    : <EstrategiaProducto cliente={c.nombre} clienteKey={clienteActivo} />
             )}
         {paginaActiva === "marketing" && React.createElement(
           clienteActivo === 'digitalife' ? MarketingClienteV2 : MarketingCliente,
