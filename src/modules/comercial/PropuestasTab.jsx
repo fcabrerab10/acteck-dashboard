@@ -151,6 +151,85 @@ export default function PropuestasTab() {
     setVista(2);
   };
 
+  // ─── Importar Excel (formato antiguo: SKU, Descripción, Marca, Familia, Piezas, Precio unitario) ───
+  const importarExcel = async (file) => {
+    if (!file) return;
+    const XLSX = window.XLSX;
+    if (!XLSX) { alert('SheetJS no está disponible. Recarga la página.'); return; }
+
+    // Auto-detectar cliente por nombre de archivo
+    const fname = (file.name || '').toLowerCase();
+    let cliDetected = 'digitalife';
+    if (fname.includes('pcel')) cliDetected = 'pcel';
+    else if (fname.includes('dicotech')) cliDetected = 'dicotech';
+
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (!rows.length) throw new Error('El archivo está vacío');
+
+      // Buscar fila de encabezados (contiene "SKU")
+      let headerIdx = rows.findIndex((r) => r.some((c) => String(c).trim().toUpperCase() === 'SKU'));
+      if (headerIdx < 0) headerIdx = 0;
+      const headers = rows[headerIdx].map((c) => String(c).trim().toLowerCase());
+
+      const idxSku = headers.findIndex((h) => h === 'sku' || h === 'no. parte' || h === 'no parte');
+      const idxDesc = headers.findIndex((h) => h.includes('descripc'));
+      const idxMarca = headers.findIndex((h) => h === 'marca');
+      const idxFam = headers.findIndex((h) => h.includes('familia') || h.includes('categoria') || h.includes('categoría'));
+      const idxPz = headers.findIndex((h) => h.includes('pieza') || h.includes('cantidad') || h === 'qty');
+      const idxPr = headers.findIndex((h) => h.includes('precio') && !h.includes('total'));
+
+      if (idxSku < 0) throw new Error('No encontré la columna "SKU"');
+      if (idxPz < 0)  throw new Error('No encontré la columna "Piezas" o "Cantidad"');
+
+      const propuestaObj = {};
+      let count = 0;
+      for (let i = headerIdx + 1; i < rows.length; i++) {
+        const r = rows[i];
+        const sku = String(r[idxSku] || '').trim();
+        if (!sku) continue;
+        const piezas = Number(r[idxPz]) || 0;
+        const precio = idxPr >= 0 ? (Number(r[idxPr]) || 0) : 0;
+        if (piezas <= 0) continue;
+        propuestaObj[sku] = {
+          sku,
+          piezas,
+          precio,
+          descripcion: idxDesc >= 0 ? String(r[idxDesc] || '') : '',
+          marca: idxMarca >= 0 ? String(r[idxMarca] || '') : '',
+          familia: idxFam >= 0 ? String(r[idxFam] || '') : '',
+          _importado: true,
+        };
+        count++;
+      }
+      if (count === 0) throw new Error('No encontré filas válidas con piezas > 0');
+
+      const cli = CLIENTES.find((c) => c.key === cliDetected);
+      const total = Object.values(propuestaObj).reduce((s, v) => s + (v.piezas * v.precio), 0);
+      const piezasTot = Object.values(propuestaObj).reduce((s, v) => s + v.piezas, 0);
+      const id = nuevaPropuestaId();
+
+      saveReciente({
+        id,
+        clienteKey: cliDetected,
+        clienteLabel: cli?.label || cliDetected,
+        estado: 'Borrador',
+        tstamp: Date.now(),
+        propuesta: propuestaObj,
+        resumen: { skus: count, piezas: piezasTot, total },
+        nombre: file.name.replace(/\.xlsx?$/i, ''),
+        origen: 'Excel importado',
+      });
+      setRecientesTick((t) => t + 1);
+      abrirReciente({ id, clienteKey: cliDetected, propuesta: propuestaObj });
+    } catch (e) {
+      alert('Error al importar: ' + (e.message || e));
+    }
+  };
+
   const guardarBorrador = () => {
     if (!clienteKey || !propuestaId) return;
     const cli = CLIENTES.find((c) => c.key === clienteKey);
@@ -176,7 +255,7 @@ export default function PropuestasTab() {
 
   // ── Landing ──
   if (vista === 0) {
-    return <Landing theme={theme} isDark={isDark} onIniciar={() => setVista(1)} onAbrirReciente={abrirReciente} tick={recientesTick} />;
+    return <Landing theme={theme} isDark={isDark} onIniciar={() => setVista(1)} onAbrirReciente={abrirReciente} onImportar={importarExcel} tick={recientesTick} />;
   }
 
   // ── Cliente picker ──
@@ -230,7 +309,7 @@ export default function PropuestasTab() {
 // ════════════════════════════════════════════════════════════════════
 // LANDING · Header + Hero + Recientes
 // ════════════════════════════════════════════════════════════════════
-function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
+function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, tick }) {
   const P = paletteFromTheme(theme);
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
   const heroText = theme.heroCardText || '#F5F5F7';
@@ -291,10 +370,25 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
             El mes cierra pronto. Arma una propuesta con las recomendaciones del Copilot y déjala lista antes del corte.
           </p>
         </div>
-        <button onClick={onIniciar}
-          style={{ padding: '11px 22px', background: P.accent, color: '#FFFFFF', border: 0, borderRadius: 999, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', letterSpacing: '-0.01em', position: 'relative' }}>
-          + Nueva propuesta
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', position: 'relative' }}>
+          <button onClick={onIniciar}
+            style={{ padding: '11px 22px', background: P.accent, color: '#FFFFFF', border: 0, borderRadius: 999, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', letterSpacing: '-0.01em' }}>
+            + Nueva propuesta
+          </button>
+          {onImportar && (
+            <label style={{
+              padding: '11px 20px', background: 'rgba(255,255,255,0.10)', color: heroText,
+              border: `1px solid rgba(255,255,255,0.20)`, borderRadius: 999, fontSize: 13, fontWeight: 600,
+              fontFamily: 'inherit', cursor: 'pointer', letterSpacing: '-0.01em',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}>
+              ↑ Importar Excel
+              <input type="file" accept=".xlsx,.xls"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onImportar(f); e.target.value = ''; }}
+                style={{ display: 'none' }} />
+            </label>
+          )}
+        </div>
       </div>
 
       {/* Recientes */}
