@@ -12,7 +12,7 @@ import {
   BarChart3, Target, ClipboardList, Settings as SettingsIcon, Building2,
   Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator,
 } from 'lucide-react';
-import { HomeCliente, HomeDigitalife, HomeDicotech, HomePcel, CreditoCobranza, CreditoCobranzaV2, PagosCliente, EstrategiaProducto, MarketingCliente, MarketingClienteV2, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente, SellInClienteV2, SellInDicotech, TrackingPedidos, SellOutCliente, SellOutClienteV2, SellOutDicotech } from './modules/comercial';
+import { HomeCliente, HomeDigitalife, HomeDicotech, HomePcel, CreditoCobranza, CreditoCobranzaV2, PagosCliente, EstrategiaProducto, MarketingCliente, MarketingClienteV2, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente, SellInClienteV2, SellInDicotech, SellInPcel, TrackingPedidos, SellOutCliente, SellOutClienteV2, SellOutDicotech } from './modules/comercial';
 import EstadoResultados from './modules/general/EstadoResultados';
 import VisionGeneral from './modules/comercial/VisionGeneral';
 import ReporteTab from './modules/comercial/ReporteTab';
@@ -584,7 +584,9 @@ export default function App() {
             ? <SellInClienteV2 clienteKey={clienteActivo} />
             : clienteActivo === 'dicotech'
               ? <SellInDicotech clienteKey={clienteActivo} />
-              : <SellInCliente clienteKey={clienteActivo} />
+              : clienteActivo === 'pcel'
+                ? <SellInPcel clienteKey={clienteActivo} />
+                : <SellInCliente clienteKey={clienteActivo} />
         )}
         {paginaActiva === "cartera" && (
           (clienteActivo === 'digitalife' || clienteActivo === 'dicotech')
