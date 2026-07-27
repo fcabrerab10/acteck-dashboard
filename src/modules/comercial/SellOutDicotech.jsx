@@ -715,19 +715,25 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
           mesActualLabel={MESES[mesActual - 1]} />
       </div>
 
-      {/* Nueva sección: Rankings globales Vendedores + Clientes finales */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, alignItems: 'stretch' }}>
-        <RankingCard theme={theme} P={P}
+      {/* Nueva sección: Rankings globales Vendedores + Clientes finales · expandibles con drill individual */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, alignItems: 'start' }}>
+        <RankingCard theme={theme} P={P} isDark={isDark}
+          type="vendedor"
           title="Ranking vendedores · YTD"
-          eyebrow={`Top 6 de ${rankingsGlobales.totVendedores}`}
-          items={rankingsGlobales.vendedores.slice(0, 6)}
+          allItems={rankingsGlobales.vendedores}
+          totalCount={rankingsGlobales.totVendedores}
           color={P.indigo}
+          selloutGeneral={selloutGeneral}
+          anio={anio} mesActual={mesActual}
           emptyMsg="Sin datos de vendedores" />
-        <RankingCard theme={theme} P={P}
+        <RankingCard theme={theme} P={P} isDark={isDark}
+          type="cliente"
           title="Ranking clientes finales · YTD"
-          eyebrow={`Top 6 de ${rankingsGlobales.totClientes}`}
-          items={rankingsGlobales.clientes.slice(0, 6)}
+          allItems={rankingsGlobales.clientes}
+          totalCount={rankingsGlobales.totClientes}
           color={P.teal}
+          selloutGeneral={selloutGeneral}
+          anio={anio} mesActual={mesActual}
           emptyMsg="Sin datos de clientes" />
       </div>
 
@@ -1472,42 +1478,301 @@ function cellStyle(theme, align) {
   };
 }
 
-// ═══════════════ NUEVA: Ranking genérico (vendedores / clientes) ═══════════════
-function RankingCard({ theme, P, title, eyebrow, items, color, emptyMsg }) {
-  const isDark = theme.mode === 'dark';
-  const maxMonto = Math.max(1, ...items.map((x) => x.monto || 0));
+// ═══════════════ Ranking expandible con drill individual (vendedores / clientes) ═══════════════
+function RankingCard({ theme, P, isDark, type, title, allItems, totalCount, color, selloutGeneral, anio, mesActual, emptyMsg }) {
+  const TOP_N = 6;
+  const [expanded, setExpanded] = useState(false);
+  const [openName, setOpenName] = useState(null);
+  const items = expanded ? allItems : allItems.slice(0, TOP_N);
+  const maxMonto = Math.max(1, ...allItems.map((x) => x.monto || 0));
+  const restCount = Math.max(0, allItems.length - TOP_N);
+
+  // Derivar drill del item abierto — depende del tipo
+  const drillData = useMemo(() => {
+    if (!openName) return null;
+    const field = type === 'vendedor' ? 'vendedor_nombre' : 'cliente_nombre';
+    const filtered = [];
+    for (const r of selloutGeneral) {
+      if (Number(r.anio) !== anio) continue;
+      if (Number(r.mes) > mesActual) continue;
+      const val = (r[field] || '(sin nombre)').trim() || '(sin nombre)';
+      if (val === openName) filtered.push(r);
+    }
+    // Agregados
+    const skus = new Map(), sucs = new Map();
+    const otros = new Map(); // clientes si type=vendedor · vendedores si type=cliente
+    const otrosField = type === 'vendedor' ? 'cliente_nombre' : 'vendedor_nombre';
+    let totalPz = 0, totalMonto = 0, totalTx = filtered.length;
+    for (const r of filtered) {
+      const cnt = Number(r.cantidad) || 0;
+      const imp = Number(r.importe) || 0;
+      totalPz += cnt; totalMonto += imp;
+      const sku = r.sku || '(sin sku)';
+      if (!skus.has(sku)) skus.set(sku, { sku, piezas: 0, monto: 0 });
+      skus.get(sku).piezas += cnt; skus.get(sku).monto += imp;
+      const suc = r.sucursal || '(sin sucursal)';
+      if (!sucs.has(suc)) sucs.set(suc, { name: suc, piezas: 0, monto: 0 });
+      sucs.get(suc).piezas += cnt; sucs.get(suc).monto += imp;
+      const ot = (r[otrosField] || '(sin nombre)').trim() || '(sin nombre)';
+      if (!otros.has(ot)) otros.set(ot, { name: ot, piezas: 0, monto: 0 });
+      otros.get(ot).piezas += cnt; otros.get(ot).monto += imp;
+    }
+    const topProductos = Array.from(skus.values())
+      .map((v) => ({ ...v, pct: totalMonto > 0 ? (v.monto / totalMonto * 100) : 0 }))
+      .sort((a, b) => b.monto - a.monto).slice(0, 5);
+    const topSucursales = Array.from(sucs.values())
+      .map((v) => ({ ...v, label: (SUCURSAL_META[v.name]?.label) || v.name, tipo: metaSuc(v.name).tipo, pct: totalMonto > 0 ? (v.monto / totalMonto * 100) : 0 }))
+      .sort((a, b) => b.monto - a.monto).slice(0, 5);
+    const topOtros = Array.from(otros.values())
+      .map((v) => ({ ...v, pct: totalMonto > 0 ? (v.monto / totalMonto * 100) : 0 }))
+      .sort((a, b) => b.monto - a.monto).slice(0, 5);
+    const ticket = totalTx > 0 ? totalMonto / totalTx : null;
+    return { topProductos, topSucursales, topOtros, totalPz, totalMonto, totalTx, ticket, totalSkus: skus.size, totalOtros: otros.size };
+  }, [openName, type, selloutGeneral, anio, mesActual]);
+
   return (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10, gap: 8 }}>
-        <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>{title}</h5>
-        <span style={{ fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textSubtle || theme.textMuted, fontStyle: 'italic' }}>{eyebrow}</span>
+        <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
+          {title}
+          <span style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontWeight: 500, fontStyle: 'italic', marginLeft: 8 }}>
+            click abre drill
+          </span>
+        </h5>
+        <span style={{ fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textSubtle || theme.textMuted }}>
+          Top {items.length} de {totalCount}
+        </span>
       </div>
-      {items.length === 0 ? (
+      {allItems.length === 0 ? (
         <div style={{ padding: '20px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>{emptyMsg}</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {items.map((r, i) => (
-            <div key={r.name} style={{ display: 'grid', gridTemplateColumns: '22px 1fr auto', gap: 10, alignItems: 'center' }}>
-              <span style={{
-                fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 700, color: theme.textMuted,
-                background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderRadius: 6, padding: '3px 0', textAlign: 'center', letterSpacing: '0.02em',
-              }}>{i + 1}</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.name}>{r.name}</span>
-                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 500, color: theme.textMuted }}>{r.pct?.toFixed(1)}%</span>
-                </div>
-                <div style={{ height: 6, borderRadius: 999, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-                  <div style={{ width: `${(r.monto / maxMonto * 100).toFixed(1)}%`, height: '100%', background: color, borderRadius: 999, transition: 'width 400ms' }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace', marginTop: 1 }}>
-                  <span>{fmt.int(r.piezas)} pz · {fmt.money(r.monto)}</span>
-                  {r.yoy != null && <span style={{ fontWeight: 700, color: r.yoy >= 0 ? P.green : P.red }}>{r.yoy >= 0 ? '+' : ''}{r.yoy.toFixed(0)}% YoY</span>}
-                </div>
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, maxHeight: expanded ? 520 : 'none', overflowY: expanded ? 'auto' : 'visible' }}>
+            {items.map((r, i) => {
+              const isOpen = openName === r.name;
+              return (
+                <React.Fragment key={r.name}>
+                  <div
+                    onClick={() => setOpenName(isOpen ? null : r.name)}
+                    onMouseEnter={(e) => { if (!isOpen) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'; }}
+                    onMouseLeave={(e) => { if (!isOpen) e.currentTarget.style.background = 'transparent'; }}
+                    style={{
+                      display: 'grid', gridTemplateColumns: '22px 1fr auto 12px', gap: 10, alignItems: 'center',
+                      padding: '8px', margin: '0 -8px', borderRadius: 8, cursor: 'pointer',
+                      background: isOpen ? (isDark ? 'rgba(100,210,255,0.08)' : 'rgba(90,200,250,0.08)') : 'transparent',
+                      transition: 'background 200ms cubic-bezier(.4,0,.2,1)',
+                    }}>
+                    <span style={{
+                      fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 700, color: theme.textMuted,
+                      background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderRadius: 6, padding: '3px 0', textAlign: 'center', letterSpacing: '0.02em',
+                    }}>#{i + 1}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.name}>{r.name}</span>
+                        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 500, color: theme.textMuted }}>{r.pct?.toFixed(1)}%</span>
+                      </div>
+                      <div style={{ height: 4, borderRadius: 999, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${(r.monto / maxMonto * 100).toFixed(1)}%`, height: '100%', borderRadius: 999,
+                          background: `linear-gradient(90deg, ${color}CC 0%, ${color} 100%)`,
+                          transition: 'width 460ms cubic-bezier(.4,0,.2,1)',
+                        }} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace', marginTop: 1 }}>
+                        <span>{fmt.int(r.piezas)} pz · {fmt.money(r.monto)}</span>
+                        {r.yoy != null && <span style={{ fontWeight: 700, color: r.yoy >= 0 ? P.green : P.red }}>{r.yoy >= 0 ? '+' : ''}{r.yoy.toFixed(0)}% YoY</span>}
+                      </div>
+                    </div>
+                    <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, fontWeight: 600, color: theme.text, textAlign: 'right', minWidth: 56 }}>{fmt.money(r.monto)}</span>
+                    <ChevronRight size={12} style={{
+                      color: isOpen ? P.accent : theme.textSubtle,
+                      transform: isOpen ? 'rotate(90deg)' : 'none',
+                      transition: 'transform 280ms cubic-bezier(.4,0,.2,1)',
+                    }} />
+                  </div>
+                  {isOpen && drillData && (
+                    <RankingDrillPanel theme={theme} P={P} isDark={isDark}
+                      type={type} name={r.name} data={drillData}
+                      onClose={() => setOpenName(null)} />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+          {restCount > 0 && (
+            <button onClick={() => setExpanded((v) => !v)}
+              onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = P.accent; e.currentTarget.style.color = P.accent; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = theme.border; e.currentTarget.style.color = theme.textMuted; }}
+              style={{
+                marginTop: 10, padding: '8px 14px', width: '100%',
+                border: `1px solid ${theme.border}`, borderRadius: 999,
+                background: 'transparent', color: theme.textMuted,
+                fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 500,
+                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                transition: 'background 200ms cubic-bezier(.4,0,.2,1), border-color 200ms cubic-bezier(.4,0,.2,1), color 200ms cubic-bezier(.4,0,.2,1)',
+              }}>
+              {expanded ? `Ver menos ▴` : `+ Ver los ${totalCount} ${type === 'vendedor' ? 'vendedores' : 'clientes'} ▾`}
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════ Drill inline vendedor/cliente ═══════════════
+function RankingDrillPanel({ theme, P, isDark, type, name, data, onClose }) {
+  const bg = isDark ? 'rgba(100,210,255,0.06)' : 'rgba(90,200,250,0.05)';
+  const border = isDark ? 'rgba(100,210,255,0.20)' : 'rgba(90,200,250,0.28)';
+  const cols = type === 'vendedor' ? 3 : 2;
+  return (
+    <div style={{
+      background: bg, border: `1px dashed ${border}`, borderRadius: 10, padding: '10px 12px',
+      margin: '4px -8px 8px', animation: 'sodicoRankSlide 320ms cubic-bezier(.4,0,.2,1)', overflow: 'hidden',
+    }}>
+      <style>{`@keyframes sodicoRankSlide{from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);}}`}</style>
+      {/* Header con stats */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        gap: 12, paddingBottom: 8, marginBottom: 8, borderBottom: `1px dashed ${theme.divider || theme.border}`,
+      }}>
+        <div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>
+            Detalle {type === 'vendedor' ? 'vendedor' : 'cliente'} · YTD
+          </div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {name}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+          <SmallStat theme={theme} k="Piezas" v={fmt.int(data.totalPz)} />
+          <SmallStat theme={theme} k="Monto" v={fmt.money(data.totalMonto)} />
+          {type === 'vendedor' ? (
+            <SmallStat theme={theme} k="Clientes" v={fmt.int(data.totalOtros)} />
+          ) : (
+            <SmallStat theme={theme} k="Frecuencia" v={`${fmt.int(data.totalTx)} tx`} />
+          )}
+          {data.ticket != null && <SmallStat theme={theme} k="Ticket" v={fmt.moneyFull(data.ticket)} />}
+          <button onClick={(e) => { e.stopPropagation(); onClose(); }}
+            style={{
+              background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted,
+              padding: 4, borderRadius: 6, marginLeft: 4,
+              transition: 'background 160ms cubic-bezier(.4,0,.2,1)',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = `${theme.text}0F`}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            title="Cerrar">
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+      {/* Columnas */}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 14 }}>
+        <ProductosCol theme={theme} P={P} items={data.topProductos} totalSkus={data.totalSkus} />
+        {type === 'vendedor' && (
+          <SimpleRankingCol theme={theme} P={P} title="Mejores clientes"
+            count={`Top ${Math.min(5, data.topOtros.length)} de ${data.totalOtros}`}
+            items={data.topOtros} color={P.teal} />
+        )}
+        <SucursalesCol theme={theme} P={P} items={data.topSucursales} title={type === 'vendedor' ? 'Sucursales' : 'Compra desde sucursales'} />
+      </div>
+    </div>
+  );
+}
+
+function ProductosCol({ theme, P, items, totalSkus }) {
+  const maxMonto = Math.max(1, ...items.map((x) => x.monto));
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>Productos que más vende</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted }}>Top {items.length} de {totalSkus}</span>
+      </div>
+      {items.length === 0 ? (
+        <div style={{ fontSize: 10.5, color: theme.textMuted, fontStyle: 'italic' }}>Sin ventas</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {items.map((v) => (
+            <div key={v.sku} style={{ paddingBottom: 5, borderBottom: `1px dashed ${theme.divider || theme.border}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: P.accent }}>{v.sku}</span>
+                <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted, fontWeight: 500 }}>{v.pct.toFixed(1)}%</span>
               </div>
-              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, fontWeight: 600, color: theme.text, textAlign: 'right', minWidth: 60 }}>{fmt.money(r.monto)}</span>
+              <div style={{ height: 3, background: `${P.accent}18`, borderRadius: 999, marginTop: 2, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${(v.monto / maxMonto * 100).toFixed(1)}%`, background: P.accent, borderRadius: 999, transition: 'width 460ms cubic-bezier(.4,0,.2,1)' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: theme.textMuted, marginTop: 2, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                <span>{fmt.int(v.piezas)} pz · {fmt.money(v.monto)}</span>
+              </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SimpleRankingCol({ theme, P, title, count, items, color }) {
+  const maxMonto = Math.max(1, ...items.map((x) => x.monto));
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>{title}</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted }}>{count}</span>
+      </div>
+      {items.length === 0 ? (
+        <div style={{ fontSize: 10.5, color: theme.textMuted, fontStyle: 'italic' }}>Sin datos</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {items.map((v) => (
+            <div key={v.name} style={{ paddingBottom: 5, borderBottom: `1px dashed ${theme.divider || theme.border}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={v.name}>{v.name}</span>
+                <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted, fontWeight: 500 }}>{v.pct.toFixed(1)}%</span>
+              </div>
+              <div style={{ height: 3, background: `${color}18`, borderRadius: 999, marginTop: 2, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${(v.monto / maxMonto * 100).toFixed(1)}%`, background: color, borderRadius: 999, transition: 'width 460ms cubic-bezier(.4,0,.2,1)' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: theme.textMuted, marginTop: 2, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                <span>{fmt.int(v.piezas)} pz · {fmt.money(v.monto)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SucursalesCol({ theme, P, items, title }) {
+  const maxMonto = Math.max(1, ...items.map((x) => x.monto));
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>{title || 'Sucursales'}</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted }}>Top {items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <div style={{ fontSize: 10.5, color: theme.textMuted, fontStyle: 'italic' }}>Sin datos</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {items.map((v) => {
+            const c = v.tipo === 'online' ? P.green : P.accent;
+            return (
+              <div key={v.name} style={{ paddingBottom: 5, borderBottom: `1px dashed ${theme.divider || theme.border}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 500, color: theme.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={v.label}>{v.label}</span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted, fontWeight: 500 }}>{v.pct.toFixed(1)}%</span>
+                </div>
+                <div style={{ height: 3, background: `${c}18`, borderRadius: 999, marginTop: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${(v.monto / maxMonto * 100).toFixed(1)}%`, background: c, borderRadius: 999, transition: 'width 460ms cubic-bezier(.4,0,.2,1)' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: theme.textMuted, marginTop: 2, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                  <span>{fmt.int(v.piezas)} pz · {fmt.money(v.monto)}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
