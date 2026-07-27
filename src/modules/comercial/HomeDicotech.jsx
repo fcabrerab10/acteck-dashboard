@@ -173,6 +173,27 @@ export default function HomeDicotech({ cliente, clienteKey }) {
     return Array.from(mp.entries()).map(([mes, sell_in]) => ({ mes, sell_in, sell_out: 0 }));
   }, [facturacion, anio]);
 
+  // ═════ Sell Out por mes desde v_sellout_dicotech_mensual (movido arriba para TDZ) ═════
+  const sellOutByMes = useMemo(() => {
+    const cur = new Map(), prev = new Map();
+    (selloutMensualDico || []).forEach(r => {
+      const y = Number(r.anio); const m = Number(r.mes);
+      const monto = Number(r.monto) || 0;
+      if (y === anio) cur.set(m, (cur.get(m) || 0) + monto);
+      else if (y === anio - 1) prev.set(m, (prev.get(m) || 0) + monto);
+    });
+    return { cur, prev };
+  }, [selloutMensualDico, anio]);
+  const sellOutByMesRaw = sellOutByMes.cur;
+  const sellOutPiezasByMes = useMemo(() => {
+    const cur = new Map();
+    (selloutMensualDico || []).forEach(r => {
+      if (Number(r.anio) !== anio) return;
+      cur.set(Number(r.mes), (cur.get(Number(r.mes)) || 0) + (Number(r.piezas) || 0));
+    });
+    return cur;
+  }, [selloutMensualDico, anio]);
+
   // ═════ Inventario real: snapshot más reciente por SKU ═════
   const invSnapshot = useMemo(() => {
     const bySku = new Map();
@@ -257,27 +278,7 @@ export default function HomeDicotech({ cliente, clienteKey }) {
   const cobranzaMesAnt = cobranzaByMes.get(mesActual - 1) || 0;
   const deltaCobranza = cobranzaMesAnt > 0 ? ((cobranzaMesActual - cobranzaMesAnt) / cobranzaMesAnt * 100) : null;
 
-  // Sell Out por mes desde v_sellout_dicotech_mensual (vista precalculada, un row por mes)
-  const sellOutByMes = useMemo(() => {
-    const cur = new Map(), prev = new Map();
-    (selloutMensualDico || []).forEach(r => {
-      const y = Number(r.anio); const m = Number(r.mes);
-      const monto = Number(r.monto) || 0;
-      if (y === anio) cur.set(m, (cur.get(m) || 0) + monto);
-      else if (y === anio - 1) prev.set(m, (prev.get(m) || 0) + monto);
-    });
-    return { cur, prev };
-  }, [selloutMensualDico, anio]);
-  const sellOutByMesRaw = sellOutByMes.cur;
-  // Piezas SO por mes (para calcular días de inventario)
-  const sellOutPiezasByMes = useMemo(() => {
-    const cur = new Map();
-    (selloutMensualDico || []).forEach(r => {
-      if (Number(r.anio) !== anio) return;
-      cur.set(Number(r.mes), (cur.get(Number(r.mes)) || 0) + (Number(r.piezas) || 0));
-    });
-    return cur;
-  }, [selloutMensualDico, anio]);
+  // (sellOutByMes + sellOutPiezasByMes ya definidos arriba antes de invSnapshot para evitar TDZ)
 
   // ═════ KPIs ═════
   const sellInMes = Number(ventasActual.find(v => Number(v.mes) === mesActual)?.sell_in) || cliente?.kpis?.sellInMes || 0;
