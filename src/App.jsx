@@ -601,7 +601,7 @@ export default function App() {
                     : <EstrategiaProducto cliente={c.nombre} clienteKey={clienteActivo} />
             )}
         {paginaActiva === "marketing" && React.createElement(
-          clienteActivo === 'digitalife' ? MarketingClienteV2 : MarketingCliente,
+          (clienteActivo === 'digitalife' || clienteActivo === 'dicotech') ? MarketingClienteV2 : MarketingCliente,
           { cliente: clienteActivo, clienteKey: clienteActivo }
         )}
                     {paginaActiva === "forecast" && React.createElement(ForecastCliente, { cliente: c.nombre, clienteKey: clienteActivo })}
