@@ -11,7 +11,7 @@ import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
-import { Search, ArrowUpDown, ArrowUp, ArrowDown, Sparkles } from 'lucide-react';
+import { Search, ArrowUpDown, ArrowUp, ArrowDown, Sparkles, X, ChevronRight } from 'lucide-react';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -103,16 +103,19 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   const [sucursalMes, setSucursalMes] = useState([]);
   const [roadmap, setRoadmap] = useState([]);
   const [inventarioCliente, setInventarioCliente] = useState([]);
+  const [inventarioSucursal, setInventarioSucursal] = useState([]);
+  const [selloutGeneral, setSelloutGeneral] = useState([]); // detalle transaccional para vendedores/clientes/drill
   const [rango, setRango] = useState(() => new Set(['Q3']));
   const [busqueda, setBusqueda] = useState('');
   const [orden, setOrden] = useState({ col: 'total', dir: 'desc' });
   const [familiaFilter, setFamiliaFilter] = useState(null);
-  const [sucursalFilter, setSucursalFilter] = useState(null); // reservado para futuro drill
+  const [sucursalDrill, setSucursalDrill] = useState(null); // sucursal expandida en el ranking
+  const [skuDrill, setSkuDrill] = useState(null); // { sku, descripcion, ... } → abre modal
 
   useEffect(() => {
     setLoading(true);
     (async () => {
-      const [mes, skuMes, sucMes, rdmp, inv] = await Promise.all([
+      const [mes, skuMes, sucMes, rdmp, inv, invSuc, general] = await Promise.all([
         fetchAll('v_sellout_dicotech_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
         fetchAll('v_sellout_dicotech_sku_mes', 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anio])),
@@ -121,12 +124,18 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
         fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp,sort_order'),
         fetchAll('inventario_cliente', 'sku,stock,valor,precio_venta,costo_convenio,anio,semana,fecha_ultima_venta,dias_sin_venta',
           (q) => q.eq('cliente', clienteKey)),
+        fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
+          (q) => q.eq('cliente', clienteKey)),
+        fetchAll('sellout_general', 'anio,mes,sku,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe',
+          (q) => q.eq('mayorista', 'DICOTECH').in('anio', [anioPrev, anio])),
       ]);
       setMensual(mes);
       setSkuMesRaw(skuMes);
       setSucursalMes(sucMes);
       setRoadmap(rdmp);
       setInventarioCliente(inv);
+      setInventarioSucursal(invSuc);
+      setSelloutGeneral(general);
       setLoading(false);
     })();
   }, [clienteKey, anio, anioPrev]);
@@ -296,6 +305,100 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
     for (const [sku, v] of inventarioMap) if (v.stock > 0) s.add(sku);
     return s;
   }, [inventarioMap]);
+
+  // Inventario por sucursal · último snapshot por sku+sucursal
+  const inventarioSucursalMap = useMemo(() => {
+    const bySku = new Map();
+    for (const r of inventarioSucursal) {
+      const key = (Number(r.anio) || 0) * 100 + (Number(r.semana) || 0);
+      if (!bySku.has(r.sku)) bySku.set(r.sku, new Map());
+      const bySuc = bySku.get(r.sku);
+      const prev = bySuc.get(r.sucursal);
+      if (!prev || key > prev._key) {
+        const stock = Number(r.stock) || 0;
+        const valorRaw = Number(r.valor) || 0;
+        const costoConv = Number(r.costo_convenio) || 0;
+        const valor = valorRaw > 0 ? valorRaw : stock * costoConv;
+        bySuc.set(r.sucursal, { sucursal: r.sucursal, stock, valor, _key: key });
+      }
+    }
+    const out = new Map();
+    for (const [sku, bySuc] of bySku) {
+      const arr = Array.from(bySuc.values()).filter((x) => x.stock > 0).sort((a, b) => b.stock - a.stock);
+      if (arr.length > 0) out.set(sku, arr);
+    }
+    return out;
+  }, [inventarioSucursal]);
+
+  // ═════ Rankings globales de vendedores y clientes finales (YTD del año actual) ═════
+  const rankingsGlobales = useMemo(() => {
+    const vend = new Map(), vendPrev = new Map();
+    const cli = new Map(), cliPrev = new Map();
+    for (const r of selloutGeneral) {
+      const y = Number(r.anio);
+      const mes = Number(r.mes);
+      if (mes > mesActual && y === anio) continue;
+      const cnt = Number(r.cantidad) || 0;
+      const imp = Number(r.importe) || 0;
+      const vn = (r.vendedor_nombre || '(sin nombre)').trim() || '(sin nombre)';
+      const cn = (r.cliente_nombre || '(sin nombre)').trim() || '(sin nombre)';
+      const [mVend, mCli] = y === anio ? [vend, cli] : y === anioPrev ? [vendPrev, cliPrev] : [null, null];
+      if (!mVend) continue;
+      if (!mVend.has(vn)) mVend.set(vn, { name: vn, monto: 0, piezas: 0, tx: 0, clientes: new Set() });
+      const vv = mVend.get(vn);
+      vv.monto += imp; vv.piezas += cnt; vv.tx += 1; vv.clientes.add(cn);
+      if (!mCli.has(cn)) mCli.set(cn, { name: cn, monto: 0, piezas: 0, tx: 0 });
+      const cc = mCli.get(cn);
+      cc.monto += imp; cc.piezas += cnt; cc.tx += 1;
+    }
+    const totVend = Array.from(vend.values()).reduce((s, x) => s + x.monto, 0);
+    const totCli = Array.from(cli.values()).reduce((s, x) => s + x.monto, 0);
+    const vendedores = Array.from(vend.values()).map((v) => {
+      const prev = vendPrev.get(v.name)?.monto || 0;
+      return {
+        name: v.name, monto: v.monto, piezas: v.piezas, tx: v.tx, clientes: v.clientes.size,
+        pct: totVend > 0 ? (v.monto / totVend * 100) : 0,
+        yoy: prev > 0 ? ((v.monto - prev) / prev * 100) : null,
+      };
+    }).sort((a, b) => b.monto - a.monto);
+    const clientes = Array.from(cli.values()).map((v) => {
+      const prev = cliPrev.get(v.name)?.monto || 0;
+      return {
+        name: v.name, monto: v.monto, piezas: v.piezas, tx: v.tx,
+        pct: totCli > 0 ? (v.monto / totCli * 100) : 0,
+        yoy: prev > 0 ? ((v.monto - prev) / prev * 100) : null,
+      };
+    }).sort((a, b) => b.monto - a.monto);
+    return { vendedores, clientes, totVendedores: vend.size, totClientes: cli.size };
+  }, [selloutGeneral, anio, anioPrev, mesActual]);
+
+  // ═════ Drill por SUCURSAL: top clientes + top vendedores de una sucursal (YTD) ═════
+  const drillSucursal = useMemo(() => {
+    if (!sucursalDrill) return null;
+    const cli = new Map(), ven = new Map();
+    for (const r of selloutGeneral) {
+      if (Number(r.anio) !== anio) continue;
+      if (Number(r.mes) > mesActual) continue;
+      if ((r.sucursal || '(sin sucursal)') !== sucursalDrill) continue;
+      const cnt = Number(r.cantidad) || 0;
+      const imp = Number(r.importe) || 0;
+      const cn = (r.cliente_nombre || '(sin nombre)').trim() || '(sin nombre)';
+      const vn = (r.vendedor_nombre || '(sin nombre)').trim() || '(sin nombre)';
+      if (!cli.has(cn)) cli.set(cn, { name: cn, monto: 0, piezas: 0 });
+      cli.get(cn).monto += imp; cli.get(cn).piezas += cnt;
+      if (!ven.has(vn)) ven.set(vn, { name: vn, monto: 0, piezas: 0 });
+      ven.get(vn).monto += imp; ven.get(vn).piezas += cnt;
+    }
+    const totCli = Array.from(cli.values()).reduce((s, x) => s + x.monto, 0);
+    const totVen = Array.from(ven.values()).reduce((s, x) => s + x.monto, 0);
+    const topClientes = Array.from(cli.values()).map((v) => ({
+      ...v, pct: totCli > 0 ? (v.monto / totCli * 100) : 0,
+    })).sort((a, b) => b.monto - a.monto).slice(0, 5);
+    const topVendedores = Array.from(ven.values()).map((v) => ({
+      ...v, pct: totVen > 0 ? (v.monto / totVen * 100) : 0,
+    })).sort((a, b) => b.monto - a.monto).slice(0, 5);
+    return { topClientes, topVendedores, clientesTotal: cli.size, vendedoresTotal: ven.size };
+  }, [sucursalDrill, selloutGeneral, anio, mesActual]);
 
   // ═════ Sucursales YTD · agregado + split físico/online ═════
   const sucursalesYTD = useMemo(() => {
@@ -555,21 +658,50 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
           selected={familiaFilter} onSelect={setFamiliaFilter} />
       </div>
 
-      {/* Nueva sección: Físico vs Online + Ranking sucursales */}
+      {/* Nueva sección: Físico vs Online + Ranking sucursales (con drill expandible) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.3fr)', gap: 10, alignItems: 'stretch' }}>
         <FisicoOnlineCard theme={theme} P={P} split={splitFisicoOnline} />
-        <SucursalesRankingCard theme={theme} P={P} sucursales={sucursalesYTD} />
+        <SucursalesRankingCard theme={theme} P={P} sucursales={sucursalesYTD}
+          drillSucursal={sucursalDrill} onSelectSucursal={setSucursalDrill}
+          drillData={drillSucursal} />
+      </div>
+
+      {/* Nueva sección: Rankings globales Vendedores + Clientes finales */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, alignItems: 'stretch' }}>
+        <RankingCard theme={theme} P={P}
+          title="Ranking vendedores · YTD"
+          eyebrow={`Top 6 de ${rankingsGlobales.totVendedores}`}
+          items={rankingsGlobales.vendedores.slice(0, 6)}
+          color={P.indigo}
+          emptyMsg="Sin datos de vendedores" />
+        <RankingCard theme={theme} P={P}
+          title="Ranking clientes finales · YTD"
+          eyebrow={`Top 6 de ${rankingsGlobales.totClientes}`}
+          items={rankingsGlobales.clientes.slice(0, 6)}
+          color={P.teal}
+          emptyMsg="Sin datos de clientes" />
       </div>
 
       {/* Ferruteck strip */}
       <FerruteckStrip recos={copilotRecos} />
 
-      {/* Tabla SKU */}
+      {/* Tabla SKU · click abre modal drill-down */}
       <TablaSKU theme={theme} P={P} isDark={isDark}
         rows={filas} busqueda={busqueda} onChangeBusqueda={setBusqueda}
         orden={orden} onToggleSort={toggleSort}
         maxCelda={maxCelda} mesActual={mesActual}
-        familiaFilter={familiaFilter} onClearFamilia={() => setFamiliaFilter(null)} />
+        familiaFilter={familiaFilter} onClearFamilia={() => setFamiliaFilter(null)}
+        onOpenSku={(row) => setSkuDrill(row)} />
+
+      {/* Modal drill-down por SKU */}
+      {skuDrill && (
+        <SkuDrillModal theme={theme} P={P} isDark={isDark}
+          skuRow={skuDrill}
+          anio={anio} anioPrev={anioPrev} mesActual={mesActual}
+          selloutGeneral={selloutGeneral}
+          inventarioSucursalMap={inventarioSucursalMap}
+          onClose={() => setSkuDrill(null)} />
+      )}
     </div>
   );
 }
@@ -1016,8 +1148,8 @@ function FoRow({ color, kind, name, monto, pct, tx, clientes, ticket, theme }) {
   );
 }
 
-// ═══════════════ NUEVA: Ranking sucursales (barras horizontales top 6) ═══════════════
-function SucursalesRankingCard({ theme, P, sucursales }) {
+// ═══════════════ NUEVA: Ranking sucursales (barras horizontales + drill inline) ═══════════════
+function SucursalesRankingCard({ theme, P, sucursales, drillSucursal, onSelectSucursal, drillData }) {
   const [modo, setModo] = useState('monto'); // monto | tx | ticket
   const top = sucursales.slice(0, 6);
   const rows = top.map((s) => {
@@ -1061,35 +1193,56 @@ function SucursalesRankingCard({ theme, P, sucursales }) {
             const pct = valueOf(r) / maxVal * 100;
             const isFis = r.tipo === 'fisica';
             const barColor = isFis ? P.teal : P.green;
+            const isOpen = drillSucursal === r.sucursal;
+            const canDrill = typeof onSelectSucursal === 'function';
             return (
-              <div key={r.sucursal} style={{ display: 'grid', gridTemplateColumns: '22px 1fr auto', gap: 10, alignItems: 'center' }}>
-                <span style={{
-                  fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 700, color: theme.textMuted,
-                  background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderRadius: 6, padding: '3px 0', textAlign: 'center', letterSpacing: '0.02em',
-                }}>{i + 1}</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      {r.label}
-                      <span style={{
-                        fontFamily: TYPO.fontText, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', fontWeight: 600,
-                        padding: '1px 6px', borderRadius: 4,
-                        background: isFis ? `${P.teal}1F` : `${P.green}1F`,
-                        color: isFis ? P.teal : P.green,
-                      }}>{isFis ? 'FÍS' : 'ONL'}</span>
-                    </span>
-                    {r.momPct != null && (
-                      <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: r.momPct >= 0 ? P.green : P.red }}>
-                        {r.momPct >= 0 ? '+' : ''}{r.momPct.toFixed(0)}% MoM
+              <React.Fragment key={r.sucursal}>
+                <div
+                  onClick={() => canDrill && onSelectSucursal(isOpen ? null : r.sucursal)}
+                  style={{
+                    display: 'grid', gridTemplateColumns: '22px 1fr auto 14px', gap: 10, alignItems: 'center',
+                    padding: canDrill ? '4px 8px' : 0, margin: canDrill ? '0 -8px' : 0, borderRadius: 8,
+                    cursor: canDrill ? 'pointer' : 'default',
+                    background: isOpen ? (isDark ? 'rgba(100,210,255,0.10)' : 'rgba(90,200,250,0.10)') : 'transparent',
+                    transition: 'background 160ms',
+                  }}
+                  onMouseEnter={(e) => { if (canDrill && !isOpen) e.currentTarget.style.background = `${theme.text}05`; }}
+                  onMouseLeave={(e) => { if (canDrill && !isOpen) e.currentTarget.style.background = 'transparent'; }}>
+                  <span style={{
+                    fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 700, color: theme.textMuted,
+                    background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderRadius: 6, padding: '3px 0', textAlign: 'center', letterSpacing: '0.02em',
+                  }}>{i + 1}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {r.label}
+                        <span style={{
+                          fontFamily: TYPO.fontText, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', fontWeight: 600,
+                          padding: '1px 6px', borderRadius: 4,
+                          background: isFis ? `${P.teal}1F` : `${P.green}1F`,
+                          color: isFis ? P.teal : P.green,
+                        }}>{isFis ? 'FÍS' : 'ONL'}</span>
                       </span>
-                    )}
+                      {r.momPct != null && (
+                        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: r.momPct >= 0 ? P.green : P.red }}>
+                          {r.momPct >= 0 ? '+' : ''}{r.momPct.toFixed(0)}% MoM
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ height: 6, borderRadius: 999, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 999, transition: 'width 400ms' }} />
+                    </div>
                   </div>
-                  <div style={{ height: 6, borderRadius: 999, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-                    <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 999, transition: 'width 400ms' }} />
-                  </div>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, fontWeight: 600, color: theme.text, textAlign: 'right', minWidth: 60 }}>{formatValue(r)}</span>
+                  {canDrill && (
+                    <ChevronRight size={12} style={{ color: theme.textMuted, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 160ms' }} />
+                  )}
                 </div>
-                <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, fontWeight: 600, color: theme.text, textAlign: 'right', minWidth: 60 }}>{formatValue(r)}</span>
-              </div>
+                {isOpen && drillData && (
+                  <SucursalDrillPanel theme={theme} P={P} isDark={isDark}
+                    label={r.label} data={drillData} />
+                )}
+              </React.Fragment>
             );
           })}
         </div>
@@ -1126,7 +1279,7 @@ function FerruteckStrip({ recos }) {
 }
 
 // ═══════════════ Tabla SKU (sin marca column · single-brand Acteck) ═══════════════
-function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, familiaFilter, onClearFamilia }) {
+function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, familiaFilter, onClearFamilia, onOpenSku }) {
   const heatCell = (v) => {
     if (v == null || v === 0) return null;
     if (v < 0) return { bg: `${P.red}22`, color: P.red, weight: 600 };
@@ -1182,9 +1335,14 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
             )}
             {rows.slice(0, 500).map((r) => {
               const rmpStyle = r.rdmp ? roadmapChipStyle(r.rdmp, P, theme) : null;
+              const clickable = typeof onOpenSku === 'function';
               return (
-                <tr key={r.sku}>
-                  <td style={{ ...cellStyle(theme), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.sku}</td>
+                <tr key={r.sku}
+                  onClick={() => clickable && onOpenSku(r)}
+                  style={{ cursor: clickable ? 'pointer' : 'default' }}
+                  onMouseEnter={(e) => { if (clickable) e.currentTarget.style.background = `${theme.text}05`; }}
+                  onMouseLeave={(e) => { if (clickable) e.currentTarget.style.background = 'transparent'; }}>
+                  <td style={{ ...cellStyle(theme), fontFamily: '"SF Mono", ui-monospace, monospace', color: clickable ? P.teal : theme.text, fontWeight: clickable ? 600 : 400 }}>{r.sku}</td>
                   <td style={{ ...cellStyle(theme), color: theme.textMuted, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
                   <td style={cellStyle(theme)}>{r.categoria || '—'}</td>
                   <td style={{ ...cellStyle(theme), textAlign: 'center' }}>
@@ -1247,4 +1405,457 @@ function cellStyle(theme, align) {
     padding: '7px 6px', borderBottom: `1px solid ${theme.divider || theme.border}`,
     verticalAlign: 'middle', textAlign: align || 'left',
   };
+}
+
+// ═══════════════ NUEVA: Ranking genérico (vendedores / clientes) ═══════════════
+function RankingCard({ theme, P, title, eyebrow, items, color, emptyMsg }) {
+  const isDark = theme.mode === 'dark';
+  const maxMonto = Math.max(1, ...items.map((x) => x.monto || 0));
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10, gap: 8 }}>
+        <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>{title}</h5>
+        <span style={{ fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textSubtle || theme.textMuted, fontStyle: 'italic' }}>{eyebrow}</span>
+      </div>
+      {items.length === 0 ? (
+        <div style={{ padding: '20px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>{emptyMsg}</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {items.map((r, i) => (
+            <div key={r.name} style={{ display: 'grid', gridTemplateColumns: '22px 1fr auto', gap: 10, alignItems: 'center' }}>
+              <span style={{
+                fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 700, color: theme.textMuted,
+                background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderRadius: 6, padding: '3px 0', textAlign: 'center', letterSpacing: '0.02em',
+              }}>{i + 1}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.name}>{r.name}</span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 500, color: theme.textMuted }}>{r.pct?.toFixed(1)}%</span>
+                </div>
+                <div style={{ height: 6, borderRadius: 999, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+                  <div style={{ width: `${(r.monto / maxMonto * 100).toFixed(1)}%`, height: '100%', background: color, borderRadius: 999, transition: 'width 400ms' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace', marginTop: 1 }}>
+                  <span>{fmt.int(r.piezas)} pz · {fmt.money(r.monto)}</span>
+                  {r.yoy != null && <span style={{ fontWeight: 700, color: r.yoy >= 0 ? P.green : P.red }}>{r.yoy >= 0 ? '+' : ''}{r.yoy.toFixed(0)}% YoY</span>}
+                </div>
+              </div>
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, fontWeight: 600, color: theme.text, textAlign: 'right', minWidth: 60 }}>{fmt.money(r.monto)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════ NUEVA: Drill-down inline por sucursal ═══════════════
+function SucursalDrillPanel({ theme, P, isDark, label, data }) {
+  const { topClientes, topVendedores, clientesTotal, vendedoresTotal } = data;
+  const bg = isDark ? 'rgba(100,210,255,0.06)' : 'rgba(90,200,250,0.04)';
+  const border = isDark ? 'rgba(100,210,255,0.14)' : 'rgba(90,200,250,0.24)';
+  return (
+    <div style={{
+      background: bg, border: `1px dashed ${border}`, borderRadius: 10, padding: '10px 12px',
+      margin: '2px 0 4px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14,
+    }}>
+      <MiniRankingList theme={theme} P={P} color={P.teal}
+        title={`Clientes finales · ${label}`} count={`Top ${Math.min(5, topClientes.length)} de ${clientesTotal}`}
+        items={topClientes} />
+      <MiniRankingList theme={theme} P={P} color={P.indigo}
+        title={`Vendedores · ${label}`} count={`Top ${Math.min(5, topVendedores.length)} de ${vendedoresTotal}`}
+        items={topVendedores} />
+    </div>
+  );
+}
+
+function MiniRankingList({ theme, P, color, title, count, items }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>{title}</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted }}>{count}</span>
+      </div>
+      {items.length === 0 ? (
+        <div style={{ fontSize: 10.5, color: theme.textMuted, fontStyle: 'italic' }}>Sin datos</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {items.map((v) => (
+            <div key={v.name}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 4 }}>
+                <span style={{ fontFamily: TYPO.fontText, fontSize: 11, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }} title={v.name}>{v.name}</span>
+                <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, color: theme.textMuted }}>{v.pct.toFixed(1)}%</span>
+              </div>
+              <div style={{ height: 3, borderRadius: 999, background: `${color}18`, overflow: 'hidden', marginTop: 2 }}>
+                <div style={{ width: `${v.pct}%`, height: '100%', background: color, borderRadius: 999 }} />
+              </div>
+              <div style={{ fontSize: 9.5, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace', marginTop: 2 }}>
+                {fmt.int(v.piezas)} pz · {fmt.money(v.monto)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════ NUEVA: Modal Drill-down por SKU (Propuesta B compacta) ═══════════════
+function SkuDrillModal({ theme, P, isDark, skuRow, anio, anioPrev, mesActual, selloutGeneral, inventarioSucursalMap, onClose }) {
+  const sku = skuRow.sku;
+  const [precioLista, setPrecioLista] = useState(null);
+  const [loadingPrecio, setLoadingPrecio] = useState(true);
+
+  useEffect(() => {
+    setLoadingPrecio(true);
+    (async () => {
+      const { data } = await supabase.from('precios_sku')
+        .select('precio').eq('sku', sku).eq('lista', 'DICOTECH')
+        .eq('anio', anio).eq('mes', mesActual).maybeSingle();
+      setPrecioLista(data?.precio ? Number(data.precio) : null);
+      setLoadingPrecio(false);
+    })();
+  }, [sku, anio, mesActual]);
+
+  // Filtrar sellout_general por sku
+  const skuRows = useMemo(() => selloutGeneral.filter((r) => r.sku === sku), [selloutGeneral, sku]);
+
+  // Rankings del SKU
+  const { topClientes, topVendedores, topSucursales, mensuales, piezasYTD, montoYTD, precioReal, clientesTotal, vendedoresTotal, sucursalesTotal } = useMemo(() => {
+    const cli = new Map(); const ven = new Map(); const suc = new Map();
+    const cliPrev = new Map(); const sucPrev = new Map();
+    const mensual = Array.from({ length: 12 }, () => ({ mesPiezas: 0, mesMonto: 0, mesN: 0 }));
+    let pz = 0, monto = 0, precioAcum = 0, precioN = 0;
+    for (const r of skuRows) {
+      const y = Number(r.anio), m = Number(r.mes);
+      const cnt = Number(r.cantidad) || 0; const imp = Number(r.importe) || 0;
+      const cn = (r.cliente_nombre || '(sin nombre)').trim() || '(sin nombre)';
+      const vn = (r.vendedor_nombre || '(sin nombre)').trim() || '(sin nombre)';
+      const sn = r.sucursal || '(sin sucursal)';
+      if (y === anio && m <= mesActual) {
+        pz += cnt; monto += imp;
+        if (Number(r.precio_unitario) > 0) { precioAcum += Number(r.precio_unitario) * cnt; precioN += cnt; }
+        if (m >= 1 && m <= 12) {
+          mensual[m - 1].mesPiezas += cnt;
+          mensual[m - 1].mesMonto += imp;
+          if (Number(r.precio_unitario) > 0) { mensual[m - 1].mesN += cnt; mensual[m - 1].precioAcum = (mensual[m - 1].precioAcum || 0) + Number(r.precio_unitario) * cnt; }
+        }
+        if (!cli.has(cn)) cli.set(cn, { name: cn, monto: 0, piezas: 0 });
+        cli.get(cn).monto += imp; cli.get(cn).piezas += cnt;
+        if (!ven.has(vn)) ven.set(vn, { name: vn, monto: 0, piezas: 0 });
+        ven.get(vn).monto += imp; ven.get(vn).piezas += cnt;
+        if (!suc.has(sn)) suc.set(sn, { name: sn, monto: 0, piezas: 0 });
+        suc.get(sn).monto += imp; suc.get(sn).piezas += cnt;
+      } else if (y === anioPrev && m <= mesActual) {
+        cliPrev.set(cn, (cliPrev.get(cn) || 0) + imp);
+        sucPrev.set(sn, (sucPrev.get(sn) || 0) + imp);
+      }
+    }
+    const totCli = Array.from(cli.values()).reduce((s, x) => s + x.monto, 0);
+    const totVen = Array.from(ven.values()).reduce((s, x) => s + x.monto, 0);
+    const totSuc = Array.from(suc.values()).reduce((s, x) => s + x.monto, 0);
+    const topC = Array.from(cli.values()).map((v) => ({
+      ...v, pct: totCli > 0 ? (v.monto / totCli * 100) : 0,
+      yoy: cliPrev.get(v.name) > 0 ? ((v.monto - cliPrev.get(v.name)) / cliPrev.get(v.name) * 100) : null,
+    })).sort((a, b) => b.monto - a.monto).slice(0, 6);
+    const topV = Array.from(ven.values()).map((v) => ({
+      ...v, pct: totVen > 0 ? (v.monto / totVen * 100) : 0,
+    })).sort((a, b) => b.monto - a.monto).slice(0, 5);
+    const topS = Array.from(suc.values()).map((v) => ({
+      ...v, label: (SUCURSAL_META[v.name]?.label) || v.name,
+      tipo: metaSuc(v.name).tipo,
+      pct: totSuc > 0 ? (v.monto / totSuc * 100) : 0,
+      yoy: sucPrev.get(v.name) > 0 ? ((v.monto - sucPrev.get(v.name)) / sucPrev.get(v.name) * 100) : null,
+    })).sort((a, b) => b.monto - a.monto).slice(0, 6);
+    const precioR = precioN > 0 ? precioAcum / precioN : null;
+    const mensuales = mensual.map((mm, i) => ({
+      mes: i + 1, label: MESES[i],
+      piezas: mm.mesPiezas,
+      precioReal: mm.mesN > 0 ? (mm.precioAcum / mm.mesN) : null,
+    }));
+    return {
+      topClientes: topC, topVendedores: topV, topSucursales: topS,
+      mensuales, piezasYTD: pz, montoYTD: monto, precioReal: precioR,
+      clientesTotal: cli.size, vendedoresTotal: ven.size, sucursalesTotal: suc.size,
+    };
+  }, [skuRows, anio, anioPrev, mesActual]);
+
+  const yieldPct = precioLista && precioReal ? (precioReal / precioLista * 100) : null;
+  const ratioSISo = skuRow.total > 0 ? (piezasYTD / skuRow.total * 100) : null;
+  const invSuc = inventarioSucursalMap.get(sku) || [];
+  const invTotal = invSuc.reduce((s, x) => ({ stock: s.stock + x.stock, valor: s.valor + x.valor }), { stock: 0, valor: 0 });
+
+  const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#000000');
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 60,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+      }}>
+      <div style={{
+        background: theme.surface, borderRadius: 14, overflow: 'hidden',
+        boxShadow: '0 24px 60px rgba(0,0,0,0.32)', maxWidth: 1100, width: '100%', maxHeight: '92vh',
+        display: 'flex', flexDirection: 'column',
+      }}>
+        {/* Hero */}
+        <div style={{
+          background: heroBg, color: '#FFF', padding: '14px 20px',
+          display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', gap: 14, alignItems: 'center',
+          flexShrink: 0,
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
+              Detalle SKU · Sell Out YTD {anio}
+            </span>
+            <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', margin: '3px 0 3px', color: '#FFF' }}>
+              {sku} · {skuRow.descripcion || ''}
+            </h3>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', margin: 0 }}>
+              {skuRow.categoria || 'Sin categoría'}{skuRow.rdmp ? ` · Roadmap ${skuRow.rdmp}` : ''}
+              {precioReal != null && <> · <strong style={{ color: '#FFF' }}>Ticket promedio {fmt.moneyFull(precioReal)}</strong></>}
+              {precioLista && <> · precio lista {fmt.moneyFull(precioLista)}</>}
+              {yieldPct != null && <> · <span style={{ color: yieldPct >= 95 ? P.green : yieldPct >= 85 ? P.orange : P.red }}>{yieldPct.toFixed(0)}% yield</span></>}
+            </p>
+          </div>
+          <MiniStat k="Piezas YTD" v={fmt.int(piezasYTD)} s={ratioSISo != null ? `${ratioSISo.toFixed(0)}% del SI` : ''} />
+          <MiniStat k="Monto YTD" v={fmt.money(montoYTD)} s={`${mesActual} meses`} />
+          <MiniStat k="Precio real" v={precioReal != null ? fmt.moneyFull(precioReal) : '—'} s="promedio" />
+          <button onClick={onClose}
+            style={{
+              background: 'rgba(255,255,255,0.14)', border: 0, color: '#FFF',
+              width: 30, height: 30, borderRadius: 999, cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start',
+            }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body scrolleable */}
+        <div style={{ padding: '14px 20px 18px', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
+          {/* KPI strip */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8,
+            background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+            padding: '9px 12px', borderRadius: 10,
+          }}>
+            <KpiCell theme={theme} k="Clientes finales" v={fmt.int(clientesTotal)} s={topClientes[0] ? `Top: ${topClientes[0].name.split(' ').slice(0, 2).join(' ')}` : ''} />
+            <KpiCell theme={theme} k="Vendedores" v={fmt.int(vendedoresTotal)} s={topVendedores[0] ? `Top: ${topVendedores[0].name.split(' ').slice(0, 2).join(' ')} ${topVendedores[0].pct.toFixed(0)}%` : ''} />
+            <KpiCell theme={theme} k="Sucursales" v={fmt.int(sucursalesTotal)} s={topSucursales[0] ? `${topSucursales[0].label} ${topSucursales[0].pct.toFixed(0)}%` : ''} />
+            <KpiCell theme={theme} k="Ratio SO / SI" v={ratioSISo != null ? `${ratioSISo.toFixed(0)}%` : '—'} s={`${fmt.int(piezasYTD)} SO / ${fmt.int(skuRow.total)} SI`} vColor={ratioSISo == null ? undefined : ratioSISo >= 80 ? P.green : P.orange} />
+          </div>
+
+          {/* 3 columnas rankings */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+            <DrillCol theme={theme} P={P} title="Clientes finales" count={`Top ${topClientes.length} de ${clientesTotal}`} items={topClientes} color={P.teal} />
+            <DrillCol theme={theme} P={P} title="Vendedores"     count={`Top ${topVendedores.length} de ${vendedoresTotal}`} items={topVendedores} color={P.indigo} />
+            <DrillCol theme={theme} P={P} title="Sucursales"     count={`Top ${topSucursales.length} de ${sucursalesTotal}`} items={topSucursales} color={P.accent} sucursalTint />
+          </div>
+
+          {/* Compacto: análisis mensual + inventario por sucursal (2 columnas) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: 12 }}>
+            <AnalisisMensualMini theme={theme} P={P} isDark={isDark} mensuales={mensuales.slice(0, mesActual)} precioLista={precioLista} />
+            <InvSucursalMini theme={theme} P={P} isDark={isDark} inv={invSuc} total={invTotal} />
+          </div>
+
+          <div style={{ fontSize: 10, color: theme.textSubtle || theme.textMuted, textAlign: 'right' }}>
+            Datos <strong>sellout_general</strong> · precio <strong>precios_sku</strong> lista DICOTECH · inv <strong>inventario_cliente_sucursal</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ k, v, s }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>{k}</div>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 600, color: '#FFF', letterSpacing: '-0.015em', fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+      {s && <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.55)' }}>{s}</div>}
+    </div>
+  );
+}
+
+function KpiCell({ theme, k, v, s, vColor }) {
+  return (
+    <div>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>{k}</div>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, color: vColor || theme.text, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+      {s && <div style={{ fontSize: 9.5, color: theme.textMuted }}>{s}</div>}
+    </div>
+  );
+}
+
+function DrillCol({ theme, P, title, count, items, color, sucursalTint }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>{title}</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted }}>{count}</span>
+      </div>
+      {items.length === 0 ? (
+        <div style={{ fontSize: 10.5, color: theme.textMuted, fontStyle: 'italic' }}>Sin datos</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {items.map((v) => {
+            const c = sucursalTint && v.tipo === 'online' ? P.green : color;
+            return (
+              <div key={v.name} style={{ paddingBottom: 5, borderBottom: `1px dashed ${theme.divider || theme.border}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={v.name}>
+                    {v.label || v.name}
+                  </span>
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted, fontWeight: 500 }}>{v.pct.toFixed(1)}%</span>
+                </div>
+                <div style={{ height: 3, background: `${c}18`, borderRadius: 999, marginTop: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${v.pct}%`, background: c, borderRadius: 999 }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: theme.textMuted, marginTop: 2, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                  <span>{fmt.int(v.piezas)} pz · {fmt.money(v.monto)}</span>
+                  {v.yoy != null && <span style={{ fontWeight: 700, color: v.yoy >= 0 ? P.green : P.red }}>{v.yoy >= 0 ? '+' : ''}{v.yoy.toFixed(0)}% YoY</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnalisisMensualMini({ theme, P, isDark, mensuales, precioLista }) {
+  const W = 400, H = 90;
+  const padL = 18, padR = 8, padT = 14, padB = 22;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+  const maxPz = Math.max(1, ...mensuales.map((m) => m.piezas));
+  const preciosVal = mensuales.filter((m) => m.precioReal != null).map((m) => m.precioReal);
+  const precioMin = Math.min(...preciosVal, precioLista || Infinity);
+  const precioMax = Math.max(...preciosVal, precioLista || 0);
+  const precioRange = precioMax - precioMin || 1;
+  const xOf = (i) => padL + (i / Math.max(1, mensuales.length - 1)) * chartW;
+  const yBar = (v) => padT + chartH * (1 - v / maxPz);
+  const yPr = (v) => padT + chartH * (1 - (v - precioMin) / precioRange);
+  const barW = Math.max(6, chartW / mensuales.length - 4);
+  return (
+    <div style={{
+      background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+      borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>
+          Análisis mensual · precio × piezas
+        </span>
+        <div style={{ display: 'flex', gap: 8, fontSize: 9, color: theme.textMuted }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+            <span style={{ width: 7, height: 2, borderRadius: 1, background: P.teal }} />Real
+          </span>
+          {precioLista && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ width: 7, height: 2, borderRadius: 1, background: theme.textMuted }} />Lista
+            </span>
+          )}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 1, background: P.orange, opacity: 0.7 }} />Piezas
+          </span>
+        </div>
+      </div>
+      {mensuales.length === 0 ? (
+        <div style={{ padding: '18px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 10.5 }}>Sin transacciones aún</div>
+      ) : (
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, display: 'block' }}>
+          <line x1={padL} y1={padT} x2={W - padR} y2={padT} stroke={isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)'} strokeDasharray="3 4" />
+          <line x1={padL} y1={padT + chartH / 2} x2={W - padR} y2={padT + chartH / 2} stroke={isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)'} strokeDasharray="3 4" />
+          <line x1={padL} y1={padT + chartH} x2={W - padR} y2={padT + chartH} stroke={theme.divider || theme.border} />
+          {mensuales.map((m, i) => (
+            m.piezas > 0 ? <rect key={`b-${i}`} x={xOf(i) - barW / 2} y={yBar(m.piezas)} width={barW} height={padT + chartH - yBar(m.piezas)} fill={P.orange} opacity="0.55" rx="1" /> : null
+          ))}
+          {precioLista && (
+            <polyline points={mensuales.map((m, i) => `${xOf(i)},${yPr(precioLista)}`).join(' ')} fill="none" stroke={theme.textMuted} strokeWidth="1.2" strokeDasharray="4 3" opacity="0.55" />
+          )}
+          {(() => {
+            const puntos = mensuales.filter((m) => m.precioReal != null);
+            if (puntos.length === 0) return null;
+            const pts = mensuales.map((m, i) => m.precioReal != null ? `${xOf(i)},${yPr(m.precioReal)}` : null).filter(Boolean).join(' ');
+            return <polyline points={pts} fill="none" stroke={P.teal} strokeWidth="2" />;
+          })()}
+          {mensuales.map((m, i) => (
+            <text key={`x-${i}`} x={xOf(i)} y={H - 8} textAnchor="middle"
+              fontFamily='"SF Mono", ui-monospace, monospace' fontSize="8" fill={theme.textMuted}>{m.label}</text>
+          ))}
+        </svg>
+      )}
+    </div>
+  );
+}
+
+function InvSucursalMini({ theme, P, isDark, inv, total }) {
+  const SIETE = ['dicoags2', 'leon2', 'Arboledas', 'GDL', 'ZACATECAS', 'santafe', 'DC'];
+  const byName = new Map(inv.map((x) => [x.sucursal, x]));
+  const cells = SIETE.map((s) => ({ key: s, label: (SUCURSAL_META[s]?.label || s).slice(0, 3), data: byName.get(s) }));
+  const online = inv.filter((x) => metaSuc(x.sucursal).tipo === 'online');
+  const maxStock = Math.max(1, ...inv.map((x) => x.stock));
+  return (
+    <div style={{
+      background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+      borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>
+          Inventario por sucursal
+        </span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textSubtle || theme.textMuted }}>
+          snapshot
+        </span>
+      </div>
+      {inv.length === 0 ? (
+        <div style={{ padding: '18px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 10.5 }}>Sin stock</div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+            {cells.map((c) => {
+              const has = !!c.data;
+              const isTop = has && c.data.stock === maxStock;
+              return (
+                <div key={c.key} style={{
+                  background: theme.surface, border: `1px solid ${isTop ? P.teal : theme.border}`,
+                  borderRadius: 6, padding: '5px 4px', textAlign: 'center',
+                  opacity: has ? 1 : 0.45,
+                  boxShadow: isTop ? `0 0 0 1px ${P.teal}44` : 'none',
+                }}>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.05em', color: theme.textMuted, fontWeight: 600 }}>{c.label}</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 700, color: theme.text, marginTop: 1, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>{has ? fmt.int(c.data.stock) : '—'}</div>
+                  <div style={{ fontSize: 8.5, color: theme.textSubtle || theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>{has && c.data.valor > 0 ? fmt.money(c.data.valor) : ''}</div>
+                </div>
+              );
+            })}
+          </div>
+          {online.length > 0 && (
+            <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {online.map((s) => (
+                <span key={s.sucursal} style={{
+                  fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600,
+                  padding: '3px 8px', borderRadius: 999, background: `${P.green}18`, color: P.green,
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}>
+                  {metaSuc(s.sucursal).label} <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace' }}>{fmt.int(s.stock)}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', marginTop: 6,
+            borderTop: `1px dashed ${theme.divider || theme.border}`,
+            fontSize: 10, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace',
+          }}>
+            <span>{inv.length} sucursales con stock</span>
+            <span>Total <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.int(total.stock)} pz</strong> · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(total.valor)}</strong></span>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
