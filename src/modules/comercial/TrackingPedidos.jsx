@@ -213,7 +213,7 @@ export default function TrackingPedidos() {
       if (estatusFiltro === 'abiertas' && oc.etapa === 'entregada') return false;
       if (estatusFiltro === 'entregadas' && oc.etapa !== 'entregada') return false;
       if (q) {
-        const hay = `${oc.numero_oc_cliente} ${(oc.skus || []).map((s) => s.sku).join(' ')} ${(oc.envios || []).map((e) => `${e.numero_factura || ''} ${e.guia_rastreo || ''}`).join(' ')}`.toLowerCase();
+        const hay = `${oc.numero_oc || ''} ${oc.numero_oc_cliente || ''} ${oc.numero_factura || ''} ${(oc.skus || []).map((s) => s.sku).join(' ')} ${(oc.envios || []).map((e) => `${e.numero_factura || ''} ${e.guia_rastreo || ''}`).join(' ')}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -517,7 +517,7 @@ export default function TrackingPedidos() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 999, height: 30, flex: 1, maxWidth: 280 }}>
             <Search style={{ width: 12, height: 12, color: theme.textMuted }} strokeWidth={2.2} />
             <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar No. OC, SKU, factura, guía…"
+              placeholder="Buscar OC, OS, factura, SKU, guía…"
               style={{ border: 0, outline: 0, background: 'transparent', fontFamily: TYPO.fontText, fontSize: 11, color: theme.text, flex: 1 }} />
           </div>
           <select value={clienteFiltro} onChange={(e) => setClienteFiltro(e.target.value)}
@@ -548,15 +548,16 @@ export default function TrackingPedidos() {
             <thead>
               <tr>
                 {[
-                  { l: 'Cliente', a: 'left', w: 130 },
-                  { l: 'No. OC', a: 'left', w: 100 },
-                  { l: 'Envíos', a: 'center', w: 60 },
-                  { l: 'Recibida', a: 'left', w: 90 },
-                  { l: 'Piezas', a: 'right', w: 70 },
-                  { l: 'Monto', a: 'right', w: 96 },
-                  { l: 'Fill', a: 'right', w: 60 },
-                  { l: 'Progreso', a: 'left', w: 160 },
-                  { l: 'Estatus', a: 'left', w: 110 },
+                  { l: 'Cliente', a: 'left', w: 120 },
+                  { l: 'OC / OS', a: 'left', w: 130 },
+                  { l: 'Factura', a: 'left', w: 96 },
+                  { l: 'Envíos', a: 'center', w: 54 },
+                  { l: 'Recibida', a: 'left', w: 86 },
+                  { l: 'Piezas', a: 'right', w: 64 },
+                  { l: 'Monto', a: 'right', w: 92 },
+                  { l: 'Fill', a: 'right', w: 56 },
+                  { l: 'Progreso', a: 'left', w: 150 },
+                  { l: 'Estatus', a: 'left', w: 104 },
                 ].map((h, i) => (
                   <th key={i} style={{
                     position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
@@ -570,7 +571,7 @@ export default function TrackingPedidos() {
             </thead>
             <tbody>
               {filas.length === 0 && (
-                <tr><td colSpan={9} style={{ padding: 40, textAlign: 'center', color: theme.textMuted, fontSize: 12, fontFamily: TYPO.fontText }}>
+                <tr><td colSpan={10} style={{ padding: 40, textAlign: 'center', color: theme.textMuted, fontSize: 12, fontFamily: TYPO.fontText }}>
                   Sin OCs. Da click en "+ Nueva OC" para capturar la primera.
                 </td></tr>
               )}
@@ -598,10 +599,22 @@ export default function TrackingPedidos() {
                         </span>
                       </td>
                       <td style={{ ...tdStyle(theme, 'left'), fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: theme.text, paddingLeft: 14 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <ChevronRight style={{ width: 11, height: 11, color: P.accent, transform: abierta ? 'rotate(90deg)' : 'none', transition: 'transform 120ms' }} strokeWidth={2.4} />
-                          {oc.numero_oc_cliente}
+                        <span style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 4 }}>
+                          <ChevronRight style={{ width: 11, height: 11, color: P.accent, transform: abierta ? 'rotate(90deg)' : 'none', transition: 'transform 120ms', marginTop: 3, flex: '0 0 auto' }} strokeWidth={2.4} />
+                          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                            <span style={{ color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {oc.numero_oc || <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>— OC</span>}
+                            </span>
+                            <span style={{ fontSize: 9.5, color: theme.textMuted, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title="Orden de surtido">
+                              OS · {oc.numero_oc_cliente || '—'}
+                            </span>
+                          </span>
                         </span>
+                      </td>
+                      <td style={{ ...tdStyle(theme, 'left'), fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.text }}>
+                        {oc.numero_factura
+                          ? <span style={{ display: 'inline-block', padding: '1px 7px', borderRadius: 4, background: `${P.green || '#34C759'}18`, color: P.green || '#34C759', fontWeight: 600, fontSize: 10, letterSpacing: '.005em' }}>{oc.numero_factura}</span>
+                          : <span style={{ color: theme.textSubtle || theme.textMuted, fontSize: 10 }}>Sin facturar</span>}
                       </td>
                       <td style={{ ...tdStyle(theme, 'center') }}>
                         {oc.envios.length > 0
@@ -814,7 +827,10 @@ function DetalleOC({ oc, theme, P, isDark, envioAbierto, setEnvioAbierto, envioS
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: theme.textMuted, fontWeight: 600, marginBottom: 3 }}>
-            OC <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text }}>{oc.numero_oc_cliente}</span> · {NOMBRE_CLIENTE[oc.cliente_key]}
+            {oc.numero_oc ? <>OC <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text }}>{oc.numero_oc}</span> · </> : null}
+            OS <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text }}>{oc.numero_oc_cliente || '—'}</span>
+            {oc.numero_factura ? <> · Factura <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: P.green || '#34C759' }}>{oc.numero_factura}</span></> : null}
+            {' · '}{NOMBRE_CLIENTE[oc.cliente_key]}
           </div>
           {oc.notas && <div style={{ fontSize: 11.5, color: theme.textMuted, fontStyle: 'italic', fontFamily: TYPO.fontText }}>"{oc.notas}"</div>}
         </div>
@@ -1150,7 +1166,9 @@ function CopilotOps({ theme, P, isDark, open, setOpen, recs }) {
 // ═══════════════════════════════════════════════════════════════════
 function ModalOC({ theme, P, isDark, ocInicial, onClose, onSaved }) {
   const es = !!ocInicial;
-  const [numero, setNumero] = useState(ocInicial?.numero_oc_cliente || '');
+  const [numeroOc, setNumeroOc] = useState(ocInicial?.numero_oc || '');
+  const [numero, setNumero] = useState(ocInicial?.numero_oc_cliente || ''); // Orden de Surtido
+  const [numeroFactura, setNumeroFactura] = useState(ocInicial?.numero_factura || '');
   const [cliente, setCliente] = useState(ocInicial?.cliente_key || 'digitalife');
   const [fechaCotizacionSolic, setFechaCotizacionSolic] = useState(ocInicial?.fecha_cotizacion_solicitada ? ocInicial.fecha_cotizacion_solicitada.slice(0, 16) : '');
   const [fechaCotizacionEnv, setFechaCotizacionEnv] = useState(ocInicial?.fecha_cotizacion_enviada ? ocInicial.fecha_cotizacion_enviada.slice(0, 16) : '');
@@ -1171,11 +1189,13 @@ function ModalOC({ theme, P, isDark, ocInicial, onClose, onSaved }) {
   const updateSku = (i, field, val) => setSkus(skus.map((s, j) => j === i ? { ...s, [field]: val } : s));
 
   const guardar = async () => {
-    if (!numero.trim()) return alert('Falta el número de OC');
+    if (!numero.trim() && !numeroOc.trim()) return alert('Necesitas al menos la Orden de Compra o la Orden de Surtido');
     if (!cliente) return alert('Falta el cliente');
     setSaving(true);
     const payload = {
-      numero_oc_cliente: numero.trim(),
+      numero_oc: numeroOc.trim() || null,
+      numero_oc_cliente: numero.trim() || null,
+      numero_factura: numeroFactura.trim() || null,
       cliente_key: cliente,
       fecha_cotizacion_solicitada: cliente === 'dicotech' ? toIso(fechaCotizacionSolic) : null,
       fecha_cotizacion_enviada: cliente === 'dicotech' ? toIso(fechaCotizacionEnv) : null,
@@ -1212,7 +1232,9 @@ function ModalOC({ theme, P, isDark, ocInicial, onClose, onSaved }) {
     <ModalShell theme={theme} P={P} isDark={isDark}
       eyebrow={es ? 'Editar orden existente' : `Captura nueva orden · ${new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}`}
       title={es ? 'Editar OC' : 'Nueva OC'}
-      contexto={es ? <>Cliente <strong>{NOMBRE_CLIENTE[ocInicial.cliente_key]}</strong> · OC <code>{ocInicial.numero_oc_cliente}</code></> : 'Registra los datos iniciales de una nueva Orden de Compra. Podrás agregar envíos y SKUs después.'}
+      contexto={es
+        ? <>Cliente <strong>{NOMBRE_CLIENTE[ocInicial.cliente_key]}</strong> · OS <code>{ocInicial.numero_oc_cliente || '—'}</code>{ocInicial.numero_oc ? <> · OC <code>{ocInicial.numero_oc}</code></> : null}</>
+        : 'Registra los identificadores de una nueva orden. La OC es la que envía el cliente; la OS es la interna. La factura se puede llenar después de surtir.'}
       onClose={onClose} onGuardar={guardar} saving={saving} ctaLabel={es ? 'Actualizar OC' : 'Guardar OC'}
       sideNote={<>Se guarda en <strong>tracking_pedidos</strong></>}>
 
@@ -1244,18 +1266,28 @@ function ModalOC({ theme, P, isDark, ocInicial, onClose, onSaved }) {
         })}
       </div>
 
+      <SectionEyebrow theme={theme}>Identificadores</SectionEyebrow>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+        <FieldApple theme={theme} label="Orden de Compra">
+          <InputPrefix theme={theme} prefix="OC" value={numeroOc} onChange={setNumeroOc} placeholder="La que envía el cliente" />
+        </FieldApple>
+        <FieldApple theme={theme} label="Orden de Surtido">
+          <InputPrefix theme={theme} prefix="OS" value={numero} onChange={setNumero} placeholder="Interna" />
+        </FieldApple>
+        <FieldApple theme={theme} label="Factura · opcional">
+          <InputPrefix theme={theme} prefix="F" value={numeroFactura} onChange={setNumeroFactura} placeholder="Se llena después de surtir" />
+        </FieldApple>
+      </div>
+
       <SectionEyebrow theme={theme}>Detalles de la OC</SectionEyebrow>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <FieldApple theme={theme} label="No. OC del cliente *">
-          <InputPrefix theme={theme} prefix="#" value={numero} onChange={setNumero} placeholder="ej. OC-24891" />
-        </FieldApple>
         <FieldApple theme={theme} label="Fecha recibida">
           <InputApple theme={theme} type="datetime-local" mono value={fechaRecibida} onChange={setFechaRecibida} />
         </FieldApple>
         <FieldApple theme={theme} label="Fecha procesada">
           <InputApple theme={theme} type="datetime-local" mono value={fechaProcesada} onChange={setFechaProcesada} />
         </FieldApple>
-        <FieldApple theme={theme} label="Notas · opcional">
+        <FieldApple theme={theme} label="Notas · opcional" cols={2}>
           <InputApple theme={theme} value={notas} onChange={setNotas} placeholder="Observaciones internas…" />
         </FieldApple>
       </div>
