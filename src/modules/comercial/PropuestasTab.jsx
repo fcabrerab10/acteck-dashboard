@@ -1115,7 +1115,48 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, onBac
 
   const gap = contexto?.gap || 0;
   const cierraGapPct = gap > 0 ? Math.round((total / gap) * 100) : null;
-  const exportar = () => alert('Export Excel — próximo push.');
+
+  const [savedMsg, setSavedMsg] = useState(null);
+  const handleGuardar = () => {
+    onGuardar?.();
+    setSavedMsg('✓ Borrador guardado');
+    setTimeout(() => setSavedMsg(null), 1800);
+  };
+
+  const exportar = () => {
+    const XLSX = window.XLSX;
+    if (!XLSX) { alert('SheetJS no disponible. Recarga la página.'); return; }
+    if (propuestaLista.length === 0) { alert('La propuesta está vacía.'); return; }
+
+    const headers = ['SKU', 'Descripción', 'Marca', 'Familia', 'Piezas', 'Precio unitario', 'Total línea'];
+    const rows = propuestaLista.map((r) => [
+      r.sku,
+      r.descripcion || r.desc || '',
+      r.marca || '',
+      r.familia || '',
+      Number(r.piezas) || 0,
+      Number(r.precio) || 0,
+      (Number(r.piezas) || 0) * (Number(r.precio) || 0),
+    ]);
+    // Fila de totales
+    rows.push(['', '', '', 'TOTAL', piezas, '', total]);
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    ws['!cols'] = [
+      { wch: 14 }, { wch: 60 }, { wch: 14 }, { wch: 20 },
+      { wch: 10 }, { wch: 14 }, { wch: 14 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Propuesta');
+
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const fname = `Propuesta ${cliente.label} ${dd}-${mm}-${now.getFullYear()}.xlsx`;
+    XLSX.writeFile(wb, fname);
+    setSavedMsg('✓ Excel descargado');
+    setTimeout(() => setSavedMsg(null), 1800);
+  };
 
   return (
     <div style={{ padding: '10px 6px 40px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
@@ -1147,8 +1188,11 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, onBac
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onGuardar}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {savedMsg && (
+            <span style={{ fontSize: 12, color: P.green, fontWeight: 600, fontFamily: 'inherit' }}>{savedMsg}</span>
+          )}
+          <button onClick={handleGuardar}
             style={{ padding: '8px 16px', background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text, fontWeight: 500, fontFamily: 'inherit', borderRadius: 999, fontSize: 12, cursor: 'pointer' }}>
             Guardar borrador
           </button>
