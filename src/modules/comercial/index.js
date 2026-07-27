@@ -1,6 +1,7 @@
 export { default as HomeCliente } from './HomeCliente';
 export { default as HomeDigitalife } from './HomeDigitalife';
 export { default as HomeDicotech } from './HomeDicotech';
+export { default as HomePcel } from './HomePcel';
 export { default as CreditoCobranza } from './CreditoCobranza';
 export { default as CreditoCobranzaV2 } from './CreditoCobranzaV2';
 export { default as PagosCliente } from './PagosCliente';
