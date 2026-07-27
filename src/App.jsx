@@ -41,6 +41,7 @@ import { FerrutekLoader } from './components';
 import { useBreakpoint, isMobile, useMobileShell } from './lib/useBreakpoint';
 import MobileNav from './components/MobileNav';
 import MobileShell from './components/MobileShell';
+import MobileHome from './components/MobileHome';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -474,9 +475,11 @@ export default function App() {
           )}
           {paginaActiva === "resumenClientes" && (
             puedeVerPestanaGlobal(perfil, "resumen_clientes")
-              ? <ResumenClientesTab
-                  onDrillDown={(clienteKey) => { setClienteActivo(clienteKey); setPaginaActiva('home'); }}
-                />
+              ? (mobile
+                  ? <MobileHome perfil={perfil} onNavegar={handleNavegar} />
+                  : <ResumenClientesTab
+                      onDrillDown={(clienteKey) => { setClienteActivo(clienteKey); setPaginaActiva('home'); }}
+                    />)
               : <SinAcceso motivo="No tienes acceso al Resumen de Clientes." />
           )}
           {paginaActiva === "propuestas" && (
