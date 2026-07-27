@@ -39,8 +39,18 @@ function roadmapChipStyle(rdmp, P, theme) {
     RMS:  { bg: `${P.pink}22`,   color: P.pink },
     NVS:  { bg: `${P.green}22`,  color: P.green },
     '2026': { bg: `${P.orange}22`, color: P.orange },
+    '2025': { bg: `${theme.text}0F`, color: theme.textMuted },
   };
   return map[key] || { bg: `${theme.text}0F`, color: theme.textMuted };
+}
+
+// Color de marca (como Digitalife: Acteck iOS blue · Balam Rush morado · Vorago naranja)
+function marcaColor(marca, P) {
+  const key = String(marca || '').trim().toLowerCase();
+  if (key === 'balam rush' || key === 'balam') return P.purple;
+  if (key === 'vorago') return P.orange;
+  if (key === 'acteck') return P.accent;
+  return P.accent;
 }
 
 function paletteFromTheme(theme) {
@@ -1386,7 +1396,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                   }}
                   onMouseEnter={(e) => { if (clickable && !isOpen) e.currentTarget.style.background = `${theme.text}05`; }}
                   onMouseLeave={(e) => { if (clickable && !isOpen) e.currentTarget.style.background = 'transparent'; }}>
-                  <td style={{ ...cellStyle(theme), fontFamily: TYPO.fontDisplay, fontWeight: 600, color: P.accent }}>
+                  <td style={{ ...cellStyle(theme), fontFamily: TYPO.fontDisplay, fontWeight: 600, color: marcaColor(r.marca, P) }}>
                     {r.marca || 'Acteck'}
                   </td>
                   <td style={{ ...cellStyle(theme), fontFamily: '"SF Mono", ui-monospace, monospace', color: (clickable && isOpen) ? P.accent : (clickable ? P.accent : theme.text), fontWeight: clickable ? 600 : 400 }}>
