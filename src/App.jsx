@@ -42,6 +42,7 @@ import { useBreakpoint, isMobile, useMobileShell } from './lib/useBreakpoint';
 import MobileNav from './components/MobileNav';
 import MobileShell from './components/MobileShell';
 import MobileHome from './components/MobileHome';
+import MobileHoy from './components/MobileHoy';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -552,7 +553,9 @@ export default function App() {
           {paginaActiva === "adminInterna" && (
             // Permiso granular: nivel 'ver' o 'edit' en permisos.globales.admin_interna
             puedeVerPestanaGlobal(perfil, "admin_interna")
-              ? <PendientesCalendarioV2 />
+              ? (mobile
+                  ? <MobileHoy perfil={perfil} onNavegar={handleNavegar} />
+                  : <PendientesCalendarioV2 />)
               : <SinAcceso motivo="No tienes acceso a esta pestaña. Pídele a Fernando que te habilite 'Pendientes & Calendario' desde Configuración." />
           )}
           {paginaActiva === "telemetria" && (

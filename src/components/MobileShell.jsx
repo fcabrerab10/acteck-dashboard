@@ -240,14 +240,14 @@ export default function MobileShell({
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              position: 'absolute', right: 0, top: 0,
+              position: 'absolute', left: 0, top: 0,
               width: '86vw', maxWidth: 360, height: '100vh',
               background: theme.sidebar,
               paddingTop: 'env(safe-area-inset-top)',
-              paddingRight: 'env(safe-area-inset-right)',
+              paddingLeft: 'env(safe-area-inset-left)',
               display: 'flex', flexDirection: 'column',
-              animation: 'msSlideRight 340ms cubic-bezier(.32,.72,0,1)',
-              boxShadow: '-4px 0 32px rgba(0,0,0,.25)',
+              animation: 'msSlideLeft 340ms cubic-bezier(.32,.72,0,1)',
+              boxShadow: '4px 0 32px rgba(0,0,0,.25)',
             }}
           >
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
@@ -265,7 +265,7 @@ export default function MobileShell({
 
       <style>{`
         @keyframes msFadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes msSlideRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
+        @keyframes msSlideLeft { from { transform: translateX(-100%) } to { transform: translateX(0) } }
         @keyframes msSlideDown { from { transform: translateY(-100%) } to { transform: translateY(0) } }
       `}</style>
     </>
