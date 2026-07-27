@@ -461,7 +461,7 @@ export default function HomePcel({ cliente, clienteKey }) {
     if (pctCuota >= 100) {
       arr.push({
         sev: 'info',
-        title: `Digitalife ${(pctCuota - 100).toFixed(1)}% arriba de cuota`,
+        title: `PCEL ${(pctCuota - 100).toFixed(1)}% arriba de cuota`,
         sub: 'Sube meta trimestral para mantener incentivo',
       });
     } else if (pctCuota > 0 && pctCuota < 85) {
@@ -480,7 +480,7 @@ export default function HomePcel({ cliente, clienteKey }) {
   const heroBg = theme.heroCardBg || theme.surfaceInverse || '#1C1C1E';
 
   if (loading) {
-    return <FerrutekLoader label="Cargando Digitalife…" sub="Trayendo Sell In, Sell Out, cobranza y marcas" minHeight={480} />;
+    return <FerrutekLoader label="Cargando PCEL…" sub="Trayendo Sell In, Sell Out, cobranza y marcas" minHeight={480} />;
   }
 
   return (
@@ -493,7 +493,7 @@ export default function HomePcel({ cliente, clienteKey }) {
         <div>
           <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'rgba(255,255,255,0.55)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span style={{ width: 7, height: 7, borderRadius: 999, background: '#EF4444' }} />
-            Digitalife · {NOMBRES_MES[mesActual - 1]} {anio}
+            PCEL · {NOMBRES_MES[mesActual - 1]} {anio}
           </span>
           <h2 style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, margin: '3px 0 2px', color: '#FFF', letterSpacing: '-0.025em' }}>
             {narrativa(pctCuota)}

@@ -6,12 +6,12 @@
 // PCEL no expone clientes finales/vendedores/sucursales — el drill
 // del SKU muestra evolución mensual + inventario del SKU en PCEL.
 // ─ Hero editorial narrativo con 3 stats
-// ─ 4 KPI cards planas (MTD · YTD · YoY · Inv. Digitalife)
+// ─ 4 KPI cards planas (MTD · YTD · YoY · Inv. PCEL)
 // ─ Timeline lineal SO 2025 vs 2026 + filtros Q + sums row
 // ─ Composición sucursal (interactiva, filtra tabla) — basada en inventario cliente
 // ─ Composición marca (interactiva, filtra tabla)
 // ─ Ferruteck cosmic strip
-// ─ Tabla SKU con Roadmap chip + 12 meses heat + Inv. Digitalife
+// ─ Tabla SKU con Roadmap chip + 12 meses heat + Inv. PCEL
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -289,7 +289,7 @@ export default function SellOutPcel({ clienteKey = 'pcel' }) {
     return out;
   }, [inventarioSucursal]);
 
-  // Agregado por familia (inventario Digitalife via roadmap)
+  // Agregado por familia (inventario PCEL via roadmap)
   const CAT_COLORS = ['#0071E3', '#FF9F0A', '#30D158', '#BF5AF2', '#FF375F', '#64D2FF', '#5E5CE6', '#40C8E0', '#FFD60A', '#FF9500'];
   const familiasInvYTD = useMemo(() => {
     const map = new Map();
@@ -489,7 +489,7 @@ export default function SellOutPcel({ clienteKey = 'pcel' }) {
         <div>
           <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'rgba(255,255,255,0.55)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span style={{ width: 7, height: 7, borderRadius: 999, background: '#5E5CE6' }} />
-            Sell Out · Digitalife · {MESES_LARGO[mesActual - 1]} {anio}
+            Sell Out · PCEL · {MESES_LARGO[mesActual - 1]} {anio}
           </span>
           <h2 style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, margin: '3px 0 2px', color: '#FFF', letterSpacing: '-0.025em' }}>
             {narrativa()}
@@ -529,7 +529,7 @@ export default function SellOutPcel({ clienteKey = 'pcel' }) {
           sub={<><strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(kpis.mtdMonto)}</strong> vs {fmt.money(kpis.momPrev)}</>}
         />
         <KpiCard theme={theme} P={P}
-          eyebrow="Inv. Digitalife"
+          eyebrow="Inv. PCEL"
           title="stock disponible"
           big={fmt.int(invTotales.stock)}
           bigSmall={`pz · ${fmt.money(invTotales.valor)}`}
@@ -1130,7 +1130,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
               ))}
               <SortableHeader theme={theme} col="promedio" label="Prom." orden={orden} onToggleSort={onToggleSort} align="right" />
               <SortableHeader theme={theme} col="total" label="Total" orden={orden} onToggleSort={onToggleSort} align="right" />
-              <SortableHeader theme={theme} col="invStock" label={<>Inv.<br/>Digitalife</>} orden={orden} onToggleSort={onToggleSort} align="right" />
+              <SortableHeader theme={theme} col="invStock" label={<>Inv.<br/>PCEL</>} orden={orden} onToggleSort={onToggleSort} align="right" />
             </tr>
           </thead>
           <tbody>
