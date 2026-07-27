@@ -589,7 +589,7 @@ export default function App() {
                 : <SellInCliente clienteKey={clienteActivo} />
         )}
         {paginaActiva === "cartera" && (
-          (clienteActivo === 'digitalife' || clienteActivo === 'dicotech')
+          (clienteActivo === 'digitalife' || clienteActivo === 'dicotech' || clienteActivo === 'pcel')
             ? <CreditoCobranzaV2 cliente={c?.nombre || clienteActivo} clienteKey={clienteActivo} />
             : <CreditoCobranza cliente={c} clienteKey={clienteActivo} />
         )}
