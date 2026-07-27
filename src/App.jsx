@@ -24,7 +24,7 @@ import AxonMexico from './modules/interno/AxonMexico';
 import LoginPage from './modules/auth/LoginPage';
 import { Configuracion } from './modules/configuracion';
 import ActualizacionDatos from './modules/settings/ActualizacionDatos';
-import { AdministracionInterna } from './modules/interno';
+import { AdministracionInterna, PendientesCalendarioV2 } from './modules/interno';
 import SinAcceso from './components/SinAcceso';
 import {
   puedeConfigurar,
@@ -547,7 +547,7 @@ export default function App() {
           {paginaActiva === "adminInterna" && (
             // Permiso granular: nivel 'ver' o 'edit' en permisos.globales.admin_interna
             puedeVerPestanaGlobal(perfil, "admin_interna")
-              ? <AdministracionInterna />
+              ? <PendientesCalendarioV2 />
               : <SinAcceso motivo="No tienes acceso a esta pestaña. Pídele a Fernando que te habilite 'Pendientes & Calendario' desde Configuración." />
           )}
           {paginaActiva === "telemetria" && (
