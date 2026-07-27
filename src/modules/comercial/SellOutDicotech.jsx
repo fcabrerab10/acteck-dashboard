@@ -424,6 +424,54 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
     return arr;
   }, [sucursalMes, anio, mesActual]);
 
+  // Enriquecemos sucursalesYTD con inventario + venta del mes por sucursal
+  const sucursalesEnriched = useMemo(() => {
+    return sucursalesYTD.map((s) => {
+      const inv = inventarioPorSucursal.get(s.sucursal) || { stock: 0, valor: 0 };
+      const vm = ventaMesPorSucursal.get(s.sucursal) || { monto: 0, piezas: 0, tx: 0, clientes: 0 };
+      return {
+        ...s,
+        invStock: inv.stock,
+        invValor: inv.valor,
+        ventaMes: vm.monto,
+        piezasMes: vm.piezas,
+        txMes: vm.tx,
+        clientesMes: vm.clientes,
+      };
+    });
+  }, [sucursalesYTD, inventarioPorSucursal, ventaMesPorSucursal]);
+
+  // Valor de inventario POR sucursal (agregado desde inventarioSucursalMap)
+  const inventarioPorSucursal = useMemo(() => {
+    const acc = new Map();
+    for (const [, sucs] of inventarioSucursalMap) {
+      for (const s of sucs) {
+        if (!acc.has(s.sucursal)) acc.set(s.sucursal, { stock: 0, valor: 0 });
+        const it = acc.get(s.sucursal);
+        it.stock += s.stock;
+        it.valor += s.valor;
+      }
+    }
+    return acc;
+  }, [inventarioSucursalMap]);
+
+  // Venta del MES actual por sucursal
+  const ventaMesPorSucursal = useMemo(() => {
+    const acc = new Map();
+    for (const r of sucursalMes) {
+      if (Number(r.anio) !== anio) continue;
+      if (Number(r.mes) !== mesActual) continue;
+      const suc = r.sucursal || '(sin sucursal)';
+      if (!acc.has(suc)) acc.set(suc, { monto: 0, piezas: 0, tx: 0, clientes: 0 });
+      const it = acc.get(suc);
+      it.monto += Number(r.monto) || 0;
+      it.piezas += Number(r.piezas) || 0;
+      it.tx += Number(r.tx) || 0;
+      it.clientes = Math.max(it.clientes, Number(r.clientes_distintos) || 0);
+    }
+    return acc;
+  }, [sucursalMes, anio, mesActual]);
+
   const splitFisicoOnline = useMemo(() => {
     let fisMonto = 0, fisTx = 0, fisClientes = 0;
     let onlMonto = 0, onlTx = 0, onlClientes = 0;
@@ -658,12 +706,13 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
           selected={familiaFilter} onSelect={setFamiliaFilter} />
       </div>
 
-      {/* Nueva sección: Físico vs Online + Ranking sucursales (con drill expandible) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.3fr)', gap: 10, alignItems: 'stretch' }}>
+      {/* Nueva sección: Físico vs Online (compacto) + Ranking sucursales (con drill expandible) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.55fr) minmax(0, 1.45fr)', gap: 10, alignItems: 'stretch' }}>
         <FisicoOnlineCard theme={theme} P={P} split={splitFisicoOnline} />
-        <SucursalesRankingCard theme={theme} P={P} sucursales={sucursalesYTD}
+        <SucursalesRankingCard theme={theme} P={P} sucursales={sucursalesEnriched}
           drillSucursal={sucursalDrill} onSelectSucursal={setSucursalDrill}
-          drillData={drillSucursal} />
+          drillData={drillSucursal}
+          mesActualLabel={MESES[mesActual - 1]} />
       </div>
 
       {/* Nueva sección: Rankings globales Vendedores + Clientes finales */}
@@ -1147,26 +1196,25 @@ function FoRow({ color, kind, name, monto, pct, tx, clientes, ticket, theme }) {
 }
 
 // ═══════════════ Ranking sucursales · mini-cards grid 3×2 + drill inline ═══════════════
-function SucursalesRankingCard({ theme, P, sucursales, drillSucursal, onSelectSucursal, drillData }) {
-  const [modo, setModo] = useState('monto'); // monto | tx | ticket
-  const top = sucursales.slice(0, 6);
-  const rows = top.map((s) => {
-    const ticket = s.tx > 0 ? s.monto / s.tx : 0;
-    return { ...s, ticket };
-  });
-  const valueOf = (r) => modo === 'monto' ? r.monto : modo === 'tx' ? r.tx : r.ticket;
+function SucursalesRankingCard({ theme, P, sucursales, drillSucursal, onSelectSucursal, drillData, mesActualLabel }) {
+  const [modo, setModo] = useState('venta'); // venta | inv | ventames
+  const rows = sucursales.slice(0, 6);
+  const valueOf = (r) => modo === 'venta' ? r.monto : modo === 'inv' ? r.invValor : r.ventaMes;
   const maxVal = Math.max(1, ...rows.map(valueOf));
-  const formatValue = (r) => modo === 'monto' ? fmt.money(r.monto) : modo === 'tx' ? fmt.int(r.tx) : fmt.moneyFull(r.ticket);
+  const formatValue = (r) => fmt.money(valueOf(r));
   const isDark = theme.mode === 'dark';
+  // Título dinámico del modo
+  const modoTitle = modo === 'venta' ? 'Ranking sucursales · YTD' : modo === 'inv' ? `Inventario por sucursal · snapshot` : `Ranking sucursales · ${mesActualLabel || 'mes'}`;
   const seg = (k, l) => (
     <button key={k} onClick={() => setModo(k)}
       style={{
         border: 0, background: modo === k ? theme.surface : 'transparent',
-        padding: '3px 9px', borderRadius: 6,
-        fontFamily: modo === k ? TYPO.fontDisplay : TYPO.fontText, fontSize: 10,
+        padding: '4px 12px', borderRadius: 6,
+        fontFamily: modo === k ? TYPO.fontDisplay : TYPO.fontText, fontSize: 10.5,
         color: modo === k ? theme.text : theme.textMuted, fontWeight: modo === k ? 600 : 500, cursor: 'pointer',
         boxShadow: modo === k ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
         borderWidth: 1, borderStyle: 'solid', borderColor: modo === k ? theme.border : 'transparent',
+        transition: 'background 200ms cubic-bezier(.4,0,.2,1), color 200ms cubic-bezier(.4,0,.2,1)',
       }}>{l}</button>
   );
 
@@ -1174,13 +1222,13 @@ function SucursalesRankingCard({ theme, P, sucursales, drillSucursal, onSelectSu
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
         <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
-          Ranking sucursales · YTD
+          {modoTitle}
           <span style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontWeight: 500, fontStyle: 'italic', marginLeft: 8 }}>
-            top {top.length}
+            top {rows.length}
           </span>
         </h5>
         <div style={{ display: 'inline-flex', background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 8, padding: 2 }}>
-          {seg('monto', '$')}{seg('tx', 'Tx')}{seg('ticket', 'Ticket')}
+          {seg('venta', 'Venta')}{seg('inv', 'Inventario')}{seg('ventames', `Venta ${mesActualLabel || 'mes'}`)}
         </div>
       </div>
       {rows.length === 0 ? (
@@ -1201,11 +1249,16 @@ function SucursalesRankingCard({ theme, P, sucursales, drillSucursal, onSelectSu
                 label={r.label}
                 isFis={isFis}
                 accent={accent}
+                modo={modo}
                 monto={formatValue(r)}
                 pct={pct}
                 tx={r.tx}
                 clientes={r.clientes}
                 momPct={r.momPct}
+                invStock={r.invStock}
+                invValor={r.invValor}
+                txMes={r.txMes}
+                clientesMes={r.clientesMes}
                 isOpen={isOpen}
                 onClick={() => canDrill && onSelectSucursal(isOpen ? null : r.sucursal)}
                 P={P} />
@@ -1261,9 +1314,9 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
     if (v == null || v === 0) return null;
     if (v < 0) return { bg: `${P.red}22`, color: P.red, weight: 600 };
     const r = v / maxCelda;
-    const b = P.teal;
+    const b = P.accent; // iOS blue como Digitalife
     if (r > 0.75) return { bg: b, color: '#FFF', weight: 600 };
-    if (r > 0.50) return { bg: isDark ? 'rgba(100,210,255,0.45)' : `${b}59`, color: '#FFF', weight: 600 };
+    if (r > 0.50) return { bg: isDark ? 'rgba(10,132,255,0.45)' : `${b}59`, color: '#FFF', weight: 600 };
     if (r > 0.25) return { bg: `${b}2E`, color: theme.text };
     return { bg: `${b}14`, color: theme.textMuted };
   };
@@ -1294,16 +1347,16 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
           <thead>
             <tr>
-              <th style={headStyle(theme)}>SKU</th>
+              <SortableHeader theme={theme} col="marca" label="Marca" orden={orden} onToggleSort={onToggleSort} align="left" />
+              <SortableHeader theme={theme} col="sku" label="SKU" orden={orden} onToggleSort={onToggleSort} align="left" />
               <th style={headStyle(theme)}>Descripción</th>
-              <th style={headStyle(theme)}>Categoría</th>
-              <th style={{ ...headStyle(theme), textAlign: 'center' }}>Roadmap</th>
+              <SortableHeader theme={theme} col="rdmp" label="Roadmap" orden={orden} onToggleSort={onToggleSort} align="center" />
               {MESES.map((m, i) => (
                 <th key={m} style={{ ...headStyle(theme), textAlign: 'right', opacity: i + 1 > mesActual ? 0.5 : 1 }}>{m}</th>
               ))}
               <SortableHeader theme={theme} col="promedio" label="Prom." orden={orden} onToggleSort={onToggleSort} align="right" />
               <SortableHeader theme={theme} col="total" label="Total" orden={orden} onToggleSort={onToggleSort} align="right" />
-              <SortableHeader theme={theme} col="invStock" label="Inv." orden={orden} onToggleSort={onToggleSort} align="right" />
+              <SortableHeader theme={theme} col="invStock" label={<>Inv.<br/>Dicotech</>} orden={orden} onToggleSort={onToggleSort} align="right" />
             </tr>
           </thead>
           <tbody>
@@ -1314,7 +1367,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
               const rmpStyle = r.rdmp ? roadmapChipStyle(r.rdmp, P, theme) : null;
               const clickable = typeof onToggleSku === 'function';
               const isOpen = skuOpen === r.sku;
-              const rowColSpan = 4 + MESES.length + 3;
+              const rowColSpan = 4 + MESES.length + 4;
               return (
                 <React.Fragment key={r.sku}>
                 <tr
@@ -1326,13 +1379,16 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                   }}
                   onMouseEnter={(e) => { if (clickable && !isOpen) e.currentTarget.style.background = `${theme.text}05`; }}
                   onMouseLeave={(e) => { if (clickable && !isOpen) e.currentTarget.style.background = 'transparent'; }}>
-                  <td style={{ ...cellStyle(theme), fontFamily: '"SF Mono", ui-monospace, monospace', color: (clickable && isOpen) ? P.teal : (clickable ? P.teal : theme.text), fontWeight: clickable ? 600 : 400 }}>
+                  <td style={{ ...cellStyle(theme), fontFamily: TYPO.fontDisplay, fontWeight: 600, color: P.accent }}>
+                    {r.marca || 'Acteck'}
+                  </td>
+                  <td style={{ ...cellStyle(theme), fontFamily: '"SF Mono", ui-monospace, monospace', color: (clickable && isOpen) ? P.accent : (clickable ? P.accent : theme.text), fontWeight: clickable ? 600 : 400 }}>
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
                     }}>
                       {clickable && (
                         <ChevronRight size={11} style={{
-                          color: isOpen ? P.teal : theme.textSubtle,
+                          color: isOpen ? P.accent : theme.textSubtle,
                           transform: isOpen ? 'rotate(90deg)' : 'none',
                           transition: 'transform 280ms cubic-bezier(.4,0,.2,1)',
                         }} />
@@ -1340,8 +1396,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                       {r.sku}
                     </span>
                   </td>
-                  <td style={{ ...cellStyle(theme), color: theme.textMuted, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
-                  <td style={cellStyle(theme)}>{r.categoria || '—'}</td>
+                  <td style={{ ...cellStyle(theme), color: theme.textMuted, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
                   <td style={{ ...cellStyle(theme), textAlign: 'center' }}>
                     {rmpStyle ? <span style={{ display: 'inline-block', fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '2px 6px', borderRadius: 4, background: rmpStyle.bg, color: rmpStyle.color }}>{r.rdmp}</span>
                       : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
@@ -1459,9 +1514,25 @@ function RankingCard({ theme, P, title, eyebrow, items, color, emptyMsg }) {
   );
 }
 
-// ═══════════════ Mini-card de sucursal (grid 3×2) ═══════════════
-function MiniSucursalCard({ theme, isDark, P, rank, label, isFis, accent, monto, pct, tx, clientes, momPct, isOpen, onClick }) {
+// ═══════════════ Mini-card de sucursal (grid 3×2) · footer según modo ═══════════════
+function MiniSucursalCard({ theme, isDark, P, rank, label, isFis, accent, modo, monto, pct, tx, clientes, momPct, invStock, invValor, txMes, clientesMes, isOpen, onClick }) {
   const [hover, setHover] = useState(false);
+  // Footer content dinámico según modo
+  let footerLeft = '', footerRight = null;
+  if (modo === 'venta') {
+    footerLeft = `${fmt.int(tx)} tx · ${fmt.int(clientes)} cli`;
+    if (momPct != null) footerRight = (
+      <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, fontWeight: 700, color: momPct >= 0 ? P.green : P.red }}>
+        {momPct >= 0 ? '+' : ''}{momPct.toFixed(0)}% MoM
+      </span>
+    );
+  } else if (modo === 'inv') {
+    footerLeft = invStock > 0 ? `${fmt.int(invStock)} pz stock` : 'sin stock';
+    footerRight = null;
+  } else if (modo === 'ventames') {
+    footerLeft = `${fmt.int(txMes)} tx · ${fmt.int(clientesMes)} cli`;
+    footerRight = null;
+  }
   return (
     <div
       onClick={onClick}
@@ -1469,29 +1540,34 @@ function MiniSucursalCard({ theme, isDark, P, rank, label, isFis, accent, monto,
       onMouseLeave={() => setHover(false)}
       style={{
         background: theme.surface,
-        border: `1px solid ${isOpen ? accent : (hover ? accent : theme.border)}`,
-        borderRadius: 10, padding: '9px 11px',
+        border: `1px solid ${isOpen ? accent : theme.border}`,
+        borderRadius: 10, padding: '10px 12px 9px 14px',
         position: 'relative', overflow: 'hidden',
         cursor: 'pointer',
         transform: hover && !isOpen ? 'translateY(-1px)' : 'none',
-        boxShadow: isOpen ? `0 0 0 2px ${accent}26` : 'none',
-        transition: 'transform 260ms cubic-bezier(.4,0,.2,1), border-color 200ms cubic-bezier(.4,0,.2,1), box-shadow 200ms cubic-bezier(.4,0,.2,1)',
+        boxShadow: isOpen
+          ? `0 0 0 3px ${accent}22, 0 2px 8px ${accent}20`
+          : hover
+            ? '0 4px 14px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)'
+            : '0 1px 2px rgba(0,0,0,0.04)',
+        transition: 'transform 260ms cubic-bezier(.4,0,.2,1), border-color 200ms cubic-bezier(.4,0,.2,1), box-shadow 240ms cubic-bezier(.4,0,.2,1)',
       }}>
-      {/* Acento lateral */}
+      {/* Acento lateral · más definido con gradiente sutil */}
       <span style={{
-        position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: accent,
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+        background: `linear-gradient(180deg, ${accent} 0%, ${accent}CC 100%)`,
       }} />
       {/* Header: rank pill + tag FÍS/ONL */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
         <span style={{
           fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, color: theme.textMuted,
           background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-          borderRadius: 999, padding: '1px 6px', letterSpacing: '0.05em',
+          borderRadius: 999, padding: '1px 7px', letterSpacing: '0.05em',
         }}>#{rank}</span>
         <span style={{
-          fontFamily: TYPO.fontText, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.09em', fontWeight: 600,
-          padding: '1px 6px', borderRadius: 4,
-          background: `${accent}22`, color: accent,
+          fontFamily: TYPO.fontDisplay, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.09em', fontWeight: 700,
+          padding: '2px 7px', borderRadius: 4,
+          background: `${accent}1F`, color: accent,
         }}>{isFis ? 'FÍS' : 'ONL'}</span>
       </div>
       {/* Nombre */}
@@ -1507,29 +1583,25 @@ function MiniSucursalCard({ theme, isDark, P, rank, label, isFis, accent, monto,
         fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, color: theme.text,
         letterSpacing: '-0.02em', marginTop: 2, fontVariantNumeric: 'tabular-nums',
       }}>{monto}</div>
-      {/* Barra */}
+      {/* Barra con gradiente sutil */}
       <div style={{
         height: 3, borderRadius: 999,
         background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
         marginTop: 6, overflow: 'hidden',
       }}>
         <div style={{
-          width: `${pct}%`, height: '100%', background: accent, borderRadius: 999,
+          width: `${pct}%`, height: '100%', borderRadius: 999,
+          background: `linear-gradient(90deg, ${accent}CC 0%, ${accent} 100%)`,
           transition: 'width 460ms cubic-bezier(.4,0,.2,1)',
         }} />
       </div>
-      {/* Footer: tx + clientes + MoM */}
+      {/* Footer dinámico */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         gap: 6, marginTop: 5, fontSize: 9.5, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace',
       }}>
-        <span>{fmt.int(tx)} tx · {fmt.int(clientes)} cli</span>
-        {momPct != null && (
-          <span style={{
-            fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, fontWeight: 700,
-            color: momPct >= 0 ? P.green : P.red,
-          }}>{momPct >= 0 ? '+' : ''}{momPct.toFixed(0)}% MoM</span>
-        )}
+        <span>{footerLeft}</span>
+        {footerRight}
       </div>
     </div>
   );
