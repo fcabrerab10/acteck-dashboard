@@ -420,20 +420,6 @@ export default function TrackingPedidos() {
   return (
     <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
 
-      {/* ═════ Botón Nueva OC · SEPARADO del hero (flex row propio) ═════ */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: -4 }}>
-        <button type="button" onClick={() => setShowNuevaOC(true)}
-          style={{
-            background: P.accent, border: 0, color: '#FFF',
-            padding: '8px 16px', borderRadius: 999, fontSize: 12, fontWeight: 600,
-            cursor: 'pointer', fontFamily: TYPO.fontText,
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            boxShadow: '0 2px 8px rgba(0,113,227,0.24)',
-          }}>
-          <Plus style={{ width: 14, height: 14 }} strokeWidth={2.5} /> Nueva OC
-        </button>
-      </div>
-
       {/* ═════ Hero editorial ═════ */}
       <div style={{
         display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 20,
@@ -447,6 +433,23 @@ export default function TrackingPedidos() {
             background: `radial-gradient(circle, ${P.accent}1F 0%, transparent 70%)`, pointerEvents: 'none',
           }} />
         )}
+        {/* Botón Nueva OC · ghost translúcido que respeta el hero (mismo look en los 3 temas) */}
+        <button type="button" onClick={() => setShowNuevaOC(true)}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.20)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+          style={{
+            position: 'absolute', top: 14, right: 16, zIndex: 20,
+            background: 'rgba(255,255,255,0.12)',
+            border: '1px solid rgba(255,255,255,0.14)',
+            color: heroText,
+            padding: '6px 12px', borderRadius: 999, fontSize: 11.5, fontWeight: 600,
+            cursor: 'pointer', fontFamily: TYPO.fontText,
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+            transition: 'background 160ms',
+          }}>
+          <Plus style={{ width: 13, height: 13 }} strokeWidth={2.5} /> Nueva OC
+        </button>
         <div style={{ position: 'relative' }}>
           <p style={{
             fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em',
