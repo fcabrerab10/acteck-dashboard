@@ -45,6 +45,7 @@ import MobileHome from './components/MobileHome';
 import MobileHoy from './components/MobileHoy';
 import MobileEquipo from './components/MobileEquipo';
 import MobileYo from './components/MobileYo';
+import MobileSellIn from './components/MobileSellIn';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -596,13 +597,15 @@ export default function App() {
                 : <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
         )}
         {clienteActivo && paginaActiva === "sellIn"  && (
-          clienteActivo === 'digitalife'
-            ? <SellInClienteV2 clienteKey={clienteActivo} />
-            : clienteActivo === 'dicotech'
-              ? <SellInDicotech clienteKey={clienteActivo} />
-              : clienteActivo === 'pcel'
-                ? <SellInPcel clienteKey={clienteActivo} />
-                : <SellInCliente clienteKey={clienteActivo} />
+          mobile
+            ? <MobileSellIn clienteKey={clienteActivo} onBack={() => setPaginaActiva('home')} onNavegar={handleNavegar} />
+            : clienteActivo === 'digitalife'
+              ? <SellInClienteV2 clienteKey={clienteActivo} />
+              : clienteActivo === 'dicotech'
+                ? <SellInDicotech clienteKey={clienteActivo} />
+                : clienteActivo === 'pcel'
+                  ? <SellInPcel clienteKey={clienteActivo} />
+                  : <SellInCliente clienteKey={clienteActivo} />
         )}
         {paginaActiva === "cartera" && (
           (clienteActivo === 'digitalife' || clienteActivo === 'dicotech' || clienteActivo === 'pcel')
