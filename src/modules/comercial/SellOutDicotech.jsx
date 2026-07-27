@@ -685,23 +685,17 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
       {/* Ferruteck strip */}
       <FerruteckStrip recos={copilotRecos} />
 
-      {/* Tabla SKU · click abre modal drill-down */}
+      {/* Tabla SKU · click en fila expande drill inline debajo */}
       <TablaSKU theme={theme} P={P} isDark={isDark}
         rows={filas} busqueda={busqueda} onChangeBusqueda={setBusqueda}
         orden={orden} onToggleSort={toggleSort}
         maxCelda={maxCelda} mesActual={mesActual}
         familiaFilter={familiaFilter} onClearFamilia={() => setFamiliaFilter(null)}
-        onOpenSku={(row) => setSkuDrill(row)} />
-
-      {/* Modal drill-down por SKU */}
-      {skuDrill && (
-        <SkuDrillModal theme={theme} P={P} isDark={isDark}
-          skuRow={skuDrill}
-          anio={anio} anioPrev={anioPrev} mesActual={mesActual}
-          selloutGeneral={selloutGeneral}
-          inventarioSucursalMap={inventarioSucursalMap}
-          onClose={() => setSkuDrill(null)} />
-      )}
+        skuOpen={skuDrill?.sku || null}
+        onToggleSku={(row) => setSkuDrill((prev) => prev?.sku === row.sku ? null : row)}
+        anio={anio} anioPrev={anioPrev}
+        selloutGeneral={selloutGeneral}
+        inventarioSucursalMap={inventarioSucursalMap} />
     </div>
   );
 }
@@ -1086,9 +1080,9 @@ function FamiliaSOCard({ theme, P, familias, totalMonto, totalPiezas, selected, 
   );
 }
 
-// ═══════════════ NUEVA: Físico vs Online (donut 2 segmentos) ═══════════════
+// ═══════════════ Físico vs Online · compacto (ring 110px + leyenda apretada) ═══════════════
 function FisicoOnlineCard({ theme, P, split }) {
-  const size = 160, cx = 120, cy = 120, r = 88, stroke = 34;
+  const size = 110, cx = 120, cy = 120, r = 88, stroke = 34;
   const circ = 2 * Math.PI * r;
   const fisLen = split.total > 0 ? (split.fis.monto / split.total) * circ : 0;
   const onlLen = split.total > 0 ? (split.onl.monto / split.total) * circ : 0;
@@ -1097,15 +1091,17 @@ function FisicoOnlineCard({ theme, P, split }) {
   const pctFis = Math.round(split.fis.pct);
   const pctOnl = Math.round(split.onl.pct);
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
-      <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: '0 0 8px', color: theme.text }}>
-        Físico vs Online · YTD
-        <span style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontWeight: 500, fontStyle: 'italic', marginLeft: 8 }}>canal de venta</span>
-      </h5>
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
+        <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
+          Físico vs Online · YTD
+        </h5>
+        <span style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontStyle: 'italic' }}>canal</span>
+      </div>
       {split.total === 0 ? (
         <div style={{ padding: '30px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>Sin sucursales aún</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: `${size}px 1fr`, gap: 16, alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `${size}px 1fr`, gap: 12, alignItems: 'center' }}>
           <div style={{ position: 'relative', width: size, height: size }}>
             <svg viewBox="0 0 240 240" width={size} height={size}>
               <circle cx={cx} cy={cy} r={r} fill="none"
@@ -1113,17 +1109,19 @@ function FisicoOnlineCard({ theme, P, split }) {
                 strokeWidth={stroke} />
               <g transform={`rotate(-90 ${cx} ${cy})`} fill="none" strokeWidth={stroke}>
                 <circle cx={cx} cy={cy} r={r} stroke={fisColor}
-                  strokeDasharray={`${fisLen} ${circ}`} strokeDashoffset={0} />
+                  strokeDasharray={`${fisLen} ${circ}`} strokeDashoffset={0}
+                  style={{ transition: 'stroke-dasharray 460ms cubic-bezier(.4,0,.2,1)' }} />
                 <circle cx={cx} cy={cy} r={r} stroke={onlColor}
-                  strokeDasharray={`${onlLen} ${circ}`} strokeDashoffset={-fisLen} />
+                  strokeDasharray={`${onlLen} ${circ}`} strokeDashoffset={-fisLen}
+                  style={{ transition: 'stroke-dasharray 460ms cubic-bezier(.4,0,.2,1)' }} />
               </g>
             </svg>
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>Split</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: theme.text, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{pctFis}/{pctOnl}</div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>Split</div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em', color: theme.text, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{pctFis}/{pctOnl}</div>
             </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <FoRow color={fisColor} kind="FÍSICO" name={`${split.fis.n} sucursales`} monto={split.fis.monto} pct={pctFis} tx={split.fis.tx} clientes={split.fis.clientes} ticket={split.fis.ticket} theme={theme} />
             <FoRow color={onlColor} kind="ONLINE" name="Amazon · Internet · dropship" monto={split.onl.monto} pct={pctOnl} tx={split.onl.tx} clientes={split.onl.clientes} ticket={split.onl.ticket} theme={theme} />
           </div>
@@ -1137,18 +1135,18 @@ function FoRow({ color, kind, name, monto, pct, tx, clientes, ticket, theme }) {
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 8, alignItems: 'center' }}>
-        <span style={{ padding: '3px 8px', borderRadius: 999, background: `${color}22`, color, fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em' }}>{kind}</span>
-        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, color: theme.text }}>{name}</span>
-        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 12, fontWeight: 600, color: theme.text, textAlign: 'right' }}>{fmt.money(monto)}</span>
+        <span style={{ padding: '2px 7px', borderRadius: 999, background: `${color}22`, color, fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em' }}>{kind}</span>
+        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11.5, fontWeight: 600, color: theme.text, textAlign: 'right' }}>{fmt.money(monto)}</span>
       </div>
-      <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 3, fontFamily: TYPO.fontText }}>
-        {pct}% · {fmt.int(tx)} tx · {fmt.int(clientes)} clientes{ticket != null ? ` · Ticket ${fmt.moneyFull(ticket)}` : ''}
+      <div style={{ fontSize: 9.5, color: theme.textMuted, marginTop: 2, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+        {pct}% · {fmt.int(tx)} tx · {fmt.int(clientes)} cli{ticket != null ? ` · Ticket ${fmt.moneyFull(ticket)}` : ''}
       </div>
     </div>
   );
 }
 
-// ═══════════════ NUEVA: Ranking sucursales (barras horizontales + drill inline) ═══════════════
+// ═══════════════ Ranking sucursales · mini-cards grid 3×2 + drill inline ═══════════════
 function SucursalesRankingCard({ theme, P, sucursales, drillSucursal, onSelectSucursal, drillData }) {
   const [modo, setModo] = useState('monto'); // monto | tx | ticket
   const top = sucursales.slice(0, 6);
@@ -1188,64 +1186,43 @@ function SucursalesRankingCard({ theme, P, sucursales, drillSucursal, onSelectSu
       {rows.length === 0 ? (
         <div style={{ padding: '30px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>Sin sucursales aún</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
           {rows.map((r, i) => {
             const pct = valueOf(r) / maxVal * 100;
             const isFis = r.tipo === 'fisica';
-            const barColor = isFis ? P.teal : P.green;
+            const accent = isFis ? P.teal : P.green;
             const isOpen = drillSucursal === r.sucursal;
             const canDrill = typeof onSelectSucursal === 'function';
             return (
-              <React.Fragment key={r.sucursal}>
-                <div
-                  onClick={() => canDrill && onSelectSucursal(isOpen ? null : r.sucursal)}
-                  style={{
-                    display: 'grid', gridTemplateColumns: '22px 1fr auto 14px', gap: 10, alignItems: 'center',
-                    padding: canDrill ? '4px 8px' : 0, margin: canDrill ? '0 -8px' : 0, borderRadius: 8,
-                    cursor: canDrill ? 'pointer' : 'default',
-                    background: isOpen ? (isDark ? 'rgba(100,210,255,0.10)' : 'rgba(90,200,250,0.10)') : 'transparent',
-                    transition: 'background 160ms',
-                  }}
-                  onMouseEnter={(e) => { if (canDrill && !isOpen) e.currentTarget.style.background = `${theme.text}05`; }}
-                  onMouseLeave={(e) => { if (canDrill && !isOpen) e.currentTarget.style.background = 'transparent'; }}>
-                  <span style={{
-                    fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 700, color: theme.textMuted,
-                    background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderRadius: 6, padding: '3px 0', textAlign: 'center', letterSpacing: '0.02em',
-                  }}>{i + 1}</span>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        {r.label}
-                        <span style={{
-                          fontFamily: TYPO.fontText, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', fontWeight: 600,
-                          padding: '1px 6px', borderRadius: 4,
-                          background: isFis ? `${P.teal}1F` : `${P.green}1F`,
-                          color: isFis ? P.teal : P.green,
-                        }}>{isFis ? 'FÍS' : 'ONL'}</span>
-                      </span>
-                      {r.momPct != null && (
-                        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: r.momPct >= 0 ? P.green : P.red }}>
-                          {r.momPct >= 0 ? '+' : ''}{r.momPct.toFixed(0)}% MoM
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ height: 6, borderRadius: 999, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 999, transition: 'width 400ms' }} />
-                    </div>
-                  </div>
-                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, fontWeight: 600, color: theme.text, textAlign: 'right', minWidth: 60 }}>{formatValue(r)}</span>
-                  {canDrill && (
-                    <ChevronRight size={12} style={{ color: theme.textMuted, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 160ms' }} />
-                  )}
-                </div>
-                {isOpen && drillData && (
-                  <SucursalDrillPanel theme={theme} P={P} isDark={isDark}
-                    label={r.label} data={drillData} />
-                )}
-              </React.Fragment>
+              <MiniSucursalCard key={r.sucursal}
+                theme={theme} isDark={isDark}
+                rank={i + 1}
+                label={r.label}
+                isFis={isFis}
+                accent={accent}
+                monto={formatValue(r)}
+                pct={pct}
+                tx={r.tx}
+                clientes={r.clientes}
+                momPct={r.momPct}
+                isOpen={isOpen}
+                onClick={() => canDrill && onSelectSucursal(isOpen ? null : r.sucursal)}
+                P={P} />
             );
           })}
         </div>
+        {drillSucursal && drillData && (() => {
+          const sucInfo = rows.find((r) => r.sucursal === drillSucursal);
+          return (
+            <SucursalDrillPanel theme={theme} P={P} isDark={isDark}
+              label={sucInfo?.label || drillSucursal}
+              suc={sucInfo}
+              data={drillData}
+              onClose={() => onSelectSucursal(null)} />
+          );
+        })()}
+        </>
       )}
     </div>
   );
@@ -1278,8 +1255,8 @@ function FerruteckStrip({ recos }) {
   );
 }
 
-// ═══════════════ Tabla SKU (sin marca column · single-brand Acteck) ═══════════════
-function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, familiaFilter, onClearFamilia, onOpenSku }) {
+// ═══════════════ Tabla SKU (sin marca column · single-brand Acteck) + drill inline ═══════════════
+function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, onToggleSort, maxCelda, mesActual, familiaFilter, onClearFamilia, skuOpen, onToggleSku, anio, anioPrev, selloutGeneral, inventarioSucursalMap }) {
   const heatCell = (v) => {
     if (v == null || v === 0) return null;
     if (v < 0) return { bg: `${P.red}22`, color: P.red, weight: 600 };
@@ -1335,14 +1312,34 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
             )}
             {rows.slice(0, 500).map((r) => {
               const rmpStyle = r.rdmp ? roadmapChipStyle(r.rdmp, P, theme) : null;
-              const clickable = typeof onOpenSku === 'function';
+              const clickable = typeof onToggleSku === 'function';
+              const isOpen = skuOpen === r.sku;
+              const rowColSpan = 4 + MESES.length + 3;
               return (
-                <tr key={r.sku}
-                  onClick={() => clickable && onOpenSku(r)}
-                  style={{ cursor: clickable ? 'pointer' : 'default' }}
-                  onMouseEnter={(e) => { if (clickable) e.currentTarget.style.background = `${theme.text}05`; }}
-                  onMouseLeave={(e) => { if (clickable) e.currentTarget.style.background = 'transparent'; }}>
-                  <td style={{ ...cellStyle(theme), fontFamily: '"SF Mono", ui-monospace, monospace', color: clickable ? P.teal : theme.text, fontWeight: clickable ? 600 : 400 }}>{r.sku}</td>
+                <React.Fragment key={r.sku}>
+                <tr
+                  onClick={() => clickable && onToggleSku(r)}
+                  style={{
+                    cursor: clickable ? 'pointer' : 'default',
+                    background: isOpen ? (isDark ? 'rgba(100,210,255,0.08)' : 'rgba(90,200,250,0.06)') : 'transparent',
+                    transition: 'background 200ms cubic-bezier(.4,0,.2,1)',
+                  }}
+                  onMouseEnter={(e) => { if (clickable && !isOpen) e.currentTarget.style.background = `${theme.text}05`; }}
+                  onMouseLeave={(e) => { if (clickable && !isOpen) e.currentTarget.style.background = 'transparent'; }}>
+                  <td style={{ ...cellStyle(theme), fontFamily: '"SF Mono", ui-monospace, monospace', color: (clickable && isOpen) ? P.teal : (clickable ? P.teal : theme.text), fontWeight: clickable ? 600 : 400 }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                    }}>
+                      {clickable && (
+                        <ChevronRight size={11} style={{
+                          color: isOpen ? P.teal : theme.textSubtle,
+                          transform: isOpen ? 'rotate(90deg)' : 'none',
+                          transition: 'transform 280ms cubic-bezier(.4,0,.2,1)',
+                        }} />
+                      )}
+                      {r.sku}
+                    </span>
+                  </td>
                   <td style={{ ...cellStyle(theme), color: theme.textMuted, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
                   <td style={cellStyle(theme)}>{r.categoria || '—'}</td>
                   <td style={{ ...cellStyle(theme), textAlign: 'center' }}>
@@ -1369,6 +1366,19 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                   <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmt.int(r.total) : '—'}</td>
                   <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: r.invStock > 0 ? theme.text : theme.textMuted }}>{r.invStock > 0 ? fmt.int(r.invStock) : '—'}</td>
                 </tr>
+                {isOpen && (
+                  <tr>
+                    <td colSpan={rowColSpan} style={{ padding: 0, border: 0 }}>
+                      <SkuDrillInline theme={theme} P={P} isDark={isDark}
+                        skuRow={r}
+                        anio={anio} anioPrev={anioPrev} mesActual={mesActual}
+                        selloutGeneral={selloutGeneral}
+                        inventarioSucursalMap={inventarioSucursalMap}
+                        onClose={() => onToggleSku(r)} />
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -1449,22 +1459,144 @@ function RankingCard({ theme, P, title, eyebrow, items, color, emptyMsg }) {
   );
 }
 
-// ═══════════════ NUEVA: Drill-down inline por sucursal ═══════════════
-function SucursalDrillPanel({ theme, P, isDark, label, data }) {
+// ═══════════════ Mini-card de sucursal (grid 3×2) ═══════════════
+function MiniSucursalCard({ theme, isDark, P, rank, label, isFis, accent, monto, pct, tx, clientes, momPct, isOpen, onClick }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        background: theme.surface,
+        border: `1px solid ${isOpen ? accent : (hover ? accent : theme.border)}`,
+        borderRadius: 10, padding: '9px 11px',
+        position: 'relative', overflow: 'hidden',
+        cursor: 'pointer',
+        transform: hover && !isOpen ? 'translateY(-1px)' : 'none',
+        boxShadow: isOpen ? `0 0 0 2px ${accent}26` : 'none',
+        transition: 'transform 260ms cubic-bezier(.4,0,.2,1), border-color 200ms cubic-bezier(.4,0,.2,1), box-shadow 200ms cubic-bezier(.4,0,.2,1)',
+      }}>
+      {/* Acento lateral */}
+      <span style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: accent,
+      }} />
+      {/* Header: rank pill + tag FÍS/ONL */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+        <span style={{
+          fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, color: theme.textMuted,
+          background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+          borderRadius: 999, padding: '1px 6px', letterSpacing: '0.05em',
+        }}>#{rank}</span>
+        <span style={{
+          fontFamily: TYPO.fontText, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.09em', fontWeight: 600,
+          padding: '1px 6px', borderRadius: 4,
+          background: `${accent}22`, color: accent,
+        }}>{isFis ? 'FÍS' : 'ONL'}</span>
+      </div>
+      {/* Nombre */}
+      <div style={{
+        fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, color: theme.text,
+        letterSpacing: '-0.01em', marginTop: 5,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }} title={label}>
+        {label} {isOpen ? '▾' : ''}
+      </div>
+      {/* Valor grande */}
+      <div style={{
+        fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, color: theme.text,
+        letterSpacing: '-0.02em', marginTop: 2, fontVariantNumeric: 'tabular-nums',
+      }}>{monto}</div>
+      {/* Barra */}
+      <div style={{
+        height: 3, borderRadius: 999,
+        background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+        marginTop: 6, overflow: 'hidden',
+      }}>
+        <div style={{
+          width: `${pct}%`, height: '100%', background: accent, borderRadius: 999,
+          transition: 'width 460ms cubic-bezier(.4,0,.2,1)',
+        }} />
+      </div>
+      {/* Footer: tx + clientes + MoM */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        gap: 6, marginTop: 5, fontSize: 9.5, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace',
+      }}>
+        <span>{fmt.int(tx)} tx · {fmt.int(clientes)} cli</span>
+        {momPct != null && (
+          <span style={{
+            fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, fontWeight: 700,
+            color: momPct >= 0 ? P.green : P.red,
+          }}>{momPct >= 0 ? '+' : ''}{momPct.toFixed(0)}% MoM</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════ Drill-down inline por sucursal (después del grid) ═══════════════
+function SucursalDrillPanel({ theme, P, isDark, label, suc, data, onClose }) {
   const { topClientes, topVendedores, clientesTotal, vendedoresTotal } = data;
-  const bg = isDark ? 'rgba(100,210,255,0.06)' : 'rgba(90,200,250,0.04)';
-  const border = isDark ? 'rgba(100,210,255,0.14)' : 'rgba(90,200,250,0.24)';
+  const bg = isDark ? 'rgba(100,210,255,0.06)' : 'rgba(90,200,250,0.05)';
+  const border = isDark ? 'rgba(100,210,255,0.20)' : 'rgba(90,200,250,0.28)';
+  const ticket = suc?.tx > 0 ? suc.monto / suc.tx : null;
   return (
     <div style={{
-      background: bg, border: `1px dashed ${border}`, borderRadius: 10, padding: '10px 12px',
-      margin: '2px 0 4px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14,
+      background: bg, border: `1px dashed ${border}`, borderRadius: 10, padding: '10px 14px',
+      marginTop: 10, animation: 'sodicoSlideOpen 320ms cubic-bezier(.4,0,.2,1)',
+      overflow: 'hidden',
     }}>
-      <MiniRankingList theme={theme} P={P} color={P.teal}
-        title={`Clientes finales · ${label}`} count={`Top ${Math.min(5, topClientes.length)} de ${clientesTotal}`}
-        items={topClientes} />
-      <MiniRankingList theme={theme} P={P} color={P.indigo}
-        title={`Vendedores · ${label}`} count={`Top ${Math.min(5, topVendedores.length)} de ${vendedoresTotal}`}
-        items={topVendedores} />
+      <style>{`@keyframes sodicoSlideOpen{from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);}}`}</style>
+      {/* Header con stats */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        gap: 12, paddingBottom: 8, marginBottom: 8, borderBottom: `1px dashed ${theme.divider || theme.border}`,
+      }}>
+        <div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>
+            Detalle sucursal · YTD
+          </div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, marginTop: 2 }}>
+            {label}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'baseline' }}>
+          <SmallStat theme={theme} k="Clientes" v={fmt.int(clientesTotal)} />
+          <SmallStat theme={theme} k="Vendedores" v={fmt.int(vendedoresTotal)} />
+          {suc?.tx > 0 && <SmallStat theme={theme} k="Tx" v={fmt.int(suc.tx)} />}
+          {ticket != null && <SmallStat theme={theme} k="Ticket" v={fmt.moneyFull(ticket)} />}
+          <button onClick={(e) => { e.stopPropagation(); onClose && onClose(); }}
+            style={{
+              background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted,
+              padding: 4, borderRadius: 6, marginLeft: 4,
+              transition: 'background 160ms',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = `${theme.text}0F`}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            title="Cerrar drill">
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+      {/* 2 cols rankings */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <MiniRankingList theme={theme} P={P} color={P.teal}
+          title={`Top clientes · ${label}`} count={`Top ${Math.min(5, topClientes.length)} de ${clientesTotal}`}
+          items={topClientes} />
+        <MiniRankingList theme={theme} P={P} color={P.indigo}
+          title={`Top vendedores · ${label}`} count={`Top ${Math.min(5, topVendedores.length)} de ${vendedoresTotal}`}
+          items={topVendedores} />
+      </div>
+    </div>
+  );
+}
+
+function SmallStat({ theme, k, v }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600 }}>{k}</div>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, color: theme.text, letterSpacing: '-0.015em', fontVariantNumeric: 'tabular-nums' }}>{v}</div>
     </div>
   );
 }
@@ -1500,8 +1632,8 @@ function MiniRankingList({ theme, P, color, title, count, items }) {
   );
 }
 
-// ═══════════════ NUEVA: Modal Drill-down por SKU (Propuesta B compacta) ═══════════════
-function SkuDrillModal({ theme, P, isDark, skuRow, anio, anioPrev, mesActual, selloutGeneral, inventarioSucursalMap, onClose }) {
+// ═══════════════ Drill-down INLINE por SKU (dentro de la tabla) ═══════════════
+function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, mesActual, selloutGeneral, inventarioSucursalMap, onClose }) {
   const sku = skuRow.sku;
   const [precioLista, setPrecioLista] = useState(null);
   const [loadingPrecio, setLoadingPrecio] = useState(true);
@@ -1586,23 +1718,28 @@ function SkuDrillModal({ theme, P, isDark, skuRow, anio, anioPrev, mesActual, se
   const invTotal = invSuc.reduce((s, x) => ({ stock: s.stock + x.stock, valor: s.valor + x.valor }), { stock: 0, valor: 0 });
 
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#000000');
+  const drillBg = isDark ? 'rgba(100,210,255,0.05)' : 'rgba(90,200,250,0.04)';
+  const drillBorder = isDark ? 'rgba(100,210,255,0.18)' : 'rgba(90,200,250,0.26)';
 
   return (
-    <div
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 60,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-      }}>
+    <div style={{
+      background: drillBg,
+      borderTop: `1px dashed ${drillBorder}`,
+      borderBottom: `1px dashed ${drillBorder}`,
+      padding: '12px 14px',
+      animation: 'sodicoSkuSlide 340ms cubic-bezier(.4,0,.2,1)',
+      overflow: 'hidden',
+    }}>
+      <style>{`@keyframes sodicoSkuSlide{from{opacity:0; transform:translateY(-6px);} to{opacity:1; transform:translateY(0);}}`}</style>
       <div style={{
-        background: theme.surface, borderRadius: 14, overflow: 'hidden',
-        boxShadow: '0 24px 60px rgba(0,0,0,0.32)', maxWidth: 1100, width: '100%', maxHeight: '92vh',
+        background: theme.surface, borderRadius: 12, overflow: 'hidden',
+        boxShadow: isDark ? '0 4px 14px rgba(0,0,0,0.30)' : '0 2px 10px rgba(0,0,0,0.08)',
+        border: `1px solid ${theme.border}`,
         display: 'flex', flexDirection: 'column',
       }}>
         {/* Hero */}
         <div style={{
-          background: heroBg, color: '#FFF', padding: '14px 20px',
+          background: heroBg, color: '#FFF', padding: '12px 18px',
           display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', gap: 14, alignItems: 'center',
           flexShrink: 0,
         }}>
@@ -1633,8 +1770,8 @@ function SkuDrillModal({ theme, P, isDark, skuRow, anio, anioPrev, mesActual, se
           </button>
         </div>
 
-        {/* Body scrolleable */}
-        <div style={{ padding: '14px 20px 18px', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
+        {/* Body */}
+        <div style={{ padding: '12px 18px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {/* KPI strip */}
           <div style={{
             display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8,
