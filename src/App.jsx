@@ -398,7 +398,7 @@ export default function App() {
     { id: "analisis",   label: "An¡lisis",                icono: "°", habilitado: true  },
     { id: "sellIn",     label: "Sell In",                icono: "°", habilitado: true  },
     { id: "estrategia", label: "Sell Out",               icono: "°", habilitado: true  },
-    { id: "marketing",  label: "Marketing",              icono: "°", habilitado: clienteActivo !== "pcel"  },
+    { id: "marketing",  label: "Marketing",              icono: "°", habilitado: true  },
     { id: "pagos",      label: "Pagos",                  icono: "°°", habilitado: true  },
     { id: "cartera",    label: "Crdito y Cobranza",     icono: "°", habilitado: true  },
     ...(puedeActualizar ? [{ id: "actualizacion", label: "Actualizaci�n de datos", icono: "=", habilitado: true, admin: true }] : []),
