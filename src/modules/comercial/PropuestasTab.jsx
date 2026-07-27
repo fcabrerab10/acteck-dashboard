@@ -566,6 +566,12 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
   const [filtroFamilia, setFiltroFamilia] = useState('todas');
   const [soloConInv, setSoloConInv] = useState(true);
   const [orden, setOrden] = useState({ col: 'sellout90', dir: 'desc' });
+  const [savedMsg, setSavedMsg] = useState(null);
+  const handleGuardar = () => {
+    onGuardar?.();
+    setSavedMsg('✓ Borrador guardado');
+    setTimeout(() => setSavedMsg(null), 1800);
+  };
 
   const familias = useMemo(() => {
     const s = new Set();
@@ -863,8 +869,11 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
                 <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{formatMXN(totalPropuesta)}</div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={onGuardar}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {savedMsg && (
+                <span style={{ fontSize: 12, color: P.green, fontWeight: 600, fontFamily: 'inherit' }}>{savedMsg}</span>
+              )}
+              <button onClick={handleGuardar}
                 style={{ padding: '9px 18px', background: 'rgba(255,255,255,0.12)', border: 0, borderRadius: 999, color: '#FFF', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <Save style={{ width: 12, height: 12 }} strokeWidth={2} />
                 Guardar borrador
