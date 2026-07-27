@@ -44,6 +44,7 @@ import MobileShell from './components/MobileShell';
 import MobileHome from './components/MobileHome';
 import MobileHoy from './components/MobileHoy';
 import MobileEquipo from './components/MobileEquipo';
+import MobileYo from './components/MobileYo';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -460,7 +461,11 @@ export default function App() {
           }}>
           <PageTransition keyId={vistaActual === 'configuracion' ? 'configuracion' : `${clienteActivo || 'g'}-${paginaActiva}`}>
           {vistaActual === "configuracion" ? (
-            puedeVerConfig ? <Configuracion session={{user: authUser, perfil}} /> : <SinAcceso motivo="Solo el Super Admin puede ver Configuración." />
+            puedeVerConfig
+              ? (mobile
+                  ? <MobileYo perfil={perfil} onCerrarSesion={handleLogout} onOpenConfig={() => { /* placeholder: quedará en la misma vista si necesita ir al detalle */ }} />
+                  : <Configuracion session={{user: authUser, perfil}} />)
+              : <SinAcceso motivo="Solo el Super Admin puede ver Configuración." />
           ) : (
             <>
             {/* Banner modo presentaci³n */}
