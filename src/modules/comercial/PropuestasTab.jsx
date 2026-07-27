@@ -33,6 +33,7 @@ function mesesCerrados() {
 }
 const MES_ACTUAL = { anio: new Date().getFullYear(), mes: new Date().getMonth() + 1 };
 const MES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const MES_FULL  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 // ═══ Paleta derivada del tema ═══
 function paletteFromTheme(theme) {
@@ -98,6 +99,7 @@ export default function PropuestasTab() {
   const [clienteKey, setClienteKey] = useState(null);
   const [propuesta, setPropuesta] = useState({});
   const [propuestaId, setPropuestaId] = useState(null);
+  const [propuestaNombre, setPropuestaNombre] = useState('Cierre');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -134,6 +136,7 @@ export default function PropuestasTab() {
   const iniciarCliente = (cli) => {
     setPropuesta({});
     setPropuestaId(nuevaPropuestaId());
+    setPropuestaNombre('Cierre');
     setSkus([]);
     setContexto(null);
     setError(null);
@@ -145,6 +148,7 @@ export default function PropuestasTab() {
     setPropuestaId(r.id);
     setClienteKey(r.clienteKey);
     setPropuesta(r.propuesta || {});
+    setPropuestaNombre(r.nombre || 'Cierre');
     setSkus([]);
     setContexto(null);
     setError(null);
@@ -212,19 +216,25 @@ export default function PropuestasTab() {
       const piezasTot = Object.values(propuestaObj).reduce((s, v) => s + v.piezas, 0);
       const id = nuevaPropuestaId();
 
+      // Nombre corto: quita "Propuesta <Cliente>" del nombre del archivo
+      const rawName = file.name.replace(/\.xlsx?$/i, '');
+      const shortName = rawName
+        .replace(new RegExp(`^propuesta\\s+${cli?.label || ''}\\s*`, 'i'), '')
+        .trim() || 'Cierre';
+
       saveReciente({
         id,
         clienteKey: cliDetected,
         clienteLabel: cli?.label || cliDetected,
+        nombre: shortName,
         estado: 'Borrador',
         tstamp: Date.now(),
         propuesta: propuestaObj,
         resumen: { skus: count, piezas: piezasTot, total },
-        nombre: file.name.replace(/\.xlsx?$/i, ''),
         origen: 'Excel importado',
       });
       setRecientesTick((t) => t + 1);
-      abrirReciente({ id, clienteKey: cliDetected, propuesta: propuestaObj });
+      abrirReciente({ id, clienteKey: cliDetected, propuesta: propuestaObj, nombre: shortName });
     } catch (e) {
       alert('Error al importar: ' + (e.message || e));
     }
@@ -242,6 +252,7 @@ export default function PropuestasTab() {
       id: propuestaId,
       clienteKey,
       clienteLabel: cli?.label || clienteKey,
+      nombre: propuestaNombre || 'Cierre',
       estado: 'Borrador',
       tstamp: Date.now(),
       propuesta,
@@ -287,6 +298,7 @@ export default function PropuestasTab() {
       theme={theme} isDark={isDark}
       cliente={cliente} contexto={contexto} skus={skus}
       propuesta={propuesta} setPropuesta={setPropuesta}
+      nombre={propuestaNombre} setNombre={setPropuestaNombre}
       onBack={reiniciar}
       onGuardar={guardarBorrador}
       onRevisar={() => { guardarBorrador(); setVista(3); }}
@@ -298,6 +310,7 @@ export default function PropuestasTab() {
     return <VistaRevisar
       theme={theme} isDark={isDark}
       cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta}
+      nombre={propuestaNombre} setNombre={setPropuestaNombre}
       onBack={() => setVista(2)}
       onGuardar={guardarBorrador}
     />;
@@ -1100,7 +1113,7 @@ function SortableTh({ theme, P, orden, onToggle, col, width, children }) {
 // ════════════════════════════════════════════════════════════════════
 // VISTA REVISAR · Hero total + KPIs Fitness + agrupación por familia
 // ════════════════════════════════════════════════════════════════════
-function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, onBack, onGuardar }) {
+function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombre, setNombre, onBack, onGuardar }) {
   const P = paletteFromTheme(theme);
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
   const heroText = theme.heroCardText || '#F5F5F7';
@@ -1159,9 +1172,10 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, onBac
     XLSX.utils.book_append_sheet(wb, ws, 'Propuesta');
 
     const now = new Date();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const fname = `Propuesta ${cliente.label} ${dd}-${mm}-${now.getFullYear()}.xlsx`;
+    const mesLbl = MES_FULL[now.getMonth()];
+    const anio = now.getFullYear();
+    const nombreLimpio = (nombre || 'Cierre').trim();
+    const fname = `Propuesta ${cliente.label} ${nombreLimpio} ${mesLbl} ${anio}.xlsx`;
     XLSX.writeFile(wb, fname);
     setSavedMsg('✓ Excel descargado');
     setTimeout(() => setSavedMsg(null), 1800);
@@ -1190,10 +1204,26 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, onBac
               fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, letterSpacing: '-0.02em',
             }}>{cliente.iniciales}</div>
             <div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em' }}>
-                Revisar · {cliente.label}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em' }}>Revisar · {cliente.label} ·</span>
+                <input
+                  type="text"
+                  value={nombre || ''}
+                  onChange={(e) => setNombre?.(e.target.value)}
+                  placeholder="Nombre propuesta"
+                  style={{
+                    background: 'transparent', border: `1px dashed ${theme.border}`, borderRadius: 6,
+                    padding: '2px 8px', fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600,
+                    letterSpacing: '-0.02em', color: theme.accent, minWidth: 100, maxWidth: 240,
+                    outline: 'none',
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = theme.accent}
+                  onBlur={(e) => e.target.style.borderColor = theme.border}
+                />
               </div>
-              <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>Listo para enviar</div>
+              <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>
+                Se exportará como <b>Propuesta {cliente.label} {(nombre || 'Cierre').trim()} {MES_FULL[new Date().getMonth()]} {new Date().getFullYear()}.xlsx</b>
+              </div>
             </div>
           </div>
         </div>
