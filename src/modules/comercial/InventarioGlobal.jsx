@@ -129,6 +129,13 @@ export default function InventarioGlobal() {
   const [busqueda, setBusqueda] = useState('');
   const [skuAbierto, setSkuAbierto] = useState(null);
   const [descripciones, setDescripciones] = useState(new Map());
+  // Filtros nuevos
+  const [marcaFiltro, setMarcaFiltro] = useState(() => new Set());       // Set de marcas seleccionadas · vacío = todas
+  const [familiaFiltro, setFamiliaFiltro] = useState('');                // string · '' = todas
+  const [roadmapFiltro, setRoadmapFiltro] = useState(() => new Set());   // Set de rdmp · vacío = todos
+  const [soloConStock, setSoloConStock] = useState(false);
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
+  const [exportando, setExportando] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -156,9 +163,15 @@ export default function InventarioGlobal() {
         const mapDesc = new Map();
         const chunkBy = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, (i + 1) * n));
         for (const chunk of chunkBy(skus, 200)) {
-          const { data } = await supabase.from('roadmap_sku').select('sku, descripcion, marca').in('sku', chunk);
+          const { data } = await supabase.from('roadmap_sku').select('sku, descripcion, marca, familia, rdmp, categoria').in('sku', chunk);
           (data || []).forEach((r) => {
-            if (!mapDesc.has(r.sku)) mapDesc.set(r.sku, { descripcion: r.descripcion || '', marca: r.marca || '' });
+            if (!mapDesc.has(r.sku)) mapDesc.set(r.sku, {
+              descripcion: r.descripcion || '',
+              marca: r.marca || '',
+              familia: r.familia || '',
+              rdmp: r.rdmp || '',
+              categoria: r.categoria || '',
+            });
           });
         }
         setDescripciones(mapDesc);
@@ -254,22 +267,129 @@ export default function InventarioGlobal() {
       it.valor += val;
     });
     let arr = Array.from(m.values());
-    // Enriquecer con desc/marca
+    // Enriquecer con desc/marca/familia/rdmp/categoria
     arr = arr.map((it) => {
       const d = descripciones.get(it.sku) || {};
-      return { ...it, descripcion: d.descripcion || '', marca: d.marca || '' };
+      return {
+        ...it,
+        descripcion: d.descripcion || '',
+        marca: d.marca || '',
+        familia: d.familia || '',
+        rdmp: d.rdmp || '',
+        categoria: d.categoria || '',
+      };
     });
     // Filtro por búsqueda
     const q = busqueda.trim().toUpperCase();
     if (q) {
       arr = arr.filter((r) => {
-        const hay = `${r.sku} ${r.descripcion} ${r.marca}`.toUpperCase();
+        const hay = `${r.sku} ${r.descripcion} ${r.marca} ${r.familia} ${r.categoria}`.toUpperCase();
         return hay.includes(q);
       });
     }
+    // Filtro por marca
+    if (marcaFiltro.size > 0) {
+      arr = arr.filter((r) => marcaFiltro.has(String(r.marca || '').trim().toLowerCase()));
+    }
+    // Filtro por familia
+    if (familiaFiltro) {
+      arr = arr.filter((r) => String(r.familia || '').trim().toLowerCase() === familiaFiltro.toLowerCase());
+    }
+    // Filtro por roadmap
+    if (roadmapFiltro.size > 0) {
+      arr = arr.filter((r) => roadmapFiltro.has(String(r.rdmp || '').toUpperCase()));
+    }
+    // Filtro solo con stock
+    if (soloConStock) {
+      arr = arr.filter((r) => r.totalPz > 0);
+    }
     // Ordenar por valor descendente
     return arr.sort((a, b) => b.valor - a.valor);
-  }, [filasEfectivas, descripciones, busqueda]);
+  }, [filasEfectivas, descripciones, busqueda, marcaFiltro, familiaFiltro, roadmapFiltro, soloConStock]);
+
+  // Opciones de filtros (derivadas de la data)
+  const opcionesFiltros = useMemo(() => {
+    const marcas = new Set(), familias = new Set(), roadmaps = new Set();
+    for (const [, d] of descripciones) {
+      if (d.marca) marcas.add(String(d.marca).trim());
+      if (d.familia) familias.add(String(d.familia).trim());
+      if (d.rdmp) roadmaps.add(String(d.rdmp).trim().toUpperCase());
+    }
+    return {
+      marcas: Array.from(marcas).sort(),
+      familias: Array.from(familias).sort(),
+      roadmaps: Array.from(roadmaps).sort(),
+    };
+  }, [descripciones]);
+
+  const nFiltrosActivos = (marcaFiltro.size > 0 ? 1 : 0) + (familiaFiltro ? 1 : 0) + (roadmapFiltro.size > 0 ? 1 : 0) + (soloConStock ? 1 : 0);
+
+  const limpiarFiltros = () => {
+    setMarcaFiltro(new Set());
+    setFamiliaFiltro('');
+    setRoadmapFiltro(new Set());
+    setSoloConStock(false);
+  };
+
+  // ── Export Excel (respeta filtros aplicados) ──
+  const handleExport = async () => {
+    setExportando(true);
+    try {
+      const XLSX = await import('xlsx-js-style');
+      const shortAlmacenMap = { 1: 'GEN GDL', 3: 'GEN MEX', 2: 'GEN COL', 6: 'DECME MEX', 9: 'ML' };
+      const rows = filasTabla.map((r) => {
+        const base = {
+          Marca: r.marca || '',
+          SKU: r.sku,
+          Descripción: r.descripcion || '',
+          Familia: r.familia || '',
+          Categoría: r.categoria || '',
+          Roadmap: r.rdmp || '',
+        };
+        for (const a of almacenesActivos) {
+          base[shortAlmacenMap[a] || `Alm ${a}`] = Number(r.byAlm[a]?.pz || 0);
+        }
+        base['Total pz'] = Number(r.totalPz || 0);
+        base['Disponible'] = Number(r.totalDisp || 0);
+        base['Reservado'] = Number(r.totalRes || 0);
+        base['Valor'] = Number(r.valor || 0);
+        return base;
+      });
+      const ws = XLSX.utils.json_to_sheet(rows);
+      // Anchos aproximados
+      ws['!cols'] = [
+        { wch: 14 }, { wch: 14 }, { wch: 46 }, { wch: 18 }, { wch: 18 }, { wch: 10 },
+        ...almacenesActivos.map(() => ({ wch: 12 })),
+        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
+      ];
+      // Estilo de header (bold + fondo claro)
+      const header = Object.keys(rows[0] || { SKU: '' });
+      header.forEach((h, i) => {
+        const cell = ws[XLSX.utils.encode_cell({ r: 0, c: i })];
+        if (cell) {
+          cell.s = {
+            font: { bold: true, sz: 11, color: { rgb: 'FFFFFFFF' } },
+            fill: { fgColor: { rgb: 'FF007AFF' } },
+            alignment: { vertical: 'center', horizontal: 'left' },
+          };
+        }
+      });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
+      // Filename: Inventario DD MM YYYY.xlsx
+      const now = new Date();
+      const dd = String(now.getDate()).padStart(2, '0');
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const yyyy = now.getFullYear();
+      const filename = `Inventario ${dd} ${mm} ${yyyy}.xlsx`;
+      XLSX.writeFile(wb, filename);
+    } catch (e) {
+      console.error('Export inventario error:', e);
+      alert('Error al exportar el Excel: ' + (e.message || 'desconocido'));
+    } finally {
+      setExportando(false);
+    }
+  };
 
   const maxCelda = useMemo(() => {
     let m = 0;
@@ -538,13 +658,144 @@ export default function InventarioGlobal() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 999, height: 30, flex: 1, maxWidth: 280 }}>
             <Search style={{ width: 12, height: 12, color: theme.textMuted }} />
-            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar SKU o descripción…"
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar SKU, marca, familia…"
               style={{ border: 0, outline: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 12, color: theme.text, flex: 1 }} />
           </div>
-          <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 4 }}>
+
+          {/* Botón Filtros */}
+          <button onClick={() => setFiltrosAbiertos((v) => !v)}
+            onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = filtrosAbiertos || nFiltrosActivos > 0 ? (isDark ? 'rgba(10,132,255,0.14)' : 'rgba(0,122,255,0.10)') : 'transparent'; }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, height: 30,
+              padding: '0 12px', borderRadius: 999,
+              border: `1px solid ${filtrosAbiertos || nFiltrosActivos > 0 ? (theme.accent || '#007AFF') : theme.border}`,
+              background: filtrosAbiertos || nFiltrosActivos > 0 ? (isDark ? 'rgba(10,132,255,0.14)' : 'rgba(0,122,255,0.10)') : 'transparent',
+              color: filtrosAbiertos || nFiltrosActivos > 0 ? (theme.accent || '#007AFF') : theme.textMuted,
+              fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'background 200ms cubic-bezier(.4,0,.2,1), border-color 200ms cubic-bezier(.4,0,.2,1), color 200ms cubic-bezier(.4,0,.2,1)',
+            }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
+            Filtros
+            {nFiltrosActivos > 0 && (
+              <span style={{
+                background: theme.accent || '#007AFF', color: '#FFF',
+                fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, fontWeight: 700,
+                padding: '1px 6px', borderRadius: 999, minWidth: 16, textAlign: 'center',
+              }}>{nFiltrosActivos}</span>
+            )}
+          </button>
+
+          {/* Botón Export */}
+          <button onClick={handleExport} disabled={exportando || filasTabla.length === 0}
+            onMouseEnter={(e) => { if (!exportando && filasTabla.length > 0) { e.currentTarget.style.background = isDark ? '#0071E3' : '#0062CC'; } }}
+            onMouseLeave={(e) => { if (!exportando) { e.currentTarget.style.background = theme.accent || '#007AFF'; } }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, height: 30,
+              padding: '0 14px', borderRadius: 999, border: 0,
+              background: exportando || filasTabla.length === 0 ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)') : (theme.accent || '#007AFF'),
+              color: '#FFF', fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600,
+              cursor: exportando || filasTabla.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: exportando || filasTabla.length === 0 ? 0.5 : 1,
+              boxShadow: '0 2px 6px rgba(0,113,227,0.18)',
+              transition: 'background 200ms cubic-bezier(.4,0,.2,1), transform 160ms cubic-bezier(.4,0,.2,1)',
+            }}>
+            <Download style={{ width: 12, height: 12 }} strokeWidth={2.4} />
+            {exportando ? 'Exportando…' : 'Exportar Excel'}
+          </button>
+
+          <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 'auto' }}>
             {fmtInt(filasTabla.length)} SKUs · {almacenesActivos.length} almacenes
           </span>
         </div>
+
+        {/* Panel de filtros expandible */}
+        {filtrosAbiertos && (
+          <div style={{
+            padding: '12px 14px', borderBottom: `1px solid ${theme.border}`,
+            background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
+            display: 'flex', flexDirection: 'column', gap: 12,
+            animation: 'invFilterOpen 260ms cubic-bezier(.4,0,.2,1)',
+          }}>
+            <style>{`@keyframes invFilterOpen{from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);}}`}</style>
+
+            {/* Marca (pills multi-select) */}
+            <FiltroBlock theme={theme} title="Marca" count={marcaFiltro.size}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {opcionesFiltros.marcas.map((m) => {
+                  const key = m.toLowerCase();
+                  const active = marcaFiltro.has(key);
+                  return (
+                    <FiltroPill key={m} theme={theme} isDark={isDark}
+                      active={active}
+                      onClick={() => {
+                        const next = new Set(marcaFiltro);
+                        if (active) next.delete(key); else next.add(key);
+                        setMarcaFiltro(next);
+                      }}>{m}</FiltroPill>
+                  );
+                })}
+              </div>
+            </FiltroBlock>
+
+            {/* Familia (dropdown) */}
+            <FiltroBlock theme={theme} title="Familia" count={familiaFiltro ? 1 : 0}>
+              <select value={familiaFiltro} onChange={(e) => setFamiliaFiltro(e.target.value)}
+                style={{
+                  padding: '5px 10px', height: 28, borderRadius: 8,
+                  border: `1px solid ${theme.border}`, background: theme.surface,
+                  color: theme.text, fontFamily: TYPO.fontText, fontSize: 11.5, cursor: 'pointer',
+                  minWidth: 200,
+                }}>
+                <option value="">Todas las familias</option>
+                {opcionesFiltros.familias.map((f) => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+            </FiltroBlock>
+
+            {/* Roadmap (pills multi-select) */}
+            <FiltroBlock theme={theme} title="Roadmap" count={roadmapFiltro.size}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {opcionesFiltros.roadmaps.map((rd) => {
+                  const active = roadmapFiltro.has(rd);
+                  return (
+                    <FiltroPill key={rd} theme={theme} isDark={isDark}
+                      active={active}
+                      onClick={() => {
+                        const next = new Set(roadmapFiltro);
+                        if (active) next.delete(rd); else next.add(rd);
+                        setRoadmapFiltro(next);
+                      }}>{rd}</FiltroPill>
+                  );
+                })}
+              </div>
+            </FiltroBlock>
+
+            {/* Solo con stock (toggle) + Limpiar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, borderTop: `1px dashed ${theme.border}`, paddingTop: 10 }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: theme.text, fontSize: 11.5, fontFamily: TYPO.fontText }}>
+                <input type="checkbox" checked={soloConStock} onChange={(e) => setSoloConStock(e.target.checked)}
+                  style={{ accentColor: theme.accent || '#007AFF', width: 15, height: 15, cursor: 'pointer' }} />
+                Solo SKUs con stock disponible
+              </label>
+              {nFiltrosActivos > 0 && (
+                <button onClick={limpiarFiltros}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = theme.accent || '#007AFF'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = theme.textMuted; }}
+                  style={{
+                    background: 'transparent', border: 0, cursor: 'pointer',
+                    color: theme.textMuted, fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 500,
+                    padding: '4px 8px', borderRadius: 6,
+                    transition: 'color 200ms cubic-bezier(.4,0,.2,1)',
+                  }}>Limpiar filtros ×</button>
+              )}
+            </div>
+          </div>
+        )}
 
         <div style={{ overflow: 'auto', maxHeight: '65vh' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
@@ -771,5 +1022,48 @@ function ProximoBloque({ icon: Icon, titulo, nota }) {
       <div className="text-xs text-gray-400 mt-1.5">Próximamente</div>
       <div className="text-[11px] text-gray-400 mt-2 leading-relaxed">{nota}</div>
     </div>
+  );
+}
+
+// ═══════════════ Panel de filtros · helpers ═══════════════
+function FiltroBlock({ theme, title, count, children }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{
+        fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em',
+        color: theme.textMuted, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6,
+      }}>
+        {title}
+        {count > 0 && (
+          <span style={{
+            background: theme.accent || '#007AFF', color: '#FFF',
+            fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9, fontWeight: 700,
+            padding: '0 5px', borderRadius: 999, minWidth: 14, textAlign: 'center', lineHeight: '14px',
+          }}>{count}</span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function FiltroPill({ theme, isDark, active, onClick, children }) {
+  const [hover, setHover] = React.useState(false);
+  const activeBg = isDark ? 'rgba(10,132,255,0.20)' : 'rgba(0,122,255,0.14)';
+  const idleBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)';
+  const hoverBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+  return (
+    <button onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        padding: '4px 12px', height: 26, borderRadius: 999,
+        border: `1px solid ${active ? (theme.accent || '#007AFF') : theme.border}`,
+        background: active ? activeBg : hover ? hoverBg : idleBg,
+        color: active ? (theme.accent || '#007AFF') : theme.text,
+        fontFamily: TYPO.fontText, fontSize: 11, fontWeight: active ? 600 : 500,
+        cursor: 'pointer', whiteSpace: 'nowrap',
+        transition: 'background 200ms cubic-bezier(.4,0,.2,1), border-color 200ms cubic-bezier(.4,0,.2,1), color 200ms cubic-bezier(.4,0,.2,1)',
+      }}>{children}</button>
   );
 }
