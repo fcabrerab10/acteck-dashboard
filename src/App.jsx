@@ -43,6 +43,7 @@ import MobileNav from './components/MobileNav';
 import MobileShell from './components/MobileShell';
 import MobileHome from './components/MobileHome';
 import MobileHoy from './components/MobileHoy';
+import MobileEquipo from './components/MobileEquipo';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -560,7 +561,9 @@ export default function App() {
           )}
           {paginaActiva === "telemetria" && (
             perfil?.es_super_admin
-              ? <TelemetriaPanel />
+              ? (mobile
+                  ? <MobileEquipo perfil={perfil} onNavegar={handleNavegar} />
+                  : <TelemetriaPanel />)
               : <SinAcceso motivo="Sólo el super admin puede ver la actividad del equipo." />
           )}
           {paginaActiva === "axonMexico" && (
