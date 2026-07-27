@@ -425,22 +425,6 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   }, [sucursalMes, anio, mesActual]);
 
   // Enriquecemos sucursalesYTD con inventario + venta del mes por sucursal
-  const sucursalesEnriched = useMemo(() => {
-    return sucursalesYTD.map((s) => {
-      const inv = inventarioPorSucursal.get(s.sucursal) || { stock: 0, valor: 0 };
-      const vm = ventaMesPorSucursal.get(s.sucursal) || { monto: 0, piezas: 0, tx: 0, clientes: 0 };
-      return {
-        ...s,
-        invStock: inv.stock,
-        invValor: inv.valor,
-        ventaMes: vm.monto,
-        piezasMes: vm.piezas,
-        txMes: vm.tx,
-        clientesMes: vm.clientes,
-      };
-    });
-  }, [sucursalesYTD, inventarioPorSucursal, ventaMesPorSucursal]);
-
   // Valor de inventario POR sucursal (agregado desde inventarioSucursalMap)
   const inventarioPorSucursal = useMemo(() => {
     const acc = new Map();
@@ -471,6 +455,23 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
     }
     return acc;
   }, [sucursalMes, anio, mesActual]);
+
+  // Enriquecemos sucursalesYTD con inventario + venta del mes por sucursal
+  const sucursalesEnriched = useMemo(() => {
+    return sucursalesYTD.map((s) => {
+      const inv = inventarioPorSucursal.get(s.sucursal) || { stock: 0, valor: 0 };
+      const vm = ventaMesPorSucursal.get(s.sucursal) || { monto: 0, piezas: 0, tx: 0, clientes: 0 };
+      return {
+        ...s,
+        invStock: inv.stock,
+        invValor: inv.valor,
+        ventaMes: vm.monto,
+        piezasMes: vm.piezas,
+        txMes: vm.tx,
+        clientesMes: vm.clientes,
+      };
+    });
+  }, [sucursalesYTD, inventarioPorSucursal, ventaMesPorSucursal]);
 
   const splitFisicoOnline = useMemo(() => {
     let fisMonto = 0, fisTx = 0, fisClientes = 0;
