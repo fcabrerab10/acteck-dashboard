@@ -7,8 +7,6 @@ import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { ClipboardList, Search, ChevronRight, Download, X, Sparkles, ArrowLeft, Save } from 'lucide-react';
-import * as XLSX from 'xlsx-js-style';
-import { toast } from '../../lib/toast';
 
 // ═══ Constantes ═══
 const CLIENTES = [
@@ -62,240 +60,27 @@ function fmtCompact(n) {
 }
 
 // ═══ Persistencia local de recientes ═══
-// Blindaje multi-capa contra pérdida de datos:
-//   · propuestas_recientes_v1        · principal (24 más recientes)
-//   · propuestas_recientes_v1_bak    · backup rolling (24 más recientes, se actualiza SOLO si el principal se pudo leer)
-//   · propuestas_recientes_v1_last   · último snapshot antes de cada save (rollback de emergencia)
 const STORAGE_KEY = 'propuestas_recientes_v1';
-const BACKUP_KEY  = 'propuestas_recientes_v1_bak';
-const LAST_KEY    = 'propuestas_recientes_v1_last';
-
 function loadRecientes() {
-  // Fallback 3 capas: principal → backup → snapshot antes del último save
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr) && arr.length > 0) {
-        console.log('[Propuestas] cargadas desde principal:', arr.length);
-        return arr;
-      }
-    }
-  } catch (e) { console.warn('[Propuestas] fallo lectura principal', e); }
-  try {
-    const raw = localStorage.getItem(BACKUP_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr) && arr.length > 0) {
-        console.warn('[Propuestas] cargando desde BACKUP · principal vacío/corrupto', arr.length);
-        return arr;
-      }
-    }
-  } catch {}
-  try {
-    const raw = localStorage.getItem(LAST_KEY);
-    if (raw) {
-      const snap = JSON.parse(raw);
-      const arr = snap?.data;
-      if (Array.isArray(arr) && arr.length > 0) {
-        console.warn('[Propuestas] cargando desde SNAPSHOT _last · principal + backup vacíos', arr.length);
-        return arr;
-      }
-    }
-  } catch {}
-  console.log('[Propuestas] sin propuestas en ninguna capa');
-  return [];
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
 }
-
-// Import Excel: lee un .xlsx exportado por la app, extrae SKUs + piezas +
-// precio (deshaciendo el IVA), detecta cliente por filename o hoja de
-// Resumen. Si se pasa existingEntry, actualiza esa propuesta (mismo id +
-// clienteKey). Si no, crea una nueva.
-// Retorna { ok, entry?, msg? }
-async function importarExcel(file, existingEntry = null) {
-  try {
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: 'array' });
-    const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-
-    // Detectar cliente por filename: "Propuesta <Cliente> [Nombre] <Mes> <Año>.xlsx"
-    // Formato robusto: quitamos extensión y "Propuesta ", luego separamos por
-    // el mes en español si aparece.
-    const rawName = file.name.replace(/\.xlsx?$/i, '').trim();
-    let filenameCliente = '';
-    let filenameNombre = '';
-    const prefixMatch = rawName.match(/^Propuesta\s+(.+)$/i);
-    if (prefixMatch) {
-      const resto = prefixMatch[1];
-      // Buscamos el primer mes que aparezca
-      const mesIdx = MESES_ES.findIndex((m) => resto.toLowerCase().includes(m.toLowerCase()));
-      if (mesIdx >= 0) {
-        const mesPos = resto.toLowerCase().indexOf(MESES_ES[mesIdx].toLowerCase());
-        const antes = resto.slice(0, mesPos).trim(); // "Cliente Nombre"
-        // Intentamos matchear cliente conocido al inicio de "antes"
-        const cliMatch = CLIENTES.find((c) => antes.toLowerCase().startsWith(c.label.toLowerCase()));
-        if (cliMatch) {
-          filenameCliente = cliMatch.key;
-          filenameNombre = antes.slice(cliMatch.label.length).trim();
-        } else {
-          filenameCliente = antes;
-        }
-      }
-    }
-
-    // Fallback: detectar cliente por celda A2 de la hoja Resumen ("Nombre propuesta · Familia")
-    let clienteKeyResuelto = filenameCliente;
-    if (!CLIENTES.find((c) => c.key === clienteKeyResuelto)) {
-      // Busca por label
-      const cli = CLIENTES.find((c) => c.key.toLowerCase() === (filenameCliente || '').toLowerCase()
-                                     || c.label.toLowerCase() === (filenameCliente || '').toLowerCase());
-      clienteKeyResuelto = cli?.key || '';
-    }
-
-    // Leer hojas de detalle (todas menos Resumen)
-    const propuesta = {};
-    let sheetsLeidas = 0;
-    wb.SheetNames.forEach((sn) => {
-      if (sn.toLowerCase() === 'resumen') return;
-      const sheet = wb.Sheets[sn];
-      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-      rows.forEach((row) => {
-        const sku = String(row.SKU || '').trim();
-        if (!sku) return;
-        const familia = String(row.Familia || '').trim();
-        if (familia === 'TOTAL') return; // fila resumen
-        const piezas = Number(row.Piezas) || 0;
-        const precioConIVA = Number(row['Precio + IVA']) || 0;
-        if (piezas <= 0 || precioConIVA <= 0) return;
-        // Deshacer IVA 16% para volver al precio base
-        const precioBase = +(precioConIVA / 1.16).toFixed(2);
-        // Guardamos también descripcion y familia para que la restauración
-        // no dependa del fetch de skus del cliente
-        propuesta[sku] = {
-          piezas,
-          precio: precioBase,
-          descripcion: String(row['Descripción'] || row.Descripcion || '').trim(),
-          familia,
-        };
-      });
-      sheetsLeidas += 1;
-    });
-
-    const skusCount = Object.keys(propuesta).length;
-    if (skusCount === 0) {
-      return { ok: false, msg: 'No se encontraron SKUs con piezas en el Excel' };
-    }
-    // Si estamos actualizando una existente, forzamos el clienteKey de la
-    // existente (aunque el filename lo cambie) y validamos consistencia.
-    if (existingEntry) {
-      clienteKeyResuelto = existingEntry.clienteKey;
-    } else if (!clienteKeyResuelto) {
-      return { ok: false, msg: 'No pude detectar el cliente. Renombra el archivo a "Propuesta {Cliente} …" o crea la propuesta desde cero' };
-    }
-
-    const cli = CLIENTES.find((c) => c.key === clienteKeyResuelto);
-    const piezas = Object.values(propuesta).reduce((s, v) => s + (v.piezas || 0), 0);
-    const total  = Object.values(propuesta).reduce((s, v) => s + (v.piezas || 0) * (v.precio || 0), 0);
-
-    const entry = {
-      id: existingEntry?.id || nuevaPropuestaId(),
-      clienteKey: clienteKeyResuelto,
-      clienteLabel: cli?.label || clienteKeyResuelto,
-      nombre: existingEntry?.nombre || filenameNombre || `Importado ${new Date().toLocaleDateString('es-MX')}`,
-      estado: existingEntry ? existingEntry.estado : 'Borrador',
-      tstamp: Date.now(),
-      // Si estamos actualizando desde Excel, marcamos también updatedFromExcelAt
-      // y preservamos exportedAt/exportFilename originales
-      ...(existingEntry ? {
-        exportedAt: existingEntry.exportedAt,
-        exportFilename: existingEntry.exportFilename,
-        updatedFromExcelAt: Date.now(),
-      } : {}),
-      propuesta,
-      resumen: { skus: skusCount, piezas, total },
-    };
-    saveReciente(entry);
-    return { ok: true, entry, sheetsLeidas, updated: !!existingEntry };
-  } catch (e) {
-    console.error('[Propuestas] importarExcel falló', e);
-    return { ok: false, msg: e?.message || 'Error leyendo el Excel' };
-  }
-}
-
-// Import: restaura propuestas desde un JSON descargado previamente
-function importarBackup(json) {
-  try {
-    let arr = null;
-    if (Array.isArray(json)) arr = json;
-    else if (json?.recientes && Array.isArray(json.recientes)) arr = json.recientes;
-    else if (json?.data && Array.isArray(json.data)) arr = json.data;
-    if (!arr || arr.length === 0) return { ok: false, count: 0, msg: 'El JSON no tiene propuestas' };
-    // Merge con lo existente por id (import gana en caso de conflicto)
-    const existentes = loadRecientes();
-    const map = new Map(existentes.map((r) => [r.id, r]));
-    arr.forEach((r) => { if (r && r.id) map.set(r.id, r); });
-    const merged = Array.from(map.values())
-      .filter((r) => r && r.id)
-      .sort((a, b) => (b.tstamp || 0) - (a.tstamp || 0))
-      .slice(0, 100); // ampliamos límite para permitir historial más largo
-    const str = JSON.stringify(merged);
-    localStorage.setItem(STORAGE_KEY, str);
-    try { localStorage.setItem(BACKUP_KEY, str); } catch {}
-    return { ok: true, count: merged.length, added: merged.length - existentes.length };
-  } catch (e) {
-    console.error('[Propuestas] importarBackup falló', e);
-    return { ok: false, count: 0, msg: e?.message || 'error desconocido' };
-  }
-}
-
 function saveReciente(entry) {
   try {
-    const prev = loadRecientes();
-    // Snapshot rollback: guarda estado previo antes de sobrescribir
-    try {
-      localStorage.setItem(LAST_KEY, JSON.stringify({ tstamp: Date.now(), data: prev }));
-    } catch {}
-
-    const all = prev.filter((r) => r.id !== entry.id);
+    const all = loadRecientes().filter((r) => r.id !== entry.id);
     all.unshift(entry);
-    const nextStr = JSON.stringify(all.slice(0, 24));
-    localStorage.setItem(STORAGE_KEY, nextStr);
-    // Backup copy solo si la escritura principal succeed
-    try { localStorage.setItem(BACKUP_KEY, nextStr); } catch {}
-    return true;
-  } catch (e) {
-    console.error('[Propuestas] Error guardando en localStorage:', e);
-    return false;
-  }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all.slice(0, 24)));
+  } catch {}
 }
-
 function removeReciente(id) {
   try {
     const all = loadRecientes().filter((r) => r.id !== id);
-    const nextStr = JSON.stringify(all);
-    // Snapshot antes de borrar
-    try { localStorage.setItem(LAST_KEY, JSON.stringify({ tstamp: Date.now(), data: loadRecientes() })); } catch {}
-    localStorage.setItem(STORAGE_KEY, nextStr);
-    try { localStorage.setItem(BACKUP_KEY, nextStr); } catch {}
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
   } catch {}
-}
-
-// Export helper: descarga snapshot completo como JSON (rescate de emergencia)
-function exportarSnapshot() {
-  try {
-    const data = { tstamp: new Date().toISOString(), recientes: loadRecientes() };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `propuestas_backup_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    return true;
-  } catch (e) {
-    console.error('[Propuestas] fallo snapshot', e);
-    return false;
-  }
 }
 function nuevaPropuestaId() {
   return `prp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -313,14 +98,12 @@ export default function PropuestasTab() {
   const [clienteKey, setClienteKey] = useState(null);
   const [propuesta, setPropuesta] = useState({});
   const [propuestaId, setPropuestaId] = useState(null);
-  const [nombreBorrador, setNombreBorrador] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [skus, setSkus] = useState([]);
   const [contexto, setContexto] = useState(null);
   const [recientesTick, setRecientesTick] = useState(0); // fuerza re-render de landing tras guardar
-  const lastAutoSaveRef = React.useRef(0);
 
   // Fetch al entrar a la vista One-Page
   useEffect(() => {
@@ -343,7 +126,6 @@ export default function PropuestasTab() {
     setClienteKey(null);
     setPropuesta({});
     setPropuestaId(null);
-    setNombreBorrador('');
     setSkus([]);
     setContexto(null);
     setError(null);
@@ -352,7 +134,6 @@ export default function PropuestasTab() {
   const iniciarCliente = (cli) => {
     setPropuesta({});
     setPropuestaId(nuevaPropuestaId());
-    setNombreBorrador('');
     setSkus([]);
     setContexto(null);
     setError(null);
@@ -364,338 +145,30 @@ export default function PropuestasTab() {
     setPropuestaId(r.id);
     setClienteKey(r.clienteKey);
     setPropuesta(r.propuesta || {});
-    setNombreBorrador(r.nombre || '');
     setSkus([]);
     setContexto(null);
     setError(null);
     setVista(2);
   };
 
-  // Guarda silencioso (sin toast) — usado por autosave
-  const guardarSilencioso = React.useCallback(() => {
-    if (!clienteKey) return false;
-    let pid = propuestaId;
-    if (!pid) { pid = nuevaPropuestaId(); setPropuestaId(pid); }
-    try {
-      const cli = CLIENTES.find((c) => c.key === clienteKey);
-      const propuestaLista = Object.entries(propuesta)
-        .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
-        .filter((r) => r.sku);
-      const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
-      const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
-      const ok = saveReciente({
-        id: pid,
-        clienteKey,
-        clienteLabel: cli?.label || clienteKey,
-        nombre: nombreBorrador,
-        estado: 'Borrador',
-        tstamp: Date.now(),
-        propuesta,
-        resumen: { skus: propuestaLista.length, piezas, total },
-      });
-      if (ok) setRecientesTick((t) => t + 1);
-      return ok;
-    } catch (e) {
-      console.error('[Propuestas] autosave falló', e);
-      return false;
-    }
-  }, [clienteKey, propuestaId, propuesta, skus, nombreBorrador]);
-
-  // Auto-save cada 15 segundos si hay cambios y estamos editando
-  useEffect(() => {
-    if (vista !== 2 && vista !== 3) return;
-    if (!clienteKey) return;
-    const interval = setInterval(() => {
-      const now = Date.now();
-      // Solo si pasaron 15s desde el último autosave
-      if (now - lastAutoSaveRef.current > 15000) {
-        const propuestaCount = Object.keys(propuesta).length;
-        if (propuestaCount === 0 && !nombreBorrador) return; // nada que guardar
-        const ok = guardarSilencioso();
-        if (ok) lastAutoSaveRef.current = now;
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [vista, clienteKey, propuesta, nombreBorrador, guardarSilencioso]);
-
   const guardarBorrador = () => {
-    // Auto-genera propuestaId si no existe (defensivo: nunca perder trabajo)
-    let pid = propuestaId;
-    if (!pid) {
-      pid = nuevaPropuestaId();
-      setPropuestaId(pid);
-    }
-    if (!clienteKey) {
-      toast.error('No se pudo guardar: selecciona un cliente primero');
-      return;
-    }
-    try {
-      const cli = CLIENTES.find((c) => c.key === clienteKey);
-      const propuestaLista = Object.entries(propuesta)
-        .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
-        .filter((r) => r.sku);
-      const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
-      const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
-      saveReciente({
-        id: pid,
-        clienteKey,
-        clienteLabel: cli?.label || clienteKey,
-        nombre: nombreBorrador,
-        estado: 'Borrador',
-        tstamp: Date.now(),
-        propuesta,
-        resumen: { skus: propuestaLista.length, piezas, total },
-      });
-      setRecientesTick((t) => t + 1);
-      toast.success(`Borrador guardado · ${propuestaLista.length} SKUs · ${formatMXN(total)}`);
-    } catch (e) {
-      console.error('[Propuestas] Error guardando borrador:', e);
-      toast.error('Error al guardar borrador: ' + (e?.message || 'desconocido'));
-    }
-  };
-
-  // ═══ Export Excel real ═══
-  const exportarExcel = () => {
-    if (!clienteKey) {
-      toast.error('Selecciona un cliente para exportar');
-      return;
-    }
-    console.log('[Propuestas] export inicia', { clienteKey, propuestaKeys: Object.keys(propuesta).length, skusLoaded: skus.length, nombreBorrador });
-    try {
-      const cli = CLIENTES.find((c) => c.key === clienteKey);
-      // Blindaje: si skus no está cargado, exportar con lo que tengamos en el
-      // objeto propuesta (evita perder trabajo del usuario por fetch tardío)
-      const skusIdx = new Map(skus.map((r) => [r.sku, r]));
-      // IVA MX 16%
-      const IVA = 0.16;
-      const propuestaLista = Object.entries(propuesta)
-        .map(([sku, val]) => {
-          const dataSku = skusIdx.get(sku) || {};
-          const precioBase = Number(val.precio) || 0;
-          const piezas = Number(val.piezas) || 0;
-          const precioIVA = +(precioBase * (1 + IVA)).toFixed(2);
-          const total = +(piezas * precioIVA).toFixed(2);
-          return {
-            sku,
-            descripcion: dataSku.descripcion || val.descripcion || '',
-            familia:     dataSku.familia     || val.familia     || '',
-            piezas, precioBase, precioIVA, total,
-          };
-        })
-        .filter((r) => r.sku && r.piezas > 0);
-      if (propuestaLista.length === 0) {
-        console.warn('[Propuestas] export sin filas · propuesta state:', propuesta, 'skus loaded:', skus.length);
-        toast.error('La propuesta no tiene SKUs con piezas · guarda el borrador antes de exportar');
-        return;
-      }
-
-      const wb = XLSX.utils.book_new();
-      const CURRENCY = '"$"#,##0.00';
-
-      // ═══ Helper para hoja de detalle ═══
-      // Columnas: SKU · Descripción · Familia · Piezas · Precio + IVA (money) · Total (money)
-      const buildDetalleSheet = (filas, sheetName) => {
-        if (!filas || filas.length === 0) return;
-        const dataRows = filas.map((r) => ({
-          SKU: r.sku,
-          'Descripción': r.descripcion,
-          Familia: r.familia,
-          Piezas: r.piezas,
-          'Precio + IVA': r.precioIVA,
-          Total: r.total,
-        }));
-        const totalPiezas = filas.reduce((s, r) => s + r.piezas, 0);
-        const totalMonto  = filas.reduce((s, r) => s + r.total, 0);
-        dataRows.push({
-          SKU: '', 'Descripción': '', Familia: 'TOTAL',
-          Piezas: totalPiezas, 'Precio + IVA': '', Total: totalMonto,
-        });
-        const ws = XLSX.utils.json_to_sheet(dataRows);
-        ws['!cols'] = [
-          { wch: 16 }, { wch: 44 }, { wch: 18 }, { wch: 10 }, { wch: 16 }, { wch: 18 },
-        ];
-        const range = XLSX.utils.decode_range(ws['!ref']);
-        // Header (fila 0): bold blanco sobre fondo negro
-        for (let c = range.s.c; c <= range.e.c; c++) {
-          const addr = XLSX.utils.encode_cell({ r: 0, c });
-          if (ws[addr]) {
-            ws[addr].s = {
-              font: { bold: true, color: { rgb: 'FFFFFF' }, name: 'Calibri', sz: 11 },
-              fill: { fgColor: { rgb: '1D1D1F' } },
-              alignment: { horizontal: c >= 3 ? 'right' : 'left', vertical: 'center' },
-            };
-          }
-        }
-        // Filas de datos + total: formato moneda en columnas E (Precio + IVA) y F (Total)
-        for (let R = 1; R <= range.e.r; R++) {
-          const isTotal = R === range.e.r;
-          ['E', 'F'].forEach((col) => {
-            const addr = `${col}${R + 1}`;
-            if (ws[addr] && typeof ws[addr].v === 'number') {
-              ws[addr].z = CURRENCY;
-              ws[addr].s = {
-                numFmt: CURRENCY,
-                alignment: { horizontal: 'right' },
-                font: isTotal ? { bold: true } : undefined,
-                fill: isTotal ? { fgColor: { rgb: 'F0F0F0' } } : undefined,
-              };
-            }
-          });
-          // Piezas col D — right align
-          const addrD = `D${R + 1}`;
-          if (ws[addrD]) {
-            ws[addrD].s = {
-              alignment: { horizontal: 'right' },
-              font: isTotal ? { bold: true } : undefined,
-              fill: isTotal ? { fgColor: { rgb: 'F0F0F0' } } : undefined,
-            };
-          }
-          if (isTotal) {
-            // Bold en columnas A-C también
-            ['A', 'B', 'C'].forEach((col) => {
-              const addr = `${col}${R + 1}`;
-              if (ws[addr]) {
-                ws[addr].s = {
-                  font: { bold: true },
-                  fill: { fgColor: { rgb: 'F0F0F0' } },
-                };
-              }
-            });
-          }
-        }
-        // Sheet name sanitize (Excel máx 31 chars, sin []:*?/\)
-        const safeName = String(sheetName).replace(/[[\]:*?/\\]/g, '').slice(0, 31);
-        XLSX.utils.book_append_sheet(wb, ws, safeName);
-      };
-
-      // ═══ Hoja Resumen ═══
-      const buildResumen = (bloques) => {
-        // bloques = [{ nombre, skus, piezas, total }]
-        const rows = bloques.map((b) => ({
-          'Nombre de la propuesta': b.nombre,
-          'Cantidad de SKUs': b.skus,
-          'Piezas totales': b.piezas,
-          'Monto total': b.total,
-        }));
-        const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [{ wch: 40 }, { wch: 18 }, { wch: 16 }, { wch: 20 }];
-        const range = XLSX.utils.decode_range(ws['!ref']);
-        // Header
-        for (let c = range.s.c; c <= range.e.c; c++) {
-          const addr = XLSX.utils.encode_cell({ r: 0, c });
-          if (ws[addr]) {
-            ws[addr].s = {
-              font: { bold: true, color: { rgb: 'FFFFFF' }, name: 'Calibri', sz: 11 },
-              fill: { fgColor: { rgb: '1D1D1F' } },
-              alignment: { horizontal: c >= 1 ? 'right' : 'left', vertical: 'center' },
-            };
-          }
-        }
-        // Monto total col D como currency
-        for (let R = 1; R <= range.e.r; R++) {
-          const addr = `D${R + 1}`;
-          if (ws[addr] && typeof ws[addr].v === 'number') {
-            ws[addr].z = CURRENCY;
-            ws[addr].s = { numFmt: CURRENCY, alignment: { horizontal: 'right' } };
-          }
-          // Right align números
-          ['B', 'C'].forEach((col) => {
-            const a = `${col}${R + 1}`;
-            if (ws[a]) ws[a].s = { alignment: { horizontal: 'right' } };
-          });
-        }
-        // Fila TOTAL general (última) en gris + bold
-        if (bloques.length > 1) {
-          const totalRow = range.e.r + 1;
-          const totalSKUs   = bloques.reduce((s, b) => s + b.skus, 0);
-          const totalPiezas = bloques.reduce((s, b) => s + b.piezas, 0);
-          const totalMonto  = bloques.reduce((s, b) => s + b.total, 0);
-          ws[`A${totalRow + 1}`] = { t: 's', v: 'TOTAL GENERAL' };
-          ws[`B${totalRow + 1}`] = { t: 'n', v: totalSKUs };
-          ws[`C${totalRow + 1}`] = { t: 'n', v: totalPiezas };
-          ws[`D${totalRow + 1}`] = { t: 'n', v: totalMonto, z: CURRENCY };
-          ['A', 'B', 'C', 'D'].forEach((col) => {
-            const a = `${col}${totalRow + 1}`;
-            ws[a].s = {
-              font: { bold: true },
-              fill: { fgColor: { rgb: 'D0D0D0' } },
-              alignment: col === 'A' ? { horizontal: 'left' } : { horizontal: 'right' },
-              numFmt: col === 'D' ? CURRENCY : undefined,
-            };
-          });
-          ws['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 3, r: totalRow } });
-        }
-        XLSX.utils.book_append_sheet(wb, ws, 'Resumen');
-      };
-
-      const nombrePropuesta = (nombreBorrador || '').trim() || `Propuesta ${cli?.label || clienteKey}`;
-
-      // Construcción según cliente
-      if (clienteKey === 'digitalife') {
-        // Digitalife: 3 hojas de familia + Resumen
-        const grupos = { 'Monitores': [], 'Sillas': [], 'Todo lo demás': [] };
-        for (const r of propuestaLista) grupos[familiaHoja(r.familia)].push(r);
-        // Resumen con un renglón por hoja
-        const bloques = Object.entries(grupos).filter(([, filas]) => filas.length > 0).map(([nombre, filas]) => ({
-          nombre: `${nombrePropuesta} · ${nombre}`,
-          skus: filas.length,
-          piezas: filas.reduce((s, r) => s + r.piezas, 0),
-          total: filas.reduce((s, r) => s + r.total, 0),
-        }));
-        buildResumen(bloques);
-        Object.entries(grupos).forEach(([nombre, filas]) => {
-          if (filas.length > 0) buildDetalleSheet(filas, nombre);
-        });
-      } else {
-        // Otros clientes: 1 hoja Resumen + 1 hoja Propuesta
-        buildResumen([{
-          nombre: nombrePropuesta,
-          skus: propuestaLista.length,
-          piezas: propuestaLista.reduce((s, r) => s + r.piezas, 0),
-          total: propuestaLista.reduce((s, r) => s + r.total, 0),
-        }]);
-        buildDetalleSheet(propuestaLista, 'Propuesta');
-      }
-
-      // Filename: Propuesta (Cliente) (Nombre del Borrador) (Mes) (Año)
-      const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-      const now = new Date();
-      const mesEs = MESES_ES[now.getMonth()];
-      const anioNum = now.getFullYear();
-      const clienteSafe = (cli?.label || clienteKey).replace(/[^\w\sáéíóúüñÁÉÍÓÚÜÑ-]/g, '').trim();
-      const nombreSafe = (nombreBorrador || '').replace(/[^\w\sáéíóúüñÁÉÍÓÚÜÑ-]/g, '').trim();
-      const partes = ['Propuesta', clienteSafe];
-      if (nombreSafe) partes.push(nombreSafe);
-      partes.push(mesEs, String(anioNum));
-      const filename = partes.join(' ') + '.xlsx';
-      XLSX.writeFile(wb, filename);
-      const totalGlobal = propuestaLista.reduce((s, r) => s + r.total, 0);
-      // Marcar la propuesta como "exportada" para que aparezca en la sección
-      // "Propuestas exportadas" del Landing
-      try {
-        const cliEntry = CLIENTES.find((c) => c.key === clienteKey);
-        const piezasEntry = propuestaLista.reduce((s, r) => s + r.piezas, 0);
-        let pidEntry = propuestaId;
-        if (!pidEntry) { pidEntry = nuevaPropuestaId(); setPropuestaId(pidEntry); }
-        saveReciente({
-          id: pidEntry,
-          clienteKey,
-          clienteLabel: cliEntry?.label || clienteKey,
-          nombre: nombreBorrador,
-          estado: 'Exportada',
-          tstamp: Date.now(),
-          exportedAt: Date.now(),
-          exportFilename: filename,
-          propuesta,
-          resumen: { skus: propuestaLista.length, piezas: piezasEntry, total: totalGlobal },
-        });
-        setRecientesTick((t) => t + 1);
-      } catch (e) { console.warn('[Propuestas] no se pudo marcar como exportada', e); }
-      toast.success(`Excel exportado · ${propuestaLista.length} SKUs · ${formatMXN(totalGlobal)}`);
-    } catch (e) {
-      console.error('[Propuestas] Error exportando Excel:', e);
-      toast.error('Error al exportar: ' + (e?.message || 'desconocido'));
-    }
+    if (!clienteKey || !propuestaId) return;
+    const cli = CLIENTES.find((c) => c.key === clienteKey);
+    const propuestaLista = Object.entries(propuesta)
+      .map(([sku, val]) => ({ ...skus.find((r) => r.sku === sku), ...val }))
+      .filter((r) => r.sku);
+    const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
+    const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+    saveReciente({
+      id: propuestaId,
+      clienteKey,
+      clienteLabel: cli?.label || clienteKey,
+      estado: 'Borrador',
+      tstamp: Date.now(),
+      propuesta,
+      resumen: { skus: propuestaLista.length, piezas, total },
+    });
+    setRecientesTick((t) => t + 1);
   };
 
   const cliente = CLIENTES.find((c) => c.key === clienteKey);
@@ -746,10 +219,8 @@ export default function PropuestasTab() {
     return <VistaRevisar
       theme={theme} isDark={isDark}
       cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta}
-      nombreBorrador={nombreBorrador} onChangeNombre={setNombreBorrador}
       onBack={() => setVista(2)}
       onGuardar={guardarBorrador}
-      onExportar={exportarExcel}
     />;
   }
 
@@ -766,30 +237,7 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
   const heroMuted = theme.textMutedOnDark || 'rgba(255,255,255,0.65)';
   const heroSub = theme.textSubtleOnDark || 'rgba(255,255,255,0.5)';
   const [recientes, setRecientes] = useState(() => loadRecientes());
-  const [showPegarJSON, setShowPegarJSON] = useState(false);
-  const [pegadoText, setPegadoText] = useState('');
   useEffect(() => { setRecientes(loadRecientes()); }, [tick]);
-
-  const procesarPegado = () => {
-    if (!pegadoText.trim()) {
-      toast.error('Pega un JSON válido');
-      return;
-    }
-    try {
-      const json = JSON.parse(pegadoText.trim());
-      const res = importarBackup(json);
-      if (res.ok) {
-        setRecientes(loadRecientes());
-        toast.success(`JSON pegado · ${res.count} propuestas en total${res.added > 0 ? ` (+${res.added} nuevas)` : ''}`);
-        setShowPegarJSON(false);
-        setPegadoText('');
-      } else {
-        toast.error(res.msg || 'JSON válido pero sin propuestas');
-      }
-    } catch (err) {
-      toast.error('JSON inválido: ' + (err?.message || 'error de parseo'));
-    }
-  };
 
   const timeAgo = (ts) => {
     const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
@@ -806,145 +254,17 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
 
   return (
     <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
-      {showPegarJSON && (
-        <div
-          onClick={() => { setShowPegarJSON(false); setPegadoText(''); }}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000, backdropFilter: 'blur(6px)',
-          }}
-        >
-          <div onClick={(e) => e.stopPropagation()}
-            style={{
-              background: theme.surface, border: `1px solid ${theme.border}`,
-              borderRadius: 16, padding: 20, maxWidth: 640, width: '90%',
-              maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: 10,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', margin: 0, color: theme.text }}>
-                  Pegar JSON manualmente
-                </h3>
-                <p style={{ fontSize: 11.5, color: theme.textMuted, margin: '4px 0 0', lineHeight: 1.4 }}>
-                  Útil para restaurar desde DevTools: <code style={{ background: theme.bg, padding: '1px 5px', borderRadius: 4, fontFamily: TYPO.fontText, fontSize: 11, border: `1px solid ${theme.border}` }}>Application → Local Storage → propuestas_recientes_v1</code>
-                </p>
-              </div>
-              <button onClick={() => { setShowPegarJSON(false); setPegadoText(''); }}
-                style={{ background: 'transparent', border: 0, color: theme.textMuted, cursor: 'pointer', padding: 4, borderRadius: 6, fontSize: 18, lineHeight: 1 }}>×</button>
-            </div>
-            <textarea
-              value={pegadoText}
-              onChange={(e) => setPegadoText(e.target.value)}
-              placeholder='Pega aquí el JSON completo (array de propuestas o snapshot con &quot;data&quot;/&quot;recientes&quot;)'
-              spellCheck={false}
-              style={{
-                width: '100%', minHeight: 260, maxHeight: '50vh',
-                padding: 12, borderRadius: 10, border: `1px solid ${theme.border}`,
-                background: theme.bg, color: theme.text,
-                fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, lineHeight: 1.5,
-                resize: 'vertical', outline: 'none',
-              }}
-              onFocus={(e) => e.target.style.borderColor = P.accent}
-              onBlur={(e) => e.target.style.borderColor = theme.border}
-            />
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => { setShowPegarJSON(false); setPegadoText(''); }}
-                style={{ padding: '8px 16px', background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text, fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 500, borderRadius: 999, cursor: 'pointer' }}>
-                Cancelar
-              </button>
-              <button onClick={procesarPegado}
-                style={{ padding: '8px 18px', background: P.accent, border: 0, color: '#FFF', fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 600, borderRadius: 999, cursor: 'pointer' }}>
-                Restaurar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
-      <div style={{ padding: '0 4px', marginBottom: 12, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
-            Dirección Comercial · Armador
-          </p>
-          <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
-            Propuestas.
-          </h2>
-          <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText }}>
-            Arma propuestas de venta por cliente con inventario, precios y sell-out.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <button
-            onClick={() => setShowPegarJSON(true)}
-            title="Pega un JSON de propuestas (útil para restaurar desde DevTools localStorage)"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '6px 12px', borderRadius: 999,
-              background: theme.surface, border: `1px solid ${theme.border}`,
-              color: theme.textMuted, fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
-            📋 Pegar JSON
-          </button>
-          <label
-            title="Sube un JSON de backup para restaurar propuestas"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '6px 12px', borderRadius: 999,
-              background: theme.surface, border: `1px solid ${theme.border}`,
-              color: theme.textMuted, fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
-            ↑ Importar backup
-            <input type="file" accept="application/json,.json" style={{ display: 'none' }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                  try {
-                    const json = JSON.parse(String(ev.target?.result || 'null'));
-                    const res = importarBackup(json);
-                    if (res.ok) {
-                      setRecientes(loadRecientes());
-                      toast.success(`Backup importado · ${res.count} propuestas en total${res.added > 0 ? ` (+${res.added} nuevas)` : ''}`);
-                    } else {
-                      toast.error(res.msg || 'No se pudo importar');
-                    }
-                  } catch (err) {
-                    toast.error('JSON inválido: ' + (err?.message || 'error'));
-                  }
-                  e.target.value = ''; // permite re-subir el mismo archivo
-                };
-                reader.readAsText(file);
-              }}
-            />
-          </label>
-          <button
-            onClick={() => {
-              const ok = exportarSnapshot();
-              if (ok) toast.success(`Snapshot descargado · ${recientes.length} borradores respaldados`);
-              else toast.error('No se pudo descargar el snapshot');
-            }}
-            title="Descarga un JSON con TODOS tus borradores (rescate manual)"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '6px 12px', borderRadius: 999,
-              background: theme.surface, border: `1px solid ${theme.border}`,
-              color: theme.textMuted, fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
-            <Download style={{ width: 12, height: 12 }} strokeWidth={2} />
-            Backup JSON
-          </button>
-        </div>
+      <div style={{ padding: '0 4px', marginBottom: 12 }}>
+        <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
+          Dirección Comercial · Armador
+        </p>
+        <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
+          Propuestas.
+        </h2>
+        <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText }}>
+          Arma propuestas de venta por cliente con inventario, precios y sell-out.
+        </p>
       </div>
 
       {/* Hero card */}
@@ -987,191 +307,56 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, tick }) {
             {recientes.length === 0 ? 'sin propuestas aún' : `${recientes.length} guardada${recientes.length === 1 ? '' : 's'}`}
           </span>
         </div>
-        {(() => {
-          // Split en 3 buckets:
-          //   · exportadas: tienen exportedAt (independiente de edad)
-          //   · recientes: sin exportedAt, últimos 30 días
-          //   · anteriores: sin exportedAt, más de 30 días
-          const CUTOFF = 30 * 86400 * 1000;
-          const now = Date.now();
-          const exportadas = recientes.filter((r) => !!r.exportedAt)
-            .sort((a, b) => (b.exportedAt || 0) - (a.exportedAt || 0));
-          const noExportadas = recientes.filter((r) => !r.exportedAt);
-          const rec = noExportadas.filter((r) => now - (r.tstamp || 0) <= CUTOFF);
-          const ant = noExportadas.filter((r) => now - (r.tstamp || 0) > CUTOFF);
-
-          if (recientes.length === 0) {
-            return (
-              <div style={{
-                background: theme.surface, border: `1px dashed ${theme.border}`, borderRadius: 14,
-                padding: 32, textAlign: 'center', color: theme.textMuted, fontSize: 12,
-              }}>
-                Al guardar borradores aparecerán aquí para volver a abrirlos con un click.
-              </div>
-            );
-          }
-
-          const handleActualizarExcel = async (entryExistente, file) => {
-            try {
-              const res = await importarExcel(file, entryExistente);
-              if (res.ok) {
-                setRecientes(loadRecientes());
-                toast.success(`Excel actualizado · ${res.entry.resumen.skus} SKUs · ${fmtCompact(res.entry.resumen.total)}`);
-              } else {
-                toast.error(res.msg || 'No se pudo actualizar');
-              }
-            } catch (err) {
-              toast.error('Error: ' + (err?.message || 'desconocido'));
-            }
-          };
-
-          return (
-            <>
-              {/* Recientes (borradores últimos 30 días, sin exportar) */}
-              {rec.length > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10, marginBottom: 20 }}>
-                  {rec.map((r) => (
-                    <PropuestaCard key={r.id} r={r} theme={theme} timeAgo={timeAgo} estadoPill={estadoPill} onAbrirReciente={onAbrirReciente} />
-                  ))}
-                </div>
-              )}
-
-              {/* Propuestas exportadas */}
-              {exportadas.length > 0 && (
-                <div style={{ marginBottom: ant.length > 0 ? 20 : 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>
-                      Propuestas exportadas
-                    </h3>
-                    <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-                      {exportadas.length} · sube el Excel modificado para actualizar
+        {recientes.length === 0 ? (
+          <div style={{
+            background: theme.surface, border: `1px dashed ${theme.border}`, borderRadius: 14,
+            padding: 32, textAlign: 'center', color: theme.textMuted, fontSize: 12,
+          }}>
+            Al guardar borradores aparecerán aquí para volver a abrirlos con un click.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
+            {recientes.map((r) => {
+              const cli = CLIENTES.find((c) => c.key === r.clienteKey);
+              const col = clienteColor(theme, r.clienteKey);
+              const pill = estadoPill(r.estado);
+              return (
+                <div key={r.id} onClick={() => onAbrirReciente(r)}
+                  style={{
+                    background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
+                    padding: '14px 16px', cursor: 'pointer', transition: 'transform 120ms, border-color 120ms',
+                    fontFamily: TYPO.fontText,
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.borderColor = col; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = theme.border; }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: 8, background: col, color: '#FFF',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, letterSpacing: '-0.02em',
+                    }}>{cli?.iniciales || '?'}</div>
+                    <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', background: pill.bg, color: pill.color }}>{r.estado || 'Borrador'}</span>
+                  </div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>
+                    Propuesta {cli?.label || r.clienteLabel}
+                  </div>
+                  <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+                    {timeAgo(r.tstamp)}
+                  </div>
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>
+                      {r.resumen?.skus || 0} SKUs · {fmtInt(r.resumen?.piezas || 0)}pz
+                    </span>
+                    <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.015em', fontSize: 15, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtCompact(r.resumen?.total || 0)}
                     </span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
-                    {exportadas.map((r) => (
-                      <PropuestaCard key={r.id} r={r} theme={theme} timeAgo={timeAgo} estadoPill={estadoPill}
-                        onAbrirReciente={onAbrirReciente}
-                        onActualizarExcel={(file) => handleActualizarExcel(r, file)}
-                      />
-                    ))}
-                  </div>
                 </div>
-              )}
-
-              {/* Anteriores (más de 30 días, sin exportar) */}
-              {ant.length > 0 && (
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>
-                      Propuestas anteriores
-                    </h3>
-                    <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-                      {ant.length} · más de 30 días
-                    </span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10, opacity: 0.85 }}>
-                    {ant.map((r) => (
-                      <PropuestaCard key={r.id} r={r} theme={theme} timeAgo={timeAgo} estadoPill={estadoPill} onAbrirReciente={onAbrirReciente} historico />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          );
-        })()}
-      </div>
-    </div>
-  );
-}
-
-function PropuestaCard({ r, theme, timeAgo, estadoPill, onAbrirReciente, onActualizarExcel, historico }) {
-  const cli = CLIENTES.find((c) => c.key === r.clienteKey);
-  const col = clienteColor(theme, r.clienteKey);
-  const pill = estadoPill(r.estado);
-  const P = paletteFromTheme(theme);
-  const exported = !!r.exportedAt;
-  const updated  = !!r.updatedFromExcelAt;
-  return (
-    <div
-      onClick={() => onAbrirReciente(r)}
-      style={{
-        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
-        padding: '14px 16px', cursor: 'pointer', transition: 'transform 120ms, border-color 120ms',
-        fontFamily: TYPO.fontText, position: 'relative',
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.borderColor = col; }}
-      onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = theme.border; }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: 8, background: col, color: '#FFF',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, letterSpacing: '-0.02em',
-        }}>{cli?.iniciales || '?'}</div>
-        <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', background: pill.bg, color: pill.color }}>{r.estado || 'Borrador'}</span>
-      </div>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>
-        {r.nombre ? r.nombre : `Propuesta ${cli?.label || r.clienteLabel}`}
-      </div>
-      <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-        {r.nombre ? `${cli?.label || r.clienteLabel} · ${timeAgo(r.tstamp)}` : timeAgo(r.tstamp)}
-        {exported && (
-          <> · <span style={{ color: P.green, fontWeight: 600 }}>exportada {timeAgo(r.exportedAt)}</span></>
-        )}
-        {updated && (
-          <> · <span style={{ color: P.accent, fontWeight: 600 }}>actualizada {timeAgo(r.updatedFromExcelAt)}</span></>
+              );
+            })}
+          </div>
         )}
       </div>
-      <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>
-          {r.resumen?.skus || 0} SKUs · {fmtInt(r.resumen?.piezas || 0)}pz
-        </span>
-        <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.015em', fontSize: 15, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>
-          {fmtCompact(r.resumen?.total || 0)}
-        </span>
-      </div>
-
-      {onActualizarExcel && (
-        <>
-          <label
-            onClick={(e) => e.stopPropagation()}
-            title="Sube el Excel modificado y actualiza esta propuesta con los cambios"
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              marginTop: 10, padding: '7px 10px', borderRadius: 10,
-              background: `${P.accent}14`, border: `1px solid ${P.accent}40`,
-              color: P.accent, fontSize: 11, fontFamily: TYPO.fontText, fontWeight: 600,
-              cursor: 'pointer',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = `${P.accent}22`; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = `${P.accent}14`; }}
-          >
-            <Download style={{ width: 12, height: 12, transform: 'rotate(180deg)' }} strokeWidth={2} />
-            Actualizar desde Excel
-            <input
-              type="file"
-              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              style={{ display: 'none' }}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => {
-                e.stopPropagation();
-                const file = e.target.files?.[0];
-                if (file) onActualizarExcel(file);
-                e.target.value = '';
-              }}
-            />
-          </label>
-          {r.exportFilename && (
-            <div style={{
-              marginTop: 6, textAlign: 'center',
-              fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5,
-              color: theme.textSubtle || theme.textMuted,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }} title={r.exportFilename}>
-              {r.exportFilename}
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 }
@@ -1812,7 +997,7 @@ function SortableTh({ theme, P, orden, onToggle, col, width, children }) {
 // ════════════════════════════════════════════════════════════════════
 // VISTA REVISAR · Hero total + KPIs Fitness + agrupación por familia
 // ════════════════════════════════════════════════════════════════════
-function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombreBorrador, onChangeNombre, onBack, onGuardar, onExportar }) {
+function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, onBack, onGuardar }) {
   const P = paletteFromTheme(theme);
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
   const heroText = theme.heroCardText || '#F5F5F7';
@@ -1836,7 +1021,7 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombr
 
   const gap = contexto?.gap || 0;
   const cierraGapPct = gap > 0 ? Math.round((total / gap) * 100) : null;
-  const exportar = () => (onExportar ? onExportar() : null);
+  const exportar = () => alert('Export Excel — próximo push.');
 
   return (
     <div style={{ padding: '10px 6px 40px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
@@ -1866,23 +1051,6 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombr
               </div>
               <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>Listo para enviar</div>
             </div>
-          </div>
-          <div style={{ width: 1, height: 24, background: theme.border }} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <label style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: theme.textMuted, fontWeight: 600 }}>Nombre del borrador</label>
-            <input
-              type="text"
-              value={nombreBorrador || ''}
-              onChange={(e) => onChangeNombre?.(e.target.value)}
-              placeholder="ej. Kickoff Q3, Promo verano…"
-              style={{
-                background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8,
-                padding: '5px 10px', fontSize: 12, fontFamily: TYPO.fontText, color: theme.text,
-                minWidth: 200, outline: 'none',
-              }}
-              onFocus={(e) => e.target.style.borderColor = P.accent}
-              onBlur={(e) => e.target.style.borderColor = theme.border}
-            />
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
