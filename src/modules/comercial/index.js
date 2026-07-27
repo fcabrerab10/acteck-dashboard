@@ -20,4 +20,5 @@ export { default as TrackingPedidos } from './TrackingPedidos';
 export { default as SellOutCliente } from './SellOutCliente';
 export { default as SellOutClienteV2 } from './SellOutClienteV2';
 export { default as SellOutDicotech } from './SellOutDicotech';
+export { default as SellOutPcel } from './SellOutPcel';
 export { default as ForecastCliente } from './ForecastCliente';

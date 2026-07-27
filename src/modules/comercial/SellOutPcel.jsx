@@ -1,4 +1,10 @@
-// SellOutClienteV2 · rediseño Apple V2 · exclusivo Digitalife
+// SellOutPcel · rediseño Apple V2 · exclusivo PCEL
+// Clon estructural de SellOutClienteV2 con vistas PCEL:
+//   - v_sellout_pcel_mensual · agregado por año/mes ($ a costo)
+//   - v_sellout_pcel_sku_mes · sell out por sku/mes
+//   - v_sellout_pcel_marca_mes · sell out por marca/mes
+// PCEL no expone clientes finales/vendedores/sucursales — el drill
+// del SKU muestra evolución mensual + inventario del SKU en PCEL.
 // ─ Hero editorial narrativo con 3 stats
 // ─ 4 KPI cards planas (MTD · YTD · YoY · Inv. Digitalife)
 // ─ Timeline lineal SO 2025 vs 2026 + filtros Q + sums row
@@ -90,7 +96,7 @@ async function fetchAll(table, select, applyFilter = (q) => q) {
 // ═══════════════════════════════════════════════════════════════════
 // Componente principal
 // ═══════════════════════════════════════════════════════════════════
-export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
+export default function SellOutPcel({ clienteKey = 'pcel' }) {
   const { theme } = useTheme();
   const P = paletteFromTheme(theme);
   const isDark = theme.mode === 'dark';
@@ -116,15 +122,15 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
     setLoading(true);
     (async () => {
       const [mes, skuMes, rdmp, inv, invSuc, mrcMes] = await Promise.all([
-        fetchAll('v_sellout_digitalife_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
-        fetchAll('v_sellout_digitalife_sku_mes', 'sku,anio,mes,piezas,monto',
+        fetchAll('v_sellout_pcel_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
+        fetchAll('v_sellout_pcel_sku_mes', 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anio])),
         fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp,sort_order'),
         fetchAll('inventario_cliente', 'sku,stock,valor,precio_venta,costo_convenio,anio,semana,fecha_ultima_venta,dias_sin_venta',
           (q) => q.eq('cliente', clienteKey)),
         fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
           (q) => q.eq('cliente', clienteKey)),
-        fetchAll('v_sellout_digitalife_marca_mes', 'marca,anio,mes,piezas,monto,tx,skus_distintos',
+        fetchAll('v_sellout_pcel_marca_mes', 'marca,anio,mes,piezas,monto,tx,skus_distintos',
           (q) => q.in('anio', [anioPrev, anio])),
       ]);
       setMensual(mes);
