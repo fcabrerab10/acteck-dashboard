@@ -29,3 +29,36 @@ export const isTablet     = (bp) => bp === 'tablet';
 export const isMobileDown = (bp) => bp === 'mobile';
 export const isTabletDown = (bp) => bp === 'mobile' || bp === 'tablet';
 export const isDesktopUp  = (bp) => bp === 'laptop' || bp === 'desktop' || bp === 'wide';
+
+// Detecta si el dispositivo es principalmente táctil (iPad landscape cae en
+// 'laptop' por ancho pero necesita el shell mobile). Devuelve `true` para
+// iPhone, iPad (todas las orientaciones) y otros dispositivos coarse pointer.
+export function useIsTouch() {
+  const [touch, setTouch] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(pointer: coarse)');
+    const handler = (e) => setTouch(e.matches);
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else mq.addListener(handler);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', handler);
+      else mq.removeListener(handler);
+    };
+  }, []);
+  return touch;
+}
+
+// True cuando conviene usar shell mobile: iPhone/iPad en cualquier orientación.
+// - mobile / tablet siempre
+// - laptop (<1440) sólo si es dispositivo touch (iPad landscape)
+export const useMobileShell = () => {
+  const bp = useBreakpoint();
+  const touch = useIsTouch();
+  if (bp === 'mobile' || bp === 'tablet') return true;
+  if (bp === 'laptop' && touch) return true;
+  return false;
+};

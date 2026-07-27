@@ -38,8 +38,9 @@ import { PerfilContext } from './lib/perfilContext';
 import { ThemeProvider } from './lib/themeContext';
 import { PageTransition } from './components/apple/AppleLoader';
 import { FerrutekLoader } from './components';
-import { useBreakpoint, isMobile } from './lib/useBreakpoint';
+import { useBreakpoint, isMobile, useMobileShell } from './lib/useBreakpoint';
 import MobileNav from './components/MobileNav';
+import MobileShell from './components/MobileShell';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -258,7 +259,7 @@ export default function App() {
   const [perfil, setPerfil] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const bp = useBreakpoint();
-  const mobile = isMobile(bp);
+  const mobile = useMobileShell();
 
   useEffect(() => {
     // Check existing session
@@ -420,11 +421,12 @@ export default function App() {
 
       {/* Sidebar desktop eliminada — la navegación vive en Topbar */}
 
-      {/* MOBILE NAV — top bar + bottom tab bar + drawer, sólo mobile */}
+      {/* MOBILE SHELL — Fitness style (iPhone/iPad H+V) */}
       {mobile && (
-        <MobileNav
+        <MobileShell
           clienteActivo={clienteActivo}
           paginaActiva={vistaActual === 'configuracion' ? 'configuracion' : paginaActiva}
+          vistaActual={vistaActual}
           onNavegar={handleNavegar}
           onCerrarSesion={handleLogout}
           perfilUsuario={perfil}
@@ -433,7 +435,7 @@ export default function App() {
 
       {/* CONTENIDO */}
       <main className={mobile ? '' : 'flex-1 overflow-y-auto'} style={mobile ? {
-        paddingBottom: 'calc(60px + env(safe-area-inset-bottom) + 16px)',
+        paddingBottom: 'calc(96px + env(safe-area-inset-bottom))',
         minHeight: '100vh',
       } : undefined}>
           {!mobile && (
