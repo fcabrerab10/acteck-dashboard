@@ -50,6 +50,7 @@ import MobileSellOut from './components/MobileSellOut';
 import MobileCartera from './components/MobileCartera';
 import MobileMarketing from './components/MobileMarketing';
 import MobileHomeCliente from './components/MobileHomeCliente';
+import MobileBuscar from './components/MobileBuscar';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -301,14 +302,14 @@ export default function App() {
 
   
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
-    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','ordenesCompra','adminInterna','telemetria','axonMexico']), []);
+    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','ordenesCompra','adminInterna','telemetria','axonMexico','buscar']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
       try { return localStorage.getItem('nav_pagina') || 'home'; } catch { return 'home'; }
     });
     const [clienteActivo, setClienteActivo] = useState(() => {
       try {
         const pag = localStorage.getItem('nav_pagina') || 'home';
-        const globals = new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','ordenesCompra','adminInterna','telemetria','axonMexico']);
+        const globals = new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','ordenesCompra','adminInterna','telemetria','axonMexico','buscar']);
         if (globals.has(pag)) return null;
         return localStorage.getItem('nav_cliente') || 'digitalife';
       } catch { return 'digitalife'; }
@@ -479,6 +480,9 @@ export default function App() {
             perfil?.es_super_admin
               ? <ResumenCuentas />
               : <SinAcceso motivo="No tienes acceso al Resumen general." />
+          )}
+          {paginaActiva === "buscar" && mobile && (
+            <MobileBuscar perfil={perfil} onNavegar={handleNavegar} />
           )}
           {paginaActiva === "reporte" && (
             perfil?.es_super_admin

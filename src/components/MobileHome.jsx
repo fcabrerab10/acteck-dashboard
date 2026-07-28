@@ -38,41 +38,62 @@ export default function MobileHome({ perfil, onNavegar }) {
 
   const [ventas, setVentas] = useState([]);
   const [cuotas, setCuotas] = useState([]);
+  const [cartera, setCartera] = useState({}); // { cliente: { saldo_actual, saldo_vencido, dso } }
   const [pendCount, setPendCount] = useState(0);
+  const [mesData, setMesData] = useState(MES_ACTUAL.mes); // mes real con data (puede no ser el mes actual)
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [v, c, p] = await Promise.all([
-        supabase.from('v_ventas_mensuales_agg').select('cliente,sell_in').eq('anio', MES_ACTUAL.anio).eq('mes', MES_ACTUAL.mes),
-        supabase.from('cuotas_mensuales').select('cliente,cuota_min,cuota_meta').eq('anio', MES_ACTUAL.anio).eq('mes', MES_ACTUAL.mes),
-        supabase.from('pendientes_equipo').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente'),
+      const [v, c, dso, p] = await Promise.all([
+        // Traer todos los meses del año, luego escogemos el último con data
+        supabase.from('v_ventas_mensuales_agg').select('cliente,anio,mes,sell_in').eq('anio', MES_ACTUAL.anio),
+        supabase.from('cuotas_mensuales').select('cliente,anio,mes,cuota_min,cuota_ideal,cuota_meta').eq('anio', MES_ACTUAL.anio),
+        supabase.from('v_dso_real').select('cliente,saldo_actual_total,saldo_vencido,dso_real,dso_erp'),
+        supabase.from('pendientes_equipo').select('id', { count: 'exact', head: true }).eq('estatus', 'pendiente'),
       ]);
       if (!alive) return;
       setVentas(v.data || []);
       setCuotas(c.data || []);
+
+      // Cartera map por cliente
+      const cMap = {};
+      (dso.data || []).forEach(r => {
+        cMap[r.cliente] = {
+          saldo: Number(r.saldo_actual_total) || 0,
+          vencido: Number(r.saldo_vencido) || 0,
+          dso: r.dso_real != null ? Math.round(Number(r.dso_real)) : (r.dso_erp != null ? Math.round(Number(r.dso_erp)) : null),
+        };
+      });
+      setCartera(cMap);
+
       setPendCount(p.count || 0);
+
+      // Detectar el último mes con al menos un dato de sell_in > 0
+      const mesesConData = new Set((v.data || []).filter(r => Number(r.sell_in) > 0).map(r => Number(r.mes)));
+      const ultimoMes = Math.max(0, ...Array.from(mesesConData));
+      if (ultimoMes > 0) setMesData(ultimoMes);
     })();
     return () => { alive = false; };
   }, []);
 
-  // Agregados
+  // Agregados del último mes con data
   const clienteKpis = useMemo(() => {
     const out = {};
-    (ventas || []).forEach((r) => {
+    (ventas || []).filter(r => Number(r.mes) === mesData).forEach((r) => {
       if (!out[r.cliente]) out[r.cliente] = { facturado: 0, cuota: 0 };
       out[r.cliente].facturado += Number(r.sell_in || 0);
     });
-    (cuotas || []).forEach((r) => {
+    (cuotas || []).filter(r => Number(r.mes) === mesData).forEach((r) => {
       if (!out[r.cliente]) out[r.cliente] = { facturado: 0, cuota: 0 };
-      out[r.cliente].cuota += Number(r.cuota_min || r.cuota_meta || 0);
+      out[r.cliente].cuota += Number(r.cuota_min || r.cuota_ideal || r.cuota_meta || 0);
     });
     Object.entries(out).forEach(([k, v]) => {
       v.pct = v.cuota > 0 ? Math.round((v.facturado / v.cuota) * 100) : 0;
       v.gap = Math.max(0, v.cuota - v.facturado);
     });
     return out;
-  }, [ventas, cuotas]);
+  }, [ventas, cuotas, mesData]);
 
   const totales = useMemo(() => {
     const vals = Object.values(clienteKpis);
@@ -159,7 +180,7 @@ export default function MobileHome({ perfil, onNavegar }) {
       {mode === 'negocio' ? (
         <GruposNegocio theme={theme} isDark={isDark} onNavegar={onNavegar} totales={totales} pendCount={pendCount} />
       ) : (
-        <ListaClientes theme={theme} isDark={isDark} onNavegar={onNavegar} clienteKpis={clienteKpis} />
+        <ListaClientes theme={theme} isDark={isDark} onNavegar={onNavegar} clienteKpis={clienteKpis} cartera={cartera} mesData={mesData} />
       )}
     </div>
   );
@@ -302,56 +323,119 @@ function GruposNegocio({ theme, isDark, onNavegar, totales, pendCount }) {
 // ═══════════════════════════════════════════════════════════════════════
 // Lista MIS CLIENTES — cards por cliente con KPIs + barra
 // ═══════════════════════════════════════════════════════════════════════
-function ListaClientes({ theme, isDark, onNavegar, clienteKpis }) {
+function ListaClientes({ theme, isDark, onNavegar, clienteKpis, cartera, mesData }) {
   const lista = Object.keys(CLIENTES).filter((k) => CLIENTES[k].activo);
+  const [expandedId, setExpandedId] = useState(null);
+  const toggle = (id) => setExpandedId((cur) => cur === id ? null : id);
+
+  const PESTANA_ICON = {
+    home: Building2, sellIn: ShoppingCart, estrategia: ShoppingBag,
+    marketing: Users, pagos: HandCoins, cartera: FileCheck,
+  };
+  const PESTANA_COLOR = {
+    home: '#8E8E93', sellIn: '#007AFF', estrategia: '#FF9500',
+    marketing: '#AF52DE', pagos: '#34C759', cartera: '#FF2D55',
+  };
+
   return (
     <div style={{ padding: '4px 18px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
       {lista.map((id) => {
         const cli = CLIENTES[id];
         const kpi = clienteKpis[id] || { facturado: 0, cuota: 0, gap: 0, pct: 0 };
+        const car = cartera?.[id];
         const color = CLIENTE_DOT[id] || theme.accent;
+        const expanded = expandedId === id;
+        const pestanas = (cli.pestanas || []).filter(p => !p.disabled);
+
         return (
-          <button key={id}
-            onClick={() => onNavegar(id, 'home')}
-            style={{
-              width: '100%', background: theme.surface, border: `1px solid ${theme.border}`,
-              borderRadius: 16, padding: 14, textAlign: 'left', cursor: 'pointer',
-              fontFamily: TYPO.fontText, transition: 'transform 160ms cubic-bezier(.34,1.56,.64,1)',
-            }}
-            onPointerDown={(e) => e.currentTarget.style.transform = 'scale(.99)'}
-            onPointerUp={(e) => e.currentTarget.style.transform = ''}
-            onPointerLeave={(e) => e.currentTarget.style.transform = ''}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <div style={{
-                width: 34, height: 34, borderRadius: 10, background: color,
-                color: '#fff', display: 'grid', placeItems: 'center',
-                fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 13,
-              }}>{cli.label.slice(0, 2).toUpperCase()}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14.5, fontWeight: 700, letterSpacing: '-.01em', color: theme.text }}>{cli.label}</div>
-                <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 500, marginTop: 1 }}>{id === 'pcel' ? 'Acteck' : 'Acteck · Balam Rush'}</div>
+          <div key={id} style={{
+            background: theme.surface, border: `1px solid ${expanded ? color : theme.border}`,
+            borderRadius: 16, overflow: 'hidden',
+            transition: 'border-color 200ms cubic-bezier(.4,0,.2,1)',
+          }}>
+            {/* Cabecera tap para expandir */}
+            <button
+              onClick={() => toggle(id)}
+              style={{
+                width: '100%', background: 'transparent', border: 'none',
+                padding: 14, textAlign: 'left', cursor: 'pointer', fontFamily: TYPO.fontText,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <div style={{
+                  width: 34, height: 34, borderRadius: 10, background: color,
+                  color: '#fff', display: 'grid', placeItems: 'center',
+                  fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 13,
+                }}>{cli.label.slice(0, 2).toUpperCase()}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14.5, fontWeight: 700, letterSpacing: '-.01em', color: theme.text }}>{cli.label}</div>
+                  <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 500, marginTop: 1 }}>{id === 'pcel' ? 'Acteck' : 'Acteck · Balam Rush'}</div>
+                </div>
+                {expanded
+                  ? <ChevronDown size={16} style={{ color }} />
+                  : <ChevronRight size={16} style={{ color: theme.textSubtle }} />}
               </div>
-              <ChevronRight size={16} style={{ color: theme.textSubtle }} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-              <ClienteMetric theme={theme} label="Sell In" value={formatMXN(kpi.facturado)} />
-              <ClienteMetric theme={theme} label="Cuota" value={`${kpi.pct}%`}
-                sub={kpi.gap > 0 ? `Gap ${formatMXN(kpi.gap)}` : 'On track'}
-                positive={kpi.gap === 0} />
-              <ClienteMetric theme={theme} label="Cartera" value="—" sub="Ver detalle" />
-            </div>
-            <div style={{
-              height: 4, background: isDark ? 'rgba(255,255,255,.10)' : 'rgba(0,0,0,.08)',
-              borderRadius: 2, marginTop: 10, overflow: 'hidden',
-            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                <ClienteMetric theme={theme} label="Sell In" value={formatMXN(kpi.facturado)}
+                  sub={`${MES_FULL[mesData - 1]?.slice(0, 3) || ''}`} />
+                <ClienteMetric theme={theme} label="Cuota" value={`${kpi.pct}%`}
+                  sub={kpi.gap > 0 ? `Gap ${formatMXN(kpi.gap)}` : 'On track'}
+                  positive={kpi.gap === 0} />
+                <ClienteMetric theme={theme} label="Cartera"
+                  value={car?.saldo ? formatMXN(car.saldo) : '—'}
+                  sub={car?.dso != null ? `DSO ${car.dso}d` : car?.saldo ? '—' : 'Ver detalle'}
+                  positive={car?.dso != null && car.dso <= 30 ? true : car?.dso > 60 ? false : undefined} />
+              </div>
               <div style={{
-                height: '100%', width: `${Math.min(100, kpi.pct)}%`,
-                background: color, borderRadius: 2,
-                transition: 'width 400ms cubic-bezier(.4,0,.2,1)',
-              }} />
-            </div>
-          </button>
+                height: 4, background: isDark ? 'rgba(255,255,255,.10)' : 'rgba(0,0,0,.08)',
+                borderRadius: 2, marginTop: 10, overflow: 'hidden',
+              }}>
+                <div style={{
+                  height: '100%', width: `${Math.min(100, kpi.pct)}%`,
+                  background: color, borderRadius: 2,
+                  transition: 'width 400ms cubic-bezier(.4,0,.2,1)',
+                }} />
+              </div>
+            </button>
+
+            {/* Sub-menú de pestañas del cliente */}
+            {expanded && (
+              <div style={{
+                borderTop: `1px solid ${theme.divider}`,
+                background: isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.015)',
+                animation: 'mhClienteExpand 220ms cubic-bezier(.4,0,.2,1)',
+              }}>
+                {pestanas.map((p) => {
+                  const Icon = PESTANA_ICON[p.id] || Building2;
+                  const iconCol = PESTANA_COLOR[p.id] || theme.accent;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => onNavegar(id, p.id)}
+                      style={{
+                        width: '100%', padding: '11px 14px', background: 'transparent', border: 'none',
+                        borderTop: `1px solid ${theme.divider}`, cursor: 'pointer', textAlign: 'left',
+                        display: 'flex', alignItems: 'center', gap: 12, fontFamily: TYPO.fontText,
+                        color: theme.text, transition: 'background 160ms',
+                      }}
+                      onPointerEnter={(e) => e.currentTarget.style.background = theme.surfaceHover}
+                      onPointerLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{
+                        width: 28, height: 28, borderRadius: 8, background: `${iconCol}18`, color: iconCol,
+                        display: 'grid', placeItems: 'center', flex: '0 0 auto',
+                      }}>
+                        <Icon size={14} strokeWidth={2} />
+                      </div>
+                      <div style={{ flex: 1, fontSize: 13.5, fontWeight: 500 }}>{p.label}</div>
+                      <ChevronRight size={14} style={{ color: theme.textSubtle }} />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <style>{`@keyframes mhClienteExpand { from { opacity: 0; max-height: 0; } to { opacity: 1; max-height: 500px; } }`}</style>
+          </div>
         );
       })}
     </div>
