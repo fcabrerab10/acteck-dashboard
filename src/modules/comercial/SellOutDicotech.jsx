@@ -136,8 +136,11 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
           (q) => q.eq('cliente', clienteKey)),
         fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
           (q) => q.eq('cliente', clienteKey)),
+        // FIX audit #3: ilike en vez de eq strict. La columna 'mayorista' puede
+        // guardar 'DICOTECH', 'Dicotech', 'dicotech', 'DICO'… El eq('DICOTECH')
+        // dejaba la vista vacía si el schema no matcheaba mayúsculas exactas.
         fetchAll('sellout_general', 'anio,mes,sku,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe',
-          (q) => q.eq('mayorista', 'DICOTECH').in('anio', [anioPrev, anio])),
+          (q) => q.ilike('mayorista', '%dicotech%').in('anio', [anioPrev, anio])),
       ]);
       setMensual(mes);
       setSkuMesRaw(skuMes);
@@ -299,7 +302,8 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
         const valorRaw = Number(r.valor) || 0;
         const costoConv = Number(r.costo_convenio) || 0;
         const precioVta = Number(r.precio_venta) || 0;
-        const valor = valorRaw > 0 ? valorRaw : stock * (costoConv || precioVta);
+        // FIX audit #5: NO usar precio_venta como fallback (mezcla costo con retail).
+        const valor = valorRaw > 0 ? valorRaw : (costoConv > 0 ? stock * costoConv : 0);
         m.set(r.sku, {
           stock, valor,
           dias_sin_venta: Number(r.dias_sin_venta) || null,
@@ -347,7 +351,10 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
     for (const r of selloutGeneral) {
       const y = Number(r.anio);
       const mes = Number(r.mes);
-      if (mes > mesActual && y === anio) continue;
+      // FIX audit #4: cortar tanto anio actual (parcial) como anioPrev al mismo
+      // rango de meses. Antes solo cortaba anio → YoY comparaba MTD 2026 vs
+      // 12 meses de 2025 → caídas dramáticas falsas.
+      if (mes > mesActual && (y === anio || y === anioPrev)) continue;
       const cnt = Number(r.cantidad) || 0;
       const imp = Number(r.importe) || 0;
       const vn = (r.vendedor_nombre || '(sin nombre)').trim() || '(sin nombre)';
@@ -423,8 +430,9 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
       it.piezas += Number(r.piezas) || 0;
       it.tx += Number(r.tx) || 0;
       it.clientes = Math.max(it.clientes, Number(r.clientes_distintos) || 0);
-      if (r.mes === mesActual) it.montoActual = Number(r.monto) || 0;
-      if (r.mes === mesActual - 1) it.montoPrev = Number(r.monto) || 0;
+      // FIX audit #7: += en lugar de = por si la vista trae >1 row por (sucursal, mes)
+      if (Number(r.mes) === mesActual) it.montoActual += Number(r.monto) || 0;
+      if (Number(r.mes) === mesActual - 1) it.montoPrev += Number(r.monto) || 0;
     }
     const arr = Array.from(map.values()).map((s) => {
       const meta = metaSuc(s.sucursal);

@@ -230,8 +230,11 @@ export default function SellOutClienteV2({ clienteKey = 'digitalife' }) {
         const valorRaw = Number(r.valor) || 0;
         const costoConv = Number(r.costo_convenio) || 0;
         const precioVta = Number(r.precio_venta) || 0;
-        // Si valor viene 0 en DB, aproximar con stock × costo_convenio o precio_venta
-        const valor = valorRaw > 0 ? valorRaw : stock * (costoConv || precioVta);
+        // FIX audit #5: NO usar precio_venta como fallback de valor de inventario
+        // (mezcla costo con retail e infla el KPI). Si no hay valor ni costo_convenio,
+        // marcamos sin costeo y excluimos del total para no engañar.
+        const valor = valorRaw > 0 ? valorRaw : (costoConv > 0 ? stock * costoConv : 0);
+        const sinCosteo = valor === 0 && stock > 0;
         m.set(r.sku, {
           stock,
           valor,

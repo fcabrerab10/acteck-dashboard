@@ -197,6 +197,11 @@ export default function SellInClienteV2({ clienteKey }) {
   const sellInMesProyectado = mesActualData.monto * factorProy;
   const yoyProyectado = mesActualData.prevMonto > 0 ? ((sellInMesProyectado - mesActualData.prevMonto) / mesActualData.prevMonto * 100) : null;
   const yoyMonto = mesActualData.prevMonto ? ((mesActualData.monto - mesActualData.prevMonto) / mesActualData.prevMonto * 100) : null;
+  // FIX audit #1: yoyMonto engaña con mes parcial (compara MTD vs mes cerrado).
+  // Cuando factorProy > 1.05 (queda >~15% del mes por facturar), usamos la
+  // proyección para el KPI principal para no mostrar caídas artificiales.
+  const yoyDisplay = factorProy > 1.05 ? yoyProyectado : yoyMonto;
+  const yoyEsProyectado = factorProy > 1.05;
   const yoyPiezasDelta = mesActualData.prevPiezas ? mesActualData.piezas - mesActualData.prevPiezas : null;
   const momIdx = mesActual - 2;
   const momPrevMonto = momIdx < 0 ? mensualPorAnio.monto[anioPrev][11] : mensualPorAnio.monto[anio][momIdx];
@@ -372,12 +377,12 @@ export default function SellInClienteV2({ clienteKey }) {
             {narrativa(pctMTD)}
           </h2>
           <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11.5, maxWidth: 400, lineHeight: 1.4, margin: 0 }}>
-            {subnarrativa(mesActualData.monto, mesActualData.cuota?.ideal, familiasYTD[0], yoyMonto)}
+            {subnarrativa(mesActualData.monto, mesActualData.cuota?.ideal, familiasYTD[0], yoyDisplay)}
           </p>
         </div>
         <HeroStat k={`MTD ${MESES[mesActual - 1]}`} v={fmt.money(mesActualData.monto)} sub={pctMTD != null ? `${Math.round(pctMTD)}% cuota` : ''} />
         <HeroStat k={`YTD ${anio}`} v={fmt.money(totalYTD.monto)} sub={pctYTD != null ? `${Math.round(pctYTD)}% cuota` : ''} />
-        <HeroStat k="YoY" v={yoyMonto != null ? `${yoyMonto >= 0 ? '+' : ''}${yoyMonto.toFixed(0)}%` : '—'} sub={`vs ${anioPrev}`} valColor={yoyMonto == null ? undefined : yoyMonto >= 0 ? P.green : P.red} />
+        <HeroStat k={yoyEsProyectado ? "YoY proy." : "YoY"} v={yoyDisplay != null ? `${yoyDisplay >= 0 ? '+' : ''}${yoyDisplay.toFixed(0)}%` : '—'} sub={yoyEsProyectado ? `vs ${anioPrev} · fin de mes` : `vs ${anioPrev}`} valColor={yoyDisplay == null ? undefined : yoyDisplay >= 0 ? P.green : P.red} />
       </div>
 
       {/* KPI cards */}
