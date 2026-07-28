@@ -8,6 +8,8 @@ import { puedeEditarPestanaCliente } from '../../lib/permisos';
 import { Wallet, CalendarDays, BarChart3, ClipboardList } from 'lucide-react';
 import { NuevaPromocionButton, ListaPromociones } from './PagosPromociones';
 import LineamientosCliente from './LineamientosCliente';
+import { useTheme } from '../../lib/themeContext';
+import { TYPO } from '../../lib/themeTokens';
 
 const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
@@ -46,6 +48,12 @@ function esMesFuturo(fechaStr) {
 export default function PagosCliente({ cliente, clienteKey }) {
   const c = cliente;
   const perfil = usePerfil();
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
+  const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#000000');
+  const heroText = theme.heroCardText || '#F5F5F7';
+  const heroMuted = 'rgba(255,255,255,0.72)';
+  const heroSubtle = 'rgba(255,255,255,0.55)';
   // Permiso granular por (clienteKey, 'pagos').
   const canEdit = puedeEditarPestanaCliente(perfil, clienteKey, 'pagos');
 
@@ -1746,43 +1754,117 @@ export default function PagosCliente({ cliente, clienteKey }) {
   };
 
   // ────────────────────────── RENDER ──────────────────────────────────────────
+  const catActivaMeta = catActiva !== 'todas' ? CATEGORIA_META[catActiva] : null;
+  const nombreMesActual = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][new Date().getMonth()];
+  const anioActual = new Date().getFullYear();
+  const rebateTotalAcum = Math.round(Object.values(rebateAllQ).reduce((s, v) => s + v, 0));
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div style={{ minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, padding: '10px 6px' }}>
 
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl shadow-lg text-sm font-semibold transition-all ${toast.type === "err" ? "bg-red-500 text-white" : "bg-green-600 text-white"}`}>
+        <div style={{
+          position: 'fixed', top: 16, right: 16, zIndex: 50,
+          padding: '10px 16px', borderRadius: 12,
+          background: toast.type === 'err' ? theme.red : theme.green,
+          color: '#fff', fontFamily: TYPO.fontText, fontSize: 13, fontWeight: 600,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+        }}>
           {toast.msg}
         </div>
       )}
 
-      {/* Header */}
-      <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
-                 style={{ backgroundColor: c.color }}><Wallet className="w-4 h-4 text-white" /></div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">{c.nombre} — Pagos y Compromisos</h1>
-              <p className="text-sm text-gray-400 mt-0.5">
-                <span className="font-medium" style={{ color: c.color }}>{c.marca}</span>
-                {" · "}Promociones · Marketing{clienteKey !== "pcel" && " · Pagos Fijos"} · Variables
-                {saving && <span className="ml-2 text-blue-400 animate-pulse">● Guardando...</span>}
-              </p>
-            </div>
-          </div>
-          <div className="text-right">
-            <span className="text-xs text-gray-400 block">
-              Actualizado: {formatFecha(c.cartera?.ultimaActualizacion || "2026-04-07")}
-              {c.cartera?.horaActualizacion ? ` · ${c.cartera.horaActualizacion} hrs` : ""}
-            </span>
-            {c.cartera?.tipoCambio && (
-              <span className="text-xs text-gray-400">TC: ${c.cartera.tipoCambio.toFixed(2)} MXN/USD</span>
+      {/* Hero editorial · narrativa + 4 stats */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 20,
+        background: heroBg, color: heroText, borderRadius: 14, padding: '16px 20px',
+        alignItems: 'center', position: 'relative', overflow: 'hidden',
+        border: isDark ? `1px solid rgba(255,255,255,0.06)` : 'none',
+        marginBottom: 12,
+      }}>
+        {isDark && (
+          <div style={{
+            position: 'absolute', top: '-30%', right: '-10%', width: '50%', height: '100%',
+            background: `radial-gradient(circle, ${theme.accent}1F 0%, transparent 70%)`, pointerEvents: 'none',
+          }} />
+        )}
+        <div style={{ position: 'relative' }}>
+          <p style={{
+            fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em',
+            color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText, margin: 0,
+          }}>
+            {c.nombre} · {nombreMesActual} {anioActual}{catActivaMeta ? ` · Vista ${catActivaMeta.label}` : ''}
+          </p>
+          <h2 style={{
+            fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em',
+            color: heroText, margin: '4px 0 6px', lineHeight: 1.15,
+          }}>
+            Pagos y Compromisos.
+          </h2>
+          <p style={{
+            color: heroMuted, fontSize: 12, lineHeight: 1.55, margin: 0, maxWidth: 540,
+            fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums',
+          }}>
+            <strong style={{ color: '#34D158', fontWeight: 500 }}>{formatMXN(totalPagado || 0)} pagado</strong> · <strong style={{ color: '#FFB84D', fontWeight: 500 }}>{formatMXN(totalPorPagar || 0)} por pagar</strong> · total {formatMXN(totalAnio || 0)} en <strong style={{ color: heroText, fontWeight: 500 }}>{registros.length} conceptos</strong>.
+            {(clienteKey === 'digitalife' || clienteKey === 'dicotech') && rebateTotalAcum > 0 && (
+              <> Rebate acumulado <strong style={{ color: heroText, fontWeight: 500 }}>{formatMXN(rebateTotalAcum)}</strong>.</>
             )}
-            <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-semibold ${DB_CONFIGURED ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
-              {DB_CONFIGURED ? "✅ Sincronizado" : "⚠️ Solo lectura"}
-            </span>
+            {saving && <span style={{ color: theme.accentDark || theme.accent, marginLeft: 8 }}>● Guardando…</span>}
+          </p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', position: 'relative' }}>
+          <div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText }}>Pagado</div>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: '#34D158', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, marginTop: 2 }}>{totalPagado > 0 ? formatMXN(totalPagado) : '$0'}</div>
+            <div style={{ fontSize: 10, color: heroSubtle, marginTop: 1 }}>{registros.filter(r => r.estatus === 'pagado').length} conceptos</div>
           </div>
+          <div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText }}>Por pagar</div>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: '#FFB84D', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, marginTop: 2 }}>{totalPorPagar > 0 ? formatMXN(totalPorPagar) : '$0'}</div>
+            <div style={{ fontSize: 10, color: heroSubtle, marginTop: 1 }}>{registros.filter(r => ['pendiente','en_proceso'].includes(r.estatus)).length} conceptos</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText }}>Total {anioActual}</div>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: heroText, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, marginTop: 2 }}>{totalAnio > 0 ? formatMXN(totalAnio) : '$0'}</div>
+            <div style={{ fontSize: 10, color: heroSubtle, marginTop: 1 }}>{registros.length} registros</div>
+          </div>
+          {(clienteKey === 'digitalife' || clienteKey === 'dicotech') && (
+            <div>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText }}>Rebate acum.</div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: '#FF6961', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, marginTop: 2 }}>{rebateTotalAcum > 0 ? formatMXN(rebateTotalAcum) : '$0'}</div>
+              <div style={{ fontSize: 10, color: heroSubtle, marginTop: 1 }}>{Object.values(rebateSynced).filter(Boolean).length} de 4 Qs</div>
+            </div>
+          )}
+          {clienteKey === 'pcel' && (
+            <div style={{ cursor: 'pointer' }} onClick={() => setMostrarFondo(v => !v)} title="Click para ver ledger del fondo">
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText }}>Saldo Fondo MKT</div>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: '#BF5AF2', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, marginTop: 2 }}>{formatMXN(fondoResumen.saldoMkt)}</div>
+              <div style={{ fontSize: 10, color: heroSubtle, marginTop: 1 }}>+{formatMXN(fondoResumen.aporteMktAnio)} · −{formatMXN(fondoResumen.gastoMktAnio)}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Sub-header meta: marca + actualización + sync */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '0 4px', marginBottom: 12, fontSize: 11.5, color: theme.textMuted,
+      }}>
+        <div>
+          <span style={{ color: c.color, fontWeight: 600 }}>{c.marca}</span>
+          {' · '}Promociones · Marketing{clienteKey !== 'pcel' && ' · Pagos Fijos'} · Variables
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>Actualizado: {formatFecha(c.cartera?.ultimaActualizacion || '2026-04-07')}{c.cartera?.horaActualizacion ? ` · ${c.cartera.horaActualizacion} hrs` : ''}</span>
+          {c.cartera?.tipoCambio && <span>· TC ${c.cartera.tipoCambio.toFixed(2)}</span>}
+          <span style={{
+            padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700,
+            background: DB_CONFIGURED ? `${theme.green}22` : `${theme.orange}22`,
+            color: DB_CONFIGURED ? theme.green : theme.orange,
+          }}>
+            {DB_CONFIGURED ? '✓ Sincronizado' : '⚠ Solo lectura'}
+          </span>
         </div>
       </div>
 
@@ -1812,59 +1894,28 @@ export default function PagosCliente({ cliente, clienteKey }) {
 
       {!loading && (
         <>
-          {/* KPI Cards */}
-          <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Resumen de Pagos 2026</h3>
-                <span className="text-xs text-gray-400">{registros.length} registros</span>
-              </div>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-5 md:grid-cols-4">
-                <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Pagado</p>
-                  <p className="text-2xl font-bold text-green-600">{totalPagado > 0 ? formatMXN(totalPagado) : "$0"}</p>
-                  <p className="text-xs text-gray-400 mt-1">{registros.filter(r => r.estatus === "pagado").length} conceptos</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Por Pagar</p>
-                  <p className="text-2xl font-bold text-yellow-600">{totalPorPagar > 0 ? formatMXN(totalPorPagar) : "$0"}</p>
-                  <p className="text-xs text-gray-400 mt-1">{registros.filter(r => ["pendiente","en_proceso"].includes(r.estatus)).length} conceptos</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total {new Date().getFullYear()}</p>
-                  <p className="text-2xl font-bold text-gray-800">{totalAnio > 0 ? formatMXN(totalAnio) : "$0"}</p>
-                  <p className="text-xs text-gray-400 mt-1">{registros.length} conceptos registrados</p>
-                  {/* Desglose por categoría — mini lista horizontal */}
-                  {totalAnio > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                      {Object.entries(CATEGORIA_META)
-                        .map(([k, meta]) => ({ k, meta, total: registros.filter(r => r.categoria === k).reduce((s, r) => s + (r.monto || 0), 0) }))
-                        .filter(x => x.total > 0)
-                        .sort((a, b) => b.total - a.total)
-                        .map(({ k, meta, total }) => (
-                          <span key={k} className="text-[10px] text-gray-500 whitespace-nowrap">
-                            <span className="w-1.5 h-1.5 rounded-full inline-block mr-1 align-middle" style={{ backgroundColor: meta.color }} />
-                            <strong>{meta.label}:</strong> {formatMXN(total)}
-                          </span>
-                        ))}
-                    </div>
-                  )}
-                </div>
-                {(clienteKey === "digitalife" || clienteKey === "dicotech") && (
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Rebate Acum.</p>
-                    <p className="text-2xl font-bold text-red-600">{(() => { const total = Math.round(Object.values(rebateAllQ).reduce((s, v) => s + v, 0)); return total > 0 ? formatMXN(total) : "$0"; })()}</p>
-                    <p className="text-xs text-gray-400 mt-1">{Object.values(rebateSynced).filter(Boolean).length} de 4 Qs registrados</p>
-                  </div>
-                )}
-                {clienteKey === "pcel" && (
-                  <div className="cursor-pointer hover:bg-violet-50 rounded-lg p-2 -m-2 transition-colors" onClick={() => setMostrarFondo(v => !v)} title="Click para ver ledger del fondo">
-                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Saldo Fondo MKT</p>
-                    <p className="text-2xl font-bold text-violet-600">{formatMXN(fondoResumen.saldoMkt)}</p>
-                    <p className="text-xs text-gray-400 mt-1">{new Date().getFullYear()}: +{formatMXN(fondoResumen.aporteMktAnio)} · −{formatMXN(fondoResumen.gastoMktAnio)}</p>
-                  </div>
-                )}
-              </div>
+          {/* Desglose por categoría — chips debajo del hero */}
+          {totalAnio > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 4px', marginBottom: 12 }}>
+              {Object.entries(CATEGORIA_META)
+                .filter(([k, meta]) => !meta.soloPara || meta.soloPara.includes(clienteKey))
+                .map(([k, meta]) => ({ k, meta, total: registros.filter(r => r.categoria === k).reduce((s, r) => s + (r.monto || 0), 0) }))
+                .filter(x => x.total > 0)
+                .sort((a, b) => b.total - a.total)
+                .map(({ k, meta, total }) => (
+                  <span key={k} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '3px 9px', borderRadius: 999,
+                    background: meta.color + '22', color: meta.color,
+                    fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.005em',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: meta.color }} />
+                    <strong style={{ fontWeight: 600 }}>{meta.label}</strong> {formatMXN(total)}
+                  </span>
+                ))}
             </div>
+          )}
 
           {/* Calendario mensual de pagos 2026 */}
           <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
@@ -2185,36 +2236,76 @@ export default function PagosCliente({ cliente, clienteKey }) {
           {showRegularTable && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
 
-              {/* Filter tabs + Add button */}
-              <div className="flex items-center gap-2 mb-5 flex-wrap">
-                <button onClick={() => setCatActiva("todas")}
-                  className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${catActiva === "todas" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-                  Todas
-                </button>
-                {Object.entries(CATEGORIA_META)
-                  .filter(([key, meta]) => !(clienteKey === "pcel" && key === "pagosFijos"))
-                  .filter(([key, meta]) => !meta.soloPara || meta.soloPara.includes(clienteKey))
-                  .map(([key, meta]) => (
-                  <button key={key} onClick={() => setCatActiva(catActiva === key ? "todas" : key)}
-                    className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${catActiva === key ? "text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
-                    style={catActiva === key ? { backgroundColor: meta.color } : {}}>
-                    <span>{meta.icono}</span>{meta.label}
+              {/* Nav pill de categorías + acciones */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                <div style={{
+                  display: 'inline-flex', gap: 2, padding: 4,
+                  background: theme.surface, border: `1px solid ${theme.border}`,
+                  borderRadius: 999, flexWrap: 'wrap',
+                }}>
+                  <button onClick={() => setCatActiva('todas')}
+                    style={{
+                      padding: '6px 12px', borderRadius: 999, border: 'none',
+                      background: catActiva === 'todas' ? theme.text : 'transparent',
+                      color: catActiva === 'todas' ? theme.bg : theme.textMuted,
+                      fontFamily: TYPO.fontText, fontSize: 12, fontWeight: catActiva === 'todas' ? 600 : 500,
+                      cursor: 'pointer', letterSpacing: '-0.005em',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                    }}>
+                    Todas
+                    <span style={{
+                      fontFamily: TYPO.fontDisplay, fontSize: 10, padding: '0 6px', borderRadius: 4, fontWeight: 700,
+                      background: catActiva === 'todas' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.05)',
+                      color: catActiva === 'todas' ? theme.bg : theme.textMuted,
+                    }}>{registros.length}</span>
                   </button>
-                ))}
-                <span className="ml-auto text-xs text-gray-400">{filtered.length} registro{filtered.length !== 1 ? "s" : ""}</span>
-                {/* Botón especializado por categoría */}
-                {DB_CONFIGURED && canEdit && catActiva === "promociones" && (
+                  {Object.entries(CATEGORIA_META)
+                    .filter(([key, meta]) => !(clienteKey === 'pcel' && key === 'pagosFijos'))
+                    .filter(([key, meta]) => !meta.soloPara || meta.soloPara.includes(clienteKey))
+                    .map(([key, meta]) => {
+                      const on = catActiva === key;
+                      const count = registros.filter(r => r.categoria === key).length;
+                      return (
+                        <button key={key} onClick={() => setCatActiva(on ? 'todas' : key)}
+                          style={{
+                            padding: '6px 12px', borderRadius: 999, border: 'none',
+                            background: on ? meta.color : 'transparent',
+                            color: on ? '#fff' : theme.textMuted,
+                            fontFamily: TYPO.fontText, fontSize: 12, fontWeight: on ? 600 : 500,
+                            cursor: 'pointer', letterSpacing: '-0.005em',
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                          }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: on ? '#fff' : meta.color }} />
+                          {meta.label}
+                          <span style={{
+                            fontFamily: TYPO.fontDisplay, fontSize: 10, padding: '0 6px', borderRadius: 4, fontWeight: 700,
+                            background: on ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.05)',
+                            color: on ? '#fff' : theme.textMuted,
+                          }}>{count}</span>
+                        </button>
+                      );
+                    })}
+                </div>
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: theme.textMuted, fontFamily: TYPO.fontText }}>
+                  {filtered.length} registro{filtered.length !== 1 ? 's' : ''}
+                </span>
+                {DB_CONFIGURED && canEdit && catActiva === 'promociones' && (
                   <NuevaPromocionButton clienteKey={clienteKey} onCreated={() => setPromosVer(v => v + 1)} />
                 )}
-                {/* Botón genérico (legacy) — solo cuando NO estás en una categoría especializada */}
-                {DB_CONFIGURED && canEdit && catActiva !== "promociones" && (
+                {DB_CONFIGURED && canEdit && catActiva !== 'promociones' && (
                   <button onClick={() => setShowAdd(!showAdd)}
-                    className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white rounded-full text-sm font-semibold hover:bg-blue-700 transition-colors">
-                    + Agregar
+                    style={{
+                      height: 30, padding: '0 14px', borderRadius: 999,
+                      background: theme.accent, color: '#fff', border: 'none',
+                      fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 600,
+                      cursor: 'pointer', letterSpacing: '-0.005em',
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                    }}>
+                    ＋ Agregar
                   </button>
                 )}
                 {!canEdit && (
-                  <span className="text-xs text-gray-400 italic flex items-center gap-1">🔒 Modo lectura</span>
+                  <span style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>🔒 Modo lectura</span>
                 )}
               </div>
 
