@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
+import { PCEL_REAL } from '../lib/constants';
 import { CLIENTES } from './Sidebar';
 
 const CLIENTE_DOT = { digitalife: '#5856D6', dicotech: '#FF9500', pcel: '#34C759' };
@@ -27,21 +28,41 @@ export default function MobileAnalisisClientes({ onBack, onNavegar }) {
   const anio = new Date().getFullYear();
 
   const [loading, setLoading] = useState(true);
-  const [ventas, setVentas] = useState([]);
+  const [siSku, setSiSku] = useState([]);
+  const [soSku, setSoSku] = useState([]);
   const [cuotas, setCuotas] = useState([]);
   const [dso, setDso] = useState([]);
+
+  // Fetch page-through porque sell_in_sku puede tener miles de rows
+  async function fetchAll(table, select, applyFilter = q => q) {
+    const PAGE = 1000; let acc = [], from = 0;
+    while (true) {
+      let q = supabase.from(table).select(select).range(from, from + PAGE - 1);
+      q = applyFilter(q);
+      const { data, error } = await q;
+      if (error || !data || data.length === 0) break;
+      acc = acc.concat(data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+    return acc;
+  }
 
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
-      const [v, c, d] = await Promise.all([
-        safeQuery(supabase.from('v_ventas_mensuales_agg').select('cliente,anio,mes,sell_in,sell_out').eq('anio', anio)),
-        safeQuery(supabase.from('cuotas_mensuales').select('cliente,mes,cuota_min,cuota_ideal,cuota_meta').eq('anio', anio)),
+      // Alineado con desktop AnalisisCliente que usa sell_in_sku.monto_pesos
+      // (más granular que v_ventas_mensuales_agg y consistente con el resto del dashboard).
+      const [si, so, c, d] = await Promise.all([
+        fetchAll('sell_in_sku', 'cliente,mes,monto_pesos', q => q.eq('anio', anio)),
+        // sellout_sku es la tabla equivalente para SO en desktop
+        fetchAll('sellout_sku', 'cliente,mes,monto_pesos', q => q.eq('anio', anio)),
+        safeQuery(supabase.from('cuotas_mensuales').select('cliente,mes,cuota_min,cuota_ideal').eq('anio', anio)),
         safeQuery(supabase.from('v_dso_real').select('cliente,saldo_actual_total,saldo_vencido,dso_real,dso_erp')),
       ]);
       if (!alive) return;
-      setVentas(v); setCuotas(c); setDso(d);
+      setSiSku(si); setSoSku(so); setCuotas(c); setDso(d);
       setLoading(false);
     })();
     return () => { alive = false; };
@@ -49,21 +70,30 @@ export default function MobileAnalisisClientes({ onBack, onNavegar }) {
 
   const mesData = useMemo(() => {
     let last = 0;
-    ventas.forEach(r => { const m = Number(r.mes) || 0; if (m > last && Number(r.sell_in) > 0) last = m; });
+    siSku.forEach(r => { const m = Number(r.mes) || 0; if (m > last && Number(r.monto_pesos) > 0) last = m; });
     return last || new Date().getMonth() + 1;
-  }, [ventas]);
+  }, [siSku]);
 
   const clienteKpis = useMemo(() => {
     const out = {};
-    ventas.filter(r => Number(r.mes) === mesData).forEach(r => {
+    // Sell In del mes usando monto_pesos (alineado con desktop AnalisisCliente)
+    siSku.filter(r => Number(r.mes) === mesData).forEach(r => {
       if (!out[r.cliente]) out[r.cliente] = { facturado: 0, sellOut: 0, cuota: 0 };
-      out[r.cliente].facturado += Number(r.sell_in) || 0;
-      out[r.cliente].sellOut += Number(r.sell_out) || 0;
+      out[r.cliente].facturado += Number(r.monto_pesos) || 0;
     });
+    soSku.filter(r => Number(r.mes) === mesData).forEach(r => {
+      if (!out[r.cliente]) out[r.cliente] = { facturado: 0, sellOut: 0, cuota: 0 };
+      out[r.cliente].sellOut += Number(r.monto_pesos) || 0;
+    });
+    // Cuota_ideal como meta principal (matching desktop) + fallback PCEL_REAL
     cuotas.filter(r => Number(r.mes) === mesData).forEach(r => {
       if (!out[r.cliente]) out[r.cliente] = { facturado: 0, sellOut: 0, cuota: 0 };
-      out[r.cliente].cuota += Number(r.cuota_min || r.cuota_ideal || r.cuota_meta || 0);
+      out[r.cliente].cuota += Number(r.cuota_ideal || r.cuota_min || 0);
     });
+    if ((!out.pcel || out.pcel.cuota === 0) && PCEL_REAL?.cuota50M?.[mesData]) {
+      if (!out.pcel) out.pcel = { facturado: 0, sellOut: 0, cuota: 0 };
+      out.pcel.cuota = PCEL_REAL.cuota50M[mesData];
+    }
     dso.forEach(r => {
       if (!out[r.cliente]) out[r.cliente] = { facturado: 0, sellOut: 0, cuota: 0 };
       out[r.cliente].saldo = Number(r.saldo_actual_total) || 0;
@@ -76,7 +106,7 @@ export default function MobileAnalisisClientes({ onBack, onNavegar }) {
       v.siso = v.facturado > 0 ? Math.round((v.sellOut / v.facturado) * 100) : 0;
     });
     return out;
-  }, [ventas, cuotas, dso, mesData]);
+  }, [siSku, soSku, cuotas, dso, mesData]);
 
   const totales = useMemo(() => {
     const vals = Object.values(clienteKpis);

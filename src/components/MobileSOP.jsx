@@ -5,6 +5,7 @@ import { ChevronLeft } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
+import { PCEL_REAL } from '../lib/constants';
 import { CLIENTES } from './Sidebar';
 
 const MES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -48,7 +49,16 @@ export default function MobileSOP({ onBack, onNavegar }) {
   const meses = Q_MESES[qSel];
   const kpis = useMemo(() => {
     const factQ = fact.filter(r => meses.includes(Number(r.mes))).reduce((s, r) => s + (Number(r.monto) || 0), 0);
-    const metaQ = cuotas.filter(r => meses.includes(Number(r.mes))).reduce((s, r) => s + (Number(r.cuota_min || r.cuota_ideal || r.cuota_meta) || 0), 0);
+    // cuota_ideal como meta (matching desktop) + fallback PCEL_REAL
+    let metaQ = 0;
+    ['digitalife', 'dicotech', 'pcel'].forEach(cli => {
+      meses.forEach(mes => {
+        const r = cuotas.find(x => x.cliente === cli && Number(x.mes) === mes);
+        let v = r ? Number(r.cuota_ideal || r.cuota_min || 0) : 0;
+        if (cli === 'pcel' && v === 0 && PCEL_REAL?.cuota50M?.[mes]) v = PCEL_REAL.cuota50M[mes];
+        metaQ += v;
+      });
+    });
     const gap = Math.max(0, metaQ - factQ);
     const pct = metaQ > 0 ? Math.round((factQ / metaQ) * 100) : 0;
     // días transcurridos del trimestre
@@ -66,7 +76,13 @@ export default function MobileSOP({ onBack, onNavegar }) {
   const porCliente = useMemo(() => {
     return Object.keys(CLIENTES).filter(k => CLIENTES[k].activo).map(id => {
       const f = fact.filter(r => r.cliente_key === id && meses.includes(Number(r.mes))).reduce((s, r) => s + (Number(r.monto) || 0), 0);
-      const meta = cuotas.filter(r => r.cliente === id && meses.includes(Number(r.mes))).reduce((s, r) => s + (Number(r.cuota_min || r.cuota_ideal || r.cuota_meta) || 0), 0);
+      let meta = 0;
+      meses.forEach(mes => {
+        const r = cuotas.find(x => x.cliente === id && Number(x.mes) === mes);
+        let v = r ? Number(r.cuota_ideal || r.cuota_min || 0) : 0;
+        if (id === 'pcel' && v === 0 && PCEL_REAL?.cuota50M?.[mes]) v = PCEL_REAL.cuota50M[mes];
+        meta += v;
+      });
       return { id, label: CLIENTES[id].label, color: CLIENTE_DOT[id] || theme.accent, real: f, meta };
     });
   }, [fact, cuotas, meses, theme.accent]);
@@ -78,7 +94,7 @@ export default function MobileSOP({ onBack, onNavegar }) {
   return (
     <div style={{ background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100vh' }}>
       <BackHdr theme={theme} onBack={onBack} eyebrow="Dirección Comercial" />
-      <TitleH theme={theme} h="S&OP" sub={`Forecast ${qSel} ${anio}`} />
+      <TitleH theme={theme} h="S&OP" sub={`Cumplimiento ${qSel} ${anio} · vista ejecutiva`} />
 
       <div style={{ padding: '10px 18px 8px', display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none' }}>
         {['Q1','Q2','Q3','Q4'].map(q => (

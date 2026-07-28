@@ -40,7 +40,8 @@ export default function MobileSellInGlobal({ onBack, onNavegar }) {
   const isDark = theme.mode === 'dark';
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
-  const [fact, setFact] = useState([]);
+  const [fact, setFact] = useState([]);         // Global YTD (vista pre-agregada)
+  const [factRaw, setFactRaw] = useState([]);   // Raw con cliente_key para desglose
   const [roadmap, setRoadmap] = useState([]);
   const [cuotas, setCuotas] = useState([]);
 
@@ -48,11 +49,21 @@ export default function MobileSellInGlobal({ onBack, onNavegar }) {
     let alive = true;
     (async () => {
       setLoading(true);
-      const [f, r, c] = await Promise.all([
+      // Alineado con desktop SellInCliente(clienteKey=null): usa vistas globales
+      // pre-agregadas server-side. Además fetch facturacion_clientes raw para
+      // desglose por cliente (las vistas globales no lo traen).
+      const [fGlobal, fRaw, r, cGlobal] = await Promise.all([
+        fetchAll('v_facturacion_global_sku_mes', 'sku,anio,mes,piezas,monto', q => q.eq('anio', anio)),
         fetchAll('facturacion_clientes', 'sku,cliente_key,anio,mes,piezas,monto', q => q.eq('anio', anio)),
         fetchAll('roadmap_sku', 'sku,marca,descripcion,familia'),
-        fetchAll('cuotas_mensuales', 'cliente,mes,cuota_min,cuota_ideal,cuota_meta', q => q.eq('anio', anio)),
+        fetchAll('v_cuota_global_mensual', 'mes,cuota_min,cuota_ideal', q => q.eq('anio', anio)),
       ]);
+      // fGlobal para KPIs YTD (montos oficiales del server-side aggregate).
+      // fRaw para desglose por cliente (vistas globales no traen cliente_key).
+      // Si vista global no existe, fact cae a fRaw.
+      const f = fGlobal.length > 0 ? fGlobal : fRaw;
+      const c = cGlobal;
+      setFactRaw(fRaw);
       if (!alive) return;
       setFact(f); setRoadmap(r); setCuotas(c); setLoading(false);
     })();
@@ -73,7 +84,8 @@ export default function MobileSellInGlobal({ onBack, onNavegar }) {
     const piezas = mesM.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
     const prevMes = mesActual > 1 ? fact.filter(r => Number(r.mes) === mesActual - 1).reduce((s, r) => s + (Number(r.monto) || 0), 0) : 0;
     const delta = prevMes > 0 ? Math.round(((facturado - prevMes) / prevMes) * 100) : 0;
-    const cuotaMes = cuotas.filter(r => Number(r.mes) === mesActual).reduce((s, r) => s + (Number(r.cuota_min || r.cuota_ideal || r.cuota_meta) || 0), 0);
+    // cuota_ideal como meta oficial (matching desktop). Si no hay cuota_ideal, cuota_min.
+    const cuotaMes = cuotas.filter(r => Number(r.mes) === mesActual).reduce((s, r) => s + (Number(r.cuota_ideal || r.cuota_min) || 0), 0);
     const pct = cuotaMes > 0 ? Math.round((facturado / cuotaMes) * 100) : 0;
     const ticket = piezas > 0 ? facturado / piezas : 0;
     return { facturado, piezas, delta, cuotaMes, pct, ticket, gap: Math.max(0, cuotaMes - facturado) };
@@ -85,16 +97,17 @@ export default function MobileSellInGlobal({ onBack, onNavegar }) {
     return arr;
   }, [fact]);
 
+  // Desglose por cliente usa factRaw porque la vista global no trae cliente_key
   const porCliente = useMemo(() => {
     const m = new Map();
-    fact.filter(r => Number(r.mes) === mesActual).forEach(r => {
+    factRaw.filter(r => Number(r.mes) === mesActual).forEach(r => {
       const k = r.cliente_key;
       m.set(k, (m.get(k) || 0) + (Number(r.monto) || 0));
     });
     const arr = Array.from(m.entries()).map(([k, v]) => ({ k, label: CLIENTES[k]?.label || k, color: CLIENTE_DOT[k] || theme.accent, monto: v })).sort((a, b) => b.monto - a.monto);
     const total = arr.reduce((s, r) => s + r.monto, 0);
     return arr.map(r => ({ ...r, pct: total > 0 ? (r.monto / total) * 100 : 0 }));
-  }, [fact, mesActual, theme.accent]);
+  }, [factRaw, mesActual, theme.accent]);
 
   const porMarca = useMemo(() => {
     const m = new Map();
