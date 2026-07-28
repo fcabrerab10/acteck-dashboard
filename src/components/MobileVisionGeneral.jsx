@@ -98,14 +98,14 @@ export default function MobileVisionGeneral({ onBack, onNavegar }) {
   // Último mes con data
   const mesActual = useMemo(() => {
     let last = 0;
-    facCanalAct.forEach(r => { const m = Number(r.mes) || 0; if (m > last && Number(r.importe || r.venta || 0) > 0) last = m; });
+    facCanalAct.forEach(r => { const m = Number(r.mes) || 0; if (m > last && Number(r.venta || r.importe || 0) > 0) last = m; });
     return last || new Date().getMonth() + 1;
   }, [facCanalAct]);
 
-  // KPIs YTD
-  const sellInYTD = useMemo(() => facCanalAct.reduce((s, r) => s + (Number(r.importe || r.venta || 0)), 0), [facCanalAct]);
-  const sellInYTDPrev = useMemo(() => facCanalPrev.reduce((s, r) => s + (Number(r.importe || r.venta || 0)), 0), [facCanalPrev]);
-  const sellOutYTD = useMemo(() => soCanal.reduce((s, r) => s + (Number(r.importe || 0)), 0), [soCanal]);
+  // KPIs YTD — filtrando por mes <= mesActual como hace el desktop
+  const sellInYTD = useMemo(() => facCanalAct.filter(r => Number(r.mes) <= mesActual).reduce((s, r) => s + (Number(r.venta || r.importe || 0)), 0), [facCanalAct, mesActual]);
+  const sellInYTDPrev = useMemo(() => facCanalPrev.reduce((s, r) => s + (Number(r.venta || r.importe || 0)), 0), [facCanalPrev]);
+  const sellOutYTD = useMemo(() => soCanal.filter(r => Number(r.mes) <= mesActual).reduce((s, r) => s + (Number(r.importe || r.monto || 0)), 0), [soCanal, mesActual]);
 
   const carteraTotal = useMemo(() => cartera.reduce((s, r) => s + (Number(r.saldo_actual_total || r.saldo_actual || 0)), 0), [cartera]);
   const carteraVencida = useMemo(() => cartera.reduce((s, r) => s + (Number(r.saldo_vencido || 0)), 0), [cartera]);
@@ -119,13 +119,13 @@ export default function MobileVisionGeneral({ onBack, onNavegar }) {
     const m = new Map();
     facCanalAct.filter(r => Number(r.mes) === mesActual).forEach(r => {
       const k = r.canal || r.cliente || 'otro';
-      m.set(k, (m.get(k) || 0) + (Number(r.importe || r.venta || 0)));
+      m.set(k, (m.get(k) || 0) + (Number(r.venta || r.importe || 0)));
     });
     // Fallback: si el mes actual está vacío, usar YTD
     if (m.size === 0) {
       facCanalAct.forEach(r => {
         const k = r.canal || r.cliente || 'otro';
-        m.set(k, (m.get(k) || 0) + (Number(r.importe || r.venta || 0)));
+        m.set(k, (m.get(k) || 0) + (Number(r.venta || r.importe || 0)));
       });
     }
     const arr = Array.from(m.entries()).map(([k, v]) => ({
@@ -138,7 +138,7 @@ export default function MobileVisionGeneral({ onBack, onNavegar }) {
   // Serie mensual SI vs SO
   const serieSI = useMemo(() => {
     const arr = Array(12).fill(0);
-    facCanalAct.forEach(r => { const m = Number(r.mes) - 1; if (m >= 0 && m < 12) arr[m] += Number(r.importe || r.venta || 0); });
+    facCanalAct.forEach(r => { const m = Number(r.mes) - 1; if (m >= 0 && m < 12) arr[m] += Number(r.venta || r.importe || 0); });
     return arr;
   }, [facCanalAct]);
   const serieSO = useMemo(() => {

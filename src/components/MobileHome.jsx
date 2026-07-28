@@ -16,6 +16,7 @@ import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
 import { formatMXN } from '../lib/utils';
+import { PCEL_REAL } from '../lib/constants';
 import { CLIENTES } from './Sidebar';
 
 const CLIENTE_DOT = {
@@ -84,10 +85,16 @@ export default function MobileHome({ perfil, onNavegar }) {
       if (!out[r.cliente]) out[r.cliente] = { facturado: 0, cuota: 0 };
       out[r.cliente].facturado += Number(r.sell_in || 0);
     });
+    // Cuota alineada al desktop: solo cuota_min. PCEL fallback a PCEL_REAL.cuota50M[mes].
     (cuotas || []).filter(r => Number(r.mes) === mesData).forEach((r) => {
       if (!out[r.cliente]) out[r.cliente] = { facturado: 0, cuota: 0 };
-      out[r.cliente].cuota += Number(r.cuota_min || r.cuota_ideal || r.cuota_meta || 0);
+      out[r.cliente].cuota += Number(r.cuota_min || 0);
     });
+    // Fallback PCEL si cuota_min viene 0
+    if ((!out.pcel || out.pcel.cuota === 0) && PCEL_REAL?.cuota50M?.[mesData]) {
+      if (!out.pcel) out.pcel = { facturado: 0, cuota: 0 };
+      out.pcel.cuota = PCEL_REAL.cuota50M[mesData];
+    }
     Object.entries(out).forEach(([k, v]) => {
       v.pct = v.cuota > 0 ? Math.round((v.facturado / v.cuota) * 100) : 0;
       v.gap = Math.max(0, v.cuota - v.facturado);

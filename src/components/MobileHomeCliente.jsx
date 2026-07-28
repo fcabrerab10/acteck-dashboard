@@ -16,6 +16,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
+import { PCEL_REAL } from '../lib/constants';
 import { CLIENTES } from './Sidebar';
 
 const MES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -72,9 +73,14 @@ export default function MobileHomeCliente({ clienteKey, onBack, onNavegar }) {
         setSellIn(facturaPorMes[mesActual]);
         setSellInPrev(mesActual > 1 ? facturaPorMes[mesActual - 1] : 0);
 
-        // Cuota mes actual
+        // Cuota mes actual — alineado al desktop (HomeDigitalife usa cuota_ideal como
+        // meta comunicada). PCEL fallback si viene en 0.
         const cuotaMes = ct.find(r => Number(r.mes) === mesActual);
-        setCuota(Number(cuotaMes?.cuota_min || cuotaMes?.cuota_ideal || 0));
+        let cuotaVal = Number(cuotaMes?.cuota_ideal || cuotaMes?.cuota_min || 0);
+        if (clienteKey === 'pcel' && cuotaVal === 0 && PCEL_REAL?.cuota50M?.[mesActual]) {
+          cuotaVal = PCEL_REAL.cuota50M[mesActual];
+        }
+        setCuota(cuotaVal);
 
         // Sell Out mes actual + previo
         const soPorMes = Array(13).fill(0);

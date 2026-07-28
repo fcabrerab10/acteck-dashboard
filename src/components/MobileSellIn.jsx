@@ -15,6 +15,7 @@ import { ChevronLeft } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
+import { PCEL_REAL } from '../lib/constants';
 import { CLIENTES } from './Sidebar';
 
 const MES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -94,11 +95,26 @@ export default function MobileSellIn({ clienteKey, onBack, onNavegar }) {
     return { monto, piezas };
   }, [facturacion]);
 
+  // Cuota alineada al desktop (SellInClienteV2 usa cuota_ideal como meta principal).
+  // PCEL: fallback a PCEL_REAL.cuota50M si viene en 0.
   const cuotaPorMes = useMemo(() => {
     const m = new Map();
-    for (const c of cuotas) m.set(Number(c.mes), Number(c.cuota_min) || Number(c.cuota_ideal) || 0);
+    for (const c of cuotas) {
+      let v = Number(c.cuota_ideal) || Number(c.cuota_min) || 0;
+      if (clienteKey === 'pcel' && v === 0 && PCEL_REAL?.cuota50M?.[Number(c.mes)]) {
+        v = PCEL_REAL.cuota50M[Number(c.mes)];
+      }
+      m.set(Number(c.mes), v);
+    }
+    // Asegurar todos los meses PCEL aunque no vengan en cuotas_mensuales
+    if (clienteKey === 'pcel' && PCEL_REAL?.cuota50M) {
+      Object.entries(PCEL_REAL.cuota50M).forEach(([k, v]) => {
+        const mes = Number(k);
+        if (!m.has(mes) || m.get(mes) === 0) m.set(mes, Number(v));
+      });
+    }
     return m;
-  }, [cuotas]);
+  }, [cuotas, clienteKey]);
 
   // KPIs mes actual
   const kpis = useMemo(() => {

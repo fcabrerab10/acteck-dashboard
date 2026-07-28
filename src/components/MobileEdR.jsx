@@ -23,16 +23,17 @@ const MES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','
 const MES_FULL  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 // Cuentas clave (mismos slugs que usa EstadoResultados desktop)
+// Cuentas clave alineadas con el desktop EstadoResultados.
+// IMPORTANTE: el desktop nunca usa las variantes "con proyectos" — proyectos
+// se reporta separado. UAFIR y utilidad neta canónicas son SIN proyectos.
 const CUENTA = {
   VENTA_NETA:    'venta_neta',
   UT_BRUTA:      'utilidad_bruta',
   UAFIR:         'uafir_sin_proyectos',
-  UAFIR_CON:     'uafir_con_proyectos',
   COSTO:         'total_costo_de_venta',
   GASTOS:        'total_gastos',
   FINANCIEROS:   'total_productos_financieros',
-  UTILIDAD_FIN:  'uaii_contable_con_proyecctos', // typo del schema real
-  UTILIDAD_FIN_ALT: 'uaii_contable_sin_proyectos',
+  UTILIDAD_FIN:  'uaii_contable_sin_proyectos',
 };
 
 // Secciones P&L (subset del desktop, colapsables)
@@ -132,20 +133,10 @@ export default function MobileEdR({ onBack, onNavegar }) {
   // KPIs
   const ventaYTD = useMemo(() => getYTD(rows, CUENTA.VENTA_NETA), [rows]);
   const utBrutaYTD = useMemo(() => getYTD(rows, CUENTA.UT_BRUTA), [rows]);
-  const uafirYTD = useMemo(() => {
-    const withProj = getYTD(rows, CUENTA.UAFIR_CON);
-    return withProj || getYTD(rows, CUENTA.UAFIR);
-  }, [rows]);
-  const utFinalYTD = useMemo(() => {
-    const con = getYTD(rows, CUENTA.UTILIDAD_FIN);
-    return con || getYTD(rows, CUENTA.UTILIDAD_FIN_ALT);
-  }, [rows]);
-
+  const uafirYTD = useMemo(() => getYTD(rows, CUENTA.UAFIR), [rows]);
+  const utFinalYTD = useMemo(() => getYTD(rows, CUENTA.UTILIDAD_FIN), [rows]);
   const ventaYTDPrev = useMemo(() => getYTD(rowsPrev, CUENTA.VENTA_NETA), [rowsPrev]);
-  const utFinalYTDPrev = useMemo(() => {
-    const con = getYTD(rowsPrev, CUENTA.UTILIDAD_FIN);
-    return con || getYTD(rowsPrev, CUENTA.UTILIDAD_FIN_ALT);
-  }, [rowsPrev]);
+  const utFinalYTDPrev = useMemo(() => getYTD(rowsPrev, CUENTA.UTILIDAD_FIN), [rowsPrev]);
 
   const deltaVenta = ventaYTDPrev > 0 ? Math.round(((ventaYTD - ventaYTDPrev) / ventaYTDPrev) * 100) : null;
   const margenBruto = ventaYTD > 0 ? (utBrutaYTD / ventaYTD) * 100 : null;
@@ -153,12 +144,7 @@ export default function MobileEdR({ onBack, onNavegar }) {
 
   // Series mensuales para chart
   const serieVenta = useMemo(() => getSerieMensual(rows, CUENTA.VENTA_NETA), [rows]);
-  const serieUtilidad = useMemo(() => {
-    const con = getSerieMensual(rows, CUENTA.UTILIDAD_FIN);
-    const sum = con.reduce((s, v) => s + v, 0);
-    if (sum !== 0) return con;
-    return getSerieMensual(rows, CUENTA.UTILIDAD_FIN_ALT);
-  }, [rows]);
+  const serieUtilidad = useMemo(() => getSerieMensual(rows, CUENTA.UTILIDAD_FIN), [rows]);
 
   // Waterfall del mes actual
   const wf = useMemo(() => {
@@ -166,8 +152,7 @@ export default function MobileEdR({ onBack, onNavegar }) {
     const costo = Math.abs(getMes(rows, CUENTA.COSTO, mesActual));
     const gastos = Math.abs(getMes(rows, CUENTA.GASTOS, mesActual));
     const financ = Math.abs(getMes(rows, CUENTA.FINANCIEROS, mesActual));
-    let ut = getMes(rows, CUENTA.UTILIDAD_FIN, mesActual);
-    if (ut === 0) ut = getMes(rows, CUENTA.UTILIDAD_FIN_ALT, mesActual);
+    const ut = getMes(rows, CUENTA.UTILIDAD_FIN, mesActual);
     return { venta, costo, gastos, financ, ut };
   }, [rows, mesActual]);
 
