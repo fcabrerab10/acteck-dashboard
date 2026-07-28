@@ -17,8 +17,32 @@ import {
   Home, ShoppingCart, ShoppingBag, Megaphone, Wallet, CreditCard,
   Activity, PieChart, Boxes, HandCoins, Target,
   BarChart3, ClipboardList, TrendingUp, FileCheck, Building2, Users, Calendar,
-  Calculator, Sparkles, ChevronDown, ChevronRight, Check, Search, LogOut,
+  Calculator, ChevronDown, ChevronRight, Check, Search, LogOut,
 } from 'lucide-react';
+
+// Mini fantasmita de Ferruteck — mismo diseño del Topbar web (versión compacta)
+function FerrutekMini({ size = 22 }) {
+  return (
+    <svg width={size} height={size * 1.07} viewBox="0 0 140 150" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="frtMini" cx="35%" cy="30%">
+          <stop offset="0%" stopColor="#F5E6FF" />
+          <stop offset="40%" stopColor="#D0A8F0" />
+          <stop offset="100%" stopColor="#AF52DE" />
+        </radialGradient>
+      </defs>
+      <path
+        d="M 25 40 Q 25 15 70 15 Q 115 15 115 40 L 115 100 Q 115 105 110 105 Q 105 100 100 105 Q 95 110 90 105 Q 85 100 80 105 Q 75 110 70 105 Q 65 100 60 105 Q 55 110 50 105 Q 45 100 40 105 Q 35 110 30 105 Q 25 100 25 95 Z"
+        fill="url(#frtMini)" stroke="rgba(255,255,255,0.3)" strokeWidth="0.5"
+      />
+      <ellipse cx="52" cy="50" rx="7" ry="9" fill="#1a1a2e" />
+      <ellipse cx="54" cy="47" rx="3" ry="4" fill="#FFF" />
+      <ellipse cx="88" cy="50" rx="7" ry="9" fill="#1a1a2e" />
+      <ellipse cx="90" cy="47" rx="3" ry="4" fill="#FFF" />
+      <path d="M 60 72 Q 70 80 80 72" stroke="#1a1a2e" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
 import Sidebar, { CLIENTES } from './Sidebar';
 import MobileYo from './MobileYo';
 import { useTheme } from '../lib/themeContext';
@@ -249,90 +273,93 @@ export default function MobileShell({
         </div>
       </header>
 
-      {/* ═══ BOTTOM TAB BAR (Instagram-style shrink on scroll) ═══ */}
+      {/* ═══ BOTTOM TAB BAR · Instagram-style · siempre icon-only ═══ */}
       <nav aria-label="Navegación" style={{
         position: 'fixed',
         left: 'max(10px, env(safe-area-inset-left))',
         right: 'max(10px, env(safe-area-inset-right))',
         bottom: 'calc(env(safe-area-inset-bottom) + 12px)',
-        maxWidth: shrunk ? 380 : 780,
+        // Ancho auto — se acomoda al contenido, centrado
         marginLeft: 'auto', marginRight: 'auto',
-        height: shrunk ? 52 : 60,
+        width: 'fit-content', maxWidth: 'calc(100vw - 20px)',
+        height: shrunk ? 48 : 60,
         background: chromeSurface,
         backdropFilter: 'saturate(180%) blur(28px)',
         WebkitBackdropFilter: 'saturate(180%) blur(28px)',
         border: `1px solid ${theme.border}`,
-        borderRadius: 30,
-        padding: shrunk ? '4px 6px' : '6px 8px',
-        display: 'flex', alignItems: 'center', gap: shrunk ? 3 : 6,
+        borderRadius: 999, // pill fully round
+        padding: shrunk ? '5px 8px' : '6px 8px',
+        display: 'flex', alignItems: 'center', gap: shrunk ? 3 : 4,
         zIndex: 39,
         boxShadow: isDark
           ? '0 20px 40px rgba(0,0,0,.5), 0 0 0 .5px rgba(255,255,255,.04)'
           : '0 10px 30px rgba(0,0,0,.10)',
-        transition: 'max-width 320ms cubic-bezier(.4,0,.2,1), height 320ms cubic-bezier(.4,0,.2,1), padding 320ms cubic-bezier(.4,0,.2,1), gap 320ms cubic-bezier(.4,0,.2,1)',
+        transition: 'height 320ms cubic-bezier(.4,0,.2,1), padding 320ms cubic-bezier(.4,0,.2,1), gap 320ms cubic-bezier(.4,0,.2,1)',
       }}>
-        {/* Tabs (dominios o cliente) */}
-        <div style={{ flex: 1, display: 'flex', gap: 4, overflowX: 'auto', scrollbarWidth: 'none' }} className="ms-hide">
-          {cliMode ? (
-            CLIENTE_TABS_ORDER
-              .filter((t) => {
-                const p = CLIENTES[clienteActivo]?.pestanas?.find((x) => x.id === t.id);
-                return p && !p.disabled && puedeVerPestanaCliente(perfilUsuario, clienteActivo, t.id);
-              })
-              .map((t) => (
-                <TabPill key={t.id}
-                  active={activeCliTab === t.id}
-                  onClick={() => onNavegar(clienteActivo, t.id)}
-                  theme={theme} label={t.label} Icon={t.Icon} iconOnly
-                  shrunk={shrunk}
-                />
-              ))
-          ) : (
-            <>
-              <TabPill
-                active={paginaActiva === 'resumenClientes'}
-                onClick={() => onNavegar(null, 'resumenClientes')}
-                theme={theme} label={INICIO_TAB.label} Icon={INICIO_TAB.Icon}
-                shrunk={shrunk}
+        {/* Tabs uniformes (dominios o cliente) — todas mismo tamaño */}
+        {cliMode ? (
+          CLIENTE_TABS_ORDER
+            .filter((t) => {
+              const p = CLIENTES[clienteActivo]?.pestanas?.find((x) => x.id === t.id);
+              return p && !p.disabled && puedeVerPestanaCliente(perfilUsuario, clienteActivo, t.id);
+            })
+            .map((t) => (
+              <TabPill key={t.id}
+                active={activeCliTab === t.id}
+                onClick={() => onNavegar(clienteActivo, t.id)}
+                theme={theme} label={t.label} Icon={t.Icon} shrunk={shrunk}
               />
-              {DOMINIOS.map((d) => (
-                <TabPill key={d.id}
-                  active={activeDom === d.id || openSheet === d.id}
-                  onClick={() => setOpenSheet(openSheet === d.id ? null : d.id)}
-                  theme={theme} label={d.label} Icon={d.Icon}
-                  shrunk={shrunk}
-                />
-              ))}
-            </>
-          )}
-        </div>
+            ))
+        ) : (
+          <>
+            <TabPill
+              active={paginaActiva === 'resumenClientes'}
+              onClick={() => onNavegar(null, 'resumenClientes')}
+              theme={theme} label={INICIO_TAB.label} Icon={INICIO_TAB.Icon} shrunk={shrunk}
+            />
+            {DOMINIOS.map((d) => (
+              <TabPill key={d.id}
+                active={activeDom === d.id || openSheet === d.id}
+                onClick={() => setOpenSheet(openSheet === d.id ? null : d.id)}
+                theme={theme} label={d.label} Icon={d.Icon} shrunk={shrunk}
+              />
+            ))}
+          </>
+        )}
 
-        {/* Ferruteck mini pill */}
+        {/* Separador visual */}
+        <div style={{
+          width: 1, height: shrunk ? 22 : 26, background: theme.border,
+          margin: '0 2px', flex: '0 0 auto',
+          transition: 'height 320ms cubic-bezier(.4,0,.2,1)',
+        }} />
+
+        {/* Ferruteck · fantasmita real con cosmic bg (idéntico al web) */}
         <button
           onClick={() => setOpenSheet('ferruteck')}
           aria-label="Ferruteck"
           style={{
-            width: shrunk ? 36 : 44, height: shrunk ? 36 : 44,
-            borderRadius: shrunk ? 18 : 22,
-            background: 'linear-gradient(135deg, #FF2D55, #FF9500)',
-            color: '#fff', border: 'none', cursor: 'pointer',
-            display: 'grid', placeItems: 'center',
-            boxShadow: '0 6px 14px rgba(255,45,85,.35)',
-            flex: '0 0 auto', position: 'relative',
+            width: shrunk ? 36 : 46, height: shrunk ? 36 : 46,
+            borderRadius: '50%',
+            background: `radial-gradient(circle at 20% 30%, rgba(191,90,242,0.35) 0%, transparent 55%), radial-gradient(circle at 80% 70%, rgba(100,210,255,0.25) 0%, transparent 55%), linear-gradient(180deg, #1e1e2e 0%, #0d0d19 100%)`,
+            border: '1px solid rgba(255,255,255,0.10)',
+            cursor: 'pointer', display: 'grid', placeItems: 'center',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)',
+            flex: '0 0 auto', position: 'relative', padding: 0,
             transition: 'transform 160ms cubic-bezier(.4,0,.2,1), width 320ms cubic-bezier(.4,0,.2,1), height 320ms cubic-bezier(.4,0,.2,1)',
           }}
           onPointerDown={(e) => e.currentTarget.style.transform = 'scale(.9)'}
           onPointerUp={(e) => e.currentTarget.style.transform = ''}
           onPointerLeave={(e) => e.currentTarget.style.transform = ''}
         >
-          <Sparkles size={shrunk ? 15 : 18} strokeWidth={2} />
+          <FerrutekMini size={shrunk ? 20 : 26} />
           {!shrunk && (
             <span style={{
-              position: 'absolute', top: -3, right: -3,
+              position: 'absolute', top: -2, right: -2,
               minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8,
-              background: '#000', color: '#fff', fontSize: 9.5, fontWeight: 800,
+              background: '#FF375F', color: '#fff', fontSize: 9.5, fontWeight: 800,
               display: 'grid', placeItems: 'center',
-              border: `1.5px solid ${chromeSurface.replace(/[\d.]+\)$/, '1)')}`,
+              border: `1.5px solid ${isDark ? '#000' : '#fff'}`,
             }}>3</span>
           )}
         </button>
@@ -438,39 +465,30 @@ export default function MobileShell({
 }
 
 // ─────────────── Sub-componentes ───────────────
-function TabPill({ active, onClick, theme, label, Icon, iconOnly, shrunk }) {
+function TabPill({ active, onClick, theme, label, Icon, shrunk }) {
   const [pressed, setPressed] = useState(false);
-  // Shrunk = solo icono compacto (nunca desaparece)
-  const compact = shrunk;
+  // Instagram-style: siempre solo icono, cambia tamaño con shrink
+  const size = shrunk ? 36 : 46;
+  const iconSize = shrunk ? 18 : 22;
   return (
     <button
       onClick={onClick}
       aria-label={label}
+      title={label}
       style={{
-        flex: compact ? '0 0 auto' : '1 0 auto', minWidth: 0,
+        width: size, height: size, borderRadius: '50%',
         background: active ? theme.text : 'transparent',
         color: active ? theme.bg : theme.textMuted,
         border: 'none', cursor: 'pointer',
-        borderRadius: compact ? 18 : 22,
-        padding: compact ? '6px' : (iconOnly ? '6px 8px' : '9px 12px'),
-        width: compact ? 36 : 'auto', height: compact ? 36 : 'auto',
-        display: 'inline-flex',
-        flexDirection: (iconOnly && !compact) ? 'column' : 'row',
-        alignItems: 'center', justifyContent: 'center',
-        gap: compact ? 0 : (iconOnly ? 2 : 0),
-        fontFamily: TYPO.fontText,
-        fontSize: compact ? 0 : (iconOnly ? 9.5 : 12.5),
-        fontWeight: active ? 700 : 600, letterSpacing: '-.005em',
-        whiteSpace: 'nowrap',
-        transition: 'background 200ms cubic-bezier(.4,0,.2,1), color 200ms, transform 140ms, padding 320ms, width 320ms, height 320ms, font-size 200ms',
-        transform: pressed ? 'scale(.94)' : 'scale(1)',
+        display: 'grid', placeItems: 'center', padding: 0, flex: '0 0 auto',
+        transition: 'background 200ms cubic-bezier(.4,0,.2,1), color 200ms, transform 140ms, width 320ms cubic-bezier(.4,0,.2,1), height 320ms cubic-bezier(.4,0,.2,1)',
+        transform: pressed ? 'scale(.9)' : 'scale(1)',
       }}
       onPointerDown={() => setPressed(true)}
       onPointerUp={() => setPressed(false)}
       onPointerLeave={() => setPressed(false)}
     >
-      {Icon && <Icon size={compact ? 18 : (iconOnly ? 18 : 14)} strokeWidth={active ? 2.4 : 2} style={{ marginRight: (compact || iconOnly) ? 0 : 6 }} />}
-      {!compact && label}
+      {Icon && <Icon size={iconSize} strokeWidth={active ? 2.4 : 2} />}
     </button>
   );
 }
