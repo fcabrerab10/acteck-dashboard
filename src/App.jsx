@@ -47,6 +47,7 @@ import MobileEquipo from './components/MobileEquipo';
 import MobileYo from './components/MobileYo';
 import MobileSellIn from './components/MobileSellIn';
 import MobileSellOut from './components/MobileSellOut';
+import MobileCartera from './components/MobileCartera';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -609,9 +610,11 @@ export default function App() {
                   : <SellInCliente clienteKey={clienteActivo} />
         )}
         {paginaActiva === "cartera" && (
-          (clienteActivo === 'digitalife' || clienteActivo === 'dicotech' || clienteActivo === 'pcel')
-            ? <CreditoCobranzaV2 cliente={c?.nombre || clienteActivo} clienteKey={clienteActivo} />
-            : <CreditoCobranza cliente={c} clienteKey={clienteActivo} />
+          mobile
+            ? <MobileCartera clienteKey={clienteActivo} onBack={() => setPaginaActiva('home')} onNavegar={handleNavegar} />
+            : (clienteActivo === 'digitalife' || clienteActivo === 'dicotech' || clienteActivo === 'pcel')
+              ? <CreditoCobranzaV2 cliente={c?.nombre || clienteActivo} clienteKey={clienteActivo} />
+              : <CreditoCobranza cliente={c} clienteKey={clienteActivo} />
         )}
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
