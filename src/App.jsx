@@ -49,6 +49,7 @@ import MobileSellIn from './components/MobileSellIn';
 import MobileSellOut from './components/MobileSellOut';
 import MobileCartera from './components/MobileCartera';
 import MobileMarketing from './components/MobileMarketing';
+import MobileHomeCliente from './components/MobileHomeCliente';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -591,12 +592,14 @@ export default function App() {
         ) : (
           <>
         {paginaActiva === "home" && (
-          clienteActivo === 'digitalife'
-            ? <HomeDigitalife cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
-            : clienteActivo === 'dicotech'
-              ? <HomeDicotech cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
-              : clienteActivo === 'pcel'
-                ? <HomePcel cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
+          mobile
+            ? <MobileHomeCliente clienteKey={clienteActivo} onBack={() => { setClienteActivo(null); setPaginaActiva('resumenClientes'); }} onNavegar={handleNavegar} />
+            : clienteActivo === 'digitalife'
+              ? <HomeDigitalife cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
+              : clienteActivo === 'dicotech'
+                ? <HomeDicotech cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
+                : clienteActivo === 'pcel'
+                  ? <HomePcel cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
                 : <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
         )}
         {clienteActivo && paginaActiva === "sellIn"  && (
