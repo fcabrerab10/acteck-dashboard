@@ -51,6 +51,7 @@ import MobileCartera from './components/MobileCartera';
 import MobileMarketing from './components/MobileMarketing';
 import MobileHomeCliente from './components/MobileHomeCliente';
 import MobileBuscar from './components/MobileBuscar';
+import MobileEdR from './components/MobileEdR';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -505,7 +506,9 @@ export default function App() {
           )}
           {paginaActiva === "estadoResultados" && (
             puedeVerPestanaGlobal(perfil, "estado_resultados")
-              ? <EstadoResultados />
+              ? (mobile
+                  ? <MobileEdR onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
+                  : <EstadoResultados />)
               : <SinAcceso motivo="No tienes acceso a Estado de Resultados." />
           )}
           {paginaActiva === "visionGeneral" && (
