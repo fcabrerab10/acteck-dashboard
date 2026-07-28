@@ -206,6 +206,18 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
     const mtdPiezasPrev = mensualPorAnio.piezas[anioPrev][mesActual - 1] || 0;
     const yoyMtd = mtdPrev > 0 ? ((mtdMonto - mtdPrev) / mtdPrev * 100) : null;
 
+    // Proyectado: si el mes actual está en curso, escalamos el MTD al mes completo
+    // para que el YoY no se vea castigado por comparar un mes parcial vs un mes completo.
+    const hoy = new Date();
+    const esMesEnCurso = anio === hoy.getFullYear() && mesActual === (hoy.getMonth() + 1);
+    const diasDelMes = new Date(anio, mesActual, 0).getDate();
+    const diasTranscurridos = esMesEnCurso ? hoy.getDate() : diasDelMes;
+    const factorProy = diasTranscurridos > 0 ? diasDelMes / diasTranscurridos : 1;
+    const mtdMontoProy = mtdMonto * factorProy;
+    const yoyMtdProy = mtdPrev > 0 ? ((mtdMontoProy - mtdPrev) / mtdPrev * 100) : null;
+    const esProyectado = factorProy > 1.05 && mtdMonto > 0;
+    const yoyMtdDisplay = esProyectado ? yoyMtdProy : yoyMtd;
+
     let ytdMonto = 0, ytdPiezas = 0, ytdTx = 0, ytdMontoPrev = 0;
     for (let i = 0; i < mesActual; i++) {
       ytdMonto += mensualPorAnio.monto[anio][i];
@@ -235,6 +247,8 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
     return {
       mtdMonto, mtdPiezas, mtdTx, mtdClientes,
       mtdPrev, mtdPiezasPrev, yoyMtd,
+      mtdMontoProy, yoyMtdProy, esProyectado, yoyMtdDisplay,
+      diasDelMes, diasTranscurridos, factorProy,
       ytdMonto, ytdPiezas, ytdTx, ytdMontoPrev, yoyYtd,
       momPrev, momPct, momPrevTx, momPrevClientes,
       ticketMtd, ticketPrev, ticketMomPct,
@@ -313,6 +327,20 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
     }
     return m;
   }, [inventarioCliente]);
+
+  // Totales de inventario en cliente — para KPI card "Inventario en Dicotech"
+  const invTotales = useMemo(() => {
+    let piezas = 0, valor = 0, skus = 0, sinVentaCritico = 0;
+    for (const [, v] of inventarioMap) {
+      if (v.stock > 0) {
+        piezas += v.stock;
+        valor += v.valor;
+        skus++;
+        if (v.dias_sin_venta != null && v.dias_sin_venta >= 60) sinVentaCritico++;
+      }
+    }
+    return { piezas, valor, skus, sinVentaCritico };
+  }, [inventarioMap]);
 
   const skusConInventario = useMemo(() => {
     const s = new Set();
@@ -668,15 +696,22 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
       {/* KPI cards — MTD, YTD, Ticket promedio (NUEVO), Clientes activos (NUEVO) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
         <KpiCard theme={theme} P={P}
-          eyebrow={`MTD · ${MESES[mesActual - 1]}`}
-          badge={kpis.yoyMtd != null ? { l: `${kpis.yoyMtd >= 0 ? '+' : ''}${Math.round(kpis.yoyMtd)}% YoY`, tone: kpis.yoyMtd >= 0 ? 'good' : 'warn' } : null}
+          eyebrow={`MTD · ${MESES[mesActual - 1]}${kpis.esProyectado ? ` · ${kpis.diasTranscurridos}/${kpis.diasDelMes}d` : ''}`}
+          badge={kpis.yoyMtdDisplay != null ? { l: `${kpis.yoyMtdDisplay >= 0 ? '+' : ''}${Math.round(kpis.yoyMtdDisplay)}% YoY${kpis.esProyectado ? ' proy.' : ''}`, tone: kpis.yoyMtdDisplay >= 0 ? 'good' : 'warn' } : null}
           title="Sell Out del mes"
           big={fmt.money(kpis.mtdMonto)}
           bigColor={P.teal}
           bigSmall={kpis.mtdTx > 0 ? `${fmt.int(kpis.mtdTx)} tx` : `${fmt.int(kpis.mtdPiezas)} pz`}
           sub={<>
-            {kpis.mtdPrev > 0 ? <><strong style={{ color: (kpis.yoyMtd || 0) >= 0 ? P.green : P.red, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{(kpis.yoyMtd || 0) >= 0 ? '+' : ''}{fmt.money(kpis.mtdMonto - kpis.mtdPrev)}</strong> vs {MESES[mesActual - 1]} {anioPrev}</> : `vs ${anioPrev} sin datos`}
-            {kpis.momPct != null && <> · <strong style={{ color: kpis.momPct >= 0 ? P.green : P.red, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{kpis.momPct >= 0 ? '+' : ''}{kpis.momPct.toFixed(1)}%</strong> MoM</>}
+            {kpis.esProyectado ? (
+              <>Proyección mes completo: <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(kpis.mtdMontoProy)}</strong>
+                {kpis.mtdPrev > 0 && <> vs {fmt.money(kpis.mtdPrev)} en {MESES[mesActual - 1]} {anioPrev}</>}
+              </>
+            ) : (
+              <>{kpis.mtdPrev > 0 ? <><strong style={{ color: (kpis.yoyMtd || 0) >= 0 ? P.green : P.red, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{(kpis.yoyMtd || 0) >= 0 ? '+' : ''}{fmt.money(kpis.mtdMonto - kpis.mtdPrev)}</strong> vs {MESES[mesActual - 1]} {anioPrev}</> : `vs ${anioPrev} sin datos`}
+                {kpis.momPct != null && <> · <strong style={{ color: kpis.momPct >= 0 ? P.green : P.red, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{kpis.momPct >= 0 ? '+' : ''}{kpis.momPct.toFixed(1)}%</strong> MoM</>}
+              </>
+            )}
           </>}
         />
         <KpiCard theme={theme} P={P}
@@ -711,6 +746,22 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
           sub={<>
             {kpis.momPrevClientes > 0 && <>{fmt.int(kpis.momPrevClientes)} en {MESES_LARGO[mesActual - 2] || MESES_LARGO[11]}</>}
             {kpis.frecuencia != null && <> · Frecuencia <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{kpis.frecuencia.toFixed(2)}</strong> tx/cliente</>}
+          </>}
+        />
+        {/* KPI NUEVO: Inventario en Dicotech */}
+        <KpiCard theme={theme} P={P}
+          eyebrow="Inventario en Dicotech"
+          badge={invTotales.sinVentaCritico > 0 ? { l: `${invTotales.sinVentaCritico} sin venta ≥60d`, tone: 'warn' } : { l: 'nuevo', tone: 'new' }}
+          title="Stock del cliente"
+          big={fmt.int(invTotales.piezas)}
+          bigColor={P.orange}
+          bigSmall="pz"
+          sub={<>
+            {invTotales.valor > 0 && <><strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(invTotales.valor)}</strong> valor</>}
+            {invTotales.skus > 0 && <> · {fmt.int(invTotales.skus)} SKUs</>}
+            {kpis.mtdTx > 0 && invTotales.piezas > 0 && (
+              <> · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{(invTotales.piezas / (kpis.mtdPiezas > 0 ? kpis.mtdPiezas : 1)).toFixed(1)}×</strong> meses de venta</>
+            )}
           </>}
         />
       </div>
