@@ -48,6 +48,7 @@ import MobileYo from './components/MobileYo';
 import MobileSellIn from './components/MobileSellIn';
 import MobileSellOut from './components/MobileSellOut';
 import MobileCartera from './components/MobileCartera';
+import MobileMarketing from './components/MobileMarketing';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -629,9 +630,13 @@ export default function App() {
                       ? <SellOutPcel clienteKey={clienteActivo} />
                       : <EstrategiaProducto cliente={c.nombre} clienteKey={clienteActivo} />
             )}
-        {paginaActiva === "marketing" && React.createElement(
-          (clienteActivo === 'digitalife' || clienteActivo === 'dicotech' || clienteActivo === 'pcel') ? MarketingClienteV2 : MarketingCliente,
-          { cliente: clienteActivo, clienteKey: clienteActivo }
+        {paginaActiva === "marketing" && (
+          mobile
+            ? <MobileMarketing clienteKey={clienteActivo} onBack={() => setPaginaActiva('home')} onNavegar={handleNavegar} />
+            : React.createElement(
+                (clienteActivo === 'digitalife' || clienteActivo === 'dicotech' || clienteActivo === 'pcel') ? MarketingClienteV2 : MarketingCliente,
+                { cliente: clienteActivo, clienteKey: clienteActivo }
+              )
         )}
                     {paginaActiva === "forecast" && React.createElement(ForecastCliente, { cliente: c.nombre, clienteKey: clienteActivo })}
           </>
