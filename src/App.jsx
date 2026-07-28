@@ -52,6 +52,7 @@ import MobileMarketing from './components/MobileMarketing';
 import MobileHomeCliente from './components/MobileHomeCliente';
 import MobileBuscar from './components/MobileBuscar';
 import MobileEdR from './components/MobileEdR';
+import MobileVisionGeneral from './components/MobileVisionGeneral';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -513,7 +514,9 @@ export default function App() {
           )}
           {paginaActiva === "visionGeneral" && (
             puedeVerPestanaGlobal(perfil, "vision_general")
-              ? <VisionGeneral />
+              ? (mobile
+                  ? <MobileVisionGeneral onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
+                  : <VisionGeneral />)
               : <SinAcceso motivo="No tienes acceso a Visión General." />
           )}
           {paginaActiva === "analisisClientes" && (
