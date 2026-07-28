@@ -54,33 +54,36 @@ export default function MobileHomeCliente({ clienteKey, onBack, onNavegar }) {
       setLoading(true);
       try {
         const view = `v_sellout_${clienteKey}_mensual`;
+        const safeQuery = async (q) => {
+          try { const r = await q; return r.data || []; } catch { return []; }
+        };
         const [fact, ct, so, ec, mkt] = await Promise.all([
-          supabase.from('facturacion_clientes').select('mes,monto').eq('cliente_key', clienteKey).eq('anio', anio),
-          supabase.from('cuotas_mensuales').select('mes,cuota_min,cuota_ideal').eq('cliente', clienteKey).eq('anio', anio),
-          supabase.from(view).select('mes,monto').eq('anio', anio).catch(() => ({ data: [] })),
-          supabase.from('estados_cuenta').select('id,fecha_corte,saldo_actual,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: false }).limit(1),
-          supabase.from('marketing_actividades').select('inversion,estatus,fecha,mes').eq('cliente', clienteKey).eq('anio', anio),
+          safeQuery(supabase.from('facturacion_clientes').select('mes,monto').eq('cliente_key', clienteKey).eq('anio', anio)),
+          safeQuery(supabase.from('cuotas_mensuales').select('mes,cuota_min,cuota_ideal').eq('cliente', clienteKey).eq('anio', anio)),
+          safeQuery(supabase.from(view).select('mes,monto').eq('anio', anio)),
+          safeQuery(supabase.from('estados_cuenta').select('id,fecha_corte,saldo_actual,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: false }).limit(1)),
+          safeQuery(supabase.from('marketing_actividades').select('inversion,estatus,fecha,mes').eq('cliente', clienteKey).eq('anio', anio)),
         ]);
         if (!alive) return;
 
         // Sell In mes actual + previo
         const facturaPorMes = Array(13).fill(0);
-        (fact.data || []).forEach(r => { const m = Number(r.mes); if (m >= 1 && m <= 12) facturaPorMes[m] += Number(r.monto) || 0; });
+        fact.forEach(r => { const m = Number(r.mes); if (m >= 1 && m <= 12) facturaPorMes[m] += Number(r.monto) || 0; });
         setSellIn(facturaPorMes[mesActual]);
         setSellInPrev(mesActual > 1 ? facturaPorMes[mesActual - 1] : 0);
 
         // Cuota mes actual
-        const cuotaMes = (ct.data || []).find(r => Number(r.mes) === mesActual);
+        const cuotaMes = ct.find(r => Number(r.mes) === mesActual);
         setCuota(Number(cuotaMes?.cuota_min || cuotaMes?.cuota_ideal || 0));
 
         // Sell Out mes actual + previo
         const soPorMes = Array(13).fill(0);
-        (so.data || []).forEach(r => { const m = Number(r.mes); if (m >= 1 && m <= 12) soPorMes[m] += Number(r.monto) || 0; });
+        so.forEach(r => { const m = Number(r.mes); if (m >= 1 && m <= 12) soPorMes[m] += Number(r.monto) || 0; });
         setSellOut(soPorMes[mesActual]);
         setSellOutPrev(mesActual > 1 ? soPorMes[mesActual - 1] : 0);
 
         // Cartera del último corte
-        const est = ec.data?.[0];
+        const est = ec?.[0];
         if (est?.id) {
           setCartera(Number(est.saldo_actual) || 0);
           if (est.dso != null) setDso(Math.round(Number(est.dso)));
@@ -105,7 +108,7 @@ export default function MobileHomeCliente({ clienteKey, onBack, onNavegar }) {
           if (a.fecha) { const [, m] = a.fecha.split('-').map(Number); return m; }
           return Number(a.mes) || 0;
         };
-        const actMes = (mkt.data || []).filter(a => parseMes(a) === mesActual);
+        const actMes = mkt.filter(a => parseMes(a) === mesActual);
         setMktCount(actMes.length);
         setMktInv(actMes.reduce((s, a) => s + (Number(a.inversion) || 0), 0));
       } finally {
