@@ -164,8 +164,8 @@ export default function MobileShell({
   const clienteLabel = clienteActivo ? (CLIENTES[clienteActivo]?.label || clienteActivo) : 'Global';
   const dotColor = clienteActivo ? (CLIENTE_DOT[clienteActivo] || theme.accent) : theme.textMuted;
 
-  const iniciales = (perfilUsuario?.nombre || perfilUsuario?.email || 'FC')
-    .split(/\s+|@/)[0].slice(0, 2).toUpperCase();
+  // Iniciales: primera letra de cada palabra del nombre (2 letras)
+  const iniciales = ((perfilUsuario?.nombre || perfilUsuario?.email || '').split(/\s+|@/).filter(Boolean).map(s => s[0]).slice(0, 2).join('').toUpperCase()) || 'FC';
 
   const cliMode = !!clienteActivo && paginaActiva !== 'resumenClientes' && vistaActual !== 'configuracion';
 
@@ -204,54 +204,50 @@ export default function MobileShell({
           height: MOBILE_SHELL_TOP_HEIGHT, padding: '0 14px',
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
-          {/* Search icon */}
+          {/* Search bar inline — ocupa casi todo el ancho */}
           <button
             onClick={() => onNavegar(null, 'buscar')}
             aria-label="Buscar"
             style={{
-              width: 40, height: 40, borderRadius: 20,
-              background: theme.surface, border: `1px solid ${theme.border}`,
-              display: 'grid', placeItems: 'center', color: theme.text,
-              cursor: 'pointer', flex: '0 0 auto',
+              flex: 1, minWidth: 0, height: 40,
+              padding: '0 14px', borderRadius: 20,
+              background: theme.mode === 'dark' ? 'rgba(120,120,128,.24)' : 'rgba(120,120,128,.16)',
+              border: 'none', color: theme.textMuted, cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              fontFamily: TYPO.fontText, fontSize: 14, fontWeight: 500,
+              textAlign: 'left',
               transition: 'transform 160ms cubic-bezier(.4,0,.2,1)',
             }}
-            onPointerDown={(e) => e.currentTarget.style.transform = 'scale(.94)'}
+            onPointerDown={(e) => e.currentTarget.style.transform = 'scale(.985)'}
             onPointerUp={(e) => e.currentTarget.style.transform = ''}
             onPointerLeave={(e) => e.currentTarget.style.transform = ''}
           >
-            <Search size={16} strokeWidth={2} />
+            <Search size={16} strokeWidth={2} style={{ color: theme.textMuted, flex: '0 0 auto' }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {clienteActivo
+                ? `Buscar en ${clienteLabel}…`
+                : 'Buscar SKU, propuesta, minuta…'}
+            </span>
           </button>
 
-          {/* Centro: cliente pill (solo si hay cliente activo) o título Dashboard */}
-          {clienteActivo ? (
+          {/* Cliente pill compacta · SOLO si hay cliente activo · para cambiar */}
+          {clienteActivo && (
             <button
               onClick={() => setOpenSheet('switcher')}
+              aria-label={`Cambiar cliente · ${clienteLabel}`}
               style={{
-                flex: 1, minWidth: 0,
-                display: 'inline-flex', alignItems: 'center', gap: 10,
-                padding: '10px 18px', borderRadius: 999,
+                width: 40, height: 40, borderRadius: 20,
                 background: theme.surface, border: `1px solid ${theme.border}`,
-                color: theme.text, cursor: 'pointer',
-                fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600,
-                letterSpacing: '-.01em',
-                justifyContent: 'center',
+                display: 'grid', placeItems: 'center', cursor: 'pointer',
+                flex: '0 0 auto', position: 'relative',
                 transition: 'transform 160ms cubic-bezier(.4,0,.2,1)',
               }}
-              onPointerDown={(e) => e.currentTarget.style.transform = 'scale(.97)'}
+              onPointerDown={(e) => e.currentTarget.style.transform = 'scale(.94)'}
               onPointerUp={(e) => e.currentTarget.style.transform = ''}
               onPointerLeave={(e) => e.currentTarget.style.transform = ''}
             >
-              <span style={{ width: 9, height: 9, borderRadius: '50%', background: dotColor, flex: '0 0 auto' }} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clienteLabel}</span>
-              <ChevronDown size={15} strokeWidth={2.2} style={{ color: theme.textMuted, flex: '0 0 auto' }} />
+              <span style={{ width: 12, height: 12, borderRadius: '50%', background: dotColor }} />
             </button>
-          ) : (
-            <div style={{
-              flex: 1, textAlign: 'center', minWidth: 0,
-              fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 700,
-              letterSpacing: '-.02em', color: theme.text,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>Dashboard</div>
           )}
 
           {/* Avatar → sheet Yo */}

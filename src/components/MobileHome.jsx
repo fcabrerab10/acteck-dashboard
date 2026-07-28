@@ -124,24 +124,24 @@ export default function MobileHome({ perfil, onNavegar }) {
         }}>Resumen</h1>
       </div>
 
-      {/* Segmented Negocio / Clientes */}
+      {/* Segmented Negocio / Clientes · full pill */}
       <div style={{
-        margin: '8px 18px 12px', padding: 3,
+        margin: '8px 18px 12px', padding: 4,
         background: isDark ? 'rgba(120,120,128,.24)' : 'rgba(120,120,128,.16)',
-        borderRadius: 10,
-        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3,
+        borderRadius: 999,
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4,
       }}>
         {['negocio', 'clientes'].map((m) => (
           <button key={m}
             onClick={() => setMode(m)}
             style={{
-              padding: '8px 10px', borderRadius: 8, border: 'none',
+              padding: '10px 16px', borderRadius: 999, border: 'none',
               background: mode === m ? theme.surface : 'transparent',
               color: mode === m ? theme.text : theme.textMuted,
-              fontFamily: TYPO.fontText, fontSize: 13, fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: mode === m ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
-              transition: 'background 160ms, color 160ms',
+              fontFamily: TYPO.fontText, fontSize: 13.5, fontWeight: 600,
+              letterSpacing: '-.005em', cursor: 'pointer',
+              boxShadow: mode === m ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+              transition: 'background 240ms cubic-bezier(.32,.72,0,1), color 240ms',
             }}
           >{m === 'negocio' ? 'Negocio' : 'Mis Clientes'}</button>
         ))}
@@ -155,8 +155,8 @@ export default function MobileHome({ perfil, onNavegar }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: theme.textMuted }}>
             {mode === 'negocio'
-              ? `Cierre ${MES_FULL[MES_ACTUAL.mes - 1]} · consolidado`
-              : `${Object.keys(CLIENTES).filter(k => CLIENTES[k].activo).length} clientes · ${MES_FULL[MES_ACTUAL.mes - 1]}`}
+              ? `${MES_FULL[mesData - 1]} · consolidado`
+              : `${Object.keys(CLIENTES).filter(k => CLIENTES[k].activo).length} clientes · ${MES_FULL[mesData - 1]}`}
           </div>
           <button
             onClick={() => onNavegar(null, mode === 'negocio' ? 'estadoResultados' : 'analisisClientes')}
@@ -166,10 +166,12 @@ export default function MobileHome({ perfil, onNavegar }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Metric theme={theme} label={mode === 'negocio' ? 'Facturación' : 'Cuota total'}
             value={mode === 'negocio' ? formatMXN(totales.facturado) : `${totales.pct}%`}
-            delta="+9% YoY" positive />
+            delta={totales.facturado > 0 ? `de ${formatMXN(totales.cuota)}` : 'sin data del mes'}
+            positive={totales.pct >= 100} />
           <Metric theme={theme} label={mode === 'negocio' ? 'Gap' : 'Gap consolidado'}
             value={formatMXN(totales.gap)}
-            delta={`${diasRestantes}d restantes`} positive={false} />
+            delta={totales.gap > 0 ? `${diasRestantes}d restantes` : '✓ cumplido'}
+            positive={totales.gap === 0} />
         </div>
       </div>
 
@@ -261,16 +263,16 @@ function GruposNegocio({ theme, isDark, onNavegar, totales, pendCount }) {
   const toggle = (k) => setExpanded((s) => ({ ...s, [k]: !s[k] }));
 
   const dgral = [
-    { id: 'estadoResultados', label: 'Estado de Resultados', valor: formatMXN(totales.facturado || 0) },
+    { id: 'estadoResultados', label: 'Estado de Resultados', valor: 'Ver P&L' },
   ];
   const dcom = [
-    { id: 'visionGeneral',    label: 'Visión General',      valor: '+12% vs mes anterior', positive: true },
+    { id: 'visionGeneral',    label: 'Visión General',      valor: 'Ver detalle' },
     { id: 'analisisClientes', label: 'Análisis por Cliente', valor: '3 activos' },
-    { id: 'sellIn',           label: 'Sell In',             valor: formatMXN(totales.facturado || 0), positive: true },
+    { id: 'sellIn',           label: 'Sell In',             valor: totales.facturado > 0 ? formatMXN(totales.facturado) : 'Ver detalle', positive: totales.facturado > 0 },
     { id: 'sellOut',          label: 'Sell Out',            valor: 'Ver detalle' },
     { id: 'inventarioGlobal', label: 'Inventario',          valor: 'Ver detalle' },
     { id: 'cobranzaGlobal',   label: 'Cobranza',            valor: 'Ver detalle' },
-    { id: 'forecastClientes', label: 'S&OP',                valor: 'Q3 forecast' },
+    { id: 'forecastClientes', label: 'S&OP',                valor: 'Ver forecast' },
   ];
 
   return (
