@@ -17,7 +17,7 @@ import {
   Home, ShoppingCart, ShoppingBag, Megaphone, Wallet, CreditCard,
   Activity, PieChart, Boxes, HandCoins, Target,
   BarChart3, ClipboardList, TrendingUp, FileCheck, Building2, Users, Calendar,
-  Calculator, ChevronDown, ChevronRight, Check, Search, LogOut,
+  Calculator, ChevronDown, ChevronRight, Check, Search, LogOut, ArrowLeft,
 } from 'lucide-react';
 
 // Mini fantasmita de Ferruteck — mismo diseño del Topbar web (versión compacta)
@@ -87,21 +87,18 @@ const DOMINIOS = [
         ],
       },
       { title: 'Clientes', expandableClientes: true },
-      {
-        title: 'Administración',
-        items: [
-          { id: 'adminInterna', label: 'Pendientes & Calendario', Icon: Calendar, permiso: 'admin_interna' },
-          { id: 'telemetria',   label: 'Actividad del equipo',    Icon: Users, permiso: '__super_admin_only__' },
-        ],
-      },
     ],
   },
   {
-    id: 'axon', label: 'Axon', color: '#FF375F', Icon: Building2,
+    id: 'admin', label: 'Admin', color: '#5AC8FA', Icon: Calendar,
     items: [
-      { id: 'axonMexico', label: 'Axon de México', Icon: Building2, permiso: 'axon_mexico' },
+      { id: 'adminInterna', label: 'Pendientes & Calendario', Icon: Calendar, permiso: 'admin_interna' },
+      { id: 'telemetria',   label: 'Actividad del equipo',    Icon: Users, permiso: '__super_admin_only__' },
     ],
   },
+  // Axon oculto — se puede reactivar aquí cuando se use:
+  // { id: 'axon', label: 'Axon', color: '#FF375F', Icon: Building2,
+  //   items: [{ id: 'axonMexico', label: 'Axon de México', Icon: Building2, permiso: 'axon_mexico' }] },
 ];
 
 // Inicio · pill primaria antes de los dominios (equivale a Resumen de Clientes)
@@ -287,29 +284,38 @@ export default function MobileShell({
         backdropFilter: 'saturate(180%) blur(28px)',
         WebkitBackdropFilter: 'saturate(180%) blur(28px)',
         border: `1px solid ${theme.border}`,
-        borderRadius: 999, // pill fully round
+        borderRadius: 999,
         padding: shrunk ? '5px 8px' : '6px 8px',
         display: 'flex', alignItems: 'center', gap: shrunk ? 3 : 4,
         zIndex: 39,
         boxShadow: isDark
           ? '0 20px 40px rgba(0,0,0,.5), 0 0 0 .5px rgba(255,255,255,.04)'
           : '0 10px 30px rgba(0,0,0,.10)',
-        transition: 'height 320ms cubic-bezier(.4,0,.2,1), padding 320ms cubic-bezier(.4,0,.2,1), gap 320ms cubic-bezier(.4,0,.2,1)',
+        transition: 'height 420ms cubic-bezier(.32,.72,0,1), padding 420ms cubic-bezier(.32,.72,0,1), gap 420ms cubic-bezier(.32,.72,0,1)',
       }}>
         {/* Tabs uniformes (dominios o cliente) — todas mismo tamaño */}
         {cliMode ? (
-          CLIENTE_TABS_ORDER
-            .filter((t) => {
-              const p = CLIENTES[clienteActivo]?.pestanas?.find((x) => x.id === t.id);
-              return p && !p.disabled && puedeVerPestanaCliente(perfilUsuario, clienteActivo, t.id);
-            })
-            .map((t) => (
-              <TabPill key={t.id}
-                active={activeCliTab === t.id}
-                onClick={() => onNavegar(clienteActivo, t.id)}
-                theme={theme} label={t.label} Icon={t.Icon} shrunk={shrunk}
-              />
-            ))
+          <>
+            {/* Volver a Resumen */}
+            <TabPill
+              active={false}
+              onClick={() => onNavegar(null, 'resumenClientes')}
+              theme={theme} label="Volver a Resumen" Icon={ArrowLeft} shrunk={shrunk}
+              backButton
+            />
+            {CLIENTE_TABS_ORDER
+              .filter((t) => {
+                const p = CLIENTES[clienteActivo]?.pestanas?.find((x) => x.id === t.id);
+                return p && !p.disabled && puedeVerPestanaCliente(perfilUsuario, clienteActivo, t.id);
+              })
+              .map((t) => (
+                <TabPill key={t.id}
+                  active={activeCliTab === t.id}
+                  onClick={() => onNavegar(clienteActivo, t.id)}
+                  theme={theme} label={t.label} Icon={t.Icon} shrunk={shrunk}
+                />
+              ))}
+          </>
         ) : (
           <>
             <TabPill
@@ -331,7 +337,7 @@ export default function MobileShell({
         <div style={{
           width: 1, height: shrunk ? 22 : 26, background: theme.border,
           margin: '0 2px', flex: '0 0 auto',
-          transition: 'height 320ms cubic-bezier(.4,0,.2,1)',
+          transition: 'height 420ms cubic-bezier(.32,.72,0,1)',
         }} />
 
         {/* Ferruteck · fantasmita real con cosmic bg (idéntico al web) */}
@@ -346,9 +352,9 @@ export default function MobileShell({
             cursor: 'pointer', display: 'grid', placeItems: 'center',
             boxShadow: '0 4px 12px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)',
             flex: '0 0 auto', position: 'relative', padding: 0,
-            transition: 'transform 160ms cubic-bezier(.4,0,.2,1), width 320ms cubic-bezier(.4,0,.2,1), height 320ms cubic-bezier(.4,0,.2,1)',
+            transition: 'transform 200ms cubic-bezier(.34,1.56,.64,1), width 420ms cubic-bezier(.32,.72,0,1), height 420ms cubic-bezier(.32,.72,0,1)',
           }}
-          onPointerDown={(e) => e.currentTarget.style.transform = 'scale(.9)'}
+          onPointerDown={(e) => e.currentTarget.style.transform = 'scale(.88)'}
           onPointerUp={(e) => e.currentTarget.style.transform = ''}
           onPointerLeave={(e) => e.currentTarget.style.transform = ''}
         >
@@ -465,11 +471,14 @@ export default function MobileShell({
 }
 
 // ─────────────── Sub-componentes ───────────────
-function TabPill({ active, onClick, theme, label, Icon, shrunk }) {
+function TabPill({ active, onClick, theme, label, Icon, shrunk, backButton }) {
   const [pressed, setPressed] = useState(false);
-  // Instagram-style: siempre solo icono, cambia tamaño con shrink
   const size = shrunk ? 36 : 46;
   const iconSize = shrunk ? 18 : 22;
+  const bg = backButton
+    ? (theme.mode === 'dark' ? 'rgba(255,255,255,.10)' : 'rgba(0,0,0,.06)')
+    : (active ? theme.text : 'transparent');
+  const color = backButton ? theme.text : (active ? theme.bg : theme.textMuted);
   return (
     <button
       onClick={onClick}
@@ -477,12 +486,11 @@ function TabPill({ active, onClick, theme, label, Icon, shrunk }) {
       title={label}
       style={{
         width: size, height: size, borderRadius: '50%',
-        background: active ? theme.text : 'transparent',
-        color: active ? theme.bg : theme.textMuted,
+        background: bg, color,
         border: 'none', cursor: 'pointer',
         display: 'grid', placeItems: 'center', padding: 0, flex: '0 0 auto',
-        transition: 'background 200ms cubic-bezier(.4,0,.2,1), color 200ms, transform 140ms, width 320ms cubic-bezier(.4,0,.2,1), height 320ms cubic-bezier(.4,0,.2,1)',
-        transform: pressed ? 'scale(.9)' : 'scale(1)',
+        transition: 'background 260ms cubic-bezier(.32,.72,0,1), color 260ms, transform 200ms cubic-bezier(.34,1.56,.64,1), width 420ms cubic-bezier(.32,.72,0,1), height 420ms cubic-bezier(.32,.72,0,1)',
+        transform: pressed ? 'scale(.88)' : 'scale(1)',
       }}
       onPointerDown={() => setPressed(true)}
       onPointerUp={() => setPressed(false)}
@@ -530,27 +538,15 @@ function DominioSheet({ dominio, theme, isDark, perfilUsuario, clientesVisibles,
           )}
           {s.expandableClientes && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {clientesVisibles.map((c) => {
-                const expanded = expandedCli === c.id;
-                return (
-                  <div key={c.id}>
-                    <SheetItem
-                      theme={theme} Icon={Users}
-                      swatchColor={CLIENTE_DOT[c.id] || theme.accent}
-                      label={c.label}
-                      onClick={() => setExpandedCli(expanded ? null : c.id)}
-                      chevron={expanded ? 'down' : 'right'}
-                    />
-                    {expanded && (
-                      <div style={{ paddingLeft: 24, display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-                        {c.pestanas.filter((p) => !p.disabled && puedeVerPestanaCliente(perfilUsuario, c.id, p.id)).map((p) => (
-                          <SheetItem key={p.id} theme={theme} label={p.label} small onClick={() => { onNavegar(c.id, p.id); onClose(); }} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {clientesVisibles.map((c) => (
+                <SheetItem
+                  key={c.id}
+                  theme={theme} Icon={Users}
+                  swatchColor={CLIENTE_DOT[c.id] || theme.accent}
+                  label={c.label}
+                  onClick={() => { onNavegar(c.id, 'home'); onClose(); }}
+                />
+              ))}
             </div>
           )}
         </React.Fragment>
