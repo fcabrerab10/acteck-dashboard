@@ -53,6 +53,15 @@ import MobileHomeCliente from './components/MobileHomeCliente';
 import MobileBuscar from './components/MobileBuscar';
 import MobileEdR from './components/MobileEdR';
 import MobileVisionGeneral from './components/MobileVisionGeneral';
+import MobileAnalisisClientes from './components/MobileAnalisisClientes';
+import MobileSellInGlobal from './components/MobileSellInGlobal';
+import MobileSellOutGlobal from './components/MobileSellOutGlobal';
+import MobileInventarioGlobal from './components/MobileInventarioGlobal';
+import MobileCobranzaGlobal from './components/MobileCobranzaGlobal';
+import MobileSOP from './components/MobileSOP';
+import MobilePropuestas from './components/MobilePropuestas';
+import MobileEstrategiaPrecios from './components/MobileEstrategiaPrecios';
+import MobileTrackingPedidos from './components/MobileTrackingPedidos';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -502,7 +511,9 @@ export default function App() {
           )}
           {paginaActiva === "propuestas" && (
             puedeVerPestanaGlobal(perfil, "propuestas")
-              ? <PropuestasTab />
+              ? (mobile
+                  ? <MobilePropuestas onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
+                  : <PropuestasTab />)
               : <SinAcceso motivo="No tienes acceso a Propuestas." />
           )}
           {paginaActiva === "estadoResultados" && (
@@ -521,54 +532,70 @@ export default function App() {
           )}
           {paginaActiva === "analisisClientes" && (
             puedeVerPestanaGlobal(perfil, "analisis_clientes")
-              ? <AnalisisClientesGlobal />
+              ? (mobile
+                  ? <MobileAnalisisClientes onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
+                  : <AnalisisClientesGlobal />)
               : <SinAcceso motivo="No tienes acceso a Análisis por Cliente." />
           )}
           {!clienteActivo && paginaActiva === "sellIn" && (
             puedeVerPestanaGlobal(perfil, "sell_in")
-              ? <SellInCliente clienteKey={null} />
+              ? (mobile
+                  ? <MobileSellInGlobal onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
+                  : <SellInCliente clienteKey={null} />)
               : <SinAcceso motivo="No tienes acceso a Sell In." />
           )}
           {paginaActiva === "sellOut" && (
             puedeVerPestanaGlobal(perfil, "sell_out")
-              ? (
-                <div className="p-12 text-center">
-                  <ShoppingBag className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold text-gray-700 mb-2">Sell Out</h2>
-                  <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
-                </div>
-              )
+              ? (mobile
+                  ? <MobileSellOutGlobal onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
+                  : (
+                    <div className="p-12 text-center">
+                      <ShoppingBag className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <h2 className="text-xl font-semibold text-gray-700 mb-2">Sell Out</h2>
+                      <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
+                    </div>
+                  ))
               : <SinAcceso motivo="No tienes acceso a Sell Out." />
           )}
           {paginaActiva === "inventarioGlobal" && (
             puedeVerPestanaGlobal(perfil, "inventario_global")
-              ? <InventarioGlobal />
+              ? (mobile
+                  ? <MobileInventarioGlobal onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
+                  : <InventarioGlobal />)
               : <SinAcceso motivo="No tienes acceso a Inventario." />
           )}
           {paginaActiva === "cobranzaGlobal" && (
             puedeVerPestanaGlobal(perfil, "cobranza_global")
-              ? (
-                <div className="p-12 text-center">
-                  <HandCoins className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold text-gray-700 mb-2">Cobranza</h2>
-                  <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
-                </div>
-              )
+              ? (mobile
+                  ? <MobileCobranzaGlobal onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
+                  : (
+                    <div className="p-12 text-center">
+                      <HandCoins className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <h2 className="text-xl font-semibold text-gray-700 mb-2">Cobranza</h2>
+                      <p className="text-gray-500">Próximamente — esta pestaña está en construcción.</p>
+                    </div>
+                  ))
               : <SinAcceso motivo="No tienes acceso a Cobranza." />
           )}
           {paginaActiva === "forecastClientes" && (
             puedeVerPestanaGlobal(perfil, "forecast_clientes")
-              ? <ForecastClientesTab />
+              ? (mobile
+                  ? <MobileSOP onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
+                  : <ForecastClientesTab />)
               : <SinAcceso motivo="No tienes acceso a Forecast / S&OP." />
           )}
           {paginaActiva === "estrategiaPrecios" && (
             puedeVerPestanaGlobal(perfil, "estrategia_precios")
-              ? <EstrategiaPrecios />
+              ? (mobile
+                  ? <MobileEstrategiaPrecios onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
+                  : <EstrategiaPrecios />)
               : <SinAcceso motivo="No tienes acceso a Estrategia de Precios." />
           )}
           {paginaActiva === "ordenesCompra" && (
             puedeVerPestanaGlobal(perfil, "ordenes_compra")
-              ? <TrackingPedidos />
+              ? (mobile
+                  ? <MobileTrackingPedidos onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
+                  : <TrackingPedidos />)
               : <SinAcceso motivo="No tienes acceso a Tracking Pedidos." />
           )}
           {paginaActiva === "adminInterna" && (
