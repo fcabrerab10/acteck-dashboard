@@ -46,6 +46,7 @@ import MobileHoy from './components/MobileHoy';
 import MobileEquipo from './components/MobileEquipo';
 import MobileYo from './components/MobileYo';
 import MobileSellIn from './components/MobileSellIn';
+import MobileSellOut from './components/MobileSellOut';
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -615,13 +616,15 @@ export default function App() {
         {paginaActiva === "pagos"   && <PagosCliente cliente={c} clienteKey={clienteActivo} />}
           {paginaActiva === "analisis" && React.createElement(AnalisisCliente, { cliente: clientesDinamicos[clienteActivo] ? clientesDinamicos[clienteActivo].nombre : clienteActivo, clienteKey: clienteActivo })}
             {paginaActiva === "estrategia" && (
-              clienteActivo === 'digitalife'
-                ? <SellOutClienteV2 clienteKey={clienteActivo} />
-                : clienteActivo === 'dicotech'
-                  ? <SellOutDicotech clienteKey={clienteActivo} />
-                  : clienteActivo === 'pcel'
-                    ? <SellOutPcel clienteKey={clienteActivo} />
-                    : <EstrategiaProducto cliente={c.nombre} clienteKey={clienteActivo} />
+              mobile
+                ? <MobileSellOut clienteKey={clienteActivo} onBack={() => setPaginaActiva('home')} onNavegar={handleNavegar} />
+                : clienteActivo === 'digitalife'
+                  ? <SellOutClienteV2 clienteKey={clienteActivo} />
+                  : clienteActivo === 'dicotech'
+                    ? <SellOutDicotech clienteKey={clienteActivo} />
+                    : clienteActivo === 'pcel'
+                      ? <SellOutPcel clienteKey={clienteActivo} />
+                      : <EstrategiaProducto cliente={c.nombre} clienteKey={clienteActivo} />
             )}
         {paginaActiva === "marketing" && React.createElement(
           (clienteActivo === 'digitalife' || clienteActivo === 'dicotech' || clienteActivo === 'pcel') ? MarketingClienteV2 : MarketingCliente,
