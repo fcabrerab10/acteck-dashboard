@@ -87,13 +87,11 @@ export default function MobileShell({
   }, [clienteActivo, paginaActiva, vistaActual]);
 
   const handleTab = (tab) => {
-    if (tab.id === 'yo') { setDrawerOpen(true); return; }
+    if (tab.id === 'yo') { onNavegar(null, 'configuracion'); return; }
     if (tab.id === 'cliente') {
-      // Si ya hay cliente activo, quedarse. Si no, abrir switcher.
+      // Si ya hay cliente activo, ir a su home. Si no, abrir switcher.
       if (clienteActivo) {
-        const cli = CLIENTES[clienteActivo];
-        const primera = cli?.pestanas?.find((p) => !p.disabled && puedeVerPestanaCliente(perfilUsuario, clienteActivo, p.id));
-        onNavegar(clienteActivo, primera?.id || 'home');
+        onNavegar(clienteActivo, 'home');
       } else {
         setSwitcherOpen(true);
       }

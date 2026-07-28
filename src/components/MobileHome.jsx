@@ -135,7 +135,7 @@ export default function MobileHome({ perfil, onNavegar }) {
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: theme.textMuted }}>
             {mode === 'negocio'
               ? `Cierre ${MES_FULL[MES_ACTUAL.mes - 1]} · consolidado`
-              : `${Object.keys(clienteKpis).length} clientes · ${MES_FULL[MES_ACTUAL.mes - 1]}`}
+              : `${Object.keys(CLIENTES).filter(k => CLIENTES[k].activo).length} clientes · ${MES_FULL[MES_ACTUAL.mes - 1]}`}
           </div>
           <button
             onClick={() => onNavegar(null, mode === 'negocio' ? 'estadoResultados' : 'analisisClientes')}
@@ -330,7 +330,7 @@ function ListaClientes({ theme, isDark, onNavegar, clienteKpis }) {
               }}>{cli.label.slice(0, 2).toUpperCase()}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14.5, fontWeight: 700, letterSpacing: '-.01em', color: theme.text }}>{cli.label}</div>
-                <div style={{ fontSize: 10.5, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>Acteck · Balam Rush</div>
+                <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 500, marginTop: 1 }}>{id === 'pcel' ? 'Acteck' : 'Acteck · Balam Rush'}</div>
               </div>
               <ChevronRight size={16} style={{ color: theme.textSubtle }} />
             </div>

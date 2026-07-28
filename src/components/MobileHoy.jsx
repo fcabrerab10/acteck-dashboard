@@ -118,9 +118,11 @@ export default function MobileHoy({ perfil, onNavegar }) {
 
   // ── Items del día seleccionado
   const isoSel = toISO(diaSel);
+  const textoTarea = (p) => (p.titulo || p.texto || p.descripcion || p.contenido || p.nota || '').trim();
   const tareasHoy = useMemo(
     () => pendientesVis
       .filter(p => p.fecha_limite === isoSel)
+      .filter(p => textoTarea(p).length > 0 || p.estatus === 'listo')
       .sort((a, b) => {
         const rank = { alta: 0, media: 1, baja: 2 };
         return (rank[a.prioridad] ?? 1) - (rank[b.prioridad] ?? 1);
@@ -420,7 +422,7 @@ function TodoRow({ theme, tarea, onToggle, saving }) {
           fontSize: 13.5, fontWeight: 600, color: done ? theme.textMuted : theme.text,
           textDecoration: done ? 'line-through' : 'none',
           fontFamily: TYPO.fontText,
-        }}>{tarea.titulo || tarea.texto || '(sin título)'}</div>
+        }}>{(tarea.titulo || tarea.texto || tarea.descripcion || tarea.contenido || tarea.nota || '').trim() || '(sin descripción)'}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, fontSize: 11, color: theme.textMuted }}>
           {cli && (
             <span style={{

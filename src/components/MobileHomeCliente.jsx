@@ -147,7 +147,7 @@ export default function MobileHomeCliente({ clienteKey, onBack, onNavegar }) {
         </h1>
       </div>
       <div style={{ padding: '0 18px 4px', color: theme.textMuted, fontSize: 12.5 }}>
-        {MES_CORTO[mesActual - 1]} {anio} · {diasCierre}d para el cierre
+        {clienteKey === 'pcel' ? 'Acteck' : 'Acteck · Balam Rush'} · {MES_CORTO[mesActual - 1]} {anio} · {diasCierre}d para el cierre
       </div>
 
       {loading ? (
