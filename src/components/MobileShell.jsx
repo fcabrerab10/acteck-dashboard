@@ -33,13 +33,13 @@ const CLIENTE_DOT = { digitalife: '#5856D6', dicotech: '#FF9500', pcel: '#34C759
 // ── 4 dominios (idénticos al web sidebar §12) ───────────────────────────
 const DOMINIOS = [
   {
-    id: 'direccion', label: 'Dirección', color: '#5856D6',
+    id: 'direccion', label: 'Dirección', color: '#5856D6', Icon: Calculator,
     items: [
       { id: 'estadoResultados', label: 'Estado de Resultados', Icon: Calculator, permiso: 'estado_resultados' },
     ],
   },
   {
-    id: 'comercial', label: 'Comercial', color: '#007AFF',
+    id: 'comercial', label: 'Comercial', color: '#007AFF', Icon: Activity,
     items: [
       { id: 'visionGeneral',    label: 'Visión General',       Icon: Activity, permiso: 'vision_general' },
       { id: 'analisisClientes', label: 'Análisis por Cliente', Icon: PieChart, permiso: 'analisis_clientes' },
@@ -51,7 +51,7 @@ const DOMINIOS = [
     ],
   },
   {
-    id: 'interno', label: 'Interno', color: '#FF9500',
+    id: 'interno', label: 'Interno', color: '#FF9500', Icon: Users,
     sections: [
       {
         title: 'Clientes Propios',
@@ -73,12 +73,15 @@ const DOMINIOS = [
     ],
   },
   {
-    id: 'axon', label: 'Axon', color: '#FF375F',
+    id: 'axon', label: 'Axon', color: '#FF375F', Icon: Building2,
     items: [
       { id: 'axonMexico', label: 'Axon de México', Icon: Building2, permiso: 'axon_mexico' },
     ],
   },
 ];
+
+// Inicio · pill primaria antes de los dominios (equivale a Resumen de Clientes)
+const INICIO_TAB = { id: 'inicio', label: 'Inicio', color: '#34C759', Icon: Home };
 
 // ── 6 pestañas cliente ──────────────────────────────────────────────────
 const CLIENTE_TABS_ORDER = [
@@ -198,28 +201,37 @@ export default function MobileShell({
             <Search size={16} strokeWidth={2} />
           </button>
 
-          {/* Cliente pill — MÁS REDONDA */}
-          <button
-            onClick={() => setOpenSheet('switcher')}
-            style={{
-              flex: 1, minWidth: 0,
-              display: 'inline-flex', alignItems: 'center', gap: 10,
-              padding: '10px 18px', borderRadius: 999,
-              background: theme.surface, border: `1px solid ${theme.border}`,
-              color: theme.text, cursor: 'pointer',
-              fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600,
-              letterSpacing: '-.01em',
-              justifyContent: 'center',
-              transition: 'transform 160ms cubic-bezier(.4,0,.2,1)',
-            }}
-            onPointerDown={(e) => e.currentTarget.style.transform = 'scale(.97)'}
-            onPointerUp={(e) => e.currentTarget.style.transform = ''}
-            onPointerLeave={(e) => e.currentTarget.style.transform = ''}
-          >
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: dotColor, flex: '0 0 auto' }} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clienteLabel}</span>
-            <ChevronDown size={15} strokeWidth={2.2} style={{ color: theme.textMuted, flex: '0 0 auto' }} />
-          </button>
+          {/* Centro: cliente pill (solo si hay cliente activo) o título Dashboard */}
+          {clienteActivo ? (
+            <button
+              onClick={() => setOpenSheet('switcher')}
+              style={{
+                flex: 1, minWidth: 0,
+                display: 'inline-flex', alignItems: 'center', gap: 10,
+                padding: '10px 18px', borderRadius: 999,
+                background: theme.surface, border: `1px solid ${theme.border}`,
+                color: theme.text, cursor: 'pointer',
+                fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600,
+                letterSpacing: '-.01em',
+                justifyContent: 'center',
+                transition: 'transform 160ms cubic-bezier(.4,0,.2,1)',
+              }}
+              onPointerDown={(e) => e.currentTarget.style.transform = 'scale(.97)'}
+              onPointerUp={(e) => e.currentTarget.style.transform = ''}
+              onPointerLeave={(e) => e.currentTarget.style.transform = ''}
+            >
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: dotColor, flex: '0 0 auto' }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clienteLabel}</span>
+              <ChevronDown size={15} strokeWidth={2.2} style={{ color: theme.textMuted, flex: '0 0 auto' }} />
+            </button>
+          ) : (
+            <div style={{
+              flex: 1, textAlign: 'center', minWidth: 0,
+              fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 700,
+              letterSpacing: '-.02em', color: theme.text,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>Dashboard</div>
+          )}
 
           {/* Avatar → sheet Yo */}
           <button
@@ -243,9 +255,9 @@ export default function MobileShell({
         left: 'max(10px, env(safe-area-inset-left))',
         right: 'max(10px, env(safe-area-inset-right))',
         bottom: 'calc(env(safe-area-inset-bottom) + 12px)',
-        maxWidth: shrunk ? 320 : 780,
+        maxWidth: shrunk ? 380 : 780,
         marginLeft: 'auto', marginRight: 'auto',
-        height: shrunk ? 48 : 60,
+        height: shrunk ? 52 : 60,
         background: chromeSurface,
         backdropFilter: 'saturate(180%) blur(28px)',
         WebkitBackdropFilter: 'saturate(180%) blur(28px)',
@@ -276,14 +288,22 @@ export default function MobileShell({
                 />
               ))
           ) : (
-            DOMINIOS.map((d) => (
-              <TabPill key={d.id}
-                active={activeDom === d.id || openSheet === d.id}
-                onClick={() => setOpenSheet(openSheet === d.id ? null : d.id)}
-                theme={theme} label={d.label}
+            <>
+              <TabPill
+                active={paginaActiva === 'resumenClientes'}
+                onClick={() => onNavegar(null, 'resumenClientes')}
+                theme={theme} label={INICIO_TAB.label} Icon={INICIO_TAB.Icon}
                 shrunk={shrunk}
               />
-            ))
+              {DOMINIOS.map((d) => (
+                <TabPill key={d.id}
+                  active={activeDom === d.id || openSheet === d.id}
+                  onClick={() => setOpenSheet(openSheet === d.id ? null : d.id)}
+                  theme={theme} label={d.label} Icon={d.Icon}
+                  shrunk={shrunk}
+                />
+              ))}
+            </>
           )}
         </div>
 
@@ -420,36 +440,37 @@ export default function MobileShell({
 // ─────────────── Sub-componentes ───────────────
 function TabPill({ active, onClick, theme, label, Icon, iconOnly, shrunk }) {
   const [pressed, setPressed] = useState(false);
-  // En modo shrunk, todas las pills muestran solo icono (más chico). Si no hay icon, muestra inicial.
+  // Shrunk = solo icono compacto (nunca desaparece)
   const compact = shrunk;
   return (
     <button
       onClick={onClick}
+      aria-label={label}
       style={{
-        flex: '1 0 auto', minWidth: 0,
+        flex: compact ? '0 0 auto' : '1 0 auto', minWidth: 0,
         background: active ? theme.text : 'transparent',
         color: active ? theme.bg : theme.textMuted,
         border: 'none', cursor: 'pointer',
         borderRadius: compact ? 18 : 22,
-        padding: compact ? '4px 6px' : (iconOnly ? '6px 8px' : '9px 14px'),
+        padding: compact ? '6px' : (iconOnly ? '6px 8px' : '9px 12px'),
+        width: compact ? 36 : 'auto', height: compact ? 36 : 'auto',
         display: 'inline-flex',
         flexDirection: (iconOnly && !compact) ? 'column' : 'row',
         alignItems: 'center', justifyContent: 'center',
         gap: compact ? 0 : (iconOnly ? 2 : 0),
         fontFamily: TYPO.fontText,
-        fontSize: compact ? 0 : (iconOnly ? 9.5 : 13),
+        fontSize: compact ? 0 : (iconOnly ? 9.5 : 12.5),
         fontWeight: active ? 700 : 600, letterSpacing: '-.005em',
         whiteSpace: 'nowrap',
-        transition: 'background 200ms cubic-bezier(.4,0,.2,1), color 200ms, transform 140ms, padding 320ms, font-size 200ms',
+        transition: 'background 200ms cubic-bezier(.4,0,.2,1), color 200ms, transform 140ms, padding 320ms, width 320ms, height 320ms, font-size 200ms',
         transform: pressed ? 'scale(.94)' : 'scale(1)',
       }}
       onPointerDown={() => setPressed(true)}
       onPointerUp={() => setPressed(false)}
       onPointerLeave={() => setPressed(false)}
     >
-      {Icon && <Icon size={compact ? 16 : (iconOnly ? 18 : 14)} strokeWidth={active ? 2.4 : 2} style={{ marginRight: (compact || iconOnly) ? 0 : 6 }} />}
-      {!compact && (Icon ? label : label)}
-      {compact && !Icon && (label ? label.slice(0, 1) : '')}
+      {Icon && <Icon size={compact ? 18 : (iconOnly ? 18 : 14)} strokeWidth={active ? 2.4 : 2} style={{ marginRight: (compact || iconOnly) ? 0 : 6 }} />}
+      {!compact && label}
     </button>
   );
 }
