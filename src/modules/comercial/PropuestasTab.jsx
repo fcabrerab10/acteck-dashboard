@@ -1295,80 +1295,51 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombr
     const nombreLimpio = (nombre || 'Cierre').trim();
     const fechaLbl = `${String(now.getDate()).padStart(2, '0')} ${MES_FULL[now.getMonth()]} ${anio}`;
 
-    // Resumen por familia (solo para Digitalife tiene sentido, pero lo generamos genérico)
-    const porFamilia = new Map();
-    for (const r of propuestaLista) {
-      const fam = r.familia || 'Sin familia';
-      if (!porFamilia.has(fam)) porFamilia.set(fam, { piezas: 0, total: 0, skus: 0 });
-      const it = porFamilia.get(fam);
-      it.piezas += Number(r.piezas) || 0;
-      it.total  += (Number(r.piezas) || 0) * (Number(r.precio) || 0);
-      it.skus   += 1;
+    // Segmentación única de la tabla resumen:
+    //   Resumen general · Monitores · Sillas · Todas las categorías (Unificadas)
+    // Para clientes ≠ Digitalife, Monitores y Sillas quedan vacíos y solo se
+    // muestra la fila de resumen general.
+    const monitoresList = cliente.key === 'digitalife'
+      ? propuestaLista.filter((r) => familiaHoja(r.familia) === 'Monitores')
+      : [];
+    const sillasList = cliente.key === 'digitalife'
+      ? propuestaLista.filter((r) => familiaHoja(r.familia) === 'Sillas')
+      : [];
+    const otrasList = cliente.key === 'digitalife'
+      ? propuestaLista.filter((r) => familiaHoja(r.familia) === 'Todo lo demás')
+      : propuestaLista;
+    const agregar = (list) => ({
+      skus: list.length,
+      piezas: list.reduce((s, r) => s + (Number(r.piezas) || 0), 0),
+      total: list.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0),
+    });
+    const aggGeneral = { skus: propuestaLista.length, piezas, total };
+    const aggMonitores = agregar(monitoresList);
+    const aggSillas = agregar(sillasList);
+    const aggOtras = agregar(otrasList);
+
+    const filasResumen = [['Resumen general', aggGeneral.skus, aggGeneral.piezas, aggGeneral.total]];
+    if (cliente.key === 'digitalife') {
+      filasResumen.push(
+        ['Monitores', aggMonitores.skus, aggMonitores.piezas, aggMonitores.total],
+        ['Sillas', aggSillas.skus, aggSillas.piezas, aggSillas.total],
+        ['Todas las categorías (Unificadas)', aggOtras.skus, aggOtras.piezas, aggOtras.total],
+      );
     }
-    const famRows = Array.from(porFamilia.entries())
-      .sort((a, b) => b[1].total - a[1].total)
-      .map(([fam, v]) => [fam, v.skus, v.piezas, v.total]);
 
     const resumenAoa = [
-      [`Propuesta ${cliente.label}`],
-      [`Cierre · ${nombreLimpio}`],
-      [`Generado: ${fechaLbl}`],
-      [],
-      ['Resumen general'],
-      ['Concepto', 'Valor'],
-      ['SKUs en propuesta', propuestaLista.length],
-      ['Piezas totales', piezas],
-      ['Monto propuesto', total],
-      ['Precio promedio', precioProm],
-      ...(gap > 0 ? [['Gap a cubrir', gap], ['% que cubre', cierraGapPct != null ? `${cierraGapPct}%` : '—']] : []),
-      [],
-      ['Desglose por familia'],
-      ['Familia', 'SKUs', 'Piezas', 'Total'],
-      ...famRows,
+      ['Concepto', 'SKUs', 'Piezas', 'Total'],
+      ...filasResumen,
     ];
     const wsResumen = XLSX.utils.aoa_to_sheet(resumenAoa);
-    wsResumen['!cols'] = [{ wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
+    wsResumen['!cols'] = [{ wch: 34 }, { wch: 12 }, { wch: 14 }, { wch: 18 }];
+    wsResumen['!rows'] = [{ hpt: 24 }];
 
-    // Estilos para resumen
-    const titleStyle = { font: { bold: true, sz: 16, name: 'Calibri' }, alignment: { horizontal: 'left', vertical: 'center' } };
-    const sectionStyle = { font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' }, name: 'Calibri' }, fill: { fgColor: { rgb: '000000' }, patternType: 'solid' }, alignment: { horizontal: 'left', vertical: 'center' } };
-    const subheaderStyle = HEADER_STYLE;
-
-    // Título principal
-    wsResumen['A1'] = { t: 's', v: `Propuesta ${cliente.label}`, s: titleStyle };
-    wsResumen['A2'] = { t: 's', v: `Cierre · ${nombreLimpio}`, s: { font: { sz: 12, color: { rgb: '595959' }, name: 'Calibri' } } };
-    wsResumen['A3'] = { t: 's', v: `Generado: ${fechaLbl}`, s: { font: { sz: 10, color: { rgb: '808080' }, name: 'Calibri' } } };
-    // Sección "Resumen general"
-    wsResumen['A5'] = { t: 's', v: 'Resumen general', s: sectionStyle };
-    // Header de la tabla resumen
-    ['A6', 'B6'].forEach((a) => { if (wsResumen[a]) wsResumen[a].s = subheaderStyle; });
-    // Valores del resumen (rows 7..)
-    const gapRows = gap > 0 ? 6 : 4;
-    for (let r = 6; r < 6 + gapRows; r++) {
-      const aAddr = XLSX.utils.encode_cell({ r, c: 0 });
-      const bAddr = XLSX.utils.encode_cell({ r, c: 1 });
-      if (wsResumen[aAddr]) wsResumen[aAddr].s = CELL_STYLE;
-      if (wsResumen[bAddr]) {
-        // Monto, gap → moneda; piezas, skus → número; % → texto
-        const isMoney = r === 8 || r === 9 || (gap > 0 && r === 10); // rows 9,10,11 en index-1
-        wsResumen[bAddr].s = isMoney ? MONEY_STYLE : NUM_STYLE;
-      }
-    }
-    // Sección "Desglose por familia"
-    const rowFamSection = 6 + gapRows + 1; // linea en blanco + header
-    const rowFamHeader = rowFamSection + 1;
-    const rowFamDataStart = rowFamHeader + 1;
-    const secAddr = XLSX.utils.encode_cell({ r: rowFamSection, c: 0 });
-    if (wsResumen[secAddr]) wsResumen[secAddr].s = sectionStyle;
-    // Header familia
+    // Estilos: header negro + celdas
     for (let c = 0; c < 4; c++) {
-      const a = XLSX.utils.encode_cell({ r: rowFamHeader, c });
-      if (wsResumen[a]) wsResumen[a].s = subheaderStyle;
-    }
-    // Data familia
-    for (let i = 0; i < famRows.length; i++) {
-      const r = rowFamDataStart + i;
-      for (let c = 0; c < 4; c++) {
+      const h = XLSX.utils.encode_cell({ r: 0, c });
+      if (wsResumen[h]) wsResumen[h].s = HEADER_STYLE;
+      for (let r = 1; r <= filasResumen.length; r++) {
         const a = XLSX.utils.encode_cell({ r, c });
         if (!wsResumen[a]) continue;
         if (c === 0) wsResumen[a].s = CELL_STYLE;
