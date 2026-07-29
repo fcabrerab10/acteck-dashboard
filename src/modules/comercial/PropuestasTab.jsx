@@ -214,24 +214,42 @@ export default function PropuestasTab() {
       const cli = CLIENTES.find((c) => c.key === cliDetected);
       const total = Object.values(propuestaObj).reduce((s, v) => s + (v.piezas * v.precio), 0);
       const piezasTot = Object.values(propuestaObj).reduce((s, v) => s + v.piezas, 0);
-      const id = nuevaPropuestaId();
 
-      // Nombre corto: quita "Propuesta <Cliente>" del nombre del archivo
+      // Nombre corto: quita "Propuesta <Cliente>" del nombre del archivo,
+      // y también sufijos tipo "Mes Año" que agrega el exporter
       const rawName = file.name.replace(/\.xlsx?$/i, '');
+      const mesFullRe = MES_FULL.join('|');
       const shortName = rawName
         .replace(new RegExp(`^propuesta\\s+${cli?.label || ''}\\s*`, 'i'), '')
+        .replace(new RegExp(`\\s+(${mesFullRe})\\s+\\d{4}$`, 'i'), '')
         .trim() || 'Cierre';
+
+      // Si ya existe un borrador con mismo cliente y nombre, actualizarlo
+      // en lugar de crear uno nuevo (así el borrador refleja la versión
+      // final que se editó fuera del dashboard y se re-importó).
+      const existente = loadRecientes().find(
+        (r) => r.clienteKey === cliDetected && (r.nombre || '').trim().toLowerCase() === shortName.toLowerCase()
+      );
+      const id = existente?.id || nuevaPropuestaId();
+      const esActualizacion = !!existente;
 
       saveReciente({
         id,
         clienteKey: cliDetected,
         clienteLabel: cli?.label || cliDetected,
         nombre: shortName,
-        estado: 'Borrador',
+        estado: esActualizacion ? (existente.estado || 'Borrador') : 'Borrador',
         tstamp: Date.now(),
         propuesta: propuestaObj,
         resumen: { skus: count, piezas: piezasTot, total },
-        origen: 'Excel importado',
+        origen: esActualizacion ? 'Excel re-importado' : 'Excel importado',
+        ultimaImportacion: {
+          filename: file.name,
+          fecha: Date.now(),
+          skus: count,
+          piezas: piezasTot,
+          total,
+        },
       });
       setRecientesTick((t) => t + 1);
       abrirReciente({ id, clienteKey: cliDetected, propuesta: propuestaObj, nombre: shortName });
@@ -1145,36 +1163,237 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombr
     setTimeout(() => setSavedMsg(null), 1800);
   };
 
-  const exportar = () => {
-    const XLSX = window.XLSX;
-    if (!XLSX) { alert('SheetJS no disponible. Recarga la página.'); return; }
+  const exportar = async () => {
     if (propuestaLista.length === 0) { alert('La propuesta está vacía.'); return; }
+    let XLSX;
+    try {
+      const mod = await import('xlsx-js-style');
+      XLSX = mod.default || mod;
+    } catch {
+      XLSX = window.XLSX;
+      if (!XLSX) { alert('SheetJS no disponible. Recarga la página.'); return; }
+    }
 
-    const headers = ['SKU', 'Descripción', 'Marca', 'Familia', 'Piezas', 'Precio unitario', 'Total línea'];
-    const rows = propuestaLista.map((r) => [
-      r.sku,
-      r.descripcion || r.desc || '',
-      r.marca || '',
-      r.familia || '',
-      Number(r.piezas) || 0,
-      Number(r.precio) || 0,
-      (Number(r.piezas) || 0) * (Number(r.precio) || 0),
-    ]);
-    // Fila de totales
-    rows.push(['', '', '', 'TOTAL', piezas, '', total]);
+    // ─── Estilos: header negro con letra blanca en negritas ───
+    const HEADER_STYLE = {
+      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11, name: 'Calibri' },
+      fill: { fgColor: { rgb: '000000' }, patternType: 'solid' },
+      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
+      border: {
+        top:    { style: 'thin', color: { rgb: '000000' } },
+        bottom: { style: 'thin', color: { rgb: '000000' } },
+        left:   { style: 'thin', color: { rgb: '000000' } },
+        right:  { style: 'thin', color: { rgb: '000000' } },
+      },
+    };
+    const CELL_BORDER = {
+      top:    { style: 'thin', color: { rgb: 'D9D9D9' } },
+      bottom: { style: 'thin', color: { rgb: 'D9D9D9' } },
+      left:   { style: 'thin', color: { rgb: 'D9D9D9' } },
+      right:  { style: 'thin', color: { rgb: 'D9D9D9' } },
+    };
+    const CELL_STYLE = {
+      font: { sz: 10.5, name: 'Calibri' },
+      alignment: { vertical: 'center' },
+      border: CELL_BORDER,
+    };
+    const NUM_STYLE = {
+      ...CELL_STYLE,
+      alignment: { horizontal: 'right', vertical: 'center' },
+      numFmt: '#,##0',
+    };
+    const MONEY_STYLE = {
+      ...CELL_STYLE,
+      alignment: { horizontal: 'right', vertical: 'center' },
+      numFmt: '"$"#,##0.00',
+    };
+    const TOTAL_LABEL_STYLE = {
+      font: { bold: true, sz: 11, name: 'Calibri' },
+      alignment: { horizontal: 'right', vertical: 'center' },
+      fill: { fgColor: { rgb: 'F2F2F2' }, patternType: 'solid' },
+      border: CELL_BORDER,
+    };
+    const TOTAL_NUM_STYLE = { ...NUM_STYLE, font: { bold: true, sz: 11, name: 'Calibri' }, fill: { fgColor: { rgb: 'F2F2F2' }, patternType: 'solid' } };
+    const TOTAL_MONEY_STYLE = { ...MONEY_STYLE, font: { bold: true, sz: 11, name: 'Calibri' }, fill: { fgColor: { rgb: 'F2F2F2' }, patternType: 'solid' } };
 
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    ws['!cols'] = [
-      { wch: 14 }, { wch: 60 }, { wch: 14 }, { wch: 20 },
-      { wch: 10 }, { wch: 14 }, { wch: 14 },
-    ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Propuesta');
+    // ─── Helper: construir una hoja con estilo ───
+    // rows es array de { sku, descripcion|desc, marca, familia, piezas, precio }
+    const buildSheet = (rowsData, { incluirFamilia = true } = {}) => {
+      const headers = incluirFamilia
+        ? ['SKU', 'Descripción', 'Marca', 'Familia', 'Piezas', 'Precio unitario', 'Total línea']
+        : ['SKU', 'Descripción', 'Marca', 'Piezas', 'Precio unitario', 'Total línea'];
 
+      const dataRows = rowsData.map((r) => {
+        const pz = Number(r.piezas) || 0;
+        const px = Number(r.precio) || 0;
+        return incluirFamilia
+          ? [r.sku, r.descripcion || r.desc || '', r.marca || '', r.familia || '', pz, px, pz * px]
+          : [r.sku, r.descripcion || r.desc || '', r.marca || '', pz, px, pz * px];
+      });
+
+      const sumPz = rowsData.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+      const sumTotal = rowsData.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
+      const totalRow = incluirFamilia
+        ? ['', '', '', 'TOTAL', sumPz, '', sumTotal]
+        : ['', '', 'TOTAL', sumPz, '', sumTotal];
+
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows, totalRow]);
+
+      // Anchos
+      ws['!cols'] = incluirFamilia
+        ? [{ wch: 14 }, { wch: 60 }, { wch: 14 }, { wch: 20 }, { wch: 10 }, { wch: 16 }, { wch: 16 }]
+        : [{ wch: 14 }, { wch: 60 }, { wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 16 }];
+      ws['!rows'] = [{ hpt: 24 }]; // header más alto
+
+      const colCount = headers.length;
+      const totalRowIdx = dataRows.length + 1; // 0 = header, 1..n = data, n+1 = total
+
+      // Aplicar estilos celda por celda
+      for (let c = 0; c < colCount; c++) {
+        // Header
+        const hAddr = XLSX.utils.encode_cell({ r: 0, c });
+        if (ws[hAddr]) ws[hAddr].s = HEADER_STYLE;
+
+        // Data rows
+        for (let r = 1; r <= dataRows.length; r++) {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          if (!ws[addr]) continue;
+          const piezasCol = incluirFamilia ? 4 : 3;
+          const precioCol = incluirFamilia ? 5 : 4;
+          const totalCol  = incluirFamilia ? 6 : 5;
+          if (c === piezasCol) ws[addr].s = NUM_STYLE;
+          else if (c === precioCol || c === totalCol) ws[addr].s = MONEY_STYLE;
+          else ws[addr].s = CELL_STYLE;
+        }
+
+        // Total row
+        const tAddr = XLSX.utils.encode_cell({ r: totalRowIdx, c });
+        if (!ws[tAddr]) {
+          ws[tAddr] = { t: 's', v: '' };
+        }
+        const piezasCol = incluirFamilia ? 4 : 3;
+        const totalCol  = incluirFamilia ? 6 : 5;
+        if (c === piezasCol) ws[tAddr].s = TOTAL_NUM_STYLE;
+        else if (c === totalCol) ws[tAddr].s = TOTAL_MONEY_STYLE;
+        else ws[tAddr].s = TOTAL_LABEL_STYLE;
+      }
+
+      // Autofiltro y freeze header
+      ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: dataRows.length, c: colCount - 1 } }) };
+      ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+
+      // Expandir el range para incluir la fila de totales
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRowIdx, c: colCount - 1 } });
+
+      return ws;
+    };
+
+    // ─── Hoja Resumen ───
     const now = new Date();
     const mesLbl = MES_FULL[now.getMonth()];
     const anio = now.getFullYear();
     const nombreLimpio = (nombre || 'Cierre').trim();
+    const fechaLbl = `${String(now.getDate()).padStart(2, '0')} ${MES_FULL[now.getMonth()]} ${anio}`;
+
+    // Resumen por familia (solo para Digitalife tiene sentido, pero lo generamos genérico)
+    const porFamilia = new Map();
+    for (const r of propuestaLista) {
+      const fam = r.familia || 'Sin familia';
+      if (!porFamilia.has(fam)) porFamilia.set(fam, { piezas: 0, total: 0, skus: 0 });
+      const it = porFamilia.get(fam);
+      it.piezas += Number(r.piezas) || 0;
+      it.total  += (Number(r.piezas) || 0) * (Number(r.precio) || 0);
+      it.skus   += 1;
+    }
+    const famRows = Array.from(porFamilia.entries())
+      .sort((a, b) => b[1].total - a[1].total)
+      .map(([fam, v]) => [fam, v.skus, v.piezas, v.total]);
+
+    const resumenAoa = [
+      [`Propuesta ${cliente.label}`],
+      [`Cierre · ${nombreLimpio}`],
+      [`Generado: ${fechaLbl}`],
+      [],
+      ['Resumen general'],
+      ['Concepto', 'Valor'],
+      ['SKUs en propuesta', propuestaLista.length],
+      ['Piezas totales', piezas],
+      ['Monto propuesto', total],
+      ['Precio promedio', precioProm],
+      ...(gap > 0 ? [['Gap a cubrir', gap], ['% que cubre', cierraGapPct != null ? `${cierraGapPct}%` : '—']] : []),
+      [],
+      ['Desglose por familia'],
+      ['Familia', 'SKUs', 'Piezas', 'Total'],
+      ...famRows,
+    ];
+    const wsResumen = XLSX.utils.aoa_to_sheet(resumenAoa);
+    wsResumen['!cols'] = [{ wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
+
+    // Estilos para resumen
+    const titleStyle = { font: { bold: true, sz: 16, name: 'Calibri' }, alignment: { horizontal: 'left', vertical: 'center' } };
+    const sectionStyle = { font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' }, name: 'Calibri' }, fill: { fgColor: { rgb: '000000' }, patternType: 'solid' }, alignment: { horizontal: 'left', vertical: 'center' } };
+    const subheaderStyle = HEADER_STYLE;
+
+    // Título principal
+    wsResumen['A1'] = { t: 's', v: `Propuesta ${cliente.label}`, s: titleStyle };
+    wsResumen['A2'] = { t: 's', v: `Cierre · ${nombreLimpio}`, s: { font: { sz: 12, color: { rgb: '595959' }, name: 'Calibri' } } };
+    wsResumen['A3'] = { t: 's', v: `Generado: ${fechaLbl}`, s: { font: { sz: 10, color: { rgb: '808080' }, name: 'Calibri' } } };
+    // Sección "Resumen general"
+    wsResumen['A5'] = { t: 's', v: 'Resumen general', s: sectionStyle };
+    // Header de la tabla resumen
+    ['A6', 'B6'].forEach((a) => { if (wsResumen[a]) wsResumen[a].s = subheaderStyle; });
+    // Valores del resumen (rows 7..)
+    const gapRows = gap > 0 ? 6 : 4;
+    for (let r = 6; r < 6 + gapRows; r++) {
+      const aAddr = XLSX.utils.encode_cell({ r, c: 0 });
+      const bAddr = XLSX.utils.encode_cell({ r, c: 1 });
+      if (wsResumen[aAddr]) wsResumen[aAddr].s = CELL_STYLE;
+      if (wsResumen[bAddr]) {
+        // Monto, gap → moneda; piezas, skus → número; % → texto
+        const isMoney = r === 8 || r === 9 || (gap > 0 && r === 10); // rows 9,10,11 en index-1
+        wsResumen[bAddr].s = isMoney ? MONEY_STYLE : NUM_STYLE;
+      }
+    }
+    // Sección "Desglose por familia"
+    const rowFamSection = 6 + gapRows + 1; // linea en blanco + header
+    const rowFamHeader = rowFamSection + 1;
+    const rowFamDataStart = rowFamHeader + 1;
+    const secAddr = XLSX.utils.encode_cell({ r: rowFamSection, c: 0 });
+    if (wsResumen[secAddr]) wsResumen[secAddr].s = sectionStyle;
+    // Header familia
+    for (let c = 0; c < 4; c++) {
+      const a = XLSX.utils.encode_cell({ r: rowFamHeader, c });
+      if (wsResumen[a]) wsResumen[a].s = subheaderStyle;
+    }
+    // Data familia
+    for (let i = 0; i < famRows.length; i++) {
+      const r = rowFamDataStart + i;
+      for (let c = 0; c < 4; c++) {
+        const a = XLSX.utils.encode_cell({ r, c });
+        if (!wsResumen[a]) continue;
+        if (c === 0) wsResumen[a].s = CELL_STYLE;
+        else if (c === 3) wsResumen[a].s = MONEY_STYLE;
+        else wsResumen[a].s = NUM_STYLE;
+      }
+    }
+
+    // ─── Construir el workbook ───
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+
+    if (cliente.key === 'digitalife') {
+      // 3 hojas: Monitores, Sillas, Otras familias
+      const monitores  = propuestaLista.filter((r) => familiaHoja(r.familia) === 'Monitores');
+      const sillas     = propuestaLista.filter((r) => familiaHoja(r.familia) === 'Sillas');
+      const otras      = propuestaLista.filter((r) => familiaHoja(r.familia) === 'Todo lo demás');
+      if (monitores.length > 0) XLSX.utils.book_append_sheet(wb, buildSheet(monitores, { incluirFamilia: false }), 'Monitores');
+      if (sillas.length > 0)    XLSX.utils.book_append_sheet(wb, buildSheet(sillas,    { incluirFamilia: false }), 'Sillas');
+      if (otras.length > 0)     XLSX.utils.book_append_sheet(wb, buildSheet(otras,     { incluirFamilia: true }),  'Otras familias');
+    } else {
+      // Otros clientes: una sola hoja "Propuesta"
+      XLSX.utils.book_append_sheet(wb, buildSheet(propuestaLista, { incluirFamilia: true }), 'Propuesta');
+    }
+
     const fname = `Propuesta ${cliente.label} ${nombreLimpio} ${mesLbl} ${anio}.xlsx`;
     XLSX.writeFile(wb, fname);
     setSavedMsg('✓ Excel descargado');
