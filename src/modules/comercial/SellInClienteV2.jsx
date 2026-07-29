@@ -747,16 +747,28 @@ function TimelineTooltip({ theme, P, data, anio, anioPrev, xPct }) {
         <span style={{ color: theme.textMuted }}>SI {anioPrev}</span>
         <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmt.money(data.sellInPrev)}</span>
       </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 2 }}>
+        <span style={{ color: theme.textMuted }}>Cuota mín</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: data.cuotaMin > 0 ? theme.text : theme.textSubtle || theme.textMuted, fontWeight: 600 }}>{data.cuotaMin > 0 ? fmt.money(data.cuotaMin) : '—'}</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 2 }}>
+        <span style={{ color: theme.textMuted }}>Cuota ideal</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: data.cuota > 0 ? theme.text : theme.textSubtle || theme.textMuted, fontWeight: 600 }}>{data.cuota > 0 ? fmt.money(data.cuota) : '—'}</span>
+      </div>
       {data.cuotaMin > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 2 }}>
-          <span style={{ color: theme.textMuted }}>Cuota mín</span>
-          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmt.money(data.cuotaMin)}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginTop: 2 }}>
+          <span style={{ color: theme.textMuted }}>Δ vs mín</span>
+          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 700, color: data.sellIn >= data.cuotaMin ? P.green : P.red }}>
+            {data.sellIn >= data.cuotaMin ? '+' : ''}{((data.sellIn - data.cuotaMin) / data.cuotaMin * 100).toFixed(1)}%
+          </span>
         </div>
       )}
       {data.cuota > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginTop: 2 }}>
-          <span style={{ color: theme.textMuted }}>Cuota ideal</span>
-          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text, fontWeight: 600 }}>{fmt.money(data.cuota)}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginTop: 2 }}>
+          <span style={{ color: theme.textMuted }}>Δ vs ideal</span>
+          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 700, color: data.sellIn >= data.cuota ? P.green : P.red }}>
+            {data.sellIn >= data.cuota ? '+' : ''}{((data.sellIn - data.cuota) / data.cuota * 100).toFixed(1)}%
+          </span>
         </div>
       )}
       {delta != null && (
