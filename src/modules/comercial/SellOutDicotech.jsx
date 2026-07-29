@@ -1398,8 +1398,8 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
   };
 
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '12px 14px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', borderBottom: `1px solid ${theme.divider || theme.border}` }}>
         <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
           Detalle por SKU · Sell Out
         </h5>
@@ -1419,8 +1419,8 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
           <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs
         </span>
       </div>
-      <div style={{ overflowX: 'auto', maxHeight: '65vh' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+      <div style={{ overflow: 'auto', maxHeight: '65vh' }}>
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
           <thead>
             <tr>
               <SortableHeader theme={theme} col="marca" label="Marca" orden={orden} onToggleSort={onToggleSort} align="left" />
@@ -1451,6 +1451,7 @@ function TablaSKU({ theme, P, isDark, rows, busqueda, onChangeBusqueda, orden, o
                   style={{
                     cursor: clickable ? 'pointer' : 'default',
                     background: isOpen ? (isDark ? 'rgba(100,210,255,0.08)' : 'rgba(90,200,250,0.06)') : 'transparent',
+                    borderTop: `1px solid ${theme.divider || theme.border}`,
                     transition: 'background 200ms cubic-bezier(.4,0,.2,1)',
                   }}
                   onMouseEnter={(e) => { if (clickable && !isOpen) e.currentTarget.style.background = `${theme.text}05`; }}
@@ -1535,16 +1536,16 @@ function SortableHeader({ theme, col, label, orden, onToggleSort, align }) {
 }
 function headStyle(theme) {
   return {
-    position: 'sticky', top: 0, background: theme.surface, textAlign: 'left',
-    fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em',
-    color: theme.textMuted, fontWeight: 600, padding: '8px 6px',
+    position: 'sticky', top: 0, background: theme.surface, zIndex: 1, textAlign: 'left',
+    fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em',
+    color: theme.textMuted, fontWeight: 600, padding: '9px 10px',
     borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap',
   };
 }
 function cellStyle(theme, align) {
   return {
-    padding: '7px 6px', borderBottom: `1px solid ${theme.divider || theme.border}`,
-    verticalAlign: 'middle', textAlign: align || 'left',
+    padding: '7px 10px', fontSize: 11.5, fontFamily: TYPO.fontText, color: theme.text,
+    textAlign: align || 'left', whiteSpace: 'nowrap', verticalAlign: 'middle',
   };
 }
 
