@@ -48,13 +48,15 @@ export function usePrecios() {
 
 // ─── Facturación clientes ───
 // anios: array de años (ej [2025, 2026]) o null para todo
-export function useFacturacion(clienteKey, anios = null) {
+// select: por default '*' — se puede pasar un select más chico para reducir payload.
+export function useFacturacion(clienteKey, anios = null, select = '*') {
   return useQuery({
-    queryKey: ['facturacion_clientes', clienteKey, anios],
+    queryKey: ['facturacion_clientes', clienteKey, anios, select],
     enabled: !!clienteKey,
     queryFn: () =>
-      fetchAll('facturacion_clientes', '*', (q) => {
-        let x = q.eq('cliente', clienteKey);
+      fetchAll('facturacion_clientes', select, (q) => {
+        // La tabla usa `cliente_key`, NO `cliente`.
+        let x = q.eq('cliente_key', clienteKey);
         if (Array.isArray(anios) && anios.length) x = x.in('anio', anios);
         return x;
       }),

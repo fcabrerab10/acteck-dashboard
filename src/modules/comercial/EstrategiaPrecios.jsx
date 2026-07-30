@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useRoadmap } from '../../lib/queries';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import {
@@ -161,7 +162,9 @@ export default function EstrategiaPrecios() {
   const isDark = theme.mode === 'dark';
   const P = paletteFromTheme(theme);
   const [loading, setLoading] = useState(true);
-  const [roadmap, setRoadmap] = useState([]);
+  // roadmap ahora viene de useRoadmap() — cache compartido con otros modulos.
+  const { data: roadmapQ = [], isLoading: roadmapLoading } = useRoadmap();
+  const roadmap = roadmapQ;
   const [precios, setPrecios] = useState([]);
   const [preciosBajos, setPreciosBajos] = useState([]);
   const [promos, setPromos] = useState([]);
@@ -176,13 +179,11 @@ export default function EstrategiaPrecios() {
     setLoading(true);
     (async () => {
       const now = new Date();
-      const [rm, pr, pb, pm] = await Promise.all([
-        fetchAll('roadmap_sku', 'sku,marca,categoria,familia,rdmp,descripcion,sort_order', (q) => q.order('sort_order', { ascending: true, nullsFirst: false })),
+      const [pr, pb, pm] = await Promise.all([
         fetchAll('v_estrategia_precios_lista', 'sku,lista,precio,anio,mes'),
         fetchAll('v_estrategia_precios_bajo', 'sku,cliente_bajo,precio_bajo,piezas_bajo'),
         fetchAll('promos_temporada', 'sku,campania,promo_pct,anio,mes,descripcion', (q) => q.eq('anio', now.getFullYear()).eq('mes', now.getMonth() + 1)),
       ]);
-      setRoadmap(rm);
       setPrecios(pr);
       setPreciosBajos(pb);
       setPromos(pm);
