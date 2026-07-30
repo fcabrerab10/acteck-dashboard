@@ -1,7 +1,10 @@
 import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import './index.css'
 import App from './App.jsx'
+import { queryClient, createIDBPersister, APP_VERSION } from './lib/queryClient'
 
 // ErrorBoundary temporal para diagnosticar crashes en producción
 class ErrorBoundary extends Component {
@@ -35,10 +38,26 @@ Component:
   }
 }
 
+const persister = createIDBPersister();
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{
+          persister,
+          maxAge: 7 * 24 * 60 * 60 * 1000, // 1 semana
+          buster: APP_VERSION,              // invalida cache al cambiar commit
+          dehydrateOptions: {
+            // No persistir queries que están fallando
+            shouldDehydrateQuery: (q) => q.state.status === 'success',
+          },
+        }}
+      >
+        <App />
+        {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+      </PersistQueryClientProvider>
     </ErrorBoundary>
   </StrictMode>,
 )
