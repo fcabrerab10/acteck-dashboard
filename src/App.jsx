@@ -4,7 +4,7 @@ import { apiFetch } from './lib/apiFetch';
 import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_MES, ML_SELLOUT_DEFAULT, clientes } from './lib/constants';
 import { formatMXN, formatUSD, formatFecha, diasRestantes, calcularSalud, loadSheetJS } from './lib/utils';
 import { useTelemetry, telemetria } from './lib/telemetry';
-import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, Sidebar, Topbar } from './components';
+import { Semaforo, KPICard, CardHeader, TarjetaPendientes, TarjetaPagos, TarjetaPromociones, TarjetaMinuta, BarraCuota, Sidebar, Topbar, OfflineBadge } from './components';
 import { CLIENTES as SIDEBAR_CLIENTES } from './components/Sidebar';
 import { Toaster } from './lib/toast';
 import {
@@ -694,6 +694,7 @@ export default function App() {
       {showUpload && React.createElement(UploadModalX, { onClose: function() { setShowUpload(false); } })}
 
       <Toaster />
+      <OfflineBadge />
     </div>
     </ThemeProvider>
     </PerfilContext.Provider>

@@ -13,6 +13,7 @@ import {
   puedeVerPestanaGlobal,
 } from '../lib/permisos';
 import { useTheme } from '../lib/themeContext';
+import InstallPrompt from './InstallPrompt';
 
 // Mapping entre ids del menú y ids del schema de permisos globales
 // (ej: 'resumenClientes' en la UI → 'resumen_clientes' en permisos JSON).
@@ -308,6 +309,9 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
               label={modoPresent ? 'Salir de presentación' : 'Modo presentación'}
               active={modoPresent}
               onClick={() => setModoPresent(!modoPresent)} />
+            <div style={{ padding: '6px 4px 0' }}>
+              <InstallPrompt />
+            </div>
           </div>
         )}
 

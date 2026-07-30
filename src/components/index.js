@@ -9,3 +9,5 @@ export { BarraCuota } from './BarraCuota';
 export { default as Sidebar } from './Sidebar';
 export { default as Topbar } from './Topbar';
 export { default as FerrutekLoader, FerrutekLoaderInline, FerrutekLoaderCard } from './FerrutekLoader';
+export { default as InstallPrompt } from './InstallPrompt';
+export { default as OfflineBadge } from './OfflineBadge';
