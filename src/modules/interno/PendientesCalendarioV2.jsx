@@ -97,16 +97,33 @@ export default function PendientesCalendarioV2() {
   const [minutaAbierta, setMinutaAbierta] = useState(null);
   const [quickText, setQuickText] = useState('');
   const [quickFecha, setQuickFecha] = useState('mañana');
+  const [showEventoModal, setShowEventoModal] = useState(false);
+  const [showTareaModal, setShowTareaModal] = useState(false);
+
+  const esSuperAdmin = !!perfil?.es_super_admin;
 
   // ═══════════ Fetch ═══════════
   useEffect(() => {
     (async () => {
+      if (!perfil) return;
       setLoading(true);
       try {
+        // Query base
+        let pendQ = supabase.from('pendientes_equipo').select('*');
+        let evQ = supabase.from('eventos_equipo').select('*');
+
+        // Filtro por usuario (bypass super_admin): creador o participante
+        if (!esSuperAdmin && yoId) {
+          pendQ = pendQ.or(
+            `creado_por.eq.${yoId},responsable.eq.${yoId},responsables.cs.{${yoId}}`
+          );
+          evQ = evQ.or(`creado_por.eq.${yoId},responsable.eq.${yoId}`);
+        }
+
         const [pR, peR, evR, minR] = await Promise.all([
           supabase.from('perfiles').select('user_id, nombre, email, rol, tipo, puesto, activo, es_super_admin').eq('activo', true),
-          supabase.from('pendientes_equipo').select('*'),
-          supabase.from('eventos_equipo').select('*'),
+          pendQ,
+          evQ,
           supabase.from('minutas').select('*, minuta_acuerdos(*)').order('fecha_reunion', { ascending: false }),
         ]);
         setPerfiles(pR.data || []);
@@ -116,7 +133,7 @@ export default function PendientesCalendarioV2() {
       } catch (e) { console.error('PendientesV2 fetch', e); }
       setLoading(false);
     })();
-  }, []);
+  }, [perfil, yoId, esSuperAdmin]);
 
   // ═══════════ Lookup ═══════════
   const internos = useMemo(() => perfiles.filter(p => p.tipo === 'interno' || p.es_super_admin), [perfiles]);
@@ -139,25 +156,34 @@ export default function PendientesCalendarioV2() {
     return m;
   }, [perfiles]);
 
-  // ═══════════ Permisos externos ═══════════
-  // Si el usuario actual es externo, solo ve pendientes/minutas donde él está asignado
-  const esExterno = perfil?.tipo === 'externo';
+  // ═══════════ Visibilidad por usuario ═══════════
+  // Super_admin ve todo. El resto: solo lo que creó o donde participa.
   const pendientesVisibles = useMemo(() => {
-    if (!esExterno) return pendientes;
-    return pendientes.filter(p => p.responsable === yoId);
-  }, [pendientes, esExterno, yoId]);
+    if (esSuperAdmin) return pendientes;
+    if (!yoId) return [];
+    return pendientes.filter(p =>
+      p.creado_por === yoId ||
+      p.responsable === yoId ||
+      (Array.isArray(p.responsables) && p.responsables.includes(yoId))
+    );
+  }, [pendientes, esSuperAdmin, yoId]);
   const minutasVisibles = useMemo(() => {
-    if (!esExterno) return minutas;
+    if (esSuperAdmin) return minutas;
+    if (!yoId) return [];
     return minutas.filter(m => {
-      // Ver minuta si estoy en algún acuerdo como responsable
+      if (m.creado_por === yoId) return true;
+      const asis = Array.isArray(m.asistentes) ? m.asistentes : [];
+      if (asis.some(a => a && (a.user_id === yoId || a === yoId))) return true;
       const acuerdos = Array.isArray(m.minuta_acuerdos) ? m.minuta_acuerdos : [];
       return acuerdos.some(a => a.responsable === yoId);
     });
-  }, [minutas, esExterno, yoId]);
+  }, [minutas, esSuperAdmin, yoId]);
   const eventosVisibles = useMemo(() => {
-    if (!esExterno) return eventos;
-    return eventos.filter(e => e.responsable === yoId);
-  }, [eventos, esExterno, yoId]);
+    if (esSuperAdmin) return eventos;
+    if (!yoId) return [];
+    return eventos.filter(e => e.creado_por === yoId || e.responsable === yoId);
+  }, [eventos, esSuperAdmin, yoId]);
+  const esExterno = perfil?.tipo === 'externo';
 
   // ═══════════ Métricas ═══════════
   const hoyISO = toISO(new Date());
@@ -303,18 +329,59 @@ export default function PendientesCalendarioV2() {
     else if (quickFecha === 'mañana') { const d = new Date(hoyD); d.setDate(d.getDate() + 1); fecha_limite = toISO(d); }
     else if (quickFecha === 'semana') { const d = new Date(hoyD); d.setDate(d.getDate() + 7); fecha_limite = toISO(d); }
     const payload = {
-      titulo: txt,
+      tarea: txt,
       responsable: yoId,
+      creado_por: yoId,
       fecha_limite,
       estatus: 'pendiente',
       prioridad: 'media',
-      cliente: 'otro',
+      cuenta: 'otro',
     };
     const { data, error } = await supabase.from('pendientes_equipo').insert(payload).select().single();
-    if (!error && data) {
+    if (error) { console.error('quickAdd', error); return; }
+    if (data) {
       setPendientes(prev => [...prev, data]);
       setQuickText('');
     }
+  }
+
+  async function handleCrearTarea(payload) {
+    const insertPayload = {
+      tarea: payload.tarea,
+      cuenta: payload.cuenta || 'otro',
+      fecha_limite: payload.fecha_limite || null,
+      prioridad: payload.prioridad || 'media',
+      estatus: 'pendiente',
+      responsable: payload.responsable || yoId,
+      creado_por: yoId,
+      notas: payload.notas || null,
+    };
+    const { data, error } = await supabase.from('pendientes_equipo').insert(insertPayload).select().single();
+    if (error) { console.error('crearTarea', error); alert('No se pudo guardar la tarea: ' + error.message); return false; }
+    if (data) {
+      setPendientes(prev => [...prev, data]);
+      setShowTareaModal(false);
+    }
+    return true;
+  }
+
+  async function handleCrearEvento(payload) {
+    const insertPayload = {
+      titulo: payload.titulo,
+      tipo: payload.tipo || 'reunion',
+      fecha_ini: payload.fecha_ini,
+      fecha_fin: payload.fecha_fin || payload.fecha_ini,
+      responsable: payload.responsable || yoId,
+      creado_por: yoId,
+      notas: payload.notas || null,
+    };
+    const { data, error } = await supabase.from('eventos_equipo').insert(insertPayload).select().single();
+    if (error) { console.error('crearEvento', error); alert('No se pudo guardar el evento: ' + error.message); return false; }
+    if (data) {
+      setEventos(prev => [...prev, data]);
+      setShowEventoModal(false);
+    }
+    return true;
   }
 
   // ═══════════ Estilos base ═══════════
@@ -345,8 +412,8 @@ export default function PendientesCalendarioV2() {
         </div>
         {canEdit && (
           <>
-            <button style={{ padding: '7px 14px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.14)', color: '#FFF', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>+ Evento</button>
-            <button style={{ padding: '7px 14px', borderRadius: 999, background: theme.accent, border: 0, color: '#FFF', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>+ Nueva tarea</button>
+            <button onClick={() => setShowEventoModal(true)} style={{ padding: '7px 14px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.14)', color: '#FFF', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>+ Evento</button>
+            <button onClick={() => setShowTareaModal(true)} style={{ padding: '7px 14px', borderRadius: 999, background: theme.accent, border: 0, color: '#FFF', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>+ Nueva tarea</button>
           </>
         )}
       </div>
@@ -436,6 +503,30 @@ export default function PendientesCalendarioV2() {
         tipoPorUserId={tipoPorUserId}
         yoId={yoId}
       />
+
+      {/* ═════ Modal Evento ═════ */}
+      {showEventoModal && (
+        <EventoModal
+          theme={theme}
+          isDark={isDark}
+          internos={internos}
+          yoId={yoId}
+          onClose={() => setShowEventoModal(false)}
+          onSave={handleCrearEvento}
+        />
+      )}
+
+      {/* ═════ Modal Tarea ═════ */}
+      {showTareaModal && (
+        <TareaModal
+          theme={theme}
+          isDark={isDark}
+          internos={internos}
+          yoId={yoId}
+          onClose={() => setShowTareaModal(false)}
+          onSave={handleCrearTarea}
+        />
+      )}
 
       {/* ═════ Modal minuta ═════ */}
       {minutaAbierta && (
@@ -911,6 +1002,182 @@ function MinutaModal({ theme, isDark, minuta, nombrePorUserId, colorPorUserId, t
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════ Modal Evento ═══════════════
+function EventoModal({ theme, isDark, internos, yoId, onClose, onSave }) {
+  const hoyISO = toISO(new Date());
+  const [titulo, setTitulo] = useState('');
+  const [tipo, setTipo] = useState('reunion');
+  const [fechaIni, setFechaIni] = useState(hoyISO);
+  const [fechaFin, setFechaFin] = useState(hoyISO);
+  const [responsable, setResponsable] = useState(yoId || '');
+  const [notas, setNotas] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e) {
+    e?.preventDefault();
+    if (!titulo.trim() || !fechaIni) return;
+    setSaving(true);
+    await onSave({ titulo: titulo.trim(), tipo, fecha_ini: fechaIni, fecha_fin: fechaFin || fechaIni, responsable, notas });
+    setSaving(false);
+  }
+  return (
+    <ModalShell theme={theme} isDark={isDark} title="Nuevo evento" subtitle="Reunión, vacaciones, home office o salida" onClose={onClose}>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Field label="Título" theme={theme}>
+          <input autoFocus value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ej. Junta con proveedor"
+            style={inputStyle(theme)} />
+        </Field>
+        <Field label="Tipo" theme={theme}>
+          <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={inputStyle(theme)}>
+            <option value="reunion">Reunión</option>
+            <option value="salida_trabajo">Salida de trabajo</option>
+            <option value="vacaciones">Vacaciones</option>
+            <option value="permiso">Permiso</option>
+            <option value="home_office">Home office</option>
+            <option value="feriado">Feriado</option>
+          </select>
+        </Field>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <Field label="Desde" theme={theme}>
+            <input type="date" value={fechaIni} onChange={(e) => { setFechaIni(e.target.value); if (!fechaFin || fechaFin < e.target.value) setFechaFin(e.target.value); }} style={inputStyle(theme)} />
+          </Field>
+          <Field label="Hasta" theme={theme}>
+            <input type="date" value={fechaFin} min={fechaIni} onChange={(e) => setFechaFin(e.target.value)} style={inputStyle(theme)} />
+          </Field>
+        </div>
+        <Field label="Responsable" theme={theme}>
+          <select value={responsable || ''} onChange={(e) => setResponsable(e.target.value)} style={inputStyle(theme)}>
+            <option value="">Sin asignar</option>
+            {internos.map(p => (
+              <option key={p.user_id} value={p.user_id}>{p.nombre || p.email}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Notas" theme={theme}>
+          <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={3}
+            style={{ ...inputStyle(theme), resize: 'vertical', fontFamily: TYPO.fontText }} />
+        </Field>
+        <ModalActions theme={theme} onClose={onClose} saving={saving} disabled={!titulo.trim() || !fechaIni} />
+      </form>
+    </ModalShell>
+  );
+}
+
+// ═══════════════ Modal Tarea ═══════════════
+function TareaModal({ theme, isDark, internos, yoId, onClose, onSave }) {
+  const [tarea, setTarea] = useState('');
+  const [cuenta, setCuenta] = useState('otro');
+  const [prioridad, setPrioridad] = useState('media');
+  const [fechaLimite, setFechaLimite] = useState('');
+  const [responsable, setResponsable] = useState(yoId || '');
+  const [notas, setNotas] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e) {
+    e?.preventDefault();
+    if (!tarea.trim()) return;
+    setSaving(true);
+    await onSave({ tarea: tarea.trim(), cuenta, prioridad, fecha_limite: fechaLimite || null, responsable, notas });
+    setSaving(false);
+  }
+  return (
+    <ModalShell theme={theme} isDark={isDark} title="Nueva tarea" subtitle="Asignar pendiente al equipo" onClose={onClose}>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Field label="Tarea" theme={theme}>
+          <input autoFocus value={tarea} onChange={(e) => setTarea(e.target.value)} placeholder="¿Qué hay que hacer?"
+            style={inputStyle(theme)} />
+        </Field>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <Field label="Cliente" theme={theme}>
+            <select value={cuenta} onChange={(e) => setCuenta(e.target.value)} style={inputStyle(theme)}>
+              <option value="otro">Interno / Otro</option>
+              <option value="digitalife">Digitalife</option>
+              <option value="pcel">PCEL</option>
+              <option value="mercadolibre">Mercado Libre</option>
+            </select>
+          </Field>
+          <Field label="Prioridad" theme={theme}>
+            <select value={prioridad} onChange={(e) => setPrioridad(e.target.value)} style={inputStyle(theme)}>
+              <option value="alta">Alta</option>
+              <option value="media">Media</option>
+              <option value="baja">Baja</option>
+            </select>
+          </Field>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <Field label="Fecha límite" theme={theme}>
+            <input type="date" value={fechaLimite} onChange={(e) => setFechaLimite(e.target.value)} style={inputStyle(theme)} />
+          </Field>
+          <Field label="Responsable" theme={theme}>
+            <select value={responsable || ''} onChange={(e) => setResponsable(e.target.value)} style={inputStyle(theme)}>
+              <option value="">Sin asignar</option>
+              {internos.map(p => (
+                <option key={p.user_id} value={p.user_id}>{p.nombre || p.email}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <Field label="Notas" theme={theme}>
+          <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={3}
+            style={{ ...inputStyle(theme), resize: 'vertical', fontFamily: TYPO.fontText }} />
+        </Field>
+        <ModalActions theme={theme} onClose={onClose} saving={saving} disabled={!tarea.trim()} />
+      </form>
+    </ModalShell>
+  );
+}
+
+// ═══════════════ Helpers Modal ═══════════════
+function ModalShell({ theme, isDark, title, subtitle, onClose, children }) {
+  const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#000000');
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 70,
+      }}>
+      <div style={{ background: theme.surface, borderRadius: 14, overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.32)', maxWidth: 520, width: '100%', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ background: heroBg, color: '#FFF', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div>
+            <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', color: '#FFF' }}>{title}</h3>
+            {subtitle && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{subtitle}</div>}
+          </div>
+          <button type="button" onClick={onClose} style={{ background: 'rgba(255,255,255,0.14)', border: 0, color: '#FFF', width: 28, height: 28, borderRadius: 999, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={14} />
+          </button>
+        </div>
+        <div style={{ padding: '16px 20px 18px', overflowY: 'auto' }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+function Field({ label, theme, children }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: theme.textMuted, fontWeight: 600 }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+function inputStyle(theme) {
+  return {
+    border: `1px solid ${theme.border}`, background: theme.bg || 'transparent',
+    color: theme.text, padding: '8px 10px', borderRadius: 8, fontSize: 12,
+    fontFamily: TYPO.fontText, outline: 'none', width: '100%',
+  };
+}
+function ModalActions({ theme, onClose, saving, disabled }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+      <button type="button" onClick={onClose} style={{ padding: '7px 14px', borderRadius: 999, background: 'transparent', border: `1px solid ${theme.border}`, color: theme.textMuted, fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+      <button type="submit" disabled={disabled || saving} style={{ padding: '7px 16px', borderRadius: 999, background: disabled ? theme.border : theme.accent, border: 0, color: '#FFF', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+        {saving ? 'Guardando…' : 'Guardar'}
+      </button>
     </div>
   );
 }
