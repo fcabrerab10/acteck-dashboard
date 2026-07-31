@@ -29,46 +29,49 @@ export default function SetPasswordPage() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    // Con hash router (`/#/set-password`), Supabase concatena los tokens al
-    // final del hash — algo como `/#/set-password&access_token=...`
-    // o `/#/set-password#access_token=...`. La detección automática de
-    // Supabase no maneja este caso, así que parseamos a mano.
+    // Supabase puede devolver el link de invitación en 3 formatos posibles:
+    //   1) PKCE moderno:   ?code=xxx  (o &code= dentro del hash con hash router)
+    //   2) Implicit legacy: #access_token=xxx&refresh_token=xxx&type=invite
+    //   3) Sesión ya establecida (retry, refresh)
+    // Con hash router el hash puede quedar como /#/set-password&code=... o
+    // /#/set-password#code=..., así que buscamos en toda la URL.
     async function bootstrap() {
-      const fullHash = window.location.hash || '';
-      const search = window.location.search || '';
-      // Buscar tokens en cualquier parte de la URL (hash o query)
-      const buscar = fullHash + '&' + search;
-      let access = null, refresh = null;
-      const m1 = buscar.match(/access_token=([^&#]+)/);
-      const m2 = buscar.match(/refresh_token=([^&#]+)/);
-      if (m1) access = decodeURIComponent(m1[1]);
-      if (m2) refresh = decodeURIComponent(m2[1]);
-
-      if (access && refresh) {
-        // Set session desde los tokens del link
-        const { data, error } = await supabase.auth.setSession({
-          access_token: access, refresh_token: refresh,
-        });
-        // Limpiar los tokens del URL para que no queden expuestos
+      const url = window.location.href;
+      const cleanUrl = () => {
         if (window.history.replaceState) {
           window.history.replaceState(null, '', window.location.pathname + '#/set-password');
         }
-        if (error || !data?.user) {
-          setError("Este link de invitación ya expiró o no es válido. Pídele a Fernando que te reenvíe la invitación.");
-        } else {
-          setUser(data.user);
-        }
-        setChecking(false);
-        return;
+      };
+
+      // 1) PKCE — hay ?code= o &code= (o dentro del hash)
+      const codeMatch = url.match(/[?&#]code=([^&#]+)/);
+      if (codeMatch) {
+        const code = decodeURIComponent(codeMatch[1]);
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+        cleanUrl();
+        if (!error && data?.user) { setUser(data.user); setChecking(false); return; }
+        // fall through: intentar los otros formatos
       }
 
-      // No hay tokens en el URL — puede haber sesión ya establecida (refresh)
-      const { data, error } = await supabase.auth.getUser();
-      if (error || !data?.user) {
-        setError("Este link de invitación ya expiró o no es válido. Pídele a Fernando que te reenvíe la invitación.");
-      } else {
-        setUser(data.user);
+      // 2) Implicit — hay access_token/refresh_token
+      const m1 = url.match(/[?&#]access_token=([^&#]+)/);
+      const m2 = url.match(/[?&#]refresh_token=([^&#]+)/);
+      if (m1 && m2) {
+        const access = decodeURIComponent(m1[1]);
+        const refresh = decodeURIComponent(m2[1]);
+        const { data, error } = await supabase.auth.setSession({
+          access_token: access, refresh_token: refresh,
+        });
+        cleanUrl();
+        if (!error && data?.user) { setUser(data.user); setChecking(false); return; }
       }
+
+      // 3) Sesión existente (por si supabase-js ya la persistió)
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user) { setUser(userData.user); setChecking(false); return; }
+
+      // Nada funcionó
+      setError("Este link de invitación ya expiró o no es válido. Pídele a Fernando que te reenvíe la invitación.");
       setChecking(false);
     }
     bootstrap();
