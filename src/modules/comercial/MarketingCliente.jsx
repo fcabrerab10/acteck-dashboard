@@ -2,7 +2,8 @@ import React from "react";
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { Megaphone, CalendarDays } from 'lucide-react';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeEditarPestanaCliente } from '../../lib/permisos';
+import { puedeEditarPestanaCliente, puedeVerPestanaCliente } from '../../lib/permisos';
+import SinAcceso from '../../components/SinAcceso';
 
 // ═══════════ CONFIG DE TIPOS DE ACTIVIDAD ═══════════════════════
 // Cada tipo tiene color, icono y lista de métricas específicas
@@ -84,8 +85,12 @@ const fmtNum = (v) => Number(v || 0).toLocaleString("es-MX");
 
 export default function MarketingCliente({ cliente, clienteKey }) {
   const perfil = usePerfil();
+  const ckPerm = clienteKey || cliente;
+  if (!puedeVerPestanaCliente(perfil, ckPerm, 'marketing')) {
+    return <SinAcceso motivo={`No tienes acceso a Marketing de ${ckPerm || 'este cliente'}.`} />;
+  }
   // Permiso granular por (clienteKey, 'marketing').
-  const canEdit = puedeEditarPestanaCliente(perfil, clienteKey || cliente, 'marketing');
+  const canEdit = puedeEditarPestanaCliente(perfil, ckPerm, 'marketing');
   const [actividades, setActividades] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [anio, setAnio] = React.useState(2026);

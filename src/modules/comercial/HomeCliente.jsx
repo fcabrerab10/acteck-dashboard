@@ -10,7 +10,8 @@ import { Semaforo, TarjetaPendientes } from '../../components';
 import { TrendingUp, Wallet, ClipboardList, Target, BarChart3, Package } from 'lucide-react';
 import { fetchSelloutSku, fetchInventarioCliente } from '../../lib/pcelAdapter';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeEditarPestanaCliente } from '../../lib/permisos';
+import { puedeEditarPestanaCliente, puedeVerPestanaCliente } from '../../lib/permisos';
+import SinAcceso from '../../components/SinAcceso';
 
 const iconStyle14 = { width: 14, height: 14, verticalAlign: "middle", marginRight: 4 };
 const iconStyle16 = { width: 16, height: 16, verticalAlign: "middle", marginRight: 6 };
@@ -200,6 +201,9 @@ function TarjetaTendenciaML({ sellOutPorMesMarca }) {
 
 export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isML }) {
   const perfil = usePerfil();
+  if (!puedeVerPestanaCliente(perfil, clienteKey, 'home')) {
+    return <SinAcceso motivo={`No tienes acceso al Resumen de ${clienteKey || 'este cliente'}.`} />;
+  }
   // Permiso granular: edita solo si su nivel para (clienteKey, 'home') es 'edit'.
   const canEdit = puedeEditarPestanaCliente(perfil, clienteKey, 'home');
 

@@ -3,8 +3,15 @@ import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { clientes } from '../../lib/constants';
 import { Target } from 'lucide-react';
 import { fetchSelloutSku, fetchSelloutSkuRango, fetchInventarioCliente } from '../../lib/pcelAdapter';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaCliente } from '../../lib/permisos';
+import SinAcceso from '../../components/SinAcceso';
 
 export default function AnalisisCliente({ cliente, clienteKey }) {
+  var perfil = usePerfil();
+  if (!puedeVerPestanaCliente(perfil, clienteKey, 'analisis')) {
+    return React.createElement(SinAcceso, { motivo: `No tienes acceso a Análisis de ${clienteKey || 'este cliente'}.` });
+  }
   var el = React.createElement;
   var MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
   var MESES_FULL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];

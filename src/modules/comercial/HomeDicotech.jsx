@@ -12,6 +12,9 @@ import { useFacturacion, useCuotasMensuales, useInventarioCliente } from '../../
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
+import SinAcceso from '../../components/SinAcceso';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaCliente } from '../../lib/permisos';
 import { ChevronRight, Sparkles, AlertTriangle, Clock, TrendingUp } from 'lucide-react';
 
 const NOMBRES_MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -40,6 +43,10 @@ const fmtMoney = (n) => {
 const fmtPct = (n) => (n == null || !isFinite(n) ? '—' : `${Math.round(n)}%`);
 
 export default function HomeDicotech({ cliente, clienteKey }) {
+  const perfil = usePerfil();
+  if (!puedeVerPestanaCliente(perfil, clienteKey || 'dicotech', 'home')) {
+    return <SinAcceso motivo={`No tienes acceso al Resumen de ${clienteKey || 'dicotech'}.`} />;
+  }
   const { theme } = useTheme();
   const P = paletteFromTheme(theme);
   const isDark = theme.mode === 'dark';
