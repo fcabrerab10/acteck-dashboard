@@ -90,6 +90,14 @@ export default function SetPasswordPage() {
     try {
       const { error } = await supabase.auth.updateUser({ password: pwd });
       if (error) throw error;
+      // Marcar el perfil como activo (best-effort — si la columna estado
+      // no existe todavía, ignoramos el error).
+      try {
+        await supabase
+          .from('perfiles')
+          .update({ estado: 'activo', activated_at: new Date().toISOString() })
+          .eq('user_id', user.id);
+      } catch (_) { /* columna opcional */ }
       // Redirect al dashboard
       window.location.hash = '';
       window.location.reload();
