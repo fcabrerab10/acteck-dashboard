@@ -15,9 +15,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeEditarPestanaGlobal } from '../../lib/permisos';
+import { puedeEditarPestanaGlobal, CLIENTES as CLIENTES_LIST, PESTANAS_CLIENTE, PESTANAS_GLOBALES } from '../../lib/permisos';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
+import { toast } from '../../lib/toast';
 import {
   Plus, X, Search, ChevronLeft, ChevronRight, ChevronRight as ChevRight,
   AlertTriangle, Users, Calendar as CalendarIcon,
@@ -99,40 +100,41 @@ export default function PendientesCalendarioV2() {
   const [quickFecha, setQuickFecha] = useState('mañana');
   const [showEventoModal, setShowEventoModal] = useState(false);
   const [showTareaModal, setShowTareaModal] = useState(false);
+  const [showMinutaModalNueva, setShowMinutaModalNueva] = useState(false);
+  const [showInvitarExtModal, setShowInvitarExtModal] = useState(false);
 
   const esSuperAdmin = !!perfil?.es_super_admin;
 
   // ═══════════ Fetch ═══════════
+  async function refetchTodo(showSpinner = false) {
+    if (!perfil) return;
+    if (showSpinner) setLoading(true);
+    try {
+      let pendQ = supabase.from('pendientes_equipo').select('*');
+      let evQ = supabase.from('eventos_equipo').select('*');
+      if (!esSuperAdmin && yoId) {
+        pendQ = pendQ.or(
+          `creado_por.eq.${yoId},responsable.eq.${yoId},responsables.cs.{${yoId}}`
+        );
+        evQ = evQ.or(`creado_por.eq.${yoId},responsable.eq.${yoId}`);
+      }
+      const [pR, peR, evR, minR] = await Promise.all([
+        supabase.from('perfiles').select('user_id, nombre, email, rol, tipo, puesto, activo, es_super_admin').eq('activo', true),
+        pendQ,
+        evQ,
+        supabase.from('minutas').select('*, minuta_acuerdos(*)').order('fecha_reunion', { ascending: false }),
+      ]);
+      setPerfiles(pR.data || []);
+      setPendientes(peR.data || []);
+      setEventos(evR.data || []);
+      setMinutas(minR.data || []);
+    } catch (e) { console.error('PendientesV2 fetch', e); }
+    if (showSpinner) setLoading(false);
+  }
+
   useEffect(() => {
-    (async () => {
-      if (!perfil) return;
-      setLoading(true);
-      try {
-        // Query base
-        let pendQ = supabase.from('pendientes_equipo').select('*');
-        let evQ = supabase.from('eventos_equipo').select('*');
-
-        // Filtro por usuario (bypass super_admin): creador o participante
-        if (!esSuperAdmin && yoId) {
-          pendQ = pendQ.or(
-            `creado_por.eq.${yoId},responsable.eq.${yoId},responsables.cs.{${yoId}}`
-          );
-          evQ = evQ.or(`creado_por.eq.${yoId},responsable.eq.${yoId}`);
-        }
-
-        const [pR, peR, evR, minR] = await Promise.all([
-          supabase.from('perfiles').select('user_id, nombre, email, rol, tipo, puesto, activo, es_super_admin').eq('activo', true),
-          pendQ,
-          evQ,
-          supabase.from('minutas').select('*, minuta_acuerdos(*)').order('fecha_reunion', { ascending: false }),
-        ]);
-        setPerfiles(pR.data || []);
-        setPendientes(peR.data || []);
-        setEventos(evR.data || []);
-        setMinutas(minR.data || []);
-      } catch (e) { console.error('PendientesV2 fetch', e); }
-      setLoading(false);
-    })();
+    refetchTodo(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perfil, yoId, esSuperAdmin]);
 
   // ═══════════ Lookup ═══════════
@@ -384,6 +386,108 @@ export default function PendientesCalendarioV2() {
     return true;
   }
 
+  async function handleCrearMinuta(payload) {
+    // payload: { titulo, fecha_reunion, cliente, contenido, asistentes[], acuerdos[] }
+    try {
+      const insertMinuta = {
+        titulo: payload.titulo,
+        fecha_reunion: payload.fecha_reunion,
+        cliente: payload.cliente || 'otro',
+        contenido: payload.contenido || '',
+        asistentes: payload.asistentes || [],
+        creado_por: yoId,
+      };
+      const { data: min, error: mErr } = await supabase
+        .from('minutas').insert(insertMinuta).select().single();
+      if (mErr) throw mErr;
+
+      // Acuerdos + pendientes vinculados
+      const acuerdos = Array.isArray(payload.acuerdos) ? payload.acuerdos : [];
+      for (let i = 0; i < acuerdos.length; i++) {
+        const ac = acuerdos[i];
+        const desc = (ac.descripcion || '').trim();
+        if (!desc) continue;
+        let pendienteId = null;
+        if (ac.responsable || ac.fecha_limite) {
+          const pendPayload = {
+            cuenta: insertMinuta.cliente === 'interno' ? 'otro' : insertMinuta.cliente,
+            tarea: desc,
+            categoria: 'Acuerdo de minuta',
+            fecha_limite: ac.fecha_limite || null,
+            estatus: 'pendiente',
+            prioridad: ac.prioridad || 'media',
+            responsable: ac.responsable || null,
+            responsables: ac.responsable ? [ac.responsable] : [],
+            creado_por: yoId,
+            notas: `Acuerdo de minuta: ${insertMinuta.titulo}`,
+          };
+          const { data: pend } = await supabase
+            .from('pendientes_equipo').insert(pendPayload).select().single();
+          if (pend) pendienteId = pend.id;
+        }
+        await supabase.from('minuta_acuerdos').insert({
+          minuta_id: min.id,
+          descripcion: desc,
+          responsable: ac.responsable || null,
+          fecha_limite: ac.fecha_limite || null,
+          prioridad: ac.prioridad || 'media',
+          estado: 'pendiente',
+          pendiente_id: pendienteId,
+          orden: i,
+        });
+      }
+
+      toast.success('Minuta creada');
+      setShowMinutaModalNueva(false);
+      await refetchTodo(false);
+      return true;
+    } catch (e) {
+      console.error('crearMinuta', e);
+      toast.error('No se pudo crear la minuta: ' + (e.message || e));
+      return false;
+    }
+  }
+
+  async function handleInvitarExterno(payload) {
+    // payload: { nombre, email, puesto, cliente }
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      // Permisos: solo el cliente elegido en modo "ver" para todas sus pestañas
+      const permisosClean = {
+        clientes: Object.fromEntries(
+          CLIENTES_LIST.map(c => [c.id,
+            c.id === payload.cliente
+              ? Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, 'ver']))
+              : Object.fromEntries(PESTANAS_CLIENTE.map(p => [p.id, 'oculto'])),
+          ])
+        ),
+        globales: Object.fromEntries(PESTANAS_GLOBALES.map(p => [p.id, 'oculto'])),
+      };
+      const res = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({
+          nombre: payload.nombre,
+          email: payload.email,
+          puesto: payload.puesto || null,
+          tipo: 'externo',
+          permisos: permisosClean,
+          metodo: 'invite',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error creando usuario');
+      toast.success('Invitación enviada a ' + payload.email);
+      setShowInvitarExtModal(false);
+      await refetchTodo(false);
+      return true;
+    } catch (e) {
+      console.error('invitarExterno', e);
+      toast.error('No se pudo invitar: ' + (e.message || e));
+      return false;
+    }
+  }
+
   // ═══════════ Estilos base ═══════════
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#000000');
 
@@ -482,7 +586,7 @@ export default function PendientesCalendarioV2() {
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <SidebarDia theme={theme} isDark={isDark} date={diaSeleccionado} eventos={eventosDelDia} nombrePorUserId={nombrePorUserId} hoyISO={hoyISO} />
-          <SidebarEquipo theme={theme} isDark={isDark} internos={internos} externos={externos} carga={cargaPorPersona} colorPorUserId={colorPorUserId} canEdit={canEdit} />
+          <SidebarEquipo theme={theme} isDark={isDark} internos={internos} externos={externos} carga={cargaPorPersona} colorPorUserId={colorPorUserId} canEdit={canEdit && esSuperAdmin} onInvitar={() => setShowInvitarExtModal(true)} />
         </div>
       </div>
 
@@ -502,6 +606,7 @@ export default function PendientesCalendarioV2() {
         colorPorUserId={colorPorUserId}
         tipoPorUserId={tipoPorUserId}
         yoId={yoId}
+        onNueva={() => setShowMinutaModalNueva(true)}
       />
 
       {/* ═════ Modal Evento ═════ */}
@@ -525,6 +630,28 @@ export default function PendientesCalendarioV2() {
           yoId={yoId}
           onClose={() => setShowTareaModal(false)}
           onSave={handleCrearTarea}
+        />
+      )}
+
+      {/* ═════ Modal Nueva Minuta ═════ */}
+      {showMinutaModalNueva && (
+        <NuevaMinutaModal
+          theme={theme}
+          isDark={isDark}
+          internos={internos}
+          yoId={yoId}
+          onClose={() => setShowMinutaModalNueva(false)}
+          onSave={handleCrearMinuta}
+        />
+      )}
+
+      {/* ═════ Modal Invitar Externo ═════ */}
+      {showInvitarExtModal && (
+        <InvitarExternoModal
+          theme={theme}
+          isDark={isDark}
+          onClose={() => setShowInvitarExtModal(false)}
+          onSave={handleInvitarExterno}
         />
       )}
 
@@ -609,7 +736,6 @@ function CalendarioApple({ theme, isDark, mesVisible, setMesVisible, dias, onSel
               borderRadius: 999,
               width: day.esHoy ? 26 : 'auto', height: day.esHoy ? 26 : 'auto',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color2: day.esHoy ? '#FFF' : undefined,
               ...(day.esHoy ? { color: '#FFF' } : {}),
             }}>{day.d.getDate()}</span>
             <div style={{ display: 'flex', gap: 2, minHeight: 6 }}>
@@ -685,7 +811,7 @@ function SidebarDia({ theme, isDark, date, eventos, nombrePorUserId, hoyISO }) {
 }
 
 // ═══════════════ Sidebar equipo ═══════════════
-function SidebarEquipo({ theme, isDark, internos, externos, carga, colorPorUserId, canEdit }) {
+function SidebarEquipo({ theme, isDark, internos, externos, carga, colorPorUserId, canEdit, onInvitar }) {
   const cargaMap = useMemo(() => {
     const m = new Map();
     carga.forEach(c => m.set(c.perfil.user_id, c));
@@ -743,7 +869,7 @@ function SidebarEquipo({ theme, isDark, internos, externos, carga, colorPorUserI
         );
       })}
       {canEdit && (
-        <button style={{
+        <button onClick={onInvitar} style={{
           padding: '5px 10px', marginTop: 8, border: `1px dashed ${theme.border}`, borderRadius: 8, background: 'transparent',
           textAlign: 'center', width: '100%', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.accent, cursor: 'pointer',
         }}>+ Invitar colaborador externo</button>
@@ -753,7 +879,7 @@ function SidebarEquipo({ theme, isDark, internos, externos, carga, colorPorUserI
 }
 
 // ═══════════════ Minutas sección ═══════════════
-function MinutasSeccion({ theme, isDark, minutas, totalMinutas, busqueda, setBusqueda, filtro, setFiltro, onAbrir, canEdit, nombrePorUserId, colorPorUserId, tipoPorUserId, yoId }) {
+function MinutasSeccion({ theme, isDark, minutas, totalMinutas, busqueda, setBusqueda, filtro, setFiltro, onAbrir, canEdit, nombrePorUserId, colorPorUserId, tipoPorUserId, yoId, onNueva }) {
   const activas = minutas.filter(m => {
     const acs = Array.isArray(m.minuta_acuerdos) ? m.minuta_acuerdos : [];
     return acs.some(a => a.estado !== 'listo');
@@ -785,7 +911,7 @@ function MinutasSeccion({ theme, isDark, minutas, totalMinutas, busqueda, setBus
             ))}
           </div>
           {canEdit && (
-            <button style={{ padding: '5px 12px', borderRadius: 999, border: 0, background: theme.accent, color: '#FFF', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>+ Nueva minuta</button>
+            <button onClick={onNueva} style={{ padding: '5px 12px', borderRadius: 999, border: 0, background: theme.accent, color: '#FFF', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>+ Nueva minuta</button>
           )}
         </div>
       </div>
@@ -856,7 +982,7 @@ function MinutaCard({ theme, isDark, minuta, onClick, nombrePorUserId, colorPorU
                   color: '#FFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700,
                 }}>{done ? '✓' : ''}</span>
                 <span style={{ color: theme.text, textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.55 : 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {a.texto || a.contenido || '(sin descripción)'}
+                  {a.descripcion || a.texto || a.contenido || '(sin descripción)'}
                 </span>
                 <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textMuted }}>
                   {nombrePorUserId[a.responsable]?.split(' ')[0]?.substring(0, 3).toUpperCase() || '—'}{a.fecha_limite ? ` · ${fmtFechaCorta(a.fecha_limite).replace(' ', '')}` : ''}
@@ -976,7 +1102,7 @@ function MinutaModal({ theme, isDark, minuta, nombrePorUserId, colorPorUserId, t
                           cursor: canEdit ? 'pointer' : 'default',
                         }}>{done ? '✓' : ''}</span>
                       <span style={{ fontSize: 11.5, color: theme.text, textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.55 : 1 }}>
-                        {a.texto || a.contenido || '(sin descripción)'}
+                        {a.descripcion || a.texto || a.contenido || '(sin descripción)'}
                       </span>
                       <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.textMuted }}>
                         {nombrePorUserId[a.responsable]?.split(' ')[0] || '—'}{a.fecha_limite ? ` · ${fmtFechaCorta(a.fecha_limite)}` : ''}
@@ -991,12 +1117,12 @@ function MinutaModal({ theme, isDark, minuta, nombrePorUserId, colorPorUserId, t
           <div style={{ gridColumn: '1 / -1' }}>
             <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: theme.textMuted, fontWeight: 600, marginBottom: 6 }}>Seguimiento</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <SegItem theme={theme} isDark={isDark} color={theme.green} txt="Minuta creada" sub={`${fmtFechaCorta(minuta.fecha_reunion)}${minuta.autor ? ' · ' + (nombrePorUserId[minuta.autor] || '—') : ''}`} />
+              <SegItem theme={theme} isDark={isDark} color={theme.green} txt="Minuta creada" sub={`${fmtFechaCorta(minuta.fecha_reunion)}${minuta.creado_por ? ' · ' + (nombrePorUserId[minuta.creado_por] || '—') : ''}`} />
               {acs.filter(a => a.estado === 'listo').slice(0, 3).map(a => (
-                <SegItem key={a.id} theme={theme} isDark={isDark} color={theme.green} txt={`Actividad completada · ${a.texto || a.contenido || '—'}`} sub={nombrePorUserId[a.responsable] || '—'} />
+                <SegItem key={a.id} theme={theme} isDark={isDark} color={theme.green} txt={`Actividad completada · ${a.descripcion || a.descripcion || a.texto || a.contenido || '—'}`} sub={nombrePorUserId[a.responsable] || '—'} />
               ))}
               {acs.filter(a => a.estado !== 'listo' && a.fecha_limite).slice(0, 2).map(a => (
-                <SegItem key={a.id} theme={theme} isDark={isDark} color={theme.orange} txt={`Próxima acción · ${a.texto || a.contenido || '—'}`} sub={`${nombrePorUserId[a.responsable] || '—'} · ${fmtFechaCorta(a.fecha_limite)}`} />
+                <SegItem key={a.id} theme={theme} isDark={isDark} color={theme.orange} txt={`Próxima acción · ${a.descripcion || a.descripcion || a.texto || a.contenido || '—'}`} sub={`${nombrePorUserId[a.responsable] || '—'} · ${fmtFechaCorta(a.fecha_limite)}`} />
               ))}
             </div>
           </div>
@@ -1179,6 +1305,169 @@ function ModalActions({ theme, onClose, saving, disabled }) {
         {saving ? 'Guardando…' : 'Guardar'}
       </button>
     </div>
+  );
+}
+
+// ═══════════════ Modal Nueva Minuta ═══════════════
+function NuevaMinutaModal({ theme, isDark, internos, yoId, onClose, onSave }) {
+  const hoyISO = toISO(new Date());
+  const [titulo, setTitulo] = useState('');
+  const [fechaReunion, setFechaReunion] = useState(hoyISO);
+  const [cliente, setCliente] = useState('otro');
+  const [contenido, setContenido] = useState('');
+  const [asistentesSel, setAsistentesSel] = useState(yoId ? [yoId] : []);
+  const [acuerdos, setAcuerdos] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  function toggleAsistente(uid) {
+    setAsistentesSel(prev => prev.includes(uid) ? prev.filter(x => x !== uid) : [...prev, uid]);
+  }
+  function addAcuerdo() {
+    setAcuerdos(prev => [...prev, { descripcion: '', responsable: '', fecha_limite: '', prioridad: 'media' }]);
+  }
+  function updateAcuerdo(i, patch) {
+    setAcuerdos(prev => prev.map((a, idx) => idx === i ? { ...a, ...patch } : a));
+  }
+  function removeAcuerdo(i) {
+    setAcuerdos(prev => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function submit(e) {
+    e?.preventDefault();
+    if (!titulo.trim() || !fechaReunion) return;
+    setSaving(true);
+    const asistentesPayload = internos
+      .filter(p => asistentesSel.includes(p.user_id))
+      .map(p => ({ user_id: p.user_id, nombre: p.nombre || p.email }));
+    const ok = await onSave({
+      titulo: titulo.trim(),
+      fecha_reunion: fechaReunion,
+      cliente,
+      contenido,
+      asistentes: asistentesPayload,
+      acuerdos,
+    });
+    setSaving(false);
+    if (ok === false) return;
+  }
+
+  return (
+    <ModalShell theme={theme} isDark={isDark} title="Nueva minuta" subtitle="Título, asistentes, notas y acuerdos" onClose={onClose}>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Field label="Título" theme={theme}>
+          <input autoFocus value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ej. Reunión semanal Digitalife"
+            style={inputStyle(theme)} />
+        </Field>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <Field label="Fecha" theme={theme}>
+            <input type="date" value={fechaReunion} onChange={(e) => setFechaReunion(e.target.value)} style={inputStyle(theme)} />
+          </Field>
+          <Field label="Cliente" theme={theme}>
+            <select value={cliente} onChange={(e) => setCliente(e.target.value)} style={inputStyle(theme)}>
+              <option value="otro">Interno / Otro</option>
+              <option value="digitalife">Digitalife</option>
+              <option value="dicotech">Dicotech</option>
+              <option value="pcel">PCEL</option>
+              <option value="mercadolibre">Mercado Libre</option>
+            </select>
+          </Field>
+        </div>
+        <Field label="Asistentes" theme={theme}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '6px 8px', border: `1px solid ${theme.border}`, borderRadius: 8, minHeight: 40, background: theme.bg || 'transparent' }}>
+            {internos.map(p => {
+              const sel = asistentesSel.includes(p.user_id);
+              return (
+                <button type="button" key={p.user_id} onClick={() => toggleAsistente(p.user_id)}
+                  style={{
+                    padding: '4px 10px', borderRadius: 999,
+                    border: `1px solid ${sel ? theme.accent : theme.border}`,
+                    background: sel ? `${theme.accent}18` : 'transparent',
+                    color: sel ? theme.accent : theme.textMuted,
+                    fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, cursor: 'pointer',
+                  }}>
+                  {sel ? '✓ ' : ''}{(p.nombre || p.email || '').split(' ')[0]}
+                </button>
+              );
+            })}
+            {internos.length === 0 && <span style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>Sin usuarios internos</span>}
+          </div>
+        </Field>
+        <Field label="Notas / contenido" theme={theme}>
+          <textarea value={contenido} onChange={(e) => setContenido(e.target.value)} rows={4}
+            placeholder="Temas tratados, contexto…"
+            style={{ ...inputStyle(theme), resize: 'vertical', fontFamily: TYPO.fontText }} />
+        </Field>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: theme.textMuted, fontWeight: 600 }}>Acuerdos</span>
+            <button type="button" onClick={addAcuerdo} style={{ padding: '3px 10px', borderRadius: 999, border: `1px dashed ${theme.border}`, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, cursor: 'pointer' }}>+ Añadir</button>
+          </div>
+          {acuerdos.length === 0 && (
+            <div style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic', padding: '6px 0' }}>Sin acuerdos. Los acuerdos con responsable/fecha generan pendientes automáticamente.</div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {acuerdos.map((a, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 130px 120px 24px', gap: 6, alignItems: 'center' }}>
+                <input placeholder="Descripción del acuerdo" value={a.descripcion} onChange={(e) => updateAcuerdo(i, { descripcion: e.target.value })} style={inputStyle(theme)} />
+                <select value={a.responsable} onChange={(e) => updateAcuerdo(i, { responsable: e.target.value })} style={inputStyle(theme)}>
+                  <option value="">Sin resp.</option>
+                  {internos.map(p => <option key={p.user_id} value={p.user_id}>{p.nombre || p.email}</option>)}
+                </select>
+                <input type="date" value={a.fecha_limite} onChange={(e) => updateAcuerdo(i, { fecha_limite: e.target.value })} style={inputStyle(theme)} />
+                <button type="button" onClick={() => removeAcuerdo(i)} title="Quitar" style={{ width: 24, height: 24, borderRadius: 6, border: `1px solid ${theme.border}`, background: 'transparent', color: theme.textMuted, cursor: 'pointer' }}>×</button>
+              </div>
+            ))}
+          </div>
+        </div>
+        <ModalActions theme={theme} onClose={onClose} saving={saving} disabled={!titulo.trim() || !fechaReunion} />
+      </form>
+    </ModalShell>
+  );
+}
+
+// ═══════════════ Modal Invitar Externo ═══════════════
+function InvitarExternoModal({ theme, isDark, onClose, onSave }) {
+  const [nombre, setNombre] = useState('');
+  const [email, setEmail] = useState('');
+  const [puesto, setPuesto] = useState('');
+  const [cliente, setCliente] = useState((CLIENTES_LIST[0] && CLIENTES_LIST[0].id) || 'digitalife');
+  const [saving, setSaving] = useState(false);
+
+  const emailValido = /\S+@\S+\.\S+/.test(email);
+
+  async function submit(e) {
+    e?.preventDefault();
+    if (!nombre.trim() || !emailValido || !cliente) return;
+    setSaving(true);
+    await onSave({ nombre: nombre.trim(), email: email.trim().toLowerCase(), puesto: puesto.trim(), cliente });
+    setSaving(false);
+  }
+
+  return (
+    <ModalShell theme={theme} isDark={isDark} title="Invitar colaborador externo" subtitle="Recibirá un email de invitación con acceso solo al cliente seleccionado" onClose={onClose}>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Field label="Nombre completo" theme={theme}>
+          <input autoFocus value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Camilo Ramírez" style={inputStyle(theme)} />
+        </Field>
+        <Field label="Email" theme={theme}>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nombre@empresa.com" style={inputStyle(theme)} />
+        </Field>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <Field label="Puesto (opcional)" theme={theme}>
+            <input value={puesto} onChange={(e) => setPuesto(e.target.value)} placeholder="Ej. Comprador" style={inputStyle(theme)} />
+          </Field>
+          <Field label="Cliente asignado" theme={theme}>
+            <select value={cliente} onChange={(e) => setCliente(e.target.value)} style={inputStyle(theme)}>
+              {CLIENTES_LIST.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </Field>
+        </div>
+        <div style={{ fontSize: 10.5, color: theme.textMuted, background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', padding: '8px 10px', borderRadius: 8, lineHeight: 1.5 }}>
+          El colaborador solo verá las pestañas del cliente asignado (modo lectura). Podrás ajustar permisos después desde Configuración.
+        </div>
+        <ModalActions theme={theme} onClose={onClose} saving={saving} disabled={!nombre.trim() || !emailValido || !cliente} />
+      </form>
+    </ModalShell>
   );
 }
 
