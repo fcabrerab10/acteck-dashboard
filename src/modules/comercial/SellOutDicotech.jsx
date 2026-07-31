@@ -154,8 +154,20 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   }, [clienteKey, anio, anioPrev]);
 
   const mesActual = useMemo(() => {
-    let last = 1;
-    for (const r of mensual) if (r.anio === anio && Number(r.piezas) > 0) last = Math.max(last, r.mes);
+    // Si tenemos datos, tomar el último mes con actividad de este año.
+    // Si no hay datos (o la vista devolvió 0 filas), caer al mes real actual
+    // en vez de default a Enero — así se ve YTD correcto aunque el mes esté
+    // en curso sin datos aún.
+    let last = 0;
+    for (const r of mensual) {
+      if (Number(r.anio) === anio && Number(r.piezas) > 0) {
+        last = Math.max(last, Number(r.mes));
+      }
+    }
+    if (last === 0) {
+      const hoy = new Date();
+      return hoy.getFullYear() === anio ? (hoy.getMonth() + 1) : 12;
+    }
     return last;
   }, [mensual, anio]);
 
