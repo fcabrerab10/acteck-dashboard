@@ -8,6 +8,9 @@ import {
   Calendar, TrendingUp, Target, Activity,
 } from 'lucide-react';
 import SellInDrillDown, { DrillDownBoundary } from './SellInDrillDown';
+import SinAcceso from '../../components/SinAcceso';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaCliente, puedeVerPestanaGlobal } from '../../lib/permisos';
 import {
   LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip,
   CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell,
@@ -110,6 +113,13 @@ function MultiSelect({ label, options, selected, onChange, width = 160 }) {
 }
 
 export default function SellInCliente({ clienteKey }) {
+  const perfil = usePerfil();
+  const permitido = clienteKey
+    ? puedeVerPestanaCliente(perfil, clienteKey, 'sellIn')
+    : puedeVerPestanaGlobal(perfil, 'sell_in');
+  if (!permitido) {
+    return <SinAcceso motivo={clienteKey ? `No tienes acceso a Sell In de ${clienteKey}.` : 'No tienes acceso a Sell In.'} />;
+  }
   const { theme } = useTheme();
   const CLIENTE_KEY = clienteKey;
   const esGlobal = !CLIENTE_KEY;

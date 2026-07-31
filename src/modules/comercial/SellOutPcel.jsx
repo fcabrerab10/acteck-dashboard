@@ -19,6 +19,9 @@ import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
+import SinAcceso from '../../components/SinAcceso';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaCliente } from '../../lib/permisos';
 import { Search, ArrowUpDown, ArrowUp, ArrowDown, Sparkles, TrendingUp, AlertTriangle, MapPin, Zap, ChevronRight } from 'lucide-react';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -98,6 +101,10 @@ async function fetchAll(table, select, applyFilter = (q) => q) {
 // Componente principal
 // ═══════════════════════════════════════════════════════════════════
 export default function SellOutPcel({ clienteKey = 'pcel' }) {
+  const perfil = usePerfil();
+  if (!puedeVerPestanaCliente(perfil, clienteKey, 'estrategia')) {
+    return <SinAcceso motivo={`No tienes acceso a Sell Out de ${clienteKey || 'este cliente'}.`} />;
+  }
   const { theme } = useTheme();
   const P = paletteFromTheme(theme);
   const isDark = theme.mode === 'dark';

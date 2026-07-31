@@ -9,6 +9,9 @@ import {
   ComposedChart, Bar, PieChart, Pie, Cell,
 } from 'recharts';
 import * as XLSX from 'xlsx-js-style';
+import SinAcceso from '../../components/SinAcceso';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaCliente } from '../../lib/permisos';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -172,6 +175,10 @@ function MultiSelect({ label, options, selected, onChange, width = 160 }) {
 }
 
 export default function SellOutCliente({ clienteKey = 'dicotech' }) {
+  const perfil = usePerfil();
+  if (!puedeVerPestanaCliente(perfil, clienteKey, 'estrategia')) {
+    return <SinAcceso motivo={`No tienes acceso a Sell Out de ${clienteKey || 'este cliente'}.`} />;
+  }
   const meta = CLIENTES_META[clienteKey] || CLIENTES_META.dicotech;
   const ACCENT = meta.accent;
   const hoy = new Date();
