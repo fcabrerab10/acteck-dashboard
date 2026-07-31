@@ -11,6 +11,9 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
 import { Sparkles, AlertTriangle, TrendingUp, Calendar, CreditCard } from 'lucide-react';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaCliente } from '../../lib/permisos';
+import SinAcceso from '../../components/SinAcceso';
 
 const NOMBRES_MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -36,6 +39,10 @@ const fmtFechaCorta = (iso) => {
 export default function CreditoCobranzaV2({ cliente, clienteKey }) {
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';
+  const perfil = usePerfil();
+  if (!puedeVerPestanaCliente(perfil, clienteKey, 'cartera')) {
+    return <SinAcceso motivo={`No tenés acceso a Crédito y Cobranza de ${clienteKey || 'este cliente'}.`} />;
+  }
 
   const [estado, setEstado] = useState(null);
   const [estadoPrev, setEstadoPrev] = useState(null);

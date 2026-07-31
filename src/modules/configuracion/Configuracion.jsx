@@ -9,6 +9,8 @@ import {
 } from '../../lib/permisos';
 import { useTheme } from '../../lib/themeContext';
 import { THEMES } from '../../lib/themeTokens';
+import WizardNuevoUsuario from './WizardNuevoUsuario';
+import { toast } from '../../lib/toast';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Configuración — Gestión de usuarios y permisos granulares
@@ -155,6 +157,7 @@ export default function Configuracion({ session }) {
   const [msg, setMsg] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [miUserId, setMiUserId] = useState(null);
+  const [showWizard, setShowWizard] = useState(false);
 
   useEffect(() => {
     fetchUsuarios();
@@ -232,6 +235,43 @@ export default function Configuracion({ session }) {
     setShowForm(true);
   }
 
+  async function resendInvite(u) {
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const res = await fetch('/api/admin/resend-invitation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ email: u.email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success('Invitación reenviada a ' + u.email);
+    } catch (e) { toast.error('Error: ' + e.message); }
+  }
+
+  async function toggleSuspend(u) {
+    const suspender = !!u.activo; // si está activo, la acción es suspender
+    if (!confirm(suspender ? `¿Suspender a ${u.nombre}?` : `¿Reactivar a ${u.nombre}?`)) return;
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const res = await fetch('/api/admin/toggle-suspend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ perfil_id: u.id, suspended: suspender }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success(data.message);
+      fetchUsuarios();
+    } catch (e) { toast.error('Error: ' + e.message); }
+  }
+
+  function estadoDe(u) {
+    if (!u.activo || u.estado === 'suspendido') return { key: 'suspendido', label: 'Suspendido', bg: '#F0F0F2', fg: '#6E6E73', icon: '✕' };
+    if (u.estado === 'pendiente') return { key: 'pendiente', label: 'Invitación enviada', bg: '#FFF3E0', fg: '#B25000', icon: '✉' };
+    return { key: 'activo', label: 'Activo', bg: '#E5FAE8', fg: '#0F7A34', icon: '✓' };
+  }
+
   async function toggleActivo(u) {
     const token = (await supabase.auth.getSession()).data.session?.access_token;
     await fetch("/api/admin/update-user", {
@@ -304,6 +344,15 @@ export default function Configuracion({ session }) {
     (u.email  || "").toLowerCase().includes(busqueda.toLowerCase())
   );
 
+  if (showWizard) {
+    return (
+      <WizardNuevoUsuario
+        onCancel={() => setShowWizard(false)}
+        onCreated={() => { setShowWizard(false); fetchUsuarios(); }}
+      />
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       {/* Header */}
@@ -313,10 +362,10 @@ export default function Configuracion({ session }) {
           <p className="text-sm text-gray-400">Gestión de usuarios y permisos granulares</p>
         </div>
         <button
-          onClick={() => { setShowForm(true); setEditingId(null); setForm(formVacio()); }}
+          onClick={() => setShowWizard(true)}
           className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition"
         >
-          + Nuevo usuario
+          ＋ Nuevo colaborador
         </button>
       </div>
 
@@ -535,13 +584,33 @@ export default function Configuracion({ session }) {
                     {resumenPermisos(u)}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <button onClick={() => toggleActivo(u)}
-                            className={"px-2 py-1 rounded-lg text-xs font-medium " + (u.activo ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-red-100 text-red-700 hover:bg-red-200")}>
-                      {u.activo ? "Activo" : "Inactivo"}
-                    </button>
+                    {(() => {
+                      const est = estadoDe(u);
+                      return (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          padding: '4px 10px', borderRadius: 999,
+                          background: est.bg, color: est.fg,
+                          fontSize: 11, fontWeight: 600,
+                        }}>
+                          <span>{est.icon}</span>{est.label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <button onClick={() => startEdit(u)} className="text-blue-600 hover:text-blue-800 text-xs font-medium">Editar</button>
+                    <div className="flex items-center justify-center gap-3 text-xs">
+                      <button onClick={() => startEdit(u)} className="text-blue-600 hover:text-blue-800 font-medium">Editar</button>
+                      {estadoDe(u).key === 'pendiente' && (
+                        <button onClick={() => resendInvite(u)} className="text-orange-600 hover:text-orange-800 font-medium" title="Reenviar invitación">Reenviar ✉</button>
+                      )}
+                      {!u.es_super_admin && !soyYo && (
+                        <button onClick={() => toggleSuspend(u)}
+                                className={u.activo ? "text-red-600 hover:text-red-800 font-medium" : "text-green-600 hover:text-green-800 font-medium"}>
+                          {u.activo ? 'Suspender' : 'Reactivar'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
                 );

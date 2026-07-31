@@ -4,7 +4,8 @@ import { PCEL_REAL, PAGOS_DIGITALIFE_2026 } from '../../lib/constants';
 import { formatMXN, formatFecha, loadSheetJS } from '../../lib/utils';
 import { CardHeader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeEditarPestanaCliente } from '../../lib/permisos';
+import { puedeEditarPestanaCliente, puedeVerPestanaCliente } from '../../lib/permisos';
+import SinAcceso from '../../components/SinAcceso';
 import { Wallet, CalendarDays, BarChart3, ClipboardList } from 'lucide-react';
 import { NuevaPromocionButton, ListaPromociones } from './PagosPromociones';
 import LineamientosCliente from './LineamientosCliente';
@@ -48,6 +49,11 @@ function esMesFuturo(fechaStr) {
 export default function PagosCliente({ cliente, clienteKey }) {
   const c = cliente;
   const perfil = usePerfil();
+  // Self-gating (belt-and-suspenders). App.jsx ya bloquea antes, pero si
+  // alguien monta este componente directo o cambia navegación, protegemos.
+  if (!puedeVerPestanaCliente(perfil, clienteKey, 'pagos')) {
+    return <SinAcceso motivo={`No tenés acceso a Pagos de ${clienteKey || 'este cliente'}.`} />;
+  }
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#000000');

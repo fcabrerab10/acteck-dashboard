@@ -22,6 +22,7 @@ import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
 import TelemetriaPanel from './modules/interno/TelemetriaPanel';
 import AxonMexico from './modules/interno/AxonMexico';
 import LoginPage from './modules/auth/LoginPage';
+import SetPasswordPage from './modules/auth/SetPasswordPage';
 import { Configuracion } from './modules/configuracion';
 import ActualizacionDatos from './modules/settings/ActualizacionDatos';
 import { AdministracionInterna, PendientesCalendarioV2 } from './modules/interno';
@@ -427,6 +428,12 @@ export default function App() {
   ]
 
   
+  // Ruta /#/set-password → landing de invitación (aunque el usuario ya tenga
+  // sesión de invite, o si no tiene perfil aún)
+  const isSetPasswordRoute = typeof window !== 'undefined'
+    && (window.location.hash || '').startsWith('#/set-password');
+  if (isSetPasswordRoute) return <SetPasswordPage />;
+
   if (authLoading) return <FerrutekLoader fullscreen label="Cargando…" sub="Ferruteck está iniciando el dashboard" />;
   if (!authUser || !perfil) return <LoginPage onLogin={handleLogin} />;
 
