@@ -27,6 +27,46 @@ const CLIENTE_COLOR = {
   pcel:       '#FF9500',
 };
 
+// Agrupación de pestañas globales según el sidebar del dashboard.
+// Los ids referencian PESTANAS_GLOBALES.
+const GLOBAL_SECCIONES = [
+  {
+    id: 'direccionGeneral',
+    label: 'Dirección General',
+    emoji: '🏛️',
+    color: '#0F7A34',
+    items: ['estado_resultados'],
+  },
+  {
+    id: 'direccionComercial',
+    label: 'Dirección Comercial',
+    emoji: '📊',
+    color: '#0A56C0',
+    items: [
+      'vision_general', 'analisis_clientes',
+      'sell_in', 'sell_out',
+      'inventario_global', 'cobranza_global',
+      'forecast_clientes', 'forecast_solicitudes',
+      'resumen_clientes', 'propuestas',
+      'estrategia_precios', 'ordenes_compra',
+    ],
+  },
+  {
+    id: 'internaGrupo',
+    label: 'Administración Interna',
+    emoji: '🏢',
+    color: '#B36600',
+    items: ['admin_interna'],
+  },
+  {
+    id: 'axonGrupo',
+    label: 'Axon de México',
+    emoji: '🛒',
+    color: '#7F3AB0',
+    items: ['axon_mexico'],
+  },
+];
+
 const H2 = {
   fontFamily: '"SF Pro Display", -apple-system, sans-serif',
   fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1.05,
@@ -48,13 +88,22 @@ export default function WizardNuevoUsuario({ onCancel, onCreated }) {
   const [permisos, setPermisos] = useState(permisosVacios());
   const [saving, setSaving] = useState(false);
 
-  const titulos = {
-    1: 'Datos del colaborador.',
-    2: 'Elige a qué clientes tendrá acceso.',
-    3: 'Configurá el nivel de acceso por pestaña.',
-    4: datos.tipo === 'interno' ? 'Permisos globales y resumen.' : 'Revisá y confirmá.',
-  };
-  const totalPasos = 4;
+  // Los pasos dependen del tipo: los externos saltan "Globales" porque no
+  // tienen acceso a pestañas globales.
+  const stepsList = datos.tipo === 'interno'
+    ? [
+        { key: 'datos',    label: 'Datos',    titulo: 'Datos del colaborador.' },
+        { key: 'globales', label: 'Globales', titulo: 'Elige qué pestañas globales podrá ver.' },
+        { key: 'clientes', label: 'Clientes', titulo: 'Elige a qué clientes tendrá acceso.' },
+        { key: 'permisos', label: 'Permisos', titulo: 'Nivel de acceso por pestaña y resumen final.' },
+      ]
+    : [
+        { key: 'datos',    label: 'Datos',    titulo: 'Datos del colaborador.' },
+        { key: 'clientes', label: 'Clientes', titulo: 'Elige a qué clientes tendrá acceso.' },
+        { key: 'permisos', label: 'Permisos', titulo: 'Nivel de acceso por pestaña y resumen final.' },
+      ];
+  const totalPasos = stepsList.length;
+  const stepActual = stepsList[paso - 1];
 
   function actualizarNivelCliente(clienteId, pestanaId, nivel) {
     setPermisos(p => ({
@@ -84,10 +133,16 @@ export default function WizardNuevoUsuario({ onCancel, onCreated }) {
     if (clientesElegidos.includes(id)) todasCliente(id, 'oculto');
   }
 
-  // Validaciones por paso
-  const validoP1 = datos.nombre.trim() && /\S+@\S+\.\S+/.test(datos.email) &&
+  // Validaciones por step (por key, no por índice)
+  const validoDatos = datos.nombre.trim() && /\S+@\S+\.\S+/.test(datos.email) &&
     (datos.metodo === 'invite' || (datos.password.length >= 8));
-  const validoP2 = clientesElegidos.length > 0;
+  const validoClientes = clientesElegidos.length > 0;
+  const validoActual =
+    stepActual.key === 'datos' ? validoDatos :
+    stepActual.key === 'clientes' ? validoClientes :
+    true;
+  // Cambia el tipo → volver al paso 1 para evitar quedar en un step inexistente
+  React.useEffect(() => { setPaso(1); }, [datos.tipo]);
 
   async function submit() {
     setSaving(true);
@@ -138,46 +193,45 @@ export default function WizardNuevoUsuario({ onCancel, onCreated }) {
       {/* Hero negro */}
       <div style={{ background: '#000', padding: '36px 32px 44px', color: '#FFF' }}>
         <div style={EYEBROW}>Configuración · Nuevo colaborador</div>
-        <h2 style={H2}>{titulos[paso]}</h2>
-        {/* Stepper */}
+        <h2 style={H2}>{stepActual.titulo}</h2>
+        {/* Stepper dinámico según tipo */}
         <div style={{ display: 'flex', gap: 8, marginTop: 24, flexWrap: 'wrap' }}>
-          {[1,2,3,4].map(i => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '6px 12px', borderRadius: 999,
-              background: i === paso ? '#FFF' : (i < paso ? 'rgba(52,199,89,0.18)' : 'rgba(255,255,255,0.08)'),
-              color: i === paso ? '#000' : (i < paso ? '#34C759' : 'rgba(255,255,255,0.55)'),
-              fontSize: 12, fontWeight: 600, transition: `all 240ms ${APPLE_EASE}`,
-            }}>
-              <span>{i < paso ? '✓' : i}</span>
-              <span>{['Datos','Clientes','Permisos', datos.tipo === 'interno' ? 'Globales' : 'Resumen'][i-1]}</span>
-            </div>
-          ))}
+          {stepsList.map((s, i) => {
+            const n = i + 1;
+            return (
+              <div key={s.key} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 12px', borderRadius: 999,
+                background: n === paso ? '#FFF' : (n < paso ? 'rgba(52,199,89,0.18)' : 'rgba(255,255,255,0.08)'),
+                color: n === paso ? '#000' : (n < paso ? '#34C759' : 'rgba(255,255,255,0.55)'),
+                fontSize: 12, fontWeight: 600, transition: `all 240ms ${APPLE_EASE}`,
+              }}>
+                <span>{n < paso ? '✓' : n}</span>
+                <span>{s.label}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Body */}
       <div style={{ maxWidth: 860, margin: '0 auto', padding: '32px 24px 80px' }}>
-        {paso === 1 && (
+        {stepActual.key === 'datos' && (
           <PasoDatos datos={datos} setDatos={setDatos} />
         )}
-        {paso === 2 && (
+        {stepActual.key === 'globales' && (
+          <PasoGlobales permisos={permisos} onGlobal={actualizarGlobal} />
+        )}
+        {stepActual.key === 'clientes' && (
           <PasoClientes elegidos={clientesElegidos} toggle={toggleCliente} />
         )}
-        {paso === 3 && (
-          <PasoPermisosClientes
+        {stepActual.key === 'permisos' && (
+          <PasoPermisosYResumen
+            datos={datos}
             clientesElegidos={clientesElegidos}
             permisos={permisos}
             onNivel={actualizarNivelCliente}
             onTodas={todasCliente}
-          />
-        )}
-        {paso === 4 && (
-          <PasoResumen
-            datos={datos}
-            clientesElegidos={clientesElegidos}
-            permisos={permisos}
-            onGlobal={actualizarGlobal}
           />
         )}
 
@@ -192,15 +246,14 @@ export default function WizardNuevoUsuario({ onCancel, onCreated }) {
           </button>
           {paso < totalPasos ? (
             <button
-              disabled={(paso === 1 && !validoP1) || (paso === 2 && !validoP2)}
+              disabled={!validoActual}
               onClick={() => setPaso(paso+1)}
-              style={{
-                ...btnPrimary,
-                opacity: ((paso === 1 && !validoP1) || (paso === 2 && !validoP2)) ? 0.4 : 1,
-              }}>
-              {paso === 1 && 'Siguiente · Elegir clientes →'}
-              {paso === 2 && 'Siguiente · Permisos →'}
-              {paso === 3 && (datos.tipo === 'interno' ? 'Siguiente · Globales →' : 'Siguiente · Resumen →')}
+              style={{ ...btnPrimary, opacity: validoActual ? 1 : 0.4 }}>
+              {(() => {
+                const next = stepsList[paso];
+                const labels = { datos: 'Datos', globales: 'Globales', clientes: 'Clientes', permisos: 'Permisos y resumen' };
+                return `Siguiente · ${labels[next.key]} →`;
+              })()}
             </button>
           ) : (
             <button disabled={saving} onClick={submit} style={{ ...btnPrimary, fontSize: 15 }}>
@@ -415,13 +468,15 @@ function BloqueCliente({ cliente, valores, onNivel, onTodas }) {
       <div>
         {PESTANAS_CLIENTE.map((p, idx) => (
           <div key={p.id} style={{
-            display: 'flex', alignItems: 'center', gap: 14,
-            padding: '12px 18px',
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0,1fr) auto',
+            alignItems: 'center', gap: 16,
+            padding: '16px 20px',
             borderTop: idx === 0 ? 'none' : '1px solid rgba(0,0,0,0.05)',
           }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 500, color: '#1D1D1F' }}>{p.label}</div>
-              <div style={{ fontSize: 11.5, color: '#86868B', marginTop: 2 }}>{p.desc}</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: '#1D1D1F', lineHeight: 1.35 }}>{p.label}</div>
+              <div style={{ fontSize: 12, color: '#86868B', marginTop: 3, lineHeight: 1.4 }}>{p.desc}</div>
             </div>
             <PillsNivel valor={valores[p.id] || 'oculto'} onChange={n => onNivel(p.id, n)} />
           </div>
@@ -462,8 +517,70 @@ function PillsNivel({ valor, onChange }) {
   );
 }
 
-// ── Paso 4 ─────────────────────────────────────────────────────────
-function PasoResumen({ datos, clientesElegidos, permisos, onGlobal }) {
+// ── Paso Globales (solo internos) — agrupa por sección del sidebar ─────
+function PasoGlobales({ permisos, onGlobal }) {
+  const pestanaMap = useMemo(() => Object.fromEntries(PESTANAS_GLOBALES.map(p => [p.id, p])), []);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <p style={{ color: '#6E6E73', fontSize: 14, marginTop: 0, marginBottom: 0 }}>
+        Los grupos siguen la misma estructura del menú del dashboard.
+      </p>
+      {GLOBAL_SECCIONES.map(sec => {
+        const items = sec.items.map(id => pestanaMap[id]).filter(Boolean);
+        if (items.length === 0) return null;
+        return (
+          <div key={sec.id} style={{
+            background: '#FFF', borderRadius: 16, overflow: 'hidden',
+            border: '1px solid rgba(0,0,0,0.06)',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '14px 18px', background: '#000', color: '#FFF',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: sec.color }} />
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, letterSpacing: '-0.015em' }}>
+                  {sec.emoji} {sec.label}
+                </h3>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <MiniBtn onClick={() => sec.items.forEach(id => id !== 'configuracion' && onGlobal(id, 'ver'))}>Todo Ver</MiniBtn>
+                <MiniBtn onClick={() => sec.items.forEach(id => id !== 'configuracion' && onGlobal(id, 'edit'))}>Todo Editar</MiniBtn>
+                <MiniBtn onClick={() => sec.items.forEach(id => id !== 'configuracion' && onGlobal(id, 'oculto'))}>Todo Ocultar</MiniBtn>
+              </div>
+            </div>
+            <div>
+              {items.map((p, idx) => (
+                <div key={p.id} style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0,1fr) auto',
+                  alignItems: 'center', gap: 16,
+                  padding: '16px 20px',
+                  borderTop: idx === 0 ? 'none' : '1px solid rgba(0,0,0,0.05)',
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: '#1D1D1F', lineHeight: 1.35 }}>{p.label}</div>
+                    <div style={{ fontSize: 12, color: '#86868B', marginTop: 3, lineHeight: 1.4 }}>{p.desc}</div>
+                  </div>
+                  <PillsNivel
+                    valor={p.id === 'configuracion' ? 'oculto' : (permisos.globales[p.id] || 'oculto')}
+                    onChange={n => p.id !== 'configuracion' && onGlobal(p.id, n)} />
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      <p style={{ fontSize: 11.5, color: '#86868B', marginTop: -4, lineHeight: 1.5 }}>
+        <b>Configuración</b> (gestión de usuarios) es exclusiva del Super Admin —
+        no aparece en la lista porque no es asignable.
+      </p>
+    </div>
+  );
+}
+
+// ── Paso Permisos por cliente + Resumen final ──────────────────────
+function PasoPermisosYResumen({ datos, clientesElegidos, permisos, onNivel, onTodas }) {
   const editables = useMemo(() => {
     const items = [];
     clientesElegidos.forEach(cid => {
@@ -486,38 +603,14 @@ function PasoResumen({ datos, clientesElegidos, permisos, onGlobal }) {
 
   return (
     <div>
-      {datos.tipo === 'interno' && (
-        <div style={{ marginBottom: 32 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1D1D1F', margin: '0 0 12px' }}>
-            Pestañas globales (solo internos)
-          </h3>
-          <div style={{
-            background: '#FFF', borderRadius: 14, overflow: 'hidden',
-            border: '1px solid rgba(0,0,0,0.06)',
-          }}>
-            {PESTANAS_GLOBALES.map((p, idx) => (
-              <div key={p.id} style={{
-                display: 'flex', alignItems: 'center', gap: 14,
-                padding: '11px 16px',
-                borderTop: idx === 0 ? 'none' : '1px solid rgba(0,0,0,0.05)',
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 500, color: '#1D1D1F' }}>{p.label}</div>
-                  <div style={{ fontSize: 11, color: '#86868B', marginTop: 1 }}>{p.desc}</div>
-                </div>
-                <PillsNivel
-                  valor={p.id === 'configuracion' ? 'oculto' : (permisos.globales[p.id] || 'oculto')}
-                  onChange={n => p.id !== 'configuracion' && onGlobal(p.id, n)} />
-              </div>
-            ))}
-          </div>
-          <p style={{ fontSize: 11, color: '#86868B', marginTop: 8 }}>
-            Configuración solo la ve Fernando (Super Admin) — no se puede compartir.
-          </p>
-        </div>
-      )}
+      <PasoPermisosClientes
+        clientesElegidos={clientesElegidos}
+        permisos={permisos}
+        onNivel={onNivel}
+        onTodas={onTodas}
+      />
 
-      <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1D1D1F', margin: '0 0 12px' }}>
+      <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1D1D1F', margin: '32px 0 12px' }}>
         Resumen final
       </h3>
       <div style={{
