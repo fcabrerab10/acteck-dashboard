@@ -201,7 +201,7 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
     const t = { [anioPrev]: Array(12).fill(0), [anio]: Array(12).fill(0) };
     const c = { [anioPrev]: Array(12).fill(0), [anio]: Array(12).fill(0) };
     for (const r of mensual) {
-      const y = r.anio, i = r.mes - 1;
+      const y = Number(r.anio), i = Number(r.mes) - 1;
       if (i < 0 || i > 11) continue;
       if (m[y]) {
         m[y][i] = Number(r.monto) || 0;
