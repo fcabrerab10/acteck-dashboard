@@ -31,8 +31,32 @@ export default async function handler(req, res) {
   const baseUrl = process.env.PUBLIC_SITE_URL || `${proto}://${host}`;
   const redirectTo = `${baseUrl}/#/set-password`;
 
-  const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, { redirectTo });
-  if (error) return res.status(400).json({ error: error.message });
+  // Primero intentamos invite (funciona si el usuario no existe todavía).
+  // Si falla porque ya existe, usamos generateLink({ type: 'recovery' })
+  // que sí soporta usuarios existentes y manda un email de acceso.
+  const { error: inviteErr } = await supabaseAdmin.auth.admin
+    .inviteUserByEmail(email, { redirectTo });
 
-  return res.status(200).json({ ok: true, message: 'Invitación reenviada' });
+  if (!inviteErr) {
+    return res.status(200).json({ ok: true, message: 'Invitación reenviada' });
+  }
+
+  // El error clásico es "A user with this email address has already been registered"
+  const yaExiste = /already been registered|already exists/i.test(inviteErr.message || '');
+  if (!yaExiste) {
+    return res.status(400).json({ error: inviteErr.message });
+  }
+
+  // Usuario ya existe → link de recovery (usa el mismo redirectTo).
+  const { error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+    type: 'recovery',
+    email,
+    options: { redirectTo },
+  });
+  if (linkErr) return res.status(400).json({ error: linkErr.message });
+
+  return res.status(200).json({
+    ok: true,
+    message: 'Link de acceso reenviado (usa el template "Reset Password" de Supabase).',
+  });
 }
