@@ -29,16 +29,49 @@ export default function SetPasswordPage() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    // Al entrar al link de invite, Supabase deja la sesión activa.
-    // Si no hay sesión, mostramos error explicativo.
-    supabase.auth.getUser().then(({ data, error }) => {
+    // Con hash router (`/#/set-password`), Supabase concatena los tokens al
+    // final del hash — algo como `/#/set-password&access_token=...`
+    // o `/#/set-password#access_token=...`. La detección automática de
+    // Supabase no maneja este caso, así que parseamos a mano.
+    async function bootstrap() {
+      const fullHash = window.location.hash || '';
+      const search = window.location.search || '';
+      // Buscar tokens en cualquier parte de la URL (hash o query)
+      const buscar = fullHash + '&' + search;
+      let access = null, refresh = null;
+      const m1 = buscar.match(/access_token=([^&#]+)/);
+      const m2 = buscar.match(/refresh_token=([^&#]+)/);
+      if (m1) access = decodeURIComponent(m1[1]);
+      if (m2) refresh = decodeURIComponent(m2[1]);
+
+      if (access && refresh) {
+        // Set session desde los tokens del link
+        const { data, error } = await supabase.auth.setSession({
+          access_token: access, refresh_token: refresh,
+        });
+        // Limpiar los tokens del URL para que no queden expuestos
+        if (window.history.replaceState) {
+          window.history.replaceState(null, '', window.location.pathname + '#/set-password');
+        }
+        if (error || !data?.user) {
+          setError("Este link de invitación ya expiró o no es válido. Pídele a Fernando que te reenvíe la invitación.");
+        } else {
+          setUser(data.user);
+        }
+        setChecking(false);
+        return;
+      }
+
+      // No hay tokens en el URL — puede haber sesión ya establecida (refresh)
+      const { data, error } = await supabase.auth.getUser();
       if (error || !data?.user) {
         setError("Este link de invitación ya expiró o no es válido. Pídele a Fernando que te reenvíe la invitación.");
       } else {
         setUser(data.user);
       }
       setChecking(false);
-    });
+    }
+    bootstrap();
   }, []);
 
   const nombre = user?.user_metadata?.full_name || user?.email?.split('@')[0] || "colaborador";
