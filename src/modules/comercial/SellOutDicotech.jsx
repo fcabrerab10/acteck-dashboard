@@ -7,6 +7,7 @@
 // ─ Sin split por marca (Dicotech es single-brand Acteck)
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useRoadmap, useInventarioCliente } from '../../lib/queries';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -107,12 +108,14 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   const anio = new Date().getFullYear();
   const anioPrev = anio - 1;
 
+  // Datos compartidos via React Query
+  const { data: roadmap = [] } = useRoadmap();
+  const { data: inventarioCliente = [] } = useInventarioCliente(clienteKey);
+
   const [loading, setLoading] = useState(true);
   const [mensual, setMensual] = useState([]);
   const [skuMesRaw, setSkuMesRaw] = useState([]);
   const [sucursalMes, setSucursalMes] = useState([]);
-  const [roadmap, setRoadmap] = useState([]);
-  const [inventarioCliente, setInventarioCliente] = useState([]);
   const [inventarioSucursal, setInventarioSucursal] = useState([]);
   const [selloutGeneral, setSelloutGeneral] = useState([]); // detalle transaccional para vendedores/clientes/drill
   const [rango, setRango] = useState(() => new Set(['Q3']));
@@ -125,15 +128,12 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      const [mes, skuMes, sucMes, rdmp, inv, invSuc, general] = await Promise.all([
+      const [mes, skuMes, sucMes, invSuc, general] = await Promise.all([
         fetchAll('v_sellout_dicotech_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
         fetchAll('v_sellout_dicotech_sku_mes', 'sku,anio,mes,piezas,monto',
           (q) => q.in('anio', [anioPrev, anio])),
         fetchAll('v_sellout_dicotech_sucursal_mes', 'sucursal,anio,mes,piezas,monto,tx,clientes_distintos',
           (q) => q.eq('anio', anio)),
-        fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp,sort_order'),
-        fetchAll('inventario_cliente', 'sku,stock,valor,precio_venta,costo_convenio,anio,semana,fecha_ultima_venta,dias_sin_venta',
-          (q) => q.eq('cliente', clienteKey)),
         fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
           (q) => q.eq('cliente', clienteKey)),
         // FIX audit #3: ilike en vez de eq strict. La columna 'mayorista' puede
@@ -145,8 +145,6 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
       setMensual(mes);
       setSkuMesRaw(skuMes);
       setSucursalMes(sucMes);
-      setRoadmap(rdmp);
-      setInventarioCliente(inv);
       setInventarioSucursal(invSuc);
       setSelloutGeneral(general);
       setLoading(false);
