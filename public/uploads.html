@@ -15,7 +15,7 @@
   const { data: { session } } = await supa.auth.getSession();
   if (!session) { alert('Debes iniciar sesión en el dashboard primero.'); window.location.href = '/'; }
   else {
-    const { data: perfil } = await supa.from('perfiles').select('es_super_admin,rol').eq('user_id', session.user.id).single();
+    const { data: perfil } = await supa.from('perfiles').select('es_super_admin,rol,nombre,email').eq('user_id', session.user.id).single();
     const esSuper = perfil?.es_super_admin === true || perfil?.rol === 'super_admin';
     if (!esSuper) { alert('Sólo el Super Admin puede acceder a esta página.'); window.location.href = '/'; }
     else {
@@ -28,6 +28,9 @@
         }
         return origFetch(input, init);
       };
+      // Expuesto para el historial compartido (avatar/iniciales del user local).
+      window.__uploaderSession = session;
+      window.__uploaderPerfil = perfil;
       document.documentElement.style.visibility = 'visible';
     }
   }
@@ -2113,64 +2116,310 @@ function fmtDate(iso){
 }
 
 // ===== Historial de actualizaciones (últimas N por srcId) =====
+// Fuente principal: tabla `sync_events` en Supabase (compartida entre users).
+// Fuente fallback: localStorage (por si el endpoint falla / offline).
+// Ver docs/MIGRATION_SYNC_EVENTS.md.
 const LS_HISTORIAL_KEY = 'uploads_history_v1';
 const HISTORIAL_MAX = 30;
+// Cache de eventos remotos por srcId (para render instantáneo en re-open del panel).
+const REMOTE_HIST_CACHE = {};
+
 function getHistorial(srcId){
   try { const d = JSON.parse(localStorage.getItem(LS_HISTORIAL_KEY)||'{}'); return Array.isArray(d[srcId]) ? d[srcId] : []; } catch{ return []; }
 }
 function histBtnLabel(srcId, open){
-  const n = getHistorial(srcId).length;
+  const remote = REMOTE_HIST_CACHE[srcId];
+  const n = Array.isArray(remote) ? remote.length : getHistorial(srcId).length;
   const arrow = open ? '▲' : '▼';
   return n === 0 ? 'Ver historial ' + arrow : 'Historial (' + n + ') ' + arrow;
 }
-function pushHistorial(srcId, meta){
+// Guarda solo en localStorage (cache local). No hace fetch — para eso está logSyncEvent.
+function pushHistorialLocal(srcId, meta){
   try {
     const d = JSON.parse(localStorage.getItem(LS_HISTORIAL_KEY)||'{}');
     const arr = Array.isArray(d[srcId]) ? d[srcId] : [];
     arr.unshift(Object.assign({ fecha: new Date().toISOString() }, meta));
     d[srcId] = arr.slice(0, HISTORIAL_MAX);
     localStorage.setItem(LS_HISTORIAL_KEY, JSON.stringify(d));
-    const panel = document.getElementById('hist-panel-' + srcId);
-    if (panel && panel.classList.contains('open')) renderHistorialInto(panel, srcId);
-    const btn = document.getElementById('hist-btn-' + srcId);
-    if (btn) btn.textContent = histBtnLabel(srcId, panel && panel.classList.contains('open'));
-    const wrap = document.getElementById('hist-wrap-' + srcId);
-    if (wrap) wrap.style.display = '';
-    if (typeof refreshKPIs === 'function') refreshKPIs();
-  } catch(e) { console.warn('pushHistorial error', e); }
+  } catch(e) { console.warn('pushHistorialLocal error', e); }
 }
-function renderHistorialInto(cont, srcId){
-  const arr = getHistorial(srcId);
+// Mapeo local {estado:'ok'|'error', tipo, filas, archivo, mensaje, slot} → payload server.
+function localMetaToServer(srcId, meta, extra){
+  const status = meta.estado === 'error' ? 'error' : (meta.estado === 'warning' ? 'warning' : 'success');
+  const detalles = { tipo: meta.tipo || 'upload' };
+  if (meta.mensaje) detalles.mensaje = meta.mensaje;
+  if (meta.slot) detalles.slot = meta.slot;
+  return {
+    src_id: srcId,
+    status_key: (extra && extra.status_key) || null,
+    status,
+    filas: meta.filas != null ? meta.filas : null,
+    filename: meta.archivo || null,
+    duracion_ms: (extra && extra.duracion_ms) || null,
+    detalles,
+  };
+}
+// Registra un evento: escribe local (siempre) y dispara POST al server.
+// srcObj puede ser el `src` completo — se usa para inferir status_key.
+async function logSyncEvent(srcOrId, meta){
+  const srcId = typeof srcOrId === 'string' ? srcOrId : srcOrId.id;
+  const srcObj = typeof srcOrId === 'object' ? srcOrId : null;
+  const statusKey = srcObj?.statusKey || null;
+
+  // 1) Persistir local como cache (para carga instantánea en offline / fallback).
+  pushHistorialLocal(srcId, meta);
+
+  // 2) UI update inmediato — si el panel está abierto, mostrar cache local ya.
+  const panel = document.getElementById('hist-panel-' + srcId);
+  if (panel && panel.classList.contains('open')) {
+    // Render optimista con lo que tenemos, luego refresca con server.
+    const cached = REMOTE_HIST_CACHE[srcId];
+    if (Array.isArray(cached)) {
+      cached.unshift({
+        id: '__local__' + Date.now(),
+        created_at: new Date().toISOString(),
+        status: meta.estado === 'error' ? 'error' : 'success',
+        filas: meta.filas ?? null,
+        filename: meta.archivo || null,
+        user_nombre: SESSION_USER_NAME,
+        detalles: { tipo: meta.tipo || 'upload', mensaje: meta.mensaje, slot: meta.slot },
+      });
+      renderHistorialServerInto(panel, srcId, cached);
+    } else {
+      renderHistorialLocalInto(panel, srcId);
+    }
+  }
+  const btn = document.getElementById('hist-btn-' + srcId);
+  if (btn) btn.textContent = histBtnLabel(srcId, panel && panel.classList.contains('open'));
+  const wrap = document.getElementById('hist-wrap-' + srcId);
+  if (wrap) wrap.style.display = '';
+  if (typeof refreshKPIs === 'function') refreshKPIs();
+
+  // 3) Fire-and-forget POST al server.
+  try {
+    const payload = localMetaToServer(srcId, meta, { status_key: statusKey });
+    const r = await fetch('/api/admin/log-sync-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      const t = await r.text().catch(()=> '');
+      console.warn('log-sync-event failed', r.status, t.slice(0, 200));
+      return;
+    }
+    // 4) Refrescar el cache remoto para reflejar el nuevo evento (con su id real).
+    fetchServerHistorial(srcId).then(evts => {
+      if (!evts) return;
+      const p = document.getElementById('hist-panel-' + srcId);
+      if (p && p.classList.contains('open')) renderHistorialServerInto(p, srcId, evts);
+      const b = document.getElementById('hist-btn-' + srcId);
+      if (b) b.textContent = histBtnLabel(srcId, p && p.classList.contains('open'));
+    });
+  } catch(e) {
+    console.warn('log-sync-event network error', e.message);
+  }
+}
+
+// Alias legacy: mantenido por si algún call-site externo aún lo usa.
+// Internamente enruta al nuevo camino compartido.
+function pushHistorial(srcId, meta){ return logSyncEvent(srcId, meta); }
+
+// GET al server con timeout corto — retorna array de eventos o null en error.
+async function fetchServerHistorial(srcId, limit){
+  try {
+    const q = new URLSearchParams();
+    if (srcId) q.set('src_id', srcId);
+    q.set('limit', String(limit || HISTORIAL_MAX));
+    const r = await fetch('/api/admin/sync-history?' + q.toString(), { cache: 'no-store' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const arr = Array.isArray(j?.events) ? j.events : [];
+    REMOTE_HIST_CACHE[srcId] = arr;
+    return arr;
+  } catch(e) {
+    console.warn('fetchServerHistorial error', e.message);
+    return null;
+  }
+}
+
+// Guarda el nombre del user logueado para el render optimista y avatares.
+let SESSION_USER_NAME = '';
+function refreshSessionUserName(){
+  try {
+    if (window.__uploaderPerfil && window.__uploaderPerfil.nombre) {
+      SESSION_USER_NAME = window.__uploaderPerfil.nombre;
+      return;
+    }
+    if (window.__uploaderSession && window.__uploaderSession.user) {
+      SESSION_USER_NAME = window.__uploaderSession.user.user_metadata?.full_name
+        || window.__uploaderSession.user.email || '';
+    }
+  } catch {}
+}
+refreshSessionUserName();
+window.addEventListener('DOMContentLoaded', refreshSessionUserName);
+
+// ===== Helpers de UI para historial =====
+function iniciales(nombre){
+  if (!nombre) return '?';
+  const parts = String(nombre).trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+function hashColor(str){
+  // hash determinista → hue estable por nombre.
+  let h = 0;
+  const s = String(str || '');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  return `hsl(${hue}, 55%, 45%)`;
+}
+function tiempoRelativo(iso){
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return '—';
+  const diffMs = Date.now() - d.getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return 'Ahora';
+  if (min < 60) return `Hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `Hace ${h} h`;
+  // Si es ayer, "Ayer"; si es de esta semana, día; si no, "3 Ago"
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const eventDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dayDiff = Math.round((startOfToday - eventDay) / 86400000);
+  if (dayDiff === 1) return 'Ayer';
+  if (dayDiff < 7) return d.toLocaleDateString('es-MX', { weekday: 'long' });
+  return `${d.getDate()} ${MES_CORTO_ES[d.getMonth()]}`;
+}
+function tipoAccionLabel(tipo){
+  switch (tipo) {
+    case 'sync':   return 'sincronizó';
+    case 'cron':   return 'ejecutó auto-sync';
+    case 'extra':  return 'subió slot extra';
+    case 'upload':
+    default:       return 'subió';
+  }
+}
+
+// Render principal: eventos del server (con avatar, nombre, tiempo relativo).
+function renderHistorialServerInto(cont, srcId, events){
   cont.innerHTML = '';
+  const arr = Array.isArray(events) ? events : [];
   if (arr.length === 0) {
-    cont.appendChild(el('div', {style:'padding:12px; color:#94A3B8; font-size:11px; text-align:center;'}, 'Sin cargas registradas todavía'));
+    cont.appendChild(el('div', {style:'padding:14px; color:#94A3B8; font-size:11px; text-align:center;'}, 'Sin cargas registradas todavía'));
     return;
   }
-  const ok = arr.filter(function(x){ return x.estado === 'ok'; }).length;
-  const err = arr.filter(function(x){ return x.estado === 'error'; }).length;
-  const TIPO_LBL = { upload:'Archivo', sync:'Sync manual', cron:'Auto-sync', extra:'Slot extra' };
-  const header = el('div', {style:'background:#F8FAFC; padding:8px 12px; font-size:10px; color:#64748B; letter-spacing:1px; text-transform:uppercase; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between;'},
+  const ok  = arr.filter(x => x.status === 'success').length;
+  const err = arr.filter(x => x.status === 'error').length;
+  const wrn = arr.filter(x => x.status === 'warning').length;
+  const summary = [
+    ok  + ' exitosas',
+    err + ' error' + (err !== 1 ? 'es' : ''),
+    wrn ? (wrn + ' warning' + (wrn !== 1 ? 's' : '')) : null,
+  ].filter(Boolean).join(' · ');
+  const header = el('div', {style:'background:#F8FAFC; padding:8px 12px; font-size:10px; color:#64748B; letter-spacing:1px; text-transform:uppercase; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; gap:8px;'},
     el('span', {}, 'Historial (últimas ' + arr.length + ')'),
-    el('span', {style:'text-transform:none; letter-spacing:0;'}, ok + ' exitosas · ' + err + ' error' + (err !== 1 ? 'es' : ''))
+    el('span', {style:'text-transform:none; letter-spacing:0;'}, summary)
   );
   cont.appendChild(header);
-  for (const it of arr) {
-    const colorEst = it.estado === 'error' ? '#DC2626' : '#059669';
-    const iconoEst = it.estado === 'error' ? '✗' : '✓';
-    const tipo = TIPO_LBL[it.tipo] || 'Carga';
-    const detalle = it.filas
-      ? (it.archivo ? it.archivo + ' · ' : '') + it.filas.toLocaleString() + ' filas'
-      : (it.mensaje || '');
-    const detalleColor = it.estado === 'error' ? '#DC2626' : '#64748B';
-    const row = el('div', {style:'padding:10px 12px; border-bottom:1px solid #F1F5F9; display:grid; grid-template-columns:16px 1fr auto; gap:10px; align-items:baseline;'},
-      el('span', {style:'color:' + colorEst + '; font-weight:500;'}, iconoEst),
-      el('div', {},
-        el('div', {style:'font-size:12px; color:#1E293B; font-weight:500;'}, fmtDate(it.fecha)),
-        detalle ? el('div', {style:'font-size:11px; color:' + detalleColor + '; margin-top:1px;'}, detalle) : null,
+
+  for (const ev of arr) {
+    const nombre = ev.user_nombre || 'Alguien';
+    const ini = iniciales(nombre);
+    const bg = hashColor(nombre);
+    const tipo = ev.detalles?.tipo || 'upload';
+    const filename = ev.filename;
+    const filas = ev.filas;
+    const accion = tipoAccionLabel(tipo);
+
+    // Meta línea: "1,240 filas · Hace 2 h"
+    const metaParts = [];
+    if (filas != null) metaParts.push(Number(filas).toLocaleString('es-MX') + ' filas');
+    metaParts.push(tiempoRelativo(ev.created_at));
+    const meta = metaParts.join(' · ');
+
+    // Status pill si no es success
+    let pill = null;
+    if (ev.status === 'error') {
+      pill = el('span', {style:'display:inline-block;background:#FEE2E2;color:#B91C1C;font-size:9.5px;font-weight:600;letter-spacing:0.3px;padding:2px 6px;border-radius:4px;text-transform:uppercase;'}, 'Error');
+    } else if (ev.status === 'warning') {
+      pill = el('span', {style:'display:inline-block;background:#FEF3C7;color:#B45309;font-size:9.5px;font-weight:600;letter-spacing:0.3px;padding:2px 6px;border-radius:4px;text-transform:uppercase;'}, 'Warning');
+    }
+
+    const avatar = el('div', {
+      style: `flex:none;width:26px;height:26px;border-radius:50%;background:${bg};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:600;letter-spacing:0.3px;`,
+      title: nombre,
+    }, ini);
+
+    const line1 = el('div', {style:'font-size:12px;color:#1E293B;line-height:1.35;'},
+      el('span', {style:'font-weight:600;'}, nombre),
+      ' ',
+      el('span', {style:'color:#475569;'}, accion + (filename ? ' ' : '')),
+      filename ? el('span', {style:'font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:11px;color:#0F172A;'}, filename) : null,
+      pill ? el('span', {style:'margin-left:6px;'}, pill) : null,
+    );
+
+    const line2 = el('div', {
+      style:'font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:10.5px;color:#64748B;margin-top:2px;font-variant-numeric:tabular-nums;'
+    }, meta);
+
+    const detail = (ev.status === 'error' || ev.status === 'warning') && ev.detalles?.mensaje
+      ? el('div', {style:'font-size:11px;color:#B91C1C;margin-top:3px;line-height:1.4;'}, ev.detalles.mensaje)
+      : null;
+
+    const row = el('div', {style:'padding:10px 12px;border-bottom:1px solid #F1F5F9;display:flex;gap:10px;align-items:flex-start;'},
+      avatar,
+      el('div', {style:'flex:1;min-width:0;'},
+        line1,
+        line2,
+        detail,
       ),
-      el('span', {style:'font-size:10px; color:#94A3B8; text-transform:uppercase; letter-spacing:0.5px;'}, tipo),
     );
     cont.appendChild(row);
+  }
+}
+
+// Render fallback: solo cache local (mismo estilo que server pero sin user_nombre real).
+function renderHistorialLocalInto(cont, srcId){
+  const arr = getHistorial(srcId);
+  const asServer = arr.map((it) => ({
+    id: '__local__' + (it.fecha || Math.random()),
+    created_at: it.fecha,
+    status: it.estado === 'error' ? 'error' : 'success',
+    filas: it.filas ?? null,
+    filename: it.archivo || null,
+    user_nombre: SESSION_USER_NAME || 'Local',
+    detalles: { tipo: it.tipo, mensaje: it.mensaje, slot: it.slot },
+  }));
+  renderHistorialServerInto(cont, srcId, asServer);
+  // Nota visual: banner "modo offline" arriba
+  const warn = el('div', {
+    style:'background:#FEF3C7;color:#92400E;font-size:10.5px;padding:6px 12px;border-bottom:1px solid #FDE68A;text-align:center;letter-spacing:0.2px;'
+  }, '⚠ Historial local (server no disponible) — puede diferir entre usuarios');
+  cont.insertBefore(warn, cont.firstChild);
+}
+
+// Handler llamado cuando se expande el panel — fetch server, fallback local.
+async function abrirPanelHistorial(cont, srcId){
+  // Render inmediato con cache remoto si lo hay, o local mientras esperamos.
+  const cached = REMOTE_HIST_CACHE[srcId];
+  if (Array.isArray(cached)) {
+    renderHistorialServerInto(cont, srcId, cached);
+  } else {
+    // spinner discreto
+    cont.innerHTML = '';
+    cont.appendChild(el('div', {style:'padding:14px;color:#94A3B8;font-size:11px;text-align:center;'}, 'Cargando historial…'));
+  }
+  const events = await fetchServerHistorial(srcId);
+  if (events) {
+    renderHistorialServerInto(cont, srcId, events);
+  } else if (!Array.isArray(cached)) {
+    // No hay ni cache ni server — cae a localStorage.
+    renderHistorialLocalInto(cont, srcId);
   }
 }
 
@@ -2306,7 +2555,7 @@ function buildSourceCard(src){
       e.stopPropagation();
       const p = document.getElementById('hist-panel-' + src.id);
       const opened = p.classList.toggle('open');
-      if (opened) renderHistorialInto(p, src.id);
+      if (opened) abrirPanelHistorial(p, src.id);
       this.textContent = histBtnLabel(src.id, opened);
     }
   }, histBtnLabel(src.id, false));
@@ -2455,12 +2704,12 @@ async function handleUploadExtra(src, ex){
     setExStatus('b-ok', `✓ ${rows.length} filas`);
     // El slot extra registra su historial en el src padre para que aparezca
     // en el mismo desplegable de la tarjeta principal.
-    pushHistorial(src.id, { estado:'ok', tipo:'extra', slot: ex.id, filas: rows.length, archivo: f.name });
+    logSyncEvent(src, { estado:'ok', tipo:'extra', slot: ex.id, filas: rows.length, archivo: f.name });
   } catch (e) {
     console.error(e);
     setExStatus('b-err','Error');
     appendExLog('ERROR: ' + e.message);
-    pushHistorial(src.id, { estado:'error', tipo:'extra', slot: ex.id, archivo: f.name, mensaje: e.message });
+    logSyncEvent(src, { estado:'error', tipo:'extra', slot: ex.id, archivo: f.name, mensaje: e.message });
   }
 }
 
@@ -2706,7 +2955,7 @@ async function handleUpload(src){
     }
 
     saveLastUpdated(src.id);
-    pushHistorial(src.id, { estado:'ok', tipo:'upload', filas: filasTotal, archivo: f.name });
+    logSyncEvent(src, { estado:'ok', tipo:'upload', filas: filasTotal, archivo: f.name });
     const badge = document.getElementById(`updated-${src.id}`);
     badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
     badge.style.display = '';
@@ -2715,7 +2964,7 @@ async function handleUpload(src){
     console.error(e);
     setStatus(src,'b-err','Error');
     appendLog(src, 'ERROR: ' + e.message);
-    pushHistorial(src.id, { estado:'error', tipo:'upload', archivo: f.name, mensaje: e.message });
+    logSyncEvent(src, { estado:'error', tipo:'upload', archivo: f.name, mensaje: e.message });
   }
 }
 
@@ -2739,7 +2988,7 @@ async function handleCronSync(src){
     appendLog(src, `✓ Procesadas ${parsed} filas · Upserteadas ${up} · Sheet: ${data.sheet || '?'}`);
     if (data.errors?.length) appendLog(src, 'Errores: ' + JSON.stringify(data.errors).slice(0, 400));
     saveLastUpdated(src.id);
-    pushHistorial(src.id, { estado:'ok', tipo:'cron', filas: up });
+    logSyncEvent(src, { estado:'ok', tipo:'cron', filas: up });
     const badge = document.getElementById(`updated-${src.id}`);
     badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
     badge.style.display = '';
@@ -2747,7 +2996,7 @@ async function handleCronSync(src){
   } catch (e) {
     appendLog(src, 'ERROR de red: ' + e.message);
     setStatus(src,'b-err','Error');
-    pushHistorial(src.id, { estado:'error', tipo:'cron', mensaje: e.message });
+    logSyncEvent(src, { estado:'error', tipo:'cron', mensaje: e.message });
   }
 }
 
@@ -2777,7 +3026,7 @@ async function handleSync(src){
     await postChunks(src, 'embarques_compras', 'po,codigo', rows);
 
     saveLastUpdated(src.id);
-    pushHistorial(src.id, { estado:'ok', tipo:'sync', filas: rows.length });
+    logSyncEvent(src, { estado:'ok', tipo:'sync', filas: rows.length });
     const badge = document.getElementById(`updated-${src.id}`);
     badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
     badge.style.display = '';
@@ -2785,7 +3034,7 @@ async function handleSync(src){
   } catch(e) {
     console.error(e);
     appendLog(src, 'ERROR: ' + e.message);
-    pushHistorial(src.id, { estado:'error', tipo:'sync', mensaje: e.message });
+    logSyncEvent(src, { estado:'error', tipo:'sync', mensaje: e.message });
     setStatus(src,'b-err','Error');
   }
 }
