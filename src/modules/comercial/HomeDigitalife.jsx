@@ -8,6 +8,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useFacturacion, useCuotasMensuales, useInventarioCliente } from '../../lib/queries';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
@@ -46,14 +47,16 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   const anio = new Date().getFullYear();
   const mesActual = new Date().getMonth() + 1;
 
+  // Datos compartidos via React Query (cache 5min entre módulos)
+  const { data: facturacion = [] } = useFacturacion(clienteKey, [anio - 1, anio], 'sku,anio,mes,piezas,monto');
+  const { data: cuotasMes = [] } = useCuotasMensuales(clienteKey, anio);
+  const { data: inventario = [] } = useInventarioCliente(clienteKey);
+
   const [loading, setLoading] = useState(true);
-  const [facturacion, setFacturacion] = useState([]);       // facturacion_clientes (Sell In real, año actual + anterior)
-  const [cuotasMes, setCuotasMes] = useState([]);
   const [aging, setAging] = useState(null);
   const [sellInSku, setSellInSku] = useState([]);
   const [sellOutDetalle, setSellOutDetalle] = useState([]);
   const [productos, setProductos] = useState([]);
-  const [inventario, setInventario] = useState([]);         // inventario_cliente (fuente real)
   const [cortesHist, setCortesHist] = useState([]);         // estados_cuenta históricos para cobranza
   const [rango, setRango] = useState(() => new Set([getCurrentQ(mesActual)]));
   const [marcaRango, setMarcaRango] = useState(getCurrentQ(mesActual));
@@ -95,25 +98,18 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
         return acc;
       };
 
-      const [facR, cR, ecHistR, siR, prR, soRaw, invRaw] = await Promise.all([
-        supabase.from('facturacion_clientes').select('sku,anio,mes,piezas,monto').eq('cliente_key', clienteKey).in('anio', [anio - 1, anio]),
-        supabase.from('cuotas_mensuales').select('*').eq('cliente', clienteKey).eq('anio', anio),
+      const [ecHistR, siR, prR, soRaw] = await Promise.all([
         supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true }),
         supabase.from('sell_in_sku').select('sku, mes, monto_pesos, piezas').eq('cliente', clienteKey).eq('anio', anio),
         supabase.from('productos_cliente').select('sku, marca, precio_venta').eq('cliente', clienteKey),
         // Sell out con paginación (Digitalife tiene ~20K rows)
         fetchAll('sellout_detalle', 'fecha, total, cantidad, no_parte, marca', (q) => q.eq('cliente', clienteKey).gte('fecha', anioAntIni)),
-        // Inventario con paginación (por si crece a >1000 SKUs)
-        fetchAll('inventario_cliente', 'sku, stock, valor, precio_venta, costo_convenio, anio, semana', (q) => q.eq('cliente', clienteKey)),
       ]);
       if (cancel) return;
-      setFacturacion(facR.data || []);
-      setCuotasMes(cR.data || []);
       setCortesHist(ecHistR.data || []);
       setSellInSku(siR.data || []);
       setProductos(prR.data || []);
       setSellOutDetalle(soRaw || []);
-      setInventario(invRaw || []);
       const ecActualId = (ecHistR.data || []).slice(-1)[0]?.id;
 
       // Aging (mismo cálculo que antes, buckets sólo vencidos)
