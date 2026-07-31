@@ -7,6 +7,9 @@ import {
   Activity, Search, X, TrendingUp, TrendingDown, AlertTriangle, Tag, Download, ChevronDown, ChevronRight, Check, Sparkles, ArrowRight, ArrowUp,
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
+import SinAcceso from '../../components/SinAcceso';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaGlobal } from '../../lib/permisos';
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, Area, XAxis, YAxis, Tooltip,
   CartesianGrid, ResponsiveContainer, Legend,
@@ -158,6 +161,10 @@ function MultiSelect({ label, options, selected, onChange, width = 140 }) {
 }
 
 export default function EstrategiaPrecios() {
+  const perfil = usePerfil();
+  if (!puedeVerPestanaGlobal(perfil, 'estrategia_precios')) {
+    return <SinAcceso motivo="No tienes acceso a Estrategia de Precios." />;
+  }
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';
   const P = paletteFromTheme(theme);

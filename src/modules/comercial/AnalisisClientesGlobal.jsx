@@ -5,6 +5,9 @@ import { TYPO } from '../../lib/themeTokens';
 import {
   Activity, TrendingUp, TrendingDown, Minus, Search, X, Users, Target, Wallet, Calendar,
 } from 'lucide-react';
+import SinAcceso from '../../components/SinAcceso';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaGlobal } from '../../lib/permisos';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
 } from 'recharts';
@@ -305,6 +308,10 @@ const fmtPct = (n) => n == null || isNaN(n) ? '—' : n.toFixed(1) + '%';
 const fmtInt = (n) => n == null || isNaN(n) ? '—' : Math.round(n).toLocaleString('es-MX');
 
 export default function AnalisisClientesGlobal() {
+  const perfil = usePerfil();
+  if (!puedeVerPestanaGlobal(perfil, 'analisis_clientes')) {
+    return <SinAcceso motivo="No tienes acceso a Análisis por Cliente." />;
+  }
   const { theme } = useTheme();
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [aniosDisponibles, setAniosDisponibles] = useState([]);

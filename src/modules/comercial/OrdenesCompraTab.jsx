@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeEditarPestanaGlobal } from '../../lib/permisos';
+import { puedeEditarPestanaGlobal, puedeVerPestanaGlobal } from '../../lib/permisos';
+import SinAcceso from '../../components/SinAcceso';
 import { toast } from '../../lib/toast';
 import { formatMXN } from '../../lib/utils';
 import {
@@ -79,6 +80,9 @@ function diasDesde(iso) {
 // ────────── Componente principal ──────────
 export default function OrdenesCompraTab() {
   const perfil = usePerfil();
+  if (!puedeVerPestanaGlobal(perfil, 'ordenes_compra')) {
+    return <SinAcceso motivo="No tienes acceso a Órdenes de Compra." />;
+  }
   const canEdit = puedeEditarPestanaGlobal(perfil, 'ordenes_compra');
   const data = useOCData();
 

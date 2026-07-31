@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import AppleLoader from '../../components/apple/AppleLoader';
+import SinAcceso from '../../components/SinAcceso';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaGlobal } from '../../lib/permisos';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import {
@@ -381,6 +384,10 @@ const sumYTDPor = (rows, fn, mesMax) => rows
 
 // ────────── Componente principal ──────────
 export default function VisionGeneral() {
+  const perfil = usePerfil();
+  if (!puedeVerPestanaGlobal(perfil, 'vision_general')) {
+    return <SinAcceso motivo="No tienes acceso a Visión General." />;
+  }
   const { theme } = useTheme();
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [aniosDisponibles, setAniosDisponibles] = useState([]);

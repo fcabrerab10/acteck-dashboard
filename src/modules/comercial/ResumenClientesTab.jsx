@@ -6,6 +6,9 @@ import { fetchInventarioCliente } from '../../lib/pcelAdapter';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { TrendingUp, AlertTriangle, Target, Package } from 'lucide-react';
+import SinAcceso from '../../components/SinAcceso';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaGlobal } from '../../lib/permisos';
 
 /**
  * Resumen Clientes v3 — Apple Bento editorial
@@ -464,6 +467,10 @@ function estatusCliente(resumen, theme) {
 // COMPONENTE PRINCIPAL
 // ════════════════════════════════════════════════════════════════════
 export default function ResumenClientesTab({ onDrillDown }) {
+  const perfil = usePerfil();
+  if (!puedeVerPestanaGlobal(perfil, 'resumen_clientes')) {
+    return <SinAcceso motivo="No tienes acceso al Resumen de Clientes." />;
+  }
   const { theme } = useTheme();
   const data = useResumenData();
 

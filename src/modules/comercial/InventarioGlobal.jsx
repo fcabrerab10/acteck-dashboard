@@ -6,6 +6,9 @@ import {
   Activity, Boxes, MapPin, AlertTriangle, ArrowRightLeft, FileText,
   Package, TrendingUp, Percent, ChevronRight, Search, Download,
 } from 'lucide-react';
+import SinAcceso from '../../components/SinAcceso';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaGlobal } from '../../lib/permisos';
 
 const PALETTE = {
   blue:   { bg: '#E6F1FB', text: '#042C53', mid: '#185FA5', strong: '#3B82F6', soft: '#B5D4F4' },
@@ -121,6 +124,10 @@ const fmtInt = (n) => n == null || isNaN(n) ? '—' : Math.round(n).toLocaleStri
 const fmtPct = (n) => n == null || isNaN(n) ? '—' : n.toFixed(1) + '%';
 
 export default function InventarioGlobal() {
+  const perfil = usePerfil();
+  if (!puedeVerPestanaGlobal(perfil, 'inventario_global')) {
+    return <SinAcceso motivo="No tienes acceso a Inventario." />;
+  }
   const { theme } = useTheme();
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(true);

@@ -17,6 +17,7 @@ import NecesidadCard from './forecast/NecesidadCard';
 import { roadmapStyle } from '../../lib/roadmapColors';
 import { useSolicitudes } from './forecast/useSolicitudes';
 import { puedeEditarPestanaGlobal, puedeVerPestanaGlobal } from '../../lib/permisos';
+import SinAcceso from '../../components/SinAcceso';
 
 /**
  * Forecast Clientes v3 — Planeación de compras (Acteck)
@@ -507,6 +508,9 @@ function diasHasta(iso) {
 // ────────── Componente principal ──────────
 export default function ForecastClientesTab() {
   const perfil = usePerfil();
+  if (!puedeVerPestanaGlobal(perfil, 'forecast_clientes')) {
+    return <SinAcceso motivo="No tienes acceso a S&OP." />;
+  }
   const data = useForecastData();
   const [horizonte, setHorizonte] = useState(3);
   const [busqueda, setBusqueda] = useState('');

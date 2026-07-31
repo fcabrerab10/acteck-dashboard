@@ -7,6 +7,9 @@ import {
   Target, Plus, Search, X, ChevronRight, Trash2, Edit2, Truck, Package,
   Sparkles, ChevronDown, AlertTriangle, Send,
 } from 'lucide-react';
+import SinAcceso from '../../components/SinAcceso';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaGlobal } from '../../lib/permisos';
 
 // ═══ Constantes y helpers ═══
 const CLIENTES = [
@@ -141,6 +144,10 @@ function ultimaFechaOc(oc, envios) {
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════
 export default function TrackingPedidos() {
+  const perfil = usePerfil();
+  if (!puedeVerPestanaGlobal(perfil, 'ordenes_compra')) {
+    return <SinAcceso motivo="No tienes acceso a Tracking de Pedidos." />;
+  }
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';
   const P = paletteFromTheme(theme);

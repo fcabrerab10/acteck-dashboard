@@ -5,6 +5,9 @@ import { useTheme } from '../../lib/themeContext';
 import { AppleH1, AppleEyebrow, AppleSegment } from '../../components/apple';
 import { TYPO } from '../../lib/themeTokens';
 import { Calculator, Printer, X, AlertTriangle, ChevronRight } from 'lucide-react';
+import SinAcceso from '../../components/SinAcceso';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaGlobal } from '../../lib/permisos';
 
 // ────────── Constantes ──────────
 const MESES_LBL  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -64,6 +67,10 @@ const esSubcuenta = (cuenta) => /^\s*\*/.test(cuenta || '');
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════
 export default function EstadoResultados() {
+  const perfil = usePerfil();
+  if (!puedeVerPestanaGlobal(perfil, 'estado_resultados')) {
+    return <SinAcceso motivo="No tienes acceso a Estado de Resultados." />;
+  }
   const { theme } = useTheme();
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [aniosDisponibles, setAniosDisponibles] = useState([]);

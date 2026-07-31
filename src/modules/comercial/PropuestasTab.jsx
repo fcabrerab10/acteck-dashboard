@@ -7,6 +7,9 @@ import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { ClipboardList, Search, ChevronRight, Download, X, Sparkles, ArrowLeft, Save } from 'lucide-react';
+import SinAcceso from '../../components/SinAcceso';
+import { usePerfil } from '../../lib/perfilContext';
+import { puedeVerPestanaGlobal } from '../../lib/permisos';
 
 // ═══ Constantes ═══
 const CLIENTES = [
@@ -91,6 +94,10 @@ function nuevaPropuestaId() {
 // COMPONENTE PRINCIPAL
 // ════════════════════════════════════════════════════════════════════
 export default function PropuestasTab() {
+  const perfil = usePerfil();
+  if (!puedeVerPestanaGlobal(perfil, 'propuestas')) {
+    return <SinAcceso motivo="No tienes acceso a Propuestas." />;
+  }
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';
 
