@@ -33,60 +33,154 @@
   }
 </script>
 <style>
-  :root { --azul:#1e40af; --gris:#f3f4f6; --bord:#e5e7eb; --ok:#059669; --err:#dc2626; --warn:#d97706; }
+  :root {
+    --azul:#007AFF; --gris:#f3f4f6; --bord:rgba(0,0,0,0.06); --ok:#059669; --err:#dc2626; --warn:#d97706;
+    --ink:#0F172A; --muted:#64748B; --hairline:rgba(0,0,0,0.06);
+  }
   *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#fff;color:#111}
-  header{padding:24px 32px;border-bottom:1px solid var(--bord);display:flex;justify-content:space-between;align-items:center}
-  header h1{margin:0;font-size:22px}
-  header a{color:var(--azul);text-decoration:none;font-size:14px}
-  main{padding:24px 32px;max-width:1200px;margin:0 auto}
-  .intro{color:#555;margin-bottom:24px;line-height:1.5}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
-  .card{border:1px solid var(--bord);border-radius:10px;padding:16px;background:#fff;display:flex;flex-direction:column;gap:10px}
-  .card h3{margin:0;font-size:15px}
-  .card .desc{color:#666;font-size:13px;min-height:36px}
-  .card .meta{font-size:12px;color:#888}
-  .card .actions{display:flex;gap:8px;align-items:center;margin-top:auto}
-  .card input[type=file]{flex:1;font-size:12px}
-  .btn{background:var(--azul);color:#fff;border:0;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:13px}
+  body{
+    margin:0;
+    font-family:-apple-system,'SF Pro Text','SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    background:#F5F5F7;color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  .display{font-family:-apple-system,'SF Pro Display','Segoe UI',Roboto,sans-serif;letter-spacing:-0.025em}
+  .mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+  .tabular{font-variant-numeric:tabular-nums}
+
+  main{padding:20px 24px 60px;max-width:1180px;margin:0 auto}
+  .top-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;font-size:12px}
+  .top-nav a{color:var(--azul);text-decoration:none}
+  .top-nav a:hover{text-decoration:underline}
+  .top-nav .refresh-btn{background:transparent;border:1px solid rgba(0,0,0,0.1);color:var(--ink);padding:5px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:500}
+  .top-nav .refresh-btn:hover{background:#fff}
+
+  /* Hero editorial negro */
+  .hero{background:#000;border-radius:12px;padding:16px 20px 18px;color:#fff;margin-bottom:14px}
+  .hero .eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:0.12em;color:rgba(255,255,255,0.55);font-weight:500}
+  .hero h2{margin:6px 0 4px;font-size:20px;font-weight:600;letter-spacing:-0.025em;line-height:1.15}
+  .hero p{margin:0 0 12px;color:rgba(255,255,255,0.72);font-size:12px;max-width:600px;line-height:1.5}
+  .kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .kpi-card{background:rgba(255,255,255,0.06);border-radius:8px;padding:8px 10px}
+  .kpi-card .label{font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:rgba(255,255,255,0.55);font-weight:500}
+  .kpi-card .val{font-family:-apple-system,'SF Pro Display',sans-serif;font-size:18px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;margin-top:2px;color:#fff}
+  .kpi-card.warn .val{color:#FF9F0A}
+  .kpi-card .sub{font-size:10px;color:rgba(255,255,255,0.5);margin-top:1px}
+
+  /* Bloques colapsables */
+  .grupo-block{background:#fff;border:1px solid var(--hairline);border-radius:12px;margin-bottom:8px;overflow:hidden}
+  .grupo-header{cursor:pointer;padding:10px 14px;display:flex;align-items:center;gap:10px;user-select:none;transition:background .15s}
+  .grupo-header:hover{background:rgba(0,0,0,0.02)}
+  .grupo-header .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .grupo-header .title{font-size:13px;font-weight:600;color:var(--ink)}
+  .grupo-header .sub{font-size:10.5px;color:var(--muted);margin-left:2px}
+  .grupo-header .spacer{flex:1}
+  .grupo-header .count{font-size:11px;color:var(--muted);background:rgba(0,0,0,0.04);padding:2px 8px;border-radius:10px;font-variant-numeric:tabular-nums}
+  .grupo-header .chev{color:var(--muted);font-size:11px;width:12px;text-align:center;transition:transform .18s}
+  .grupo-block.collapsed .chev{transform:rotate(-90deg)}
+  .grupo-body{border-top:1px solid var(--hairline)}
+  .grupo-block.collapsed .grupo-body{display:none}
+
+  /* Filas (siguen siendo .card para compat con setStatus) */
+  .card{display:block;padding:0;background:transparent;border:0;position:relative}
+  .card + .card{border-top:1px solid var(--hairline)}
+  .row-main{display:grid;grid-template-columns:1fr 110px 150px auto;gap:12px;align-items:center;padding:12px 14px;transition:background .16s,border-color .16s;cursor:pointer;border-top:1px solid transparent;margin-top:-1px;position:relative}
+  .card:first-child .row-main{margin-top:0}
+  .row-main:hover{background:rgba(0,122,255,0.03)}
+  .card.dragover .row-main{background:rgba(0,122,255,0.08);border-top:2px dashed var(--azul)}
+  .card.uploading .row-main{background:rgba(255,159,10,0.05)}
+
+  .row-title{min-width:0}
+  .row-title .t{font-size:12.5px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .row-title .drop-hint{display:none;font-size:10px;color:var(--azul);background:rgba(0,122,255,0.1);padding:1px 8px;border-radius:10px;font-weight:500}
+  .row-main:hover .drop-hint{display:inline-block}
+  .card.dragover .drop-hint{display:inline-block;background:var(--azul);color:#fff}
+  .row-title .file-hint{font-family:ui-monospace,'SF Mono',monospace;font-size:10.5px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .badge-tipo{font-size:10px;font-weight:600;padding:3px 8px;border-radius:10px;letter-spacing:0.01em;text-align:center;justify-self:start}
+  .badge-tipo.t-semana{background:rgba(0,122,255,0.1);color:#0058B5}
+  .badge-tipo.t-mes{background:rgba(175,82,222,0.1);color:#7A2AAD}
+  .badge-tipo.t-updated{background:rgba(16,185,129,0.1);color:#047857}
+  .badge-tipo.t-sellout{background:rgba(245,158,11,0.12);color:#B45309}
+  .badge-tipo.t-idle{background:rgba(100,116,139,0.1);color:var(--muted)}
+
+  .status-cell{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);min-width:0}
+  .status-cell .sdot{width:8px;height:8px;border-radius:50%;background:#94A3B8;flex:none}
+  .status-cell.fresh .sdot{background:#10B981}
+  .status-cell.stale .sdot{background:#F59E0B}
+  .status-cell.old .sdot{background:#EF4444}
+  .status-cell.empty{color:#94A3B8;font-style:italic}
+  .status-cell .stxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .actions-cell{display:flex;gap:6px;align-items:center;justify-content:flex-end}
+  .actions-cell input[type=file]{display:none}
+  .btn{background:var(--azul);color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11.5px;font-weight:500;letter-spacing:-0.005em}
+  .btn:hover{background:#0062CC}
   .btn:disabled{opacity:.5;cursor:not-allowed}
-  .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
-  .b-ok{background:#dcfce7;color:var(--ok)}
-  .b-err{background:#fee2e2;color:var(--err)}
-  .b-warn{background:#fef3c7;color:var(--warn)}
-  .b-idle{background:#e5e7eb;color:#374151}
-  .log{max-height:140px;overflow:auto;font-family:ui-monospace,monospace;font-size:11px;background:#0b1020;color:#d1d5db;border-radius:6px;padding:8px;white-space:pre-wrap;display:none}
-  .log.open{display:block}
-  .status-line{font-size:12px;min-height:18px}
-  .last-updated{font-size:11px;color:#059669;background:#dcfce7;padding:2px 8px;border-radius:12px;display:inline-block;margin-top:2px}
+  .btn.ghost{background:rgba(0,0,0,0.05);color:var(--ink)}
+  .btn.ghost:hover{background:rgba(0,0,0,0.08)}
+  .btn.cron{background:#10B981}
+  .btn.cron:hover{background:#059669}
+
+  .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:600;letter-spacing:-0.005em}
+  .b-ok{background:#DCFCE7;color:var(--ok)}
+  .b-err{background:#FEE2E2;color:var(--err)}
+  .b-warn{background:#FEF3C7;color:var(--warn)}
+  .b-idle{background:#E5E7EB;color:#374151}
+
+  .status-line{font-size:11px;min-height:0}
+  .status-line:empty{display:none}
+  .last-updated{display:none}
+
+  /* Sección expandible */
+  .row-expand{display:none;padding:12px 14px 16px;background:rgba(0,0,0,0.015);border-top:1px solid var(--hairline);font-size:12px}
+  .card.expanded .row-expand{display:block}
+  .row-expand .desc{color:#475569;font-size:12px;line-height:1.5;margin-bottom:10px}
+  .row-expand .meta-info{font-size:10.5px;color:var(--muted);font-family:ui-monospace,'SF Mono',monospace;margin-bottom:12px;word-break:break-word}
+  .row-expand .status-block{margin:6px 0 10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
   .hist-wrap{margin-top:6px}
-  .hist-btn{background:transparent;border:none;color:#64748B;cursor:pointer;font-size:11px;padding:2px 4px;text-decoration:underline;text-underline-offset:2px}
-  .hist-btn:hover{color:#0F172A}
-  .hist-panel{display:none;margin-top:8px;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;background:#fff;max-height:280px;overflow-y:auto}
+  .hist-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px 4px;text-decoration:underline;text-underline-offset:2px}
+  .hist-btn:hover{color:var(--ink)}
+  .hist-panel{display:none;margin-top:6px;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;background:#fff;max-height:280px;overflow-y:auto}
   .hist-panel.open{display:block}
-  .grupo-section{grid-column:1 / -1;display:flex;flex-direction:column;gap:14px}
-  .grupo-header{cursor:pointer;display:flex;align-items:baseline;gap:14px;padding:18px 4px 8px;margin:10px 0 0;user-select:none;transition:opacity .15s}
-  .grupo-header:hover{opacity:.75}
-  .grupo-chevron{display:inline-block;transition:transform .2s;font-size:14px;color:#64748B;width:14px}
-  .grupo-section.collapsed .grupo-chevron{transform:rotate(-90deg)}
-  .grupo-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
-  .grupo-section.collapsed .grupo-cards{display:none}
-  .fuente-status{display:flex;align-items:center;gap:6px;font-size:11px;color:#475569;background:#f1f5f9;padding:4px 10px;border-radius:12px;align-self:flex-start}
-  .fuente-status .dot{width:8px;height:8px;border-radius:50%;background:#94a3b8;flex:none}
-  .fuente-status.fresh .dot{background:#10b981}
-  .fuente-status.stale .dot{background:#f59e0b}
-  .fuente-status.old .dot{background:#ef4444}
-  .fuente-status.empty{color:#94a3b8;background:#f8fafc;font-style:italic}
+
+  .log{max-height:180px;overflow:auto;font-family:ui-monospace,'SF Mono',monospace;font-size:10.5px;background:#0b1020;color:#d1d5db;border-radius:6px;padding:8px;white-space:pre-wrap;display:none;margin-top:8px}
+  .log.open{display:block}
+
+  /* Slot extra dentro del expand */
+  .extra-slot{margin-top:14px;padding-top:12px;border-top:1px dashed #CBD5E1}
+  .extra-slot .et{font-weight:600;font-size:12px;color:#334155;margin-bottom:4px}
+  .extra-slot .ed{color:#64748B;font-size:11px;margin-bottom:4px}
+  .extra-slot .em{font-family:ui-monospace,'SF Mono',monospace;font-size:10.5px;color:var(--muted);margin-bottom:6px}
+  .extra-slot .ea{display:flex;gap:6px;align-items:center;margin-top:6px}
+
+  @media (max-width:720px){
+    .kpi-strip{grid-template-columns:repeat(2,1fr)}
+    .row-main{grid-template-columns:1fr auto;gap:8px}
+    .badge-tipo,.status-cell{grid-column:1 / -1;justify-self:start}
+    .actions-cell{grid-column:1 / -1;justify-content:flex-start}
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>⚙️ Actualizar datos</h1>
-  <a href="/">← Volver al dashboard</a>
-</header>
 <main>
-  <p class="intro">Sube cada archivo <strong>tal como te lo comparten</strong>. El sistema lo parsea y actualiza Supabase según la estrategia correcta para cada fuente.</p>
-  <div class="grid" id="grid"></div>
+  <div class="top-nav">
+    <a href="/">← Volver al dashboard</a>
+    <button class="refresh-btn" id="btn-refresh-status" type="button">↻ Actualizar estados</button>
+  </div>
+  <section class="hero">
+    <div class="eyebrow">Configuración · Importador Central</div>
+    <h2 class="display">Arrastra archivos directo a cada fila.</h2>
+    <p>Cero clics extra: drag &amp; drop desde Finder al renglón de la tarjeta. Cada fila muestra su historial reciente al expandirla.</p>
+    <div class="kpi-strip" id="kpi-strip">
+      <div class="kpi-card"><div class="label">Cargas hoy</div><div class="val tabular" id="kpi-hoy">—</div></div>
+      <div class="kpi-card"><div class="label">Al día</div><div class="val tabular" id="kpi-aldia">—</div><div class="sub" id="kpi-aldia-sub"></div></div>
+      <div class="kpi-card" id="kpi-pendientes-card"><div class="label">Pendientes</div><div class="val tabular" id="kpi-pendientes">—</div></div>
+      <div class="kpi-card"><div class="label">Última carga</div><div class="val tabular" id="kpi-ultima">—</div></div>
+    </div>
+  </section>
+  <div id="grid"></div>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -2042,6 +2136,7 @@ function pushHistorial(srcId, meta){
     if (btn) btn.textContent = histBtnLabel(srcId, panel && panel.classList.contains('open'));
     const wrap = document.getElementById('hist-wrap-' + srcId);
     if (wrap) wrap.style.display = '';
+    if (typeof refreshKPIs === 'function') refreshKPIs();
   } catch(e) { console.warn('pushHistorial error', e); }
 }
 function renderHistorialInto(cont, srcId){
@@ -2158,17 +2253,18 @@ function pintarEstadoFuente(src){
   const node = document.getElementById(`fstatus-${src.id}`);
   if (!node) return;
   const est = describirEstado(src);
-  node.className = 'fuente-status';
+  node.className = 'status-cell';
+  const dot = el('span', {class:'sdot'});
   if (!est) {
     node.classList.add('empty');
     node.innerHTML = '';
-    node.append(el('span', {class:'dot'}), 'Sin datos en Supabase');
+    node.append(dot, el('span', {class:'stxt'}, 'Sin datos'));
     return;
   }
   const cls = freshnessClass(est.dias);
   if (cls) node.classList.add(cls);
   node.innerHTML = '';
-  node.append(el('span', {class:'dot'}), est.label);
+  node.append(dot, el('span', {class:'stxt'}, est.label));
 }
 
 async function cargarStatusFuentes(){
@@ -2177,6 +2273,7 @@ async function cargarStatusFuentes(){
     if (!r.ok) return;
     UPLOAD_STATUS = await r.json();
     for (const src of SOURCES) pintarEstadoFuente(src);
+    if (typeof refreshKPIs === 'function') refreshKPIs();
   } catch (e) {
     console.warn('No se pudo cargar /api/upload-status', e);
   }
@@ -2194,37 +2291,19 @@ function setColapsado(grupoId, val){
 // Construye una tarjeta para una fuente — separado para reutilizar el render
 // dentro de cada grupo.
 function buildSourceCard(src){
+  // Elementos con IDs que setStatus / appendLog / handleUpload esperan (conservados)
   const log = el('pre', {class:'log', id:`log-${src.id}`});
-  const status = el('div', {class:'status-line'}, el('span', {class:'badge b-idle'}, 'Esperando archivo'));
-  let file, btn;
-  if (src.syncMode) {
-    file = el('span', {}, '');
-    btn = el('button', {class:'btn', onclick: () => handleSync(src)}, '🔄 Sincronizar');
-  } else {
-    file = el('input', {type:'file', accept:'.xlsx,.xls,.csv', id:`file-${src.id}`});
-    btn = el('button', {class:'btn', onclick: () => handleUpload(src)}, 'Subir');
-    if (src.disabled) { btn.disabled = true; btn.textContent = 'Próximamente'; }
-  }
-  let cronBtn = null;
-  if (src.cronEndpoint) {
-    cronBtn = el('button', {
-      class:'btn',
-      style: 'background:#10B981;color:#fff;',
-      onclick: () => handleCronSync(src),
-    }, '⚡ Auto-sync ahora');
-  }
+  const status = el('div', {class:'status-line'});
   const lastUp = getLastUpdated(src.id);
   const updBadge = el('div', {class:'last-updated', id:`updated-${src.id}`},
     lastUp ? `🕐 Última actualización: ${fmtDate(lastUp)}` : '');
-  if (!lastUp) updBadge.style.display = 'none';
 
-  // Botón + panel de historial (bloque separado; no toca updBadge)
+  // Botón + panel de historial
   const histPanel = el('div', { class:'hist-panel', id:`hist-panel-${src.id}` });
   const histBtn = el('button', {
-    class:'hist-btn',
-    id:`hist-btn-${src.id}`,
-    type:'button',
-    onclick: function() {
+    class:'hist-btn', id:`hist-btn-${src.id}`, type:'button',
+    onclick: function(e) {
+      e.stopPropagation();
       const p = document.getElementById('hist-panel-' + src.id);
       const opened = p.classList.toggle('open');
       if (opened) renderHistorialInto(p, src.id);
@@ -2232,44 +2311,116 @@ function buildSourceCard(src){
     }
   }, histBtnLabel(src.id, false));
   const histWrap = el('div', { class:'hist-wrap', id:`hist-wrap-${src.id}` }, histBtn, histPanel);
-  const tieneHist = getHistorial(src.id).length > 0;
-  if (!lastUp && !tieneHist) histWrap.style.display = 'none';
-  // Estado de los datos en Supabase (lo llena `pintarEstadoFuente`)
-  const dataStatus = el('div', { class:'fuente-status empty', id:`fstatus-${src.id}` },
-    el('span', {class:'dot'}), 'Cargando…');
-  // Slot extra opcional (ej. Promociones por temporada dentro de Lista de Precios)
+
+  // Slot extra opcional
   let extraSection = null;
   if (src.extraSlot) {
     const ex = src.extraSlot;
     const exFile = el('input', {type:'file', accept:'.xlsx,.xls,.csv', id:`file-${ex.id}`});
-    const exBtn = el('button', {class:'btn', onclick: () => handleUploadExtra(src, ex)}, 'Subir');
+    const exBtn = el('button', {class:'btn', type:'button', onclick: (e) => { e.stopPropagation(); handleUploadExtra(src, ex); }}, 'Subir');
     const exStatus = el('div', {class:'status-line', id:`status-${ex.id}`}, el('span', {class:'badge b-idle'}, 'Sin archivo (opcional)'));
     const exLog = el('pre', {class:'log', id:`log-${ex.id}`});
-    extraSection = el('div', {style:'margin-top:16px; padding-top:14px; border-top:1px dashed #CBD5E1;'},
-      el('div', {style:'font-weight:600; font-size:13px; color:#334155; margin-bottom:4px;'}, ex.title),
-      el('div', {class:'desc', style:'font-size:12px;'}, ex.desc),
-      el('div', {class:'meta', style:'font-size:11px;'}, `📄 ${ex.file} · 🎯 ${ex.table}`),
+    extraSection = el('div', {class:'extra-slot'},
+      el('div', {class:'et'}, ex.title),
+      el('div', {class:'ed'}, ex.desc),
+      el('div', {class:'em'}, `📄 ${ex.file} · 🎯 ${ex.table}`),
       exStatus,
-      el('div', {class:'actions'}, exFile, exBtn),
+      el('div', {class:'ea'}, exFile, exBtn),
       exLog,
     );
   }
 
-  return el('div', {class:'card'},
-    el('h3', {}, src.title),
+  // ============== ROW LAYOUT (Variante B) ==============
+  const fileInput = el('input', {type:'file', accept:'.xlsx,.xls,.csv', id:`file-${src.id}`});
+  // Auto-upload on file selection
+  fileInput.addEventListener('change', () => { if (fileInput.files?.[0]) handleUpload(src); });
+  const chooseBtn = el('button', {class:'btn ghost', type:'button',
+    onclick: (e) => { e.stopPropagation(); fileInput.click(); }
+  }, '📁 Elegir');
+  if (src.disabled) { chooseBtn.disabled = true; chooseBtn.textContent = 'Próximamente'; }
+  let cronBtnNew = null;
+  if (src.cronEndpoint) {
+    cronBtnNew = el('button', {class:'btn cron', type:'button',
+      onclick: (e) => { e.stopPropagation(); handleCronSync(src); }
+    }, '⚡ Auto-sync');
+  }
+
+  const statusCell = el('div', {class:'status-cell empty', id:`fstatus-${src.id}`},
+    el('span', {class:'sdot'}), el('span', {class:'stxt'}, 'Cargando…'));
+
+  const rowMain = el('div', {class:'row-main'},
+    el('div', {class:'row-title'},
+      el('div', {class:'t'},
+        el('span', {}, src.title),
+        el('span', {class:'drop-hint'}, '⬇ Suelta el archivo aquí'),
+      ),
+      el('div', {class:'file-hint'}, `📄 ${src.file || '—'}`),
+    ),
+    el('span', {class:'badge-tipo ' + tipoClass(src.tipo)}, tipoLabel(src.tipo)),
+    statusCell,
+    el('div', {class:'actions-cell'}, fileInput, chooseBtn, cronBtnNew),
+  );
+
+  const rowExpand = el('div', {class:'row-expand'},
     el('div', {class:'desc'}, src.desc),
-    el('div', {class:'meta'}, src.combined
-      ? `📄 ${src.file} · 🎯 ${src.combined.map(c=>c.table).join(' + ')}`
-      : `📄 ${src.file} · 🎯 ${src.table}`),
-    dataStatus,
-    updBadge,
+    el('div', {class:'meta-info'}, src.combined
+      ? `🎯 ${src.combined.map(c=>c.table).join(' + ')}`
+      : `🎯 ${src.table || '—'}`),
+    el('div', {class:'status-block'}, updBadge, status),
     histWrap,
-    status,
-    el('div', {class:'actions'}, file, btn, cronBtn),
     log,
     extraSection,
   );
+
+  const card = el('div', {class:'card'}, rowMain, rowExpand);
+
+  rowMain.addEventListener('click', (e) => {
+    if (e.target.closest('button, input, a')) return;
+    card.classList.toggle('expanded');
+  });
+
+  // Drag & drop en la fila entera
+  const onDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    card.classList.add('dragover');
+  };
+  const onDragLeave = (e) => {
+    if (!card.contains(e.relatedTarget)) card.classList.remove('dragover');
+  };
+  const onDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    card.classList.remove('dragover');
+    if (src.disabled) return;
+    const f = e.dataTransfer?.files?.[0];
+    if (!f) return;
+    try {
+      const dt = new DataTransfer();
+      dt.items.add(f);
+      fileInput.files = dt.files;
+    } catch(err) { /* fallback silencioso */ }
+    handleUpload(src);
+  };
+  card.addEventListener('dragover', onDragOver);
+  card.addEventListener('dragenter', onDragOver);
+  card.addEventListener('dragleave', onDragLeave);
+  card.addEventListener('drop', onDrop);
+
+  return card;
 }
+
+function tipoLabel(tipo){
+  switch(tipo){
+    case 'semana':  return 'Semanal';
+    case 'mes':     return 'Mensual';
+    case 'sellout': return 'Sellout';
+    case 'updated': return 'Replace';
+    default:        return 'Datos';
+  }
+}
+function tipoClass(tipo){ return 't-' + (tipo || 'idle'); }
 
 // Sube el archivo del slot extra (independiente del principal)
 async function handleUploadExtra(src, ex){
@@ -2316,19 +2467,21 @@ async function handleUploadExtra(src, ex){
 function renderGrupoSection(grupo, fuentesG){
   const colapsadosLS = getColapsados();
   const collapsed = !!colapsadosLS[grupo.id];
+  const color = grupo?.color || '#94A3B8';
 
-  const chevron = el('span', {class:'grupo-chevron'}, '▼');
-  const header = el('div', { class:'grupo-header', style:`border-bottom: 2px solid ${grupo?.color || '#94A3B8'};` },
-    chevron,
-    el('h2', { style: `margin:0; color:${grupo?.color || '#94A3B8'}; font-size:20px;` }, grupo?.label || 'Otros'),
-    grupo?.subtitle ? el('span', { style: 'color:#64748B; font-size:13px;' }, grupo.subtitle) : null,
-    el('span', { style: 'color:#94A3B8; font-size:12px; margin-left:auto;' }, `${fuentesG.length} fuente${fuentesG.length !== 1 ? 's' : ''}`)
+  const header = el('div', { class:'grupo-header' },
+    el('span', { class:'dot', style:`background:${color};` }),
+    el('span', { class:'title' }, grupo?.label || 'Otros'),
+    grupo?.subtitle ? el('span', { class:'sub' }, '· ' + grupo.subtitle) : null,
+    el('span', { class:'spacer' }),
+    el('span', { class:'count' }, `${fuentesG.length} fuente${fuentesG.length !== 1 ? 's' : ''}`),
+    el('span', { class:'chev' }, '▾'),
   );
 
-  const cardsWrap = el('div', { class:'grupo-cards' });
-  for (const src of fuentesG) cardsWrap.appendChild(buildSourceCard(src));
+  const body = el('div', { class:'grupo-body' });
+  for (const src of fuentesG) body.appendChild(buildSourceCard(src));
 
-  const section = el('section', { class: 'grupo-section' + (collapsed ? ' collapsed' : '') }, header, cardsWrap);
+  const section = el('section', { class: 'grupo-block' + (collapsed ? ' collapsed' : '') }, header, body);
   header.addEventListener('click', () => {
     const ahoraCol = !section.classList.contains('collapsed');
     section.classList.toggle('collapsed', ahoraCol);
@@ -2348,6 +2501,68 @@ function renderCards(){
   const sinGrupo = SOURCES.filter(s => !s.grupo);
   if (sinGrupo.length > 0) {
     grid.appendChild(renderGrupoSection({ id:'__otros__', label:'Otros', color:'#94A3B8', subtitle:'' }, sinGrupo));
+  }
+}
+
+// ===== KPI strip =====
+function isSameDayISO(iso){
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (isNaN(d)) return false;
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+function refreshKPIs(){
+  const hoyEl = document.getElementById('kpi-hoy');
+  const alDiaEl = document.getElementById('kpi-aldia');
+  const alDiaSub = document.getElementById('kpi-aldia-sub');
+  const pendEl = document.getElementById('kpi-pendientes');
+  const pendCard = document.getElementById('kpi-pendientes-card');
+  const ultimaEl = document.getElementById('kpi-ultima');
+  if (!hoyEl) return;
+
+  // Cargas hoy: cuenta entries "ok" en historial de todas las fuentes con fecha == hoy
+  let cargasHoy = 0;
+  let ultimaFecha = null;
+  try {
+    const hist = JSON.parse(localStorage.getItem(LS_HISTORIAL_KEY) || '{}');
+    for (const k of Object.keys(hist)) {
+      const arr = hist[k] || [];
+      for (const it of arr) {
+        if (isSameDayISO(it.fecha) && it.estado === 'ok') cargasHoy++;
+        if (it.fecha && (!ultimaFecha || new Date(it.fecha) > new Date(ultimaFecha))) ultimaFecha = it.fecha;
+      }
+    }
+  } catch {}
+  // Considera también saveLastUpdated (por si historial se limpió)
+  try {
+    const upd = JSON.parse(localStorage.getItem(LS_UPDATED_KEY) || '{}');
+    for (const k of Object.keys(upd)) {
+      if (upd[k] && (!ultimaFecha || new Date(upd[k]) > new Date(ultimaFecha))) ultimaFecha = upd[k];
+    }
+  } catch {}
+
+  // Al día vs Pendientes: por sources con UPLOAD_STATUS
+  let alDia = 0, pend = 0, total = SOURCES.length;
+  for (const src of SOURCES) {
+    const est = describirEstado(src);
+    const dias = est?.dias;
+    if (!est) { pend++; continue; }
+    if (dias == null) { alDia++; continue; } // tipo 'mes' sin dias — cuenta como al día
+    if (dias <= 7) alDia++;
+    else pend++;
+  }
+
+  hoyEl.textContent = cargasHoy;
+  alDiaEl.textContent = `${alDia}/${total}`;
+  if (alDiaSub) alDiaSub.textContent = alDia === total ? 'todo al corriente' : `${total - alDia} atrasada${total - alDia === 1 ? '' : 's'}`;
+  pendEl.textContent = pend;
+  if (pendCard) pendCard.classList.toggle('warn', pend > 0);
+  if (ultimaFecha) {
+    const min = Math.max(0, Math.floor((Date.now() - new Date(ultimaFecha).getTime()) / 60000));
+    ultimaEl.textContent = min < 1 ? 'Ahora' : (min < 60 ? `Hace ${min}min` : (min < 1440 ? `Hace ${Math.floor(min/60)}h` : `Hace ${Math.floor(min/1440)}d`));
+  } else {
+    ultimaEl.textContent = '—';
   }
 }
 
@@ -2621,7 +2836,21 @@ async function postChunks(src, table, onConflict, rows, deleteAnios, deletePerio
 }
 
 renderCards();
+refreshKPIs();
 cargarStatusFuentes();
+
+const refreshBtn = document.getElementById('btn-refresh-status');
+if (refreshBtn) refreshBtn.addEventListener('click', () => {
+  refreshBtn.textContent = '↻ Actualizando…';
+  refreshBtn.disabled = true;
+  cargarStatusFuentes().finally(() => {
+    refreshBtn.textContent = '↻ Actualizar estados';
+    refreshBtn.disabled = false;
+  });
+});
+
+// Auto-refresh cada 60s
+setInterval(() => { cargarStatusFuentes(); }, 60000);
 
 </script>
 </body>
