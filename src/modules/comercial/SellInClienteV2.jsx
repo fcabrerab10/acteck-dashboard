@@ -8,6 +8,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useRoadmap, useFacturacion, useCuotasMensuales } from '../../lib/queries';
 import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -70,11 +71,16 @@ export default function SellInClienteV2({ clienteKey }) {
   const anioPrev = anio - 1;
   const mesActual = new Date().getMonth() + 1;
 
-  const [loading, setLoading] = useState(true);
-  const [facturacion, setFacturacion] = useState([]);
-  const [roadmap, setRoadmap] = useState([]);
-  const [cuotas, setCuotas] = useState([]);
+  // Cache compartida via useQuery. Mantengo los nombres facturacion/roadmap/cuotas
+  // para no romper el resto del módulo.
+  const { data: facturacion = [], isLoading: facturacionLoading } =
+    useFacturacion(clienteKey, [anioPrev, anio], 'sku,anio,mes,piezas,monto');
+  const { data: roadmap = [], isLoading: roadmapLoading } = useRoadmap();
+  const { data: cuotas = [], isLoading: cuotasLoading } =
+    useCuotasMensuales(clienteKey, anio);
   const [selloutDet, setSelloutDet] = useState([]);
+  const [selloutLoading, setSelloutLoading] = useState(true);
+  const loading = facturacionLoading || roadmapLoading || cuotasLoading || selloutLoading;
   // rango es un Set de trimestres seleccionados: subset de {'Q1','Q2','Q3','Q4'}
   // Un set vacío significa "Año completo"
   const [rango, setRango] = useState(() => new Set([getCurrentQ(mesActual)]));
@@ -97,25 +103,19 @@ export default function SellInClienteV2({ clienteKey }) {
     return Array.from(set).sort((a, b) => a - b);
   }, [rango]);
 
+  // sellout_detalle sigue con fetch local (cliente-específico, rango dinámico).
   useEffect(() => {
-    setLoading(true);
+    let cancel = false;
+    setSelloutLoading(true);
     (async () => {
       const anioIni = `${anioPrev}-01-01`;
-      const [fact, rdmp, ct, sod] = await Promise.all([
-        fetchAll('facturacion_clientes', 'sku,anio,mes,piezas,monto',
-          (q) => q.eq('cliente_key', clienteKey).in('anio', [anioPrev, anio])),
-        fetchAll('roadmap_sku', 'sku,marca,descripcion,categoria,familia,rdmp'),
-        fetchAll('cuotas_mensuales', 'mes,anio,cuota_min,cuota_ideal',
-          (q) => q.eq('cliente', clienteKey).eq('anio', anio)),
-        fetchAll('sellout_detalle', 'fecha,total,cantidad,no_parte',
-          (q) => q.eq('cliente', clienteKey).gte('fecha', anioIni)),
-      ]);
-      setFacturacion(fact);
-      setRoadmap(rdmp);
-      setCuotas(ct);
+      const sod = await fetchAll('sellout_detalle', 'fecha,total,cantidad,no_parte',
+        (q) => q.eq('cliente', clienteKey).gte('fecha', anioIni));
+      if (cancel) return;
       setSelloutDet(sod);
-      setLoading(false);
+      setSelloutLoading(false);
     })();
+    return () => { cancel = true; };
   }, [clienteKey, anio, anioPrev]);
 
   const roadmapMap = useMemo(() => {
