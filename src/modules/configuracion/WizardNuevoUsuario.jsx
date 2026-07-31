@@ -50,7 +50,7 @@ export default function WizardNuevoUsuario({ onCancel, onCreated }) {
 
   const titulos = {
     1: 'Datos del colaborador.',
-    2: 'Elegí a qué clientes tendrá acceso.',
+    2: 'Elige a qué clientes tendrá acceso.',
     3: 'Configurá el nivel de acceso por pestaña.',
     4: datos.tipo === 'interno' ? 'Permisos globales y resumen.' : 'Revisá y confirmá.',
   };
@@ -277,7 +277,7 @@ function PasoDatos({ datos, setDatos }) {
           on={datos.metodo === 'password'}
           onChange={v => upd('metodo', v ? 'password' : 'invite')}
           title="Definir contraseña ahora"
-          desc="Vas a tener que compartirla vos por otro canal seguro." />
+          desc="Tendrás que compartirla tú por otro canal seguro." />
         {datos.metodo === 'password' && (
           <div style={{ padding: '4px 14px 14px' }}>
             <input type="password" value={datos.password}
@@ -343,7 +343,7 @@ function PasoClientes({ elegidos, toggle }) {
   return (
     <div>
       <p style={{ color: '#6E6E73', fontSize: 14, marginTop: 0, marginBottom: 20 }}>
-        Elegí uno o más clientes. Solo verá los que aparezcan acá.
+        Elige uno o más clientes. Solo verá los que aparezcan aquí.
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14 }}>
         {CLIENTES.map(c => {

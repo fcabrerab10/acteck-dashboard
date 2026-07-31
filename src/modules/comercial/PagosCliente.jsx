@@ -52,7 +52,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   // Self-gating (belt-and-suspenders). App.jsx ya bloquea antes, pero si
   // alguien monta este componente directo o cambia navegación, protegemos.
   if (!puedeVerPestanaCliente(perfil, clienteKey, 'pagos')) {
-    return <SinAcceso motivo={`No tenés acceso a Pagos de ${clienteKey || 'este cliente'}.`} />;
+    return <SinAcceso motivo={`No tienes acceso a Pagos de ${clienteKey || 'este cliente'}.`} />;
   }
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';

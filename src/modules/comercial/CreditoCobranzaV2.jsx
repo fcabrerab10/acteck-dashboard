@@ -41,7 +41,7 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
   const isDark = theme.mode === 'dark';
   const perfil = usePerfil();
   if (!puedeVerPestanaCliente(perfil, clienteKey, 'cartera')) {
-    return <SinAcceso motivo={`No tenés acceso a Crédito y Cobranza de ${clienteKey || 'este cliente'}.`} />;
+    return <SinAcceso motivo={`No tienes acceso a Crédito y Cobranza de ${clienteKey || 'este cliente'}.`} />;
   }
 
   const [estado, setEstado] = useState(null);

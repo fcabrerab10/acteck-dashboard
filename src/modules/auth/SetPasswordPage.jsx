@@ -99,7 +99,7 @@ export default function SetPasswordPage() {
           textAlign: 'center', margin: '8px 0 24px', lineHeight: 1.5,
         }}>
           {user
-            ? <>Elegí una contraseña para acceder al <strong>Dashboard de Acteck</strong>.</>
+            ? <>Elige una contraseña para acceder al <strong>Dashboard de Acteck</strong>.</>
             : (error || 'Verificando invitación…')}
         </p>
 
