@@ -753,7 +753,7 @@ function UpdatePanel({ theme, isMidnight, onClose, onMouseEnter, onMouseLeave })
     // Cargar estado de fuentes conocidas — hardcoded por ahora, luego API
     (async () => {
       try {
-        const r = await fetch('/api/last-update').then(r => r.json());
+        const r = await fetch('/api/status?type=last').then(r => r.json());
         if (r?.last_update) setLastUpdate(r.last_update);
       } catch {}
     })();

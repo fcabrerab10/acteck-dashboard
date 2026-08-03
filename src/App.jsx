@@ -266,7 +266,7 @@ function Breadcrumb({ clienteActivo, paginaActiva, vistaActual }) {
 function UpdatedAtBadgeX() {
   const [info, setInfo] = useState(null);
   useEffect(() => {
-    apiFetch('/api/last-update').then(r => r.json()).then(setInfo).catch(() => setInfo({ error: true }));
+    apiFetch('/api/status?type=last').then(r => r.json()).then(setInfo).catch(() => setInfo({ error: true }));
   }, []);
   if (!info) return React.createElement('span', { className: 'text-xs text-gray-400' }, 'cargando…');
   if (info.error || !info.last_update) return React.createElement('span', { className: 'text-xs text-gray-400' }, 'sin datos');

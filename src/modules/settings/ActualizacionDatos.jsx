@@ -361,7 +361,7 @@ export default function ActualizacionDatos({ perfil }) {
 
   const refreshStatus = async () => {
     try {
-      const r = await apiFetch('/api/sync-status');
+      const r = await apiFetch('/api/status?type=sync');
       const j = await r.json();
       if (j.ok) setStatus(j);
     } catch (e) { /* ignore */ }
@@ -369,7 +369,7 @@ export default function ActualizacionDatos({ perfil }) {
 
   const refreshUploadStatus = async () => {
     try {
-      const r = await apiFetch('/api/upload-status');
+      const r = await apiFetch('/api/status?type=upload');
       if (!r.ok) return;
       const j = await r.json();
       setUploadStatus(j || {});

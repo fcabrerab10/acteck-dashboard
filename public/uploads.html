@@ -2518,7 +2518,7 @@ function pintarEstadoFuente(src){
 
 async function cargarStatusFuentes(){
   try {
-    const r = await fetch('/api/upload-status', { cache: 'no-store' });
+    const r = await fetch('/api/status?type=upload', { cache: 'no-store' });
     if (!r.ok) return;
     UPLOAD_STATUS = await r.json();
     for (const src of SOURCES) pintarEstadoFuente(src);
