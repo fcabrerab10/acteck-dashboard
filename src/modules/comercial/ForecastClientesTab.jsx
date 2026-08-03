@@ -1574,7 +1574,25 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
   const semGreen = '#1C7A34';
 
   return (
-    <div style={{ padding: 10, background: theme.bg || (isDark ? '#000' : '#F5F5F7'), display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div
+      style={{
+        padding: 10,
+        background: theme.bg || (isDark ? '#000' : '#F5F5F7'),
+        display: 'flex', flexDirection: 'column', gap: 8,
+        // Animación de apertura estilo iOS · curve estándar Apple
+        animation: 'sopDrillOpen 340ms cubic-bezier(0.32, 0.72, 0, 1) both',
+        transformOrigin: 'top',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Keyframes inyectadas — React de-dup el <style> tag repetido */}
+      <style>{`
+        @keyframes sopDrillOpen {
+          0%   { opacity: 0; max-height: 0;    transform: translateY(-6px) scaleY(0.985); }
+          50%  { opacity: 1;                                                              }
+          100% { opacity: 1; max-height: 3200px; transform: translateY(0)   scaleY(1);    }
+        }
+      `}</style>
 
       {/* ═══ HERO card negro compacto ═══ */}
       <div style={{
