@@ -1808,26 +1808,16 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
                           </div>
                         </div>
                       </td>
-                      {p.mensual.map((m, mi) => {
-                        const isPico = mi === pico && m.piezas > 0;
-                        const isZero = m.piezas === 0;
-                        return (
-                          <td key={mi} style={{
-                            ...ttC(theme),
-                            fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums',
-                            fontSize: 11.5,
-                            color: isZero ? theme.textSubtle : isPico ? theme.accent : theme.text,
-                            fontWeight: isPico ? 600 : 500,
-                          }}>
-                            {FMT_N(m.piezas)}
-                          </td>
-                        );
-                      })}
-                      <td style={{ ...ttC(theme), fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: theme.text, fontWeight: 500 }}>
-                        {FMT_N(p.prom6m)}
+                      {p.mensual.map((m, mi) => (
+                        <td key={mi} style={{ ...ttC(theme), padding: '6px 8px' }}>
+                          <NumPill value={m.piezas} highlight={mi === pico && m.piezas > 0} theme={theme} />
+                        </td>
+                      ))}
+                      <td style={{ ...ttC(theme), padding: '6px 8px' }}>
+                        <NumPill value={p.prom6m} theme={theme} />
                       </td>
-                      <td style={{ ...ttC(theme), fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 600, color: theme.text, letterSpacing: '-0.01em' }}>
-                        {FMT_N(p.total6m)}
+                      <td style={{ ...ttC(theme), padding: '6px 8px' }}>
+                        <NumPill value={p.total6m} theme={theme} strong />
                       </td>
                     </tr>
                   );
@@ -1835,19 +1825,19 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
               </tbody>
               <tfoot>
                 <tr>
-                  <td style={{ ...ttC(theme, 'left'), paddingTop: 9, borderTop: `1px solid ${theme.divider || theme.border}`, fontFamily: TYPO.fontDisplay, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>
+                  <td style={{ ...ttC(theme, 'left'), paddingTop: 10, borderTop: `1px solid ${theme.divider || theme.border}`, fontFamily: TYPO.fontDisplay, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>
                     Total {erpClientes.length} clientes
                   </td>
                   {totalesMes.map((v, i) => (
-                    <td key={i} style={{ ...ttC(theme), paddingTop: 9, borderTop: `1px solid ${theme.divider || theme.border}`, fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 700, color: theme.text }}>
-                      {FMT_N(v)}
+                    <td key={i} style={{ ...ttC(theme), padding: '10px 8px 6px', borderTop: `1px solid ${theme.divider || theme.border}` }}>
+                      <NumPill value={v} theme={theme} strong />
                     </td>
                   ))}
-                  <td style={{ ...ttC(theme), paddingTop: 9, borderTop: `1px solid ${theme.divider || theme.border}`, fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 700, color: theme.text }}>
-                    {FMT_N(total6mGrand / 6)}
+                  <td style={{ ...ttC(theme), padding: '10px 8px 6px', borderTop: `1px solid ${theme.divider || theme.border}` }}>
+                    <NumPill value={total6mGrand / 6} theme={theme} strong />
                   </td>
-                  <td style={{ ...ttC(theme), paddingTop: 9, borderTop: `1px solid ${theme.divider || theme.border}`, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 700, color: theme.text, letterSpacing: '-0.01em' }}>
-                    {FMT_N(total6mGrand)}
+                  <td style={{ ...ttC(theme), padding: '10px 8px 6px', borderTop: `1px solid ${theme.divider || theme.border}` }}>
+                    <NumPill value={total6mGrand} theme={theme} strong />
                   </td>
                 </tr>
               </tfoot>
@@ -1952,6 +1942,42 @@ function QtyBtn({ children, onClick, theme }) {
         background: theme.surface, fontSize: 13, color: theme.text, cursor: 'pointer',
         fontFamily: TYPO.fontDisplay, fontWeight: 600, lineHeight: 1,
       }}>{children}</button>
+  );
+}
+
+// Píldora de número estilo apple.com — bg azul suave para positivos,
+// rojo suave para negativos, "—" muted para ceros/nulls. Sin SF Mono:
+// SF Pro Display con tabular-nums. Highlight = pico del mes (bg más
+// saturado). Strong = totales/totales-columna (weight 700).
+function NumPill({ value, theme, highlight, strong }) {
+  const isNil = value == null || Number.isNaN(value);
+  const n = Number(value || 0);
+  if (isNil || n === 0) {
+    return <span style={{ color: theme.textSubtle, fontSize: 12 }}>—</span>;
+  }
+  const neg = n < 0;
+  const bg = neg
+    ? (theme.mode === 'dark' ? 'rgba(255,69,58,0.15)' : 'rgba(255,59,48,0.10)')
+    : highlight
+      ? (theme.mode === 'dark' ? 'rgba(10,132,255,0.22)' : 'rgba(0,122,255,0.14)')
+      : (theme.mode === 'dark' ? 'rgba(10,132,255,0.10)' : 'rgba(0,122,255,0.06)');
+  const color = neg
+    ? (theme.red || '#FF3B30')
+    : highlight
+      ? theme.accent
+      : theme.text;
+  return (
+    <span style={{
+      display: 'inline-block', padding: '3px 10px', borderRadius: 999,
+      background: bg, color,
+      fontFamily: TYPO.fontDisplay,
+      fontVariantNumeric: 'tabular-nums',
+      fontSize: strong ? 12.5 : 12,
+      fontWeight: strong || highlight ? 700 : 500,
+      letterSpacing: '-0.01em', minWidth: 42, textAlign: 'center',
+    }}>
+      {Math.round(n).toLocaleString('es-MX')}
+    </span>
   );
 }
 
