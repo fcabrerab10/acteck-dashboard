@@ -17,6 +17,20 @@ export default defineConfig({
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(commitHash),
   },
+  build: {
+    chunkSizeWarningLimit: 4096,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-recharts': ['recharts'],
+          'vendor-xlsx': ['xlsx', 'xlsx-js-style'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-query': ['@tanstack/react-query', '@tanstack/react-query-persist-client', '@tanstack/react-query-devtools', 'idb-keyval'],
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({
