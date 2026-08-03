@@ -69,6 +69,9 @@ function useForecastData() {
     // SKUs que aparecen en la tabla del Forecast (en el mismo orden).
     reporteSkus: [],
     cuotas: [],
+    // Ventas ERP raw (últimos 6 meses) para consumo por cliente REAL
+    // en el drill del S&OP — expone Steren, Office Depot, DAP, etc.
+    ventasErp: [],
   });
 
   // Helper paginador (PostgREST corta a 1000)
@@ -121,9 +124,14 @@ function useForecastData() {
       // Cuotas mensuales para calcular la necesidad vs cuota en MXN
       supabase.from('cuotas_mensuales').select('cliente, anio, mes, cuota_min, cuota_ideal')
         .gte('anio', anioActual - 1),
+      // Ventas ERP raw · últimos 6 meses · sólo facturas · para consumo por
+      // cliente real (Steren, Office Depot, DAP, etc.) en el drill del S&OP.
+      fetchAll(() => supabase.from('ventas_erp')
+        .select('articulo, cliente_nombre, clientenombre, anio, mes, piezas, cantidad, movimiento_venta, movimientoventa')
+        .gte('anio', anioCorte)),
     ]);
 
-    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes] = queries;
+    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes, veData] = queries;
 
     setState({
       loading: false,
@@ -139,6 +147,7 @@ function useForecastData() {
       solicitudLineas: (solLinRes && solLinRes.data) || [],
       reporteSkus:   rsRes.data   || [],
       cuotas:        cmRes.data   || [],
+      ventasErp:     veData       || [],
     });
   };
 
@@ -148,7 +157,31 @@ function useForecastData() {
 
 // ────────── Cálculo del forecast ──────────
 function calcularForecast(data, horizonteMeses) {
-  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques, reporteSkus } = data;
+  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques, reporteSkus, ventasErp } = data;
+
+  // ── Demanda por cliente REAL desde ventas_erp (últimos 3 meses, promedio) ──
+  // Agrupa: sku → cliente_nombre → suma piezas de últimos 3 meses.
+  // Sólo cuenta filas con movimiento_venta === 'factura' (excluye devoluciones,
+  // cancelaciones y otros movimientos no-venta).
+  const hoyRef = new Date();
+  const anio3m = new Date(hoyRef.getFullYear(), hoyRef.getMonth() - 3, 1);
+  const isRecent = (a, m) => {
+    const d = new Date(Number(a), Number(m) - 1, 1);
+    return d >= anio3m && d <= hoyRef;
+  };
+  const demandaErpBySku = {};
+  (ventasErp || []).forEach((row) => {
+    const mov = String(row.movimiento_venta || row.movimientoventa || '').toLowerCase();
+    if (mov !== 'factura') return;
+    if (!isRecent(row.anio, row.mes)) return;
+    const sku = String(row.articulo || '').trim();
+    if (!sku) return;
+    const cliente = String(row.cliente_nombre || row.clientenombre || '').trim() || 'SIN CLIENTE';
+    const piezas = Number(row.piezas || row.cantidad || 0);
+    if (piezas <= 0) return;
+    if (!demandaErpBySku[sku]) demandaErpBySku[sku] = {};
+    demandaErpBySku[sku][cliente] = (demandaErpBySku[sku][cliente] || 0) + piezas;
+  });
 
   const invBySku  = Object.fromEntries(inventario.map(r => [r.sku, r]));
   const traBySku  = Object.fromEntries(transito.map(r => [r.sku, r]));
@@ -465,6 +498,20 @@ function calcularForecast(data, horizonteMeses) {
       ultimoCostoUsd,
       demMes, demHor, demandaTotalHor, demandaMesTotal,
       demanda6m,
+      // Consumo por cliente REAL del ERP (últimos 3 meses promedio pz/m)
+      demandaPorClienteErp: (() => {
+        const bySku = demandaErpBySku[sku] || {};
+        const total = Object.values(bySku).reduce((a, b) => a + b, 0);
+        if (total <= 0) return [];
+        return Object.entries(bySku)
+          .map(([cliente, piezas]) => ({
+            cliente,
+            total6m: piezas,          // suma últimos 3 meses (nombre legacy)
+            ritmoMes: piezas / 3,     // promedio pz/mes
+            pct: (piezas / total) * 100,
+          }))
+          .sort((a, b) => b.total6m - a.total6m);
+      })(),
       coberturaDias,
       comprasHist,
       totalComprasHist: comprasHistAll.length,
@@ -1452,26 +1499,51 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
     ? `${MES_CORTO[proxOcFecha.getMonth()]} ${proxOcFecha.getFullYear()}`
     : '—';
 
-  // Proyección post-compra por cliente (solo Digitalife + PCEL por ahora)
-  const clientesData = [
-    { key: 'digitalife', nombre: 'DIGITALIFE',    color: theme.accent,  ritmo: Number(r.demMes?.digitalife || 0) },
-    { key: 'pcel',       nombre: 'PCEL',          color: theme.purple || '#AF52DE', ritmo: Number(r.demMes?.pcel || 0) },
+  // Proyección post-compra por cliente REAL del ERP (últimos 3 meses).
+  // Colores rotativos iOS para clientes fuera del top-3 conocido.
+  const CLIENTE_COLORS = [
+    theme.accent, theme.purple || '#AF52DE', theme.teal || '#5AC8FA',
+    theme.orange || '#FF9500', theme.pink || '#FF2D55', theme.indigo || '#5856D6',
+    theme.yellow || '#FFCC00', theme.green || '#34C759', theme.red || '#FF3B30',
   ];
-  const ritmoTotal = clientesData.reduce((a, c) => a + c.ritmo, 0);
-  const proyeccion = clientesData
-    .map((c) => {
-      const rDia = c.ritmo / 30;
-      const diasHoy = rDia > 0 ? r.inv / rDia : null;
-      const diasPost = rDia > 0 ? (r.inv + qty) / rDia : null;
-      const pct = ritmoTotal > 0 ? (c.ritmo / ritmoTotal) * 100 : 0;
-      const fechaAgot = diasPost != null ? new Date(Date.now() + diasPost * 86400000) : null;
-      return {
-        ...c,
-        diasHoy, diasPost, pct, fechaAgot,
-        ganancia: (diasPost != null && diasHoy != null) ? diasPost - diasHoy : null,
-      };
-    })
-    .sort((a, b) => b.ritmo - a.ritmo);
+  const erpClientes = Array.isArray(r.demandaPorClienteErp) ? r.demandaPorClienteErp : [];
+  // Mostrar top-8 individualmente y agrupar el resto en "otros"
+  const TOP_N = 8;
+  const clientesTop = erpClientes.slice(0, TOP_N);
+  const clientesResto = erpClientes.slice(TOP_N);
+  const restoRitmo = clientesResto.reduce((a, c) => a + c.ritmoMes, 0);
+  const restoPct = clientesResto.reduce((a, c) => a + c.pct, 0);
+  const proyeccion = clientesTop.map((c, i) => {
+    const rDia = c.ritmoMes / 30;
+    const diasHoy = rDia > 0 ? r.inv / rDia : null;
+    const diasPost = rDia > 0 ? (r.inv + qty) / rDia : null;
+    const fechaAgot = diasPost != null && Number.isFinite(diasPost)
+      ? new Date(Date.now() + diasPost * 86400000)
+      : null;
+    return {
+      nombre: c.cliente,
+      color: CLIENTE_COLORS[i % CLIENTE_COLORS.length],
+      ritmo: c.ritmoMes,
+      pct: c.pct,
+      diasHoy, diasPost, fechaAgot,
+      ganancia: (diasPost != null && diasHoy != null) ? diasPost - diasHoy : null,
+    };
+  });
+  if (clientesResto.length > 0 && restoRitmo > 0) {
+    const rDia = restoRitmo / 30;
+    const diasHoy = r.inv / rDia;
+    const diasPost = (r.inv + qty) / rDia;
+    proyeccion.push({
+      nombre: `+ ${clientesResto.length} clientes menores`,
+      color: theme.textMuted,
+      ritmo: restoRitmo,
+      pct: restoPct,
+      diasHoy, diasPost,
+      fechaAgot: Number.isFinite(diasPost) ? new Date(Date.now() + diasPost * 86400000) : null,
+      ganancia: diasPost - diasHoy,
+      esOtros: true,
+    });
+  }
 
   // Presets del simulador (múltiplos de contenedor)
   const presets = cntPz > 0
@@ -1643,66 +1715,70 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
         <div style={cH}>
           <div>
             <div style={cHt}>Proyección de agotamiento por cliente</div>
-            <div style={cHsub}>{proyeccion.filter(p => p.ritmo > 0).length} clientes con demanda · escenario "{FMT_N(qty)} pz"</div>
+            <div style={cHsub}>{erpClientes.length} clientes del ERP · últimos 3 meses · escenario "{FMT_N(qty)} pz"</div>
           </div>
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={ttH(theme, 'left')}>Cliente</th>
-              <th style={ttH(theme)}>Ritmo</th>
-              <th style={ttH(theme)}>%</th>
-              <th style={ttH(theme)}>Días hoy</th>
-              <th style={ttH(theme)}>Días post</th>
-              <th style={ttH(theme)}>Ganancia</th>
-              <th style={ttH(theme)}>Agotamiento</th>
-            </tr>
-          </thead>
-          <tbody>
-            {proyeccion.map((p, i) => {
-              const rDia = p.ritmo / 30;
-              const noDemanda = rDia <= 0;
-              const diasHoyColor = p.diasHoy != null && p.diasHoy < 60 ? theme.orange || '#FF9500' : theme.text;
-              return (
-                <tr key={i} style={{ borderBottom: i < proyeccion.length - 1 ? `1px solid ${theme.divider || theme.border}` : 'none' }}>
-                  <td style={ttC(theme, 'left')}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                      <span style={{ width: 7, height: 7, borderRadius: 50, background: p.color, flex: '0 0 7px' }} />
-                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 500, color: theme.text, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</span>
-                    </div>
-                  </td>
-                  <td style={{ ...ttC(theme), fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 11.5, color: theme.textMuted }}>{FMT_N(p.ritmo)} pz/m</td>
-                  <td style={{ ...ttC(theme), fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 11.5, color: theme.textMuted }}>{Math.round(p.pct)}%</td>
-                  <td style={ttC(theme)}>
-                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: noDemanda ? theme.textMuted : diasHoyColor, letterSpacing: '-0.01em' }}>
-                      {p.diasHoy != null ? `${Math.round(p.diasHoy)} d` : '∞'}
-                    </span>
-                  </td>
-                  <td style={ttC(theme)}>
-                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: noDemanda ? theme.textMuted : semGreen, letterSpacing: '-0.01em' }}>
-                      {p.diasPost != null ? `${Math.round(p.diasPost)} d` : '∞'}
-                    </span>
-                  </td>
-                  <td style={{ ...ttC(theme), fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
-                    {p.ganancia != null ? `+${Math.round(p.ganancia)}` : '—'}
-                  </td>
-                  <td style={{ ...ttC(theme), fontFamily: TYPO.fontText, fontSize: 11.5, color: noDemanda ? theme.textMuted : theme.text, fontVariantNumeric: 'tabular-nums' }}>
-                    {noDemanda ? 'sin consumo' : p.fechaAgot ? `${MES_CORTO[p.fechaAgot.getMonth()]} ${p.fechaAgot.getFullYear()}` : '—'}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-
-        <div style={{
-          padding: '10px 14px', background: `${theme.orange || '#FF9500'}0F`,
-          border: `1px dashed ${theme.orange || '#FF9500'}55`, borderRadius: 8,
-          fontSize: 11.5, color: theme.textMuted, marginTop: 10, lineHeight: 1.5, letterSpacing: '-0.005em',
-        }}>
-          <b style={{ color: theme.orange || '#FF9500', fontWeight: 600 }}>⚠ Data pendiente</b> · La vista actual sólo expone Digitalife + PCEL.
-          Los otros clientes del ERP (Steren, Office Depot, DAP, etc.) aparecerán aquí cuando se conecte <code>ventas_erp</code> completo — el layout ya soporta N clientes ordenados por consumo.
-        </div>
+        {erpClientes.length === 0 ? (
+          <div style={{ padding: '20px 0', color: theme.textMuted, fontSize: 12, textAlign: 'center', fontFamily: TYPO.fontDisplay, letterSpacing: '-0.005em' }}>
+            Sin ventas registradas en el ERP en los últimos 3 meses
+            <div style={{ marginTop: 3, color: theme.textSubtle, fontSize: 10.5 }}>este SKU no ha facturado en el periodo</div>
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={ttH(theme, 'left')}>Cliente</th>
+                <th style={ttH(theme)}>Ritmo</th>
+                <th style={ttH(theme)}>%</th>
+                <th style={ttH(theme)}>Días hoy</th>
+                <th style={ttH(theme)}>Días post</th>
+                <th style={ttH(theme)}>Ganancia</th>
+                <th style={ttH(theme)}>Agotamiento</th>
+              </tr>
+            </thead>
+            <tbody>
+              {proyeccion.map((p, i) => {
+                const rDia = p.ritmo / 30;
+                const noDemanda = rDia <= 0;
+                const diasHoyColor = p.diasHoy != null && p.diasHoy < 60 ? theme.orange || '#FF9500' : theme.text;
+                return (
+                  <tr key={i} style={{ borderBottom: i < proyeccion.length - 1 ? `1px solid ${theme.divider || theme.border}` : 'none' }}>
+                    <td style={ttC(theme, 'left')}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: 50, background: p.color, flex: '0 0 7px' }} />
+                        <span style={{
+                          fontFamily: TYPO.fontDisplay, fontSize: 12.5,
+                          fontWeight: p.esOtros ? 400 : 500,
+                          fontStyle: p.esOtros ? 'italic' : 'normal',
+                          color: p.esOtros ? theme.textMuted : theme.text,
+                          letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}>{p.nombre}</span>
+                      </div>
+                    </td>
+                    <td style={{ ...ttC(theme), fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 11.5, color: theme.textMuted }}>{FMT_N(p.ritmo)} pz/m</td>
+                    <td style={{ ...ttC(theme), fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 11.5, color: theme.textMuted }}>{Math.round(p.pct)}%</td>
+                    <td style={ttC(theme)}>
+                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: noDemanda ? theme.textMuted : diasHoyColor, letterSpacing: '-0.01em' }}>
+                        {p.diasHoy != null ? `${Math.round(p.diasHoy)} d` : '∞'}
+                      </span>
+                    </td>
+                    <td style={ttC(theme)}>
+                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: noDemanda ? theme.textMuted : semGreen, letterSpacing: '-0.01em' }}>
+                        {p.diasPost != null ? `${Math.round(p.diasPost)} d` : '∞'}
+                      </span>
+                    </td>
+                    <td style={{ ...ttC(theme), fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
+                      {p.ganancia != null ? `+${Math.round(p.ganancia)}` : '—'}
+                    </td>
+                    <td style={{ ...ttC(theme), fontFamily: TYPO.fontText, fontSize: 11.5, color: noDemanda ? theme.textMuted : theme.text, fontVariantNumeric: 'tabular-nums' }}>
+                      {noDemanda ? 'sin consumo' : p.fechaAgot ? `${MES_CORTO[p.fechaAgot.getMonth()]} ${p.fechaAgot.getFullYear()}` : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* ═══ TRÁNSITO + PROVEEDOR (2 cols compactas) ═══ */}
