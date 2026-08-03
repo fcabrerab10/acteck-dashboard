@@ -69,9 +69,10 @@ function useForecastData() {
     // SKUs que aparecen en la tabla del Forecast (en el mismo orden).
     reporteSkus: [],
     cuotas: [],
-    // Ventas ERP raw (últimos 6 meses) para consumo por cliente REAL
-    // en el drill del S&OP — expone Steren, Office Depot, DAP, etc.
-    ventasErp: [],
+    // Facturación por cliente (hoja "Venta Piezas" del Excel ERP) —
+    // fuente REAL de todos los clientes (Steren, Office Depot, DAP…)
+    // usada en el drill del S&OP.
+    facturacion: [],
   });
 
   // Helper paginador (PostgREST corta a 1000)
@@ -124,14 +125,15 @@ function useForecastData() {
       // Cuotas mensuales para calcular la necesidad vs cuota en MXN
       supabase.from('cuotas_mensuales').select('cliente, anio, mes, cuota_min, cuota_ideal')
         .gte('anio', anioActual - 1),
-      // Ventas ERP raw · últimos 6 meses · sólo facturas · para consumo por
-      // cliente real (Steren, Office Depot, DAP, etc.) en el drill del S&OP.
-      fetchAll(() => supabase.from('ventas_erp')
-        .select('articulo, cliente_nombre, clientenombre, anio, mes, piezas, cantidad, movimiento_venta, movimientoventa')
+      // Facturación por cliente REAL desde hoja "Venta Piezas" del ERP.
+      // Incluye TODOS los clientes (Steren, Office Depot, DAP, etc.) con su
+      // canal. Ya viene con devoluciones aplicadas — no necesita filtro.
+      fetchAll(() => supabase.from('facturacion_clientes')
+        .select('sku, cliente_nombre, canal, anio, mes, piezas')
         .gte('anio', anioCorte)),
     ]);
 
-    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes, veData] = queries;
+    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes, facData] = queries;
 
     setState({
       loading: false,
@@ -147,7 +149,7 @@ function useForecastData() {
       solicitudLineas: (solLinRes && solLinRes.data) || [],
       reporteSkus:   rsRes.data   || [],
       cuotas:        cmRes.data   || [],
-      ventasErp:     veData       || [],
+      facturacion:   facData      || [],
     });
   };
 
@@ -157,12 +159,11 @@ function useForecastData() {
 
 // ────────── Cálculo del forecast ──────────
 function calcularForecast(data, horizonteMeses) {
-  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques, reporteSkus, ventasErp } = data;
+  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques, reporteSkus, facturacion } = data;
 
-  // ── Demanda por cliente REAL desde ventas_erp (últimos 3 meses, promedio) ──
+  // ── Demanda por cliente REAL desde facturacion_clientes (hoja "Venta Piezas") ──
   // Agrupa: sku → cliente_nombre → suma piezas de últimos 3 meses.
-  // Sólo cuenta filas con movimiento_venta === 'factura' (excluye devoluciones,
-  // cancelaciones y otros movimientos no-venta).
+  // La tabla ya viene con devoluciones aplicadas — no requiere filtro extra.
   const hoyRef = new Date();
   const anio3m = new Date(hoyRef.getFullYear(), hoyRef.getMonth() - 3, 1);
   const isRecent = (a, m) => {
@@ -170,17 +171,16 @@ function calcularForecast(data, horizonteMeses) {
     return d >= anio3m && d <= hoyRef;
   };
   const demandaErpBySku = {};
-  (ventasErp || []).forEach((row) => {
-    const mov = String(row.movimiento_venta || row.movimientoventa || '').toLowerCase();
-    if (mov !== 'factura') return;
+  (facturacion || []).forEach((row) => {
     if (!isRecent(row.anio, row.mes)) return;
-    const sku = String(row.articulo || '').trim();
+    const sku = String(row.sku || '').trim();
     if (!sku) return;
-    const cliente = String(row.cliente_nombre || row.clientenombre || '').trim() || 'SIN CLIENTE';
-    const piezas = Number(row.piezas || row.cantidad || 0);
+    const cliente = String(row.cliente_nombre || '').trim() || 'SIN CLIENTE';
+    const piezas = Number(row.piezas || 0);
     if (piezas <= 0) return;
     if (!demandaErpBySku[sku]) demandaErpBySku[sku] = {};
-    demandaErpBySku[sku][cliente] = (demandaErpBySku[sku][cliente] || 0) + piezas;
+    if (!demandaErpBySku[sku][cliente]) demandaErpBySku[sku][cliente] = { piezas: 0, canal: row.canal || '' };
+    demandaErpBySku[sku][cliente].piezas += piezas;
   });
 
   const invBySku  = Object.fromEntries(inventario.map(r => [r.sku, r]));
@@ -501,14 +501,16 @@ function calcularForecast(data, horizonteMeses) {
       // Consumo por cliente REAL del ERP (últimos 3 meses promedio pz/m)
       demandaPorClienteErp: (() => {
         const bySku = demandaErpBySku[sku] || {};
-        const total = Object.values(bySku).reduce((a, b) => a + b, 0);
+        const entries = Object.entries(bySku);
+        const total = entries.reduce((a, [, v]) => a + v.piezas, 0);
         if (total <= 0) return [];
-        return Object.entries(bySku)
-          .map(([cliente, piezas]) => ({
+        return entries
+          .map(([cliente, v]) => ({
             cliente,
-            total6m: piezas,          // suma últimos 3 meses (nombre legacy)
-            ritmoMes: piezas / 3,     // promedio pz/mes
-            pct: (piezas / total) * 100,
+            canal: v.canal || '',
+            total6m: v.piezas,        // suma últimos 3 meses (nombre legacy)
+            ritmoMes: v.piezas / 3,   // promedio pz/mes
+            pct: (v.piezas / total) * 100,
           }))
           .sort((a, b) => b.total6m - a.total6m);
       })(),
@@ -1522,6 +1524,7 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
       : null;
     return {
       nombre: c.cliente,
+      canal: c.canal,
       color: CLIENTE_COLORS[i % CLIENTE_COLORS.length],
       ritmo: c.ritmoMes,
       pct: c.pct,
@@ -1746,13 +1749,20 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
                     <td style={ttC(theme, 'left')}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         <span style={{ width: 7, height: 7, borderRadius: 50, background: p.color, flex: '0 0 7px' }} />
-                        <span style={{
-                          fontFamily: TYPO.fontDisplay, fontSize: 12.5,
-                          fontWeight: p.esOtros ? 400 : 500,
-                          fontStyle: p.esOtros ? 'italic' : 'normal',
-                          color: p.esOtros ? theme.textMuted : theme.text,
-                          letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        }}>{p.nombre}</span>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{
+                            fontFamily: TYPO.fontDisplay, fontSize: 12.5,
+                            fontWeight: p.esOtros ? 400 : 500,
+                            fontStyle: p.esOtros ? 'italic' : 'normal',
+                            color: p.esOtros ? theme.textMuted : theme.text,
+                            letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          }}>{p.nombre}</div>
+                          {p.canal && !p.esOtros && (
+                            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textSubtle, marginTop: 1 }}>
+                              {p.canal}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td style={{ ...ttC(theme), fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 11.5, color: theme.textMuted }}>{FMT_N(p.ritmo)} pz/m</td>
