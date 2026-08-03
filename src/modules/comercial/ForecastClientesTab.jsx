@@ -16,11 +16,8 @@ import AgregarLineaModal from './forecast/AgregarLineaModal';
 import NecesidadCard from './forecast/NecesidadCard';
 import { roadmapStyle } from '../../lib/roadmapColors';
 import { useSolicitudes } from './forecast/useSolicitudes';
-import { exportarSolicitudExcel } from './forecast/excelSOP';
 import { puedeEditarPestanaGlobal, puedeVerPestanaGlobal } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
-import { useTheme } from '../../lib/themeContext';
-import { TYPO } from '../../lib/themeTokens';
 
 /**
  * Forecast Clientes v3 — Planeación de compras (Acteck)
@@ -511,12 +508,6 @@ function diasHasta(iso) {
 // ────────── Componente principal ──────────
 export default function ForecastClientesTab() {
   const perfil = usePerfil();
-  const { theme } = useTheme();
-  const isDark = theme.mode === 'dark';
-  const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#000000');
-  const heroText = theme.heroCardText || '#F5F5F7';
-  const heroMuted = 'rgba(255,255,255,0.72)';
-  const heroSubtle = 'rgba(255,255,255,0.55)';
   if (!puedeVerPestanaGlobal(perfil, 'forecast_clientes')) {
     return <SinAcceso motivo="No tienes acceso a S&OP." />;
   }
@@ -981,29 +972,49 @@ export default function ForecastClientesTab() {
     return <div className="p-6 text-gray-400">Cargando forecast de clientes…</div>;
   }
 
-  const borradorActivo = sol.borradores.find((b) => b.id === borradorActivoId) || null;
-  const lineasBorrador = borradorActivo ? sol.lineasDe(borradorActivo.id) : [];
-  const skusEnBorrador = new Set(lineasBorrador.map((l) => l.sku));
-  const totalBorradorPz = lineasBorrador.reduce((a, l) => a + Number(l.cantidad || 0), 0);
-  const totalBorradorUsd = lineasBorrador.reduce((a, l) => a + Number(l.cantidad || 0) * Number(l.ultimo_costo_usd || 0), 0);
-
-  const nombreMes = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][new Date().getMonth()];
-  const anioActual = new Date().getFullYear();
-
-  const onExportarBorrador = async () => {
-    if (!borradorActivo) return toast.error('No hay export activo');
-    if (lineasBorrador.length === 0) return toast.error('El export está vacío');
-    try {
-      const filename = await exportarSolicitudExcel(borradorActivo, lineasBorrador);
-      toast.success(`Excel descargado: ${filename}`);
-    } catch (e) {
-      toast.error(`Error exportando: ${e.message || e}`);
-    }
-  };
-
   return (
-    <div style={{ minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, padding: '10px 6px' }}>
-      {/* Modal histórico de solicitudes cerradas */}
+    <div className="p-6 space-y-5">
+      {/* HEADER */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <Activity className="w-6 h-6 text-gray-700" />
+            S&amp;OP
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Planeación de compras agregada · Digitalife + PCEL
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            {HORIZONTES.map(h => (
+              <button key={h.meses} onClick={() => setHorizonte(h.meses)}
+                className={[
+                  'px-3 py-1.5 rounded-md text-sm font-medium transition',
+                  horizonte === h.meses ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900',
+                ].join(' ')}>
+                {h.label}
+              </button>
+            ))}
+          </div>
+          {puedeVerSol && (
+            <button
+              onClick={() => setMisSolicitudesAbierto(true)}
+              className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium flex items-center gap-1.5"
+              title="Ver solicitudes cerradas (S&OP Ferru)"
+            >
+              <FileText className="w-4 h-4" /> Mis solicitudes
+              {sol.cerradas.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-blue-800/30 text-[10px] font-bold">
+                  {sol.cerradas.length}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* MODAL MIS SOLICITUDES */}
       <SolicitudesModal
         abierto={misSolicitudesAbierto}
         onCerrar={() => setMisSolicitudesAbierto(false)}
@@ -1016,7 +1027,7 @@ export default function ForecastClientesTab() {
         onEliminarSolicitud={sol.eliminarSolicitud}
       />
 
-      {/* Modal agregar línea con cantidad custom */}
+      {/* MODAL AGREGAR LÍNEA — selector de contenedores/piezas custom */}
       {skuParaAgregar && (
         <AgregarLineaModal
           row={skuParaAgregar}
@@ -1025,398 +1036,278 @@ export default function ForecastClientesTab() {
         />
       )}
 
-      {/* HERO editorial · narrativa + stats */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 24,
-        background: heroBg, color: heroText,
-        borderRadius: 14, padding: '18px 22px', marginBottom: 12,
-        alignItems: 'center', position: 'relative', overflow: 'hidden',
-        border: isDark ? `1px solid rgba(255,255,255,0.06)` : 'none',
-      }}>
-        {isDark && (
-          <div style={{
-            position: 'absolute', top: '-30%', right: '-10%', width: '50%', height: '100%',
-            background: `radial-gradient(circle, ${theme.accent}1F 0%, transparent 70%)`, pointerEvents: 'none',
-          }} />
-        )}
-        <div style={{ position: 'relative' }}>
-          <p style={{
-            fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em',
-            color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText, margin: 0,
-          }}>
-            Dirección Comercial · S&amp;OP · {nombreMes} {anioActual}
-          </p>
-          <h2 style={{
-            fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em',
-            color: heroText, margin: '4px 0 6px', lineHeight: 1.15,
-          }}>
-            Detalle por SKU · Planeación de compras.
-          </h2>
-          <p style={{
-            color: heroMuted, fontSize: 12, lineHeight: 1.55, margin: 0, maxWidth: 600,
-            fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums',
-          }}>
-            <strong style={{ color: heroText, fontWeight: 500 }}>{rowsAll.length} SKUs</strong>.
-            {kpis.conBrecha > 0 && <> <strong style={{ color: '#FF6961', fontWeight: 500 }}>{kpis.conBrecha} con brecha inmediata</strong>,</>}
-            {kpis.enCanibalizacion > 0 && <> <strong style={{ color: '#FFB84D', fontWeight: 500 }}>{kpis.enCanibalizacion} en canibalización</strong>,</>}
-            {kpis.enPreventa > 0 && <> <strong style={{ color: heroText, fontWeight: 500 }}>{kpis.enPreventa} en preventa</strong>,</>}
-            {' '}<strong style={{ color: '#34D158', fontWeight: 500 }}>{kpis.sobrestock} en sobrestock</strong>.
-            Arma tu export seleccionando SKUs con la cantidad que necesites.
-          </p>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-end', position: 'relative' }}>
-          {/* Selector de horizonte */}
-          <div style={{ display: 'inline-flex', padding: 2, background: 'rgba(255,255,255,.08)', borderRadius: 999 }}>
-            {HORIZONTES.map(h => {
-              const on = horizonte === h.meses;
-              return (
-                <button key={h.meses} onClick={() => setHorizonte(h.meses)} style={{
-                  padding: '4px 12px', borderRadius: 999, border: 'none',
-                  background: on ? 'rgba(255,255,255,.95)' : 'transparent',
-                  color: on ? '#000' : 'rgba(255,255,255,.7)',
-                  fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                }}>
-                  {h.label}
-                </button>
-              );
-            })}
-          </div>
-          {/* Stats 2x2 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', width: '100%' }}>
-            <HeroStat label="SKUs c/ brecha" value={FMT_N(kpis.conBrecha)} sub={`USD ${FMT_N(kpis.valorSugeridoUsd)}`} color="#FF6961" heroText={heroText} heroSubtle={heroSubtle} />
-            <HeroStat label="Sobrestock" value={FMT_N(kpis.sobrestock)} sub="&gt;90 días cobertura" color="#34D158" heroText={heroText} heroSubtle={heroSubtle} />
-            <HeroStat label="Export activo" value={`USD ${FMT_N(totalBorradorUsd)}`} sub={`${lineasBorrador.length} SKUs · ${FMT_N(totalBorradorPz)} pz`} color={heroText} heroText={heroText} heroSubtle={heroSubtle} />
-            <HeroStat label="LT promedio" value={`${Math.round(kpis.ltPromedio)}d`} sub="lead time" color={heroText} heroText={heroText} heroSubtle={heroSubtle} />
-          </div>
-        </div>
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <KpiCard icon={AlertTriangle} label="SKUs con brecha" value={kpis.conBrecha} color="#EF4444" />
+        <KpiCard icon={DollarSign} label="Valor a comprar" value={FMT_USD(kpis.valorSugeridoUsd)} color="#10B981" small />
+        <KpiCard icon={Users} label="Canibalización" value={kpis.enCanibalizacion} color="#F59E0B" />
+        <KpiCard icon={Target} label="En preventa" value={kpis.enPreventa} color="#8B5CF6" />
+        <KpiCard icon={Package} label="Sobrestock" value={kpis.sobrestock} color="#64748B" />
+        <KpiCard icon={Clock} label="LT promedio" value={`${Math.round(kpis.ltPromedio)}d`} color="#3B82F6" small />
       </div>
 
-      {/* Aviso migración pendiente */}
-      {!sol.tablaExiste && puedeVerSol && (
-        <div style={{
-          background: `${theme.orange}14`, border: `1px solid ${theme.orange}40`,
-          borderRadius: 10, padding: '8px 12px', fontSize: 11.5, color: theme.orange, marginBottom: 12,
-        }}>
-          ⚠ Las tablas <code>solicitudes_compra</code> aún no existen en la BD.
-          Aplica la migración <code>supabase/migrations/20260504_solicitudes_compra.sql</code> desde el SQL Editor.
-        </div>
+      {/* SUGERIDOS PENDIENTES */}
+      {data.sugeridosPendientes.length > 0 && (
+        <SugeridosPendientes
+          sugeridos={data.sugeridosPendientes}
+          open={sugeridosOpen}
+          onToggle={() => setSugeridosOpen(!sugeridosOpen)}
+          onRefresh={data.reload}
+        />
       )}
 
-      {/* GRID · main + sidebar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 12, alignItems: 'start' }}>
+      {/* TARJETAS RESUMEN — fila 1: Necesidad + Tránsito */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <NecesidadCard
+          rows={rowsAll}
+          cuotas={data.cuotas}
+          metaBySku={metaBySku}
+        />
+        <TransitoTimeline
+          embarques={data.embarques}
+          metaBySku={metaBySku}
+        />
+      </div>
 
-        {/* MAIN COLUMN */}
-        <div style={{ minWidth: 0 }}>
-          {/* Toolbar filtros */}
-          <div style={{
-            background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12,
-            padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-            marginBottom: 12,
-          }}>
-            <div style={{
-              flex: 1, minWidth: 240, maxWidth: 380, display: 'flex', alignItems: 'center', gap: 8,
-              padding: '0 12px', background: theme.bg, border: `1px solid ${theme.border}`,
-              borderRadius: 999, height: 32,
-            }}>
-              <Search size={12} style={{ color: theme.textMuted }} />
-              <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
-                placeholder="Buscar SKU, descripción, marca…"
-                style={{
-                  border: 0, outline: 0, background: 'transparent', flex: 1,
-                  fontFamily: TYPO.fontText, fontSize: 12, color: theme.text,
-                }} />
-              {busqueda && (
-                <button onClick={() => setBusqueda('')}
-                  style={{ background: 'transparent', border: 0, cursor: 'pointer', padding: 2, color: theme.textMuted }}>
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-
-            <ToolbarSelect value={filtroSupplier} onChange={setFiltroSupplier} theme={theme}
-              options={[{ v: 'todos', l: 'Todos los proveedores' }, ...suppliers.map(s => ({ v: s, l: s.slice(0, 40) }))]} />
-            <ToolbarSelect value={filtroFamilia} onChange={setFiltroFamilia} theme={theme}
-              options={[{ v: 'todas', l: 'Todas las familias' }, ...familias.map(f => ({ v: f, l: f }))]} />
-            <ToolbarSelect value={filtroCliente} onChange={setFiltroCliente} theme={theme}
-              options={[{ v: 'todos', l: 'Todos los clientes' }, ...CLIENTES.map(c => ({ v: c.key, l: c.full }))]} />
-
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: theme.textMuted, fontFamily: 'SF Mono, ui-monospace, monospace' }}>
-              <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rowsOrdenados.length}</strong>
-              &nbsp;de {rowsAll.length}
-            </span>
-          </div>
-
-          {/* Sugeridos pendientes (colapsable) */}
-          {data.sugeridosPendientes.length > 0 && (
-            <div style={{ marginBottom: 12 }}>
-              <SugeridosPendientes
-                sugeridos={data.sugeridosPendientes}
-                open={sugeridosOpen}
-                onToggle={() => setSugeridosOpen(!sugeridosOpen)}
-                onRefresh={data.reload}
-              />
-            </div>
-          )}
-
-          {/* Tabla principal */}
-          <ForecastTable
-            rows={rowsOrdenados}
-            totalRows={rowsAll.length}
-            expandedSku={expandedSku}
-            setExpandedSku={setExpandedSku}
-            sortCol={sortCol} sortDir={sortDir}
-            onSort={(c) => {
-              if (sortCol === c) setSortDir(sortDir === 'desc' ? 'asc' : 'desc');
-              else { setSortCol(c); setSortDir('desc'); }
-            }}
-            onAgregarSolicitud={onAgregarSolicitud}
-            skusEnBorrador={skusEnBorrador}
-            lineasBorrador={lineasBorrador}
-            theme={theme}
-            isDark={isDark}
-            horizonte={horizonte}
-          />
-        </div>
-
-        {/* SIDEBAR · Export cart */}
+      {/* TARJETAS RESUMEN — fila 2: Novedades + (panel solicitudes si tiene permiso) */}
+      <div className={[
+        'grid grid-cols-1 gap-4',
+        puedeVerSol ? 'xl:grid-cols-2' : ''
+      ].join(' ')}>
+        <NovedadesCard
+          roadmap={data.roadmap}
+          embarques={data.embarques}
+          metaBySku={metaBySku}
+          inventario={data.inventario}
+          reporteSkus={data.reporteSkus}
+          puedeEditar={!!perfil?.es_super_admin}
+          onAgregarRoadmap={onAgregarRoadmap}
+          onDescartar={onDescartarSku}
+          onRecuperar={onRecuperarSku}
+        />
         {puedeVerSol && (
-          <div style={{ position: 'sticky', top: 12, alignSelf: 'start', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <ExportCart
-              sol={sol}
-              activoId={borradorActivoId}
-              setActivoId={setBorradorActivoId}
-              activo={borradorActivo}
-              lineas={lineasBorrador}
-              totalPz={totalBorradorPz}
-              totalUsd={totalBorradorUsd}
-              puedeEditar={puedeEditarSol}
-              onCrearNuevo={onCrearNuevoBorrador}
-              onEditarLinea={onEditarLineaWrapped}
-              onEliminarLinea={onEliminarLineaWrapped}
-              onCerrar={onCerrarBorradorWrapped}
-              onExportar={onExportarBorrador}
-              onVerHistorial={() => setMisSolicitudesAbierto(true)}
-              theme={theme}
-            />
-          </div>
+          <SolicitudesPanel
+            borradores={sol.borradores}
+            lineasDe={sol.lineasDe}
+            activoId={borradorActivoId}
+            setActivoId={setBorradorActivoId}
+            puedeEditar={puedeEditarSol}
+            onCrearNuevo={onCrearNuevoBorrador}
+            onEditarLinea={onEditarLineaWrapped}
+            onEliminarLinea={onEliminarLineaWrapped}
+            onCerrar={onCerrarBorradorWrapped}
+            onEliminarSolicitud={onEliminarSolicitudWrapped}
+          />
         )}
       </div>
-    </div>
-  );
-}
-
-// ────────── Hero stat pill (para el hero editorial) ──────────
-function HeroStat({ label, value, sub, color, heroText, heroSubtle }) {
-  return (
-    <div>
-      <div style={{
-        fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em',
-        color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText,
-      }}>
-        {label}
-      </div>
-      <div style={{
-        fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em',
-        color: color || heroText, fontVariantNumeric: 'tabular-nums',
-        lineHeight: 1.1, marginTop: 2,
-      }}>
-        {value}
-      </div>
-      {sub && (
-        <div style={{ fontSize: 10, color: heroSubtle, marginTop: 1 }} dangerouslySetInnerHTML={{ __html: sub }} />
+      {!sol.tablaExiste && puedeVerSol && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-xs text-amber-800">
+          ⚠ Las tablas <code>solicitudes_compra</code> aún no existen en la BD.
+          Aplica la migración <code>supabase/migrations/20260504_solicitudes_compra.sql</code>
+          desde el SQL Editor de Supabase para activar el sistema de solicitudes.
+        </div>
       )}
-    </div>
-  );
-}
 
-// ────────── Select del toolbar (dropdown pill) ──────────
-function ToolbarSelect({ value, onChange, options, theme }) {
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} style={{
-      height: 32, padding: '0 10px', borderRadius: 999,
-      background: theme.bg, border: `1px solid ${theme.border}`,
-      fontFamily: TYPO.fontText, fontSize: 11.5, fontWeight: 500,
-      color: theme.text, cursor: 'pointer', maxWidth: 200,
-    }}>
-      {options.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
-    </select>
-  );
-}
 
-// ────────── Chips helpers ──────────
-function CoberturaChip({ dias, theme }) {
-  if (dias == null || dias === Infinity) return <span style={{ color: theme.textSubtle, fontSize: 10.5 }}>—</span>;
-  const bg = dias < 30 ? 'rgba(239,68,68,.14)' : dias < 60 ? 'rgba(245,158,11,.14)' : 'rgba(52,199,89,.13)';
-  const fg = dias < 30 ? '#B91C1C' : dias < 60 ? '#B45309' : '#1C7A34';
-  return (
-    <span style={{
-      display: 'inline-flex', padding: '2px 8px', borderRadius: 999,
-      background: bg, color: fg,
-      fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 700,
-      fontVariantNumeric: 'tabular-nums',
-    }}>
-      {Math.round(dias)}d
-    </span>
-  );
-}
+      {/* FILTROS */}
+      <div className="bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-2 top-2.5 w-3.5 h-3.5 text-gray-400" />
+          <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+            placeholder="Buscar SKU o descripción…"
+            className="w-full pl-7 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white" />
+          {busqueda && (
+            <button onClick={() => setBusqueda('')} className="absolute right-2 top-2 text-gray-400">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
 
-function RoadmapChip({ estado, theme }) {
-  if (!estado) return <span style={{ color: theme?.textSubtle || '#86868B', opacity: .5, fontSize: 10 }}>—</span>;
-  const s = roadmapStyle(estado);
-  return (
-    <span style={{
-      display: 'inline-block', padding: '2px 6px', borderRadius: 4,
-      background: s.bg, color: s.color,
-      fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em',
-    }}>
-      {estado}
-    </span>
-  );
-}
+        <select value={filtroSupplier} onChange={e => setFiltroSupplier(e.target.value)}
+          className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white max-w-[200px]">
+          <option value="todos">Todos los proveedores</option>
+          {suppliers.map(s => <option key={s} value={s}>{s.slice(0, 40)}</option>)}
+        </select>
+        <select value={filtroFamilia} onChange={e => setFiltroFamilia(e.target.value)}
+          className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+          <option value="todas">Todas las familias</option>
+          {familias.map(f => <option key={f} value={f}>{f}</option>)}
+        </select>
+        <select value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)}
+          className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+          <option value="todos">Todos los clientes</option>
+          {CLIENTES.map(c => <option key={c.key} value={c.key}>{c.full}</option>)}
+        </select>
 
-function SortHeader({ theme, col, label, width, align = 'left', onSort, sortCol, sortDir }) {
-  const active = col && sortCol === col;
-  const clickable = !!onSort && col;
-  return (
-    <th style={{
-      position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
-      textAlign: align, padding: '9px 10px', width,
-      fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 9.5,
-      textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted,
-      borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap',
-      cursor: clickable ? 'pointer' : 'default',
-    }} onClick={clickable ? () => onSort(col) : undefined}>
-      {label && (
-        <span style={{ color: active ? theme.text : 'inherit', fontWeight: active ? 700 : 600 }}>
-          {label}
-          {active && <span style={{ marginLeft: 3, fontSize: 8 }}>{sortDir === 'desc' ? '▼' : '▲'}</span>}
-        </span>
-      )}
-    </th>
-  );
-}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          {[
+            { id: 'todos',         label: 'Todos' },
+            { id: 'brecha',        label: 'Con brecha' },
+            { id: 'canibalizacion',label: 'Canibalización' },
+            { id: 'preventa',      label: 'Preventa' },
+          ].map(f => (
+            <button key={f.id} onClick={() => setFiltroFlag(f.id)}
+              className={[
+                'px-2.5 py-1 rounded-md text-xs font-medium transition',
+                filtroFlag === f.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900',
+              ].join(' ')}>
+              {f.label}
+            </button>
+          ))}
+        </div>
 
-// ────────── Tabla principal ──────────
-function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, sortDir, onSort, onAgregarSolicitud, skusEnBorrador, lineasBorrador, theme, isDark, horizonte }) {
-  return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
-      <div style={{
-        padding: '12px 16px', borderBottom: `1px solid ${theme.divider || theme.border}`,
-        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-      }}>
-        <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
-          Detalle por SKU
-        </h5>
-        <span style={{ marginLeft: 'auto', fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
-          <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs · click para drill · <span style={{ color: theme.green }}>■</span> en export
+        <span className="text-xs text-gray-500 ml-auto">
+          {rowsOrdenados.length} de {rowsAll.length} SKUs
         </span>
       </div>
-      <div style={{ overflow: 'auto', maxHeight: '75vh' }}>
-        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
-          <thead>
-            <tr>
-              <SortHeader theme={theme} width={24} />
-              <SortHeader theme={theme} col="marca" label="Marca" width={70} onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="sku" label="SKU" width={100} onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} label="Descripción" />
-              <SortHeader theme={theme} col="rdmp" label="Roadmap" width={80} align="center" />
-              <SortHeader theme={theme} col="inv" label="Inv actual" width={80} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="traCant" label="Tránsito" width={80} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="demandaTotalHor" label={`Dem ${horizonte}m`} width={80} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="coberturaDias" label="Cobertura" width={80} align="center" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="sugerido" label="Sugerido" width={90} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} label="Acción" width={110} align="center" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan={11} style={{ padding: '32px 16px', textAlign: 'center', color: theme.textMuted, fontSize: 11.5 }}>Sin resultados con los filtros actuales</td></tr>
-            )}
-            {rows.map((r) => {
-              const enExport = skusEnBorrador.has(r.sku);
-              const lineaExp = enExport ? lineasBorrador.find((l) => l.sku === r.sku) : null;
-              return (
-                <ForecastRow
-                  key={r.sku}
-                  r={r}
-                  expanded={expandedSku === r.sku}
-                  onToggle={() => setExpandedSku(expandedSku === r.sku ? null : r.sku)}
-                  onAgregarSolicitud={onAgregarSolicitud}
-                  enExport={enExport}
-                  cantidadEnExport={lineaExp?.cantidad || 0}
-                  theme={theme}
-                  isDark={isDark}
-                />
-              );
-            })}
-          </tbody>
-        </table>
+
+      {/* TABLA — los 818 SKUs del Reporte con scroll interno */}
+      <ForecastTable
+        rows={rowsOrdenados}
+        expandedSku={expandedSku}
+        setExpandedSku={setExpandedSku}
+        sortCol={sortCol} sortDir={sortDir}
+        onSort={(c) => {
+          if (sortCol === c) setSortDir(sortDir === 'desc' ? 'asc' : 'desc');
+          else { setSortCol(c); setSortDir('desc'); }
+        }}
+        onAgregarSolicitud={onAgregarSolicitud}
+      />
+    </div>
+  );
+}
+
+// ────────── KPI Card ──────────
+function KpiCard({ icon: Icon, label, value, color, small }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-3">
+      <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}22`, color }}>
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-[11px] text-gray-500 truncate">{label}</div>
+        <div className={small ? 'font-bold text-gray-800 text-sm truncate' : 'font-bold text-gray-800 text-lg'}>{value}</div>
       </div>
     </div>
   );
 }
 
-// ────────── Row ──────────
-function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud, enExport, cantidadEnExport, theme, isDark }) {
-  const cellS = { padding: '7px 10px', fontSize: 12, color: theme.text, fontFamily: TYPO.fontText, verticalAlign: 'middle' };
-  const numS = { ...cellS, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, textAlign: 'right' };
-  const boldS = { ...cellS, fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 12.5, letterSpacing: '-0.01em', textAlign: 'right' };
-  const rowBg = expanded ? (isDark ? 'rgba(10,132,255,0.08)' : 'rgba(0,122,255,0.04)') :
-                enExport ? 'rgba(52,199,89,0.05)' : 'transparent';
-  const sugeridoColor = r.sugerido > 0
-    ? (r.coberturaDias < 30 ? theme.red : theme.orange)
-    : theme.textMuted;
+// ────────── Tabla — orden alineado con Reporte de Resumen Clientes ──────────
+function ForecastTable({ rows, expandedSku, setExpandedSku, sortCol, sortDir, onSort, onAgregarSolicitud }) {
+  const ArrowSort = ({ col }) => sortCol === col ? (
+    <span className="text-blue-600">{sortDir === 'desc' ? '▼' : '▲'}</span>
+  ) : <span className="text-gray-300">↕</span>;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      {/* Scroll interno — el header se mantiene fijo arriba y la tabla
+          scroll-ea adentro (igual que el Reporte de Resumen Clientes) */}
+      <div className="overflow-x-auto overflow-y-auto max-h-[78vh]">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-xs text-gray-600 sticky top-0 z-10">
+          <tr>
+            <th className="w-4"></th>
+            <th className="text-left px-3 py-2 cursor-pointer" onClick={() => onSort('sku')}>
+              SKU <ArrowSort col="sku" />
+            </th>
+            <th className="text-left px-2 py-2">Roadmap</th>
+            <th className="text-left px-3 py-2 min-w-[260px]">Descripción</th>
+            <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('inv')}>Inv <ArrowSort col="inv"/></th>
+            <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('traCant')}>Tránsito <ArrowSort col="traCant"/></th>
+            <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('demandaTotalHor')}>Dem Total <ArrowSort col="demandaTotalHor"/></th>
+            <th className="text-right px-1 py-2" style={{ color: '#3B82F6' }}>DGL</th>
+            <th className="text-right px-1 py-2" style={{ color: '#EF4444' }}>PCEL</th>
+            <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('brecha')}>Brecha <ArrowSort col="brecha"/></th>
+            <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('sugerido')}>Sugerido <ArrowSort col="sugerido"/></th>
+            <th className="text-right px-2 py-2 cursor-pointer" onClick={() => onSort('ltDias')}>LT <ArrowSort col="ltDias"/></th>
+            <th className="px-2 py-2 w-8"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr><td colSpan={13} className="text-center py-10 text-gray-400 text-sm">Sin resultados con los filtros actuales</td></tr>
+          ) : rows.map(r => (
+            <ForecastRow
+              key={r.sku} r={r}
+              expanded={expandedSku === r.sku}
+              onToggle={() => setExpandedSku(expandedSku === r.sku ? null : r.sku)}
+              onAgregarSolicitud={onAgregarSolicitud}
+            />
+          ))}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  );
+}
+
+function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud }) {
+  const brechaColor = r.brecha > 0 ? 'text-red-600 font-semibold' : 'text-gray-400';
+  const eta = r.traEta ? diasHasta(r.traEta) : null;
+  const etaLabel = r.traEta ? `${fmtFechaCorta(r.traEta)}${eta != null ? ` (${eta}d)` : ''}` : '—';
+  // Badge oficial del roadmap — mismos colores que el Reporte de Resumen Clientes
+  const RoadmapBadge = ({ estado }) => {
+    if (!estado) return <span className="text-gray-300 text-[10px]">—</span>;
+    const s = roadmapStyle(estado);
+    return (
+      <span
+        className="px-1.5 py-0.5 rounded text-[10px] font-bold"
+        style={{ backgroundColor: s.bg, color: s.color }}
+      >
+        {estado}
+      </span>
+    );
+  };
+
   return (
     <>
-      <tr onClick={onToggle} style={{
-        borderTop: `1px solid ${theme.divider || theme.border}`,
-        background: rowBg, cursor: 'pointer',
-        transition: 'background 160ms ease',
-      }}>
-        <td style={{ ...cellS, width: 24, textAlign: 'center', color: expanded ? theme.accent : theme.textSubtle }}>
-          {expanded ? '▾' : '▸'}
+      <tr className="border-t border-gray-100 hover:bg-blue-50/40">
+        <td className="pl-2 cursor-pointer" onClick={onToggle}>{expanded ? <ChevronUp className="w-3.5 h-3.5 text-gray-400"/> : <ChevronDown className="w-3.5 h-3.5 text-gray-400"/>}</td>
+        <td className="px-3 py-2 font-mono text-xs font-semibold text-gray-800 cursor-pointer" onClick={onToggle}>{r.sku}</td>
+        <td className="px-2 py-2 cursor-pointer" onClick={onToggle}><RoadmapBadge estado={r.roadmapEstado}/></td>
+        <td className="px-3 py-2 text-xs text-gray-600 truncate max-w-[340px] cursor-pointer" title={r.descripcion} onClick={onToggle}>{r.descripcion || '—'}</td>
+        <td className="text-right px-2 py-2 tabular-nums text-gray-700 cursor-pointer" onClick={onToggle}>{FMT_N(r.inv)}</td>
+        <td className="text-right px-2 py-2 tabular-nums text-xs text-gray-600 cursor-pointer" title={etaLabel} onClick={onToggle}>
+          {r.traCant > 0 ? (<>
+            {FMT_N(r.traCant)}<div className="text-[9px] text-gray-400">{etaLabel}</div>
+          </>) : '—'}
         </td>
-        <td style={{ ...cellS, fontWeight: 600 }}>{r.marca || '—'}</td>
-        <td style={{ ...cellS, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600 }}>{r.sku}</td>
-        <td style={{ ...cellS, maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
-        <td style={{ ...cellS, textAlign: 'center' }}><RoadmapChip estado={r.roadmapEstado} theme={theme} /></td>
-        <td style={numS}>{FMT_N(r.inv)}</td>
-        <td style={numS}>{r.traCant > 0 ? FMT_N(r.traCant) : <span style={{ color: theme.textSubtle }}>—</span>}</td>
-        <td style={numS}>{FMT_N(r.demandaTotalHor)}</td>
-        <td style={{ ...cellS, textAlign: 'center' }}><CoberturaChip dias={r.coberturaDias} theme={theme} /></td>
-        <td style={{ ...boldS, color: sugeridoColor }}>
-          {r.sugerido > 0 ? FMT_N(r.sugerido) : <span style={{ color: theme.textMuted, fontWeight: 500 }}>—</span>}
+        <td className="text-right px-2 py-2 tabular-nums font-semibold text-gray-800 cursor-pointer" onClick={onToggle}>{FMT_N(r.demandaTotalHor)}</td>
+        <td className="text-right px-1 tabular-nums text-xs cursor-pointer" style={{ color: r.demHor.digitalife > 0 ? '#3B82F6' : '#CBD5E1' }} onClick={onToggle}>{FMT_N(r.demHor.digitalife)}</td>
+        <td className="text-right px-1 tabular-nums text-xs cursor-pointer" style={{ color: r.demHor.pcel > 0 ? '#EF4444' : '#CBD5E1' }} onClick={onToggle}>{FMT_N(r.demHor.pcel)}</td>
+        <td className={`text-right px-2 py-2 tabular-nums cursor-pointer ${brechaColor}`} onClick={onToggle}>{FMT_N(r.brecha)}</td>
+        <td className="text-right px-2 py-2 tabular-nums font-semibold text-emerald-700 cursor-pointer" onClick={onToggle}>
+          {FMT_N(r.sugerido)}
           {r.contenedoresSugeridos > 0 && (
-            <div style={{ fontSize: 9.5, color: theme.textMuted, fontWeight: 500 }}>
-              {r.contenedoresSugeridos}cnt{r.esConsolidado ? ' (consol.)' : ''}
+            <div className="text-[9px] text-gray-400 font-normal">
+              {r.contenedoresSugeridos} cnt{r.esConsolidado ? ' (consol.)' : ''}
             </div>
           )}
         </td>
-        <td style={{ ...cellS, textAlign: 'center' }}>
+        <td className="text-right px-2 py-2 text-xs cursor-pointer" onClick={onToggle}>
+          {r.ltDias ? <span className="text-gray-700">{Math.round(r.ltDias)}d</span> : <span className="text-gray-300">?</span>}
+        </td>
+        <td className="px-2 py-2 text-center">
           {onAgregarSolicitud && (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onAgregarSolicitud(r); }}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '3px 10px', borderRadius: 999,
-                background: enExport ? theme.green : (isDark ? 'rgba(10,132,255,0.14)' : 'rgba(0,122,255,0.08)'),
-                border: `1px solid ${enExport ? theme.green : (isDark ? 'rgba(10,132,255,0.30)' : 'rgba(0,122,255,0.20)')}`,
-                color: enExport ? '#fff' : theme.accent,
-                fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700,
-                cursor: 'pointer', whiteSpace: 'nowrap',
-              }}
-              title={enExport ? `Ya en el export activo (${FMT_N(cantidadEnExport)} pz)` : 'Agregar al export activo'}
+              className="inline-flex items-center justify-center w-6 h-6 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-700 transition"
+              title={
+                r.sugerido > 0
+                  ? `Agregar a solicitud (sugerido: ${FMT_N(r.sugerido)} pzs)`
+                  : 'Agregar a solicitud (cantidad personalizada)'
+              }
             >
-              {enExport ? `✓ ${FMT_N(cantidadEnExport)}` : `＋ ${r.sugerido > 0 ? FMT_N(r.sugerido) : 'custom'}`}
+              +
             </button>
           )}
         </td>
       </tr>
       {expanded && (
-        <tr>
-          <td colSpan={11} style={{ padding: 0, background: theme.surface, borderTop: `1px solid ${theme.divider || theme.border}`, borderBottom: `1px solid ${theme.divider || theme.border}` }}>
-            <ExpandedDetail r={r} theme={theme} isDark={isDark} onAgregarSolicitud={onAgregarSolicitud} enExport={enExport} />
+        <tr className="border-t border-gray-100 bg-gray-50/60">
+          <td colSpan={13} className="p-4">
+            <ExpandedDetail r={r} />
           </td>
         </tr>
       )}
@@ -1424,211 +1315,262 @@ function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud, enExport, cant
   );
 }
 
-
-// ────────── Drill inline (patrón Sell Out Dicotech) ──────────
-function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport }) {
+function ExpandedDetail({ r }) {
   const MES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const fmtFechaC = (iso) => {
     if (!iso) return '—';
     const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
     return `${d} ${MES_CORTO[m - 1]} ${String(y).slice(2)}`;
   };
-  const secLbl = {
-    fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700,
-    letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted,
-    paddingBottom: 8, marginBottom: 8, borderBottom: `1px solid ${theme.divider || theme.border}`,
-    display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-  };
-  const secSide = { fontFamily: TYPO.fontText, fontSize: 10.5, fontWeight: 500, color: theme.textSubtle, letterSpacing: 0, textTransform: 'none' };
+
+  // Brecha por cliente (lo que cada uno realmente necesita 90d vs disponible)
+  const totalDisponible = (r.inv || 0) + (r.traDentroHor || 0);
+  const ratioDigi = r.demandaMesTotal > 0 ? r.demMes.digitalife / r.demandaMesTotal : 0;
+  const ratioPcel = r.demandaMesTotal > 0 ? r.demMes.pcel       / r.demandaMesTotal : 0;
+  const necesidadDigi = r.demMes.digitalife * 3;
+  const necesidadPcel = r.demMes.pcel       * 3;
+  const stockDigi  = totalDisponible * ratioDigi;
+  const stockPcel  = totalDisponible * ratioPcel;
+  const brechaDigi = Math.max(0, necesidadDigi - stockDigi);
+  const brechaPcel = Math.max(0, necesidadPcel - stockPcel);
 
   return (
-    <div style={{
-      padding: '20px 24px',
-      background: isDark
-        ? 'linear-gradient(180deg, rgba(10,132,255,0.05) 0%, rgba(10,132,255,0) 100%)'
-        : 'linear-gradient(180deg, rgba(0,122,255,0.02) 0%, rgba(0,122,255,0) 100%)',
-    }}>
-      {/* Drill hero */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1fr auto', gap: 16,
-        paddingBottom: 16, borderBottom: `1px solid ${theme.divider || theme.border}`, marginBottom: 16,
-        alignItems: 'center',
-      }}>
-        <div>
-          <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', margin: 0, color: theme.text }}>
-            {r.descripcion || r.sku}
-          </h3>
-          <div style={{ fontSize: 11.5, color: theme.textMuted, marginTop: 3, fontFamily: 'SF Mono, ui-monospace, monospace' }}>
-            {r.sku} · {r.marca || 'Sin marca'} · {r.familia || 'Sin familia'} · {r.supplier || 'Sin proveedor'}
-            {r.piezasPorContenedor > 0 && ` · 1 cnt = ${FMT_N(r.piezasPorContenedor)} pz`}
-            {r.ultimoCostoUsd > 0 && ` · $${Number(r.ultimoCostoUsd).toFixed(2)} USD`}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            onClick={() => onAgregarSolicitud && onAgregarSolicitud(r)}
-            style={{
-              padding: '8px 16px', borderRadius: 999,
-              background: enExport ? theme.green : theme.accent, color: '#fff', border: 0,
-              fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-            }}>
-            {enExport ? '✓ Editar cantidad' : '＋ Agregar al export'}
-          </button>
-        </div>
-      </div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm">
 
-      {/* KPI strip 6 métricas con hairlines */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', marginBottom: 20 }}>
-        <DrillKpi label="Inventario hoy" value={FMT_N(r.inv)} u="pz" sub="stock actual" theme={theme} />
-        <DrillKpi label="Tránsito activo" value={FMT_N(r.traCant)} u="pz" sub={r.traEta ? `próximo ${fmtFechaC(r.traEta)}` : 'sin POs'} color={r.traCant > 0 ? '#1C7A34' : null} theme={theme} borderLeft />
-        <DrillKpi label="Demanda mensual" value={FMT_N(r.demandaMesTotal)} u="pz/m" sub={`DGL ${FMT_N(r.demMes.digitalife)} · PCEL ${FMT_N(r.demMes.pcel)}`} theme={theme} borderLeft />
-        <DrillKpi
-          label="Cobertura"
-          value={r.coberturaDias == null || r.coberturaDias === Infinity ? '∞' : Math.round(r.coberturaDias)}
-          u={r.coberturaDias == null || r.coberturaDias === Infinity ? '' : 'd'}
-          sub={r.coberturaDias < 30 ? 'crítica' : r.coberturaDias < 60 ? 'tensa' : 'ok'}
-          color={r.coberturaDias < 30 ? '#B91C1C' : r.coberturaDias < 60 ? '#B45309' : '#1C7A34'}
-          theme={theme} borderLeft
-        />
-        <DrillKpi label="Lead time" value={r.ltDias ? Math.round(r.ltDias) : '—'} u={r.ltDias ? 'd' : ''} sub={r.supplier ? r.supplier.slice(0, 22) : 'sin proveedor'} theme={theme} borderLeft />
-        <DrillKpi
-          label="Sugerido"
-          value={r.sugerido > 0 ? (r.contenedoresSugeridos || 1) : '—'}
-          u={r.sugerido > 0 ? `cnt · ${FMT_N(r.sugerido)}pz` : ''}
-          sub={r.sugeridoValorUsd > 0 ? `USD ${FMT_N(r.sugeridoValorUsd)}` : ''}
-          color={r.sugerido > 0 ? (r.coberturaDias < 30 ? '#B91C1C' : '#B45309') : null}
-          theme={theme} borderLeft
-        />
-      </div>
-
-      {/* Grid inferior: demanda 6m + tránsito + proveedor */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 20 }}>
-        <div>
-          <div style={secLbl}>
-            <span>📅 Demanda últimos 6 meses</span>
-            <span style={secSide}>Digitalife + PCEL</span>
-          </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={{ padding: '6px 8px', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, textAlign: 'left', borderBottom: `1px solid ${theme.divider || theme.border}` }}>Mes</th>
-                <th style={{ padding: '6px 8px', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, textAlign: 'right', borderBottom: `1px solid ${theme.divider || theme.border}` }}>Digitalife</th>
-                <th style={{ padding: '6px 8px', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, textAlign: 'right', borderBottom: `1px solid ${theme.divider || theme.border}` }}>PCEL</th>
-                <th style={{ padding: '6px 8px', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, textAlign: 'right', borderBottom: `1px solid ${theme.divider || theme.border}` }}>Total</th>
+      {/* 1) DEMANDA 6 MESES POR CLIENTE — TABLA */}
+      <div className="bg-white rounded-lg p-3 border border-gray-200">
+        <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2">
+          Demanda 6 meses por cliente (piezas)
+        </h4>
+        <table className="w-full text-xs">
+          <thead className="text-[10px] text-gray-500 uppercase tracking-wide">
+            <tr className="border-b border-gray-100">
+              <th className="text-left py-1.5">Mes</th>
+              <th className="text-right py-1.5" style={{ color: '#3B82F6' }}>Digitalife</th>
+              <th className="text-right py-1.5" style={{ color: '#EF4444' }}>PCEL</th>
+              <th className="text-right py-1.5">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(r.demanda6m || []).map((d, i) => (
+              <tr key={i} className="border-b border-gray-50 last:border-0">
+                <td className="py-1 text-gray-600">{MES_CORTO[d.mes - 1]} {String(d.anio).slice(2)}</td>
+                <td className="py-1 text-right tabular-nums" style={{ color: d.digi > 0 ? '#3B82F6' : '#CBD5E1' }}>
+                  {FMT_N(d.digi)}
+                </td>
+                <td className="py-1 text-right tabular-nums" style={{ color: d.pcel > 0 ? '#EF4444' : '#CBD5E1' }}>
+                  {FMT_N(d.pcel)}
+                </td>
+                <td className="py-1 text-right tabular-nums font-semibold text-gray-700">
+                  {FMT_N(d.digi + d.pcel)}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {(r.demanda6m || []).map((d, i) => (
-                <tr key={i} style={{ borderBottom: `1px solid ${theme.divider || theme.border}` }}>
-                  <td style={{ padding: '6px 8px', fontSize: 11.5, color: theme.text }}>{MES_CORTO[d.mes - 1]} {String(d.anio).slice(2)}</td>
-                  <td style={{ padding: '6px 8px', fontSize: 11.5, fontFamily: 'SF Mono, ui-monospace, monospace', textAlign: 'right', color: d.digi > 0 ? theme.accent : theme.textSubtle, fontVariantNumeric: 'tabular-nums' }}>{FMT_N(d.digi)}</td>
-                  <td style={{ padding: '6px 8px', fontSize: 11.5, fontFamily: 'SF Mono, ui-monospace, monospace', textAlign: 'right', color: d.pcel > 0 ? theme.red : theme.textSubtle, fontVariantNumeric: 'tabular-nums' }}>{FMT_N(d.pcel)}</td>
-                  <td style={{ padding: '6px 8px', fontSize: 11.5, fontFamily: 'SF Mono, ui-monospace, monospace', textAlign: 'right', fontWeight: 700, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{FMT_N(d.digi + d.pcel)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-          {(r.canibalizacion || r.preventaDeficit) && (
-            <div style={{
-              background: `${theme.orange}0F`, borderLeft: `3px solid ${theme.orange}`,
-              padding: '10px 12px', borderRadius: 6, fontSize: 11.5, lineHeight: 1.5, marginTop: 16, color: theme.text,
-            }}>
-              {r.canibalizacion && <div><b>⚠ Canibalización</b> · {r.canibalizacion.mensaje || 'Este SKU compite con otro de la misma familia.'}</div>}
-              {r.preventaDeficit && <div style={{ marginTop: 4 }}><b>🚀 Preventa</b> · Déficit acumulado de {FMT_N(r.preventaDeficit)} pz respecto a compromiso.</div>}
+      {/* 2) ARRIBOS EN TRÁNSITO */}
+      <div className="bg-white rounded-lg p-3 border border-gray-200">
+        <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2 flex items-center gap-1">
+          <Ship className="w-3.5 h-3.5" /> Arribos en tránsito
+        </h4>
+        {(r.embarques || []).length > 0 ? (
+          <div className="space-y-1 text-xs max-h-40 overflow-y-auto">
+            {r.embarques.map((e, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className={[
+                  'text-[9px] font-semibold px-1 py-0.5 rounded shrink-0',
+                  e.estatus === 'TRANSITO MARITIMO' ? 'bg-blue-100 text-blue-700' :
+                  e.estatus === 'PROXIMO A ZARPAR'  ? 'bg-amber-100 text-amber-700' :
+                  e.estatus === 'EN PRODUCCION'     ? 'bg-slate-100 text-slate-600' :
+                                                      'bg-gray-100 text-gray-600',
+                ].join(' ')}>
+                  {(e.estatus || '').slice(0, 12)}
+                </span>
+                <span className="font-semibold tabular-nums shrink-0">{FMT_N(e.cantidad)}</span>
+                <span className="text-gray-500 truncate flex-1" title={`PO ${e.po || ''}`}>{e.po ? `PO-${e.po}` : ''}</span>
+                <span className="text-gray-500 shrink-0">{fmtFechaC(e.eta)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-gray-400 italic">Sin tránsito programado</div>
+        )}
+      </div>
+
+      {/* 3) PROVEEDOR & COSTOS */}
+      <div className="bg-white rounded-lg p-3 border border-gray-200">
+        <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2">
+          Proveedor & costos
+        </h4>
+        <div className="space-y-1.5 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Proveedor</span>
+            <span className="font-semibold text-gray-800 truncate ml-2 max-w-[200px]" title={r.supplier}>{r.supplier || '—'}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Costo promedio (USD)</span>
+            <span className="font-semibold tabular-nums">
+              {r.costoPromedioUsd > 0 ? `$${r.costoPromedioUsd.toFixed(2)}` : '—'}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Último costo (USD)</span>
+            <span className="font-semibold tabular-nums" style={{ color: '#0d9488' }}>
+              {r.ultimoCostoUsd > 0 ? `$${Number(r.ultimoCostoUsd).toFixed(2)}` : '—'}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Costo promedio (MXN)</span>
+            <span className="font-semibold tabular-nums">{r.costoUnitMxn ? formatMXN(r.costoUnitMxn) : '—'}</span>
+          </div>
+          <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
+            <span className="text-gray-500">Piezas por contenedor</span>
+            <span className="font-semibold tabular-nums">
+              {r.tieneCompras
+                ? (r.piezasPorContenedor > 0 ? `${FMT_N(r.piezasPorContenedor)} pzs` : '—')
+                : <span className="text-amber-600 italic">Aún no se compra</span>}
+            </span>
+          </div>
+          {r.esConsolidado && r.tieneCompras && (
+            <div className="text-[10px] text-amber-700 italic">
+              Comparte contenedor con otros SKUs (consolidado)
             </div>
           )}
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Lead time</span>
+            <span className="font-semibold tabular-nums">
+              {r.ltDias ? `${Math.round(r.ltDias)} días` : '—'}
+              {r.ltMuestras > 0 && <span className="text-gray-400 ml-1">({r.ltMuestras})</span>}
+            </span>
+          </div>
         </div>
+      </div>
 
-        <div>
-          <div style={secLbl}>
-            <span>🚢 Tránsito · próximos shipments</span>
-            <span style={secSide}>{(r.embarques || []).length} POs</span>
-          </div>
-          {(r.embarques || []).length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {r.embarques.slice(0, 6).map((e, i) => (
-                <div key={i} style={{
-                  display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 8, alignItems: 'center',
-                  padding: '6px 0', borderBottom: `1px solid ${theme.divider || theme.border}`, fontSize: 11,
-                }}>
-                  <span style={{
-                    fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em',
-                    padding: '2px 6px', borderRadius: 4,
-                    background: e.estatus === 'TRANSITO MARITIMO' ? `${theme.accent}22`
-                      : e.estatus === 'PROXIMO A ZARPAR' ? `${theme.orange}22`
-                      : e.estatus === 'EN PRODUCCION' ? `${theme.textSubtle || theme.textMuted}22`
-                      : `${theme.textMuted}22`,
-                    color: e.estatus === 'TRANSITO MARITIMO' ? theme.accent
-                      : e.estatus === 'PROXIMO A ZARPAR' ? theme.orange
-                      : theme.textMuted,
-                  }}>{(e.estatus || 'OTRO').slice(0, 12)}</span>
-                  <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
-                    {e.po ? `PO-${e.po}` : '—'} · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{FMT_N(e.cantidad)}</strong> pz
-                  </span>
-                  <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>{fmtFechaC(e.eta)}</span>
+      {/* 4) HISTÓRICO DE COMPRAS — con detalle de contenedor por compra */}
+      <div className="bg-white rounded-lg p-3 border border-gray-200">
+        <h4 className="font-semibold text-gray-800 text-xs uppercase tracking-wide mb-2">
+          Histórico de compras
+        </h4>
+        {(r.comprasHist || []).length === 0 ? (
+          <div className="text-xs text-gray-400 italic">Sin historial de compras</div>
+        ) : (
+          <div className="text-xs space-y-1.5">
+            {r.comprasHist.map((c, i) => {
+              const consol = c.skusEnCnt > 1;
+              return (
+                <div key={i} className="border border-gray-100 rounded p-2 hover:bg-gray-50/50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-500 tabular-nums shrink-0 w-16">
+                      {fmtFechaC(c.fecha_emision)}
+                    </span>
+                    <span className="font-mono text-[10px] text-gray-400 shrink-0">
+                      PO-{c.po}
+                    </span>
+                    <span className="font-bold tabular-nums shrink-0">
+                      {FMT_N(c.qty)} pzs
+                    </span>
+                    <span className="ml-auto shrink-0 flex items-center gap-1.5">
+                      {c.unitPriceUsd > 0 && (
+                        <span className="tabular-nums text-gray-700">
+                          ${c.unitPriceUsd.toFixed(2)}/u
+                        </span>
+                      )}
+                      <span className={[
+                        'text-[9px] font-semibold px-1 rounded',
+                        c.arribo_cedis ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700',
+                      ].join(' ')}>
+                        {c.arribo_cedis ? 'recibida' : 'tránsito'}
+                      </span>
+                    </span>
+                  </div>
+                  {/* Detalle de contenedor */}
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
+                    {c.contenedorPendiente ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200 italic">
+                        ⏳ Contenedor pendiente de asignar
+                      </span>
+                    ) : c.contenedorId ? (
+                      consol ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                          🔗 Consolidado · {c.skusEnCnt} SKUs en contenedor {c.contenedorId}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          📦 1 contenedor lleno · {c.contenedorId}
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-gray-400 italic">sin contenedor asignado</span>
+                    )}
+                    {consol && c.otrosSkusEnCnt.length > 0 && (
+                      <span className="text-gray-500" title={c.otrosSkusEnCnt.join(', ')}>
+                        + {c.otrosSkusEnCnt.slice(0, 3).join(' · ')}
+                        {c.otrosSkusEnCnt.length > 3 && ` +${c.otrosSkusEnCnt.length - 3}`}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ padding: '18px 0', color: theme.textMuted, fontSize: 11, fontStyle: 'italic', textAlign: 'center' }}>Sin tránsito programado</div>
-          )}
-
-          <div style={{ ...secLbl, marginTop: 20 }}>
-            <span>💵 Proveedor & costos</span>
-            <span style={secSide}>ref. compras</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11.5 }}>
-            <KVRow k="Proveedor" v={r.supplier || '—'} theme={theme} />
-            <KVRow k="Costo promedio USD" v={r.costoPromedioUsd > 0 ? `$${r.costoPromedioUsd.toFixed(2)}` : '—'} theme={theme} mono />
-            <KVRow k="Último costo USD" v={r.ultimoCostoUsd > 0 ? `$${Number(r.ultimoCostoUsd).toFixed(2)}` : '—'} theme={theme} mono color={theme.green} />
-            <KVRow
-              k="Piezas por contenedor"
-              v={r.tieneCompras ? (r.piezasPorContenedor > 0 ? `${FMT_N(r.piezasPorContenedor)} pz` : '—') : 'Aún no se compra'}
-              theme={theme} mono
-              color={r.tieneCompras ? theme.text : theme.orange}
-            />
-            <KVRow k="Lead time" v={r.ltDias ? `${Math.round(r.ltDias)} d${r.ltMuestras > 0 ? ` (${r.ltMuestras})` : ''}` : '—'} theme={theme} mono />
-            {r.esConsolidado && r.tieneCompras && (
-              <div style={{ fontSize: 10, color: theme.orange, fontStyle: 'italic', marginTop: 2 }}>
-                Comparte contenedor con otros SKUs (consolidado)
+              );
+            })}
+            {r.totalComprasHist > r.comprasHist.length && (
+              <div className="text-[10px] text-gray-400 italic">
+                +{r.totalComprasHist - r.comprasHist.length} compras más
               </div>
             )}
           </div>
+        )}
+      </div>
+
+      {/* 5) RESUMEN DEL SUGERIDO — contenedor lleno + necesidad por cliente */}
+      <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200 lg:col-span-2">
+        <h4 className="font-semibold text-emerald-800 text-xs uppercase tracking-wide mb-2">
+          Resumen del sugerido
+        </h4>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div>
+            <div className="text-[10px] uppercase text-emerald-700 tracking-wide">Sugerido total</div>
+            <div className="font-bold text-emerald-800 tabular-nums text-lg">{FMT_N(r.sugerido)} pzs</div>
+            {r.contenedoresSugeridos > 0 && (
+              <div className="text-[10px] text-emerald-700">
+                {r.contenedoresSugeridos} contenedor{r.contenedoresSugeridos > 1 ? 'es' : ''} completo{r.contenedoresSugeridos > 1 ? 's' : ''}
+                {r.esConsolidado ? ' (consolidado)' : ''}
+              </div>
+            )}
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-blue-700 tracking-wide">Necesita Digitalife (90d)</div>
+            <div className="font-bold tabular-nums" style={{ color: '#3B82F6' }}>
+              {FMT_N(necesidadDigi)} pzs
+            </div>
+            {brechaDigi > 0 && (
+              <div className="text-[10px] text-red-600">brecha: {FMT_N(brechaDigi)}</div>
+            )}
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-red-700 tracking-wide">Necesita PCEL (90d)</div>
+            <div className="font-bold tabular-nums" style={{ color: '#EF4444' }}>
+              {FMT_N(necesidadPcel)} pzs
+            </div>
+            {brechaPcel > 0 && (
+              <div className="text-[10px] text-red-600">brecha: {FMT_N(brechaPcel)}</div>
+            )}
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-gray-500 tracking-wide">Inventario disponible</div>
+            <div className="font-bold tabular-nums text-gray-700">{FMT_N(totalDisponible)} pzs</div>
+            <div className="text-[10px] text-gray-500">
+              {FMT_N(r.inv)} stock + {FMT_N(r.traDentroHor)} tránsito
+            </div>
+          </div>
         </div>
+        {r.sugerido > 0 && (necesidadDigi + necesidadPcel) > 0 && r.sugerido > (necesidadDigi + necesidadPcel - totalDisponible) && (
+          <div className="mt-2 text-[10px] text-emerald-700 italic">
+            El sugerido completa el contenedor — el sobrante quedará como buffer para próximos meses.
+          </div>
+        )}
       </div>
-    </div>
-  );
-}
-
-function DrillKpi({ label, value, u, sub, color, theme, borderLeft }) {
-  return (
-    <div style={{
-      padding: '0 14px',
-      borderLeft: borderLeft ? `1px solid ${theme.divider || theme.border}` : 'none',
-    }}>
-      <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 700 }}>{label}</div>
-      <div style={{
-        fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em',
-        fontVariantNumeric: 'tabular-nums', marginTop: 3, lineHeight: 1.05, color: color || theme.text,
-      }}>
-        {value}
-        {u && <span style={{ fontSize: 10, color: theme.textMuted, fontWeight: 500, marginLeft: 3 }}>{u}</span>}
-      </div>
-      {sub && <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
-}
-
-function KVRow({ k, v, theme, mono, color }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '3px 0' }}>
-      <span style={{ color: theme.textMuted, fontSize: 11.5 }}>{k}</span>
-      <span style={{
-        fontFamily: mono ? 'SF Mono, ui-monospace, monospace' : TYPO.fontText,
-        fontSize: mono ? 11 : 11.5, fontWeight: 600, color: color || theme.text,
-      }}>{v}</span>
     </div>
   );
 }
@@ -1701,253 +1643,6 @@ function SugeridosPendientes({ sugeridos, open, onToggle, onRefresh }) {
           </table>
         </div>
       )}
-    </div>
-  );
-}
-
-// ────────── Sidebar · Mi Export ──────────
-function ExportCart({
-  sol, activoId, setActivoId, activo, lineas, totalPz, totalUsd,
-  puedeEditar, onCrearNuevo, onEditarLinea, onEliminarLinea, onCerrar,
-  onExportar, onVerHistorial, theme,
-}) {
-  const [nombreEdit, setNombreEdit] = useState(activo?.nombre || '');
-  React.useEffect(() => { setNombreEdit(activo?.nombre || ''); }, [activo?.id, activo?.nombre]);
-  const guardarNombre = async () => {
-    if (!activo || nombreEdit === activo.nombre) return;
-    try { await sol.editarSolicitud(activo.id, { nombre: nombreEdit }); }
-    catch (e) { toast.error(e.message || 'Error al renombrar'); }
-  };
-  const fmtRel = (iso) => {
-    if (!iso) return '';
-    const diff = (Date.now() - new Date(iso).getTime()) / 60000;
-    if (diff < 1) return 'hace segundos';
-    if (diff < 60) return `hace ${Math.round(diff)} min`;
-    if (diff < 24 * 60) return `hace ${Math.round(diff / 60)} h`;
-    return `hace ${Math.round(diff / (60 * 24))} d`;
-  };
-
-  return (
-    <div style={{
-      background: theme.surface, border: `1px solid ${theme.border}`,
-      borderRadius: 12, overflow: 'hidden',
-    }}>
-      {/* Header */}
-      <div style={{
-        padding: '12px 14px', borderBottom: `1px solid ${theme.divider || theme.border}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.005em', color: theme.text }}>
-          📋 Mi export
-        </div>
-        <div style={{ fontSize: 10, color: theme.textMuted, fontFamily: 'SF Mono, ui-monospace, monospace' }}>
-          autosave
-        </div>
-      </div>
-
-      {/* Selector de borrador */}
-      <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.divider || theme.border}`, display: 'flex', gap: 6 }}>
-        <select
-          value={activoId || ''}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === '__NEW__') { onCrearNuevo && onCrearNuevo(); return; }
-            setActivoId(v);
-          }}
-          style={{
-            flex: 1, padding: '6px 10px', borderRadius: 8,
-            border: `1px solid ${theme.border}`, background: theme.bg,
-            fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, outline: 'none',
-          }}>
-          {sol.borradores.length === 0 && <option value="">Sin borradores</option>}
-          {sol.borradores.map((b) => (
-            <option key={b.id} value={b.id}>{b.nombre || 'Sin nombre'}</option>
-          ))}
-          {puedeEditar && <option value="__NEW__">＋ Nuevo export</option>}
-        </select>
-      </div>
-
-      {activo ? (
-        <>
-          {/* Nombre editable */}
-          <div style={{ padding: '10px 14px 4px' }}>
-            <input
-              type="text"
-              value={nombreEdit}
-              onChange={(e) => setNombreEdit(e.target.value)}
-              onBlur={guardarNombre}
-              onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
-              disabled={!puedeEditar}
-              style={{
-                width: '100%', border: 'none', background: 'transparent',
-                fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600,
-                letterSpacing: '-0.015em', color: theme.text, outline: 'none',
-              }}
-              placeholder="Nombre del export"
-            />
-            <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 2 }}>
-              {lineas.length} SKU{lineas.length !== 1 ? 's' : ''}
-              {activo.updated_at && <> · edición {fmtRel(activo.updated_at)}</>}
-            </div>
-          </div>
-
-          {/* Totales */}
-          <div style={{
-            padding: '10px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
-            borderBottom: `1px solid ${theme.divider || theme.border}`,
-          }}>
-            <div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 700 }}>Piezas</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', marginTop: 2, color: theme.text }}>{FMT_N(totalPz)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 700 }}>Total USD</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', marginTop: 2, color: theme.text }}>${FMT_N(totalUsd)}</div>
-            </div>
-          </div>
-
-          {/* Líneas */}
-          <div style={{ maxHeight: 340, overflow: 'auto' }}>
-            {lineas.length === 0 ? (
-              <div style={{ padding: '30px 20px', textAlign: 'center', color: theme.textMuted, fontSize: 11.5, fontStyle: 'italic' }}>
-                Sin SKUs. Da click a "＋" en la tabla para agregar.
-              </div>
-            ) : lineas.map((l) => (
-              <ExportCartLine
-                key={l.id}
-                linea={l}
-                puedeEditar={puedeEditar}
-                onEditarLinea={onEditarLinea}
-                onEliminarLinea={onEliminarLinea}
-                theme={theme}
-              />
-            ))}
-          </div>
-
-          {/* Actions */}
-          <div style={{
-            padding: '12px 14px', borderTop: `1px solid ${theme.divider || theme.border}`,
-            background: theme.bg, display: 'flex', gap: 6,
-          }}>
-            {puedeEditar && (
-              <button
-                onClick={() => onCerrar && onCerrar(activo.id)}
-                disabled={lineas.length === 0}
-                style={{
-                  flex: 1, padding: '7px 10px', borderRadius: 999,
-                  background: theme.surface, border: `1px solid ${theme.border}`,
-                  fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600, color: theme.textMuted,
-                  cursor: lineas.length === 0 ? 'not-allowed' : 'pointer',
-                  opacity: lineas.length === 0 ? 0.5 : 1,
-                }}>
-                Cerrar
-              </button>
-            )}
-            <button
-              onClick={onExportar}
-              disabled={lineas.length === 0}
-              style={{
-                flex: 2, padding: '7px 10px', borderRadius: 999,
-                background: theme.green, border: `1px solid ${theme.green}`, color: '#fff',
-                fontFamily: TYPO.fontText, fontSize: 11.5, fontWeight: 600,
-                cursor: lineas.length === 0 ? 'not-allowed' : 'pointer',
-                opacity: lineas.length === 0 ? 0.5 : 1,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}>
-              📥 Exportar Excel
-            </button>
-          </div>
-
-          {/* Ver histórico */}
-          <button
-            onClick={onVerHistorial}
-            style={{
-              width: '100%', padding: '10px 14px', border: 'none',
-              background: 'transparent', color: theme.accent,
-              fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
-              cursor: 'pointer', borderTop: `1px solid ${theme.divider || theme.border}`,
-              textAlign: 'center',
-            }}>
-            📚 Ver historial completo ({sol.cerradas.length})
-          </button>
-        </>
-      ) : (
-        <div style={{ padding: '20px 16px', textAlign: 'center', color: theme.textMuted, fontSize: 12 }}>
-          {puedeEditar
-            ? 'Crea un nuevo export para empezar a agregar SKUs.'
-            : 'Sin export activo.'}
-          {puedeEditar && (
-            <button
-              onClick={onCrearNuevo}
-              style={{
-                marginTop: 12, padding: '7px 14px', borderRadius: 999,
-                background: theme.accent, color: '#fff', border: 0,
-                fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              }}>
-              ＋ Nuevo export
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ExportCartLine({ linea, puedeEditar, onEditarLinea, onEliminarLinea, theme }) {
-  const cantidad = Number(linea.cantidad || 0);
-  const cnt = Number(linea.contenedores || 0);
-  const pzPorCnt = cnt > 0 ? cantidad / cnt : 0;
-  const inc = () => onEditarLinea && onEditarLinea(linea.id, { cantidad: cantidad + (pzPorCnt || 100), contenedores: cnt + 1 });
-  const dec = () => {
-    if (cnt <= 1) return;
-    onEditarLinea && onEditarLinea(linea.id, { cantidad: Math.max(0, cantidad - (pzPorCnt || 100)), contenedores: cnt - 1 });
-  };
-  const subtotal = cantidad * Number(linea.ultimo_costo_usd || 0);
-  return (
-    <div style={{
-      padding: '10px 14px', borderBottom: `1px solid ${theme.divider || theme.border}`,
-      display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center',
-    }}>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 11.5, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={linea.descripcion}>
-          {linea.descripcion || linea.sku}
-        </div>
-        <div style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10, color: theme.textMuted, marginTop: 1 }}>
-          {linea.sku}
-          {linea.ultimo_costo_usd > 0 && ` · $${Number(linea.ultimo_costo_usd).toFixed(2)}`}
-          {subtotal > 0 && ` → $${FMT_N(subtotal)}`}
-        </div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        {puedeEditar && (
-          <button onClick={dec} disabled={cnt <= 1} style={{
-            width: 22, height: 22, borderRadius: 6, border: `1px solid ${theme.border}`,
-            background: theme.surface, color: theme.textMuted, cursor: cnt <= 1 ? 'not-allowed' : 'pointer',
-            fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 12, opacity: cnt <= 1 ? 0.5 : 1,
-          }}>−</button>
-        )}
-        <div style={{ textAlign: 'center', minWidth: 30 }}>
-          <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums', color: theme.text }}>
-            {cnt > 0 ? cnt : FMT_N(cantidad)}
-          </div>
-          <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 500 }}>
-            {cnt > 0 ? 'cnt' : 'pz'}
-          </div>
-        </div>
-        {puedeEditar && (
-          <button onClick={inc} style={{
-            width: 22, height: 22, borderRadius: 6, border: `1px solid ${theme.border}`,
-            background: theme.surface, color: theme.textMuted, cursor: 'pointer',
-            fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 12,
-          }}>+</button>
-        )}
-        {puedeEditar && (
-          <button onClick={() => onEliminarLinea && onEliminarLinea(linea.id)} style={{
-            width: 22, height: 22, borderRadius: 999, border: 'none',
-            background: 'transparent', color: theme.textSubtle, cursor: 'pointer', marginLeft: 4, fontSize: 12,
-          }} title="Quitar">×</button>
-        )}
-      </div>
     </div>
   );
 }
