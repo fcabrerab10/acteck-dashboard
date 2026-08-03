@@ -162,25 +162,35 @@ function calcularForecast(data, horizonteMeses) {
   const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques, reporteSkus, facturacion } = data;
 
   // ── Demanda por cliente REAL desde facturacion_clientes (hoja "Venta Piezas") ──
-  // Agrupa: sku → cliente_nombre → suma piezas de últimos 3 meses.
-  // La tabla ya viene con devoluciones aplicadas — no requiere filtro extra.
+  // Agrupa: sku → cliente_nombre → { canal, mensual: {"YYYY-M": piezas} }
+  // Recolecta los últimos 6 meses; los últimos 3 se usan para el KPI de
+  // demanda promedio y días de inventario, los 6 se muestran en la tabla
+  // histórica del drill.
   const hoyRef = new Date();
-  const anio3m = new Date(hoyRef.getFullYear(), hoyRef.getMonth() - 3, 1);
-  const isRecent = (a, m) => {
-    const d = new Date(Number(a), Number(m) - 1, 1);
-    return d >= anio3m && d <= hoyRef;
-  };
+  const mesesRef6 = []; // los 6 meses de referencia [más viejo → más nuevo]
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(hoyRef.getFullYear(), hoyRef.getMonth() - i, 1);
+    mesesRef6.push({ anio: d.getFullYear(), mes: d.getMonth() + 1, key: `${d.getFullYear()}-${d.getMonth() + 1}` });
+  }
+  const set6 = new Set(mesesRef6.map(m => m.key));
+  const setUlt3 = new Set(mesesRef6.slice(-3).map(m => m.key));
+
   const demandaErpBySku = {};
   (facturacion || []).forEach((row) => {
-    if (!isRecent(row.anio, row.mes)) return;
+    const key = `${row.anio}-${row.mes}`;
+    if (!set6.has(key)) return;
     const sku = String(row.sku || '').trim();
     if (!sku) return;
     const cliente = String(row.cliente_nombre || '').trim() || 'SIN CLIENTE';
     const piezas = Number(row.piezas || 0);
     if (piezas <= 0) return;
     if (!demandaErpBySku[sku]) demandaErpBySku[sku] = {};
-    if (!demandaErpBySku[sku][cliente]) demandaErpBySku[sku][cliente] = { piezas: 0, canal: row.canal || '' };
-    demandaErpBySku[sku][cliente].piezas += piezas;
+    if (!demandaErpBySku[sku][cliente]) {
+      demandaErpBySku[sku][cliente] = { canal: row.canal || '', mensual: {} };
+    }
+    const entry = demandaErpBySku[sku][cliente];
+    entry.mensual[key] = (entry.mensual[key] || 0) + piezas;
+    if (row.canal && !entry.canal) entry.canal = row.canal;
   });
 
   const invBySku  = Object.fromEntries(inventario.map(r => [r.sku, r]));
@@ -438,6 +448,17 @@ function calcularForecast(data, horizonteMeses) {
       demanda6m.push({ anio: a, mes: m, digi: dDigi, pcel: dPcel });
     }
 
+    // Demanda REAL últimos 3 meses (todos los clientes ERP) — para KPIs y
+    // cobertura en el drill. Usa facturacion_clientes que sí trae Steren,
+    // Office Depot, DAP, etc. (no solo digi+pcel).
+    let totalErp3m = 0;
+    const bySkuErp = demandaErpBySku[sku] || {};
+    Object.values(bySkuErp).forEach((v) => {
+      for (const k of setUlt3) totalErp3m += Number(v.mensual[k] || 0);
+    });
+    const demandaMesErp = totalErp3m / 3;
+    const coberturaDiasErp = demandaMesErp > 0 ? Math.round(inv / (demandaMesErp / 30)) : null;
+
     // Cobertura actual: inv / (demandaMesTotal/30) → días que cubre el stock
     const demandaDiaria = demandaMesTotal / 30;
     const coberturaDias = demandaDiaria > 0 ? Math.round(inv / demandaDiaria) : null;
@@ -498,23 +519,35 @@ function calcularForecast(data, horizonteMeses) {
       ultimoCostoUsd,
       demMes, demHor, demandaTotalHor, demandaMesTotal,
       demanda6m,
-      // Consumo por cliente REAL del ERP (últimos 3 meses promedio pz/m)
+      // Demanda REAL de todos los clientes ERP (últimos 3 meses promedio)
+      demandaMesErp,
+      coberturaDiasErp,
+      // Consumo por cliente REAL del ERP · mensual (6 meses) + agregados
       demandaPorClienteErp: (() => {
         const bySku = demandaErpBySku[sku] || {};
         const entries = Object.entries(bySku);
-        const total = entries.reduce((a, [, v]) => a + v.piezas, 0);
-        if (total <= 0) return [];
-        return entries
-          .map(([cliente, v]) => ({
+        if (entries.length === 0) return [];
+        const items = entries.map(([cliente, v]) => {
+          const mensual = mesesRef6.map((m) => ({
+            anio: m.anio, mes: m.mes, key: m.key, piezas: Number(v.mensual[m.key] || 0),
+          }));
+          const total6m = mensual.reduce((a, x) => a + x.piezas, 0);
+          const total3m = mensual.slice(-3).reduce((a, x) => a + x.piezas, 0);
+          return {
             cliente,
             canal: v.canal || '',
-            total6m: v.piezas,        // suma últimos 3 meses (nombre legacy)
-            ritmoMes: v.piezas / 3,   // promedio pz/mes
-            pct: (v.piezas / total) * 100,
-          }))
-          .sort((a, b) => b.total6m - a.total6m);
+            mensual,
+            total6m,
+            prom6m: total6m / 6,
+            ritmoMes3m: total3m / 3, // usado para % de participación y cobertura
+          };
+        });
+        const totalRitmo3m = items.reduce((a, x) => a + x.ritmoMes3m, 0);
+        items.forEach((it) => { it.pct = totalRitmo3m > 0 ? (it.ritmoMes3m / totalRitmo3m) * 100 : 0; });
+        return items.sort((a, b) => b.total6m - a.total6m);
       })(),
       coberturaDias,
+
       comprasHist,
       totalComprasHist: comprasHistAll.length,
       inv,
@@ -1371,8 +1404,8 @@ function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, 
               <SortHeader theme={theme} col="inv" label="Inv actual" width={80} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
               <SortHeader theme={theme} col="traCant" label="Tránsito" width={80} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
               <SortHeader theme={theme} col="traEta" label="Próximo arribo" width={110} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="demandaMesTotal" label="Demanda 3m" width={100} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="coberturaDias" label="Días inv." width={90} align="center" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="demandaMesErp" label="Demanda 3m" width={100} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="coberturaDiasErp" label="Días inv." width={90} align="center" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
               <SortHeader theme={theme} label="Acción" width={110} align="center" />
             </tr>
           </thead>
@@ -1435,8 +1468,8 @@ function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud, enExport, cant
         <td style={{ ...cellS, textAlign: 'right', fontFamily: TYPO.fontText, fontSize: 11.5, color: r.traEta ? theme.text : theme.textSubtle }}>
           {r.traEta ? fmtEtaCorta(r.traEta) : 'sin OC'}
         </td>
-        <td style={numS}>{FMT_N(r.demandaMesTotal)}<span style={{ color: theme.textMuted, marginLeft: 3, fontSize: 10 }}>pz/m</span></td>
-        <td style={{ ...cellS, textAlign: 'center' }}><CoberturaChip dias={r.coberturaDias} theme={theme} /></td>
+        <td style={numS}>{FMT_N(r.demandaMesErp)}<span style={{ color: theme.textMuted, marginLeft: 3, fontSize: 10 }}>pz/m</span></td>
+        <td style={{ ...cellS, textAlign: 'center' }}><CoberturaChip dias={r.coberturaDiasErp} theme={theme} /></td>
         <td style={{ ...cellS, textAlign: 'center' }}>
           {onAgregarSolicitud && (
             <button
@@ -1485,10 +1518,11 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
   const [qty, setQty] = useState(qtyInicial);
   useEffect(() => { setQty(qtyInicial); /* eslint-disable-next-line */ }, [r.sku, cantidadEnExport]);
 
-  // Cálculos derivados en vivo
+  // Cálculos derivados en vivo — usa demanda REAL del ERP (todos los clientes)
   const costoUnit = Number(r.ultimoCostoUsd || 0);
   const usdComprometido = qty * costoUnit;
-  const demDia = Number(r.demandaMesTotal || 0) / 30;
+  const demandaMesTotalReal = Number(r.demandaMesErp || 0);
+  const demDia = demandaMesTotalReal / 30;
   const cobHoy = demDia > 0 ? r.inv / demDia : null;
   const cobPost = demDia > 0 ? (r.inv + qty) / demDia : null;
   const gananciaDias = (cobPost != null && cobHoy != null) ? cobPost - cobHoy : null;
@@ -1501,52 +1535,14 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
     ? `${MES_CORTO[proxOcFecha.getMonth()]} ${proxOcFecha.getFullYear()}`
     : '—';
 
-  // Proyección post-compra por cliente REAL del ERP (últimos 3 meses).
-  // Colores rotativos iOS para clientes fuera del top-3 conocido.
+  // Clientes REALES del ERP · usados en la tabla histórica mensual y para
+  // el contador del subtítulo de la Demanda 3m en el KPI strip.
   const CLIENTE_COLORS = [
     theme.accent, theme.purple || '#AF52DE', theme.teal || '#5AC8FA',
     theme.orange || '#FF9500', theme.pink || '#FF2D55', theme.indigo || '#5856D6',
     theme.yellow || '#FFCC00', theme.green || '#34C759', theme.red || '#FF3B30',
   ];
   const erpClientes = Array.isArray(r.demandaPorClienteErp) ? r.demandaPorClienteErp : [];
-  // Mostrar top-8 individualmente y agrupar el resto en "otros"
-  const TOP_N = 8;
-  const clientesTop = erpClientes.slice(0, TOP_N);
-  const clientesResto = erpClientes.slice(TOP_N);
-  const restoRitmo = clientesResto.reduce((a, c) => a + c.ritmoMes, 0);
-  const restoPct = clientesResto.reduce((a, c) => a + c.pct, 0);
-  const proyeccion = clientesTop.map((c, i) => {
-    const rDia = c.ritmoMes / 30;
-    const diasHoy = rDia > 0 ? r.inv / rDia : null;
-    const diasPost = rDia > 0 ? (r.inv + qty) / rDia : null;
-    const fechaAgot = diasPost != null && Number.isFinite(diasPost)
-      ? new Date(Date.now() + diasPost * 86400000)
-      : null;
-    return {
-      nombre: c.cliente,
-      canal: c.canal,
-      color: CLIENTE_COLORS[i % CLIENTE_COLORS.length],
-      ritmo: c.ritmoMes,
-      pct: c.pct,
-      diasHoy, diasPost, fechaAgot,
-      ganancia: (diasPost != null && diasHoy != null) ? diasPost - diasHoy : null,
-    };
-  });
-  if (clientesResto.length > 0 && restoRitmo > 0) {
-    const rDia = restoRitmo / 30;
-    const diasHoy = r.inv / rDia;
-    const diasPost = (r.inv + qty) / rDia;
-    proyeccion.push({
-      nombre: `+ ${clientesResto.length} clientes menores`,
-      color: theme.textMuted,
-      ritmo: restoRitmo,
-      pct: restoPct,
-      diasHoy, diasPost,
-      fechaAgot: Number.isFinite(diasPost) ? new Date(Date.now() + diasPost * 86400000) : null,
-      ganancia: diasPost - diasHoy,
-      esOtros: true,
-    });
-  }
 
   // Presets del simulador (múltiplos de contenedor)
   const presets = cntPz > 0
@@ -1628,8 +1624,8 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
           <MiniKpi label="Inventario"      value={FMT_N(r.inv)}          u="pz"   sub="stock actual" theme={theme} />
           <MiniKpi label="Tránsito"        value={FMT_N(r.traCant)}      u="pz"   sub={r.traCant > 0 ? 'en camino' : 'sin POs'} theme={theme} borderLeft />
           <MiniKpi label="Próximo arribo"  value={r.traEta ? fmtFechaC(r.traEta).split(' ').slice(0, 2).join(' ') : '—'} sub={r.traEta ? 'próxima OC' : 'sin OC'} theme={theme} borderLeft dim={!r.traEta} />
-          <MiniKpi label="Demanda 3m"      value={FMT_N(r.demandaMesTotal)} u="pz/m" sub="promedio" theme={theme} borderLeft />
-          <MiniKpi label="Días inv."       value={r.coberturaDias == null || r.coberturaDias === Infinity ? '∞' : Math.round(r.coberturaDias)} u={r.coberturaDias == null || r.coberturaDias === Infinity ? '' : 'd'} sub={r.coberturaDias < 30 ? 'crítica' : r.coberturaDias < 60 ? 'tensa' : 'holgura sana'} color={r.coberturaDias < 30 ? '#B91C1C' : r.coberturaDias < 60 ? '#B45309' : semGreen} theme={theme} borderLeft />
+          <MiniKpi label="Demanda 3m"      value={FMT_N(r.demandaMesErp)} u="pz/m" sub={`${erpClientes.length} clientes ERP`} theme={theme} borderLeft />
+          <MiniKpi label="Días inv."       value={r.coberturaDiasErp == null ? '∞' : Math.round(r.coberturaDiasErp)} u={r.coberturaDiasErp == null ? '' : 'd'} sub={r.coberturaDiasErp == null ? 'sin demanda' : r.coberturaDiasErp < 30 ? 'crítica' : r.coberturaDiasErp < 60 ? 'tensa' : 'holgura sana'} color={r.coberturaDiasErp == null ? null : r.coberturaDiasErp < 30 ? '#B91C1C' : r.coberturaDiasErp < 60 ? '#B45309' : semGreen} theme={theme} borderLeft />
           <MiniKpi label="Sugerido"        value={r.sugerido > 0 ? FMT_N(r.sugerido) : '—'} u={r.sugerido > 0 ? 'pz' : ''} sub={r.sugerido > 0 ? `${r.contenedoresSugeridos || 1} cnt` : 'sin brecha'} color={r.sugerido > 0 ? '#B45309' : null} theme={theme} borderLeft dim={r.sugerido <= 0} />
         </div>
       </div>
@@ -1711,155 +1707,196 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
             {enExport ? 'Actualizar cantidad' : 'Agregar al export'}
           </button>
         </div>
+
+        {/* Fila 2 · Proveedor & costos absorbidos en la barra simulador */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '2.2fr 1fr 1fr 1fr 1fr', gap: 20,
+          paddingTop: 10, marginTop: 12, borderTop: `1px solid ${theme.divider || theme.border}`,
+          alignItems: 'baseline',
+        }}>
+          <SimField lbl="Proveedor"       val={r.supplier || '—'} sub={r.ltMuestras > 0 ? `${r.ltMuestras} OCs históricas` : 'sin histórico'} theme={theme} truncate />
+          <SimField lbl="Costo prom USD"  val={r.costoPromedioUsd > 0 ? `$${r.costoPromedioUsd.toFixed(2)}` : '—'} theme={theme} mono />
+          <SimField lbl="Últ. costo USD"  val={r.ultimoCostoUsd > 0 ? `$${Number(r.ultimoCostoUsd).toFixed(2)}` : '—'} theme={theme} mono color={semGreen} />
+          <SimField lbl="Pz / cnt"        val={cntPz > 0 ? FMT_N(cntPz) : (r.tieneCompras ? '—' : 'sin data')} theme={theme} mono color={cntPz > 0 ? theme.text : (theme.orange || '#FF9500')} />
+          <SimField lbl="Lead time"       val={r.ltDias ? `${Math.round(r.ltDias)} d` : '—'} sub={r.ltMuestras > 0 ? `(${r.ltMuestras})` : ''} theme={theme} mono />
+        </div>
+        {r.esConsolidado && r.tieneCompras && (
+          <div style={{ fontSize: 10, color: theme.orange || '#FF9500', fontStyle: 'italic', marginTop: 6 }}>
+            Comparte contenedor con otros SKUs (consolidado)
+          </div>
+        )}
       </div>
 
-      {/* ═══ TABLA PROYECCIÓN POR CLIENTE ═══ */}
+      {/* ═══ TABLA CLIENTES · HISTÓRICO MES A MES 6M ═══ */}
       <div style={cardMd}>
         <div style={cH}>
           <div>
-            <div style={cHt}>Proyección de agotamiento por cliente</div>
-            <div style={cHsub}>{erpClientes.length} clientes del ERP · últimos 3 meses · escenario "{FMT_N(qty)} pz"</div>
+            <div style={cHt}>Consumo por cliente</div>
+            <div style={cHsub}>{erpClientes.length} clientes del ERP · últimos 6 meses</div>
           </div>
         </div>
         {erpClientes.length === 0 ? (
           <div style={{ padding: '20px 0', color: theme.textMuted, fontSize: 12, textAlign: 'center', fontFamily: TYPO.fontDisplay, letterSpacing: '-0.005em' }}>
-            Sin ventas registradas en el ERP en los últimos 3 meses
+            Sin ventas registradas en el ERP en los últimos 6 meses
             <div style={{ marginTop: 3, color: theme.textSubtle, fontSize: 10.5 }}>este SKU no ha facturado en el periodo</div>
           </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={ttH(theme, 'left')}>Cliente</th>
-                <th style={ttH(theme)}>Ritmo</th>
-                <th style={ttH(theme)}>%</th>
-                <th style={ttH(theme)}>Días hoy</th>
-                <th style={ttH(theme)}>Días post</th>
-                <th style={ttH(theme)}>Ganancia</th>
-                <th style={ttH(theme)}>Agotamiento</th>
-              </tr>
-            </thead>
-            <tbody>
-              {proyeccion.map((p, i) => {
-                const rDia = p.ritmo / 30;
-                const noDemanda = rDia <= 0;
-                const diasHoyColor = p.diasHoy != null && p.diasHoy < 60 ? theme.orange || '#FF9500' : theme.text;
-                return (
-                  <tr key={i} style={{ borderBottom: i < proyeccion.length - 1 ? `1px solid ${theme.divider || theme.border}` : 'none' }}>
-                    <td style={ttC(theme, 'left')}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                        <span style={{ width: 7, height: 7, borderRadius: 50, background: p.color, flex: '0 0 7px' }} />
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{
-                            fontFamily: TYPO.fontDisplay, fontSize: 12.5,
-                            fontWeight: p.esOtros ? 400 : 500,
-                            fontStyle: p.esOtros ? 'italic' : 'normal',
-                            color: p.esOtros ? theme.textMuted : theme.text,
-                            letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                          }}>{p.nombre}</div>
-                          {p.canal && !p.esOtros && (
-                            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textSubtle, marginTop: 1 }}>
-                              {p.canal}
-                            </div>
-                          )}
+        ) : (() => {
+          // Renderizado histórico mensual · top-8 + fila "otros" agregando el resto
+          const TOP_N_HIST = 8;
+          const top = erpClientes.slice(0, TOP_N_HIST);
+          const resto = erpClientes.slice(TOP_N_HIST);
+          const mesesCol = (erpClientes[0] && erpClientes[0].mensual) || [];
+          const filas = top.map((c, i) => ({ ...c, color: CLIENTE_COLORS[i % CLIENTE_COLORS.length], esOtros: false }));
+          if (resto.length > 0) {
+            const restoMensual = mesesCol.map((m, idx) => ({
+              anio: m.anio, mes: m.mes, key: m.key,
+              piezas: resto.reduce((a, x) => a + Number(x.mensual[idx]?.piezas || 0), 0),
+            }));
+            const restoTotal6m = restoMensual.reduce((a, x) => a + x.piezas, 0);
+            filas.push({
+              cliente: `+ ${resto.length} clientes menores`,
+              canal: '',
+              mensual: restoMensual,
+              total6m: restoTotal6m,
+              prom6m: restoTotal6m / 6,
+              color: theme.textMuted,
+              esOtros: true,
+            });
+          }
+          // Totales columna
+          const totalesMes = mesesCol.map((m, idx) => erpClientes.reduce((a, c) => a + Number(c.mensual[idx]?.piezas || 0), 0));
+          const total6mGrand = totalesMes.reduce((a, b) => a + b, 0);
+          // Pico por fila para resaltar
+          const picoIdx = (mensual) => {
+            let mx = 0, idx = -1;
+            mensual.forEach((v, i) => { if (v.piezas > mx) { mx = v.piezas; idx = i; } });
+            return idx;
+          };
+          return (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={ttH(theme, 'left')}>Cliente</th>
+                  {mesesCol.map((m, i) => (
+                    <th key={i} style={ttH(theme)}>{MES_CORTO[m.mes - 1]}</th>
+                  ))}
+                  <th style={ttH(theme)}>Prom /m</th>
+                  <th style={ttH(theme)}>Total 6m</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map((p, i) => {
+                  const pico = picoIdx(p.mensual);
+                  return (
+                    <tr key={i} style={{ borderBottom: i < filas.length - 1 ? `1px solid ${theme.divider || theme.border}` : 'none' }}>
+                      <td style={ttC(theme, 'left')}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span style={{ width: 7, height: 7, borderRadius: 50, background: p.color, flex: '0 0 7px' }} />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{
+                              fontFamily: TYPO.fontDisplay, fontSize: 12.5,
+                              fontWeight: p.esOtros ? 400 : 500,
+                              fontStyle: p.esOtros ? 'italic' : 'normal',
+                              color: p.esOtros ? theme.textMuted : theme.text,
+                              letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                            }}>{p.cliente}</div>
+                            {p.canal && !p.esOtros && (
+                              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textSubtle, marginTop: 1 }}>
+                                {p.canal}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      </td>
+                      {p.mensual.map((m, mi) => {
+                        const isPico = mi === pico && m.piezas > 0;
+                        const isZero = m.piezas === 0;
+                        return (
+                          <td key={mi} style={{
+                            ...ttC(theme),
+                            fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums',
+                            fontSize: 11.5,
+                            color: isZero ? theme.textSubtle : isPico ? theme.accent : theme.text,
+                            fontWeight: isPico ? 600 : 500,
+                          }}>
+                            {FMT_N(m.piezas)}
+                          </td>
+                        );
+                      })}
+                      <td style={{ ...ttC(theme), fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: theme.text, fontWeight: 500 }}>
+                        {FMT_N(p.prom6m)}
+                      </td>
+                      <td style={{ ...ttC(theme), fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 600, color: theme.text, letterSpacing: '-0.01em' }}>
+                        {FMT_N(p.total6m)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td style={{ ...ttC(theme, 'left'), paddingTop: 9, borderTop: `1px solid ${theme.divider || theme.border}`, fontFamily: TYPO.fontDisplay, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>
+                    Total {erpClientes.length} clientes
+                  </td>
+                  {totalesMes.map((v, i) => (
+                    <td key={i} style={{ ...ttC(theme), paddingTop: 9, borderTop: `1px solid ${theme.divider || theme.border}`, fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 700, color: theme.text }}>
+                      {FMT_N(v)}
                     </td>
-                    <td style={{ ...ttC(theme), fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 11.5, color: theme.textMuted }}>{FMT_N(p.ritmo)} pz/m</td>
-                    <td style={{ ...ttC(theme), fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 11.5, color: theme.textMuted }}>{Math.round(p.pct)}%</td>
-                    <td style={ttC(theme)}>
-                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: noDemanda ? theme.textMuted : diasHoyColor, letterSpacing: '-0.01em' }}>
-                        {p.diasHoy != null ? `${Math.round(p.diasHoy)} d` : '∞'}
-                      </span>
-                    </td>
-                    <td style={ttC(theme)}>
-                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: noDemanda ? theme.textMuted : semGreen, letterSpacing: '-0.01em' }}>
-                        {p.diasPost != null ? `${Math.round(p.diasPost)} d` : '∞'}
-                      </span>
-                    </td>
-                    <td style={{ ...ttC(theme), fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
-                      {p.ganancia != null ? `+${Math.round(p.ganancia)}` : '—'}
-                    </td>
-                    <td style={{ ...ttC(theme), fontFamily: TYPO.fontText, fontSize: 11.5, color: noDemanda ? theme.textMuted : theme.text, fontVariantNumeric: 'tabular-nums' }}>
-                      {noDemanda ? 'sin consumo' : p.fechaAgot ? `${MES_CORTO[p.fechaAgot.getMonth()]} ${p.fechaAgot.getFullYear()}` : '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+                  ))}
+                  <td style={{ ...ttC(theme), paddingTop: 9, borderTop: `1px solid ${theme.divider || theme.border}`, fontFamily: 'SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 700, color: theme.text }}>
+                    {FMT_N(total6mGrand / 6)}
+                  </td>
+                  <td style={{ ...ttC(theme), paddingTop: 9, borderTop: `1px solid ${theme.divider || theme.border}`, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 700, color: theme.text, letterSpacing: '-0.01em' }}>
+                    {FMT_N(total6mGrand)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          );
+        })()}
       </div>
 
-      {/* ═══ TRÁNSITO + PROVEEDOR (2 cols compactas) ═══ */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        {/* Tránsito */}
-        <div style={cardMd}>
-          <div style={cH}>
-            <div>
-              <div style={cHt}>Tránsito</div>
-              <div style={cHsub}>próximos shipments</div>
-            </div>
-            <div style={cHaside}>
-              {(r.embarques || []).length}<span style={{ fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textMuted, fontWeight: 500, marginLeft: 3, letterSpacing: 0 }}>POs</span>
-            </div>
+      {/* ═══ TRÁNSITO (ancho completo) — proveedor absorbido en simulador ═══ */}
+      <div style={cardMd}>
+        <div style={cH}>
+          <div>
+            <div style={cHt}>Tránsito</div>
+            <div style={cHsub}>próximos shipments</div>
           </div>
-          {(r.embarques || []).length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {r.embarques.slice(0, 5).map((e, i) => (
-                <div key={i} style={{
-                  display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 8, alignItems: 'center',
-                  padding: '6px 0', borderTop: i > 0 ? `1px solid ${theme.divider || theme.border}` : 'none', fontSize: 11,
-                }}>
-                  <span style={{
-                    fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em',
-                    padding: '2px 6px', borderRadius: 4,
-                    background: e.estatus === 'TRANSITO MARITIMO' ? `${theme.accent}22`
-                      : e.estatus === 'PROXIMO A ZARPAR' ? `${theme.orange || '#FF9500'}22`
-                      : `${theme.textMuted}22`,
-                    color: e.estatus === 'TRANSITO MARITIMO' ? theme.accent
-                      : e.estatus === 'PROXIMO A ZARPAR' ? (theme.orange || '#FF9500')
-                      : theme.textMuted,
-                  }}>{(e.estatus || 'OTRO').slice(0, 12)}</span>
-                  <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
-                    {e.po ? `PO-${e.po}` : '—'} · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{FMT_N(e.cantidad)}</strong> pz
-                  </span>
-                  <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>{fmtFechaC(e.eta)}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ padding: '14px 0', color: theme.textMuted, fontSize: 11.5, fontFamily: TYPO.fontDisplay, textAlign: 'center', letterSpacing: '-0.005em' }}>
-              Sin tránsito programado
-              <div style={{ marginTop: 3, color: theme.textSubtle, fontSize: 10.5 }}>no hay compras en camino</div>
-            </div>
-          )}
-        </div>
-
-        {/* Proveedor */}
-        <div style={cardMd}>
-          <div style={cH}>
-            <div>
-              <div style={cHt}>Proveedor & costos</div>
-              <div style={cHsub}>{r.ltMuestras > 0 ? `${r.ltMuestras} OCs históricas` : 'ref. compras'}</div>
-            </div>
+          <div style={cHaside}>
+            {(r.embarques || []).length}<span style={{ fontFamily: TYPO.fontText, fontSize: 10.5, color: theme.textMuted, fontWeight: 500, marginLeft: 3, letterSpacing: 0 }}>POs</span>
           </div>
-          <KVCompact k="Proveedor" v={r.supplier || '—'} theme={theme} />
-          <KVCompact k="Costo promedio USD" v={r.costoPromedioUsd > 0 ? `$${r.costoPromedioUsd.toFixed(2)}` : '—'} theme={theme} mono />
-          <KVCompact k="Último costo USD" v={r.ultimoCostoUsd > 0 ? `$${Number(r.ultimoCostoUsd).toFixed(2)}` : '—'} theme={theme} mono color={semGreen} />
-          <KVCompact
-            k="Piezas por contenedor"
-            v={r.tieneCompras ? (cntPz > 0 ? `${FMT_N(cntPz)} pz` : '—') : 'Aún no se compra'}
-            theme={theme} mono
-            color={r.tieneCompras ? theme.text : (theme.orange || '#FF9500')}
-          />
-          <KVCompact k="Lead time" v={r.ltDias ? `${Math.round(r.ltDias)} d${r.ltMuestras > 0 ? ` (${r.ltMuestras})` : ''}` : '—'} theme={theme} mono />
-          {r.esConsolidado && r.tieneCompras && (
-            <div style={{ fontSize: 10, color: theme.orange || '#FF9500', fontStyle: 'italic', marginTop: 4 }}>
-              Comparte contenedor con otros SKUs (consolidado)
-            </div>
-          )}
         </div>
+        {(r.embarques || []).length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {r.embarques.slice(0, 6).map((e, i) => (
+              <div key={i} style={{
+                display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 8, alignItems: 'center',
+                padding: '6px 0', borderTop: i > 0 ? `1px solid ${theme.divider || theme.border}` : 'none', fontSize: 11,
+              }}>
+                <span style={{
+                  fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em',
+                  padding: '2px 6px', borderRadius: 4,
+                  background: e.estatus === 'TRANSITO MARITIMO' ? `${theme.accent}22`
+                    : e.estatus === 'PROXIMO A ZARPAR' ? `${theme.orange || '#FF9500'}22`
+                    : `${theme.textMuted}22`,
+                  color: e.estatus === 'TRANSITO MARITIMO' ? theme.accent
+                    : e.estatus === 'PROXIMO A ZARPAR' ? (theme.orange || '#FF9500')
+                    : theme.textMuted,
+                }}>{(e.estatus || 'OTRO').slice(0, 12)}</span>
+                <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
+                  {e.po ? `PO-${e.po}` : '—'} · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{FMT_N(e.cantidad)}</strong> pz
+                </span>
+                <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>{fmtFechaC(e.eta)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ padding: '14px 0', color: theme.textMuted, fontSize: 11.5, fontFamily: TYPO.fontDisplay, textAlign: 'center', letterSpacing: '-0.005em' }}>
+            Sin tránsito programado
+            <div style={{ marginTop: 3, color: theme.textSubtle, fontSize: 10.5 }}>no hay compras en camino</div>
+          </div>
+        )}
       </div>
 
       {(r.canibalizacion || r.preventaDeficit) && (
@@ -1915,6 +1952,21 @@ function QtyBtn({ children, onClick, theme }) {
         background: theme.surface, fontSize: 13, color: theme.text, cursor: 'pointer',
         fontFamily: TYPO.fontDisplay, fontWeight: 600, lineHeight: 1,
       }}>{children}</button>
+  );
+}
+
+function SimField({ lbl, val, sub, theme, mono, color, truncate }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 2 }}>{lbl}</div>
+      <div style={{
+        fontFamily: mono ? 'SF Mono, ui-monospace, monospace' : TYPO.fontDisplay,
+        fontSize: 13, fontWeight: 600, letterSpacing: mono ? 0 : '-0.01em',
+        color: color || theme.text, fontVariantNumeric: 'tabular-nums',
+        ...(truncate ? { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } : {}),
+      }} title={truncate ? String(val) : undefined}>{val}</div>
+      {sub && <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textMuted, fontWeight: 500, marginTop: 1, letterSpacing: '-0.005em' }}>{sub}</div>}
+    </div>
   );
 }
 
