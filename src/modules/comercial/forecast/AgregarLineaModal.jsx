@@ -13,7 +13,7 @@
 // personalizada.
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { useTheme } from '../../../hooks/themeContext';
+import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
 
 const FMT_N = (n) => Math.round(n || 0).toLocaleString('es-MX');
