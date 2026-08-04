@@ -1368,7 +1368,12 @@ const PARSERS = {
         // - "REF FF" (2025/2026) vs "REF FFW" / "FF" (históricos)
         fecha_emision: toISODate(obj.fecha_emision ?? obj.fecha_de_emision),
         grupo: toStr(obj.grupo ?? obj.rmdp ?? obj.tipo),
-        cbm: toNum(obj.cbm),
+        // CBM: nombres varían por año — 2026 tiene "CBM TOTAL" + "CBM UNITARIO",
+        // 2025 usa "CBM" + "CBM POR PIEZA", históricos usan sólo "CBM".
+        // Guardamos los 3 campos para no perder granularidad.
+        cbm: toNum(obj.cbm ?? obj.cbm_total),
+        cbm_total: toNum(obj.cbm_total ?? obj.cbm),
+        cbm_unitario: toNum(obj.cbm_unitario ?? obj.cbm_por_pieza),
         fraccion_arancelaria: toStr(obj.f_a ?? obj.fa),
         porcentaje: toNum(obj['%'] ?? obj.porcentaje),
         familia: toStr(obj.familia),
@@ -1381,6 +1386,9 @@ const PARSERS = {
         supplier: toStr(obj.supplier),
         fecha_inicio_produccion: toISODate(obj.fecha_inicio_de_produccion),
         fin_produccion: toISODate(obj.fin_de_produccion),
+        // Número de serie generado para la PO (hoja "SN" del Master lo
+        // detalla más, aquí guardamos el que viene inline en la hoja anual).
+        sn: toStr(obj.sn),
         ref_ff: toStr(obj.ref_ff ?? obj.ref_ffw ?? obj.ff),
         naviera: toStr(obj.naviera),
         tipo_carga: toStr(obj.tipo_de_carga),
@@ -1392,7 +1400,11 @@ const PARSERS = {
         eta_puerto: toISODate(obj.eta_puerto),
         agente_aduanal: toStr(obj.a_a ?? obj.aa),
         arribo_cedis: toISODate(obj.arribo_a_cedis ?? obj.eta_almacen),
+        // LT declarado en el Excel (días). Se preserva `lt` string por
+        // compatibilidad con posibles valores no-numéricos ("PENDIENTE",
+        // "NA", etc.); `lt_dias` es la versión numérica para cálculos.
         lt: toStr(obj.lt),
+        lt_dias: toInt(obj.lt),
         cedis,
         entrega_directa_cliente,
         estatus: toStr(obj.estatus),

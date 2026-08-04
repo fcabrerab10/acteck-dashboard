@@ -110,7 +110,7 @@ function useForecastData() {
       // `arribo_almacen`) como ETA del embarque, y la marca la cruzamos
       // contra v_sku_metadata por SKU.
       fetchAll(() => supabase.from('embarques_compras')
-        .select('po, codigo, fecha_emision, arribo_cedis, arribo_almacen, eta_puerto, etd, po_qty, shp_qty, cbm, contenedor, estatus, supplier, familia, descripcion, unit_price')),
+        .select('po, codigo, fecha_emision, arribo_cedis, arribo_almacen, eta_puerto, etd, po_qty, shp_qty, cbm, cbm_total, cbm_unitario, contenedor, estatus, supplier, familia, descripcion, unit_price, sn, lt_dias, tipo_carga, tipo_contenedor')),
       // Solicitudes de compra del año actual (las tablas pueden no existir aún
       // — capturamos error silenciosamente en ese caso)
       supabase.from('solicitudes_compra').select('*').eq('anio', anioActual)
@@ -302,6 +302,11 @@ function calcularForecast(data, horizonteMeses) {
         esConsolidado: cntConf && contenedorEsConsolidado(cntId),
         costoUsd: Number(ult.unit_price || 0),
         po: ult.po,
+        sn: ult.sn || null,
+        tipoCarga: ult.tipo_carga || null,
+        tipoContenedor: ult.tipo_contenedor || null,
+        cbmUnitario: Number(ult.cbm_unitario || 0),
+        ltDeclarado: Number(ult.lt_dias || 0),
       };
     }
 
@@ -1752,17 +1757,34 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
         </div>
 
         {/* Fila 2 · Proveedor & costos absorbidos en la barra simulador */}
-        <div style={{
-          display: 'grid', gridTemplateColumns: '2.2fr 1fr 1fr 1fr 1fr', gap: 20,
-          paddingTop: 10, marginTop: 12, borderTop: `1px solid ${theme.divider || theme.border}`,
-          alignItems: 'baseline',
-        }}>
-          <SimField lbl="Proveedor"       val={r.supplier || '—'} sub={r.ltMuestras > 0 ? `${r.ltMuestras} OCs históricas` : 'sin histórico'} theme={theme} truncate />
-          <SimField lbl="Costo prom USD"  val={r.costoPromedioUsd > 0 ? `$${r.costoPromedioUsd.toFixed(2)}` : '—'} theme={theme} mono />
-          <SimField lbl="Últ. costo USD"  val={r.ultimoCostoUsd > 0 ? `$${Number(r.ultimoCostoUsd).toFixed(2)}` : '—'} theme={theme} mono color={semGreen} />
-          <SimField lbl="Pz / cnt"        val={cntPz > 0 ? FMT_N(cntPz) : (r.tieneCompras ? '—' : 'sin data')} theme={theme} mono color={cntPz > 0 ? theme.text : (theme.orange || '#FF9500')} />
-          <SimField lbl="Lead time"       val={r.ltDias ? `${Math.round(r.ltDias)} d` : '—'} sub={r.ltMuestras > 0 ? `(${r.ltMuestras})` : ''} theme={theme} mono />
-        </div>
+        {(() => {
+          const uc = r.ultimaCompra || {};
+          const ltDecl = Number(uc.ltDeclarado || 0);
+          const ltCalc = Number(r.ltDias || 0);
+          const ltMostrar = ltDecl > 0 ? ltDecl : ltCalc;
+          const ltSub = ltDecl > 0
+            ? 'declarado en PO'
+            : ltCalc > 0 ? `${r.ltMuestras || 0} OCs · calculado` : '';
+          const tipoCargaShort = uc.tipoCarga
+            ? (uc.tipoCarga.length > 8 ? uc.tipoCarga.slice(0, 8) : uc.tipoCarga)
+            : '—';
+          const cbmU = Number(uc.cbmUnitario || 0);
+          return (
+            <div style={{
+              display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr', gap: 16,
+              paddingTop: 10, marginTop: 12, borderTop: `1px solid ${theme.divider || theme.border}`,
+              alignItems: 'baseline',
+            }}>
+              <SimField lbl="Proveedor"       val={r.supplier || '—'} sub={r.ltMuestras > 0 ? `${r.ltMuestras} OCs históricas` : 'sin histórico'} theme={theme} truncate />
+              <SimField lbl="Costo prom USD"  val={r.costoPromedioUsd > 0 ? `$${r.costoPromedioUsd.toFixed(2)}` : '—'} theme={theme} mono />
+              <SimField lbl="Últ. costo USD"  val={r.ultimoCostoUsd > 0 ? `$${Number(r.ultimoCostoUsd).toFixed(2)}` : '—'} theme={theme} mono color={semGreen} />
+              <SimField lbl="Pz / cnt"        val={cntPz > 0 ? FMT_N(cntPz) : (r.tieneCompras ? '—' : 'sin data')} theme={theme} mono color={cntPz > 0 ? theme.text : (theme.orange || '#FF9500')} />
+              <SimField lbl="Lead time"       val={ltMostrar > 0 ? `${Math.round(ltMostrar)} d` : '—'} sub={ltSub} theme={theme} mono color={ltDecl > 0 ? theme.text : theme.textMuted} />
+              <SimField lbl="Tipo carga"      val={tipoCargaShort} sub={uc.tipoContenedor || ''} theme={theme} />
+              <SimField lbl="CBM unit"        val={cbmU > 0 ? cbmU.toFixed(3) : '—'} sub={cbmU > 0 && cntPz > 0 ? `${(cbmU * cntPz).toFixed(1)} m³ por cnt` : ''} theme={theme} mono />
+            </div>
+          );
+        })()}
         {r.esConsolidado && r.tieneCompras && (
           <div style={{ fontSize: 10, color: theme.orange || '#FF9500', fontStyle: 'italic', marginTop: 6 }}>
             Comparte contenedor con otros SKUs (consolidado)
