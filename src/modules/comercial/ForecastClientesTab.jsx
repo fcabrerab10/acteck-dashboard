@@ -793,6 +793,7 @@ export default function ForecastClientesTab() {
   const [exportando, setExportando] = useState(false);
   const [borradorActivoId, setBorradorActivoId] = useState(null);
   const [misSolicitudesAbierto, setMisSolicitudesAbierto] = useState(false);
+  const [previewExportOpen, setPreviewExportOpen] = useState(false);
   // SKU pendiente de agregar — abre el modal de "agregar a solicitud"
   const [skuParaAgregar, setSkuParaAgregar] = useState(null);
 
@@ -1341,16 +1342,24 @@ export default function ForecastClientesTab() {
   const nombreMes = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][new Date().getMonth()];
   const anioActual = new Date().getFullYear();
 
+  // Click en "Exportar a Excel" del sidebar → abre el modal de revisión previa
+  // en lugar de exportar directo. El export real se dispara con onConfirmar
+  // del modal (ejecutarExportacion).
   const onExportarBorrador = async () => {
     if (!borradorActivo) return toast.error('No hay export activo');
     if (lineasBorrador.length === 0) return toast.error('El export está vacío');
+    setPreviewExportOpen(true);
+  };
+
+  // Exportación real · llamada por el modal cuando el usuario confirma.
+  const ejecutarExportacion = async () => {
+    if (!borradorActivo || lineasBorrador.length === 0) return;
     try {
       // Enriquecer líneas con contenedores frescos calculados desde el motor
       // actual (usa shp_qty vía compraInfo.piezasPorContenedor). Las líneas
       // guardadas en BD pueden tener contenedores/piezas_por_contenedor
       // obsoletos si se agregaron antes del fix de shp_qty — aquí los
-      // recalculamos sin persistir. La cantidad de piezas se respeta
-      // (elección explícita del usuario).
+      // recalculamos sin persistir.
       const rowsBySku = Object.fromEntries((rowsAll || []).map((r) => [r.sku, r]));
       const lineasFrescas = lineasBorrador.map((l) => {
         const r = rowsBySku[l.sku];
@@ -1370,6 +1379,7 @@ export default function ForecastClientesTab() {
       });
       const filename = await exportarSolicitudExcel(borradorActivo, lineasFrescas);
       toast.success(`Excel descargado: ${filename}`);
+      setPreviewExportOpen(false);
     } catch (e) {
       toast.error(`Error exportando: ${e.message || e}`);
     }
@@ -1609,9 +1619,30 @@ export default function ForecastClientesTab() {
               theme={theme}
               isDark={isDark}
             />
+            <UltimasComprasCard
+              embarques={data.embarques}
+              theme={theme}
+              isDark={isDark}
+            />
           </div>
         )}
       </div>
+
+      {/* Preview antes de exportar */}
+      {previewExportOpen && (
+        <ExportPreviewModal
+          activo={borradorActivo}
+          lineas={lineasBorrador}
+          totalPz={totalBorradorPz}
+          totalUsd={totalBorradorUsd}
+          onEditarLinea={onEditarLineaWrapped}
+          onEliminarLinea={onEliminarLineaWrapped}
+          onExportar={ejecutarExportacion}
+          onCerrar={() => setPreviewExportOpen(false)}
+          theme={theme}
+          isDark={isDark}
+        />
+      )}
     </div>
   );
 }
@@ -2647,30 +2678,30 @@ function ExportCart({
       background: theme.surface, border: `1px solid ${theme.border}`,
       borderRadius: 14, overflow: 'hidden',
     }}>
-      {/* ═══ HEADER · eyebrow + título + autosave chip ═══ */}
+      {/* ═══ HERO negro · eyebrow + título + autosave chip ═══ */}
       <div style={{
+        background: '#000', color: '#F5F5F7',
         padding: '14px 16px 12px',
-        borderBottom: `1px solid ${theme.divider || theme.border}`,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{
               fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700,
-              letterSpacing: '.09em', textTransform: 'uppercase', color: theme.textMuted,
+              letterSpacing: '.09em', textTransform: 'uppercase', color: 'rgba(245,245,247,.6)',
               marginBottom: 2,
             }}>
               S&OP · Planeación
             </div>
             <div style={{
               fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 600,
-              letterSpacing: '-0.02em', color: theme.text, display: 'flex',
+              letterSpacing: '-0.02em', color: '#F5F5F7', display: 'flex',
               alignItems: 'center', gap: 8,
             }}>
               Mi Export
               {nBorradores > 0 && (
                 <span style={{
                   padding: '2px 8px', borderRadius: 999,
-                  background: `${theme.accent}1E`, color: theme.accent,
+                  background: 'rgba(10,132,255,.24)', color: '#5AC8FA',
                   fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700,
                   letterSpacing: '.02em',
                 }}>{nBorradores}</span>
@@ -2681,13 +2712,13 @@ function ExportCart({
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '3px 8px', borderRadius: 999,
-              background: `${theme.green || '#34C759'}1A`,
+              background: 'rgba(48,209,88,.18)',
               fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600,
-              color: theme.green || '#34C759', letterSpacing: '.02em',
+              color: '#30D158', letterSpacing: '.02em',
             }}>
               <span style={{
                 width: 5, height: 5, borderRadius: 999,
-                background: theme.green || '#34C759',
+                background: '#30D158',
                 animation: 'sopPulse 2s ease-in-out infinite',
               }} />
               Autoguardado
@@ -3061,6 +3092,763 @@ function ExportCartLine({ linea, puedeEditar, onEditarLinea, onEliminarLinea, th
             background: 'transparent', color: theme.textSubtle, cursor: 'pointer', marginLeft: 4, fontSize: 12,
           }} title="Quitar">×</button>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Últimas compras · card debajo del Mi Export
+// ═══════════════════════════════════════════════════════════════════════
+function UltimasComprasCard({ embarques, theme, isDark }) {
+  const [filtroGrupo, setFiltroGrupo] = useState('todos');
+  const [filtroMes, setFiltroMes] = useState(null); // 'YYYY-MM' o null
+  const [poExpandidoKey, setPoExpandidoKey] = useState(null);
+
+  const MES_CORTO_UC = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+  // Agrupar embarques por PO (una PO puede tener múltiples SKUs/contenedores).
+  // Ignora cancelados/rechazados/perdidos y filas con contenedor "PEND-*" (aún
+  // no confirmadas). Suma monto USD = sum(shp_qty * unit_price).
+  const posAgrupadas = useMemo(() => {
+    const map = new Map();
+    (embarques || []).forEach((e) => {
+      const est = String(e.estatus || '').toLowerCase();
+      if (est.includes('cancel') || est.includes('rechaz') || est.includes('perdid')) return;
+      const po = (e.po || '').toString().trim();
+      if (!po) return;
+      if (!map.has(po)) {
+        map.set(po, {
+          po,
+          fecha: e.fecha_emision || null,
+          grupo: e.grupo || '(sin grupo)',
+          familia: e.familia || '',
+          supplier: e.supplier || '',
+          contenedor: e.contenedor || '',
+          estatus: e.estatus || '',
+          skus: [],
+          totalUsd: 0,
+          totalPz: 0,
+          cbmTotal: 0,
+        });
+      }
+      const g = map.get(po);
+      const shp = Number(e.shp_qty || e.po_qty || 0);
+      const uPrice = Number(e.unit_price || 0);
+      g.skus.push({
+        sku: e.codigo || '',
+        descripcion: e.descripcion || '',
+        piezas: shp,
+        unit_price: uPrice,
+      });
+      g.totalUsd += shp * uPrice;
+      g.totalPz += shp;
+      g.cbmTotal += Number(e.cbm || 0);
+      // Si el estatus del PO agregado aún es genérico, tomar el más reciente
+      if (!g.estatus && e.estatus) g.estatus = e.estatus;
+    });
+    return Array.from(map.values()).sort((a, b) => {
+      const fa = a.fecha ? new Date(a.fecha).getTime() : 0;
+      const fb = b.fecha ? new Date(b.fecha).getTime() : 0;
+      return fb - fa;
+    });
+  }, [embarques]);
+
+  // Grupos únicos (para segmented filter)
+  const grupos = useMemo(() => {
+    const counts = new Map();
+    posAgrupadas.forEach((p) => {
+      const k = p.grupo || '(sin grupo)';
+      counts.set(k, (counts.get(k) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  }, [posAgrupadas]);
+
+  // Últimos 6 meses de dinero colocado (por fecha_emision)
+  const barrasMes = useMemo(() => {
+    const hoy = new Date();
+    const meses = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+      meses.push({
+        anio: d.getFullYear(), mes: d.getMonth() + 1,
+        key: `${d.getFullYear()}-${d.getMonth() + 1}`,
+        label: MES_CORTO_UC[d.getMonth()],
+        usd: 0,
+      });
+    }
+    posAgrupadas.forEach((p) => {
+      if (!p.fecha) return;
+      const d = new Date(p.fecha);
+      const k = `${d.getFullYear()}-${d.getMonth() + 1}`;
+      const m = meses.find((x) => x.key === k);
+      if (m) m.usd += p.totalUsd;
+    });
+    return meses;
+  }, [posAgrupadas]);
+  const maxBar = barrasMes.reduce((mx, m) => Math.max(mx, m.usd), 0) || 1;
+  const mesActualKey = barrasMes[barrasMes.length - 1]?.key || '';
+  const totalMesActual = barrasMes[barrasMes.length - 1]?.usd || 0;
+
+  // Filtrar POs por grupo y mes
+  const posFiltradas = useMemo(() => {
+    return posAgrupadas.filter((p) => {
+      if (filtroGrupo !== 'todos' && p.grupo !== filtroGrupo) return false;
+      if (filtroMes) {
+        if (!p.fecha) return false;
+        const d = new Date(p.fecha);
+        const k = `${d.getFullYear()}-${d.getMonth() + 1}`;
+        if (k !== filtroMes) return false;
+      }
+      return true;
+    }).slice(0, 30); // límite visible
+  }, [posAgrupadas, filtroGrupo, filtroMes]);
+
+  // Formateo
+  const fmtUsd = (n) => `$${Math.round(n || 0).toLocaleString('es-MX')}`;
+  const fmtUsdK = (n) => {
+    const v = Math.abs(n);
+    if (v >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000) return `$${Math.round(n / 1000)}K`;
+    return `$${Math.round(n)}`;
+  };
+  const fmtFechaCorta = (iso) => {
+    if (!iso) return '—';
+    const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+    if (!y) return iso;
+    return `${d} ${MES_CORTO_UC[m - 1]}`;
+  };
+  const fmtFechaLarga = (iso) => {
+    if (!iso) return '—';
+    const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+    if (!y) return iso;
+    return `${d} ${MES_CORTO_UC[m - 1]} ${String(y).slice(2)}`;
+  };
+
+  // Colores por grupo (rotan si son muchos)
+  const grpColors = {
+    sop: theme.accent, dm: '#FF2D55', nd: '#5AC8FA',
+    dec: '#1C7A34', dev: '#AF52DE', otr: theme.textMuted,
+  };
+  const colorGrupo = (name) => {
+    const n = (name || '').toUpperCase();
+    if (n.includes('S&OP')) return { bg: 'rgba(0,122,255,.13)', color: theme.accent || '#007AFF' };
+    if (n.includes('ADICIONAL DM') || n === 'DM') return { bg: 'rgba(255,45,85,.13)', color: '#FF2D55' };
+    if (n.includes('ND') || n.includes('BLACK AND WHITE')) return { bg: 'rgba(90,199,250,.16)', color: '#0288AA' };
+    if (n.includes('DECME') || n === 'DECME') return { bg: 'rgba(52,199,89,.14)', color: '#1C7A34' };
+    if (n.includes('NUEVO') || n.includes('DESARROLLO')) return { bg: 'rgba(175,82,222,.14)', color: '#AF52DE' };
+    return { bg: 'rgba(0,0,0,.06)', color: theme.textMuted };
+  };
+  const abreviaGrp = (name) => {
+    const n = (name || '').toUpperCase();
+    if (n.length <= 10) return n;
+    if (n.includes('ADICIONAL DM')) return 'ADIC DM';
+    if (n.includes('BLACK AND WHITE')) return 'ND B&W';
+    if (n.includes('NUEVO DESARROLLO')) return 'NUEVO DES';
+    if (n.includes('S&OP')) {
+      const parts = n.split(/\s+/);
+      return parts.length > 1 ? `S&OP ${parts[parts.length - 1].slice(0, 3)}` : 'S&OP';
+    }
+    return n.slice(0, 10);
+  };
+  const chipStatus = (est) => {
+    const e = String(est || '').toUpperCase();
+    if (e.includes('CONCLU')) return { label: 'CONC', bg: 'rgba(52,199,89,.15)', color: '#1C7A34' };
+    if (e.includes('TRANSITO') || e.includes('TRÁNSITO')) return { label: 'TRÁNSITO', bg: 'rgba(0,122,255,.13)', color: theme.accent };
+    if (e.includes('ZARPAR')) return { label: 'ZARPAR', bg: 'rgba(0,122,255,.13)', color: theme.accent };
+    if (e.includes('PRODUC')) return { label: 'PROD', bg: 'rgba(255,149,0,.14)', color: '#FF9500' };
+    return null;
+  };
+
+  return (
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`,
+      borderRadius: 14, overflow: 'hidden',
+    }}>
+      {/* ═══ Hero negro compacto ═══ */}
+      <div style={{ background: '#000', color: '#F5F5F7', padding: '14px 16px 10px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700,
+              letterSpacing: '.09em', textTransform: 'uppercase',
+              color: 'rgba(245,245,247,.6)', marginBottom: 2,
+            }}>S&OP · Compras colocadas</div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600,
+              letterSpacing: '-0.02em', color: '#F5F5F7',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              Últimas POs
+              <span style={{
+                padding: '2px 8px', borderRadius: 999,
+                background: 'rgba(10,132,255,.24)', color: '#5AC8FA',
+                fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700, letterSpacing: '.02em',
+              }}>{posAgrupadas.length}</span>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700,
+              letterSpacing: '.08em', textTransform: 'uppercase',
+              color: 'rgba(245,245,247,.6)',
+            }}>Este mes</div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600,
+              letterSpacing: '-0.02em', color: '#F5F5F7',
+              fontVariantNumeric: 'tabular-nums', marginTop: 1,
+            }}>{fmtUsdK(totalMesActual)}</div>
+          </div>
+        </div>
+
+        {/* Mini bar chart 6 meses */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 5,
+          marginTop: 12,
+        }}>
+          {barrasMes.map((m) => {
+            const active = filtroMes === m.key;
+            const isCurr = m.key === mesActualKey;
+            const h = maxBar > 0 ? Math.max(3, (m.usd / maxBar) * 100) : 3;
+            return (
+              <button
+                key={m.key}
+                onClick={() => setFiltroMes(active ? null : m.key)}
+                title={`${m.label} ${m.anio} · ${fmtUsd(m.usd)}`}
+                style={{
+                  cursor: 'pointer', border: 0, background: 'transparent',
+                  textAlign: 'center', padding: 0,
+                }}
+              >
+                <div style={{
+                  height: 34, borderRadius: '3px 3px 0 0', position: 'relative',
+                  background: active
+                    ? 'rgba(90,199,255,.28)'
+                    : isCurr ? 'rgba(90,199,255,.18)' : 'rgba(245,245,247,.10)',
+                  display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    width: '100%', height: `${h}%`, borderRadius: '3px 3px 0 0',
+                    background: active || isCurr ? '#5AC8FA' : 'rgba(245,245,247,.4)',
+                    transition: 'height 200ms',
+                  }} />
+                </div>
+                <div style={{
+                  fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 600,
+                  letterSpacing: '.06em', textTransform: 'uppercase',
+                  color: 'rgba(245,245,247,.6)', marginTop: 4,
+                }}>{m.label}</div>
+                <div style={{
+                  fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600,
+                  color: active || isCurr ? '#5AC8FA' : '#F5F5F7',
+                  fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em', marginTop: 1,
+                }}>{m.usd > 0 ? fmtUsdK(m.usd) : '—'}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Segmented filter por grupo */}
+      <div style={{
+        padding: '8px 12px', borderBottom: `1px solid ${theme.divider || theme.border}`,
+        display: 'flex', gap: 5, overflowX: 'auto',
+      }}>
+        <SegBtn
+          active={filtroGrupo === 'todos'}
+          onClick={() => setFiltroGrupo('todos')}
+          theme={theme} label="Todos" count={posAgrupadas.length}
+        />
+        {grupos.slice(0, 6).map(([g, n]) => (
+          <SegBtn
+            key={g}
+            active={filtroGrupo === g}
+            onClick={() => setFiltroGrupo(g)}
+            theme={theme} label={abreviaGrp(g)} count={n}
+          />
+        ))}
+      </div>
+
+      {/* Lista POs */}
+      <div style={{ maxHeight: 480, overflow: 'auto' }}>
+        {posFiltradas.length === 0 ? (
+          <div style={{ padding: '24px 16px', textAlign: 'center', color: theme.textMuted, fontSize: 11.5 }}>
+            Sin compras que coincidan con los filtros
+          </div>
+        ) : posFiltradas.map((p) => {
+          const abierto = poExpandidoKey === p.po;
+          const grpStyle = colorGrupo(p.grupo);
+          const stChip = chipStatus(p.estatus);
+          return (
+            <React.Fragment key={p.po}>
+              <div
+                onClick={() => setPoExpandidoKey(abierto ? null : p.po)}
+                style={{
+                  padding: `10px 14px 10px ${abierto ? 12 : 14}px`,
+                  display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center',
+                  borderTop: `1px solid ${theme.divider || theme.border}`,
+                  cursor: 'pointer',
+                  background: abierto ? 'rgba(0,122,255,.04)' : 'transparent',
+                  borderLeft: abierto ? `2px solid ${theme.accent}` : 'none',
+                  transition: 'background 120ms',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600,
+                    letterSpacing: '-0.015em', color: theme.text,
+                    fontVariantNumeric: 'tabular-nums', lineHeight: 1,
+                  }}>{p.po}</div>
+                  <div style={{
+                    fontFamily: TYPO.fontText, fontSize: 10, color: theme.textMuted,
+                    marginTop: 4, letterSpacing: '-0.005em', display: 'flex',
+                    alignItems: 'center', gap: 5, flexWrap: 'wrap',
+                  }}>
+                    <span style={{
+                      display: 'inline-flex', padding: '1px 7px', borderRadius: 5,
+                      background: grpStyle.bg, color: grpStyle.color,
+                      fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700,
+                      letterSpacing: '.04em', textTransform: 'uppercase',
+                    }}>{abreviaGrp(p.grupo)}</span>
+                    <span style={{ color: theme.textSubtle }}>·</span>
+                    <span>{fmtFechaCorta(p.fecha)}</span>
+                    {p.familia && <>
+                      <span style={{ color: theme.textSubtle }}>·</span>
+                      <span>{p.familia.slice(0, 22)}{p.familia.length > 22 ? '…' : ''}{p.skus.length > 1 ? ` · ${p.skus.length} SKUs` : ''}</span>
+                    </>}
+                    {stChip && (
+                      <span style={{
+                        display: 'inline-flex', padding: '1px 5px', borderRadius: 3,
+                        background: stChip.bg, color: stChip.color,
+                        fontFamily: TYPO.fontDisplay, fontSize: 8, fontWeight: 700,
+                        letterSpacing: '.05em', marginLeft: 3, textTransform: 'uppercase',
+                      }}>{stChip.label}</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <div style={{
+                    fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600,
+                    letterSpacing: '-0.015em', color: theme.text,
+                    fontVariantNumeric: 'tabular-nums', lineHeight: 1,
+                  }}>{fmtUsd(p.totalUsd)}</div>
+                  <div style={{
+                    fontFamily: TYPO.fontText, fontSize: 9.5, color: theme.textMuted,
+                    fontWeight: 500, marginTop: 3, fontVariantNumeric: 'tabular-nums',
+                  }}>{Math.round(p.totalPz).toLocaleString('es-MX')} pz</div>
+                </div>
+              </div>
+
+              {abierto && (
+                <div style={{
+                  padding: '12px 14px', background: 'rgba(0,122,255,.03)',
+                  borderTop: `1px solid ${theme.divider || theme.border}`,
+                  borderBottom: `1px solid ${theme.divider || theme.border}`,
+                }}>
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px', marginBottom: 10,
+                  }}>
+                    <DetKV k="Fecha" v={fmtFechaLarga(p.fecha)} theme={theme} />
+                    <DetKV k="Familia" v={p.familia || '—'} theme={theme} />
+                    <DetKV k="Proveedor" v={p.supplier ? p.supplier.slice(0, 22) : '—'} theme={theme} />
+                    <DetKV k="CBM total" v={p.cbmTotal > 0 ? `${p.cbmTotal.toFixed(1)} m³` : '—'} theme={theme} mono />
+                    <DetKV k="Contenedor" v={p.contenedor && !/^PEND/i.test(p.contenedor) ? p.contenedor : 'pendiente'} theme={theme} mono />
+                    <DetKV k="Estatus" v={p.estatus || '—'} theme={theme} green={/CONCLU/i.test(p.estatus || '')} />
+                  </div>
+
+                  <div style={{ paddingTop: 8, borderTop: `1px solid ${theme.divider || theme.border}` }}>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', marginBottom: 5,
+                    }}>
+                      <span style={{
+                        fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700,
+                        letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted,
+                      }}>SKUs</span>
+                      <span style={{ fontSize: 10.5, color: theme.textSubtle }}>
+                        {p.skus.length} línea{p.skus.length !== 1 ? 's' : ''} · {Math.round(p.totalPz).toLocaleString('es-MX')} pz
+                      </span>
+                    </div>
+                    {p.skus.map((s, i) => (
+                      <div key={i} style={{
+                        display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 6,
+                        padding: '4px 0', fontSize: 10.5, alignItems: 'center',
+                        borderTop: i > 0 ? `1px solid ${theme.divider || theme.border}` : 'none',
+                      }}>
+                        <span style={{
+                          fontFamily: 'SF Mono, ui-monospace, monospace', color: theme.accent, fontSize: 10,
+                        }}>{s.sku}</span>
+                        <span style={{
+                          color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', fontSize: 10.5,
+                        }} title={s.descripcion}>{s.descripcion}</span>
+                        <span style={{
+                          fontFamily: 'SF Mono, ui-monospace, monospace', color: theme.text,
+                          fontVariantNumeric: 'tabular-nums', fontWeight: 600, fontSize: 10.5,
+                        }}>{Math.round(s.piezas).toLocaleString('es-MX')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SegBtn({ active, onClick, theme, label, count }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '4px 10px', borderRadius: 999, border: 0,
+        background: active ? theme.text : (theme.mode === 'dark' ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)'),
+        color: active ? (theme.mode === 'dark' ? '#000' : '#FFF') : theme.textMuted,
+        fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600,
+        letterSpacing: '-0.005em', cursor: 'pointer', whiteSpace: 'nowrap',
+      }}
+    >{label} <span style={{ opacity: .6, marginLeft: 3, fontWeight: 500 }}>{count}</span></button>
+  );
+}
+
+function DetKV({ k, v, theme, mono, green }) {
+  return (
+    <div>
+      <div style={{
+        fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700,
+        letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 1,
+      }}>{k}</div>
+      <div style={{
+        fontFamily: mono ? 'SF Mono, ui-monospace, monospace' : TYPO.fontText,
+        fontSize: mono ? 10.5 : 11, color: green ? '#1C7A34' : theme.text,
+        fontWeight: 500, letterSpacing: '-0.005em',
+        fontVariantNumeric: mono ? 'tabular-nums' : 'normal',
+      }}>{v}</div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Modal · Revisión previa al exportar
+// ═══════════════════════════════════════════════════════════════════════
+function ExportPreviewModal({
+  activo, lineas, totalPz, totalUsd,
+  onEditarLinea, onEliminarLinea, onExportar, onCerrar,
+  theme, isDark,
+}) {
+  const [exportando, setExportando] = useState(false);
+  if (!activo) return null;
+
+  // Agrupar por proveedor (como en el ExportCart)
+  const provKey = (l) => (l.supplier || l.proveedor || '').trim() || '—';
+  const byProv = new Map();
+  lineas.forEach((l) => {
+    const k = provKey(l);
+    if (!byProv.has(k)) byProv.set(k, []);
+    byProv.get(k).push(l);
+  });
+  const usdOf = (arr) => arr.reduce((a, l) => a + Number(l.cantidad || 0) * Number(l.ultimo_costo_usd || 0), 0);
+  const pzOf  = (arr) => arr.reduce((a, l) => a + Number(l.cantidad || 0), 0);
+  const cntOf = (arr) => arr.reduce((a, l) => a + Number(l.contenedores || 0), 0);
+  const gruposArr = Array.from(byProv.entries())
+    .map(([prov, arr]) => ({ prov, arr, usd: usdOf(arr), pz: pzOf(arr), cnt: cntOf(arr) }))
+    .sort((a, b) => b.usd - a.usd);
+
+  const nProv = gruposArr.length;
+  const totalCnt = gruposArr.reduce((a, g) => a + g.cnt, 0);
+  const avgPerCnt = totalCnt > 0 ? totalUsd / totalCnt : 0;
+
+  const handleExportar = async () => {
+    setExportando(true);
+    try { await onExportar(); } finally { setExportando(false); }
+  };
+
+  return (
+    <div
+      onClick={onCerrar}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 55,
+        background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(3px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+        animation: 'sopFadeIn 180ms cubic-bezier(0.32, 0.72, 0, 1) both',
+      }}
+    >
+      <style>{`
+        @keyframes sopFadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes sopPopIn {
+          from { opacity: 0; transform: translateY(8px) scale(.98) }
+          to { opacity: 1; transform: translateY(0) scale(1) }
+        }
+      `}</style>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: theme.surface, border: `1px solid ${theme.border}`,
+          borderRadius: 16, width: '100%', maxWidth: 780,
+          maxHeight: '90vh', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column',
+          boxShadow: isDark ? '0 24px 60px rgba(0,0,0,.55)' : '0 24px 60px rgba(0,0,0,.20)',
+          animation: 'sopPopIn 260ms cubic-bezier(0.32, 0.72, 0, 1) both',
+        }}
+      >
+        {/* Hero */}
+        <div style={{
+          background: '#000', color: '#F5F5F7',
+          padding: '14px 18px',
+          display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center',
+        }}>
+          <div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700,
+              letterSpacing: '.09em', textTransform: 'uppercase',
+              color: 'rgba(245,245,247,.6)', marginBottom: 3,
+            }}>S&OP · Revisión previa</div>
+            <h2 style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600,
+              letterSpacing: '-0.02em', margin: 0, color: '#F5F5F7', lineHeight: 1.15,
+            }}>{activo.nombre || 'Export sin nombre'}</h2>
+            <div style={{
+              fontFamily: TYPO.fontText, fontSize: 11, color: 'rgba(245,245,247,.6)',
+              marginTop: 4, letterSpacing: '-0.005em',
+            }}>
+              <strong style={{ color: '#F5F5F7', fontWeight: 600 }}>{lineas.length} SKUs</strong>
+              {' · '}<strong style={{ color: '#F5F5F7', fontWeight: 600 }}>{Math.round(totalPz).toLocaleString('es-MX')} pz</strong>
+              {' · '}listo para exportar
+            </div>
+          </div>
+          <button
+            onClick={onCerrar}
+            style={{
+              width: 28, height: 28, borderRadius: 999,
+              background: 'rgba(255,255,255,.10)', color: '#F5F5F7',
+              border: 0, fontSize: 14, cursor: 'pointer', lineHeight: 1,
+            }}
+          >✕</button>
+        </div>
+
+        {/* Totales strip */}
+        <div style={{
+          padding: '12px 18px',
+          background: isDark ? 'rgba(10,132,255,.08)' : 'rgba(0,122,255,.04)',
+          borderBottom: `1px solid ${theme.divider || theme.border}`,
+          display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 14,
+        }}>
+          <div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 700,
+              letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted,
+            }}>Total USD</div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600,
+              letterSpacing: '-0.025em', color: theme.accent,
+              fontVariantNumeric: 'tabular-nums', marginTop: 1, lineHeight: 1,
+            }}>${Math.round(totalUsd).toLocaleString('es-MX')}</div>
+          </div>
+          <div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 700,
+              letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted,
+            }}>Contenedores</div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600,
+              letterSpacing: '-0.02em', color: theme.text,
+              fontVariantNumeric: 'tabular-nums', marginTop: 1, lineHeight: 1,
+            }}>{totalCnt}<span style={{ fontSize: 11, color: theme.textMuted, fontWeight: 500, marginLeft: 3 }}>cnt</span></div>
+          </div>
+          <div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 700,
+              letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted,
+            }}>Proveedores</div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600,
+              letterSpacing: '-0.02em', color: theme.text,
+              fontVariantNumeric: 'tabular-nums', marginTop: 1, lineHeight: 1,
+            }}>{nProv}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 700,
+              letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted,
+            }}>USD prom / cnt</div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600,
+              letterSpacing: '-0.02em', color: theme.text,
+              fontVariantNumeric: 'tabular-nums', marginTop: 1, lineHeight: 1,
+            }}>${Math.round(avgPerCnt).toLocaleString('es-MX')}</div>
+          </div>
+        </div>
+
+        {/* Líneas · agrupadas por proveedor */}
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          {gruposArr.map((g) => (
+            <div key={g.prov} style={{ borderTop: `1px solid ${theme.divider || theme.border}` }}>
+              <div style={{
+                padding: '8px 18px', background: isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.02)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8,
+              }}>
+                <div style={{
+                  fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700,
+                  letterSpacing: '.06em', textTransform: 'uppercase', color: theme.text,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }} title={g.prov}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.prov}</span>
+                  {g.arr.length >= 2 && (
+                    <span style={{
+                      padding: '1px 7px', borderRadius: 999, fontSize: 9.5, fontWeight: 700,
+                      background: `${theme.accent}22`, color: theme.accent, letterSpacing: 0,
+                    }}>{g.arr.length} SKUs</span>
+                  )}
+                </div>
+                <div style={{
+                  fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600,
+                  letterSpacing: '-0.015em', color: theme.text,
+                  fontVariantNumeric: 'tabular-nums',
+                }}>${Math.round(g.usd).toLocaleString('es-MX')}<span style={{
+                  fontFamily: TYPO.fontText, color: theme.textMuted, fontWeight: 500, fontSize: 10.5, marginLeft: 4,
+                }}>· {g.cnt > 0 ? `${g.cnt} cnt` : `${Math.round(g.pz).toLocaleString('es-MX')} pz`}</span></div>
+              </div>
+              {g.arr.map((l) => (
+                <PreviewLine
+                  key={l.id}
+                  linea={l}
+                  onEditarLinea={onEditarLinea}
+                  onEliminarLinea={onEliminarLinea}
+                  theme={theme}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Actions */}
+        <div style={{
+          padding: '14px 18px', background: isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.02)',
+          borderTop: `1px solid ${theme.divider || theme.border}`,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        }}>
+          <div style={{ fontSize: 11, color: theme.textMuted, letterSpacing: '-0.005em' }}>
+            Editando en tiempo real · los cambios se guardan al modificar
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onCerrar}
+              disabled={exportando}
+              style={{
+                padding: '9px 18px', borderRadius: 10,
+                background: 'transparent', border: `1px solid ${theme.border}`,
+                color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600,
+                letterSpacing: '-0.005em', cursor: exportando ? 'not-allowed' : 'pointer',
+                opacity: exportando ? 0.5 : 1,
+              }}
+            >Cancelar</button>
+            <button
+              onClick={handleExportar}
+              disabled={exportando || lineas.length === 0}
+              style={{
+                padding: '9px 22px', borderRadius: 10,
+                background: theme.green || '#34C759', color: '#fff', border: 0,
+                fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600,
+                letterSpacing: '-0.005em',
+                cursor: (exportando || lineas.length === 0) ? 'not-allowed' : 'pointer',
+                opacity: (exportando || lineas.length === 0) ? 0.55 : 1,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >{exportando ? 'Exportando…' : '↓ Exportar a Excel'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviewLine({ linea, onEditarLinea, onEliminarLinea, theme }) {
+  const cantidad = Number(linea.cantidad || 0);
+  const cnt = Number(linea.contenedores || 0);
+  const pzPorCnt = cnt > 0 ? cantidad / cnt : 0;
+  const inc = () => onEditarLinea && onEditarLinea(linea.id, {
+    cantidad: cantidad + (pzPorCnt || 100),
+    contenedores: cnt + 1,
+  });
+  const dec = () => {
+    if (cnt <= 1) return;
+    onEditarLinea && onEditarLinea(linea.id, {
+      cantidad: Math.max(0, cantidad - (pzPorCnt || 100)),
+      contenedores: cnt - 1,
+    });
+  };
+  const usd = cantidad * Number(linea.ultimo_costo_usd || 0);
+  return (
+    <div style={{
+      padding: '9px 18px', borderTop: `1px solid ${theme.divider || theme.border}`,
+      display: 'grid', gridTemplateColumns: '90px 1fr auto auto auto',
+      gap: 12, alignItems: 'center', fontSize: 12,
+    }}>
+      <span style={{
+        fontFamily: 'SF Mono, ui-monospace, monospace', color: theme.accent,
+        fontSize: 11.5, fontWeight: 500,
+      }}>{linea.sku}</span>
+      <span style={{
+        color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap', fontSize: 12,
+      }} title={linea.descripcion}>{linea.descripcion || linea.sku}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+        <button
+          onClick={dec} disabled={cnt <= 1}
+          style={{
+            width: 24, height: 24, borderRadius: 6,
+            border: `1px solid ${theme.border}`, background: theme.surface,
+            color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600,
+            fontSize: 12, cursor: cnt <= 1 ? 'not-allowed' : 'pointer', lineHeight: 1,
+            opacity: cnt <= 1 ? 0.5 : 1,
+          }}
+        >−</button>
+        <span style={{
+          fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600,
+          color: theme.text, minWidth: 30, textAlign: 'center',
+          fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em',
+        }}>{cnt > 0 ? cnt : Math.round(cantidad).toLocaleString('es-MX')}</span>
+        <button
+          onClick={inc}
+          style={{
+            width: 24, height: 24, borderRadius: 6,
+            border: `1px solid ${theme.border}`, background: theme.surface,
+            color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600,
+            fontSize: 12, cursor: 'pointer', lineHeight: 1,
+          }}
+        >+</button>
+      </div>
+      <div style={{ textAlign: 'left', minWidth: 40 }}>
+        <div style={{
+          fontFamily: TYPO.fontText, fontSize: 9.5, color: theme.textMuted,
+          fontWeight: 500, letterSpacing: '-0.005em', lineHeight: 1,
+        }}>{cnt > 0 ? 'cnt' : 'pz'}</div>
+        {cnt > 0 && (
+          <div style={{
+            fontFamily: TYPO.fontText, fontSize: 9, color: theme.textSubtle,
+            fontVariantNumeric: 'tabular-nums', marginTop: 2,
+          }}>{Math.round(cantidad).toLocaleString('es-MX')} pz</div>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+        <span style={{
+          fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600,
+          color: theme.text, letterSpacing: '-0.015em',
+          fontVariantNumeric: 'tabular-nums', minWidth: 80, textAlign: 'right',
+        }}>${Math.round(usd).toLocaleString('es-MX')}</span>
+        <button
+          onClick={() => onEliminarLinea && onEliminarLinea(linea.id)}
+          title="Quitar del export"
+          style={{
+            width: 24, height: 24, borderRadius: 6, border: 0,
+            background: 'transparent', color: theme.textMuted, cursor: 'pointer', fontSize: 12,
+          }}
+        >✕</button>
       </div>
     </div>
   );
