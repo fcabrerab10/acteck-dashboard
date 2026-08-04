@@ -124,6 +124,12 @@
   .btn.ghost:hover{background:rgba(0,0,0,0.08)}
   .btn.cron{background:#10B981}
   .btn.cron:hover{background:#059669}
+  .btn.confirm{background:#10B981}
+  .btn.confirm:hover{background:#059669}
+  .file-ready{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink2);max-width:280px}
+  .file-ready .fn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'SF Mono',ui-monospace,monospace;font-size:10.5px}
+  .file-ready .warn{color:#B45309;font-weight:600}
+  .file-ready .ok{color:var(--ok);font-weight:600}
 
   .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:600;letter-spacing:-0.005em}
   .b-ok{background:#DCFCE7;color:var(--ok)}
@@ -2740,12 +2746,54 @@ function buildSourceCard(src){
 
   // ============== ROW LAYOUT (Variante B) ==============
   const fileInput = el('input', {type:'file', accept:'.xlsx,.xls,.csv', id:`file-${src.id}`});
-  // Auto-upload on file selection
-  fileInput.addEventListener('change', () => { if (fileInput.files?.[0]) handleUpload(src); });
   const chooseBtn = el('button', {class:'btn ghost', type:'button',
     onclick: (e) => { e.stopPropagation(); fileInput.click(); }
   }, '📁 Elegir');
   if (src.disabled) { chooseBtn.disabled = true; chooseBtn.textContent = 'Próximamente'; }
+
+  // Preview del archivo elegido + botón "Subir" (confirmación de 2 pasos)
+  const fileReady = el('div', {class:'file-ready', id:`ready-${src.id}`, style:'display:none'});
+  const uploadBtn = el('button', {class:'btn confirm', type:'button', style:'display:none',
+    onclick: (e) => { e.stopPropagation(); handleUpload(src); }
+  }, '⬆ Subir a Supabase');
+  const cancelBtn = el('button', {class:'btn ghost', type:'button', style:'display:none',
+    onclick: (e) => { e.stopPropagation(); resetFileSelection(src); }
+  }, '✕');
+
+  const showFileReady = (f) => {
+    const expectedName = (src.file || '').toLowerCase();
+    const actualName = (f.name || '').toLowerCase();
+    // Match flexible: nombre esperado suele traer "NN" como placeholder de semana
+    const expectedNorm = expectedName.replace(/nn/g, '').replace(/[^a-z0-9]/g, '');
+    const actualNorm = actualName.replace(/\d+/g, '').replace(/[^a-z0-9]/g, '');
+    const matches = !expectedName || actualNorm.includes(expectedNorm) || expectedNorm.includes(actualNorm);
+    const sizeMB = (f.size / (1024 * 1024)).toFixed(2);
+    fileReady.innerHTML = '';
+    fileReady.append(
+      el('span', {class:'fn'}, `📄 ${f.name}`),
+      el('span', {}, `· ${sizeMB} MB`),
+      el('span', {class: matches ? 'ok' : 'warn'}, matches ? '· ✓ coincide' : '· ⚠ nombre distinto'),
+    );
+    fileReady.style.display = 'flex';
+    uploadBtn.style.display = 'inline-block';
+    uploadBtn.classList.toggle('cron', matches);
+    uploadBtn.classList.toggle('confirm', !matches);
+    uploadBtn.textContent = matches ? '⬆ Subir a Supabase' : '⚠ Subir de todos modos';
+    cancelBtn.style.display = 'inline-block';
+    chooseBtn.style.display = 'none';
+  };
+  // Función global de reset para poder llamarse desde handleUpload al terminar
+  window[`resetFile_${src.id}`] = () => resetFileSelection(src);
+  function resetFileSelection(s){
+    fileInput.value = '';
+    fileReady.style.display = 'none';
+    uploadBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    chooseBtn.style.display = 'inline-block';
+  }
+
+  fileInput.addEventListener('change', () => { if (fileInput.files?.[0]) showFileReady(fileInput.files[0]); });
+
   let cronBtnNew = null;
   if (src.cronEndpoint) {
     cronBtnNew = el('button', {class:'btn cron', type:'button',
@@ -2766,7 +2814,7 @@ function buildSourceCard(src){
     ),
     el('span', {class:'badge-tipo ' + tipoClass(src.tipo)}, tipoLabel(src.tipo)),
     statusCell,
-    el('div', {class:'actions-cell'}, fileInput, chooseBtn, cronBtnNew),
+    el('div', {class:'actions-cell'}, fileInput, fileReady, chooseBtn, uploadBtn, cancelBtn, cronBtnNew),
   );
 
   const rowExpand = el('div', {class:'row-expand'},
@@ -2809,7 +2857,8 @@ function buildSourceCard(src){
       dt.items.add(f);
       fileInput.files = dt.files;
     } catch(err) { /* fallback silencioso */ }
-    handleUpload(src);
+    // No auto-sube — muestra preview y espera clic en "Subir a Supabase"
+    showFileReady(f);
   };
   card.addEventListener('dragover', onDragOver);
   card.addEventListener('dragenter', onDragOver);
@@ -3119,11 +3168,13 @@ async function handleUpload(src){
     badge.textContent = `🕐 Última actualización: ${fmtDate(new Date().toISOString())}`;
     badge.style.display = '';
     setStatus(src,'b-ok',`✓ Completado`);
+    if (typeof window[`resetFile_${src.id}`] === 'function') window[`resetFile_${src.id}`]();
   } catch (e) {
     console.error(e);
     setStatus(src,'b-err','Error');
     appendLog(src, 'ERROR: ' + e.message);
     logSyncEvent(src, { estado:'error', tipo:'upload', archivo: f.name, mensaje: e.message });
+    if (typeof window[`resetFile_${src.id}`] === 'function') window[`resetFile_${src.id}`]();
   }
 }
 
