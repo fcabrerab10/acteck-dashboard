@@ -1554,16 +1554,16 @@ function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, 
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
           <thead>
             <tr>
-              <SortHeader theme={theme} width={24} />
-              <SortHeader theme={theme} col="sku" label="SKU" width={110} onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} width={22} />
+              <SortHeader theme={theme} col="sku" label="SKU" width={95} onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
               <SortHeader theme={theme} label="Descripción" />
-              <SortHeader theme={theme} col="rdmp" label="Roadmap" width={80} align="center" />
-              <SortHeader theme={theme} col="inv" label="Inv actual" width={80} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="traCant" label="Tránsito" width={80} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="traEta" label="Próximo arribo" width={110} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="demandaMesErp" label="Demanda 3m" width={100} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="coberturaDiasErp" label="Días inv." width={90} align="center" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="sugerido" label="Sugerido de compra" width={180} align="center" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="rdmp" label="Roadmap" width={70} align="center" />
+              <SortHeader theme={theme} col="inv" label="Inv" width={64} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="traCant" label="Tránsito" width={64} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="traEta" label="Próx arribo" width={82} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="demandaMesErp" label="Dem 3m" width={78} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="coberturaDiasErp" label="Días inv" width={72} align="center" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="sugerido" label="Sugerido de compra" width={140} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
             </tr>
           </thead>
           <tbody>
@@ -1607,33 +1607,28 @@ function SugeridoCompraCell({ r, enExport, cantidadEnExport, onAgregarSolicitud,
   const critico = !!r.esCritico;
   const cap = !!r.crecimientoCap;
 
-  let btnLabel, btnBg, btnColor, btnCursor = 'pointer', btnOn = null;
+  // Sin brecha y no está en export → celda vacía (limpieza visual).
+  if (sug <= 0 && !enExport) return null;
+
+  let btnLabel, btnBg, btnColor;
   if (enExport) {
     btnBg = theme.green || '#34C759';
     btnColor = '#fff';
     btnLabel = `✓ ${FMT_N(cantidadEnExport)} pz`;
-  } else if (sug > 0) {
+  } else {
     btnBg = theme.accent || '#007AFF';
     btnColor = '#fff';
     btnLabel = cnt > 0 ? `＋ ${cnt} cnt · ${FMT_N(sug)} pz` : `＋ ${FMT_N(sug)} pz`;
-  } else {
-    btnBg = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
-    btnColor = theme.textMuted;
-    btnCursor = 'default';
-    btnLabel = '— sin brecha';
-    btnOn = 'none';
   }
 
   // Sub-línea explicativa
   let sub = '';
   if (enExport) sub = `en Mi Export`;
-  else if (sug > 0) {
+  else {
     const parts = [];
-    if (crecPct > 0) parts.push(`crece +${crecPct}%${cap ? ' · cap' : ''}`);
+    if (crecPct > 0) parts.push(`+${crecPct}%${cap ? ' cap' : ''}`);
     parts.push(`3m${seg > 0 ? ` + ${seg}m seg` : ''}`);
     sub = parts.join(' · ');
-  } else {
-    sub = '3m cubiertos';
   }
 
   const tieneNotas = critico || tendNeg || conc;
@@ -1644,7 +1639,6 @@ function SugeridoCompraCell({ r, enExport, cantidadEnExport, onAgregarSolicitud,
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            if (btnOn === 'none') return;
             if (onAgregarSolicitud) onAgregarSolicitud(r);
           }}
           style={{
@@ -1652,14 +1646,14 @@ function SugeridoCompraCell({ r, enExport, cantidadEnExport, onAgregarSolicitud,
             padding: '4px 11px', borderRadius: 999,
             background: btnBg, color: btnColor, border: 0,
             fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600,
-            letterSpacing: '-0.01em', cursor: btnCursor, whiteSpace: 'nowrap', lineHeight: 1.2,
+            letterSpacing: '-0.01em', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.2,
             transition: 'transform 120ms',
           }}
-          onMouseEnter={(e) => { if (btnOn !== 'none') e.currentTarget.style.transform = 'scale(1.03)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-          title={enExport ? `En Mi Export con ${FMT_N(cantidadEnExport)} pz — click para editar`
-            : sug > 0 ? `Sugerido: ${FMT_N(sug)} pz (${cnt} cnt) — click para agregar`
-            : 'Sin brecha con el objetivo de 3 meses'}
+          title={enExport
+            ? `En Mi Export con ${FMT_N(cantidadEnExport)} pz — click para editar`
+            : `Sugerido: ${FMT_N(sug)} pz (${cnt} cnt) — click para agregar`}
         >
           {btnLabel}
         </button>
