@@ -780,6 +780,10 @@ export default function ForecastClientesTab() {
   const [filtroFamilia, setFiltroFamilia] = useState('todas');
   const [filtroCliente, setFiltroCliente] = useState('todos');
   const [filtroFlag, setFiltroFlag] = useState('todos');
+  // Filtro "solo SKUs con sugerido de compra > 0" (Fase 4)
+  const [soloConSugerido, setSoloConSugerido] = useState(false);
+  // Flag para bloquear la UI mientras se agregan masivamente
+  const [agregandoTodos, setAgregandoTodos] = useState(false);
   const [expandedSku, setExpandedSku] = useState(null);
   const [sugeridosOpen, setSugeridosOpen] = useState(false);
   // Por defecto sin sort explícito → respeta el orden del Reporte
@@ -872,6 +876,88 @@ export default function ForecastClientesTab() {
       // eslint-disable-next-line no-console
       console.error('[Forecast] error en confirmarAgregarLinea', err);
       toast.error(`Error agregando ${row.sku}: ${err?.message || err}`);
+    }
+  };
+
+  // Agregar TODOS los SKUs con sugerido > 0 al borrador activo (Fase 4).
+  // Salta los que ya están en el borrador. Muestra progress + toast final.
+  const agregarTodosSugeridos = async () => {
+    if (!puedeEditarSol) {
+      toast.error('No tienes permiso para agregar al export.');
+      return;
+    }
+    const candidatos = rowsAll.filter((r) => Number(r.sugerido || 0) > 0);
+    if (candidatos.length === 0) {
+      toast('No hay SKUs con sugerido de compra.', { icon: 'ℹ️' });
+      return;
+    }
+    // SKUs ya en el borrador activo — se saltan
+    const yaEnExport = new Set((lineasBorrador || []).map((l) => l.sku));
+    const nuevos = candidatos.filter((r) => !yaEnExport.has(r.sku));
+    const skipped = candidatos.length - nuevos.length;
+    if (nuevos.length === 0) {
+      toast(`Los ${candidatos.length} sugeridos ya están en Mi Export.`, { icon: 'ℹ️' });
+      return;
+    }
+    const totalUsd = nuevos.reduce((a, r) => a + (Number(r.sugerido || 0) * Number(r.ultimoCostoUsd || r.costoUnitUsd || 0)), 0);
+    const totalPz = nuevos.reduce((a, r) => a + Number(r.sugerido || 0), 0);
+    const ok = window.confirm(
+      `Agregar ${nuevos.length} SKUs al export activo?\n\n` +
+      `· Total piezas: ${FMT_N(totalPz)}\n` +
+      `· Total USD estimado: $${FMT_N(totalUsd)}\n` +
+      (skipped > 0 ? `· ${skipped} ya estaban en el export (se omiten)\n` : '')
+    );
+    if (!ok) return;
+    setAgregandoTodos(true);
+    try {
+      // Borrador a usar
+      let solicitudId = borradorActivoId;
+      if (!solicitudId && sol.borradores.length > 0) {
+        solicitudId = sol.borradores[0].id;
+        setBorradorActivoId(solicitudId);
+      }
+      if (!solicitudId) {
+        const nuevo = await sol.crearBorrador();
+        if (!nuevo || !nuevo.id) {
+          toast.error('No se pudo crear el borrador');
+          return;
+        }
+        solicitudId = nuevo.id;
+        setBorradorActivoId(solicitudId);
+      }
+      let okCount = 0, errCount = 0;
+      for (const row of nuevos) {
+        const cantidad = Number(row.sugerido || 0);
+        const ppc = Number(row.piezasPorContenedor || 0);
+        const cnts = ppc > 0 ? Math.ceil(cantidad / ppc) : null;
+        let fechaEstimada = null;
+        if (row.ltDias && row.ltDias > 0) {
+          const d = new Date(); d.setDate(d.getDate() + Math.round(row.ltDias));
+          fechaEstimada = d.toISOString().slice(0, 10);
+        }
+        try {
+          const linea = await sol.agregarLinea(solicitudId, {
+            sku: row.sku,
+            descripcion: row.descripcion,
+            cantidad,
+            proveedor: row.supplier || '',
+            fecha_estimada: fechaEstimada,
+            ultimo_costo_usd: row.ultimoCostoUsd || row.costoUnitUsd || null,
+            piezas_por_contenedor: ppc || null,
+            contenedores: cnts,
+            es_consolidado: !!row.esConsolidado,
+          });
+          if (linea && linea.id) okCount++; else errCount++;
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error(`[Forecast] error agregando ${row.sku}`, err);
+          errCount++;
+        }
+      }
+      if (okCount > 0) toast.success(`✓ ${okCount} SKUs agregados al export activo`);
+      if (errCount > 0) toast.error(`${errCount} SKUs no se pudieron agregar`);
+    } finally {
+      setAgregandoTodos(false);
     }
   };
 
@@ -1107,9 +1193,10 @@ export default function ForecastClientesTab() {
       if (filtroFlag === 'brecha'         && r.brecha <= 0) return false;
       if (filtroFlag === 'canibalizacion' && !r.canibalizacion) return false;
       if (filtroFlag === 'preventa'       && r.preventaDeficit <= 0) return false;
+      if (soloConSugerido && !(Number(r.sugerido || 0) > 0)) return false;
       return true;
     });
-  }, [rowsAll, busqueda, filtroSupplier, filtroFamilia, filtroCliente, filtroFlag]);
+  }, [rowsAll, busqueda, filtroSupplier, filtroFamilia, filtroCliente, filtroFlag, soloConSugerido]);
 
   const rowsOrdenados = useMemo(() => {
     // Si no hay sort explícito, conservar el orden del Reporte (whitelist).
@@ -1392,6 +1479,57 @@ export default function ForecastClientesTab() {
               options={[{ v: 'todas', l: 'Todas las familias' }, ...familias.map(f => ({ v: f, l: f }))]} />
             <ToolbarSelect value={filtroCliente} onChange={setFiltroCliente} theme={theme}
               options={[{ v: 'todos', l: 'Todos los clientes' }, ...CLIENTES.map(c => ({ v: c.key, l: c.full }))]} />
+
+            {/* Toggle · solo con sugerido */}
+            {(() => {
+              const nSugeridos = rowsAll.filter((r) => Number(r.sugerido || 0) > 0).length;
+              return (
+                <button
+                  onClick={() => setSoloConSugerido((v) => !v)}
+                  disabled={nSugeridos === 0}
+                  title={nSugeridos === 0 ? 'No hay SKUs con sugerido' : 'Mostrar solo SKUs con sugerido de compra > 0'}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 12px', borderRadius: 999, height: 32,
+                    background: soloConSugerido ? theme.accent : (isDark ? 'rgba(10,132,255,0.10)' : 'rgba(0,122,255,0.06)'),
+                    color: soloConSugerido ? '#FFF' : theme.accent,
+                    border: `1px solid ${soloConSugerido ? theme.accent : (isDark ? 'rgba(10,132,255,0.20)' : 'rgba(0,122,255,0.15)')}`,
+                    fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, letterSpacing: '-0.005em',
+                    cursor: nSugeridos === 0 ? 'not-allowed' : 'pointer',
+                    opacity: nSugeridos === 0 ? 0.45 : 1,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {soloConSugerido ? '✓ ' : ''}Solo con sugerido
+                  <span style={{ opacity: .8, fontWeight: 500 }}>({nSugeridos})</span>
+                </button>
+              );
+            })()}
+
+            {/* Botón · agregar todos al export */}
+            {puedeEditarSol && (() => {
+              const nSugeridos = rowsAll.filter((r) => Number(r.sugerido || 0) > 0).length;
+              return (
+                <button
+                  onClick={agregarTodosSugeridos}
+                  disabled={nSugeridos === 0 || agregandoTodos}
+                  title={nSugeridos === 0 ? 'No hay SKUs con sugerido' : `Agregar ${nSugeridos} SKUs sugeridos al export activo`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 12px', borderRadius: 999, height: 32,
+                    background: nSugeridos === 0 ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)') : theme.green,
+                    color: nSugeridos === 0 ? theme.textMuted : '#FFF',
+                    border: 0,
+                    fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, letterSpacing: '-0.005em',
+                    cursor: (nSugeridos === 0 || agregandoTodos) ? 'not-allowed' : 'pointer',
+                    opacity: (nSugeridos === 0 || agregandoTodos) ? 0.55 : 1,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {agregandoTodos ? '⏳ Agregando…' : `＋ Agregar todos al export (${nSugeridos})`}
+                </button>
+              );
+            })()}
 
             <span style={{ marginLeft: 'auto', fontSize: 11, color: theme.textMuted, fontFamily: 'SF Mono, ui-monospace, monospace' }}>
               <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rowsOrdenados.length}</strong>
