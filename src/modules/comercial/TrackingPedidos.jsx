@@ -200,9 +200,49 @@ export default function TrackingPedidos() {
 
   useEffect(() => { cargar(); }, []);
 
+  // Map guias del ERP por factura — se declara temprano porque enriquecidas
+  // lo usa para colgar oc.hasErpMatch y envio.erp con guía/paquetería/fecha real.
+  const guiasPorFactura = useMemo(() => {
+    const m = {};
+    for (const g of guiasErp) {
+      if (g.movid) m[String(g.movid).trim()] = g;
+    }
+    return m;
+  }, [guiasErp]);
+
   const enriquecidas = useMemo(() => ocs.map((oc) => {
     const skus = skusPorOc[oc.id] || [];
-    const envios = enviosPorOc[oc.id] || [];
+    const enviosRaw = enviosPorOc[oc.id] || [];
+    // Enriquecimiento por envío: cuelga envio.erp cuando hay match por
+    // numero_factura contra guias_erp. Si el envío no tiene fecha_surtida/
+    // fecha_entregada/guia/paqueteria pero el ERP sí, se exponen como
+    // envio.fecha_surtida_erp / envio.fecha_entregada_erp / envio.guia_erp
+    // (fallback readonly, no sobreescribe el registro real).
+    const envios = enviosRaw.map((e) => {
+      const g = e.numero_factura ? guiasPorFactura[String(e.numero_factura).trim()] : null;
+      if (!g) return { ...e, erp: null, erpFallback: {} };
+      // Fallbacks: usar ERP cuando el campo local está vacío. Guardo `erpFallback`
+      // con true por campo para poder mostrar pill "ERP" en el render.
+      const erpFallback = {
+        fecha_surtida:   !e.fecha_surtida   && !!g.fecha_envio,
+        fecha_entregada: !e.fecha_entregada && !!g.fecha_recepcion,
+        guia_rastreo:    !e.guia_rastreo    && !!g.guias,
+        paqueteria:      !e.paqueteria      && !!g.forma_envio,
+      };
+      return {
+        ...e,
+        erp: g,
+        erpFallback,
+        fecha_surtida:   e.fecha_surtida   || g.fecha_envio || null,
+        fecha_entregada: e.fecha_entregada || g.fecha_recepcion || null,
+        guia_rastreo:    e.guia_rastreo    || g.guias || null,
+        paqueteria:      e.paqueteria      || g.forma_envio || null,
+      };
+    });
+    // También hago match a nivel OC por numero_factura de la OC (algunas capturas
+    // ponen la factura en el header, no en el envío)
+    const ocErp = oc.numero_factura ? guiasPorFactura[String(oc.numero_factura).trim()] : null;
+    const hasErpMatch = !!ocErp || envios.some((e) => e.erp);
     const piezasOrd = skus.reduce((s, x) => s + (Number(x.cantidad_ordenada) || 0), 0);
     const monto = skus.reduce((s, x) => s + (Number(x.cantidad_ordenada) || 0) * (Number(x.precio_unitario) || 0), 0);
     const surtidoPorSku = {};
@@ -221,8 +261,10 @@ export default function TrackingPedidos() {
       ...oc, skus, envios, surtidoPorSku,
       piezasOrd, piezasSur, monto, fillRate, etapa, ultimaFecha, diasSinAvance,
       atrasada: etapa && etapa !== 'entregada' && diasSinAvance != null && diasSinAvance > UMBRAL_DIAS_ALERTA,
+      erp: ocErp,
+      hasErpMatch,
     };
-  }), [ocs, skusPorOc, enviosPorOc, envioSkusPorEnvio]);
+  }), [ocs, skusPorOc, enviosPorOc, envioSkusPorEnvio, guiasPorFactura]);
 
   const filas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -363,19 +405,12 @@ export default function TrackingPedidos() {
     });
   }, [enriquecidas]);
 
-  // ═════ ERP · guias_erp mapping e insights ═════
+  // ═════ ERP · insights + facturas sin OC ═════
   const ERP_CLIENTE_A_KEY = {
     'API GLOBAL': 'digitalife',
     'DICOTECH MAYORISTA DE TECNOLOGIA': 'dicotech',
     'PC ONLINE': 'pcel',
   };
-  const guiasPorFactura = useMemo(() => {
-    const m = {};
-    for (const g of guiasErp) {
-      if (g.movid) m[String(g.movid).trim()] = g;
-    }
-    return m;
-  }, [guiasErp]);
 
   const insightsErp = useMemo(() => {
     let facEnv = [], envRec = [], onTime = 0, total = 0;
@@ -1135,9 +1170,13 @@ function DetalleOC({ oc, theme, P, isDark, envioAbierto, setEnvioAbierto, envioS
                         <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}` }}>
                           <span style={{ background: `${almCol}22`, color: almCol, padding: '2px 8px', borderRadius: 999, fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{e.almacen_origen}</span>
                         </td>
-                        <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.textMuted, fontSize: 10.5 }}>{fmtDate(e.fecha_surtida)}</td>
+                        <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.textMuted, fontSize: 10.5 }}>
+                          {fmtDate(e.fecha_surtida)}
+                          {e.erpFallback?.fecha_surtida && <ErpPill P={P} />}
+                        </td>
                         <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.textMuted, fontSize: 10.5 }}>
                           {e.fecha_entregada ? fmtDate(e.fecha_entregada) : <span style={{ color: theme.textMuted, fontStyle: 'italic' }}>Pendiente</span>}
+                          {e.erpFallback?.fecha_entregada && <ErpPill P={P} />}
                         </td>
                         <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, fontSize: 10.5 }}>
                           {e.metodo_envio === 'unidad_propia' && (
@@ -1146,10 +1185,20 @@ function DetalleOC({ oc, theme, P, isDark, envioAbierto, setEnvioAbierto, envioS
                           {e.metodo_envio === 'paqueteria' && (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: P.purple }}><Package style={{ width: 11, height: 11 }} strokeWidth={2} /> {e.paqueteria || 'Paquetería'}</span>
                           )}
-                          {!e.metodo_envio && <span style={{ color: theme.textMuted, fontStyle: 'italic' }}>—</span>}
+                          {!e.metodo_envio && e.paqueteria && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: P.purple }}><Package style={{ width: 11, height: 11 }} strokeWidth={2} /> {e.paqueteria}</span>
+                          )}
+                          {!e.metodo_envio && !e.paqueteria && <span style={{ color: theme.textMuted, fontStyle: 'italic' }}>—</span>}
+                          {e.erpFallback?.paqueteria && <ErpPill P={P} />}
                         </td>
-                        <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>{e.numero_factura || '—'}</td>
-                        <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>{e.guia_rastreo || '—'}</td>
+                        <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
+                          {e.numero_factura || '—'}
+                          {e.erp && <ErpPill P={P} title={`${e.erp.mov} ${e.erp.movid} · ${e.erp.cliente_nombre}`} />}
+                        </td>
+                        <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
+                          {e.guia_rastreo || '—'}
+                          {e.erpFallback?.guia_rastreo && <ErpPill P={P} />}
+                        </td>
                         <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}`, textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtInt(pzs)}</td>
                         <td style={{ padding: '7px 8px', borderTop: `1px solid ${theme.border}` }}>
                           {e.requiere_cita ? (
@@ -2179,11 +2228,22 @@ function PipelineHorizontal({ enriquecidas, tiemposPorCliente, theme, P, onClick
                   const leftPct = Math.min(96, Math.max(1, (dias / maxDias) * 100));
                   const crit = isCrit(oc);
                   const color = crit ? P.red : (COLOR_ETAPA[oc.etapa] || COLOR_ETAPA.recibida);
+                  // Datos ERP para tooltip enriquecido
+                  const envioConErp = (oc.envios || []).find((e) => e.erp);
+                  const guiaCorta = envioConErp?.erp?.guias
+                    ? String(envioConErp.erp.guias).replace(/[\s\r\n]+/g, '').slice(-6)
+                    : null;
+                  const paq = envioConErp?.erp?.forma_envio || oc.erp?.forma_envio;
+                  const tt = [
+                    `${oc.numero_oc || '—'} · ${dias}d · ${ETAPA_LABEL[oc.etapa] || oc.etapa}`,
+                    oc.hasErpMatch && guiaCorta ? `Guía ERP …${guiaCorta}` : null,
+                    paq ? `Paquetería: ${paq}` : null,
+                  ].filter(Boolean).join('\n');
                   return (
                     <div
                       key={oc.id}
                       onClick={(e) => { e.stopPropagation(); onClickOc && onClickOc(oc); }}
-                      title={`${oc.numero_oc || '—'} · ${dias}d · ${ETAPA_LABEL[oc.etapa] || oc.etapa}`}
+                      title={tt}
                       style={{
                         position: 'absolute', left: `${leftPct}%`, top: '50%', transform: 'translate(-50%, -50%)',
                         background: color, color: '#FFF',
@@ -2199,6 +2259,12 @@ function PipelineHorizontal({ enriquecidas, tiemposPorCliente, theme, P, onClick
                       onMouseLeave={(e) => { e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)'; }}
                     >
                       {dias}d{crit && ' ⚠'}
+                      {oc.hasErpMatch && (
+                        <span style={{
+                          background: 'rgba(255,255,255,0.28)', padding: '0 4px', borderRadius: 4,
+                          fontSize: 8.5, fontWeight: 700, letterSpacing: '.05em',
+                        }}>{guiaCorta ? `✈ ${guiaCorta}` : 'ERP'}</span>
+                      )}
                     </div>
                   );
                 })}
@@ -2312,6 +2378,9 @@ function PipeLaneDetalle({ cliente, theme, P, onClickOc }) {
       )}
       {top.map((oc) => {
         const dias = oc.fecha_recibida ? Math.floor((Date.now() - new Date(oc.fecha_recibida).getTime()) / 86400000) : 0;
+        const envioConErp = (oc.envios || []).find((e) => e.erp);
+        const guia = envioConErp?.erp?.guias ? String(envioConErp.erp.guias).replace(/[\s\r\n]+/g, '') : null;
+        const paq = envioConErp?.erp?.forma_envio;
         return (
           <div key={oc.id}
             onClick={() => onClickOc && onClickOc(oc)}
@@ -2325,11 +2394,14 @@ function PipeLaneDetalle({ cliente, theme, P, onClickOc }) {
             onMouseEnter={(e) => { e.currentTarget.style.background = `${P.accent}08`; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = theme.surface; }}
           >
-            <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: theme.text }}>
+            <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: theme.text, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               {oc.numero_oc || '— OC'}
+              {oc.hasErpMatch && <ErpPill P={P} />}
             </span>
             <span style={{ color: theme.textMuted, fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {ETAPA_LABEL[oc.etapa] || '—'} · {oc.piezasOrd} pz
+              {paq && ` · ${paq}`}
+              {guia && ` · ✈ …${guia.slice(-6)}`}
             </span>
             <span style={{
               padding: '2px 7px', borderRadius: 999,
@@ -2344,6 +2416,22 @@ function PipeLaneDetalle({ cliente, theme, P, onClickOc }) {
         );
       })}
     </div>
+  );
+}
+
+// Pill "ERP" reutilizable — marca que ese campo se enriqueció desde guias_erp.
+function ErpPill({ P, title }) {
+  const green = P.green || '#34C759';
+  return (
+    <span
+      title={title || 'Dato tomado del ERP (hoja Guias)'}
+      style={{
+        display: 'inline-block', marginLeft: 5, verticalAlign: 'middle',
+        background: `${green}22`, color: green,
+        fontSize: 8.5, fontWeight: 700, letterSpacing: '.05em',
+        padding: '1px 5px', borderRadius: 4,
+        fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+      }}>ERP</span>
   );
 }
 
