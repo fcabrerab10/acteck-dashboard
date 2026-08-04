@@ -391,6 +391,101 @@ https://acteck-dashboard.vercel.app/  → Administración Interna → Actividad 
   return { dia, mesEval, anioEval, pendientes: pendientes.length, enviados };
 }
 
+// ═════════════════════ TASK · Recordatorio tracking pedidos ═════════════════════
+// Detecta OCs abiertas cuyo updated_at es > 24h y le manda email a Karolina
+// (con Cc a Fernando) listando cuántas necesitan atención.
+async function taskRecordatorioTracking() {
+  const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
+  const cutoffIso = new Date(cutoffMs).toISOString();
+
+  // 1. OCs desactualizadas > 24h (sin importar estado por ahora)
+  const ocRes = await fetch(
+    `${SB_URL}/rest/v1/oc_clientes?select=id,cliente_key,numero_oc,numero_oc_cliente,fecha_recibida,updated_at,monto_total&updated_at=lt.${cutoffIso}&order=updated_at.asc`,
+    { headers: { apikey: SRK, Authorization: 'Bearer ' + SRK } }
+  );
+  const ocs = await ocRes.json();
+  if (!Array.isArray(ocs) || ocs.length === 0) {
+    return { skip: 'No hay OCs desactualizadas', cutoff: cutoffIso };
+  }
+
+  // 2. Envíos para saber cuáles OCs ya están 100% entregadas (esas no cuentan)
+  const ids = ocs.map((o) => o.id);
+  const envRes = await fetch(
+    `${SB_URL}/rest/v1/oc_envios?select=oc_id,fecha_entregada&oc_id=in.(${ids.join(',')})`,
+    { headers: { apikey: SRK, Authorization: 'Bearer ' + SRK } }
+  );
+  const envios = await envRes.json();
+  const envPorOc = {};
+  for (const e of (envios || [])) {
+    if (!envPorOc[e.oc_id]) envPorOc[e.oc_id] = [];
+    envPorOc[e.oc_id].push(e);
+  }
+
+  const pendientes = ocs.filter((oc) => {
+    const evs = envPorOc[oc.id] || [];
+    // Se considera "pendiente" si no tiene envíos O algún envío no tiene fecha_entregada
+    if (evs.length === 0) return true;
+    return evs.some((e) => !e.fecha_entregada);
+  });
+
+  if (pendientes.length === 0) {
+    return { skip: 'Todas las desactualizadas ya están entregadas', total: ocs.length };
+  }
+
+  // 3. Enviar email
+  const SMTP_USER = process.env.SMTP_USER;
+  const SMTP_PASS = process.env.SMTP_PASS;
+  const TO_KAROLINA = process.env.SMTP_TO_KAROLINA || 'karolina.veliz@acteck.com';
+  const CC_FERNANDO = process.env.SMTP_TO_FERNANDO || 'fernando.cabrera@acteck.com';
+  if (!SMTP_USER || !SMTP_PASS) {
+    return { error: 'SMTP_USER y SMTP_PASS no configurados', pendientes: pendientes.length };
+  }
+
+  const { default: nodemailer } = await import('nodemailer');
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com', port: 465, secure: true,
+    auth: { user: SMTP_USER, pass: SMTP_PASS.replace(/\s+/g, '') },
+  });
+
+  const NOMBRE = { digitalife: 'Digitalife', pcel: 'PCEL', dicotech: 'Dicotech' };
+  const fmtMX = (n) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Number(n) || 0);
+  const diasSince = (iso) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+
+  const lista = pendientes.slice(0, 20).map((oc) => {
+    const d = diasSince(oc.updated_at);
+    return `  · ${(NOMBRE[oc.cliente_key] || oc.cliente_key).padEnd(11)} ${(oc.numero_oc || '—').padEnd(14)} · sin update hace ${d}d · ${fmtMX(oc.monto_total)}`;
+  }).join('\n');
+  const extra = pendientes.length > 20 ? `\n  ... y ${pendientes.length - 20} más` : '';
+
+  const asunto = `⏰ ${pendientes.length} OC${pendientes.length === 1 ? '' : 's'} de tracking sin actualizar +1 día`;
+  const cuerpo = `Karolina,
+
+Estas OCs del Tracking Pedidos llevan más de 24h sin cambios en el dashboard.
+Revisa si alguna ya avanzó y actualiza la fecha correspondiente (factura, envío, entrega):
+
+${lista}${extra}
+
+Total: ${pendientes.length} pendientes.
+
+Entra al dashboard:
+https://acteck-dashboard.vercel.app/  →  Comercial  →  Tracking Pedidos
+
+— Dashboard Acteck (recordatorio automático)`;
+
+  try {
+    const info = await transporter.sendMail({
+      from: `"Dashboard Acteck" <${SMTP_USER}>`,
+      to: TO_KAROLINA,
+      cc: CC_FERNANDO,
+      subject: asunto,
+      text: cuerpo,
+    });
+    return { pendientes: pendientes.length, msg_id: info.messageId, muestra: pendientes.slice(0, 5).map((o) => o.numero_oc) };
+  } catch (e) {
+    return { error: e.message, pendientes: pendientes.length };
+  }
+}
+
 export default async function handler(req, res) {
   // CRON_SECRET es OBLIGATORIO. Si no está configurado, el endpoint rechaza todo.
   // Vercel Cron manda `authorization: Bearer <CRON_SECRET>` automáticamente
@@ -410,10 +505,12 @@ export default async function handler(req, res) {
       result = await taskActualizarFillRates();
     } else if (task === 'recordatorio-eval') {
       result = await taskRecordatorioEvaluacion();
+    } else if (task === 'recordatorio-tracking') {
+      result = await taskRecordatorioTracking();
     } else {
       return res.status(400).json({
         error: 'task inválido',
-        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval',
+        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking',
       });
     }
     if (result.status && result.error) return res.status(result.status).json(result);

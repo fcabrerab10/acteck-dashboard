@@ -488,12 +488,12 @@ export default function TrackingPedidos() {
         </div>
       </div>
 
-      {/* ═════ Métricas de tiempo por etapa (rings Apple Fitness) ═════ */}
-      <MetricasRings
-        metricas={metricas}
-        expandida={etapaExpandida}
-        onExpand={(k) => setEtapaExpandida((cur) => (cur === k ? null : k))}
+      {/* ═════ Pipeline horizontal · OCs en vivo por cliente ═════ */}
+      <PipelineHorizontal
+        enriquecidas={enriquecidas}
+        tiemposPorCliente={tiemposPorCliente}
         theme={theme} P={P}
+        onClickOc={(oc) => setOcAbierta(oc.id)}
       />
 
       {/* ═════ Chart tiempos por etapa ═════ */}
@@ -1938,6 +1938,282 @@ function DrillEmpty({ theme, children }) {
   return (
     <div style={{ padding: '12px 4px', fontSize: 11, color: theme.textMuted, fontFamily: TYPO.fontText, textAlign: 'center' }}>
       {children}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  PIPELINE HORIZONTAL — cada OC como pill posicionada por días
+// ═══════════════════════════════════════════════════════════════════
+function PipelineHorizontal({ enriquecidas, tiemposPorCliente, theme, P, onClickOc }) {
+  const [expanded, setExpanded] = React.useState(null); // clienteKey
+  const abiertas = React.useMemo(
+    () => enriquecidas.filter((o) => o.etapa && o.etapa !== 'entregada'),
+    [enriquecidas]
+  );
+  const maxDias = React.useMemo(() => {
+    let m = 20;
+    for (const o of abiertas) {
+      const d = o.fecha_recibida ? Math.floor((Date.now() - new Date(o.fecha_recibida).getTime()) / 86400000) : 0;
+      if (d > m) m = d;
+    }
+    return Math.min(45, Math.max(20, m + 2));
+  }, [abiertas]);
+
+  const COLOR_ETAPA = {
+    cotizacion_solicitada: P.indigo || '#5856D6',
+    cotizacion_enviada:    P.purple || '#AF52DE',
+    recibida:              P.accent || '#007AFF',
+    procesada:             P.teal   || '#5AC8FA',
+    surtida:               P.orange || '#FF9500',
+    entregada:             P.green  || '#34C759',
+  };
+  const isCrit = (o) => (o.diasSinAvance != null && o.diasSinAvance > 15) || (o.fecha_recibida && (Date.now() - new Date(o.fecha_recibida).getTime()) / 86400000 > 15);
+
+  const porCliente = CLIENTES.map((c) => {
+    const list = abiertas.filter((o) => o.cliente_key === c.key)
+      .sort((a, b) => (b.diasSinAvance || 0) - (a.diasSinAvance || 0));
+    const tp = tiemposPorCliente.find((t) => t.clienteKey === c.key) || {};
+    return { ...c, ocs: list, tiempos: tp };
+  });
+
+  const critAll = abiertas.filter(isCrit);
+
+  return (
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
+      padding: '14px 18px 12px', fontFamily: TYPO.fontText,
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>
+            Pipeline en vivo
+          </h4>
+          <span style={{ fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+            {abiertas.length} OCs abiertas · click en cliente para detalle
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: theme.textMuted, flexWrap: 'wrap' }}>
+          <PipeLegend color={COLOR_ETAPA.recibida} label="Recibida" />
+          <PipeLegend color={COLOR_ETAPA.procesada} label="Procesada" />
+          <PipeLegend color={COLOR_ETAPA.surtida} label="Surtida" />
+          <PipeLegend color={P.red} label="Crítica +15d" />
+        </div>
+      </div>
+
+      {/* Lanes */}
+      <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '0 12px' }}>
+        {porCliente.map((c) => {
+          const isOpen = expanded === c.key;
+          return (
+            <React.Fragment key={c.key}>
+              {/* Label del lane (click para expandir) */}
+              <div
+                onClick={() => setExpanded(isOpen ? null : c.key)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '8px 0', cursor: 'pointer',
+                  color: theme.text, fontSize: 12, fontWeight: 500,
+                  borderBottom: `1px dashed ${theme.divider || theme.border}`,
+                }}
+              >
+                <ChevronRight style={{
+                  width: 11, height: 11, color: P.accent,
+                  transform: isOpen ? 'rotate(90deg)' : 'none',
+                  transition: 'transform 160ms',
+                }} strokeWidth={2.4} />
+                <span style={{
+                  width: 20, height: 20, borderRadius: 6, background: clienteColor(theme, c.key), color: '#FFF',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 9,
+                }}>{c.letra}</span>
+                <span style={{ flex: 1 }}>{c.nombre}</span>
+                <span style={{
+                  background: theme.bg, padding: '1px 7px', borderRadius: 6,
+                  fontSize: 10, fontFamily: '"SF Mono", ui-monospace, monospace',
+                  color: theme.textMuted, fontWeight: 600,
+                }}>{c.ocs.length}</span>
+              </div>
+              {/* Track de OCs */}
+              <div style={{
+                position: 'relative', height: 40, borderBottom: `1px dashed ${theme.divider || theme.border}`,
+              }}>
+                {c.ocs.length === 0 && (
+                  <span style={{
+                    position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
+                    fontSize: 10.5, color: theme.textMuted, fontStyle: 'italic',
+                  }}>Sin OCs abiertas</span>
+                )}
+                {c.ocs.map((oc) => {
+                  const dias = oc.fecha_recibida ? Math.floor((Date.now() - new Date(oc.fecha_recibida).getTime()) / 86400000) : 0;
+                  const leftPct = Math.min(96, Math.max(1, (dias / maxDias) * 100));
+                  const crit = isCrit(oc);
+                  const color = crit ? P.red : (COLOR_ETAPA[oc.etapa] || COLOR_ETAPA.recibida);
+                  return (
+                    <div
+                      key={oc.id}
+                      onClick={(e) => { e.stopPropagation(); onClickOc && onClickOc(oc); }}
+                      title={`${oc.numero_oc || '—'} · ${dias}d · ${ETAPA_LABEL[oc.etapa] || oc.etapa}`}
+                      style={{
+                        position: 'absolute', left: `${leftPct}%`, top: '50%', transform: 'translate(-50%, -50%)',
+                        background: color, color: '#FFF',
+                        borderRadius: 999, padding: '3px 8px', height: 22,
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        fontSize: 10.5, fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600,
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                        boxShadow: crit ? `0 0 0 3px ${P.red}33` : '0 1px 2px rgba(0,0,0,0.15)',
+                        animation: crit ? 'pipePulse 2s ease-in-out infinite' : 'none',
+                        transition: 'transform 120ms',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.08)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)'; }}
+                    >
+                      {dias}d{crit && ' ⚠'}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Expansión */}
+              {isOpen && (
+                <div style={{ gridColumn: '1 / -1', padding: '12px 4px 6px', animation: 'pipeExpand 240ms cubic-bezier(0.32, 0.72, 0, 1)' }}>
+                  <PipeLaneDetalle cliente={c} theme={theme} P={P} onClickOc={onClickOc} />
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+
+      {/* Scale */}
+      <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 12, marginTop: 10, paddingTop: 8, borderTop: `1px solid ${theme.border}` }}>
+        <div />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace', letterSpacing: '0.02em' }}>
+          <span>0d</span>
+          <span>{Math.round(maxDias * 0.25)}d</span>
+          <span>{Math.round(maxDias * 0.5)}d</span>
+          <span>{Math.round(maxDias * 0.75)}d</span>
+          <span>+{maxDias}d</span>
+        </div>
+      </div>
+
+      {/* Alerta zona crítica */}
+      {critAll.length > 0 && (
+        <div style={{
+          marginTop: 12, padding: '10px 14px', borderRadius: 10,
+          background: `${P.red}12`, border: `1px solid ${P.red}33`,
+          fontSize: 11, color: theme.text, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+        }}>
+          <AlertTriangle style={{ width: 13, height: 13, color: P.red }} strokeWidth={2.4} />
+          <strong style={{ color: P.red, fontWeight: 600 }}>{critAll.length} OC{critAll.length === 1 ? '' : 's'} en zona crítica</strong>
+          <span style={{ color: theme.textMuted }}>(+15d abiertas):</span>
+          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', color: theme.text }}>
+            {critAll.slice(0, 4).map((o) => o.numero_oc || `#${o.id}`).join(' · ')}
+            {critAll.length > 4 && ` · +${critAll.length - 4} más`}
+          </span>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes pipePulse { 0%,100% { box-shadow: 0 0 0 0 ${P.red}44; } 50% { box-shadow: 0 0 0 6px ${P.red}00; } }
+        @keyframes pipeExpand { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+      `}</style>
+    </div>
+  );
+}
+
+function PipeLegend({ color, label }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      <span style={{ width: 8, height: 8, borderRadius: 2, background: color, display: 'inline-block' }} />
+      {label}
+    </span>
+  );
+}
+
+function PipeLaneDetalle({ cliente, theme, P, onClickOc }) {
+  const t = cliente.tiempos || {};
+  const kpis = [
+    { label: 'Recibida → Procesada', val: t.rp, meta: METAS_DIAS.recepcion },
+    { label: 'Procesada → Envío',    val: t.ps, meta: METAS_DIAS.procesamiento },
+    { label: 'Envío → Entrega',      val: t.se, meta: METAS_DIAS.envio },
+    { label: 'Total E2E',            val: t.total, meta: METAS_DIAS.total },
+  ];
+  const top = cliente.ocs.slice(0, 5);
+  return (
+    <div style={{
+      background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12,
+      padding: '12px 14px',
+    }}>
+      {/* KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 14 }}>
+        {kpis.map((k) => {
+          const over = k.val != null && k.val > k.meta;
+          return (
+            <div key={k.label} style={{
+              background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10,
+              padding: '9px 11px',
+            }}>
+              <div style={{
+                fontSize: 9, fontWeight: 600, letterSpacing: '0.06em',
+                textTransform: 'uppercase', color: theme.textMuted, marginBottom: 4,
+              }}>{k.label}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                <span style={{
+                  fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.028em',
+                  color: over ? P.orange : (k.val != null ? theme.text : theme.textMuted),
+                }}>
+                  {k.val != null ? k.val.toFixed(1) : '—'}
+                </span>
+                <span style={{ fontSize: 10, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>d</span>
+                <span style={{ marginLeft: 'auto', fontSize: 9.5, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                  meta {k.meta}d
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {/* Top OCs más viejas */}
+      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 6 }}>
+        Top {top.length} más viejas
+      </div>
+      {top.length === 0 && (
+        <div style={{ fontSize: 11, color: theme.textMuted, padding: '8px 0', fontStyle: 'italic' }}>Sin OCs abiertas para este cliente</div>
+      )}
+      {top.map((oc) => {
+        const dias = oc.fecha_recibida ? Math.floor((Date.now() - new Date(oc.fecha_recibida).getTime()) / 86400000) : 0;
+        return (
+          <div key={oc.id}
+            onClick={() => onClickOc && onClickOc(oc)}
+            style={{
+              display: 'grid', gridTemplateColumns: '120px 1fr auto auto',
+              gap: 10, alignItems: 'center',
+              padding: '7px 10px', borderRadius: 8,
+              background: theme.surface, border: `1px solid ${theme.border}`,
+              marginBottom: 4, cursor: 'pointer', fontSize: 11.5,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = `${P.accent}08`; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = theme.surface; }}
+          >
+            <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: theme.text }}>
+              {oc.numero_oc || '— OC'}
+            </span>
+            <span style={{ color: theme.textMuted, fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {ETAPA_LABEL[oc.etapa] || '—'} · {oc.piezasOrd} pz
+            </span>
+            <span style={{
+              padding: '2px 7px', borderRadius: 999,
+              background: dias > 15 ? `${P.red}1E` : `${P.orange}1E`,
+              color: dias > 15 ? P.red : P.orange,
+              fontSize: 10, fontWeight: 700, fontFamily: '"SF Mono", ui-monospace, monospace',
+            }}>{dias}d</span>
+            <span style={{ color: theme.text, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+              {formatMXN(oc.monto || 0)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -11,6 +11,10 @@
     {
       "path": "/api/cron?task=recordatorio-eval",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron?task=recordatorio-tracking",
+      "schedule": "0 15 * * 1-5"
     }
   ]
 }

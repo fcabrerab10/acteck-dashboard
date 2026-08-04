@@ -13,6 +13,7 @@ import {
   puedeVerPestanaGlobal,
 } from '../lib/permisos';
 import { useTheme } from '../lib/themeContext';
+import { useTrackingPendientes, useTrackingToastAviso } from '../lib/trackingPendientes';
 import InstallPrompt from './InstallPrompt';
 
 // Mapping entre ids del menú y ids del schema de permisos globales
@@ -210,6 +211,13 @@ export default function Sidebar({ clienteActivo, paginaActiva, onNavegar, onCerr
 
   const puedeVerConfig  = puedeConfigurar(perfilUsuario);
   const puedeActualizar = puedeActualizarDatos(perfilUsuario);
+
+  // Tracking Pedidos — badge de OCs sin actualizar +24h.
+  // Solo lo activo para roles internos (los que tienen acceso al módulo).
+  const rol = perfilUsuario?.rol;
+  const puedeVerTracking = ['super_admin', 'admin', 'asistente'].includes(rol);
+  const { count: trackingPendientes } = useTrackingPendientes({ enabled: puedeVerTracking });
+  useTrackingToastAviso({ enabled: puedeVerTracking });
 
   return (
     <aside className="flex flex-col shrink-0"
@@ -558,6 +566,7 @@ function GrupoBloque({ grupo, expanded, toggle, clienteActivo, onNavegar, isActi
                 hint={item.hint}
                 active={isActiveGlobal(item.id)}
                 onClick={() => !item.disabled && onNavegar(null, item.id)}
+                badge={item.id === 'ordenesCompra' ? trackingPendientes : undefined}
               />
             );
           })}
@@ -629,7 +638,7 @@ function ClienteBloque({ clienteId, cfg, expanded, toggle, onNavegar, isActiveLe
 }
 
 // ────────── SidebarButton — pill Apple con spring + variantes por tema ──────────
-function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled, onClick, hint }) {
+function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled, onClick, hint, badge }) {
   const { theme } = useTheme();
   const [hover, setHover] = useState(false);
   const [pressed, setPressed] = useState(false);
@@ -687,6 +696,15 @@ function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled,
         transition: 'opacity 200ms, color 200ms',
       }} />}
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+      {badge != null && badge > 0 && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9,
+          background: '#FF3B30', color: '#FFF',
+          fontSize: 10, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+          boxShadow: '0 0 0 2px ' + (theme.sidebarBg || 'transparent'),
+        }}>{badge > 99 ? '99+' : badge}</span>
+      )}
       {hint && !active && (
         <span style={{
           fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em',
@@ -703,11 +721,11 @@ function SidebarButton({ icon: Icon, leading, label, trailing, active, disabled,
 }
 
 // ────────── NavItem — wrapper de SidebarButton ──────────
-function NavItem({ label, icon, active, disabled, hint, onClick }) {
+function NavItem({ label, icon, active, disabled, hint, onClick, badge }) {
   return (
     <SidebarButton
       icon={icon} label={label} active={active} disabled={disabled}
-      hint={hint} onClick={onClick}
+      hint={hint} onClick={onClick} badge={badge}
     />
   );
 }
