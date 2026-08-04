@@ -2275,8 +2275,24 @@ const PARSERS = {
   // Alimenta el auto-relleno de oc_envios en Tracking Pedidos: la key
   // de match es guias_erp.movid ↔ oc_envios.numero_factura.
   guiasErp(wb){
-    const sh = wb.Sheets['Guias'];
-    if (!sh) throw new Error('El archivo no tiene la hoja "Guias". Copia el reporte "Consulta de Guias por Factura" como hoja "Guias".');
+    // Nombre canónico: "Reporte Guías x Factura" — pero somos tolerantes a
+    // variantes (con/sin tilde, "Guias", "Consulta de Guias por Factura", etc).
+    // Fallback: detectar la primera hoja que tenga columna "Movid".
+    const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    let sheetName = wb.SheetNames.find((n) => norm(n).includes('guia'));
+    if (!sheetName) {
+      // Fallback: buscar la hoja con columna Movid en la primera fila
+      for (const n of wb.SheetNames) {
+        const sh = wb.Sheets[n];
+        if (!sh) continue;
+        const first = XLSX.utils.sheet_to_json(sh, { defval: null, range: 0 })[0];
+        if (first && Object.keys(first).some((k) => k.toLowerCase() === 'movid')) {
+          sheetName = n; break;
+        }
+      }
+    }
+    if (!sheetName) throw new Error(`No encontré la hoja de guías. Hojas del archivo: ${wb.SheetNames.join(' | ')}`);
+    const sh = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
     const toISOtz = (v) => {
       if (v == null || v === '') return null;
