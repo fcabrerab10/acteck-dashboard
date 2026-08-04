@@ -1184,9 +1184,20 @@ export default function ForecastClientesTab() {
   , [data.metadata]);
 
   const rowsFiltrados = useMemo(() => {
-    const q = busqueda.trim().toLowerCase();
+    // Búsqueda fuzzy · normaliza acentos, ignora guiones/puntos y hace
+    // match multi-token AND sobre: SKU, descripción, marca, proveedor y
+    // familia. Osea "monitor 27 sp270" encuentra el SKU aunque las palabras
+    // aparezcan en distinto orden, y "AC943154" matchea "AC-943154".
+    const normalize = (s) => String(s || '').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+    const tokens = normalize(busqueda).split(' ').filter(Boolean);
     return rowsAll.filter(r => {
-      if (q && !r.sku.toLowerCase().includes(q) && !r.descripcion.toLowerCase().includes(q)) return false;
+      if (tokens.length > 0) {
+        const haystack = normalize([r.sku, r.descripcion, r.marca, r.supplier, r.familia].join(' '));
+        if (!tokens.every((t) => haystack.includes(t))) return false;
+      }
       if (filtroSupplier !== 'todos' && r.supplier !== filtroSupplier) return false;
       if (filtroFamilia  !== 'todas' && r.familia  !== filtroFamilia)  return false;
       if (filtroCliente  !== 'todos' && (r.demMes[filtroCliente] || 0) <= 0) return false;
@@ -1468,7 +1479,7 @@ export default function ForecastClientesTab() {
             }}>
               <Search size={12} style={{ color: theme.textMuted }} />
               <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
-                placeholder="Buscar SKU, descripción, marca…"
+                placeholder="Buscar SKU · descripción · marca · proveedor · familia…"
                 style={{
                   border: 0, outline: 0, background: 'transparent', flex: 1,
                   fontFamily: TYPO.fontText, fontSize: 12, color: theme.text,
