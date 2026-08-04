@@ -157,6 +157,7 @@ export default function TrackingPedidos() {
   const [skusPorOc, setSkusPorOc] = useState({});
   const [enviosPorOc, setEnviosPorOc] = useState({});
   const [envioSkusPorEnvio, setEnvioSkusPorEnvio] = useState({});
+  const [guiasErp, setGuiasErp] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [clienteFiltro, setClienteFiltro] = useState('TODOS');
   const [estatusFiltro, setEstatusFiltro] = useState('abiertas');
@@ -171,11 +172,20 @@ export default function TrackingPedidos() {
 
   const cargar = async () => {
     setLoading(true);
-    const [ocsRes, skusRes, enviosRes, envioSkusRes] = await Promise.all([
+    // guias_erp puede ser grande (~13k filas), traigo solo los últimos 90 días
+    // de los clientes que interesan al tracking + límite alto por seguridad
+    const cutoffGuias = new Date(Date.now() - 90 * 86400000).toISOString();
+    const CLIENTES_ERP = ['API GLOBAL', 'DICOTECH MAYORISTA DE TECNOLOGIA', 'PC ONLINE'];
+    const [ocsRes, skusRes, enviosRes, envioSkusRes, guiasRes] = await Promise.all([
       supabase.from('oc_clientes').select('*').order('created_at', { ascending: false }),
       supabase.from('oc_clientes_skus').select('*'),
       supabase.from('oc_envios').select('*').order('numero_envio'),
       supabase.from('oc_envio_skus').select('*'),
+      supabase.from('guias_erp')
+        .select('movid, mov, cliente_nombre, orden_compra, referencia, fecha_emision, fecha_envio, fecha_recepcion, forma_envio, guias, persona_recibio, grupo_envio, nombre_agente')
+        .gte('fecha_emision', cutoffGuias)
+        .in('cliente_nombre', CLIENTES_ERP)
+        .limit(5000),
     ]);
     const skus = {}; for (const s of (skusRes.data || [])) { (skus[s.oc_id] ||= []).push(s); }
     const envios = {}; for (const e of (enviosRes.data || [])) { (envios[e.oc_id] ||= []).push(e); }
@@ -184,6 +194,7 @@ export default function TrackingPedidos() {
     setSkusPorOc(skus);
     setEnviosPorOc(envios);
     setEnvioSkusPorEnvio(esk);
+    setGuiasErp(guiasRes.data || []);
     setLoading(false);
   };
 
@@ -352,6 +363,94 @@ export default function TrackingPedidos() {
     });
   }, [enriquecidas]);
 
+  // ═════ ERP · guias_erp mapping e insights ═════
+  const ERP_CLIENTE_A_KEY = {
+    'API GLOBAL': 'digitalife',
+    'DICOTECH MAYORISTA DE TECNOLOGIA': 'dicotech',
+    'PC ONLINE': 'pcel',
+  };
+  const guiasPorFactura = useMemo(() => {
+    const m = {};
+    for (const g of guiasErp) {
+      if (g.movid) m[String(g.movid).trim()] = g;
+    }
+    return m;
+  }, [guiasErp]);
+
+  const insightsErp = useMemo(() => {
+    let facEnv = [], envRec = [], onTime = 0, total = 0;
+    const paqueterias = {}, porAlmacen = { GDL: [], MX: [], OTRO: [] };
+    for (const g of guiasErp) {
+      if (g.fecha_emision && g.fecha_envio) {
+        const d = (new Date(g.fecha_envio) - new Date(g.fecha_emision)) / 86400000;
+        if (d >= 0 && d < 60) {
+          facEnv.push(d);
+          const alm = (g.grupo_envio || '').toUpperCase();
+          const bucket = alm.includes('GUADALAJARA') ? 'GDL' : alm.includes('MEXICO') ? 'MX' : 'OTRO';
+          porAlmacen[bucket].push(d);
+        }
+      }
+      if (g.fecha_envio && g.fecha_recepcion) {
+        const d = (new Date(g.fecha_recepcion) - new Date(g.fecha_envio)) / 86400000;
+        if (d >= 0 && d < 60) {
+          envRec.push(d);
+          total++;
+          if (d <= 3) onTime++;
+        }
+      }
+      if (g.forma_envio) paqueterias[g.forma_envio] = (paqueterias[g.forma_envio] || 0) + 1;
+    }
+    const avg = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+    const paqSorted = Object.entries(paqueterias).sort((a, b) => b[1] - a[1]);
+    const paqTotal = paqSorted.reduce((s, [, c]) => s + c, 0);
+    return {
+      avgFacEnv: avg(facEnv),
+      avgFacEnvGDL: avg(porAlmacen.GDL),
+      avgFacEnvMX: avg(porAlmacen.MX),
+      avgEnvRec: avg(envRec),
+      onTimePct: total > 0 ? (onTime / total) * 100 : null,
+      recepConfirmPct: guiasErp.length > 0 ? (envRec.length / guiasErp.filter((g) => g.fecha_envio).length) * 100 : null,
+      paqueterias: paqSorted.slice(0, 6).map(([name, count]) => ({ name, count, pct: paqTotal ? (count / paqTotal) * 100 : 0 })),
+      totalGuias: guiasErp.length,
+    };
+  }, [guiasErp]);
+
+  // Facturas del ERP de nuestros 3 clientes sin OC/envío en tracking.
+  const facturasSinOc = useMemo(() => {
+    // Set de todas las facturas ya capturadas (en oc_clientes.numero_factura + oc_envios.numero_factura)
+    const facturasCap = new Set();
+    for (const oc of ocs) {
+      if (oc.numero_factura) facturasCap.add(String(oc.numero_factura).trim());
+    }
+    for (const arr of Object.values(enviosPorOc)) {
+      for (const e of arr) {
+        if (e.numero_factura) facturasCap.add(String(e.numero_factura).trim());
+      }
+    }
+    const HOY_MENOS_30 = Date.now() - 30 * 86400000;
+    return guiasErp
+      .filter((g) => g.mov === 'Factura')
+      .filter((g) => !facturasCap.has(String(g.movid).trim()))
+      .filter((g) => !g.fecha_emision || new Date(g.fecha_emision).getTime() > HOY_MENOS_30)
+      .sort((a, b) => new Date(b.fecha_emision || 0) - new Date(a.fecha_emision || 0))
+      .slice(0, 25);
+  }, [guiasErp, ocs, enviosPorOc]);
+
+  const ocsAutoActualizadas = useMemo(() => {
+    // Cuenta cuántas OCs tienen al menos un envío con match ERP que agrega data (fecha_envio o guia)
+    let n = 0;
+    for (const oc of ocs) {
+      const envios = enviosPorOc[oc.id] || [];
+      for (const e of envios) {
+        if (e.numero_factura) {
+          const g = guiasPorFactura[String(e.numero_factura).trim()];
+          if (g && (g.fecha_envio || g.guias || g.fecha_recepcion)) { n++; break; }
+        }
+      }
+    }
+    return n;
+  }, [ocs, enviosPorOc, guiasPorFactura]);
+
   // Copilot Operaciones · recomendaciones data-driven
   const recomendaciones = useMemo(() => {
     const recs = [];
@@ -495,6 +594,36 @@ export default function TrackingPedidos() {
         theme={theme} P={P}
         onClickOc={(oc) => setOcAbierta(oc.id)}
       />
+
+      {/* ═════ Sync ERP · banner + insights + facturas sin OC ═════ */}
+      {guiasErp.length > 0 && (
+        <>
+          <SyncErpBanner
+            totalGuias={insightsErp.totalGuias}
+            ocsAutoActualizadas={ocsAutoActualizadas}
+            theme={theme} P={P}
+          />
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 12 }}>
+            <InsightsErpCard insights={insightsErp} theme={theme} P={P} />
+            <FacturasSinOcCard
+              facturas={facturasSinOc}
+              erpMap={ERP_CLIENTE_A_KEY}
+              onCapturar={(g) => {
+                // Prellena Nueva OC con datos del ERP
+                setEditOc({
+                  cliente_key: ERP_CLIENTE_A_KEY[g.cliente_nombre] || 'digitalife',
+                  numero_oc_cliente: g.orden_compra || g.referencia || '',
+                  numero_factura: g.movid,
+                  fecha_recibida: g.fecha_emision,
+                  _erpPrefill: true,
+                });
+                setShowNuevaOC(true);
+              }}
+              theme={theme} P={P}
+            />
+          </div>
+        </>
+      )}
 
       {/* ═════ Chart tiempos por etapa ═════ */}
       {tiemposPorCliente.some((t) => t.total > 0) && (
@@ -2214,6 +2343,213 @@ function PipeLaneDetalle({ cliente, theme, P, onClickOc }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SYNC ERP · Banner + Insights + Facturas sin OC
+// ═══════════════════════════════════════════════════════════════════
+function SyncErpBanner({ totalGuias, ocsAutoActualizadas, theme, P }) {
+  const green = P.green || '#34C759';
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
+      borderRadius: 12,
+      background: `linear-gradient(90deg, ${green}18 0%, ${green}08 100%)`,
+      border: `1px solid ${green}55`,
+      fontSize: 11.5, fontFamily: TYPO.fontText, color: theme.text,
+    }}>
+      <div style={{
+        width: 24, height: 24, borderRadius: 6, background: green, color: '#fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700,
+      }}>✓</div>
+      <span style={{
+        background: green, color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 6px',
+        borderRadius: 6, letterSpacing: '.06em',
+      }}>ERP LIVE</span>
+      <span>
+        <strong style={{ color: green, fontWeight: 600 }}>{ocsAutoActualizadas} OCs</strong> auto-enriquecidas ·
+        <strong style={{ color: theme.text, fontWeight: 600 }}> {totalGuias.toLocaleString('es-MX')} guías</strong> del ERP en los últimos 90 días
+      </span>
+      <span style={{ marginLeft: 'auto', color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5 }}>
+        Fuente: Actualizaciones ERP → hoja Guias
+      </span>
+    </div>
+  );
+}
+
+function InsightsErpCard({ insights, theme, P }) {
+  const green = P.green || '#34C759';
+  const orange = P.orange || '#FF9500';
+  const red = P.red || '#FF3B30';
+  const azul = P.accent || '#007AFF';
+  const overSla = insights.onTimePct != null && insights.onTimePct < 85;
+  const fmt = (n) => n != null ? n.toFixed(1) : '—';
+  return (
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
+      padding: '14px 16px', fontFamily: TYPO.fontText,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+        <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>
+          Insights operativos
+        </h4>
+        <span style={{
+          background: green, color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 6px',
+          borderRadius: 6, letterSpacing: '.06em',
+        }}>DEL ERP</span>
+        <span style={{ fontSize: 10.5, color: theme.textMuted, marginLeft: 4 }}>
+          Calculado con {insights.totalGuias.toLocaleString('es-MX')} guías · últimos 90 días · API GLOBAL · DICOTECH · PC ONLINE
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
+        <div style={{ border: `1px solid ${theme.border}`, borderRadius: 10, padding: '10px 12px' }}>
+          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 4 }}>
+            ⌀ Factura → Envío
+          </div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 24, fontWeight: 600, letterSpacing: '-0.028em', color: green, lineHeight: 1 }}>
+            {fmt(insights.avgFacEnv)}<span style={{ fontSize: 12, color: theme.textMuted, marginLeft: 2, fontFamily: '"SF Mono", ui-monospace, monospace' }}>d</span>
+          </div>
+          <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 4 }}>
+            GDL {fmt(insights.avgFacEnvGDL)}d · MX {fmt(insights.avgFacEnvMX)}d
+          </div>
+        </div>
+        <div style={{ border: `1px solid ${theme.border}`, borderRadius: 10, padding: '10px 12px' }}>
+          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 4 }}>
+            ⌀ Envío → Recepción
+          </div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 24, fontWeight: 600, letterSpacing: '-0.028em', color: theme.text, lineHeight: 1 }}>
+            {fmt(insights.avgEnvRec)}<span style={{ fontSize: 12, color: theme.textMuted, marginLeft: 2, fontFamily: '"SF Mono", ui-monospace, monospace' }}>d</span>
+          </div>
+          <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 4 }}>
+            Solo {insights.recepConfirmPct != null ? insights.recepConfirmPct.toFixed(0) : '—'}% confirmadas
+          </div>
+        </div>
+        <div style={{ border: `1px solid ${theme.border}`, borderRadius: 10, padding: '10px 12px' }}>
+          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 4 }}>
+            On-time (SLA 3d)
+          </div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 24, fontWeight: 600, letterSpacing: '-0.028em', color: overSla ? orange : green, lineHeight: 1 }}>
+            {insights.onTimePct != null ? `${insights.onTimePct.toFixed(0)}%` : '—'}
+          </div>
+          <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 4 }}>Meta ≥85%</div>
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 8 }}>
+          Distribución de paqueterías
+        </div>
+        {insights.paqueterias.length === 0 && (
+          <div style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>Sin datos de paquetería aún</div>
+        )}
+        {insights.paqueterias.map((p, i) => {
+          const colors = [azul, P.purple || '#AF52DE', green, orange, P.teal || '#5AC8FA', red];
+          const color = colors[i] || azul;
+          return (
+            <div key={p.name} style={{ display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: 10, alignItems: 'center', padding: '4px 0', fontSize: 11 }}>
+              <span style={{ fontWeight: 500, color: theme.text }}>{p.name}</span>
+              <div style={{ height: 6, background: theme.bg, borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${p.pct}%`, background: color, borderRadius: 3, transition: 'width 400ms ease' }} />
+              </div>
+              <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted, textAlign: 'right' }}>
+                {p.count.toLocaleString('es-MX')} · {p.pct.toFixed(0)}%
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FacturasSinOcCard({ facturas, erpMap, onCapturar, theme, P }) {
+  const red = P.red || '#FF3B30';
+  const green = P.green || '#34C759';
+  const [expandido, setExpandido] = React.useState(false);
+  const visibles = expandido ? facturas : facturas.slice(0, 5);
+  return (
+    <div style={{
+      background: `linear-gradient(180deg, ${red}0A 0%, ${theme.surface} 60%)`,
+      border: `1px solid ${red}44`, borderRadius: 14,
+      padding: '14px 16px', fontFamily: TYPO.fontText,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: 6, background: red, color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13,
+        }}>!</div>
+        <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', color: red, margin: 0 }}>
+          Facturas ERP sin OC en tracking
+        </h4>
+        <span style={{ marginLeft: 'auto', fontSize: 10.5, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+          últimos 30d · {facturas.length}
+        </span>
+      </div>
+      {facturas.length === 0 && (
+        <div style={{ fontSize: 11, color: theme.textMuted, padding: '12px 4px', textAlign: 'center', fontStyle: 'italic' }}>
+          ✓ Todas las facturas del ERP tienen OC capturada.
+        </div>
+      )}
+      {visibles.map((g) => {
+        const cliKey = erpMap[g.cliente_nombre] || '?';
+        const cliNombre = NOMBRE_CLIENTE[cliKey] || g.cliente_nombre;
+        const cliCol = clienteColor(theme, cliKey);
+        const fecha = g.fecha_emision ? new Date(g.fecha_emision).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '—';
+        return (
+          <div key={g.movid} style={{
+            display: 'grid', gridTemplateColumns: '90px 1fr 60px auto', gap: 8, alignItems: 'center',
+            padding: '7px 9px', borderRadius: 8,
+            background: theme.surface, border: `1px solid ${theme.border}`, marginBottom: 4,
+            fontSize: 11,
+          }}>
+            <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: red, fontSize: 10.5 }}>
+              {g.movid}
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+              <span style={{
+                width: 16, height: 16, borderRadius: 4, background: cliCol, color: '#fff',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, flex: '0 0 auto',
+              }}>{cliNombre.slice(0, 2)}</span>
+              <span style={{ fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {cliNombre}
+              </span>
+              {g.orden_compra && (
+                <span style={{ color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {g.orden_compra}
+                </span>
+              )}
+            </span>
+            <span style={{ color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10 }}>{fecha}</span>
+            <button
+              onClick={() => onCapturar(g)}
+              style={{
+                background: green, color: '#fff', border: 0, padding: '3px 9px',
+                borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#248A3D'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = green; }}
+            >
+              ＋ Crear
+            </button>
+          </div>
+        );
+      })}
+      {facturas.length > 5 && (
+        <button
+          onClick={() => setExpandido(!expandido)}
+          style={{
+            width: '100%', padding: '6px 0', marginTop: 4,
+            background: 'transparent', border: 0, color: theme.textMuted,
+            fontSize: 10.5, cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          {expandido ? '↑ Ver menos' : `↓ Ver ${facturas.length - 5} más`}
+        </button>
+      )}
     </div>
   );
 }

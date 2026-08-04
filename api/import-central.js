@@ -43,6 +43,8 @@ const ALLOWED = {
   catalogo_articulos:   'articulo',
   // Fase 4 · overrides por SKU del sugerido de compra
   sku_config:           'sku',
+  // Guías por factura del ERP · alimenta auto-relleno de Tracking Pedidos
+  guias_erp:            'mov,movid',
 };
 
 export default async function handler(req, res) {
