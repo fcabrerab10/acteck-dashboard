@@ -220,10 +220,11 @@ const SOURCES = [
   { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo único Master Embarques.xlsx con 7 hojas: histórico POs (2026, 2025, 2024, 2022-2023) → embarques_compras; Programación Arribos (logística por contenedor) → programacion_arribos; SN (series generadas por PO/SKU) → series_generadas; Proveedores (catálogo canónico) → proveedores_master. Upsert de embarques por (PO, CODIGO, CONTENEDOR) — soporta POs partidas en varios shipments. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx',
     cronEndpoint:'/api/cron?task=sync-master-embarques',
     combined: [
-      { table:'embarques_compras',    onConflict:'po,codigo,contenedor', parser:'masterEmbarques',   label:'Histórico embarques (4 hojas anuales)' },
-      { table:'programacion_arribos', onConflict:'contenedor',            parser:'masterProgArribos', label:'Programación de arribos (por contenedor)' },
-      { table:'series_generadas',     onConflict:'po,sku',                parser:'masterSN',          label:'Números de serie (SN por PO/SKU)' },
-      { table:'proveedores_master',   onConflict:'codigo,articulo',       parser:'masterProveedores', label:'Catálogo de proveedores' },
+      { table:'embarques_compras',    onConflict:'po,codigo,contenedor', parser:'masterEmbarques',        label:'Histórico embarques (4 hojas anuales)' },
+      { table:'programacion_arribos', onConflict:'contenedor',            parser:'masterProgArribos',      label:'Programación de arribos (por contenedor)' },
+      { table:'series_generadas',     onConflict:'po,sku',                parser:'masterSN',               label:'Números de serie (SN por PO/SKU)' },
+      { table:'proveedores_master',   onConflict:'codigo,articulo',       parser:'masterProveedores',      label:'Catálogo de proveedores (rows 1-58)' },
+      { table:'catalogo_articulos',   onConflict:'articulo',              parser:'masterCatalogoArticulos', label:'Catálogo maestro de artículos (~10K SKUs)' },
     ],
   },
   { id:'estados-resultados', grupo:'globales', tipo:'mes', statusKey:'estados_resultados', title:'Estado de Resultados (P&L)', desc:'Cierres mensuales/trimestrales del P&L (ej. "Cierre 1Q 2026.xlsx", "Cierre Diciembre 2025.xlsx"). Lee la hoja "Estado de Resultados" y carga sólo los meses con valores. No borra meses previos; upsert por (razón social, año, mes, cuenta).', file:'Cierre <período>.xlsx', table:'estados_resultados', onConflict:'razon_social,anio,mes,cuenta_norm', parser:'estadosResultados' },
@@ -1489,9 +1490,11 @@ const PARSERS = {
       };
     }).filter(Boolean);
   },
-  // "Proveedores" del Master Embarques — catálogo canónico proveedor↔artículo.
-  // ~10K filas. Unique por (codigo, articulo). El Excel tiene una col vacía
-  // en índice 3 — se ignora.
+  // "Proveedores" del Master Embarques — bi-modal:
+  //   · Rows 1-58: proveedores con codigo + codigo_intelisis + articulo
+  //     asociado. → proveedores_master
+  //   · Rows 59+ (~10K): catálogo maestro de artículos con SKU + descripción
+  //     (codigo NULL, articulo poblado). → catalogo_articulos
   masterProveedores(wb){
     const sh = wb.Sheets['Proveedores'];
     if (!sh) return [];
@@ -1500,6 +1503,7 @@ const PARSERS = {
       const obj = {}; for (const k of Object.keys(r)) obj[snake(k)] = r[k];
       const codigo = toInt(obj.codigo);
       const articulo = toStr(obj.articulo);
+      // Sólo las filas de PROVEEDOR (con codigo Y articulo).
       if (codigo == null || !articulo) return null;
       return {
         codigo,
@@ -1510,6 +1514,34 @@ const PARSERS = {
         isbn:              toStr(obj.isbn),
       };
     }).filter(Boolean);
+  },
+  // Catálogo maestro de artículos — misma hoja "Proveedores" pero rows 59+.
+  // Filas sin codigo de proveedor pero con articulo (SKU o número interno).
+  masterCatalogoArticulos(wb){
+    const sh = wb.Sheets['Proveedores'];
+    if (!sh) return [];
+    const rows = XLSX.utils.sheet_to_json(sh, { defval: null });
+    const seen = new Set();
+    const out = [];
+    for (const r of rows) {
+      const obj = {}; for (const k of Object.keys(r)) obj[snake(k)] = r[k];
+      const codigo = toInt(obj.codigo);
+      const articulo = toStr(obj.articulo);
+      if (!articulo) continue;
+      // Filas con codigo van a proveedores_master (aquí las salteamos).
+      if (codigo != null) continue;
+      // Dedup por articulo (PK) — el Excel puede tener el mismo SKU varias
+      // veces si hay múltiples registros o typos.
+      const key = articulo.trim().toUpperCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        articulo: articulo.trim(),
+        descripcion: toStr(obj.descripcion1),
+        isbn: toStr(obj.isbn),
+      });
+    }
+    return out;
   },
   // Roadmap (catálogo maestro) — Roadmap.xlsx / Hoja1
   // Layout: headers en fila 1, datos desde fila 2.

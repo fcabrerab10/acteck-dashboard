@@ -73,6 +73,11 @@ function useForecastData() {
     // fuente REAL de todos los clientes (Steren, Office Depot, DAP…)
     // usada en el drill del S&OP.
     facturacion: [],
+    // Fase 3 · logística por contenedor (hoja "Programación Arribos" del
+    // Master Embarques). Mapa contenedor → detalle logístico.
+    progArribos: [],
+    // Fase 3 · catálogo maestro de artículos para completar descripciones.
+    catalogoArticulos: [],
   });
 
   // Helper paginador (PostgREST corta a 1000)
@@ -131,9 +136,16 @@ function useForecastData() {
       fetchAll(() => supabase.from('facturacion_clientes')
         .select('sku, cliente_nombre, canal, anio, mes, piezas')
         .gte('anio', anioCorte)),
+      // Fase 3 · logística por contenedor (Master Embarques · hoja
+      // "Programación Arribos"). Enriquece los embarques en el drill.
+      supabase.from('programacion_arribos')
+        .select('contenedor, terminal, cita, arribo_almacen, linea_transportista, dias_demoras, cedis, reconocimiento_a, profepa'),
+      // Fase 3 · catálogo maestro de artículos — fallback de descripción
+      // cuando v_sku_metadata / roadmap no lo tienen.
+      fetchAll(() => supabase.from('catalogo_articulos').select('articulo, descripcion')),
     ]);
 
-    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes, facData] = queries;
+    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes, facData, paRes, catArtData] = queries;
 
     setState({
       loading: false,
@@ -150,6 +162,8 @@ function useForecastData() {
       reporteSkus:   rsRes.data   || [],
       cuotas:        cmRes.data   || [],
       facturacion:   facData      || [],
+      progArribos:   (paRes && paRes.data) || [],
+      catalogoArticulos: catArtData || [],
     });
   };
 
@@ -159,7 +173,19 @@ function useForecastData() {
 
 // ────────── Cálculo del forecast ──────────
 function calcularForecast(data, horizonteMeses) {
-  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques, reporteSkus, facturacion } = data;
+  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques, reporteSkus, facturacion, progArribos, catalogoArticulos } = data;
+
+  // Fase 3 · lookups de enriquecimiento.
+  const progByContainer = {};
+  (progArribos || []).forEach((p) => {
+    if (!p || !p.contenedor) return;
+    progByContainer[p.contenedor.trim()] = p;
+  });
+  const catalogoBySku = {};
+  (catalogoArticulos || []).forEach((c) => {
+    if (!c || !c.articulo) return;
+    catalogoBySku[c.articulo.trim().toUpperCase()] = c;
+  });
 
   // ── Demanda por cliente REAL desde facturacion_clientes (hoja "Venta Piezas") ──
   // Agrupa: sku → cliente_nombre → { canal, mensual: {"YYYY-M": piezas} }
@@ -394,7 +420,13 @@ function calcularForecast(data, horizonteMeses) {
 
     // Tránsito que cae dentro del horizonte
     const horizonteLimite = new Date(hoy); horizonteLimite.setMonth(horizonteLimite.getMonth() + horizonteMeses);
-    const embarques = Array.isArray(tra?.embarques_detalle) ? tra.embarques_detalle : [];
+    const embarquesBase = Array.isArray(tra?.embarques_detalle) ? tra.embarques_detalle : [];
+    // Enriquecer cada embarque con la logística por contenedor (Fase 3).
+    const embarques = embarquesBase.map((e) => {
+      const cnt = (e.contenedor || '').toString().trim();
+      const p = cnt ? progByContainer[cnt] : null;
+      return p ? { ...e, prog: p } : e;
+    });
     const traDentroHor = embarques.reduce((a, e) => {
       const eta = e.eta ? new Date(e.eta) : null;
       if (!eta) return a;
@@ -455,7 +487,8 @@ function calcularForecast(data, horizonteMeses) {
     //   1) descripción del roadmap_sku (la que se carga en el Excel del Reporte)
     //   2) fallback a v_sku_metadata.descripcion
     // El roadmap se lee de la columna `rdmp` (igual que Reporte).
-    const descripcion = rm.descripcion || meta.descripcion || '';
+    const descripcion = rm.descripcion || meta.descripcion
+      || (catalogoBySku[sku.toUpperCase()]?.descripcion) || '';
     const roadmapEstado = rm.rdmp || rm.estado || rm.estatus || null;
 
     // Demanda últimos 6 meses por cliente (para mini-gráfica del expandible)
@@ -1972,27 +2005,49 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
         </div>
         {(r.embarques || []).length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {r.embarques.slice(0, 6).map((e, i) => (
-              <div key={i} style={{
-                display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 8, alignItems: 'center',
-                padding: '6px 0', borderTop: i > 0 ? `1px solid ${theme.divider || theme.border}` : 'none', fontSize: 11,
-              }}>
-                <span style={{
-                  fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em',
-                  padding: '2px 6px', borderRadius: 4,
-                  background: e.estatus === 'TRANSITO MARITIMO' ? `${theme.accent}22`
-                    : e.estatus === 'PROXIMO A ZARPAR' ? `${theme.orange || '#FF9500'}22`
-                    : `${theme.textMuted}22`,
-                  color: e.estatus === 'TRANSITO MARITIMO' ? theme.accent
-                    : e.estatus === 'PROXIMO A ZARPAR' ? (theme.orange || '#FF9500')
-                    : theme.textMuted,
-                }}>{(e.estatus || 'OTRO').slice(0, 12)}</span>
-                <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
-                  {e.po ? `PO-${e.po}` : '—'} · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{FMT_N(e.cantidad)}</strong> pz
-                </span>
-                <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>{fmtFechaC(e.eta)}</span>
-              </div>
-            ))}
+            {r.embarques.slice(0, 6).map((e, i) => {
+              const p = e.prog || null;
+              return (
+                <div key={i} style={{
+                  padding: '8px 0', borderTop: i > 0 ? `1px solid ${theme.divider || theme.border}` : 'none',
+                }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 8, alignItems: 'center', fontSize: 11 }}>
+                    <span style={{
+                      fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em',
+                      padding: '2px 6px', borderRadius: 4,
+                      background: e.estatus === 'TRANSITO MARITIMO' ? `${theme.accent}22`
+                        : e.estatus === 'PROXIMO A ZARPAR' ? `${theme.orange || '#FF9500'}22`
+                        : `${theme.textMuted}22`,
+                      color: e.estatus === 'TRANSITO MARITIMO' ? theme.accent
+                        : e.estatus === 'PROXIMO A ZARPAR' ? (theme.orange || '#FF9500')
+                        : theme.textMuted,
+                    }}>{(e.estatus || 'OTRO').slice(0, 12)}</span>
+                    <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
+                      {e.po ? `PO-${e.po}` : '—'} · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{FMT_N(e.cantidad)}</strong> pz
+                      {e.contenedor && <> · <span style={{ color: theme.textSubtle }}>{e.contenedor}</span></>}
+                    </span>
+                    <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>{fmtFechaC(e.eta)}</span>
+                  </div>
+                  {/* Fase 3 · logística por contenedor si existe en prog_arribos */}
+                  {p && (
+                    <div style={{
+                      marginLeft: 62, marginTop: 3,
+                      display: 'flex', gap: 10, flexWrap: 'wrap',
+                      fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle,
+                      letterSpacing: '-0.005em',
+                    }}>
+                      {p.terminal && <span>📍 {p.terminal}</span>}
+                      {p.cita && <span>🕒 cita {fmtFechaC(p.cita)}</span>}
+                      {p.arribo_almacen && <span style={{ color: theme.text }}>✓ almacén {fmtFechaC(p.arribo_almacen)}</span>}
+                      {p.linea_transportista && <span>🚚 {p.linea_transportista}</span>}
+                      {Number(p.dias_demoras) > 0 && (
+                        <span style={{ color: theme.orange || '#FF9500', fontWeight: 600 }}>⚠ {p.dias_demoras}d demora</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div style={{ padding: '14px 0', color: theme.textMuted, fontSize: 11.5, fontFamily: TYPO.fontDisplay, textAlign: 'center', letterSpacing: '-0.005em' }}>

@@ -40,6 +40,7 @@ const ALLOWED = {
   programacion_arribos: 'contenedor',
   series_generadas:     'po,sku',
   proveedores_master:   'codigo,articulo',
+  catalogo_articulos:   'articulo',
 };
 
 export default async function handler(req, res) {
