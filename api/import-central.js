@@ -28,7 +28,7 @@ const ALLOWED = {
   catalogo_sku_pcel:     'sku',
   estados_cuenta:        'cliente,anio,semana',
   estados_cuenta_detalle:'id',
-  embarques_compras:     'po,codigo',
+  embarques_compras:     'po,codigo,contenedor',
   facturacion_clientes:  'cliente_nombre,sku,anio,mes',
   estados_resultados:    'razon_social,anio,mes,cuenta_norm',
   compras_oc:            'movid,articulo',

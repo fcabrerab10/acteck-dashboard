@@ -235,7 +235,7 @@ function calcularForecast(data, horizonteMeses) {
     const est = String(e.estatus || '').toLowerCase();
     if (est.includes('cancel') || est.includes('rechaz') || est.includes('perdid')) return;
     const cnt = (e.contenedor || '').toString().trim();
-    if (!cnt || cnt.toUpperCase() === 'PENDIENTE') return;
+    if (!cnt || cnt.toUpperCase() === 'PENDIENTE' || cnt.toUpperCase().startsWith('PEND-')) return;
     const sku = (e.codigo || '').trim();
     if (!sku) return;
     if (!skusPorContenedor.has(cnt)) skusPorContenedor.set(cnt, new Set());
@@ -243,8 +243,10 @@ function calcularForecast(data, horizonteMeses) {
   });
   const contenedorConfirmado = (cnt) => {
     if (!cnt) return false;
-    const t = cnt.toString().trim();
-    return t && t.toUpperCase() !== 'PENDIENTE';
+    const t = cnt.toString().trim().toUpperCase();
+    // 'PEND-...' es el placeholder que emite el uploader cuando el contenedor
+    // aún no se asigna (soporta POs partidas en varios shipments pendientes).
+    return t && t !== 'PENDIENTE' && !t.startsWith('PEND-');
   };
   const contenedorEsConsolidado = (cnt) => {
     if (!contenedorConfirmado(cnt)) return false;

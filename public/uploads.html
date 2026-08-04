@@ -217,7 +217,7 @@ const SOURCES = [
       table:'promos_temporada', onConflict:'sku,anio,mes,campania', parser:'promosTemporada',
     }
   },
-  { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO). Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
+  { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO, CONTENEDOR) — soporta POs partidas en varios shipments/contenedores. Filas sin contenedor asignado usan placeholder determinista basado en shp_qty + fecha. Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo,contenedor', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
   { id:'estados-resultados', grupo:'globales', tipo:'mes', statusKey:'estados_resultados', title:'Estado de Resultados (P&L)', desc:'Cierres mensuales/trimestrales del P&L (ej. "Cierre 1Q 2026.xlsx", "Cierre Diciembre 2025.xlsx"). Lee la hoja "Estado de Resultados" y carga sólo los meses con valores. No borra meses previos; upsert por (razón social, año, mes, cuenta).', file:'Cierre <período>.xlsx', table:'estados_resultados', onConflict:'razon_social,anio,mes,cuenta_norm', parser:'estadosResultados' },
   { id:'sellout-general', grupo:'globales', tipo:'semana', statusKey:'sellout_general', title:'Sellout General (mayoristas)', desc:'Archivo semanal "Sellout General.xlsx" (hoja "Hoja1") con el detalle de ventas de nuestros mayoristas hacia sus clientes finales. 357K+ filas históricas (2025-en adelante). Upsert por id de transacción — solo actualiza filas nuevas. Mapeo idcliente→mayorista canónico: CT, CVA, Ingram, Arroba, Dicotech, Techs Mart, Grupo Unidades de Cómputo, DC, Exel, PCH, Grupo Loma, Group NSSTORE, Kabik.', file:'Sellout General.xlsx', table:'sellout_general', onConflict:'id', parser:'selloutGeneral' },
   { id:'revko-sellout', grupo:'globales', tipo:'semana', statusKey:'revko_sellout', title:'Sellout Acteck (Revko)', desc:'Reporte desde ERP Revko: "Reporte-SellOut_Ventas ... Acteck_Revko.csv". Puede ser SEMANAL (solo la última semana) o MENSUAL (corte de mes completo). Cada fila mapea a mayorista=DICOTECH, idcliente=708. IDs sintéticos DETERMINISTAS por hash de (Venta+SKU+Fecha+Cantidad) — cargar el mismo archivo dos veces no duplica ni borra otras semanas del mes. Cada carga hace upsert; para "borrar y reemplazar" un mes completo, sube el archivo mensual.', file:'Reporte-SellOut_...Revko.csv', table:'sellout_general', onConflict:'id', parser:'revkoSellout' },
@@ -1341,6 +1341,23 @@ const PARSERS = {
       // Filas basura: sin PO y sin código son separadores/totales
       if (!po || !codigo) return null;
       const { cedis, entrega_directa_cliente } = classifyCedis(obj.cedis);
+
+      // Placeholder de contenedor cuando aún no se asigna. La unique key es
+      // (po, codigo, contenedor) — soporta POs partidas en varios shipments.
+      // Formato determinista: PEND-<shp_qty>-<fecha_emision>-<fin_produccion>
+      // Estable entre uploads (misma fila Excel → mismo placeholder), robusto
+      // a reordenamiento, y evita colisiones cuando la misma PO/SKU tiene
+      // varios contenedores todavía sin ID asignado.
+      const contenedorRaw = toStr(obj.contenedor);
+      const contenedorClean = (contenedorRaw || '').trim();
+      const esPend = !contenedorClean
+        || /^(PENDIENTE|NA|N\/A|-)$/i.test(contenedorClean);
+      const shpKey = String(toInt(obj.shp_qty) || toInt(obj.po_qty) || 0);
+      const fEmiKey = toISODate(obj.fecha_emision ?? obj.fecha_de_emision) || 'X';
+      const finProdKey = toISODate(obj.fin_de_produccion) || 'X';
+      const contenedorFinal = esPend
+        ? `PEND-${shpKey}-${fEmiKey}-${finProdKey}`
+        : contenedorClean;
       return {
         po,
         codigo,
@@ -1370,7 +1387,7 @@ const PARSERS = {
         tipo_contenedor: toStr(obj.tipo_de_cont),
         costo_flete: toNum(obj.costo_flete),
         fdw: toStr(obj.fdw),
-        contenedor: toStr(obj.contenedor),
+        contenedor: contenedorFinal,
         etd: toISODate(obj.etd),
         eta_puerto: toISODate(obj.eta_puerto),
         agente_aduanal: toStr(obj.a_a ?? obj.aa),
@@ -3023,7 +3040,7 @@ async function handleSync(src){
     const rows = PARSERS.masterEmbarques(wb);
     appendLog(src, `Filas parseadas: ${rows.length}`);
 
-    await postChunks(src, 'embarques_compras', 'po,codigo', rows);
+    await postChunks(src, 'embarques_compras', 'po,codigo,contenedor', rows);
 
     saveLastUpdated(src.id);
     logSyncEvent(src, { estado:'ok', tipo:'sync', filas: rows.length });
