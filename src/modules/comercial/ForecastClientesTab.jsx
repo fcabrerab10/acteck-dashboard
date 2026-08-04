@@ -1596,6 +1596,7 @@ export default function ForecastClientesTab() {
               onExportar={onExportarBorrador}
               onVerHistorial={() => setMisSolicitudesAbierto(true)}
               theme={theme}
+              isDark={isDark}
             />
           </div>
         )}
@@ -2621,7 +2622,7 @@ function SugeridosPendientes({ sugeridos, open, onToggle, onRefresh }) {
 function ExportCart({
   sol, activoId, setActivoId, activo, lineas, totalPz, totalUsd,
   puedeEditar, onCrearNuevo, onEditarLinea, onEliminarLinea, onCerrar,
-  onExportar, onVerHistorial, theme,
+  onExportar, onVerHistorial, theme, isDark,
 }) {
   const [nombreEdit, setNombreEdit] = useState(activo?.nombre || '');
   React.useEffect(() => { setNombreEdit(activo?.nombre || ''); }, [activo?.id, activo?.nombre]);
@@ -2639,50 +2640,105 @@ function ExportCart({
     return `hace ${Math.round(diff / (60 * 24))} d`;
   };
 
+  const nBorradores = sol.borradores.length;
+
   return (
     <div style={{
       background: theme.surface, border: `1px solid ${theme.border}`,
-      borderRadius: 12, overflow: 'hidden',
+      borderRadius: 14, overflow: 'hidden',
     }}>
-      {/* Header */}
+      {/* ═══ HEADER · eyebrow + título + autosave chip ═══ */}
       <div style={{
-        padding: '12px 14px', borderBottom: `1px solid ${theme.divider || theme.border}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '14px 16px 12px',
+        borderBottom: `1px solid ${theme.divider || theme.border}`,
       }}>
-        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.005em', color: theme.text }}>
-          📋 Mi export
-        </div>
-        <div style={{ fontSize: 10, color: theme.textMuted, fontFamily: 'SF Mono, ui-monospace, monospace' }}>
-          autosave
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700,
+              letterSpacing: '.09em', textTransform: 'uppercase', color: theme.textMuted,
+              marginBottom: 2,
+            }}>
+              S&OP · Planeación
+            </div>
+            <div style={{
+              fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 600,
+              letterSpacing: '-0.02em', color: theme.text, display: 'flex',
+              alignItems: 'center', gap: 8,
+            }}>
+              Mi Export
+              {nBorradores > 0 && (
+                <span style={{
+                  padding: '2px 8px', borderRadius: 999,
+                  background: `${theme.accent}1E`, color: theme.accent,
+                  fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700,
+                  letterSpacing: '.02em',
+                }}>{nBorradores}</span>
+              )}
+            </div>
+          </div>
+          {activo && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 8px', borderRadius: 999,
+              background: `${theme.green || '#34C759'}1A`,
+              fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600,
+              color: theme.green || '#34C759', letterSpacing: '.02em',
+            }}>
+              <span style={{
+                width: 5, height: 5, borderRadius: 999,
+                background: theme.green || '#34C759',
+                animation: 'sopPulse 2s ease-in-out infinite',
+              }} />
+              Autoguardado
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Selector de borrador */}
-      <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.divider || theme.border}`, display: 'flex', gap: 6 }}>
-        <select
-          value={activoId || ''}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === '__NEW__') { onCrearNuevo && onCrearNuevo(); return; }
-            setActivoId(v);
-          }}
-          style={{
-            flex: 1, padding: '6px 10px', borderRadius: 8,
-            border: `1px solid ${theme.border}`, background: theme.bg,
-            fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, outline: 'none',
-          }}>
-          {sol.borradores.length === 0 && <option value="">Sin borradores</option>}
-          {sol.borradores.map((b) => (
-            <option key={b.id} value={b.id}>{b.nombre || 'Sin nombre'}</option>
-          ))}
-          {puedeEditar && <option value="__NEW__">＋ Nuevo export</option>}
-        </select>
-      </div>
+      {/* Keyframes para el dot pulse del autosave */}
+      <style>{`
+        @keyframes sopPulse {
+          0%, 100% { opacity: 1 }
+          50% { opacity: .35 }
+        }
+      `}</style>
+
+      {/* ═══ Selector borrador (solo si hay más de 1) ═══ */}
+      {nBorradores > 1 && (
+        <div style={{ padding: '10px 16px', borderBottom: `1px solid ${theme.divider || theme.border}` }}>
+          <div style={{ position: 'relative' }}>
+            <select
+              value={activoId || ''}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === '__NEW__') { onCrearNuevo && onCrearNuevo(); return; }
+                setActivoId(v);
+              }}
+              style={{
+                width: '100%', padding: '8px 32px 8px 12px', borderRadius: 10,
+                border: `1px solid ${theme.border}`, background: theme.bg,
+                fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 500,
+                letterSpacing: '-0.005em', color: theme.text, outline: 'none',
+                cursor: 'pointer', appearance: 'none', WebkitAppearance: 'none',
+              }}>
+              {sol.borradores.map((b) => (
+                <option key={b.id} value={b.id}>{b.nombre || 'Sin nombre'}</option>
+              ))}
+              {puedeEditar && <option value="__NEW__">＋ Nuevo export</option>}
+            </select>
+            <span style={{
+              position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+              pointerEvents: 'none', color: theme.textMuted, fontSize: 10,
+            }}>▼</span>
+          </div>
+        </div>
+      )}
 
       {activo ? (
         <>
-          {/* Nombre editable */}
-          <div style={{ padding: '10px 14px 4px' }}>
+          {/* ═══ Nombre editable ═══ */}
+          <div style={{ padding: '12px 16px 6px' }}>
             <input
               type="text"
               value={nombreEdit}
@@ -2692,29 +2748,49 @@ function ExportCart({
               disabled={!puedeEditar}
               style={{
                 width: '100%', border: 'none', background: 'transparent',
-                fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600,
-                letterSpacing: '-0.015em', color: theme.text, outline: 'none',
+                fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600,
+                letterSpacing: '-0.02em', color: theme.text, outline: 'none',
+                padding: 0,
               }}
               placeholder="Nombre del export"
             />
-            <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 2 }}>
+            <div style={{ fontFamily: TYPO.fontText, fontSize: 11, color: theme.textMuted, marginTop: 3, letterSpacing: '-0.005em' }}>
               {lineas.length} SKU{lineas.length !== 1 ? 's' : ''}
               {activo.updated_at && <> · edición {fmtRel(activo.updated_at)}</>}
             </div>
           </div>
 
-          {/* Totales */}
-          <div style={{
-            padding: '10px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
-            borderBottom: `1px solid ${theme.divider || theme.border}`,
-          }}>
-            <div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 700 }}>Piezas</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', marginTop: 2, color: theme.text }}>{FMT_N(totalPz)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 700 }}>Total USD</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', marginTop: 2, color: theme.text }}>${FMT_N(totalUsd)}</div>
+          {/* ═══ Totales (card destacada) ═══ */}
+          <div style={{ padding: '10px 16px 14px' }}>
+            <div style={{
+              padding: '12px 14px', borderRadius: 12,
+              background: `${theme.accent}0D`, border: `1px solid ${theme.accent}22`,
+              display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'baseline', gap: 8,
+            }}>
+              <div>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.accent }}>
+                  Total USD
+                </div>
+                <div style={{
+                  fontFamily: TYPO.fontDisplay, fontSize: 24, fontWeight: 600,
+                  letterSpacing: '-0.025em', color: theme.text,
+                  fontVariantNumeric: 'tabular-nums', marginTop: 2, lineHeight: 1,
+                }}>
+                  ${FMT_N(totalUsd)}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textMuted }}>
+                  Piezas
+                </div>
+                <div style={{
+                  fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600,
+                  letterSpacing: '-0.015em', color: theme.text,
+                  fontVariantNumeric: 'tabular-nums', marginTop: 2, lineHeight: 1,
+                }}>
+                  {FMT_N(totalPz)}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2804,67 +2880,119 @@ function ExportCart({
             })()}
           </div>
 
-          {/* Actions */}
+          {/* ═══ Actions · botón principal Exportar + Cerrar ═══ */}
           <div style={{
-            padding: '12px 14px', borderTop: `1px solid ${theme.divider || theme.border}`,
-            background: theme.bg, display: 'flex', gap: 6,
+            padding: '14px 16px', borderTop: `1px solid ${theme.divider || theme.border}`,
+            background: theme.bg, display: 'flex', flexDirection: 'column', gap: 8,
           }}>
-            {puedeEditar && (
-              <button
-                onClick={() => onCerrar && onCerrar(activo.id)}
-                disabled={lineas.length === 0}
-                style={{
-                  flex: 1, padding: '7px 10px', borderRadius: 999,
-                  background: theme.surface, border: `1px solid ${theme.border}`,
-                  fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600, color: theme.textMuted,
-                  cursor: lineas.length === 0 ? 'not-allowed' : 'pointer',
-                  opacity: lineas.length === 0 ? 0.5 : 1,
-                }}>
-                Cerrar
-              </button>
-            )}
             <button
               onClick={onExportar}
               disabled={lineas.length === 0}
               style={{
-                flex: 2, padding: '7px 10px', borderRadius: 999,
-                background: theme.green, border: `1px solid ${theme.green}`, color: '#fff',
-                fontFamily: TYPO.fontText, fontSize: 11.5, fontWeight: 600,
+                width: '100%', padding: '11px 16px', borderRadius: 12,
+                background: lineas.length === 0
+                  ? (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)')
+                  : (theme.green || '#34C759'),
+                border: 0, color: lineas.length === 0 ? theme.textMuted : '#fff',
+                fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.005em',
                 cursor: lineas.length === 0 ? 'not-allowed' : 'pointer',
-                opacity: lineas.length === 0 ? 0.5 : 1,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}>
-              📥 Exportar Excel
+                opacity: lineas.length === 0 ? 0.6 : 1,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                transition: 'transform 120ms',
+              }}
+              onMouseEnter={(e) => { if (lineas.length > 0) e.currentTarget.style.transform = 'scale(1.02)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+            >
+              <span style={{ fontSize: 15 }}>↓</span> Exportar a Excel
             </button>
+            {puedeEditar && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={() => onCerrar && onCerrar(activo.id)}
+                  disabled={lineas.length === 0}
+                  style={{
+                    flex: 1, padding: '8px 10px', borderRadius: 10,
+                    background: 'transparent', border: `1px solid ${theme.border}`,
+                    fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600,
+                    color: theme.textMuted, letterSpacing: '-0.005em',
+                    cursor: lineas.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: lineas.length === 0 ? 0.5 : 1,
+                  }}>
+                  Cerrar borrador
+                </button>
+                <button
+                  onClick={onCrearNuevo}
+                  style={{
+                    flex: 1, padding: '8px 10px', borderRadius: 10,
+                    background: 'transparent', border: `1px solid ${theme.border}`,
+                    fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600,
+                    color: theme.accent, letterSpacing: '-0.005em',
+                    cursor: 'pointer',
+                  }}>
+                  ＋ Nuevo
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Ver histórico */}
-          <button
-            onClick={onVerHistorial}
-            style={{
-              width: '100%', padding: '10px 14px', border: 'none',
-              background: 'transparent', color: theme.accent,
-              fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
-              cursor: 'pointer', borderTop: `1px solid ${theme.divider || theme.border}`,
-              textAlign: 'center',
-            }}>
-            📚 Ver historial completo ({sol.cerradas.length})
-          </button>
+          {/* ═══ Ver histórico ═══ */}
+          {sol.cerradas.length > 0 && (
+            <button
+              onClick={onVerHistorial}
+              style={{
+                width: '100%', padding: '11px 16px', border: 'none',
+                background: 'transparent', color: theme.accent,
+                fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600,
+                cursor: 'pointer', borderTop: `1px solid ${theme.divider || theme.border}`,
+                textAlign: 'center', letterSpacing: '-0.005em',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+              }}>
+              Ver historial · {sol.cerradas.length} export{sol.cerradas.length !== 1 ? 's' : ''} cerrado{sol.cerradas.length !== 1 ? 's' : ''}
+              <span style={{ opacity: .5 }}>›</span>
+            </button>
+          )}
         </>
       ) : (
-        <div style={{ padding: '20px 16px', textAlign: 'center', color: theme.textMuted, fontSize: 12 }}>
-          {puedeEditar
-            ? 'Crea un nuevo export para empezar a agregar SKUs.'
-            : 'Sin export activo.'}
+        // ═══ Empty state · sin borrador activo ═══
+        <div style={{ padding: '28px 20px 24px', textAlign: 'center' }}>
+          {/* Icono grande en círculo */}
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%',
+            background: `${theme.accent}12`, color: theme.accent,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 26, marginBottom: 14,
+          }}>
+            📋
+          </div>
+          <div style={{
+            fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600,
+            letterSpacing: '-0.02em', color: theme.text, marginBottom: 4,
+          }}>
+            {puedeEditar ? 'Empieza tu primer export' : 'Sin export activo'}
+          </div>
+          <div style={{
+            fontFamily: TYPO.fontText, fontSize: 12, color: theme.textMuted,
+            letterSpacing: '-0.005em', lineHeight: 1.45, maxWidth: 260, margin: '0 auto 18px',
+          }}>
+            {puedeEditar
+              ? 'Selecciona SKUs de la tabla con el botón azul o agrega todos los sugeridos con un click.'
+              : 'Un usuario con permisos debe crear un borrador.'}
+          </div>
           {puedeEditar && (
             <button
               onClick={onCrearNuevo}
               style={{
-                marginTop: 12, padding: '7px 14px', borderRadius: 999,
+                padding: '10px 20px', borderRadius: 999,
                 background: theme.accent, color: '#fff', border: 0,
-                fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              }}>
-              ＋ Nuevo export
+                fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600,
+                letterSpacing: '-0.005em', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                transition: 'transform 120ms',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+            >
+              ＋ Crear nuevo export
             </button>
           )}
         </div>
