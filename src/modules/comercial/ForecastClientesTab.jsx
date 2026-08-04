@@ -1633,14 +1633,22 @@ function SugeridoCompraCell({ r, enExport, cantidadEnExport, onAgregarSolicitud,
 
   const tieneNotas = critico || tendNeg || conc;
   return (
-    // Grid con 2 columnas fijas — la píldora + sub siempre en la col izq
-    // (ancho fijo), las notas siempre en col der (ancho fijo). Esto hace
-    // que TODAS las filas alineen píldora y notas en las mismas coordenadas.
+    // Alineado a la derecha del td · notas horizontal a la IZQUIERDA de la
+    // píldora (no bajo, no columna) — así todas las filas tienen la misma
+    // altura (2 líneas: píldora + sub) sin importar cuántas notas haya.
     <div style={{
-      display: 'grid', gridTemplateColumns: '1fr 22px',
-      alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+      display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
     }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
+      {tieneNotas && (
+        <div style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+          {critico && <SugNota kind="crit" theme={theme} tip="SKU crítico · no puede faltar" />}
+          {tendNeg && <SugNota kind="tend" theme={theme}
+            tip={`Consumo bajando · últ 3m ${FMT_N(Math.round(r.ritmo3m))} pz/m vs 3m ant ${FMT_N(Math.round(r.ritmo3mAnt))} pz/m`} />}
+          {conc && <SugNota kind="conc" theme={theme}
+            tip={`Concentración alta: ${conc.cliente} = ${conc.pct}% del consumo con tendencia +${conc.tendPct}% vs 3m ant`} />}
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
         <button
           type="button"
           onClick={(e) => {
@@ -1666,20 +1674,10 @@ function SugeridoCompraCell({ r, enExport, cantidadEnExport, onAgregarSolicitud,
         <div style={{
           fontFamily: TYPO.fontText, fontSize: 9.5, color: theme.textMuted,
           fontWeight: 500, letterSpacing: '-0.005em', lineHeight: 1.1,
-          paddingLeft: 4,
+          paddingRight: 4,
         }}>
           {sub}
         </div>
-      </div>
-      <div style={{
-        display: 'inline-flex', flexDirection: 'column', gap: 2,
-        alignItems: 'center', justifyContent: 'center', minHeight: 16,
-      }}>
-        {critico && <SugNota kind="crit" theme={theme} tip="SKU crítico · no puede faltar" />}
-        {tendNeg && <SugNota kind="tend" theme={theme}
-          tip={`Consumo bajando · últ 3m ${FMT_N(Math.round(r.ritmo3m))} pz/m vs 3m ant ${FMT_N(Math.round(r.ritmo3mAnt))} pz/m`} />}
-        {conc && <SugNota kind="conc" theme={theme}
-          tip={`Concentración alta: ${conc.cliente} = ${conc.pct}% del consumo con tendencia +${conc.tendPct}% vs 3m ant`} />}
       </div>
     </div>
   );
@@ -1735,7 +1733,7 @@ function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud, enExport, cant
         </td>
         <td style={numS}>{FMT_N(r.demandaMesErp)}<span style={{ color: theme.textMuted, marginLeft: 3, fontSize: 10 }}>pz/m</span></td>
         <td style={{ ...cellS, textAlign: 'center' }}><CoberturaChip dias={r.coberturaDiasErp} theme={theme} /></td>
-        <td style={{ ...cellS, textAlign: 'left', padding: '6px 10px' }}>
+        <td style={{ ...cellS, textAlign: 'right', padding: '6px 10px' }}>
           <SugeridoCompraCell
             r={r}
             enExport={enExport}
