@@ -1334,7 +1334,30 @@ export default function ForecastClientesTab() {
     if (!borradorActivo) return toast.error('No hay export activo');
     if (lineasBorrador.length === 0) return toast.error('El export está vacío');
     try {
-      const filename = await exportarSolicitudExcel(borradorActivo, lineasBorrador);
+      // Enriquecer líneas con contenedores frescos calculados desde el motor
+      // actual (usa shp_qty vía compraInfo.piezasPorContenedor). Las líneas
+      // guardadas en BD pueden tener contenedores/piezas_por_contenedor
+      // obsoletos si se agregaron antes del fix de shp_qty — aquí los
+      // recalculamos sin persistir. La cantidad de piezas se respeta
+      // (elección explícita del usuario).
+      const rowsBySku = Object.fromEntries((rowsAll || []).map((r) => [r.sku, r]));
+      const lineasFrescas = lineasBorrador.map((l) => {
+        const r = rowsBySku[l.sku];
+        if (!r) return l;
+        const pzCntFresh = Number(r.piezasPorContenedor || 0);
+        const esConsolFresh = !!r.esConsolidado;
+        const cantidad = Number(l.cantidad || 0);
+        const cntsFresh = (pzCntFresh > 0 && !esConsolFresh)
+          ? Math.ceil(cantidad / pzCntFresh)
+          : null;
+        return {
+          ...l,
+          piezas_por_contenedor: pzCntFresh || l.piezas_por_contenedor,
+          contenedores: cntsFresh != null ? cntsFresh : l.contenedores,
+          es_consolidado: esConsolFresh,
+        };
+      });
+      const filename = await exportarSolicitudExcel(borradorActivo, lineasFrescas);
       toast.success(`Excel descargado: ${filename}`);
     } catch (e) {
       toast.error(`Error exportando: ${e.message || e}`);
