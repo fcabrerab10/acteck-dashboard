@@ -495,20 +495,34 @@ function calcularForecast(data, horizonteMeses) {
       return eta <= horizonte3m ? a + Number(e.cantidad || 0) : a;
     }, 0);
     const necesidad = Math.max(0, objetivo - inv - tra3m);
-    // Redondeo contenedor · umbral 50%
+    // Umbral 50% — reglas de sugerido:
+    //   · Contenedor propio: necesidad > 50% del pz_por_cnt → ceil (contenedor
+    //     completo). Si ≤ 50% → sugerido = 0 (no vale la pena pedir < ½ cnt).
+    //   · Consolidado: necesidad > 50% del promedio de PO histórica → piezas
+    //     exactas. Si ≤ 50% → sugerido = 0.
     const compraInfo = comprasBySku[sku] || {};
     const piezasPorContenedor = compraInfo.piezasPorContenedor || 0;
     const esConsolidado = !!compraInfo.esConsolidado;
-    let sugerido = necesidad;
+    let sugerido = 0;
     let contenedoresSugeridos = 0;
-    if (necesidad > 0 && piezasPorContenedor > 0 && !esConsolidado) {
+    if (necesidad > 0 && !esConsolidado && piezasPorContenedor > 0) {
       const prop = necesidad / piezasPorContenedor;
-      const frac = prop - Math.floor(prop);
-      contenedoresSugeridos = frac > 0.5 ? Math.ceil(prop) : Math.floor(prop);
-      sugerido = contenedoresSugeridos * piezasPorContenedor;
-    } else if (esConsolidado) {
-      // consolidado: no se puede definir contenedor completo, dejamos piezas
-      sugerido = necesidad;
+      if (prop > 0.5) {
+        contenedoresSugeridos = Math.ceil(prop);
+        sugerido = contenedoresSugeridos * piezasPorContenedor;
+      } // ≤ 0.5 → sugerido queda en 0
+    } else if (necesidad > 0 && esConsolidado) {
+      // Promedio de shp_qty histórico del SKU como referencia de "una PO típica".
+      const posValidas = (compraInfo.pos || []).filter((e) => {
+        const shp = Number(e.shp_qty || 0) || Number(e.po_qty || 0);
+        return shp > 0;
+      });
+      const promPoRef = posValidas.length > 0
+        ? posValidas.reduce((a, e) => a + (Number(e.shp_qty || 0) || Number(e.po_qty || 0)), 0) / posValidas.length
+        : 0;
+      if (promPoRef > 0 && necesidad / promPoRef > 0.5) {
+        sugerido = necesidad; // piezas exactas (consolidado no se rellena a cnt)
+      } // ≤ 0.5 o sin histórico → sugerido queda en 0
     }
     // Notas visuales (sólo informativas — nunca ajustan el número)
     const tendenciaNegativa = ritmo3mAnt > 0 && ritmo3m < ritmo3mAnt;
