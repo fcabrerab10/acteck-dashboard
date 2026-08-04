@@ -118,7 +118,7 @@ function useForecastData() {
       // `arribo_almacen`) como ETA del embarque, y la marca la cruzamos
       // contra v_sku_metadata por SKU.
       fetchAll(() => supabase.from('embarques_compras')
-        .select('po, codigo, fecha_emision, arribo_cedis, arribo_almacen, eta_puerto, etd, po_qty, shp_qty, cbm, cbm_total, cbm_unitario, contenedor, estatus, supplier, familia, descripcion, unit_price, sn, lt_dias, tipo_carga, tipo_contenedor')),
+        .select('po, codigo, fecha_emision, arribo_cedis, arribo_almacen, eta_puerto, etd, po_qty, shp_qty, cbm, cbm_total, cbm_unitario, contenedor, estatus, supplier, familia, descripcion, unit_price, sn, lt_dias, tipo_carga, tipo_contenedor, grupo')),
       // Solicitudes de compra del año actual (las tablas pueden no existir aún
       // — capturamos error silenciosamente en ese caso)
       supabase.from('solicitudes_compra').select('*').eq('anio', anioActual)
@@ -1753,7 +1753,7 @@ function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, 
           <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs · click para drill · <span style={{ color: theme.green }}>■</span> en export
         </span>
       </div>
-      <div style={{ overflow: 'auto', maxHeight: '75vh' }}>
+      <div style={{ overflow: 'visible' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
           <thead>
             <tr>
