@@ -1428,23 +1428,8 @@ export default function ForecastClientesTab() {
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-end', position: 'relative' }}>
-          {/* Selector de horizonte */}
-          <div style={{ display: 'inline-flex', padding: 2, background: 'rgba(255,255,255,.08)', borderRadius: 999 }}>
-            {HORIZONTES.map(h => {
-              const on = horizonte === h.meses;
-              return (
-                <button key={h.meses} onClick={() => setHorizonte(h.meses)} style={{
-                  padding: '4px 12px', borderRadius: 999, border: 'none',
-                  background: on ? 'rgba(255,255,255,.95)' : 'transparent',
-                  color: on ? '#000' : 'rgba(255,255,255,.7)',
-                  fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                }}>
-                  {h.label}
-                </button>
-              );
-            })}
-          </div>
-          {/* Stats 2x2 */}
+          {/* Stats 2x2 · el selector de horizonte fue eliminado; el sugerido
+              siempre se calcula sobre 3 meses (regla fija de la fórmula). */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', width: '100%' }}>
             <HeroStat label="SKUs c/ brecha" value={FMT_N(kpis.conBrecha)} sub={`USD ${FMT_N(kpis.valorSugeridoUsd)}`} color="#FF6961" heroText={heroText} heroSubtle={heroSubtle} />
             <HeroStat label="Sobrestock" value={FMT_N(kpis.sobrestock)} sub="&gt;90 días cobertura" color="#34D158" heroText={heroText} heroSubtle={heroSubtle} />
