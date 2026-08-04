@@ -2011,7 +2011,6 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
       {/* ═══ HERO card negro compacto ═══ */}
       <div style={{
         background: '#000', color: '#F5F5F7', borderRadius: 10, padding: '12px 16px',
-        display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center',
       }}>
         <div>
           <div style={{
@@ -2041,16 +2040,6 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
             {costoUnit > 0 && <> · <strong style={{ color: theme.green || '#30D158', fontWeight: 600 }}>${costoUnit.toFixed(2)} USD</strong></>}
           </div>
         </div>
-        <button
-          onClick={onConfirmar}
-          style={{
-            padding: '7px 14px', borderRadius: 999,
-            background: enExport ? (theme.green || '#30D158') : (theme.accent || '#0A84FF'),
-            color: '#fff', border: 0, fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600,
-            cursor: 'pointer', letterSpacing: '-0.005em', whiteSpace: 'nowrap',
-          }}>
-          {enExport ? `✓ En Mi Export · ${FMT_N(cantidadEnExport)} pz` : '＋ Agregar al export'}
-        </button>
       </div>
 
       {/* ═══ KPI strip compacto ═══ */}
