@@ -217,7 +217,15 @@ const SOURCES = [
       table:'promos_temporada', onConflict:'sku,anio,mes,campania', parser:'promosTemporada',
     }
   },
-  { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo Master Embarques.xlsx con TODAS las hojas históricas (2026, 2025, 2024, 2022-2023). Upsert por (PO, CODIGO, CONTENEDOR) — soporta POs partidas en varios shipments/contenedores. Filas sin contenedor asignado usan placeholder determinista basado en shp_qty + fecha. Detecta entregas directas a clientes externos (ej. DECME sin número) y calcula lead time por SKU. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx', table:'embarques_compras', onConflict:'po,codigo,contenedor', parser:'masterEmbarques', cronEndpoint:'/api/cron?task=sync-master-embarques' },
+  { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo único Master Embarques.xlsx con 7 hojas: histórico POs (2026, 2025, 2024, 2022-2023) → embarques_compras; Programación Arribos (logística por contenedor) → programacion_arribos; SN (series generadas por PO/SKU) → series_generadas; Proveedores (catálogo canónico) → proveedores_master. Upsert de embarques por (PO, CODIGO, CONTENEDOR) — soporta POs partidas en varios shipments. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx',
+    cronEndpoint:'/api/cron?task=sync-master-embarques',
+    combined: [
+      { table:'embarques_compras',    onConflict:'po,codigo,contenedor', parser:'masterEmbarques',   label:'Histórico embarques (4 hojas anuales)' },
+      { table:'programacion_arribos', onConflict:'contenedor',            parser:'masterProgArribos', label:'Programación de arribos (por contenedor)' },
+      { table:'series_generadas',     onConflict:'po,sku',                parser:'masterSN',          label:'Números de serie (SN por PO/SKU)' },
+      { table:'proveedores_master',   onConflict:'codigo,articulo',       parser:'masterProveedores', label:'Catálogo de proveedores' },
+    ],
+  },
   { id:'estados-resultados', grupo:'globales', tipo:'mes', statusKey:'estados_resultados', title:'Estado de Resultados (P&L)', desc:'Cierres mensuales/trimestrales del P&L (ej. "Cierre 1Q 2026.xlsx", "Cierre Diciembre 2025.xlsx"). Lee la hoja "Estado de Resultados" y carga sólo los meses con valores. No borra meses previos; upsert por (razón social, año, mes, cuenta).', file:'Cierre <período>.xlsx', table:'estados_resultados', onConflict:'razon_social,anio,mes,cuenta_norm', parser:'estadosResultados' },
   { id:'sellout-general', grupo:'globales', tipo:'semana', statusKey:'sellout_general', title:'Sellout General (mayoristas)', desc:'Archivo semanal "Sellout General.xlsx" (hoja "Hoja1") con el detalle de ventas de nuestros mayoristas hacia sus clientes finales. 357K+ filas históricas (2025-en adelante). Upsert por id de transacción — solo actualiza filas nuevas. Mapeo idcliente→mayorista canónico: CT, CVA, Ingram, Arroba, Dicotech, Techs Mart, Grupo Unidades de Cómputo, DC, Exel, PCH, Grupo Loma, Group NSSTORE, Kabik.', file:'Sellout General.xlsx', table:'sellout_general', onConflict:'id', parser:'selloutGeneral' },
   { id:'revko-sellout', grupo:'globales', tipo:'semana', statusKey:'revko_sellout', title:'Sellout Acteck (Revko)', desc:'Reporte desde ERP Revko: "Reporte-SellOut_Ventas ... Acteck_Revko.csv". Puede ser SEMANAL (solo la última semana) o MENSUAL (corte de mes completo). Cada fila mapea a mayorista=DICOTECH, idcliente=708. IDs sintéticos DETERMINISTAS por hash de (Venta+SKU+Fecha+Cantidad) — cargar el mismo archivo dos veces no duplica ni borra otras semanas del mes. Cada carga hace upsert; para "borrar y reemplazar" un mes completo, sube el archivo mensual.', file:'Reporte-SellOut_...Revko.csv', table:'sellout_general', onConflict:'id', parser:'revkoSellout' },
@@ -1410,6 +1418,96 @@ const PARSERS = {
         estatus: toStr(obj.estatus),
         comentarios_trafico: toStr(obj.comentarios_trafico),
         comentarios_diseno: toStr(obj.comentarios_diseno ?? obj.comentarios_nuevo_desarrollo),
+      };
+    }).filter(Boolean);
+  },
+  // "Programación Arribos" del Master Embarques — logística por contenedor.
+  // Cada fila = 1 contenedor. Trae: agencia, terminal, contenido, ETA puerto,
+  // piso, cita, arribo almacén, cedis, transportista, empate, custodia,
+  // seguro, importación, fac, resguardo, días de demoras, reconocimiento
+  // aduanal, PROFEPA, almacenajes. Se guarda en programacion_arribos.
+  masterProgArribos(wb){
+    const sh = wb.Sheets['Programación Arribos'] || wb.Sheets['Programacion Arribos'];
+    if (!sh) return [];
+    const rows = XLSX.utils.sheet_to_json(sh, { defval: null });
+    return rows.map(r => {
+      const obj = {}; for (const k of Object.keys(r)) obj[snake(k)] = r[k];
+      const contenedor = toStr(obj.contenedor);
+      if (!contenedor) return null;
+      return {
+        contenedor,
+        agencia:              toStr(obj.agencia),
+        terminal:             toStr(obj.terminal),
+        contenido:            toStr(obj.contenido),
+        eta_puerto:           toISODate(obj.eta_puerto),
+        piso:                 toISODate(obj.piso),
+        cita:                 toISODate(obj.cita),
+        hora_cita:            toNum(obj.hora_cita),
+        arribo_almacen:       toISODate(obj.arribo_almacen ?? obj.arribo_almacn),
+        cedis:                toStr(obj.cedis),
+        linea_transportista:  toStr(obj.linea_transportista),
+        empate:               toStr(obj.empate),
+        custodia:             toStr(obj.custodia),
+        seguro_poliza:        toStr(obj.seguro_poliza ?? obj.seguro_p_liza ?? obj.seguro),
+        importacion:          toStr(obj.importacion),
+        fac:                  toNum(obj.fac),
+        resguardo:            toStr(obj.resguardo),
+        dias_demoras:         toInt(obj.dias_de_demoras ?? obj.dias_demoras),
+        ultimo_dia_demoras:   toISODate(obj.ultimo_dia_demoras),
+        reconocimiento_a:     toStr(obj.reconocimiento_a),
+        profepa:              toStr(obj.profepa),
+        almacenajes:          toNum(obj.almacenajes),
+      };
+    }).filter(Boolean);
+  },
+  // "SN" del Master Embarques — números de serie generados por (PO, SKU).
+  // 1 fila por par. SN INITIAL/FINAL son 12 dígitos → guardar como texto
+  // para preservar precisión (superan 2^31).
+  masterSN(wb){
+    const sh = wb.Sheets['SN'];
+    if (!sh) return [];
+    const rows = XLSX.utils.sheet_to_json(sh, { defval: null });
+    return rows.map(r => {
+      const obj = {}; for (const k of Object.keys(r)) obj[snake(k)] = r[k];
+      const po = toStr(obj.po);
+      const sku = toStr(obj.sku);
+      if (!po || !sku) return null;
+      return {
+        po,
+        sku,
+        ff:            toInt(obj.ff),
+        supplier_num:  toInt(obj.supplier),           // primera col "Supplier #"
+        supplier:      toStr(obj.supplier_1),         // segunda "SUPPLIER"
+        ean:           toStr(obj.ean),
+        description:   toStr(obj.description),
+        fecha_po:      toISODate(obj.fecha_po),
+        po_qty:        toInt(obj.po_qty),
+        sn_generada:   toStr(obj.sn_generada),
+        sn_initial:    toStr(obj.sn_initial),
+        sn_final:      toStr(obj.sn_final),
+        status:        toStr(obj.status),
+      };
+    }).filter(Boolean);
+  },
+  // "Proveedores" del Master Embarques — catálogo canónico proveedor↔artículo.
+  // ~10K filas. Unique por (codigo, articulo). El Excel tiene una col vacía
+  // en índice 3 — se ignora.
+  masterProveedores(wb){
+    const sh = wb.Sheets['Proveedores'];
+    if (!sh) return [];
+    const rows = XLSX.utils.sheet_to_json(sh, { defval: null });
+    return rows.map(r => {
+      const obj = {}; for (const k of Object.keys(r)) obj[snake(k)] = r[k];
+      const codigo = toInt(obj.codigo);
+      const articulo = toStr(obj.articulo);
+      if (codigo == null || !articulo) return null;
+      return {
+        codigo,
+        articulo,
+        nombre_proveedor:  toStr(obj.nombre_proveedor),
+        codigo_intelisis:  toInt(obj.codigo_intelisis),
+        descripcion1:      toStr(obj.descripcion1),
+        isbn:              toStr(obj.isbn),
       };
     }).filter(Boolean);
   },

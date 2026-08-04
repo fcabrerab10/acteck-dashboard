@@ -36,6 +36,10 @@ const ALLOWED = {
   sellout_general:       'id',
   cuotas_mensuales:      'cliente,mes,anio',
   inventario_cliente_sucursal: 'cliente,sku,sucursal,anio,semana',
+  // Fase 3 · hojas adicionales del Master Embarques
+  programacion_arribos: 'contenedor',
+  series_generadas:     'po,sku',
+  proveedores_master:   'codigo,articulo',
 };
 
 export default async function handler(req, res) {
