@@ -41,6 +41,8 @@ const ALLOWED = {
   series_generadas:     'po,sku',
   proveedores_master:   'codigo,articulo',
   catalogo_articulos:   'articulo',
+  // Fase 4 · overrides por SKU del sugerido de compra
+  sku_config:           'sku',
 };
 
 export default async function handler(req, res) {

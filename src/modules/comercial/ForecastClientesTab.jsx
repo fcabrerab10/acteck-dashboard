@@ -78,6 +78,9 @@ function useForecastData() {
     progArribos: [],
     // Fase 3 · catálogo maestro de artículos para completar descripciones.
     catalogoArticulos: [],
+    // Fase 4 · configuración por SKU (crítico, meses seguridad, %crecimiento
+    // override) para el cálculo del sugerido de compra.
+    skuConfig: [],
   });
 
   // Helper paginador (PostgREST corta a 1000)
@@ -143,9 +146,13 @@ function useForecastData() {
       // Fase 3 · catálogo maestro de artículos — fallback de descripción
       // cuando v_sku_metadata / roadmap no lo tienen.
       fetchAll(() => supabase.from('catalogo_articulos').select('articulo, descripcion')),
+      // Fase 4 · overrides por SKU para el sugerido (crítico, meses seguridad,
+      // crecimiento manual). Tabla puede no existir aún — silencia el error.
+      supabase.from('sku_config').select('sku, es_critico, meses_seguridad, crecimiento_override, notas')
+        .then(r => r, () => ({ data: [] })),
     ]);
 
-    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes, facData, paRes, catArtData] = queries;
+    const [invRes, traRes, ltRes, metaRes, demData, sugRes, rmRes, embData, solRes, solLinRes, rsRes, cmRes, facData, paRes, catArtData, skuCfgRes] = queries;
 
     setState({
       loading: false,
@@ -164,6 +171,7 @@ function useForecastData() {
       facturacion:   facData      || [],
       progArribos:   (paRes && paRes.data) || [],
       catalogoArticulos: catArtData || [],
+      skuConfig:     (skuCfgRes && skuCfgRes.data) || [],
     });
   };
 
@@ -173,7 +181,7 @@ function useForecastData() {
 
 // ────────── Cálculo del forecast ──────────
 function calcularForecast(data, horizonteMeses) {
-  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques, reporteSkus, facturacion, progArribos, catalogoArticulos } = data;
+  const { inventario, transito, leadTimes, metadata, demanda, roadmap, embarques, reporteSkus, facturacion, progArribos, catalogoArticulos, skuConfig } = data;
 
   // Fase 3 · lookups de enriquecimiento.
   const progByContainer = {};
@@ -185,6 +193,12 @@ function calcularForecast(data, horizonteMeses) {
   (catalogoArticulos || []).forEach((c) => {
     if (!c || !c.articulo) return;
     catalogoBySku[c.articulo.trim().toUpperCase()] = c;
+  });
+  // Fase 4 · overrides por SKU (crítico, meses seguridad, %crecimiento).
+  const cfgBySku = {};
+  (skuConfig || []).forEach((c) => {
+    if (!c || !c.sku) return;
+    cfgBySku[c.sku.trim()] = c;
   });
 
   // ── Demanda por cliente REAL desde facturacion_clientes (hoja "Venta Piezas") ──
@@ -434,24 +448,75 @@ function calcularForecast(data, horizonteMeses) {
     }, 0);
     const traDespuesHor = traCant - traDentroHor;
 
-    // Brecha = demanda − (inventario + tránsito dentro del horizonte)
-    const brecha = Math.max(0, demandaTotalHor - inv - traDentroHor);
-
-    // Sugerido = brecha + buffer (1 mes de demanda) − tránsito que llega después del horizonte
-    const bufferUnidades = demandaMesTotal * BUFFER_MESES;
-    let sugerido = Math.max(0, brecha + bufferUnidades - traDespuesHor);
-
-    // Redondeo a múltiplo de contenedor (si el SKU tiene capacidad conocida
-    // y no es consolidado — si es consolidado no se puede definir
-    // "1 contenedor lleno" del SKU, así que dejamos la cantidad como brecha).
+    // ═══ Sugerido de compra · Fase 4 · fórmula nueva ═══
+    // Reemplaza el cálculo anterior basado en (digitalife + pcel × horizonte)
+    // por uno basado en TODOS los clientes del ERP (facturacion_clientes) con:
+    //   · ritmo mensual real ERP (últimos 3m promedio)
+    //   · crecimiento auto-calculado (últ 3m vs 3m anteriores), cap 40%
+    //     override manual desde sku_config
+    //   · meses de seguridad extra si el SKU está marcado como crítico
+    //   · tránsito: sólo lo que cae en los 3 meses objetivo (opción B)
+    //   · redondeo contenedor: >50% → ceil, ≤50% → floor
+    const bySkuErpS = demandaErpBySku[sku] || {};
+    // ritmo3m = suma últimos 3 meses / 3 (ya está como demandaMesErp más abajo,
+    // pero necesitamos calcularlo aquí antes)
+    let sum3m = 0, sum3mAnt = 0;
+    const keys6 = mesesRef6.map(m => m.key);
+    const keysUlt3 = keys6.slice(-3);   // los 3 más recientes
+    const keys3Ant = keys6.slice(0, 3); // los 3 anteriores
+    Object.values(bySkuErpS).forEach((v) => {
+      for (const k of keysUlt3) sum3m += Number(v.mensual[k] || 0);
+      for (const k of keys3Ant) sum3mAnt += Number(v.mensual[k] || 0);
+    });
+    const ritmo3m = sum3m / 3;
+    const ritmo3mAnt = sum3mAnt / 3;
+    // Config del SKU
+    const cfg = cfgBySku[sku] || {};
+    const esCritico = !!cfg.es_critico;
+    const mesesSeguridad = esCritico ? Math.max(0, Number(cfg.meses_seguridad || 0)) : 0;
+    // Crecimiento: override manual o auto-calculado desde tendencia
+    let crecimiento;
+    if (cfg.crecimiento_override != null) {
+      crecimiento = Math.max(0, Math.min(0.40, Number(cfg.crecimiento_override)));
+    } else if (ritmo3mAnt > 0) {
+      const diff = (ritmo3m - ritmo3mAnt) / ritmo3mAnt;
+      crecimiento = Math.max(0, Math.min(0.40, diff));   // sin negativos, cap 40%
+    } else {
+      crecimiento = 0;
+    }
+    // Objetivo 3 meses + crecimiento + seguridad
+    const demanda3m = ritmo3m * 3;
+    const objetivo = demanda3m * (1 + crecimiento) + ritmo3m * mesesSeguridad;
+    // Necesidad: resta inventario + tránsito DENTRO del horizonte 3m
+    const horizonte3m = new Date(hoy); horizonte3m.setMonth(horizonte3m.getMonth() + 3);
+    const tra3m = embarques.reduce((a, e) => {
+      const eta = e.eta ? new Date(e.eta) : null;
+      if (!eta) return a;
+      return eta <= horizonte3m ? a + Number(e.cantidad || 0) : a;
+    }, 0);
+    const necesidad = Math.max(0, objetivo - inv - tra3m);
+    // Redondeo contenedor · umbral 50%
     const compraInfo = comprasBySku[sku] || {};
     const piezasPorContenedor = compraInfo.piezasPorContenedor || 0;
     const esConsolidado = !!compraInfo.esConsolidado;
+    let sugerido = necesidad;
     let contenedoresSugeridos = 0;
-    if (sugerido > 0 && piezasPorContenedor > 0 && !esConsolidado) {
-      contenedoresSugeridos = Math.ceil(sugerido / piezasPorContenedor);
+    if (necesidad > 0 && piezasPorContenedor > 0 && !esConsolidado) {
+      const prop = necesidad / piezasPorContenedor;
+      const frac = prop - Math.floor(prop);
+      contenedoresSugeridos = frac > 0.5 ? Math.ceil(prop) : Math.floor(prop);
       sugerido = contenedoresSugeridos * piezasPorContenedor;
+    } else if (esConsolidado) {
+      // consolidado: no se puede definir contenedor completo, dejamos piezas
+      sugerido = necesidad;
     }
+    // Notas visuales (sólo informativas — nunca ajustan el número)
+    const tendenciaNegativa = ritmo3mAnt > 0 && ritmo3m < ritmo3mAnt;
+    // brecha para el histórico (para "SKUs con brecha" en el hero editorial)
+    const brecha = Math.max(0, objetivo - inv - tra3m);
+    // Compat: preservamos bufferUnidades para exportar si alguien lo consume,
+    // pero ya no interviene en el sugerido.
+    const bufferUnidades = ritmo3m * BUFFER_MESES;
 
     // Canibalización: PCEL y Digitalife ambos tienen demanda
     const canibalizacion = demMes.digitalife > 0 && demMes.pcel > 0;
@@ -606,6 +671,28 @@ function calcularForecast(data, horizonteMeses) {
         items.forEach((it) => { it.pct = totalRitmo3m > 0 ? (it.ritmoMes3m / totalRitmo3m) * 100 : 0; });
         return items.sort((a, b) => b.total6m - a.total6m);
       })(),
+      // Concentración alta: el cliente dominante concentra >40% del ritmo Y
+      // su tendencia últimos 3m vs 3m anteriores es +20%.
+      concentracionAlta: (() => {
+        const bySku = demandaErpBySku[sku] || {};
+        const entries = Object.entries(bySku);
+        if (entries.length === 0) return null;
+        // Recomputar ranking simple para no depender del IIFE anterior
+        const items = entries.map(([cliente, v]) => {
+          const total3m = mesesRef6.slice(-3).reduce((a, m) => a + Number(v.mensual[m.key] || 0), 0);
+          const total3mAnt = mesesRef6.slice(0, 3).reduce((a, m) => a + Number(v.mensual[m.key] || 0), 0);
+          return { cliente, ritmo3m: total3m / 3, ritmo3mAnt: total3mAnt / 3 };
+        });
+        const total = items.reduce((a, x) => a + x.ritmo3m, 0);
+        if (total <= 0) return null;
+        items.forEach((it) => { it.pct = (it.ritmo3m / total) * 100; });
+        items.sort((a, b) => b.ritmo3m - a.ritmo3m);
+        const top = items[0];
+        if (top.pct <= 40) return null;
+        const tendPct = top.ritmo3mAnt > 0 ? ((top.ritmo3m - top.ritmo3mAnt) / top.ritmo3mAnt) * 100 : 0;
+        if (tendPct < 20) return null;
+        return { cliente: top.cliente, pct: Math.round(top.pct), tendPct: Math.round(tendPct) };
+      })(),
       coberturaDias,
 
       comprasHist,
@@ -619,6 +706,16 @@ function calcularForecast(data, horizonteMeses) {
       piezasPorContenedor,
       contenedoresSugeridos,
       esConsolidado,
+      // ═══ Fase 4 · metadata del sugerido ═══
+      ritmo3m,
+      ritmo3mAnt,
+      crecimientoPct: crecimiento,                    // 0..0.40
+      crecimientoCap: crecimiento === 0.40,           // true si topó al 40%
+      esCritico,
+      mesesSeguridad,
+      objetivo3m: Math.round(objetivo),
+      necesidadNeta: Math.round(necesidad),
+      tendenciaNegativa,
       tieneCompras: (compraInfo.pos || []).length > 0,
       ultimaCompra: compraInfo.ultimaCompra || null,
       canibalizacion, preventaDeficit, prorrateo,
@@ -1466,7 +1563,7 @@ function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, 
               <SortHeader theme={theme} col="traEta" label="Próximo arribo" width={110} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
               <SortHeader theme={theme} col="demandaMesErp" label="Demanda 3m" width={100} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
               <SortHeader theme={theme} col="coberturaDiasErp" label="Días inv." width={90} align="center" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} label="Acción" width={110} align="center" />
+              <SortHeader theme={theme} col="sugerido" label="Sugerido de compra" width={180} align="center" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
             </tr>
           </thead>
           <tbody>
@@ -1494,6 +1591,106 @@ function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, 
         </table>
       </div>
     </div>
+  );
+}
+
+// ────────── Sugerido de Compra · celda ──────────
+// Píldora azul (agregar) / verde (edit) / gris (sin brecha) + sub-línea
+// explicativa + notas visuales pequeñas (⭐ crítico · ↓ tendencia · ⚡ conc).
+function SugeridoCompraCell({ r, enExport, cantidadEnExport, onAgregarSolicitud, theme, isDark }) {
+  const sug = Number(r.sugerido || 0);
+  const cnt = Number(r.contenedoresSugeridos || 0);
+  const crecPct = Math.round(Number(r.crecimientoPct || 0) * 100);
+  const seg = Number(r.mesesSeguridad || 0);
+  const conc = r.concentracionAlta || null;
+  const tendNeg = !!r.tendenciaNegativa;
+  const critico = !!r.esCritico;
+  const cap = !!r.crecimientoCap;
+
+  let btnLabel, btnBg, btnColor, btnCursor = 'pointer', btnOn = null;
+  if (enExport) {
+    btnBg = theme.green || '#34C759';
+    btnColor = '#fff';
+    btnLabel = `✓ ${FMT_N(cantidadEnExport)} pz`;
+  } else if (sug > 0) {
+    btnBg = theme.accent || '#007AFF';
+    btnColor = '#fff';
+    btnLabel = cnt > 0 ? `＋ ${cnt} cnt · ${FMT_N(sug)} pz` : `＋ ${FMT_N(sug)} pz`;
+  } else {
+    btnBg = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+    btnColor = theme.textMuted;
+    btnCursor = 'default';
+    btnLabel = '— sin brecha';
+    btnOn = 'none';
+  }
+
+  // Sub-línea explicativa
+  let sub = '';
+  if (enExport) sub = `en Mi Export`;
+  else if (sug > 0) {
+    const parts = [];
+    if (crecPct > 0) parts.push(`crece +${crecPct}%${cap ? ' · cap' : ''}`);
+    parts.push(`3m${seg > 0 ? ` + ${seg}m seg` : ''}`);
+    sub = parts.join(' · ');
+  } else {
+    sub = '3m cubiertos';
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (btnOn === 'none') return;
+          if (onAgregarSolicitud) onAgregarSolicitud(r);
+        }}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '5px 12px', borderRadius: 999,
+          background: btnBg, color: btnColor, border: 0,
+          fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600,
+          letterSpacing: '-0.01em', cursor: btnCursor, whiteSpace: 'nowrap',
+          transition: 'transform 120ms',
+        }}
+        onMouseEnter={(e) => { if (btnOn !== 'none') e.currentTarget.style.transform = 'scale(1.03)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+        title={enExport ? `En Mi Export con ${FMT_N(cantidadEnExport)} pz — click para editar`
+          : sug > 0 ? `Sugerido: ${FMT_N(sug)} pz (${cnt} cnt) — click para agregar`
+          : 'Sin brecha con el objetivo de 3 meses'}
+      >
+        {btnLabel}
+      </button>
+      <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textMuted, fontWeight: 500, letterSpacing: '-0.005em' }}>
+        {sub}
+      </div>
+      {(critico || tendNeg || conc) && (
+        <div style={{ display: 'inline-flex', gap: 4, marginTop: 3 }}>
+          {critico && <SugNota kind="crit" theme={theme} tip="SKU crítico · no puede faltar" />}
+          {tendNeg && <SugNota kind="tend" theme={theme}
+            tip={`Consumo bajando · últ 3m ${FMT_N(Math.round(r.ritmo3m))} pz/m vs 3m ant ${FMT_N(Math.round(r.ritmo3mAnt))} pz/m`} />}
+          {conc && <SugNota kind="conc" theme={theme}
+            tip={`Concentración alta: ${conc.cliente} = ${conc.pct}% del consumo con tendencia +${conc.tendPct}% vs 3m ant`} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SugNota({ kind, theme, tip }) {
+  const map = {
+    crit: { bg: 'rgba(255,204,0,0.18)', color: '#B8860B', ch: '⭐' },
+    tend: { bg: 'rgba(255,45,85,0.16)',  color: theme.pink || '#FF2D55', ch: '↓' },
+    conc: { bg: 'rgba(0,122,255,0.14)',  color: theme.accent || '#007AFF', ch: '⚡' },
+  };
+  const s = map[kind] || map.crit;
+  return (
+    <span title={tip} style={{
+      width: 16, height: 16, borderRadius: '50%',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      background: s.bg, color: s.color, fontSize: 9, fontWeight: 700,
+      cursor: 'help', userSelect: 'none',
+    }}>{s.ch}</span>
   );
 }
 
@@ -1530,25 +1727,15 @@ function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud, enExport, cant
         </td>
         <td style={numS}>{FMT_N(r.demandaMesErp)}<span style={{ color: theme.textMuted, marginLeft: 3, fontSize: 10 }}>pz/m</span></td>
         <td style={{ ...cellS, textAlign: 'center' }}><CoberturaChip dias={r.coberturaDiasErp} theme={theme} /></td>
-        <td style={{ ...cellS, textAlign: 'center' }}>
-          {onAgregarSolicitud && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onAgregarSolicitud(r); }}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '3px 10px', borderRadius: 999,
-                background: enExport ? theme.green : (isDark ? 'rgba(10,132,255,0.14)' : 'rgba(0,122,255,0.08)'),
-                border: `1px solid ${enExport ? theme.green : (isDark ? 'rgba(10,132,255,0.30)' : 'rgba(0,122,255,0.20)')}`,
-                color: enExport ? '#fff' : theme.accent,
-                fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700,
-                cursor: 'pointer', whiteSpace: 'nowrap',
-              }}
-              title={enExport ? `Ya en el export activo (${FMT_N(cantidadEnExport)} pz)` : 'Agregar al export activo'}
-            >
-              {enExport ? `✓ ${FMT_N(cantidadEnExport)}` : `＋ ${r.sugerido > 0 ? FMT_N(r.sugerido) : 'custom'}`}
-            </button>
-          )}
+        <td style={{ ...cellS, textAlign: 'center', padding: '10px 10px' }}>
+          <SugeridoCompraCell
+            r={r}
+            enExport={enExport}
+            cantidadEnExport={cantidadEnExport}
+            onAgregarSolicitud={onAgregarSolicitud}
+            theme={theme}
+            isDark={isDark}
+          />
         </td>
       </tr>
       {expanded && (
@@ -2365,22 +2552,90 @@ function ExportCart({
             </div>
           </div>
 
-          {/* Líneas */}
-          <div style={{ maxHeight: 340, overflow: 'auto' }}>
+          {/* Líneas · agrupadas por proveedor cuando >= 3 SKUs del mismo */}
+          <div style={{ maxHeight: 380, overflow: 'auto' }}>
             {lineas.length === 0 ? (
               <div style={{ padding: '30px 20px', textAlign: 'center', color: theme.textMuted, fontSize: 11.5, fontStyle: 'italic' }}>
                 Sin SKUs. Da click a "＋" en la tabla para agregar.
               </div>
-            ) : lineas.map((l) => (
-              <ExportCartLine
-                key={l.id}
-                linea={l}
-                puedeEditar={puedeEditar}
-                onEditarLinea={onEditarLinea}
-                onEliminarLinea={onEliminarLinea}
-                theme={theme}
-              />
-            ))}
+            ) : (() => {
+              // Agrupar por proveedor
+              const provKey = (l) => (l.supplier || l.proveedor || '').trim() || '—';
+              const byProv = new Map();
+              lineas.forEach((l) => {
+                const k = provKey(l);
+                if (!byProv.has(k)) byProv.set(k, []);
+                byProv.get(k).push(l);
+              });
+              // Ordenar por: grupo (>=3) primero por USD desc, luego sueltos por USD desc
+              const grouped = [];
+              const singles = [];
+              const usdOf = (arr) => arr.reduce((a, l) => a + Number(l.cantidad || 0) * Number(l.ultimo_costo_usd || 0), 0);
+              const pzOf  = (arr) => arr.reduce((a, l) => a + Number(l.cantidad || 0), 0);
+              const cntOf = (arr) => arr.reduce((a, l) => a + Number(l.contenedores || 0), 0);
+              byProv.forEach((arr, prov) => {
+                if (arr.length >= 3) grouped.push({ prov, arr, usd: usdOf(arr), pz: pzOf(arr), cnt: cntOf(arr) });
+                else singles.push({ prov, arr, usd: usdOf(arr) });
+              });
+              grouped.sort((a, b) => b.usd - a.usd);
+              singles.sort((a, b) => b.usd - a.usd);
+              const flatSingles = singles.flatMap((s) => s.arr);
+              return (
+                <>
+                  {grouped.map((g) => (
+                    <div key={`g-${g.prov}`}>
+                      <div style={{
+                        padding: '10px 14px 6px', background: theme.bg,
+                        borderTop: `1px solid ${theme.divider || theme.border}`,
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                      }}>
+                        <div style={{
+                          fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em',
+                          textTransform: 'uppercase', color: theme.text, display: 'flex', alignItems: 'center', gap: 6,
+                          minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }} title={g.prov}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.prov}</span>
+                          <span style={{
+                            padding: '1px 7px', borderRadius: 999, fontSize: 9.5, fontWeight: 700, letterSpacing: '.03em',
+                            background: `${theme.accent}22`, color: theme.accent, letterSpacing: 0,
+                          }}>{g.arr.length} SKUs</span>
+                        </div>
+                        <div style={{
+                          fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 700,
+                          letterSpacing: '-0.015em', color: theme.text, fontVariantNumeric: 'tabular-nums',
+                          whiteSpace: 'nowrap', marginLeft: 8,
+                        }}>
+                          ${FMT_N(g.usd)}
+                          <span style={{ fontFamily: TYPO.fontText, fontWeight: 500, color: theme.textMuted, fontSize: 10.5, marginLeft: 4 }}>
+                            · {g.cnt > 0 ? `${g.cnt} cnt` : `${FMT_N(g.pz)} pz`}
+                          </span>
+                        </div>
+                      </div>
+                      {g.arr.map((l) => (
+                        <ExportCartLine key={l.id} linea={l} puedeEditar={puedeEditar}
+                          onEditarLinea={onEditarLinea} onEliminarLinea={onEliminarLinea}
+                          theme={theme} indent />
+                      ))}
+                    </div>
+                  ))}
+                  {flatSingles.length > 0 && grouped.length > 0 && (
+                    <div style={{
+                      padding: '10px 14px 6px', background: theme.bg,
+                      borderTop: `1px solid ${theme.divider || theme.border}`,
+                      fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 700,
+                      letterSpacing: '.06em', textTransform: 'uppercase', color: theme.textMuted,
+                    }}>
+                      Otros SKUs
+                    </div>
+                  )}
+                  {flatSingles.map((l) => (
+                    <ExportCartLine key={l.id} linea={l} puedeEditar={puedeEditar}
+                      onEditarLinea={onEditarLinea} onEliminarLinea={onEliminarLinea}
+                      theme={theme} showProv />
+                  ))}
+                </>
+              );
+            })()}
           </div>
 
           {/* Actions */}
@@ -2452,7 +2707,7 @@ function ExportCart({
   );
 }
 
-function ExportCartLine({ linea, puedeEditar, onEditarLinea, onEliminarLinea, theme }) {
+function ExportCartLine({ linea, puedeEditar, onEditarLinea, onEliminarLinea, theme, indent, showProv }) {
   const cantidad = Number(linea.cantidad || 0);
   const cnt = Number(linea.contenedores || 0);
   const pzPorCnt = cnt > 0 ? cantidad / cnt : 0;
@@ -2462,9 +2717,10 @@ function ExportCartLine({ linea, puedeEditar, onEditarLinea, onEliminarLinea, th
     onEditarLinea && onEditarLinea(linea.id, { cantidad: Math.max(0, cantidad - (pzPorCnt || 100)), contenedores: cnt - 1 });
   };
   const subtotal = cantidad * Number(linea.ultimo_costo_usd || 0);
+  const proveedor = (linea.supplier || linea.proveedor || '').trim();
   return (
     <div style={{
-      padding: '10px 14px', borderBottom: `1px solid ${theme.divider || theme.border}`,
+      padding: `10px 14px 10px ${indent ? 26 : 14}px`, borderBottom: `1px solid ${theme.divider || theme.border}`,
       display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center',
     }}>
       <div style={{ minWidth: 0 }}>
@@ -2476,6 +2732,11 @@ function ExportCartLine({ linea, puedeEditar, onEditarLinea, onEliminarLinea, th
           {linea.ultimo_costo_usd > 0 && ` · $${Number(linea.ultimo_costo_usd).toFixed(2)}`}
           {subtotal > 0 && ` → $${FMT_N(subtotal)}`}
         </div>
+        {showProv && proveedor && (
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: theme.textSubtle, marginTop: 2 }}>
+            {proveedor}
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         {puedeEditar && (
