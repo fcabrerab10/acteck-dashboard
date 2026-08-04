@@ -110,7 +110,7 @@ function useForecastData() {
       // `arribo_almacen`) como ETA del embarque, y la marca la cruzamos
       // contra v_sku_metadata por SKU.
       fetchAll(() => supabase.from('embarques_compras')
-        .select('po, codigo, fecha_emision, arribo_cedis, arribo_almacen, eta_puerto, etd, po_qty, cbm, contenedor, estatus, supplier, familia, descripcion, unit_price')),
+        .select('po, codigo, fecha_emision, arribo_cedis, arribo_almacen, eta_puerto, etd, po_qty, shp_qty, cbm, contenedor, estatus, supplier, familia, descripcion, unit_price')),
       // Solicitudes de compra del año actual (las tablas pueden no existir aún
       // — capturamos error silenciosamente en ese caso)
       supabase.from('solicitudes_compra').select('*').eq('anio', anioActual)
@@ -193,7 +193,18 @@ function calcularForecast(data, horizonteMeses) {
     if (row.canal && !entry.canal) entry.canal = row.canal;
   });
 
-  const invBySku  = Object.fromEntries(inventario.map(r => [r.sku, r]));
+  // Fix crítico: v_inventario_comercial puede devolver múltiples filas por SKU
+  // (una por almacén). Agregamos manualmente para no perder stock de los demás
+  // almacenes cuando Object.fromEntries colapsa por key duplicada.
+  const invBySku = {};
+  (inventario || []).forEach((r) => {
+    if (!r || !r.sku) return;
+    if (!invBySku[r.sku]) {
+      invBySku[r.sku] = { ...r, disponible: 0, inventario: 0 };
+    }
+    invBySku[r.sku].disponible += Number(r.disponible || 0);
+    invBySku[r.sku].inventario += Number(r.inventario || 0);
+  });
   const traBySku  = Object.fromEntries(transito.map(r => [r.sku, r]));
   const ltBySku   = Object.fromEntries(leadTimes.map(r => [r.sku, r]));
   const metaBySku = Object.fromEntries(metadata.map(r => [r.sku, r]));
@@ -265,6 +276,16 @@ function calcularForecast(data, horizonteMeses) {
     const ordenadas = info.pos.slice().sort((a, b) =>
       String(b.fecha_emision || '').localeCompare(String(a.fecha_emision || '')));
 
+    // Helper: piezas EN ESE SHIPMENT/CONTENEDOR concreto — NO el total de la PO.
+    // Una PO se puede partir en varios shipments (ej. PO=1000 en 2 contenedores
+    // de 500 cada uno). shp_qty refleja lo que va en ESE embarque; po_qty es
+    // el total de la PO original. Usar shp_qty es correcto para "pzs/contenedor";
+    // fallback a po_qty si shp_qty viene null/0.
+    const shpQty = (e) => {
+      const s = Number(e.shp_qty || 0);
+      return s > 0 ? s : Number(e.po_qty || 0);
+    };
+
     // Última PO (cualquiera, aunque su contenedor esté pendiente) — info
     // visual del modal.
     const ult = ordenadas[0];
@@ -273,7 +294,7 @@ function calcularForecast(data, horizonteMeses) {
       const cntConf = contenedorConfirmado(cntId);
       info.ultimaCompra = {
         fecha: ult.fecha_emision || null,
-        piezas: Number(ult.po_qty || 0),
+        piezas: shpQty(ult),
         contenedor: cntConf ? cntId : null,
         contenedorPendiente: !cntConf,
         esConsolidado: cntConf && contenedorEsConsolidado(cntId),
@@ -290,18 +311,17 @@ function calcularForecast(data, horizonteMeses) {
     if (ultConf) {
       const cntId = (ultConf.contenedor || '').toString().trim();
       info.esConsolidado = contenedorEsConsolidado(cntId);
-      // pzs/contenedor:
-      //   - Si la última confirmada fue NO consolidada → po_qty es 1 contenedor lleno
-      //   - Si fue consolidada → buscar hacia atrás la última NO consolidada
-      if (!info.esConsolidado && Number(ultConf.po_qty) > 0) {
-        info.piezasPorContenedor = Math.round(Number(ultConf.po_qty) || 0);
+      // pzs/contenedor = shp_qty de la última PO NO consolidada. Si la última
+      // confirmada fue consolidada, se busca hacia atrás.
+      if (!info.esConsolidado && shpQty(ultConf) > 0) {
+        info.piezasPorContenedor = Math.round(shpQty(ultConf));
       } else {
         const ultNoConsol = ordenadas.find((e) => {
           const c = (e.contenedor || '').toString().trim();
-          return contenedorConfirmado(c) && !contenedorEsConsolidado(c) && Number(e.po_qty) > 0;
+          return contenedorConfirmado(c) && !contenedorEsConsolidado(c) && shpQty(e) > 0;
         });
         if (ultNoConsol) {
-          info.piezasPorContenedor = Math.round(Number(ultNoConsol.po_qty) || 0);
+          info.piezasPorContenedor = Math.round(shpQty(ultNoConsol));
         }
       }
     } else {
