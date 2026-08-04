@@ -1636,36 +1636,39 @@ function SugeridoCompraCell({ r, enExport, cantidadEnExport, onAgregarSolicitud,
     sub = '3m cubiertos';
   }
 
+  const tieneNotas = critico || tendNeg || conc;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          if (btnOn === 'none') return;
-          if (onAgregarSolicitud) onAgregarSolicitud(r);
-        }}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '5px 12px', borderRadius: 999,
-          background: btnBg, color: btnColor, border: 0,
-          fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600,
-          letterSpacing: '-0.01em', cursor: btnCursor, whiteSpace: 'nowrap',
-          transition: 'transform 120ms',
-        }}
-        onMouseEnter={(e) => { if (btnOn !== 'none') e.currentTarget.style.transform = 'scale(1.03)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-        title={enExport ? `En Mi Export con ${FMT_N(cantidadEnExport)} pz — click para editar`
-          : sug > 0 ? `Sugerido: ${FMT_N(sug)} pz (${cnt} cnt) — click para agregar`
-          : 'Sin brecha con el objetivo de 3 meses'}
-      >
-        {btnLabel}
-      </button>
-      <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textMuted, fontWeight: 500, letterSpacing: '-0.005em' }}>
-        {sub}
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (btnOn === 'none') return;
+            if (onAgregarSolicitud) onAgregarSolicitud(r);
+          }}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '4px 11px', borderRadius: 999,
+            background: btnBg, color: btnColor, border: 0,
+            fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600,
+            letterSpacing: '-0.01em', cursor: btnCursor, whiteSpace: 'nowrap', lineHeight: 1.2,
+            transition: 'transform 120ms',
+          }}
+          onMouseEnter={(e) => { if (btnOn !== 'none') e.currentTarget.style.transform = 'scale(1.03)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+          title={enExport ? `En Mi Export con ${FMT_N(cantidadEnExport)} pz — click para editar`
+            : sug > 0 ? `Sugerido: ${FMT_N(sug)} pz (${cnt} cnt) — click para agregar`
+            : 'Sin brecha con el objetivo de 3 meses'}
+        >
+          {btnLabel}
+        </button>
+        <div style={{ fontFamily: TYPO.fontText, fontSize: 9.5, color: theme.textMuted, fontWeight: 500, letterSpacing: '-0.005em', lineHeight: 1.1 }}>
+          {sub}
+        </div>
       </div>
-      {(critico || tendNeg || conc) && (
-        <div style={{ display: 'inline-flex', gap: 4, marginTop: 3 }}>
+      {tieneNotas && (
+        <div style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
           {critico && <SugNota kind="crit" theme={theme} tip="SKU crítico · no puede faltar" />}
           {tendNeg && <SugNota kind="tend" theme={theme}
             tip={`Consumo bajando · últ 3m ${FMT_N(Math.round(r.ritmo3m))} pz/m vs 3m ant ${FMT_N(Math.round(r.ritmo3mAnt))} pz/m`} />}
@@ -1727,7 +1730,7 @@ function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud, enExport, cant
         </td>
         <td style={numS}>{FMT_N(r.demandaMesErp)}<span style={{ color: theme.textMuted, marginLeft: 3, fontSize: 10 }}>pz/m</span></td>
         <td style={{ ...cellS, textAlign: 'center' }}><CoberturaChip dias={r.coberturaDiasErp} theme={theme} /></td>
-        <td style={{ ...cellS, textAlign: 'center', padding: '10px 10px' }}>
+        <td style={{ ...cellS, textAlign: 'right', padding: '6px 10px' }}>
           <SugeridoCompraCell
             r={r}
             enExport={enExport}
