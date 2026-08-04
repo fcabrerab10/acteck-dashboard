@@ -1471,11 +1471,13 @@ export default function ForecastClientesTab() {
         </div>
       )}
 
-      {/* GRID · main + sidebar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 12, alignItems: 'start' }}>
+      {/* GRID · main + sidebar
+          alignItems: stretch para que la tabla del S&OP se corte a la
+          altura del sidebar (Mi Export + Últimas compras). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 12, alignItems: 'stretch' }}>
 
         {/* MAIN COLUMN */}
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           {/* Toolbar filtros */}
           <div style={{
             background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12,
@@ -1741,7 +1743,7 @@ function SortHeader({ theme, col, label, width, align = 'left', onSort, sortCol,
 // ────────── Tabla principal ──────────
 function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, sortDir, onSort, onAgregarSolicitud, skusEnBorrador, lineasBorrador, theme, isDark, horizonte }) {
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <div style={{
         padding: '12px 16px', borderBottom: `1px solid ${theme.divider || theme.border}`,
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
@@ -1753,7 +1755,7 @@ function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, 
           <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs · click para drill · <span style={{ color: theme.green }}>■</span> en export
         </span>
       </div>
-      <div style={{ overflow: 'visible' }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
           <thead>
             <tr>
