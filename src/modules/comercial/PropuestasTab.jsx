@@ -1591,6 +1591,54 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombr
   const gap = contexto?.gap || 0;
   const cierraGapPct = gap > 0 ? Math.round((total / gap) * 100) : null;
 
+  // ═════ Métricas comerciales: descuento vs Mayoreo AAA + margen vs costo ═════
+  const metricasComerciales = useMemo(() => {
+    let ahorroTotal = 0;
+    let sumaDescPond = 0, sumaTotalConComp = 0;
+    let sumaMargPond = 0, sumaTotalConCosto = 0;
+    let sinCosto = 0, sinComparacion = 0;
+    for (const r of propuestaLista) {
+      const px = Number(r.precio) || 0;
+      const pz = Number(r.piezas) || 0;
+      const tot = px * pz;
+      const maaa = Number(r.precios?.['Mayoreo AAA']) || 0;
+      const costo = Number(r.costo) || 0;
+      if (maaa > 0 && px > 0) {
+        const ahorro = (maaa - px) * pz;
+        ahorroTotal += ahorro;
+        sumaDescPond += ((maaa - px) / maaa) * tot;
+        sumaTotalConComp += tot;
+      } else if (px > 0) {
+        sinComparacion++;
+      }
+      if (costo > 0 && px > 0) {
+        sumaMargPond += ((px - costo) / px) * tot;
+        sumaTotalConCosto += tot;
+      } else if (px > 0) {
+        sinCosto++;
+      }
+    }
+    return {
+      ahorroTotal,
+      descuentoProm: sumaTotalConComp > 0 ? (sumaDescPond / sumaTotalConComp) * 100 : null,
+      margenProm: sumaTotalConCosto > 0 ? (sumaMargPond / sumaTotalConCosto) * 100 : null,
+      sinCosto, sinComparacion,
+    };
+  }, [propuestaLista]);
+
+  // Distribución por familia para la barra visual
+  const distribucionFamilia = useMemo(() => {
+    const arr = Object.entries(grupos).map(([k, filas]) => ({
+      nombre: k,
+      total: filas.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0),
+    })).filter((g) => g.total > 0);
+    const sumaTotal = arr.reduce((s, g) => s + g.total, 0);
+    return arr.map((g) => ({ ...g, pct: sumaTotal > 0 ? (g.total / sumaTotal) * 100 : 0 }));
+  }, [grupos]);
+
+  const FAMILIA_COLORS = { 'Monitores': P.accent, 'Sillas': P.purple, 'Todo lo demás': P.green, 'Propuesta': P.accent };
+  const famColor = (n) => FAMILIA_COLORS[n] || P.accent;
+
   const [savedMsg, setSavedMsg] = useState(null);
   const handleGuardar = () => {
     onGuardar?.();
@@ -1869,10 +1917,10 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombr
       </div>
 
       <div style={{ padding: '0 4px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* Hero total */}
+        {/* Hero denso: total + descuento⌀ + margen⌀ + cierra gap */}
         <div style={{
-          background: heroBg, color: heroText, borderRadius: 16, padding: '20px 24px',
-          display: 'grid', gridTemplateColumns: '1fr auto', gap: 20, alignItems: 'center',
+          background: heroBg, color: heroText, borderRadius: 16, padding: '22px 28px',
+          display: 'grid', gridTemplateColumns: '1.4fr repeat(3, auto)', gap: 28, alignItems: 'center',
           position: 'relative', overflow: 'hidden',
           border: isDark ? '1px solid rgba(255,255,255,0.06)' : 'none',
         }}>
@@ -1883,48 +1931,83 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombr
             }} />
           )}
           <div style={{ position: 'relative' }}>
-            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: heroSub, fontWeight: 500, margin: 0 }}>
-              Total de la propuesta
+            <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.14em', color: heroSub, fontWeight: 600, margin: 0 }}>
+              Revisar propuesta · {cliente.label} · {MES_FULL[new Date().getMonth()]} {new Date().getFullYear()}
             </p>
-            <h2 style={{ fontFamily: TYPO.fontDisplay, fontSize: 32, fontWeight: 600, letterSpacing: '-0.03em', color: heroText, margin: '6px 0', fontVariantNumeric: 'tabular-nums' }}>
+            <h2 style={{ fontFamily: TYPO.fontDisplay, fontSize: 40, fontWeight: 600, letterSpacing: '-0.032em', color: heroText, margin: '6px 0 4px', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
               {formatMXN(total)}
             </h2>
-            <p style={{ fontSize: 12, color: heroMuted, margin: 0, maxWidth: 480, lineHeight: 1.5 }}>
+            <p style={{ fontSize: 12, color: heroMuted, margin: 0, maxWidth: 520, lineHeight: 1.5 }}>
               <strong style={{ color: heroText, fontWeight: 500 }}>{propuestaLista.length} SKUs · {fmtInt(piezas)} piezas.</strong>
               {' '}
+              {metricasComerciales.ahorroTotal > 0 && (
+                <><strong style={{ color: P.green, fontWeight: 600 }}>{fmtCompact(metricasComerciales.ahorroTotal)} ahorro</strong> aplicado sobre Mayoreo AAA{metricasComerciales.descuentoProm != null ? ` (${metricasComerciales.descuentoProm.toFixed(1)}%)` : ''}. </>
+              )}
               {cierraGapPct != null
-                ? <>Cierra el gap del mes en <strong style={{ color: heroText }}>{cierraGapPct}%</strong> — te da margen para negociar cierres.</>
-                : <>El gap del mes ya está cerrado; esta propuesta suma a tu YTD.</>}
+                ? <>Cierra el gap del mes en <strong style={{ color: heroText }}>{cierraGapPct}%</strong>.</>
+                : <>El gap del mes ya está cerrado.</>}
             </p>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, textAlign: 'right', position: 'relative' }}>
-            {cierraGapPct != null && (
-              <div>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>Cierra gap</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', fontSize: 20, marginTop: 2, color: cierraGapPct >= 100 ? P.green : P.orange }}>
-                  ▲ {cierraGapPct}%
-                </div>
-              </div>
-            )}
-            <div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>Precio promedio</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', fontSize: 18, marginTop: 2, color: heroText }}>
-                {formatMXN(precioProm)}/pz
-              </div>
+          <div style={{ borderLeft: `1px solid rgba(255,255,255,0.08)`, paddingLeft: 24, position: 'relative' }}>
+            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: heroSub }}>Descuento ⌀</div>
+            <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: heroText, marginTop: 3 }}>
+              {metricasComerciales.descuentoProm != null ? `${metricasComerciales.descuentoProm.toFixed(1)}%` : '—'}
+            </div>
+            <div style={{ fontSize: 10.5, color: heroSub, marginTop: 2, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+              vs Mayoreo AAA
             </div>
           </div>
+          <div style={{ position: 'relative' }}>
+            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: heroSub }}>Margen ⌀</div>
+            <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', marginTop: 3, color: metricasComerciales.margenProm != null && metricasComerciales.margenProm >= 25 ? '#30D158' : metricasComerciales.margenProm != null && metricasComerciales.margenProm >= 15 ? '#FF9F0A' : metricasComerciales.margenProm != null ? '#FF453A' : heroText }}>
+              {metricasComerciales.margenProm != null ? `${metricasComerciales.margenProm.toFixed(1)}%` : '—'}
+            </div>
+            <div style={{ fontSize: 10.5, color: heroSub, marginTop: 2, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+              vs costo{metricasComerciales.sinCosto > 0 ? ` · ${metricasComerciales.sinCosto} sin costo` : ''}
+            </div>
+          </div>
+          {cierraGapPct != null && (
+            <div style={{ position: 'relative' }}>
+              <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: heroSub }}>Cierra gap</div>
+              <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', marginTop: 3, color: cierraGapPct >= 100 ? '#30D158' : '#FF9F0A' }}>
+                ▲ {cierraGapPct}%
+              </div>
+              <div style={{ fontSize: 10.5, color: heroSub, marginTop: 2, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                de {fmtCompact(gap)}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* KPIs Fitness */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-          <KpiFit theme={theme} P={P} icon="🧾" iconBg={`${P.accent}22`} iconColor={P.accent} chip="SKUs" value={String(propuestaLista.length)} note="Productos incluidos en la propuesta." />
-          <KpiFit theme={theme} P={P} icon="📦" iconBg={`${P.green}22`} iconColor={P.green} chip="Piezas" value={fmtInt(piezas)} note={<>Suma total de <strong style={{ color: theme.text }}>{propuestaLista.length} SKUs</strong>.</>} />
-          <KpiFit theme={theme} P={P} icon="💰" iconBg={`${P.orange}22`} iconColor={P.orange} chip="Total" value={fmtCompact(total)} note={<>Precio promedio <strong style={{ color: theme.text }}>{formatMXN(precioProm)}</strong>/pz.</>} />
-          <KpiFit theme={theme} P={P} icon="🎯" iconBg={`${P.purple}22`} iconColor={P.purple} chip="Vs Gap"
-            value={cierraGapPct != null ? `▲ ${cierraGapPct}%` : '—'}
-            valueColor={cierraGapPct != null && cierraGapPct >= 100 ? P.green : cierraGapPct != null ? P.orange : theme.text}
-            note={gap > 0 ? <>Gap era <strong style={{ color: theme.text }}>{fmtCompact(gap)}</strong>.</> : <>Sin gap pendiente.</>} />
-        </div>
+        {/* Distribución por familia — barra visual */}
+        {distribucionFamilia.length > 1 && (
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 18px' }}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 10 }}>
+              Distribución del total por familia
+            </div>
+            <div style={{ display: 'flex', height: 18, borderRadius: 9, overflow: 'hidden', background: theme.bg, marginBottom: 10 }}>
+              {distribucionFamilia.map((g) => (
+                <div key={g.nombre} style={{ width: `${g.pct}%`, background: famColor(g.nombre), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10, fontWeight: 600 }}>
+                  {g.pct >= 8 ? `${g.pct.toFixed(0)}%` : ''}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11 }}>
+              {distribucionFamilia.map((g) => (
+                <span key={g.nombre} style={{ display: 'flex', alignItems: 'center', gap: 6, color: theme.text }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 3, background: famColor(g.nombre) }} />
+                  {g.nombre}
+                  <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, marginLeft: 4 }}>{fmtCompact(g.total)}</span>
+                </span>
+              ))}
+              {distribucionFamilia.some((g) => g.pct > 60) && (
+                <span style={{ marginLeft: 'auto', color: P.orange, fontSize: 10.5, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                  ⚠ {distribucionFamilia.find((g) => g.pct > 60).nombre} concentra {distribucionFamilia.find((g) => g.pct > 60).pct.toFixed(0)}% — considera balancear
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Grupos */}
         {Object.entries(grupos).map(([nombreGrupo, filas]) => {
@@ -1954,33 +2037,67 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombr
                     <tr style={{ background: heroBg }}>
                       <th style={{ textAlign: 'left', padding: '8px 10px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 100 }}>SKU</th>
                       <th style={{ textAlign: 'left', padding: '8px 10px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>Descripción</th>
-                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 60 }}>Inv cli</th>
-                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 60 }}>Inv Ack</th>
-                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 68 }}>SO 90d</th>
-                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 66 }}>Piezas</th>
-                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 86 }}>Precio</th>
+                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 60 }}>Piezas</th>
+                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 130, background: 'rgba(100,210,255,0.14)' }}>Precio propuesta</th>
+                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 82, background: 'rgba(100,210,255,0.14)' }}>vs MAAA</th>
+                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 76, background: 'rgba(100,210,255,0.14)' }}>Descuento</th>
+                      <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 76 }}>Margen</th>
                       <th style={{ textAlign: 'right', padding: '8px 8px', color: '#FFF', fontFamily: TYPO.fontText, fontWeight: 600, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', width: 100 }}>Total</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filas.map((r) => (
-                      <tr key={r.sku} style={{ borderTop: `1px solid ${theme.border}`, height: 30 }}>
-                        <td style={{ padding: '5px 10px', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: theme.text }}>{r.sku}</td>
-                        <td style={{ padding: '5px 10px', fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(r.invCliente || 0)}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(r.invActeck || 0)}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(r.sellout90 || 0)}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(r.piezas || 0)}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right', color: r.listaSel === '__custom' ? P.accent : theme.text, fontWeight: r.listaSel === '__custom' ? 600 : 400, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{formatMXN(r.precio)}</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>{formatMXN((r.piezas || 0) * (r.precio || 0))}</td>
-                      </tr>
-                    ))}
+                    {filas.map((r) => {
+                      const px = Number(r.precio) || 0;
+                      const pz = Number(r.piezas) || 0;
+                      const maaa = Number(r.precios?.['Mayoreo AAA']) || 0;
+                      const costo = Number(r.costo) || 0;
+                      const descuento = (maaa > 0 && px > 0) ? ((maaa - px) / maaa) * 100 : null;
+                      const margen = (costo > 0 && px > 0) ? ((px - costo) / px) * 100 : null;
+                      const listaSel = r.listaSel && r.listaSel !== '__custom' ? r.listaSel : null;
+                      const chipColor = listaSel ? listaColor(listaSel) : P.orange;
+                      const chipLabel = listaSel ? listaShort(listaSel) : (r.listaSel === '__custom' ? 'CUSTOM' : '');
+                      const margenColor = margen == null ? P.red : margen >= 25 ? P.green : margen >= 15 ? P.orange : P.red;
+                      const bgSplit = isDark ? 'rgba(100,210,255,0.05)' : `${P.accent}05`;
+                      return (
+                        <tr key={r.sku} style={{ borderTop: `1px solid ${theme.border}`, height: 32 }}>
+                          <td style={{ padding: '5px 10px', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600, color: theme.text }}>{r.sku}</td>
+                          <td style={{ padding: '5px 10px', fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion}</td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(pz)}</td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', color: theme.text, fontSize: 11, fontVariantNumeric: 'tabular-nums', background: bgSplit }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
+                              <strong style={{ fontFamily: '"SF Mono", ui-monospace, monospace' }}>{formatMXN(px)}</strong>
+                              {chipLabel && (
+                                <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', padding: '1px 4px', borderRadius: 3, background: `${chipColor}22`, color: chipColor }}>{chipLabel}</span>
+                              )}
+                            </span>
+                          </td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums', background: bgSplit, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                            {maaa > 0 ? formatMXN(maaa) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
+                          </td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', fontSize: 11, fontVariantNumeric: 'tabular-nums', background: bgSplit, fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: descuento == null ? theme.textMuted : descuento > 0 ? P.green : descuento < 0 ? P.red : theme.textMuted }}>
+                            {descuento != null ? `${descuento > 0 ? '-' : descuento < 0 ? '+' : ''}${Math.abs(descuento).toFixed(1)}%` : '—'}
+                          </td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', fontSize: 11 }}>
+                            {margen != null ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 5, fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, background: `${margenColor}18`, color: margenColor }}>
+                                {margen.toFixed(0)}%
+                              </span>
+                            ) : (
+                              <span title="Falta cargar costo_promedio en precios_sku para este SKU" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 6px', borderRadius: 5, background: `${P.red}18`, color: P.red, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                                ⚠ sin costo
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>{formatMXN(pz * px)}</td>
+                        </tr>
+                      );
+                    })}
                     <tr style={{ background: theme.bg, borderTop: `2px solid ${theme.borderStrong || theme.border}` }}>
-                      <td colSpan={5} style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: theme.textMuted, letterSpacing: '-0.01em' }}>
+                      <td colSpan={2} style={{ padding: '10px 12px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, color: theme.textMuted, letterSpacing: '-0.01em' }}>
                         Total {nombreGrupo.toLowerCase()}
                       </td>
                       <td style={{ padding: '10px 8px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{fmtInt(piezasGrupo)}</td>
-                      <td></td>
+                      <td colSpan={4}></td>
                       <td style={{ padding: '10px 8px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, color: theme.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{formatMXN(totalGrupo)}</td>
                     </tr>
                   </tbody>
@@ -2034,7 +2151,7 @@ async function fetchAll(clienteKey) {
     supabase.from('inventario_acteck').select('articulo,disponible,no_almacen'),
     supabase.from('inventario_cliente').select('sku,stock,titulo,anio,semana').eq('cliente', clienteKey),
     supabase.from('precios_sku')
-      .select('sku,lista,precio,anio,mes')
+      .select('sku,lista,precio,costo_promedio,anio,mes')
       .gte('anio', anioMax - 1)
       .order('anio', { ascending: false })
       .order('mes', { ascending: false }),
@@ -2065,10 +2182,15 @@ async function fetchAll(clienteKey) {
     }
   }
   const preciosPorSku = new Map();
+  const costoPorSku = new Map();
   for (const r of preciosRes.data || []) {
     if (!preciosPorSku.has(r.sku)) preciosPorSku.set(r.sku, {});
     const lst = preciosPorSku.get(r.sku);
     if (!(r.lista in lst)) lst[r.lista] = Number(r.precio) || 0;
+    // Costo: primer valor encontrado (registros ya vienen ordenados desc por año/mes)
+    if (!costoPorSku.has(r.sku) && r.costo_promedio) {
+      costoPorSku.set(r.sku, Number(r.costo_promedio) || 0);
+    }
   }
   // Total 3m y desglose por mes: selloutPorMes.get(sku) = { 'YYYY-MM': cantidad }
   const sellout = new Map();
@@ -2105,6 +2227,7 @@ async function fetchAll(clienteKey) {
         [mesesKeys[2]]: arr[2],
       },
       precios: preciosPorSku.get(r.sku) || {},
+      costo: costoPorSku.get(r.sku) || 0,
     };
   });
   rows.sort((a, b) => b.sellout90 - a.sellout90);
