@@ -1,5 +1,5 @@
 // PropuestasTab.jsx — Armador de propuestas de venta por cliente.
-// Flujo: landing (con recientes) → cliente picker → one-page + copilot → revisar.
+// Flujo: landing (con recientes) → cliente picker → one-page + Ferruteck → revisar.
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -88,6 +88,58 @@ function removeReciente(id) {
 }
 function nuevaPropuestaId() {
   return `prp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+// Agrupa recientes por mes-año de creación (basado en tstamp). Devuelve
+// Array<{ label, key, items }> ordenado descendente (mes actual arriba).
+function agruparPorMes(recientes) {
+  const groups = new Map();
+  for (const r of recientes) {
+    const d = new Date(r.tstamp || Date.now());
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key, label: `${MES_FULL[d.getMonth()]} ${d.getFullYear()}`,
+        items: [],
+      });
+    }
+    groups.get(key).items.push(r);
+  }
+  return Array.from(groups.values()).sort((a, b) => b.key.localeCompare(a.key));
+}
+
+// Adjunta / reemplaza el Excel final enviado al cliente. Persiste como
+// dataUrl base64 en localStorage. Cambia el estatus a "Enviada".
+function setExcelFinalReciente(id, excel) {
+  try {
+    const all = loadRecientes();
+    const idx = all.findIndex((r) => r.id === id);
+    if (idx < 0) return;
+    if (excel) {
+      all[idx] = { ...all[idx], excelFinal: excel, estado: 'Enviada' };
+    } else {
+      const { excelFinal: _drop, ...rest } = all[idx];
+      all[idx] = { ...rest, estado: rest.estado === 'Enviada' ? 'Exportada' : rest.estado };
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+// Convierte un File a dataUrl base64 para persistir en localStorage.
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+// Descarga un dataUrl como archivo
+function descargarDataUrl(dataUrl, filename) {
+  const a = document.createElement('a');
+  a.href = dataUrl; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -405,7 +457,7 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, tick }
             Empújalo con una propuesta ganadora.
           </h2>
           <p style={{ color: heroMuted, fontSize: 12, lineHeight: 1.5, margin: 0 }}>
-            El mes cierra pronto. Arma una propuesta con las recomendaciones del Copilot y déjala lista antes del corte.
+            El mes cierra pronto. Arma una propuesta con las recomendaciones de Ferruteck y déjala lista antes del corte.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', position: 'relative' }}>
@@ -429,64 +481,248 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, tick }
         </div>
       </div>
 
-      {/* Recientes */}
-      <div style={{ padding: '0 4px' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-          <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 }}>
-            Propuestas recientes
-          </h3>
-          <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-            {recientes.length === 0 ? 'sin propuestas aún' : `${recientes.length} guardada${recientes.length === 1 ? '' : 's'}`}
-          </span>
+      {/* Recientes agrupadas por mes + filtros + slot Excel final */}
+      <PropuestasRecientes
+        theme={theme} isDark={isDark} P={P}
+        recientes={recientes}
+        onAbrirReciente={onAbrirReciente}
+        onRefresh={() => setRecientes(loadRecientes())}
+      />
+    </div>
+  );
+}
+
+// ────────── Recientes: filtros + agrupado por mes + slot Excel final ──────────
+function PropuestasRecientes({ theme, isDark, P, recientes, onAbrirReciente, onRefresh }) {
+  const [filtroCli, setFiltroCli] = useState('todos');
+  const [filtroEst, setFiltroEst] = useState('todas');
+  const [busqueda, setBusqueda] = useState('');
+
+  const filtradas = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    return recientes.filter((r) => {
+      if (filtroCli !== 'todos' && r.clienteKey !== filtroCli) return false;
+      if (filtroEst !== 'todas') {
+        const est = r.estado || 'Borrador';
+        if (filtroEst === 'borrador' && est !== 'Borrador') return false;
+        if (filtroEst === 'exportada' && est !== 'Exportada') return false;
+        if (filtroEst === 'enviada' && est !== 'Enviada') return false;
+      }
+      if (q) {
+        const hay = `${r.nombre || ''} ${r.clienteLabel || ''} ${r.clienteKey || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [recientes, filtroCli, filtroEst, busqueda]);
+
+  const grupos = useMemo(() => agruparPorMes(filtradas), [filtradas]);
+
+  const segStyle = (active) => ({
+    padding: '5px 12px', borderRadius: 999, fontSize: 11, fontWeight: active ? 600 : 500,
+    cursor: 'pointer', border: 0,
+    background: active ? theme.surface : 'transparent',
+    color: active ? theme.text : theme.textMuted,
+    boxShadow: active ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+    fontFamily: 'inherit',
+  });
+
+  return (
+    <div style={{ padding: '0 4px' }}>
+      {/* Filtros */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={{
+          flex: 1, maxWidth: 280,
+          background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999,
+          padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: theme.textMuted,
+        }}>
+          <Search style={{ width: 12, height: 12 }} strokeWidth={2.2} />
+          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar por nombre, cliente…"
+            style={{ border: 0, outline: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 11.5, color: theme.text, flex: 1 }} />
         </div>
-        {recientes.length === 0 ? (
+        <div style={{ display: 'inline-flex', padding: 2, background: isDark ? 'rgba(255,255,255,0.06)' : '#EFEFF4', borderRadius: 999, gap: 1 }}>
+          {[
+            { k: 'todos', l: 'Todos' },
+            { k: 'digitalife', l: 'Digi' },
+            { k: 'pcel', l: 'PCEL' },
+            { k: 'dicotech', l: 'Dico' },
+          ].map((op) => (
+            <button key={op.k} onClick={() => setFiltroCli(op.k)} style={segStyle(filtroCli === op.k)}>{op.l}</button>
+          ))}
+        </div>
+        <div style={{ display: 'inline-flex', padding: 2, background: isDark ? 'rgba(255,255,255,0.06)' : '#EFEFF4', borderRadius: 999, gap: 1 }}>
+          {[
+            { k: 'todas', l: 'Todas' },
+            { k: 'borrador', l: 'Borradores' },
+            { k: 'exportada', l: 'Exportadas' },
+            { k: 'enviada', l: 'Enviadas' },
+          ].map((op) => (
+            <button key={op.k} onClick={() => setFiltroEst(op.k)} style={segStyle(filtroEst === op.k)}>{op.l}</button>
+          ))}
+        </div>
+        <span style={{ marginLeft: 'auto', fontSize: 10.5, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+          {filtradas.length} de {recientes.length}
+        </span>
+      </div>
+
+      {filtradas.length === 0 ? (
+        <div style={{
+          background: theme.surface, border: `1px dashed ${theme.border}`, borderRadius: 14,
+          padding: 32, textAlign: 'center', color: theme.textMuted, fontSize: 12,
+        }}>
+          {recientes.length === 0
+            ? 'Al guardar borradores aparecerán aquí para volver a abrirlos con un click.'
+            : 'Ninguna propuesta con los filtros actuales.'}
+        </div>
+      ) : (
+        grupos.map((g) => (
+          <MesGroup key={g.key} grupo={g} theme={theme} isDark={isDark} P={P}
+            onAbrirReciente={onAbrirReciente} onRefresh={onRefresh} />
+        ))
+      )}
+    </div>
+  );
+}
+
+function MesGroup({ grupo, theme, isDark, P, onAbrirReciente, onRefresh }) {
+  const totalMes = grupo.items.reduce((s, r) => s + (Number(r.resumen?.total) || 0), 0);
+  const enviadas = grupo.items.filter((r) => r.estado === 'Enviada').length;
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10, paddingBottom: 6 }}>
+        <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, margin: 0 }}>
+          {grupo.label}
+        </h5>
+        <span style={{ fontSize: 10.5, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+          {grupo.items.length} propuesta{grupo.items.length === 1 ? '' : 's'} · {fmtCompact(totalMes)} total{enviadas > 0 ? ` · ${enviadas} enviada${enviadas === 1 ? '' : 's'}` : ''}
+        </span>
+        <div style={{ flex: 1, height: 1, background: theme.border, marginLeft: 8 }}></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+        {grupo.items.map((r) => (
+          <PropuestaCard key={r.id} r={r} theme={theme} isDark={isDark} P={P}
+            onAbrir={() => onAbrirReciente(r)} onRefresh={onRefresh} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PropuestaCard({ r, theme, isDark, P, onAbrir, onRefresh }) {
+  const cli = CLIENTES.find((c) => c.key === r.clienteKey);
+  const col = clienteColor(theme, r.clienteKey);
+  const estado = r.estado || 'Borrador';
+  const pill =
+    estado === 'Enviada' ? { bg: `${P.accent}22`, color: P.accent, label: 'Enviada' } :
+    estado === 'Exportada' ? { bg: `${P.green}22`, color: P.green, label: 'Exportada' } :
+    { bg: `${P.orange}22`, color: P.orange, label: 'Borrador' };
+
+  const timeAgo = (ts) => {
+    const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+    if (s < 60) return `hace ${s}s`;
+    if (s < 3600) return `hace ${Math.floor(s / 60)}m`;
+    if (s < 86400) return `hace ${Math.floor(s / 3600)}h`;
+    return `hace ${Math.floor(s / 86400)}d`;
+  };
+
+  const onSubirExcel = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const dataUrl = await fileToDataUrl(f);
+      setExcelFinalReciente(r.id, { name: f.name, size: f.size, dataUrl, tstamp: Date.now() });
+      onRefresh();
+    } catch (err) { console.warn('excel final', err); }
+  };
+  const onQuitarExcel = (e) => {
+    e.stopPropagation();
+    if (!confirm('¿Quitar el Excel final adjunto?')) return;
+    setExcelFinalReciente(r.id, null);
+    onRefresh();
+  };
+  const onDescargarExcel = (e) => {
+    e.stopPropagation();
+    if (r.excelFinal?.dataUrl) descargarDataUrl(r.excelFinal.dataUrl, r.excelFinal.name);
+  };
+
+  const puedeAdjuntar = estado !== 'Borrador'; // solo exportadas/enviadas tienen sentido
+
+  return (
+    <div
+      onClick={onAbrir}
+      style={{
+        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
+        padding: '14px 16px', cursor: 'pointer', transition: 'transform 120ms, border-color 120ms, box-shadow 120ms',
+        fontFamily: TYPO.fontText,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = col; e.currentTarget.style.boxShadow = `0 4px 14px ${theme.text}0F`; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = theme.border; e.currentTarget.style.boxShadow = 'none'; }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <div style={{
+          width: 26, height: 26, borderRadius: 7, background: col, color: '#FFF',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 11, letterSpacing: '-0.02em', flexShrink: 0,
+        }}>{cli?.iniciales || '?'}</div>
+        <span style={{ flex: 1, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.005em', color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {cli?.label || r.clienteLabel} · {r.nombre || 'Cierre'}
+        </span>
+        <span style={{
+          padding: '2px 7px', borderRadius: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em',
+          textTransform: 'uppercase', background: pill.bg, color: pill.color, fontFamily: '"SF Mono", ui-monospace, monospace',
+        }}>{pill.label}</span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px 12px', fontSize: 11, marginBottom: 8 }}>
+        <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textSubtle || theme.textMuted, fontWeight: 600 }}>SKUs</span>
+        <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textSubtle || theme.textMuted, fontWeight: 600 }}>Piezas</span>
+        <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textSubtle || theme.textMuted, fontWeight: 600 }}>Total</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, fontSize: 13 }}>{r.resumen?.skus || 0}</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, fontSize: 13 }}>{fmtInt(r.resumen?.piezas || 0)}</span>
+        <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, fontSize: 13, color: P.green }}>{fmtCompact(r.resumen?.total || 0)}</span>
+      </div>
+
+      {/* Slot Excel final */}
+      {puedeAdjuntar && (
+        r.excelFinal ? (
           <div style={{
-            background: theme.surface, border: `1px dashed ${theme.border}`, borderRadius: 14,
-            padding: 32, textAlign: 'center', color: theme.textMuted, fontSize: 12,
+            background: `${P.green}12`, border: `1px solid ${P.green}44`, borderRadius: 8,
+            padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8, marginTop: 6,
           }}>
-            Al guardar borradores aparecerán aquí para volver a abrirlos con un click.
+            <div style={{ width: 22, height: 22, borderRadius: 5, background: P.green, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>📎</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 10, color: P.green, fontWeight: 600 }}>Excel final enviado</div>
+              <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.excelFinal.name}</div>
+            </div>
+            <button onClick={onDescargarExcel} title="Descargar"
+              style={{ padding: '2px 6px', background: theme.surface, border: 0, borderRadius: 4, fontSize: 10, cursor: 'pointer', color: theme.textMuted }}>↓</button>
+            <button onClick={onQuitarExcel} title="Quitar"
+              style={{ padding: '2px 6px', background: theme.surface, border: 0, borderRadius: 4, fontSize: 10, cursor: 'pointer', color: theme.textMuted }}>✕</button>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
-            {recientes.map((r) => {
-              const cli = CLIENTES.find((c) => c.key === r.clienteKey);
-              const col = clienteColor(theme, r.clienteKey);
-              const pill = estadoPill(r.estado);
-              return (
-                <div key={r.id} onClick={() => onAbrirReciente(r)}
-                  style={{
-                    background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
-                    padding: '14px 16px', cursor: 'pointer', transition: 'transform 120ms, border-color 120ms',
-                    fontFamily: TYPO.fontText,
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.borderColor = col; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = theme.border; }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                    <div style={{
-                      width: 28, height: 28, borderRadius: 8, background: col, color: '#FFF',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 12, letterSpacing: '-0.02em',
-                    }}>{cli?.iniciales || '?'}</div>
-                    <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', background: pill.bg, color: pill.color }}>{r.estado || 'Borrador'}</span>
-                  </div>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>
-                    Propuesta {cli?.label || r.clienteLabel}
-                  </div>
-                  <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-                    {timeAgo(r.tstamp)}
-                  </div>
-                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>
-                      {r.resumen?.skus || 0} SKUs · {fmtInt(r.resumen?.piezas || 0)}pz
-                    </span>
-                    <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.015em', fontSize: 15, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>
-                      {fmtCompact(r.resumen?.total || 0)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <label onClick={(e) => e.stopPropagation()}
+            style={{
+              border: `1.5px dashed ${theme.border}`, borderRadius: 8, padding: '8px 10px',
+              display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 6,
+              transition: 'border-color 160ms, background 160ms',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = P.accent; e.currentTarget.style.background = `${P.accent}0A`; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = theme.border; e.currentTarget.style.background = 'transparent'; }}>
+            <div style={{ width: 22, height: 22, borderRadius: 5, background: theme.bg, color: theme.textMuted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>📎</div>
+            <span style={{ flex: 1, fontSize: 10.5, color: theme.textMuted, fontWeight: 500 }}>Sube el Excel final que le enviaste al cliente</span>
+            <input type="file" accept=".xlsx,.xls" onChange={onSubirExcel} style={{ display: 'none' }} />
+          </label>
+        )
+      )}
+
+      <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 10, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+          {timeAgo(r.tstamp)}
+        </span>
+        {r.exportedFilename && (
+          <span style={{ fontSize: 9.5, color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.exportedFilename.slice(0, 24)}{r.exportedFilename.length > 24 ? '…' : ''}</span>
         )}
       </div>
     </div>
@@ -498,6 +734,7 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, tick }
 // ════════════════════════════════════════════════════════════════════
 function VistaClientePicker({ theme, isDark, onElegir, onBack }) {
   const [kpis, setKpis] = useState({}); // { clienteKey: { cuota, facturado, gap } }
+  const [ultimasProp, setUltimasProp] = useState({}); // { clienteKey: lastReciente }
 
   useEffect(() => {
     (async () => {
@@ -517,10 +754,18 @@ function VistaClientePicker({ theme, isDark, onElegir, onBack }) {
       });
       Object.values(out).forEach((v) => { v.gap = Math.max(0, v.cuota - v.facturado); });
       setKpis(out);
+      // Última propuesta por cliente
+      const rec = loadRecientes();
+      const ultima = {};
+      for (const r of rec) if (!ultima[r.clienteKey]) ultima[r.clienteKey] = r;
+      setUltimasProp(ultima);
     })();
   }, []);
 
   const P = paletteFromTheme(theme);
+  const hoy = new Date();
+  const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+  const diasRestantes = Math.max(0, Math.ceil((finMes - hoy) / 86400000));
 
   return (
     <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
@@ -536,56 +781,93 @@ function VistaClientePicker({ theme, isDark, onElegir, onBack }) {
         </div>
       </div>
 
-      <div style={{ padding: '20px 20px 40px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-        <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: theme.text, margin: '4px 0 6px' }}>
-          ¿Para qué cliente?
-        </h3>
-        <p style={{ fontSize: 13, color: theme.textMuted, marginBottom: 28, maxWidth: 420, lineHeight: 1.5 }}>
-          Elige el cliente y arma la propuesta con el Copilot en la siguiente pantalla.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, maxWidth: 780, width: '100%' }}>
+      <div style={{ padding: '10px 4px 30px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 22 }}>
+          <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, margin: '4px 0 5px' }}>
+            ¿Para qué cliente?
+          </h3>
+          <p style={{ fontSize: 12, color: theme.textMuted, margin: 0 }}>
+            Elige el cliente y arma la propuesta con Ferruteck en la siguiente pantalla.
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, maxWidth: 1080, width: '100%', margin: '0 auto' }}>
           {CLIENTES.map((c) => {
             const col = clienteColor(theme, c.key);
             const k = kpis[c.key];
+            const cuota = k?.cuota || 0;
+            const facturado = k?.facturado || 0;
             const gap = k?.gap ?? 0;
-            const gapCol = gap > 300000 ? P.red : gap > 100000 ? P.orange : P.green;
+            const pctCumpl = cuota > 0 ? (facturado / cuota) * 100 : 0;
+            const gapCol = gap > 300000 ? '#FF453A' : gap > 100000 ? '#FF9F0A' : '#30D158';
+            const ultima = ultimasProp[c.key];
+            const estUlt = ultima?.estado || 'Borrador';
+            const estColor = estUlt === 'Enviada' ? '#30D158' : estUlt === 'Exportada' ? '#64D2FF' : '#FF9F0A';
+            const timeAgoStr = (ts) => {
+              if (!ts) return '';
+              const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+              if (s < 3600) return `hace ${Math.floor(s / 60) || 1}m`;
+              if (s < 86400) return `hace ${Math.floor(s / 3600)}h`;
+              return `hace ${Math.floor(s / 86400)}d`;
+            };
             return (
               <button key={c.key} onClick={() => onElegir(c.key)}
                 style={{
-                  padding: 22, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16,
-                  cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
-                  transition: 'transform 120ms, border-color 120ms, background 120ms',
+                  padding: 0, background: '#000', color: '#F5F5F7',
+                  border: 0, borderRadius: 14, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+                  overflow: 'hidden', position: 'relative',
+                  transition: 'transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1)',
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.borderColor = col;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'none';
-                  e.currentTarget.style.borderColor = theme.border;
-                }}>
-                <div style={{
-                  width: 44, height: 44, borderRadius: 12, background: col, color: '#FFFFFF',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 16, letterSpacing: '-0.02em', marginBottom: 12,
-                }}>{c.iniciales}</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>{c.label}</div>
-                <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 3 }}>{c.marca}</div>
-                {k && (
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; }}>
+                {/* Barra accent */}
+                <div style={{ height: 3, background: col }} />
+                {/* Top: avatar + nombre */}
+                <div style={{ padding: '20px 22px 14px', display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                   <div style={{
-                    marginTop: 14, paddingTop: 12, borderTop: `1px dashed ${theme.border}`,
-                    display: 'flex', justifyContent: 'space-between', fontSize: 10, color: theme.textMuted,
-                    fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    <span>Cuota <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtCompact(k.cuota)}</strong></span>
-                    <span>Gap <strong style={{ color: gapCol, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmtCompact(k.gap)}</strong></span>
+                    width: 52, height: 52, borderRadius: 13, background: col, color: '#FFF',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 20, letterSpacing: '-0.02em',
+                  }}>{c.iniciales}</div>
+                  <div>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 600, letterSpacing: '-0.02em' }}>{c.label}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(245,245,247,0.55)', marginTop: 3 }}>{c.marca}</div>
                   </div>
-                )}
+                </div>
+                {/* Stats */}
+                <div style={{ padding: '14px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px' }}>
+                  <Stat label="Cuota Ago" value={fmtCompact(cuota)} />
+                  <Stat label="Facturado" value={cuota > 0 ? `${fmtCompact(facturado)} · ${pctCumpl.toFixed(0)}%` : fmtCompact(facturado)} />
+                  <Stat label="Gap" value={gap > 0 ? fmtCompact(gap) : '✓ Cumplida'} color={gap > 0 ? gapCol : '#30D158'} />
+                  <Stat label="Días" value={`${diasRestantes}d`} />
+                </div>
+                {/* Última propuesta */}
+                <div style={{ padding: '0 22px 14px', fontSize: 10.5, color: 'rgba(245,245,247,0.55)', display: 'flex', alignItems: 'center', gap: 5, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 14 }}>
+                  {ultima ? (
+                    <>📋 Última: <span style={{ background: `${estColor}33`, color: estColor, padding: '2px 7px', borderRadius: 5, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{estUlt}</span> · {ultima.resumen?.skus || 0} SKUs · {timeAgoStr(ultima.tstamp)}</>
+                  ) : (
+                    <>📋 Sin propuestas previas</>
+                  )}
+                </div>
+                {/* CTA */}
+                <div style={{ padding: '14px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: '#F5F5F7' }}>
+                  <span>Armar propuesta</span>
+                  <span style={{ fontSize: 16, opacity: 0.6 }}>→</span>
+                </div>
               </button>
             );
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, color }) {
+  return (
+    <div>
+      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(245,245,247,0.5)' }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', fontFamily: '"SF Mono", ui-monospace, monospace', marginTop: 3, color: color || '#F5F5F7' }}>{value}</div>
     </div>
   );
 }
@@ -616,6 +898,11 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
     for (const r of skus) if (r.familia) s.add(r.familia);
     return ['todas', ...Array.from(s).sort()];
   }, [skus]);
+
+  // Meses cerrados (los 3 anteriores al actual). mm[0] = mes anterior, [1] anterior a ese, [2] tres atrás.
+  const mesesCerr = useMemo(() => mesesCerrados(), []);
+  const mesesLabels = mesesCerr.map((m) => MES_LABEL[m.mes - 1]);
+  const mesesKeys = mesesCerr.map((m) => `${m.anio}-${String(m.mes).padStart(2, '0')}`);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toUpperCase();
@@ -793,12 +1080,15 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
                   <th style={{ ...thLeft, width: 96 }}>SKU</th>
                   <th style={thLeft}>Descripción</th>
                   <th style={{ ...thLeft, width: 110 }}>Familia</th>
-                  <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invCliente" width={60}>Inv cli</SortableTh>
-                  <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invActeck" width={60}>Inv Ack</SortableTh>
-                  <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="sellout90" width={64}>SO 90d</SortableTh>
-                  <th style={{ ...thBase, width: 80 }}>Piezas</th>
-                  <th style={{ ...thLeft, width: 170 }}>Precio</th>
-                  <th style={{ ...thBase, width: 92 }}>Total</th>
+                  <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invCliente" width={62}>Inv cli</SortableTh>
+                  <th style={{ ...thBase, width: 54, background: `${P.accent}0F`, color: P.accent }}>{mesesLabels[2]}</th>
+                  <th style={{ ...thBase, width: 54, background: `${P.accent}0F`, color: P.accent }}>{mesesLabels[1]}</th>
+                  <th style={{ ...thBase, width: 54, background: `${P.accent}0F`, color: P.accent }}>{mesesLabels[0]}</th>
+                  <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="promSellout" width={58}>⌀ 3m</SortableTh>
+                  <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invActeck" width={62}>Inv Ack</SortableTh>
+                  <th style={{ ...thBase, width: 78 }}>Piezas</th>
+                  <th style={{ ...thLeft, width: 154 }}>Precio</th>
+                  <th style={{ ...thBase, width: 88 }}>Total</th>
                   <th style={{ ...thBase, width: 40, textAlign: 'center' }}></th>
                 </tr>
               </thead>
@@ -820,8 +1110,19 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
                       <td style={{ padding: '6px 6px', fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
                       <td style={{ padding: '6px 6px', color: theme.textMuted, fontSize: 10.5 }}>{r.familia || '—'}</td>
                       <td style={{ padding: '6px 6px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{r.invCliente ? fmtInt(r.invCliente) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
+                      {/* Sellout Jul/Jun/May (orden viejo→reciente: mesesKeys[2], [1], [0]) */}
+                      {[2, 1, 0].map((idx) => {
+                        const v = Number(r.selloutMes?.[mesesKeys[idx]] || 0);
+                        return (
+                          <td key={idx} style={{ padding: '6px 6px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums', background: `${P.accent}05` }}>
+                            {v ? fmtInt(v) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
+                          </td>
+                        );
+                      })}
+                      <td style={{ padding: '6px 6px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12, fontVariantNumeric: 'tabular-nums', background: `${P.accent}0F` }}>
+                        {r.promSellout ? fmtInt(r.promSellout) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
+                      </td>
                       <td style={{ padding: '6px 6px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{r.invActeck ? fmtInt(r.invActeck) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
-                      <td style={{ padding: '6px 6px', textAlign: 'right', fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{r.sellout90 ? fmtInt(r.sellout90) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}</td>
                       {/* Piezas (editable si sel) */}
                       <td style={{ padding: '4px 6px', textAlign: 'right' }}>
                         {sel ? (
@@ -831,27 +1132,13 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
                             style={{ width: 62, padding: '4px 8px', textAlign: 'right', fontSize: 11, fontFamily: 'inherit', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, color: theme.text, outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
                         ) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
                       </td>
-                      {/* Precio (select lista + custom si sel) */}
+                      {/* Precio: chip Apple con popover de listas + custom */}
                       <td style={{ padding: '4px 6px' }}>
                         {sel ? (
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            <select value={val.listaSel || ''}
-                              onChange={(e) => {
-                                const lst = e.target.value;
-                                editarSku(r.sku, { listaSel: lst, precio: lst === '__custom' ? val.precio : (r.precios[lst] || 0) });
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ flex: 1, minWidth: 0, padding: '4px 6px', fontSize: 10, fontFamily: 'inherit', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, color: theme.text, outline: 'none', cursor: 'pointer' }}>
-                              {listasKeys.map((k) => <option key={k} value={k}>{k} · {formatMXN(r.precios[k])}</option>)}
-                              <option value="__custom">Personalizado</option>
-                            </select>
-                            {val.listaSel === '__custom' && (
-                              <input type="number" min="0" step="0.01" value={val.precio ?? ''}
-                                onChange={(e) => editarSku(r.sku, { precio: Number(e.target.value) || 0 })}
-                                onClick={(e) => e.stopPropagation()}
-                                style={{ width: 68, padding: '4px 6px', textAlign: 'right', fontSize: 10.5, fontFamily: 'inherit', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, color: theme.text, outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
-                            )}
-                          </div>
+                          <PrecioPicker
+                            r={r} val={val} theme={theme} isDark={isDark} P={P}
+                            onChange={(patch) => editarSku(r.sku, patch)}
+                          />
                         ) : (
                           <span style={{ paddingLeft: 8, fontSize: 10, color: theme.textSubtle || theme.textMuted }}>Marcar para editar</span>
                         )}
@@ -877,7 +1164,7 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
                 })}
                 {filtrados.length > 300 && (
                   <tr>
-                    <td colSpan={10} style={{ padding: 12, textAlign: 'center', fontSize: 11, color: theme.textMuted, borderTop: `1px solid ${theme.border}` }}>
+                    <td colSpan={13} style={{ padding: 12, textAlign: 'center', fontSize: 11, color: theme.textMuted, borderTop: `1px solid ${theme.border}` }}>
                       Mostrando 300 de {fmtInt(filtrados.length)} · usa el buscador para filtrar
                     </td>
                   </tr>
@@ -1032,14 +1319,15 @@ function Copilot({ theme, isDark, P, cliente, contexto, skus, propuesta, onAplic
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             width: 30, height: 30, borderRadius: 9,
-            background: `linear-gradient(135deg, ${P.accent}, ${P.purple})`,
+            background: 'linear-gradient(135deg, #FF9F0A 0%, #FF453A 100%)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF',
-          }}>
-            <Sparkles style={{ width: 14, height: 14 }} strokeWidth={2} />
+            fontSize: 15,
+          }} title="Ferruteck">
+            🌴
           </div>
           <div>
             <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, letterSpacing: '-0.015em', color: theme.text }}>
-              Copilot
+              Ferruteck
             </div>
             <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>
               {cliente.label} · {sugerencias.length} sugerencia{sugerencias.length === 1 ? '' : 's'}
@@ -1097,7 +1385,7 @@ function Copilot({ theme, isDark, P, cliente, contexto, skus, propuesta, onAplic
           background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999,
         }}>
           <Sparkles style={{ width: 12, height: 12, color: P.accent }} strokeWidth={2} />
-          <input placeholder="Chat con el Copilot (próximamente)"
+          <input placeholder="Chat con Ferruteck (próximamente)"
             disabled
             style={{ border: 0, outline: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 11, color: theme.text, flex: 1, cursor: 'not-allowed', opacity: 0.6 }} />
         </div>
@@ -1109,6 +1397,144 @@ function Copilot({ theme, isDark, P, cliente, contexto, skus, propuesta, onAplic
 // ════════════════════════════════════════════════════════════════════
 // SortableTh — header ordenable
 // ════════════════════════════════════════════════════════════════════
+// ────── PrecioPicker: chip Apple con popover de listas + input personalizado ──────
+const LISTA_COLORS = {
+  'API PROVISIONAL': '#007AFF',
+  'DECME PROVISIONAL': '#AF52DE',
+  'DICOTECH': '#8B5CF6',
+  'Mayoreo A': '#EF4444',
+  'Mayoreo AA': '#F59E0B',
+  'Mayoreo AAA': '#EC4899',
+  'MAYOREO B1': '#14B8A6',
+  'Mayoreo PMM': '#0EA5E9',
+  'PCEL PROVISIONAL': '#F97316',
+};
+const LISTA_SHORT = {
+  'API PROVISIONAL': 'API',
+  'DECME PROVISIONAL': 'DECME',
+  'DICOTECH': 'DICO',
+  'Mayoreo A': 'MA',
+  'Mayoreo AA': 'MAA',
+  'Mayoreo AAA': 'MAAA',
+  'MAYOREO B1': 'MB1',
+  'Mayoreo PMM': 'PMM',
+  'PCEL PROVISIONAL': 'PCEL',
+};
+function listaColor(name) { return LISTA_COLORS[name] || '#6E6E73'; }
+function listaShort(name) { return LISTA_SHORT[name] || (name || '').slice(0, 4).toUpperCase(); }
+
+function PrecioPicker({ r, val, theme, isDark, P, onChange }) {
+  const [open, setOpen] = React.useState(false);
+  const [customEditing, setCustomEditing] = React.useState(false);
+  const wrapRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+  const listasKeys = Object.keys(r.precios || {});
+  const listaActiva = val.listaSel && listasKeys.includes(val.listaSel) ? val.listaSel : (val.listaSel === '__custom' ? '__custom' : listasKeys[0]);
+  const precioActual = Number(val.precio || 0);
+  const chipColor = listaActiva === '__custom' ? P.orange : listaColor(listaActiva);
+  const chipLabel = listaActiva === '__custom' ? 'CUSTOM' : listaShort(listaActiva);
+
+  const elegir = (k) => {
+    if (k === '__custom') {
+      onChange({ listaSel: '__custom' });
+      setCustomEditing(true);
+      setOpen(false);
+      return;
+    }
+    onChange({ listaSel: k, precio: r.precios[k] || 0 });
+    setOpen(false);
+    setCustomEditing(false);
+  };
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <button onClick={() => setOpen((o) => !o)}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '3px 8px 3px 6px', borderRadius: 6,
+            background: isDark ? 'rgba(255,255,255,0.05)' : '#F2F2F7',
+            border: `1px solid ${open ? P.accent : 'transparent'}`,
+            cursor: 'pointer', fontFamily: 'inherit', color: theme.text,
+            transition: 'background 160ms, border-color 160ms',
+          }}
+          onMouseEnter={(e) => { if (!open) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.09)' : '#DBEAFE'; }}
+          onMouseLeave={(e) => { if (!open) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : '#F2F2F7'; }}>
+          <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, fontSize: 11 }}>{formatMXN(precioActual)}</span>
+          <span style={{
+            fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', padding: '1px 4px', borderRadius: 3,
+            background: `${chipColor}22`, color: chipColor,
+          }}>{chipLabel}</span>
+          <span style={{ fontSize: 9, color: theme.textMuted }}>▾</span>
+        </button>
+        {listaActiva === '__custom' && customEditing && (
+          <input type="number" min="0" step="0.01" value={val.precio ?? ''} autoFocus
+            onChange={(e) => onChange({ precio: Number(e.target.value) || 0 })}
+            onBlur={() => setCustomEditing(false)}
+            style={{ width: 62, padding: '3px 6px', textAlign: 'right', fontSize: 10.5, fontFamily: '"SF Mono", ui-monospace, monospace', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 6, color: theme.text, outline: 'none' }} />
+        )}
+      </div>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 40,
+          background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.14)', padding: 6, minWidth: 220,
+          animation: 'fadeInDown 160ms ease',
+        }}>
+          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: theme.textMuted, padding: '6px 10px 4px' }}>
+            Elige lista para este SKU
+          </div>
+          {listasKeys.length === 0 && (
+            <div style={{ padding: '8px 10px', fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>Sin listas de precio para este SKU</div>
+          )}
+          {listasKeys.map((k) => {
+            const active = listaActiva === k;
+            return (
+              <div key={k} onClick={() => elegir(k)} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11.5,
+                background: active ? `${P.accent}18` : 'transparent',
+                color: theme.text,
+              }}
+              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = theme.bg; }}
+              onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: listaColor(k), display: 'inline-block' }} />
+                  {k}
+                </span>
+                <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>
+                  {formatMXN(r.precios[k])} {active && '✓'}
+                </span>
+              </div>
+            );
+          })}
+          <div onClick={() => elegir('__custom')} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11.5,
+            background: listaActiva === '__custom' ? `${P.orange}18` : 'transparent',
+            color: theme.text, borderTop: `1px dashed ${theme.border}`, marginTop: 4,
+          }}
+          onMouseEnter={(e) => { if (listaActiva !== '__custom') e.currentTarget.style.background = theme.bg; }}
+          onMouseLeave={(e) => { if (listaActiva !== '__custom') e.currentTarget.style.background = 'transparent'; }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: P.orange, display: 'inline-block' }} />
+              Personalizado
+            </span>
+            <span style={{ fontSize: 10, color: theme.textMuted, fontStyle: 'italic' }}>
+              editable
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SortableTh({ theme, P, orden, onToggle, col, width, children }) {
   const active = orden.col === col;
   const dir = active ? orden.dir : null;
@@ -1642,22 +2068,43 @@ async function fetchAll(clienteKey) {
     const lst = preciosPorSku.get(r.sku);
     if (!(r.lista in lst)) lst[r.lista] = Number(r.precio) || 0;
   }
+  // Total 3m y desglose por mes: selloutPorMes.get(sku) = { 'YYYY-MM': cantidad }
   const sellout = new Map();
-  for (const r of sellout90) sellout.set(r.sku, (sellout.get(r.sku) || 0) + (Number(r.cantidad) || 0));
+  const selloutPorMes = new Map();
+  for (const r of sellout90) {
+    sellout.set(r.sku, (sellout.get(r.sku) || 0) + (Number(r.cantidad) || 0));
+    if (r.anio && r.mes) {
+      const key = `${r.anio}-${String(r.mes).padStart(2, '0')}`;
+      const mesMap = selloutPorMes.get(r.sku) || {};
+      mesMap[key] = (mesMap[key] || 0) + (Number(r.cantidad) || 0);
+      selloutPorMes.set(r.sku, mesMap);
+    }
+  }
+  // mm ordenado descendente (mes más reciente primero): [Jul, Jun, May] cuando estamos en Ago
+  const mesesKeys = mm.map((m) => `${m.anio}-${String(m.mes).padStart(2, '0')}`);
 
-  const rows = (roadmapRes.data || []).map((r) => ({
-    sku: r.sku,
-    marca: r.marca || '',
-    familia: r.familia || '',
-    categoria: r.categoria || '',
-    descripcion: r.descripcion || invCliTitulos.get(r.sku) || '',
-    rdmp: r.rdmp || '',
-    invActeck: invAck.get(r.sku) || 0,
-    invCliente: invCli.get(r.sku)?.stock || 0,
-    sellout90: sellout.get(r.sku) || 0,
-    promSellout: Math.round((sellout.get(r.sku) || 0) / 3),
-    precios: preciosPorSku.get(r.sku) || {},
-  }));
+  const rows = (roadmapRes.data || []).map((r) => {
+    const selloutMes = selloutPorMes.get(r.sku) || {};
+    const arr = mesesKeys.map((k) => Number(selloutMes[k]) || 0);
+    return {
+      sku: r.sku,
+      marca: r.marca || '',
+      familia: r.familia || '',
+      categoria: r.categoria || '',
+      descripcion: r.descripcion || invCliTitulos.get(r.sku) || '',
+      rdmp: r.rdmp || '',
+      invActeck: invAck.get(r.sku) || 0,
+      invCliente: invCli.get(r.sku)?.stock || 0,
+      sellout90: sellout.get(r.sku) || 0,
+      promSellout: Math.round((sellout.get(r.sku) || 0) / 3),
+      selloutMes: {
+        [mesesKeys[0]]: arr[0],
+        [mesesKeys[1]]: arr[1],
+        [mesesKeys[2]]: arr[2],
+      },
+      precios: preciosPorSku.get(r.sku) || {},
+    };
+  });
   rows.sort((a, b) => b.sellout90 - a.sellout90);
 
   const cuota = (cuotaRes.data || []).reduce((s, r) => s + (Number(r.cuota_min) || Number(r.cuota_meta) || 0), 0);
@@ -1698,8 +2145,10 @@ async function fetchSelloutMesActual(clienteKey) {
   return 0;
 }
 
+// Devuelve { sku, cantidad, anio, mes } — desglose por mes para poder mostrar Jul/Jun/May
+// individualmente en la tabla de propuesta.
 async function fetchSellout(clienteKey, mm, anioMin, anioMax) {
-  const meses = new Set(mm.map((m) => `${m.anio}-${String(m.mes).padStart(2, '0')}`));
+  const mesesSet = new Set(mm.map((m) => `${m.anio}-${String(m.mes).padStart(2, '0')}`));
 
   if (clienteKey === 'digitalife') {
     const { data } = await supabase.from('sellout_detalle')
@@ -1707,10 +2156,15 @@ async function fetchSellout(clienteKey, mm, anioMin, anioMax) {
       .eq('cliente', 'digitalife')
       .gte('fecha', `${anioMin}-01-01`).limit(200000);
     return (data || [])
-      .filter((r) => meses.has(String(r.fecha).slice(0, 7)))
-      .map((r) => ({ sku: r.no_parte, cantidad: r.cantidad }));
+      .filter((r) => mesesSet.has(String(r.fecha).slice(0, 7)))
+      .map((r) => {
+        const s = String(r.fecha);
+        return { sku: r.no_parte, cantidad: r.cantidad, anio: Number(s.slice(0, 4)), mes: Number(s.slice(5, 7)) };
+      });
   }
   if (clienteKey === 'pcel') {
+    // sellout_pcel trae los últimos 3 meses en columnas vta_mes_1/2/3
+    // relativo a la SEMANA. mm[0] = mes anterior, mm[1] = anterior al anterior, mm[2] = 3 atrás.
     const { data } = await supabase.from('sellout_pcel')
       .select('sku,anio,semana,vta_mes_1,vta_mes_2,vta_mes_3')
       .gte('anio', anioMax - 1).limit(50000);
@@ -1722,8 +2176,10 @@ async function fetchSellout(clienteKey, mm, anioMin, anioMax) {
     }
     const out = [];
     for (const { r } of byKey.values()) {
-      const total = (Number(r.vta_mes_1) || 0) + (Number(r.vta_mes_2) || 0) + (Number(r.vta_mes_3) || 0);
-      if (total > 0) out.push({ sku: r.sku, cantidad: total });
+      const cols = [Number(r.vta_mes_1) || 0, Number(r.vta_mes_2) || 0, Number(r.vta_mes_3) || 0];
+      mm.forEach((m, i) => {
+        if (cols[i] > 0) out.push({ sku: r.sku, cantidad: cols[i], anio: m.anio, mes: m.mes });
+      });
     }
     return out;
   }
@@ -1733,8 +2189,8 @@ async function fetchSellout(clienteKey, mm, anioMin, anioMax) {
       .eq('mayorista', 'DICOTECH')
       .gte('anio', anioMin).limit(200000);
     return (data || [])
-      .filter((r) => meses.has(`${r.anio}-${String(r.mes).padStart(2, '0')}`))
-      .map((r) => ({ sku: r.sku, cantidad: r.cantidad }));
+      .filter((r) => mesesSet.has(`${r.anio}-${String(r.mes).padStart(2, '0')}`))
+      .map((r) => ({ sku: r.sku, cantidad: r.cantidad, anio: Number(r.anio), mes: Number(r.mes) }));
   }
   return [];
 }
