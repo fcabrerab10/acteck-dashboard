@@ -739,18 +739,20 @@ function VistaClientePicker({ theme, isDark, onElegir, onBack }) {
   useEffect(() => {
     (async () => {
       const anio = MES_ACTUAL.anio, mes = MES_ACTUAL.mes;
-      const [cuotas, ventas] = await Promise.all([
-        supabase.from('cuotas_mensuales').select('cliente,cuota_min,cuota_meta').eq('anio', anio).eq('mes', mes),
-        supabase.from('v_ventas_mensuales_agg').select('cliente,sell_in').eq('anio', anio).eq('mes', mes),
+      const cliKeys = CLIENTES.map((c) => c.key);
+      // Fuente canónica del sell-in real: facturacion_clientes (mismo que Sell In V2).
+      // v_ventas_mensuales_agg quedaba desactualizada en varios meses.
+      const [cuotas, factRes] = await Promise.all([
+        supabase.from('cuotas_mensuales').select('cliente,cuota_min,cuota_meta').eq('anio', anio).eq('mes', mes).in('cliente', cliKeys),
+        supabase.from('facturacion_clientes').select('cliente_key,monto').eq('anio', anio).eq('mes', mes).in('cliente_key', cliKeys),
       ]);
       const out = {};
+      for (const k of cliKeys) out[k] = { cuota: 0, facturado: 0 };
       (cuotas.data || []).forEach((r) => {
-        if (!out[r.cliente]) out[r.cliente] = { cuota: 0, facturado: 0 };
-        out[r.cliente].cuota += Number(r.cuota_min || r.cuota_meta || 0);
+        if (out[r.cliente]) out[r.cliente].cuota += Number(r.cuota_min || r.cuota_meta || 0);
       });
-      (ventas.data || []).forEach((r) => {
-        if (!out[r.cliente]) out[r.cliente] = { cuota: 0, facturado: 0 };
-        out[r.cliente].facturado += Number(r.sell_in || 0);
+      (factRes.data || []).forEach((r) => {
+        if (out[r.cliente_key]) out[r.cliente_key].facturado += Number(r.monto || 0);
       });
       Object.values(out).forEach((v) => { v.gap = Math.max(0, v.cuota - v.facturado); });
       setKpis(out);
