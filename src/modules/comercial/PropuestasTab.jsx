@@ -915,8 +915,8 @@ function PropuestaCard({ r, theme, isDark, P, onAbrir, onRefresh }) {
         padding: '14px 16px', cursor: 'pointer', transition: 'transform 120ms, border-color 120ms, box-shadow 120ms',
         fontFamily: TYPO.fontText,
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = col; e.currentTarget.style.boxShadow = `0 4px 14px ${theme.text}0F`; }}
-      onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = theme.border; e.currentTarget.style.boxShadow = 'none'; }}
+      onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.015)'; e.currentTarget.style.boxShadow = `0 8px 24px ${theme.text}18`; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <div style={{
