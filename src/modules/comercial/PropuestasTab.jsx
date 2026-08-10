@@ -63,9 +63,16 @@ function fmtCompact(n) {
   return `$${Math.round(v)}`;
 }
 
-// ═══ Persistencia local de recientes ═══
+// ═══ Persistencia de borradores ═══
+// Estrategia: cache local (render instantáneo) + sync a Supabase (fuente de verdad).
+// Al iniciar la landing, un useEffect llama syncRecientesFromRemote() que jala de
+// Supabase y actualiza el cache. Cualquier local no visto en remote se migra.
+// Cada save/remove/setExcelFinal escribe ambos: localStorage inmediato + upsert
+// fire-and-forget a Supabase.
+
 const STORAGE_KEY = 'propuestas_recientes_v1';
-function loadRecientes() {
+
+function loadRecientesLocal() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
@@ -73,18 +80,96 @@ function loadRecientes() {
     return Array.isArray(arr) ? arr : [];
   } catch { return []; }
 }
-function saveReciente(entry) {
+function saveRecientesLocal(all) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(all.slice(0, 50))); } catch {}
+}
+
+function rowToReciente(r) {
+  return {
+    id: r.id,
+    clienteKey: r.cliente_key,
+    clienteLabel: r.cliente_label,
+    nombre: r.nombre,
+    estado: r.estado || 'Borrador',
+    tstamp: Number(r.tstamp),
+    propuesta: r.propuesta || {},
+    resumen: r.resumen || {},
+    excelFinal: r.excel_final || null,
+    exportedFilename: r.exported_filename || null,
+    origen: r.origen || null,
+    ultimaImportacion: r.ultima_importacion || null,
+  };
+}
+function recienteToRow(entry) {
+  return {
+    id: entry.id,
+    cliente_key: entry.clienteKey,
+    cliente_label: entry.clienteLabel || null,
+    nombre: entry.nombre || null,
+    estado: entry.estado || 'Borrador',
+    tstamp: entry.tstamp || Date.now(),
+    propuesta: entry.propuesta || {},
+    resumen: entry.resumen || {},
+    excel_final: entry.excelFinal || null,
+    exported_filename: entry.exportedFilename || null,
+    origen: entry.origen || null,
+    ultima_importacion: entry.ultimaImportacion || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function fetchRecientesRemote() {
   try {
-    const all = loadRecientes().filter((r) => r.id !== entry.id);
-    all.unshift(entry);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(all.slice(0, 24)));
-  } catch {}
+    const { data, error } = await supabase.from('propuestas_borradores')
+      .select('*').order('tstamp', { ascending: false }).limit(50);
+    if (error) return null;
+    return (data || []).map(rowToReciente);
+  } catch { return null; }
+}
+async function upsertRecienteRemote(entry) {
+  try {
+    const row = recienteToRow(entry);
+    const { error } = await supabase.from('propuestas_borradores').upsert(row, { onConflict: 'id' });
+    return !error;
+  } catch { return false; }
+}
+async function deleteRecienteRemote(id) {
+  try {
+    const { error } = await supabase.from('propuestas_borradores').delete().eq('id', id);
+    return !error;
+  } catch { return false; }
+}
+
+// Sincroniza: (1) sube al remoto cualquier local que no exista allá (migración),
+// (2) devuelve el estado remoto como fuente de verdad. Si falla la red, retorna
+// null para que el consumer se quede con el cache local.
+async function syncRecientesFromRemote() {
+  const remote = await fetchRecientesRemote();
+  if (remote === null) return null;
+  const local = loadRecientesLocal();
+  const remoteIds = new Set(remote.map((r) => r.id));
+  const toMigrate = local.filter((r) => !remoteIds.has(r.id));
+  if (toMigrate.length > 0) {
+    await Promise.all(toMigrate.map((r) => upsertRecienteRemote(r)));
+    const remote2 = await fetchRecientesRemote();
+    if (remote2) { saveRecientesLocal(remote2); return remote2; }
+  }
+  saveRecientesLocal(remote);
+  return remote;
+}
+
+// API pública — mantiene firma sincrónica para no romper consumers existentes.
+function loadRecientes() { return loadRecientesLocal(); }
+function saveReciente(entry) {
+  const all = loadRecientesLocal().filter((r) => r.id !== entry.id);
+  all.unshift(entry);
+  saveRecientesLocal(all);
+  upsertRecienteRemote(entry); // fire-and-forget
 }
 function removeReciente(id) {
-  try {
-    const all = loadRecientes().filter((r) => r.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
-  } catch {}
+  const all = loadRecientesLocal().filter((r) => r.id !== id);
+  saveRecientesLocal(all);
+  deleteRecienteRemote(id); // fire-and-forget
 }
 function nuevaPropuestaId() {
   return `prp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -109,10 +194,10 @@ function agruparPorMes(recientes) {
 }
 
 // Adjunta / reemplaza el Excel final enviado al cliente. Persiste como
-// dataUrl base64 en localStorage. Cambia el estatus a "Enviada".
+// dataUrl base64 en cache local + Supabase. Cambia el estatus a "Enviada".
 function setExcelFinalReciente(id, excel) {
   try {
-    const all = loadRecientes();
+    const all = loadRecientesLocal();
     const idx = all.findIndex((r) => r.id === id);
     if (idx < 0) return;
     if (excel) {
@@ -121,7 +206,8 @@ function setExcelFinalReciente(id, excel) {
       const { excelFinal: _drop, ...rest } = all[idx];
       all[idx] = { ...rest, estado: rest.estado === 'Enviada' ? 'Exportada' : rest.estado };
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+    saveRecientesLocal(all);
+    upsertRecienteRemote(all[idx]); // fire-and-forget
   } catch {}
 }
 
@@ -500,7 +586,11 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, onGest
   const heroMuted = theme.textMutedOnDark || 'rgba(255,255,255,0.65)';
   const heroSub = theme.textSubtleOnDark || 'rgba(255,255,255,0.5)';
   const [recientes, setRecientes] = useState(() => loadRecientes());
-  useEffect(() => { setRecientes(loadRecientes()); }, [tick]);
+  useEffect(() => {
+    // Cache local para render inmediato + sync con Supabase (fuente de verdad)
+    setRecientes(loadRecientes());
+    syncRecientesFromRemote().then((r) => { if (r) setRecientes(r); });
+  }, [tick]);
 
   const timeAgo = (ts) => {
     const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
@@ -591,7 +681,10 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, onGest
         theme={theme} isDark={isDark} P={P}
         recientes={recientes}
         onAbrirReciente={onAbrirReciente}
-        onRefresh={() => setRecientes(loadRecientes())}
+        onRefresh={() => {
+          setRecientes(loadRecientes());
+          syncRecientesFromRemote().then((r) => { if (r) setRecientes(r); });
+        }}
       />
     </div>
   );
