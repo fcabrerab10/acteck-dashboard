@@ -339,7 +339,25 @@ export default function PropuestasTab() {
   const [skus, setSkus] = useState([]);
   const [contexto, setContexto] = useState(null);
   const [recientesTick, setRecientesTick] = useState(0); // fuerza re-render de landing tras guardar
-  const [spiffModalOpen, setSpiffModalOpen] = useState(false);
+  const [spiffPanelOpen, setSpiffPanelOpen] = useState(false);
+  const [spiffUploadMsg, setSpiffUploadMsg] = useState(null);
+
+  const handleSpiffFile = async (file) => {
+    if (!file) return;
+    setSpiffUploadMsg({ tipo: 'info', msg: 'Parseando…' });
+    try {
+      const spiffs = await parseSpiffsExcel(file);
+      const { inicio, fin } = inferVigenciaFromFilename(file.name);
+      await borrarSpiffsExistentes();
+      await subirSpiffs(spiffs, { vigencia_inicio: inicio, vigencia_fin: fin, fuente: file.name });
+      setSpiffUploadMsg({ tipo: 'ok', msg: `✓ ${spiffs.length} SPIFFs cargados · vigencia ${inicio} → ${fin}` });
+      setRecientesTick((t) => t + 1);
+      setTimeout(() => setSpiffUploadMsg(null), 4200);
+    } catch (e) {
+      setSpiffUploadMsg({ tipo: 'error', msg: `✕ ${e.message || 'Error al cargar'}` });
+      setTimeout(() => setSpiffUploadMsg(null), 6000);
+    }
+  };
 
   // Fetch al entrar a la vista One-Page
   useEffect(() => {
@@ -520,8 +538,23 @@ export default function PropuestasTab() {
   if (vista === 0) {
     return (
       <>
-        <Landing theme={theme} isDark={isDark} onIniciar={() => setVista(1)} onAbrirReciente={abrirReciente} onImportar={importarExcel} onGestionarSpiffs={() => setSpiffModalOpen(true)} tick={recientesTick} />
-        {spiffModalOpen && <SpiffModal theme={theme} isDark={isDark} onClose={() => setSpiffModalOpen(false)} onSaved={() => { setSpiffModalOpen(false); setRecientesTick((t) => t + 1); }} />}
+        <Landing
+          theme={theme} isDark={isDark}
+          onIniciar={() => setVista(1)}
+          onAbrirReciente={abrirReciente}
+          onImportar={importarExcel}
+          onSubirSpiffs={handleSpiffFile}
+          onGestionarSpiffs={() => setSpiffPanelOpen(true)}
+          spiffUploadMsg={spiffUploadMsg}
+          tick={recientesTick}
+        />
+        {spiffPanelOpen && (
+          <SpiffPanel
+            theme={theme} isDark={isDark}
+            onClose={() => setSpiffPanelOpen(false)}
+            onSaved={() => { setRecientesTick((t) => t + 1); }}
+          />
+        )}
       </>
     );
   }
@@ -579,7 +612,7 @@ export default function PropuestasTab() {
 // ════════════════════════════════════════════════════════════════════
 // LANDING · Header + Hero + Recientes
 // ════════════════════════════════════════════════════════════════════
-function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, onGestionarSpiffs, tick }) {
+function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, onSubirSpiffs, onGestionarSpiffs, spiffUploadMsg, tick }) {
   const P = paletteFromTheme(theme);
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
   const heroText = theme.heroCardText || '#F5F5F7';
@@ -662,8 +695,8 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, onGest
                 style={{ display: 'none' }} />
             </label>
           )}
-          {onGestionarSpiffs && (
-            <button onClick={onGestionarSpiffs} title="Cargar / actualizar SPIFFs por SKU"
+          {onSubirSpiffs && (
+            <label title="Sube el Excel de SPIFFs (vigencia auto-detectada del nombre)"
               style={{
                 padding: '11px 20px', background: 'rgba(255,255,255,0.10)', color: heroText,
                 border: `1px solid rgba(255,255,255,0.20)`, borderRadius: 999, fontSize: 13, fontWeight: 600,
@@ -671,10 +704,36 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, onGest
                 display: 'inline-flex', alignItems: 'center', gap: 6,
               }}>
               ↑ Excel de SPIFFs
+              <input type="file" accept=".xlsx,.xls"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onSubirSpiffs(f); e.target.value = ''; }}
+                style={{ display: 'none' }} />
+            </label>
+          )}
+          {onGestionarSpiffs && (
+            <button onClick={onGestionarSpiffs} title="Editar SPIFFs cargados: monto, vigencia, agregar/quitar SKUs"
+              style={{
+                padding: '11px 20px', background: 'rgba(255,255,255,0.10)', color: heroText,
+                border: `1px solid rgba(255,255,255,0.20)`, borderRadius: 999, fontSize: 13, fontWeight: 600,
+                fontFamily: 'inherit', cursor: 'pointer', letterSpacing: '-0.01em',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}>
+              ⚙ Gestionar SPIFFs
             </button>
           )}
         </div>
       </div>
+
+      {spiffUploadMsg && (
+        <div style={{
+          padding: '10px 16px', marginBottom: 12, borderRadius: 10,
+          background: spiffUploadMsg.tipo === 'ok' ? `${P.green}18` : spiffUploadMsg.tipo === 'error' ? `${P.red}18` : `${P.accent}14`,
+          color: spiffUploadMsg.tipo === 'ok' ? P.green : spiffUploadMsg.tipo === 'error' ? P.red : P.accent,
+          border: `1px solid ${spiffUploadMsg.tipo === 'ok' ? P.green : spiffUploadMsg.tipo === 'error' ? P.red : P.accent}33`,
+          fontSize: 12, fontWeight: 500,
+        }}>
+          {spiffUploadMsg.msg}
+        </div>
+      )}
 
       {/* Recientes agrupadas por mes + filtros + slot Excel final */}
       <PropuestasRecientes
@@ -2578,143 +2637,233 @@ async function fetchSpiffsActivos() {
 // ════════════════════════════════════════════════════════════════════
 // MODAL · Cargar / Actualizar SPIFFs
 // ════════════════════════════════════════════════════════════════════
-function SpiffModal({ theme, isDark, onClose, onSaved }) {
-  const [file, setFile] = React.useState(null);
-  const [parsed, setParsed] = React.useState(null);
-  const [vigencia, setVigencia] = React.useState({ inicio: '', fin: '' });
-  const [current, setCurrent] = React.useState(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState(null);
+// ════════════════════════════════════════════════════════════════════
+// PANEL · Gestión editable de SPIFFs (tabla con CRUD)
+// ════════════════════════════════════════════════════════════════════
+function SpiffPanel({ theme, isDark, onClose, onSaved }) {
+  const [rows, setRows] = React.useState([]);          // filas actuales (incluye editadas)
+  const [originalIds, setOriginalIds] = React.useState(new Set()); // ids que venían del server (para saber qué borrar)
+  const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [msg, setMsg] = React.useState(null);
+  const [busqueda, setBusqueda] = React.useState('');
 
   React.useEffect(() => {
     (async () => {
-      const r = await fetchSpiffsActivos();
-      setCurrent(r.meta);
+      setLoading(true);
+      try {
+        const { data, error } = await supabase.from('spiffs')
+          .select('id,sku,descripcion,monto,vigencia_inicio,vigencia_fin,fuente')
+          .order('sku');
+        if (error) throw error;
+        setRows((data || []).map((r) => ({ ...r, _dirty: false, _new: false })));
+        setOriginalIds(new Set((data || []).map((r) => r.id)));
+      } catch (e) {
+        setError(e.message);
+      } finally { setLoading(false); }
     })();
   }, []);
 
-  const onFile = async (f) => {
-    if (!f) return;
-    setFile(f); setError(null); setLoading(true);
-    try {
-      const spiffs = await parseSpiffsExcel(f);
-      const v = inferVigenciaFromFilename(f.name);
-      setParsed(spiffs);
-      setVigencia(v);
-    } catch (e) {
-      setError(e.message); setParsed(null);
-    } finally { setLoading(false); }
+  const filtradas = React.useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => (r.sku || '').toLowerCase().includes(q) || (r.descripcion || '').toLowerCase().includes(q));
+  }, [rows, busqueda]);
+
+  const editRow = (id, patch) => {
+    setRows((prev) => prev.map((r) => (r.id === id || r._tempId === id) ? { ...r, ...patch, _dirty: true } : r));
+  };
+  const removeRow = (id) => {
+    setRows((prev) => prev.filter((r) => (r.id || r._tempId) !== id));
+  };
+  const addRow = () => {
+    const tempId = `_tmp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    // Copia la vigencia de la primera fila si existe
+    const ref = rows[0] || {};
+    setRows((prev) => [{
+      _tempId: tempId, id: null, _new: true, _dirty: true,
+      sku: '', descripcion: '', monto: 0,
+      vigencia_inicio: ref.vigencia_inicio || '',
+      vigencia_fin: ref.vigencia_fin || '',
+    }, ...prev]);
   };
 
   const guardar = async () => {
-    if (!parsed || parsed.length === 0) return;
-    if (!vigencia.inicio || !vigencia.fin) { setError('Define vigencia'); return; }
-    setSaving(true); setError(null);
+    setSaving(true); setError(null); setMsg(null);
     try {
-      await borrarSpiffsExistentes();
-      await subirSpiffs(parsed, { vigencia_inicio: vigencia.inicio, vigencia_fin: vigencia.fin, fuente: file?.name });
+      // Valida: sku + monto > 0 + fechas válidas
+      const invalidas = rows.filter((r) => !r.sku?.trim() || !(Number(r.monto) > 0) || !r.vigencia_inicio || !r.vigencia_fin);
+      if (invalidas.length > 0) {
+        throw new Error(`${invalidas.length} filas incompletas (falta SKU, monto o fecha)`);
+      }
+      // Determina qué borrar (originales que ya no están)
+      const currentIds = new Set(rows.filter((r) => r.id).map((r) => r.id));
+      const toDelete = Array.from(originalIds).filter((id) => !currentIds.has(id));
+
+      if (toDelete.length > 0) {
+        const { error: delErr } = await supabase.from('spiffs').delete().in('id', toDelete);
+        if (delErr) throw delErr;
+      }
+      // Upsert (por sku que es unique key)
+      const payload = rows.map((r) => ({
+        sku: r.sku.trim(),
+        descripcion: r.descripcion || null,
+        monto: Number(r.monto),
+        vigencia_inicio: r.vigencia_inicio,
+        vigencia_fin: r.vigencia_fin,
+        situacion: 'Spiff',
+        fuente: r.fuente || 'edición manual',
+      }));
+      const { error: upErr } = await supabase.from('spiffs').upsert(payload, { onConflict: 'sku' });
+      if (upErr) throw upErr;
+
+      setMsg(`✓ Guardado · ${payload.length} SPIFFs${toDelete.length > 0 ? ` (${toDelete.length} eliminadas)` : ''}`);
       onSaved?.();
+      setTimeout(() => { onClose?.(); }, 900);
     } catch (e) {
-      setError(e.message);
+      setError(e.message || 'Error al guardar');
     } finally { setSaving(false); }
   };
+
+  const dirty = rows.some((r) => r._dirty) || rows.length !== originalIds.size;
 
   return (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
-      fontFamily: TYPO.fontText, animation: 'sopFadeIn 180ms ease',
+      fontFamily: TYPO.fontText, animation: 'sopFadeIn 180ms ease', padding: 20,
     }} onClick={onClose}>
       <div style={{
-        background: theme.surface, borderRadius: 16, width: '92%', maxWidth: 540,
-        padding: '22px 26px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+        background: theme.surface, borderRadius: 16, width: '100%', maxWidth: 900,
+        maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
       }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10,
-            background: 'linear-gradient(135deg, #F59E0B, #F5C842)',
-            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17,
-          }}>💰</div>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 22px', borderBottom: `1px solid ${theme.border}` }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #F59E0B, #F5C842)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>💰</div>
           <div>
             <h3 style={{ margin: 0, fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text }}>
-              SPIFFs por SKU
+              Gestionar SPIFFs
             </h3>
             <div style={{ fontSize: 11, color: theme.textMuted }}>
-              {current ? `${current.total} SKUs activos · vence ${new Date(current.vigencia_fin).toLocaleDateString('es-MX')}` : 'Sube el Excel para activar incentivos'}
+              {loading ? 'Cargando…' : `${rows.length} SKUs${dirty ? ' · cambios sin guardar' : ''}`}
             </div>
           </div>
-          <button onClick={onClose} style={{ marginLeft: 'auto', background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 18, padding: 4 }}>✕</button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 999, height: 30, fontSize: 11 }}>
+              <Search style={{ width: 12, height: 12, color: theme.textMuted }} strokeWidth={2.2} />
+              <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar SKU o descripción"
+                style={{ border: 0, outline: 0, background: 'transparent', fontSize: 11, color: theme.text, width: 180, fontFamily: 'inherit' }} />
+            </div>
+            <button onClick={addRow}
+              style={{ padding: '6px 12px', borderRadius: 999, border: 0, background: `${P_ACCENT}18`, color: P_ACCENT, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              ＋ Agregar SKU
+            </button>
+            <button onClick={onClose}
+              style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 18, padding: 4 }}>✕</button>
+          </div>
         </div>
 
-        {/* Drop zone */}
-        <label style={{
-          display: 'block', border: `1.5px dashed ${parsed ? '#F59E0B' : theme.border}`,
-          borderRadius: 12, padding: 20, textAlign: 'center', cursor: 'pointer',
-          background: parsed ? '#FEF9E720' : 'transparent', marginBottom: 14,
-        }}>
-          <div style={{ fontSize: 26, marginBottom: 6 }}>📎</div>
-          {file ? (
-            <>
-              <div style={{ fontSize: 12, fontWeight: 600, color: theme.text, marginBottom: 3 }}>{file.name}</div>
-              {loading && <div style={{ fontSize: 11, color: theme.textMuted }}>Parseando…</div>}
-              {parsed && <div style={{ fontSize: 11, color: '#B45309' }}>✓ {parsed.length} SKUs · potencial ${parsed.reduce((s, r) => s + r.monto, 0).toLocaleString()}/pz suma</div>}
-              {error && <div style={{ fontSize: 11, color: theme.red || '#FF3B30' }}>{error}</div>}
-            </>
+        {/* Tabla */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '4px 22px' }}>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: 'center', fontSize: 12, color: theme.textMuted }}>Cargando SPIFFs…</div>
+          ) : filtradas.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center', fontSize: 12, color: theme.textMuted }}>
+              {rows.length === 0 ? 'Sin SPIFFs. Sube un Excel o agrega SKUs manualmente.' : 'Sin resultados con la búsqueda actual.'}
+            </div>
           ) : (
-            <div style={{ fontSize: 12, color: theme.textMuted }}>
-              Arrastra o elige el Excel de SPIFFs<br/>
-              <span style={{ fontSize: 10, color: theme.textSubtle || theme.textMuted }}>Formato: Articulo · Descripcion · Situación · Valor SPIFF x Unidad MXN</span>
-            </div>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11.5 }}>
+              <thead>
+                <tr>
+                  {['SKU', 'Descripción', 'Monto/pz', 'Vig. inicio', 'Vig. fin', ''].map((h, i) => (
+                    <th key={i} style={{
+                      position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
+                      textAlign: i === 2 ? 'right' : 'left', padding: '10px 8px',
+                      fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
+                      color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap',
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtradas.map((r) => {
+                  const rid = r.id || r._tempId;
+                  const inputStyle = {
+                    width: '100%', padding: '5px 8px', fontSize: 11, fontFamily: 'inherit',
+                    background: r._new ? `${P_ACCENT}0A` : theme.bg,
+                    border: `1px solid ${r._dirty ? P_ACCENT + '55' : theme.border}`, borderRadius: 6,
+                    color: theme.text, outline: 'none',
+                  };
+                  return (
+                    <tr key={rid} style={{ borderTop: `1px solid ${theme.border}` }}>
+                      <td style={{ padding: '6px 8px', width: 110 }}>
+                        <input value={r.sku || ''} onChange={(e) => editRow(rid, { sku: e.target.value.toUpperCase() })}
+                          placeholder="AC-XXXXXX"
+                          style={{ ...inputStyle, fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }} />
+                      </td>
+                      <td style={{ padding: '6px 8px' }}>
+                        <input value={r.descripcion || ''} onChange={(e) => editRow(rid, { descripcion: e.target.value })}
+                          placeholder="Descripción opcional"
+                          style={inputStyle} />
+                      </td>
+                      <td style={{ padding: '6px 8px', width: 90 }}>
+                        <input type="number" min="0" step="0.5" value={r.monto ?? ''}
+                          onChange={(e) => editRow(rid, { monto: Number(e.target.value) || 0 })}
+                          style={{ ...inputStyle, textAlign: 'right', fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: (Number(r.monto) > 0) ? '#B45309' : theme.textMuted }} />
+                      </td>
+                      <td style={{ padding: '6px 8px', width: 140 }}>
+                        <input type="date" value={r.vigencia_inicio || ''}
+                          onChange={(e) => editRow(rid, { vigencia_inicio: e.target.value })}
+                          style={inputStyle} />
+                      </td>
+                      <td style={{ padding: '6px 8px', width: 140 }}>
+                        <input type="date" value={r.vigencia_fin || ''}
+                          onChange={(e) => editRow(rid, { vigencia_fin: e.target.value })}
+                          style={inputStyle} />
+                      </td>
+                      <td style={{ padding: '6px 8px', width: 40, textAlign: 'center' }}>
+                        <button onClick={() => removeRow(rid)} title="Eliminar SPIFF"
+                          style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 14, padding: 4 }}>🗑</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
-          <input type="file" accept=".xlsx,.xls" style={{ display: 'none' }}
-            onChange={(e) => onFile(e.target.files?.[0])} />
-        </label>
+        </div>
 
-        {/* Vigencia */}
-        {parsed && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-            <div>
-              <label style={{ display: 'block', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 4 }}>
-                Vigencia inicio
-              </label>
-              <input type="date" value={vigencia.inicio}
-                onChange={(e) => setVigencia({ ...vigencia, inicio: e.target.value })}
-                style={{ width: '100%', padding: '8px 12px', border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, fontFamily: 'inherit', background: theme.surface, color: theme.text }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 4 }}>
-                Vigencia fin
-              </label>
-              <input type="date" value={vigencia.fin}
-                onChange={(e) => setVigencia({ ...vigencia, fin: e.target.value })}
-                style={{ width: '100%', padding: '8px 12px', border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, fontFamily: 'inherit', background: theme.surface, color: theme.text }} />
-            </div>
+        {/* Footer */}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', padding: '14px 22px', borderTop: `1px solid ${theme.border}`, background: theme.bg }}>
+          <div style={{ fontSize: 11, minWidth: 200 }}>
+            {error && <span style={{ color: '#B91C1C', fontWeight: 600 }}>⚠ {error}</span>}
+            {msg && <span style={{ color: '#166534', fontWeight: 600 }}>{msg}</span>}
+            {!error && !msg && dirty && <span style={{ color: theme.textMuted }}>Cambios sin guardar</span>}
           </div>
-        )}
-
-        {error && !loading && (
-          <div style={{ padding: '8px 12px', background: '#FEE2E2', color: '#B91C1C', borderRadius: 8, fontSize: 11.5, marginBottom: 10 }}>
-            ⚠ {error}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose}
+              style={{ padding: '9px 16px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 0, background: theme.surface, color: theme.text, fontFamily: 'inherit', border: `1px solid ${theme.border}` }}>
+              {dirty ? 'Cancelar' : 'Cerrar'}
+            </button>
+            <button onClick={guardar} disabled={!dirty || saving}
+              style={{
+                padding: '9px 16px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+                cursor: dirty && !saving ? 'pointer' : 'not-allowed',
+                border: 0, background: dirty && !saving ? 'linear-gradient(135deg, #F59E0B, #F5C842)' : theme.border,
+                color: '#fff', fontFamily: 'inherit', opacity: dirty && !saving ? 1 : 0.5,
+              }}>
+              {saving ? 'Guardando…' : 'Guardar cambios'}
+            </button>
           </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onClose}
-            style={{ padding: '9px 16px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 0, background: theme.bg, color: theme.text, fontFamily: 'inherit' }}>
-            Cancelar
-          </button>
-          <button onClick={guardar} disabled={!parsed || saving}
-            style={{
-              padding: '9px 16px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: parsed && !saving ? 'pointer' : 'not-allowed',
-              border: 0, background: parsed && !saving ? 'linear-gradient(135deg, #F59E0B, #F5C842)' : theme.border,
-              color: '#fff', fontFamily: 'inherit', opacity: parsed && !saving ? 1 : 0.5,
-            }}>
-            {saving ? 'Guardando…' : parsed ? `✓ Cargar ${parsed.length} SPIFFs` : 'Cargar SPIFFs'}
-          </button>
         </div>
       </div>
       <style>{`@keyframes sopFadeIn { from { opacity:0 } to { opacity:1 } }`}</style>
     </div>
   );
 }
+
+// Constante para el color accent — evita colisión con el prop P que existe en otras funciones
+const P_ACCENT = '#007AFF';
