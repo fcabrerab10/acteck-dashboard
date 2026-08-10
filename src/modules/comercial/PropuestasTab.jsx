@@ -573,14 +573,14 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, onGest
             </label>
           )}
           {onGestionarSpiffs && (
-            <button onClick={onGestionarSpiffs} title="Gestionar SPIFFs"
+            <button onClick={onGestionarSpiffs} title="Cargar / actualizar SPIFFs por SKU"
               style={{
-                padding: '11px 14px', background: 'rgba(255,255,255,0.10)', color: heroText,
-                border: `1px solid rgba(255,255,255,0.20)`, borderRadius: 999, fontSize: 15, fontWeight: 600,
-                fontFamily: 'inherit', cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', gap: 4, lineHeight: 1,
+                padding: '11px 20px', background: 'rgba(255,255,255,0.10)', color: heroText,
+                border: `1px solid rgba(255,255,255,0.20)`, borderRadius: 999, fontSize: 13, fontWeight: 600,
+                fontFamily: 'inherit', cursor: 'pointer', letterSpacing: '-0.01em',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
               }}>
-              ⋯
+              ↑ Excel de SPIFFs
             </button>
           )}
         </div>
