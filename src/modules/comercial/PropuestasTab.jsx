@@ -1305,6 +1305,33 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
         )}
       </div>
 
+      {/* Banner de warnings — detecta data faltante y ofrece ir a arreglarla */}
+      {(contexto?.warnings?.length || 0) > 0 && (
+        <div style={{ padding: '10px 16px 4px', display: 'flex', flexDirection: 'column', gap: 6, background: theme.bg }}>
+          {contexto.warnings.map((w, i) => {
+            const color = w.tipo === 'error' ? P.red : w.tipo === 'warn' ? P.orange : P.accent;
+            return (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderRadius: 10,
+                background: `${color}10`, border: `1px solid ${color}44`, fontSize: 12,
+              }}>
+                <span style={{ color, fontSize: 13, fontWeight: 700 }}>
+                  {w.tipo === 'error' ? '⚠' : w.tipo === 'warn' ? '▲' : 'ℹ'}
+                </span>
+                <span style={{ fontWeight: 600, color: theme.text }}>{w.titulo}</span>
+                <span style={{ color: theme.textMuted }}>· {w.msg}</span>
+                {w.link && (
+                  <a href={w.link} target="_blank" rel="noopener noreferrer"
+                    style={{ marginLeft: 'auto', color, fontWeight: 600, textDecoration: 'none', fontSize: 11.5, whiteSpace: 'nowrap' }}>
+                    Ir al uploader →
+                  </a>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Body: catálogo (izq) + copilot (der) */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', flex: 1, minHeight: 0 }}>
         {/* Catálogo */}
@@ -2533,9 +2560,39 @@ async function fetchAll(clienteKey) {
   const skusConInv = rows.filter((r) => r.invActeck > 0).length;
   const topVendidos = rows.slice(0, 5).map((r) => ({ sku: r.sku, piezas: r.sellout90 }));
 
+  // ═══ Warnings automáticos: detecta data faltante para avisar al usuario ═══
+  const warnings = [];
+  const skusConPrecios = rows.filter((r) => Object.keys(r.precios || {}).length > 0).length;
+  const pctConPrecios = rows.length > 0 ? (skusConPrecios / rows.length) * 100 : 0;
+
+  if (rows.length === 0) {
+    warnings.push({ tipo: 'error', titulo: 'Sin SKUs cargados', msg: 'La tabla roadmap_sku está vacía. Sube el archivo Roadmap.xlsx en /uploads.html.', link: '/uploads.html' });
+  } else if (pctConPrecios < 10) {
+    warnings.push({ tipo: 'error', titulo: 'Sin precios cargados', msg: `Solo ${skusConPrecios} de ${rows.length} SKUs tienen precios en precios_sku. Sube Actualizaciones ERP en /uploads.html para actualizar las listas.`, link: '/uploads.html' });
+  } else if (pctConPrecios < 60) {
+    warnings.push({ tipo: 'warn', titulo: 'Precios incompletos', msg: `Solo ${pctConPrecios.toFixed(0)}% de los SKUs tienen lista de precios. Considera re-subir el ERP.`, link: '/uploads.html' });
+  }
+
+  if (cuota === 0) {
+    warnings.push({ tipo: 'warn', titulo: 'Cuota del mes no capturada', msg: `No hay cuota registrada para ${clienteKey} en ${MES_LABEL[MES_ACTUAL.mes - 1]} ${MES_ACTUAL.anio}. El gap saldrá en $0. Sube la hoja Cuotas del ERP.`, link: '/uploads.html' });
+  }
+  if (facturado === 0) {
+    warnings.push({ tipo: 'info', titulo: 'Sin facturación del mes', msg: `Aún no hay facturación en facturacion_clientes para ${MES_LABEL[MES_ACTUAL.mes - 1]}. Sube el ERP con datos del mes actual cuando esté disponible.`, link: '/uploads.html' });
+  }
+  const spiffsCount = spiffsRes?.meta?.total || 0;
+  if (spiffsCount === 0) {
+    warnings.push({ tipo: 'info', titulo: 'Sin SPIFFs activos', msg: 'No hay SPIFFs vigentes hoy. Sube el Excel de SPIFFs desde el hero de Propuestas.' });
+  }
+
   return {
     skus: rows,
-    contexto: { cuota, facturado, gap: Math.max(0, cuota - facturado), diasRestantes, skusConInv, topVendidos, spiffsMeta: spiffsRes?.meta || null },
+    contexto: {
+      cuota, facturado, gap: Math.max(0, cuota - facturado), diasRestantes,
+      skusConInv, topVendidos,
+      spiffsMeta: spiffsRes?.meta || null,
+      warnings,
+      diag: { totalSkus: rows.length, skusConPrecios, spiffsActivos: spiffsCount },
+    },
   };
 }
 
