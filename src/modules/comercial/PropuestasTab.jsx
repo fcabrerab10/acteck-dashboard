@@ -1250,60 +1250,81 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
   const thLeft = { ...thBase, textAlign: 'left' };
 
   return (
-    <div style={{ background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header sticky */}
+    <div style={{ background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%', display: 'flex', flexDirection: 'column', padding: '10px 12px 0' }}>
+      {/* HERO negro grande — estilo S&OP */}
       <div style={{
-        position: 'sticky', top: 0, zIndex: 20,
-        background: `color-mix(in srgb, ${theme.surface} 92%, transparent)`,
-        backdropFilter: 'blur(20px) saturate(180%)',
-        borderBottom: `1px solid ${theme.border}`,
-        padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+        position: 'relative', overflow: 'hidden',
+        background: '#000', color: '#F5F5F7',
+        borderRadius: 14, padding: '20px 28px',
+        marginBottom: 12,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={onBack} title="Volver"
-            style={{ background: 'transparent', border: 0, padding: 4, color: theme.textMuted, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: 'inherit' }}>
-            <ArrowLeft style={{ width: 14, height: 14 }} strokeWidth={2} /> Propuestas
-          </button>
-          <div style={{ width: 1, height: 24, background: theme.border, margin: '0 4px' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 10, background: cliCol, color: '#FFF',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, letterSpacing: '-0.02em',
-            }}>{cliente.iniciales}</div>
-            <div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>
-                Propuesta · {cliente.label}
-              </div>
-              <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>
-                {MES_LABEL[MES_ACTUAL.mes - 1]} {MES_ACTUAL.anio} · borrador
-              </div>
+        <div style={{
+          position: 'absolute', top: '-40%', right: '-10%', width: '50%', height: '200%',
+          background: `radial-gradient(circle, ${P.accent}22 0%, transparent 60%)`, pointerEvents: 'none',
+        }} />
+        {/* Botón volver arriba */}
+        <button onClick={onBack} title="Volver a Propuestas"
+          style={{ position:'relative', background: 'transparent', border: 0, padding: 0, color: 'rgba(245,245,247,0.65)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontFamily: 'inherit', marginBottom: 6 }}>
+          <ArrowLeft style={{ width: 12, height: 12 }} strokeWidth={2} /> Propuestas
+        </button>
+
+        <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: contexto ? '1.4fr repeat(4, auto)' : '1fr', gap: 36, alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(245,245,247,0.55)' }}>
+              Dirección Comercial · Armador · {MES_FULL[MES_ACTUAL.mes - 1]} {MES_ACTUAL.anio}
             </div>
+            <h2 style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.025em', color: '#F5F5F7', margin: '6px 0', lineHeight: 1.15, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{
+                width: 34, height: 34, borderRadius: 10, background: cliCol, color: '#FFF',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 14, letterSpacing: '-0.02em',
+              }}>{cliente.iniciales}</span>
+              Propuesta {cliente.label}.
+            </h2>
+            <p style={{ fontSize: 12, color: 'rgba(245,245,247,0.68)', margin: 0, maxWidth: 640, lineHeight: 1.5 }}>
+              <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{fmtInt(skus.length)} SKUs</strong> disponibles ·
+              <strong style={{ color: '#FFD60A', fontWeight: 600 }}> {propuestaLista.length} en export</strong> · Cierra el mes con las recomendaciones de Ferruteck y déjala lista antes del corte.
+            </p>
           </div>
+          {contexto && (
+            <>
+              <div style={{ position: 'relative' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(245,245,247,0.55)', marginBottom: 6 }}>Cuota {MES_LABEL[MES_ACTUAL.mes - 1]}</div>
+                <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 24, fontWeight: 600, letterSpacing: '-0.028em', lineHeight: 1, color: '#F5F5F7' }}>
+                  {fmtCompact(contexto.cuota)}
+                </div>
+                <div style={{ fontSize: 10.5, color: 'rgba(245,245,247,0.55)', marginTop: 4, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                  {contexto.cuota > 0 ? 'meta del mes' : 'sin capturar'}
+                </div>
+              </div>
+              <div style={{ position: 'relative' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(245,245,247,0.55)', marginBottom: 6 }}>Facturado · {cuotaPct}%</div>
+                <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 24, fontWeight: 600, letterSpacing: '-0.028em', lineHeight: 1, color: '#F5F5F7' }}>
+                  {fmtCompact(contexto.facturado)}
+                </div>
+                <div style={{ height: 4, background: 'rgba(255,255,255,0.10)', borderRadius: 999, overflow: 'hidden', marginTop: 6, width: 120 }}>
+                  <div style={{ height: '100%', width: `${cuotaPct}%`, background: cuotaPct >= 90 ? '#30D158' : cuotaPct >= 60 ? '#FFD60A' : '#FF9F0A', borderRadius: 999 }} />
+                </div>
+              </div>
+              <div style={{ position: 'relative' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(245,245,247,0.55)', marginBottom: 6 }}>Gap</div>
+                <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 24, fontWeight: 600, letterSpacing: '-0.028em', lineHeight: 1, color: contexto.gap > 0 ? '#FF9F0A' : '#30D158' }}>
+                  {contexto.gap > 0 ? fmtCompact(contexto.gap) : '✓'}
+                </div>
+                <div style={{ fontSize: 10.5, color: 'rgba(245,245,247,0.55)', marginTop: 4, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                  {contexto.gap > 0 ? 'por cerrar' : 'cumplida'}
+                </div>
+              </div>
+              <div style={{ position: 'relative' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(245,245,247,0.55)', marginBottom: 6 }}>Días</div>
+                <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 24, fontWeight: 600, letterSpacing: '-0.028em', lineHeight: 1, color: '#F5F5F7' }}>
+                  {contexto.diasRestantes}d
+                </div>
+                <div style={{ fontSize: 10.5, color: 'rgba(245,245,247,0.55)', marginTop: 4, fontFamily: '"SF Mono", ui-monospace, monospace' }}>hasta corte</div>
+              </div>
+            </>
+          )}
         </div>
-        {contexto && (
-          <div style={{ display: 'flex', gap: 22, alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Cuota</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{fmtCompact(contexto.cuota)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Facturado · {cuotaPct}%</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{fmtCompact(contexto.facturado)}</div>
-              <div style={{ height: 5, background: theme.divider || theme.border, borderRadius: 999, overflow: 'hidden', marginTop: 4, width: 160 }}>
-                <div style={{ height: '100%', width: `${cuotaPct}%`, background: P.accent, borderRadius: 999 }} />
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Gap</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: contexto.gap > 0 ? P.orange : P.green, fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{fmtCompact(contexto.gap)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>Días</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{contexto.diasRestantes}d</div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Banner de warnings — detecta data faltante y ofrece ir a arreglarla */}
@@ -1470,64 +1491,160 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
             </table>
           </div>
 
-          {/* Footer sticky negro Apple */}
-          <div style={{
-            position: 'sticky', bottom: 0, zIndex: 20,
-            background: heroBg, color: heroText,
-            borderTop: isDark ? '1px solid rgba(255,255,255,0.08)' : 'none',
-            padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
-          }}>
-            <div style={{ display: 'flex', gap: 32 }}>
-              <div>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>SKUs</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{propuestaLista.length}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>Piezas</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{fmtInt(piezasTotal)}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>Total propuesta</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{formatMXN(totalPropuesta)}</div>
-              </div>
-              {spiffDisponiblesCount > 0 && (
-                <div>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>SPIFF ganado</div>
-                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums', marginTop: 2, color: spiffTotal > 0 ? '#F5C842' : heroSub }}>
-                    {spiffTotal > 0 ? formatMXN(spiffTotal) : '—'}
-                    <span style={{ fontSize: 10, color: heroSub, fontWeight: 500, marginLeft: 6, fontFamily: TYPO.fontText, letterSpacing: 0 }}>
-                      {spiffSkusCount}/{spiffDisponiblesCount}
-                    </span>
-                  </div>
-                </div>
-              )}
+          {/* El footer sticky se movió a la card 'Mi Propuesta' en el sidebar
+              — mismos totales, botones y estados de guardado en una sola pieza. */}
+        </div>
+
+        {/* Sidebar derecho: Mi Propuesta (arriba) + Ferruteck (abajo) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+          <MiPropuestaCard
+            theme={theme} isDark={isDark} P={P}
+            cliente={cliente} cliCol={cliCol}
+            propuestaLista={propuestaLista}
+            totalPropuesta={totalPropuesta} piezasTotal={piezasTotal}
+            spiffTotal={spiffTotal} spiffSkusCount={spiffSkusCount} spiffDisponiblesCount={spiffDisponiblesCount}
+            onGuardar={handleGuardar} onRevisar={onRevisar}
+            savedMsg={savedMsg}
+          />
+          <Copilot theme={theme} isDark={isDark} P={P} cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta} onAplicarPaquete={aplicarPaquete} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// MI PROPUESTA CARD · header negro + body blanco (estilo S&OP Mi Export)
+// ════════════════════════════════════════════════════════════════════
+function MiPropuestaCard({ theme, isDark, P, cliente, cliCol, propuestaLista, totalPropuesta, piezasTotal, spiffTotal, spiffSkusCount, spiffDisponiblesCount, onGuardar, onRevisar, savedMsg }) {
+  const vacia = propuestaLista.length === 0;
+  return (
+    <div style={{
+      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
+      overflow: 'hidden', display: 'flex', flexDirection: 'column',
+      fontFamily: TYPO.fontText,
+    }}>
+      {/* Header negro */}
+      <div style={{ background: '#000', color: '#F5F5F7', padding: '14px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 9, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(245,245,247,0.55)', marginBottom: 6 }}>
+          <span>Propuesta · {cliente.label}</span>
+          {savedMsg && (
+            <span style={{ padding: '2px 8px', borderRadius: 999, background: 'rgba(48,209,88,0.16)', color: '#30D158', fontSize: 9.5, fontWeight: 700 }}>● {savedMsg}</span>
+          )}
+          {!savedMsg && (
+            <span style={{ padding: '2px 8px', borderRadius: 999, background: 'rgba(48,209,88,0.16)', color: '#30D158', fontSize: 9.5, fontWeight: 700 }}>● Autoguardado</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em', margin: 0 }}>
+            Mi Propuesta
+          </h4>
+          <span style={{
+            background: `${P.accent}44`, color: '#64D2FF',
+            padding: '1px 8px', borderRadius: 999,
+            fontSize: 11, fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600,
+          }}>{propuestaLista.length}</span>
+        </div>
+      </div>
+
+      {/* Body blanco */}
+      <div style={{ padding: '16px 18px', background: theme.surface, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Totales */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 12, borderBottom: `1px solid ${theme.border}` }}>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.textMuted }}>Total propuesta</div>
+            <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: vacia ? theme.textMuted : P.green, marginTop: 3, lineHeight: 1 }}>
+              {vacia ? '—' : formatMXN(totalPropuesta)}
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {savedMsg && (
-                <span style={{ fontSize: 12, color: P.green, fontWeight: 600, fontFamily: 'inherit' }}>{savedMsg}</span>
-              )}
-              <button onClick={handleGuardar}
-                style={{ padding: '9px 18px', background: 'rgba(255,255,255,0.12)', border: 0, borderRadius: 999, color: '#FFF', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Save style={{ width: 12, height: 12 }} strokeWidth={2} />
-                Guardar borrador
-              </button>
-              <button onClick={onRevisar} disabled={propuestaLista.length === 0}
-                style={{
-                  padding: '9px 20px',
-                  background: propuestaLista.length === 0 ? 'rgba(255,255,255,0.10)' : P.accent,
-                  color: propuestaLista.length === 0 ? heroSub : '#FFF',
-                  border: 0, borderRadius: 999, fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
-                  cursor: propuestaLista.length === 0 ? 'not-allowed' : 'pointer',
-                  display: 'inline-flex', alignItems: 'center', gap: 6, letterSpacing: '-0.01em',
-                }}>
-                Revisar <ChevronRight style={{ width: 12, height: 12 }} strokeWidth={2} />
-              </button>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.textMuted }}>Piezas</div>
+            <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, marginTop: 3, lineHeight: 1 }}>
+              {fmtInt(piezasTotal)}
             </div>
           </div>
         </div>
 
-        {/* Copilot lateral derecha */}
-        <Copilot theme={theme} isDark={isDark} P={P} cliente={cliente} contexto={contexto} skus={skus} propuesta={propuesta} onAplicarPaquete={aplicarPaquete} />
+        {/* Sección SPIFF si hay */}
+        {spiffDisponiblesCount > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '8px 12px', background: '#FEF9E7', border: '1px solid #FCD34D66', borderRadius: 8,
+            fontSize: 11,
+          }}>
+            <span style={{ color: '#B45309', fontWeight: 600 }}>💰 SPIFF ganado</span>
+            <span style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 700, color: '#B45309' }}>
+              {spiffTotal > 0 ? formatMXN(spiffTotal) : '—'}
+              <span style={{ fontSize: 10, fontWeight: 500, color: '#B45309', opacity: 0.7, marginLeft: 5 }}>
+                {spiffSkusCount}/{spiffDisponiblesCount}
+              </span>
+            </span>
+          </div>
+        )}
+
+        {/* Lista de líneas seleccionadas */}
+        {vacia ? (
+          <div style={{
+            padding: '20px 12px', textAlign: 'center', color: theme.textMuted, fontSize: 11, fontStyle: 'italic',
+            border: `1px dashed ${theme.border}`, borderRadius: 8,
+          }}>
+            Selecciona SKUs de la tabla para armar tu propuesta.
+          </div>
+        ) : (
+          <div style={{ maxHeight: 220, overflow: 'auto', margin: '0 -4px' }}>
+            {propuestaLista.slice(0, 20).map((r) => {
+              const total = (Number(r.piezas) || 0) * (Number(r.precio) || 0);
+              return (
+                <div key={r.sku} style={{
+                  display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'center',
+                  padding: '8px 4px', borderBottom: `1px solid ${theme.border}`,
+                  fontSize: 10.5,
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, color: theme.text }}>{r.sku}</div>
+                    <div style={{ fontSize: 9.5, color: theme.textMuted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.descripcion}
+                    </div>
+                  </div>
+                  <div style={{ color: P.accent, fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600, fontSize: 10.5 }}>
+                    {fmtInt(r.piezas)} pz
+                  </div>
+                  <div style={{ color: P.green, fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 700, fontSize: 10.5, minWidth: 60, textAlign: 'right' }}>
+                    {formatMXN(total)}
+                  </div>
+                </div>
+              );
+            })}
+            {propuestaLista.length > 20 && (
+              <div style={{ padding: '8px 4px', textAlign: 'center', fontSize: 10, color: theme.textMuted, fontStyle: 'italic' }}>
+                +{propuestaLista.length - 20} más…
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Botones */}
+        <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
+          <button onClick={onRevisar} disabled={vacia}
+            style={{
+              flex: 1, padding: '11px 14px', border: 0, borderRadius: 10,
+              background: vacia ? theme.border : 'linear-gradient(180deg, #30D158, #248A3D)',
+              color: '#FFF', fontWeight: 700, fontSize: 12, fontFamily: 'inherit',
+              cursor: vacia ? 'not-allowed' : 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              opacity: vacia ? 0.5 : 1,
+            }}>
+            Revisar y exportar <ChevronRight style={{ width: 12, height: 12 }} strokeWidth={2.5} />
+          </button>
+          <button onClick={onGuardar}
+            style={{
+              padding: '11px 14px', border: `1px solid ${theme.border}`, borderRadius: 10,
+              background: theme.surface, color: theme.text, fontWeight: 600, fontSize: 12, fontFamily: 'inherit',
+              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}>
+            <Save style={{ width: 12, height: 12 }} strokeWidth={2} /> Guardar
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -2588,16 +2705,9 @@ async function fetchAll(clienteKey) {
     warnings.push({ tipo: 'warn', titulo: 'Precios incompletos', msg: `Solo ${pctConPrecios.toFixed(0)}% de los SKUs tienen lista de precios. Considera re-subir el ERP.`, link: '/uploads.html' });
   }
 
-  if (cuota === 0) {
-    warnings.push({ tipo: 'warn', titulo: 'Cuota del mes no capturada', msg: `No hay cuota registrada para ${clienteKey} en ${MES_LABEL[MES_ACTUAL.mes - 1]} ${MES_ACTUAL.anio}. El gap saldrá en $0. Sube la hoja Cuotas del ERP.`, link: '/uploads.html' });
-  }
-  if (facturado === 0) {
-    warnings.push({ tipo: 'info', titulo: 'Sin facturación del mes', msg: `Aún no hay facturación en facturacion_clientes para ${MES_LABEL[MES_ACTUAL.mes - 1]}. Sube el ERP con datos del mes actual cuando esté disponible.`, link: '/uploads.html' });
-  }
   const spiffsCount = spiffsRes?.meta?.total || 0;
-  if (spiffsCount === 0) {
-    warnings.push({ tipo: 'info', titulo: 'Sin SPIFFs activos', msg: 'No hay SPIFFs vigentes hoy. Sube el Excel de SPIFFs desde el hero de Propuestas.' });
-  }
+  // Nota: quité los warnings de cuota/facturado/spiffs — solo dejamos los que
+  // bloquean el armado de la propuesta (SKUs vacíos y precios sin cargar).
 
   return {
     skus: rows,
