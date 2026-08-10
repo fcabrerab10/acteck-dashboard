@@ -142,6 +142,94 @@ function descargarDataUrl(dataUrl, filename) {
   document.body.appendChild(a); a.click(); a.remove();
 }
 
+// ═══ SPIFFs · parser Excel + upload ═══
+// Layout del Excel: fila 1 = título con total, fila 2 = headers, fila 3+ = data.
+// Headers esperados (col B..H): Articulo · Descripcion 1 · Situación ·
+// Valor Spiff x Unidad MXN · Spiff Total · Inv Total · Transito.
+async function parseSpiffsExcel(file) {
+  const mod = await import('xlsx-js-style');
+  const XLSX = mod.default || mod;
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  const sh = wb.Sheets[wb.SheetNames[0]];
+  if (!sh) throw new Error('El archivo está vacío');
+  const rows = XLSX.utils.sheet_to_json(sh, { header: 1, defval: null });
+  const dataRows = rows.slice(2); // salta título + headers
+  const out = [];
+  for (const r of dataRows) {
+    // r[0] = Articulo, r[1] = Descripcion, r[2] = Situación, r[3] = Monto
+    const sku = r?.[0] ? String(r[0]).trim() : null;
+    const monto = Number(r?.[3]);
+    if (!sku || !monto || monto <= 0) continue;
+    out.push({
+      sku,
+      descripcion: r?.[1] ? String(r[1]).trim() : null,
+      situacion: r?.[2] ? String(r[2]).trim() : null,
+      monto,
+    });
+  }
+  if (out.length === 0) throw new Error('No se encontraron filas válidas (columnas B=SKU, E=Valor Spiff)');
+  return out;
+}
+
+// Infiere vigencia del nombre del archivo. Formatos soportados:
+// "Spiff Q1 2026" → 01-ene a 31-mar 2026
+// "Spiff Q2 2026" → 01-abr a 30-jun 2026, etc.
+// Fallback: mes actual completo.
+function inferVigenciaFromFilename(name) {
+  const m = /Q([1-4])[\s_-]*(\d{4})/i.exec(name || '');
+  if (m) {
+    const q = parseInt(m[1]);
+    const anio = parseInt(m[2]);
+    const mesIni = (q - 1) * 3 + 1;
+    const mesFin = q * 3;
+    const finDia = new Date(anio, mesFin, 0).getDate();
+    return {
+      inicio: `${anio}-${String(mesIni).padStart(2, '0')}-01`,
+      fin: `${anio}-${String(mesFin).padStart(2, '0')}-${String(finDia).padStart(2, '0')}`,
+    };
+  }
+  const hoy = new Date();
+  const fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+  return {
+    inicio: `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`,
+    fin: `${fin.getFullYear()}-${String(fin.getMonth() + 1).padStart(2, '0')}-${String(fin.getDate()).padStart(2, '0')}`,
+  };
+}
+
+async function subirSpiffs(spiffs, { vigencia_inicio, vigencia_fin, fuente }) {
+  // Trae la anon key desde el cliente supabase (ya inicializado)
+  const rows = spiffs.map((s) => ({ ...s, vigencia_inicio, vigencia_fin, fuente }));
+  // Primero borra la tabla existente (replace), luego upsert
+  const { data: sess } = await supabase.auth.getSession();
+  const token = sess?.session?.access_token;
+  if (!token) throw new Error('No hay sesión activa');
+  // Usamos el endpoint import-central (requiere superAdmin)
+  const res = await fetch('/api/import-central', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      table: 'spiffs',
+      rows,
+      // No hay deleteAnios/deletePeriodos aplicables; hacemos delete manual antes
+      _replaceAll: true,
+    }),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}: ${txt.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+async function borrarSpiffsExistentes() {
+  const { data: sess } = await supabase.auth.getSession();
+  const token = sess?.session?.access_token;
+  if (!token) return;
+  // Borrado en lote de la tabla spiffs vía RPC del cliente
+  await supabase.from('spiffs').delete().gte('id', 0);
+}
+
 // ════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ════════════════════════════════════════════════════════════════════
@@ -165,6 +253,7 @@ export default function PropuestasTab() {
   const [skus, setSkus] = useState([]);
   const [contexto, setContexto] = useState(null);
   const [recientesTick, setRecientesTick] = useState(0); // fuerza re-render de landing tras guardar
+  const [spiffModalOpen, setSpiffModalOpen] = useState(false);
 
   // Fetch al entrar a la vista One-Page
   useEffect(() => {
@@ -343,7 +432,12 @@ export default function PropuestasTab() {
 
   // ── Landing ──
   if (vista === 0) {
-    return <Landing theme={theme} isDark={isDark} onIniciar={() => setVista(1)} onAbrirReciente={abrirReciente} onImportar={importarExcel} tick={recientesTick} />;
+    return (
+      <>
+        <Landing theme={theme} isDark={isDark} onIniciar={() => setVista(1)} onAbrirReciente={abrirReciente} onImportar={importarExcel} onGestionarSpiffs={() => setSpiffModalOpen(true)} tick={recientesTick} />
+        {spiffModalOpen && <SpiffModal theme={theme} isDark={isDark} onClose={() => setSpiffModalOpen(false)} onSaved={() => { setSpiffModalOpen(false); setRecientesTick((t) => t + 1); }} />}
+      </>
+    );
   }
 
   // ── Cliente picker ──
@@ -399,7 +493,7 @@ export default function PropuestasTab() {
 // ════════════════════════════════════════════════════════════════════
 // LANDING · Header + Hero + Recientes
 // ════════════════════════════════════════════════════════════════════
-function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, tick }) {
+function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, onGestionarSpiffs, tick }) {
   const P = paletteFromTheme(theme);
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
   const heroText = theme.heroCardText || '#F5F5F7';
@@ -477,6 +571,17 @@ function Landing({ theme, isDark, onIniciar, onAbrirReciente, onImportar, tick }
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) onImportar(f); e.target.value = ''; }}
                 style={{ display: 'none' }} />
             </label>
+          )}
+          {onGestionarSpiffs && (
+            <button onClick={onGestionarSpiffs} title="Gestionar SPIFFs"
+              style={{
+                padding: '11px 14px', background: 'rgba(255,255,255,0.10)', color: heroText,
+                border: `1px solid rgba(255,255,255,0.20)`, borderRadius: 999, fontSize: 15, fontWeight: 600,
+                fontFamily: 'inherit', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 4, lineHeight: 1,
+              }}>
+              ⋯
+            </button>
           )}
         </div>
       </div>
@@ -976,6 +1081,9 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
     .filter((r) => r.sku), [propuesta, skus]);
   const totalPropuesta = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
   const piezasTotal = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
+  const spiffTotal = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.spiff) || 0), 0);
+  const spiffSkusCount = propuestaLista.filter((r) => (Number(r.spiff) || 0) > 0 && (Number(r.piezas) || 0) > 0).length;
+  const spiffDisponiblesCount = (skus || []).filter((r) => (Number(r.spiff) || 0) > 0).length;
 
   const cuotaPct = contexto?.cuota > 0 ? Math.min(100, Math.round((contexto.facturado / contexto.cuota) * 100)) : 0;
 
@@ -1088,6 +1196,10 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
                   <th style={{ ...thBase, width: 54, background: `${P.accent}0F`, color: P.accent }}>{mesesLabels[0]}</th>
                   <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="promSellout" width={58}>⌀ 3m</SortableTh>
                   <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="invActeck" width={62}>Inv Ack</SortableTh>
+                  <SortableTh theme={theme} P={P} orden={orden} onToggle={toggleOrden} col="spiff" width={54}>
+                    SPIFF
+                    <span style={{ display: 'block', fontSize: 8, fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: theme.textSubtle || theme.textMuted, marginTop: 1 }}>$/pz</span>
+                  </SortableTh>
                   <th style={{ ...thBase, width: 78 }}>Piezas</th>
                   <th style={{ ...thLeft, width: 154 }}>Precio</th>
                   <th style={{ ...thBase, width: 88 }}>Total</th>
@@ -1125,6 +1237,9 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
                         {r.promSellout ? fmtInt(r.promSellout) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
                       </td>
                       <td style={{ padding: '6px 6px', textAlign: 'right', color: theme.textMuted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{r.invActeck ? fmtInt(r.invActeck) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}</td>
+                      <td style={{ padding: '6px 6px', textAlign: 'right', fontSize: 11, fontVariantNumeric: 'tabular-nums', color: r.spiff > 0 ? '#B45309' : (theme.textSubtle || theme.textMuted), fontWeight: r.spiff > 0 ? 600 : 400, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                        {r.spiff > 0 ? `$${r.spiff}` : '—'}
+                      </td>
                       {/* Piezas (editable si sel) */}
                       <td style={{ padding: '4px 6px', textAlign: 'right' }}>
                         {sel ? (
@@ -1166,7 +1281,7 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
                 })}
                 {filtrados.length > 300 && (
                   <tr>
-                    <td colSpan={13} style={{ padding: 12, textAlign: 'center', fontSize: 11, color: theme.textMuted, borderTop: `1px solid ${theme.border}` }}>
+                    <td colSpan={14} style={{ padding: 12, textAlign: 'center', fontSize: 11, color: theme.textMuted, borderTop: `1px solid ${theme.border}` }}>
                       Mostrando 300 de {fmtInt(filtrados.length)} · usa el buscador para filtrar
                     </td>
                   </tr>
@@ -1195,6 +1310,17 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
                 <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>Total propuesta</div>
                 <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{formatMXN(totalPropuesta)}</div>
               </div>
+              {spiffDisponiblesCount > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: heroSub, fontWeight: 500 }}>SPIFF ganado</div>
+                  <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums', marginTop: 2, color: spiffTotal > 0 ? '#F5C842' : heroSub }}>
+                    {spiffTotal > 0 ? formatMXN(spiffTotal) : '—'}
+                    <span style={{ fontSize: 10, color: heroSub, fontWeight: 500, marginLeft: 6, fontFamily: TYPO.fontText, letterSpacing: 0 }}>
+                      {spiffSkusCount}/{spiffDisponiblesCount}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {savedMsg && (
@@ -1580,6 +1706,8 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombr
   const total = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
   const piezas = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
   const precioProm = piezas > 0 ? Math.round(total / piezas) : 0;
+  const spiffTotal = propuestaLista.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.spiff) || 0), 0);
+  const spiffSkus = propuestaLista.filter((r) => (Number(r.spiff) || 0) > 0 && (Number(r.piezas) || 0) > 0).length;
 
   const grupos = useMemo(() => {
     if (cliente.key !== 'digitalife') return { 'Propuesta': propuestaLista };
@@ -1977,6 +2105,17 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombr
               </div>
             </div>
           )}
+          {spiffTotal > 0 && (
+            <div style={{ position: 'relative' }}>
+              <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: heroSub }}>SPIFF ganado</div>
+              <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', marginTop: 3, color: '#F5C842' }}>
+                {formatMXN(spiffTotal)}
+              </div>
+              <div style={{ fontSize: 10.5, color: heroSub, marginTop: 2, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
+                {spiffSkus} SKUs · {contexto?.spiffsMeta ? `hasta ${new Date(contexto.spiffsMeta.vigencia_fin).toLocaleDateString('es-MX')}` : 'Q actual'}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Distribución por familia — barra visual */}
@@ -2146,7 +2285,7 @@ async function fetchAll(clienteKey) {
   const anioMin = Math.min(...mm.map((m) => m.anio));
   const anioMax = Math.max(...mm.map((m) => m.anio));
 
-  const [roadmapRes, invAckRes, invCliRes, preciosRes, sellout90, selloutMes, cuotaRes] = await Promise.all([
+  const [roadmapRes, invAckRes, invCliRes, preciosRes, sellout90, selloutMes, cuotaRes, spiffsRes] = await Promise.all([
     supabase.from('roadmap_sku').select('sku,marca,familia,categoria,descripcion,rdmp'),
     supabase.from('inventario_acteck').select('articulo,disponible,no_almacen'),
     supabase.from('inventario_cliente').select('sku,stock,titulo,anio,semana').eq('cliente', clienteKey),
@@ -2161,6 +2300,7 @@ async function fetchAll(clienteKey) {
       .select('cuota_min,cuota_meta')
       .eq('cliente', clienteKey)
       .eq('anio', MES_ACTUAL.anio).eq('mes', MES_ACTUAL.mes),
+    fetchSpiffsActivos(),
   ]);
 
   const ALMACENES_COMERCIALES = new Set([1, 2, 3, 6, 9, 12, 14, 15, 16, 17, 19, 25, 44, 64, 71]);
@@ -2228,6 +2368,7 @@ async function fetchAll(clienteKey) {
       },
       precios: preciosPorSku.get(r.sku) || {},
       costo: costoPorSku.get(r.sku) || 0,
+      spiff: spiffsRes?.byKey?.get(r.sku)?.monto || 0,
     };
   });
   rows.sort((a, b) => b.sellout90 - a.sellout90);
@@ -2242,7 +2383,7 @@ async function fetchAll(clienteKey) {
 
   return {
     skus: rows,
-    contexto: { cuota, facturado, gap: Math.max(0, cuota - facturado), diasRestantes, skusConInv, topVendidos },
+    contexto: { cuota, facturado, gap: Math.max(0, cuota - facturado), diasRestantes, skusConInv, topVendidos, spiffsMeta: spiffsRes?.meta || null },
   };
 }
 
@@ -2318,4 +2459,169 @@ async function fetchSellout(clienteKey, mm, anioMin, anioMax) {
       .map((r) => ({ sku: r.sku, cantidad: r.cantidad, anio: Number(r.anio), mes: Number(r.mes) }));
   }
   return [];
+}
+
+// ═══ Fetch de SPIFFs activos hoy ═══
+async function fetchSpiffsActivos() {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase.from('spiffs')
+    .select('sku,monto,vigencia_inicio,vigencia_fin,descripcion,fuente')
+    .lte('vigencia_inicio', hoy).gte('vigencia_fin', hoy);
+  if (error) return { list: [], byKey: new Map(), meta: null };
+  const byKey = new Map();
+  for (const r of data || []) byKey.set(r.sku, r);
+  const meta = data && data.length > 0
+    ? {
+        total: data.length,
+        potencial: data.reduce((s, r) => s + Number(r.monto || 0), 0), // suma monto/pz — no potencial real
+        vigencia_inicio: data[0].vigencia_inicio,
+        vigencia_fin: data[0].vigencia_fin,
+        fuente: data[0].fuente,
+      }
+    : null;
+  return { list: data || [], byKey, meta };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// MODAL · Cargar / Actualizar SPIFFs
+// ════════════════════════════════════════════════════════════════════
+function SpiffModal({ theme, isDark, onClose, onSaved }) {
+  const [file, setFile] = React.useState(null);
+  const [parsed, setParsed] = React.useState(null);
+  const [vigencia, setVigencia] = React.useState({ inicio: '', fin: '' });
+  const [current, setCurrent] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    (async () => {
+      const r = await fetchSpiffsActivos();
+      setCurrent(r.meta);
+    })();
+  }, []);
+
+  const onFile = async (f) => {
+    if (!f) return;
+    setFile(f); setError(null); setLoading(true);
+    try {
+      const spiffs = await parseSpiffsExcel(f);
+      const v = inferVigenciaFromFilename(f.name);
+      setParsed(spiffs);
+      setVigencia(v);
+    } catch (e) {
+      setError(e.message); setParsed(null);
+    } finally { setLoading(false); }
+  };
+
+  const guardar = async () => {
+    if (!parsed || parsed.length === 0) return;
+    if (!vigencia.inicio || !vigencia.fin) { setError('Define vigencia'); return; }
+    setSaving(true); setError(null);
+    try {
+      await borrarSpiffsExistentes();
+      await subirSpiffs(parsed, { vigencia_inicio: vigencia.inicio, vigencia_fin: vigencia.fin, fuente: file?.name });
+      onSaved?.();
+    } catch (e) {
+      setError(e.message);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+      fontFamily: TYPO.fontText, animation: 'sopFadeIn 180ms ease',
+    }} onClick={onClose}>
+      <div style={{
+        background: theme.surface, borderRadius: 16, width: '92%', maxWidth: 540,
+        padding: '22px 26px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+      }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: 'linear-gradient(135deg, #F59E0B, #F5C842)',
+            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17,
+          }}>💰</div>
+          <div>
+            <h3 style={{ margin: 0, fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text }}>
+              SPIFFs por SKU
+            </h3>
+            <div style={{ fontSize: 11, color: theme.textMuted }}>
+              {current ? `${current.total} SKUs activos · vence ${new Date(current.vigencia_fin).toLocaleDateString('es-MX')}` : 'Sube el Excel para activar incentivos'}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ marginLeft: 'auto', background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 18, padding: 4 }}>✕</button>
+        </div>
+
+        {/* Drop zone */}
+        <label style={{
+          display: 'block', border: `1.5px dashed ${parsed ? '#F59E0B' : theme.border}`,
+          borderRadius: 12, padding: 20, textAlign: 'center', cursor: 'pointer',
+          background: parsed ? '#FEF9E720' : 'transparent', marginBottom: 14,
+        }}>
+          <div style={{ fontSize: 26, marginBottom: 6 }}>📎</div>
+          {file ? (
+            <>
+              <div style={{ fontSize: 12, fontWeight: 600, color: theme.text, marginBottom: 3 }}>{file.name}</div>
+              {loading && <div style={{ fontSize: 11, color: theme.textMuted }}>Parseando…</div>}
+              {parsed && <div style={{ fontSize: 11, color: '#B45309' }}>✓ {parsed.length} SKUs · potencial ${parsed.reduce((s, r) => s + r.monto, 0).toLocaleString()}/pz suma</div>}
+              {error && <div style={{ fontSize: 11, color: theme.red || '#FF3B30' }}>{error}</div>}
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: theme.textMuted }}>
+              Arrastra o elige el Excel de SPIFFs<br/>
+              <span style={{ fontSize: 10, color: theme.textSubtle || theme.textMuted }}>Formato: Articulo · Descripcion · Situación · Valor SPIFF x Unidad MXN</span>
+            </div>
+          )}
+          <input type="file" accept=".xlsx,.xls" style={{ display: 'none' }}
+            onChange={(e) => onFile(e.target.files?.[0])} />
+        </label>
+
+        {/* Vigencia */}
+        {parsed && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 4 }}>
+                Vigencia inicio
+              </label>
+              <input type="date" value={vigencia.inicio}
+                onChange={(e) => setVigencia({ ...vigencia, inicio: e.target.value })}
+                style={{ width: '100%', padding: '8px 12px', border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, fontFamily: 'inherit', background: theme.surface, color: theme.text }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 4 }}>
+                Vigencia fin
+              </label>
+              <input type="date" value={vigencia.fin}
+                onChange={(e) => setVigencia({ ...vigencia, fin: e.target.value })}
+                style={{ width: '100%', padding: '8px 12px', border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, fontFamily: 'inherit', background: theme.surface, color: theme.text }} />
+            </div>
+          </div>
+        )}
+
+        {error && !loading && (
+          <div style={{ padding: '8px 12px', background: '#FEE2E2', color: '#B91C1C', borderRadius: 8, fontSize: 11.5, marginBottom: 10 }}>
+            ⚠ {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onClose}
+            style={{ padding: '9px 16px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 0, background: theme.bg, color: theme.text, fontFamily: 'inherit' }}>
+            Cancelar
+          </button>
+          <button onClick={guardar} disabled={!parsed || saving}
+            style={{
+              padding: '9px 16px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: parsed && !saving ? 'pointer' : 'not-allowed',
+              border: 0, background: parsed && !saving ? 'linear-gradient(135deg, #F59E0B, #F5C842)' : theme.border,
+              color: '#fff', fontFamily: 'inherit', opacity: parsed && !saving ? 1 : 0.5,
+            }}>
+            {saving ? 'Guardando…' : parsed ? `✓ Cargar ${parsed.length} SPIFFs` : 'Cargar SPIFFs'}
+          </button>
+        </div>
+      </div>
+      <style>{`@keyframes sopFadeIn { from { opacity:0 } to { opacity:1 } }`}</style>
+    </div>
+  );
 }

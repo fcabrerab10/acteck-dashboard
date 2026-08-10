@@ -45,6 +45,8 @@ const ALLOWED = {
   sku_config:           'sku',
   // Guías por factura del ERP · alimenta auto-relleno de Tracking Pedidos
   guias_erp:            'mov,movid',
+  // SPIFFs por SKU (incentivo por pieza vendida) — se sube desde Propuestas
+  spiffs:               'sku',
 };
 
 export default async function handler(req, res) {
