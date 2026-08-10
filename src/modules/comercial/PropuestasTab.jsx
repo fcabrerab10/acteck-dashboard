@@ -1354,10 +1354,10 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
         </div>
       )}
 
-      {/* Body: catálogo (izq) + copilot (der) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', flex: 1, minHeight: 0 }}>
-        {/* Catálogo */}
-        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      {/* Body: catálogo (izq) + copilot (der) — gap para separar visualmente */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 12, flex: 1, minHeight: 0, padding: '0 12px 12px' }}>
+        {/* Catálogo — card blanca redondeada como el resto del sistema */}
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' }}>
           {/* Toolbar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: `1px solid ${theme.border}`, background: theme.surface, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 999, height: 30, flex: 1, maxWidth: 260 }}>
@@ -1733,7 +1733,8 @@ function Copilot({ theme, isDark, P, cliente, contexto, skus, propuesta, onAplic
 
   return (
     <div style={{
-      background: theme.surface, borderLeft: `1px solid ${theme.border}`,
+      background: theme.surface, border: `1px solid ${theme.border}`,
+      borderRadius: 14, overflow: 'hidden',
       display: 'flex', flexDirection: 'column', minWidth: 0,
     }}>
       {/* Header */}
