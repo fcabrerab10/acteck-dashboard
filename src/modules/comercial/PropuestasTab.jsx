@@ -1737,10 +1737,9 @@ function Copilot({ theme, isDark, P, cliente, contexto, skus, propuesta, onAplic
       borderRadius: 14, overflow: 'hidden',
       display: 'flex', flexDirection: 'column', minWidth: 0,
     }}>
-      {/* Header */}
+      {/* Header — negro consistente con Mi Propuesta */}
       <div style={{
-        padding: '14px 16px', borderBottom: `1px solid ${theme.border}`,
-        background: `linear-gradient(135deg, ${P.accent}0F, ${P.purple}0F)`,
+        padding: '14px 16px', background: '#000', color: '#F5F5F7',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
@@ -1752,10 +1751,10 @@ function Copilot({ theme, isDark, P, cliente, contexto, skus, propuesta, onAplic
             🌴
           </div>
           <div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 13, letterSpacing: '-0.015em', color: theme.text }}>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 14, letterSpacing: '-0.015em', color: '#F5F5F7' }}>
               Ferruteck
             </div>
-            <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>
+            <div style={{ fontSize: 10.5, color: 'rgba(245,245,247,0.6)', marginTop: 1 }}>
               {cliente.label} · {sugerencias.length} sugerencia{sugerencias.length === 1 ? '' : 's'}
             </div>
           </div>
