@@ -2464,12 +2464,16 @@ async function fetchAll(clienteKey) {
   const anioMin = Math.min(...mm.map((m) => m.anio));
   const anioMax = Math.max(...mm.map((m) => m.anio));
 
-  const [roadmapRes, invAckRes, invCliRes, preciosRes, sellout90, selloutMes, cuotaRes, spiffsRes] = await Promise.all([
+  const [roadmapRes, invAckRes, invCliRes, preciosRes, costosRes, sellout90, selloutMes, cuotaRes, spiffsRes] = await Promise.all([
     supabase.from('roadmap_sku').select('sku,marca,familia,categoria,descripcion,rdmp'),
     supabase.from('inventario_acteck').select('articulo,disponible,no_almacen'),
     supabase.from('inventario_cliente').select('sku,stock,titulo,anio,semana').eq('cliente', clienteKey),
+    // Vista canónica: mismos precios que la pestaña Estrategia de Precios.
+    // Trae 1 fila por (sku, lista) con el precio más reciente.
+    supabase.from('v_estrategia_precios_lista').select('sku,lista,precio'),
+    // Costo lo seguimos leyendo de la tabla base porque la vista no lo trae.
     supabase.from('precios_sku')
-      .select('sku,lista,precio,costo_promedio,anio,mes')
+      .select('sku,costo_promedio,anio,mes')
       .gte('anio', anioMax - 1)
       .order('anio', { ascending: false })
       .order('mes', { ascending: false }),
@@ -2501,12 +2505,15 @@ async function fetchAll(clienteKey) {
     }
   }
   const preciosPorSku = new Map();
-  const costoPorSku = new Map();
+  // v_estrategia_precios_lista ya trae 1 fila por (sku, lista) con el precio canónico
   for (const r of preciosRes.data || []) {
     if (!preciosPorSku.has(r.sku)) preciosPorSku.set(r.sku, {});
     const lst = preciosPorSku.get(r.sku);
-    if (!(r.lista in lst)) lst[r.lista] = Number(r.precio) || 0;
-    // Costo: primer valor encontrado (registros ya vienen ordenados desc por año/mes)
+    lst[r.lista] = Number(r.precio) || 0;
+  }
+  const costoPorSku = new Map();
+  // Costo: primer valor no-null encontrado (registros ya vienen ordenados desc por año/mes)
+  for (const r of costosRes.data || []) {
     if (!costoPorSku.has(r.sku) && r.costo_promedio) {
       costoPorSku.set(r.sku, Number(r.costo_promedio) || 0);
     }
