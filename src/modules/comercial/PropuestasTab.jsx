@@ -1307,12 +1307,12 @@ function VistaOnePage({ theme, isDark, cliente, contexto, skus, propuesta, setPr
                 </div>
               </div>
               <div style={{ position: 'relative' }}>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(245,245,247,0.55)', marginBottom: 6 }}>Gap</div>
-                <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 24, fontWeight: 600, letterSpacing: '-0.028em', lineHeight: 1, color: contexto.gap > 0 ? '#FF9F0A' : '#30D158' }}>
-                  {contexto.gap > 0 ? fmtCompact(contexto.gap) : '✓'}
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(245,245,247,0.55)', marginBottom: 6 }}>Total propuesta</div>
+                <div style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 24, fontWeight: 600, letterSpacing: '-0.028em', lineHeight: 1, color: totalPropuesta > 0 ? '#30D158' : 'rgba(245,245,247,0.55)' }}>
+                  {totalPropuesta > 0 ? fmtCompact(totalPropuesta) : '$0'}
                 </div>
                 <div style={{ fontSize: 10.5, color: 'rgba(245,245,247,0.55)', marginTop: 4, fontFamily: '"SF Mono", ui-monospace, monospace' }}>
-                  {contexto.gap > 0 ? 'por cerrar' : 'cumplida'}
+                  {propuestaLista.length} SKUs · {fmtInt(piezasTotal)} pz
                 </div>
               </div>
               <div style={{ position: 'relative' }}>
