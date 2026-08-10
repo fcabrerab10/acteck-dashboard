@@ -603,6 +603,7 @@ export default function PropuestasTab() {
       nombre={propuestaNombre} setNombre={setPropuestaNombre}
       onBack={() => setVista(2)}
       onGuardar={guardarBorrador}
+      onSalir={() => { guardarBorrador(); reiniciar(); }}
     />;
   }
 
@@ -1871,7 +1872,7 @@ function SortableTh({ theme, P, orden, onToggle, col, width, children }) {
 // ════════════════════════════════════════════════════════════════════
 // VISTA REVISAR · Hero total + KPIs Fitness + agrupación por familia
 // ════════════════════════════════════════════════════════════════════
-function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombre, setNombre, onBack, onGuardar }) {
+function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombre, setNombre, onBack, onGuardar, onSalir }) {
   const P = paletteFromTheme(theme);
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#1D1D1F');
   const heroText = theme.heroCardText || '#F5F5F7';
@@ -2215,6 +2216,13 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombr
             style={{ padding: '8px 16px', background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text, fontWeight: 500, fontFamily: 'inherit', borderRadius: 999, fontSize: 12, cursor: 'pointer' }}>
             Guardar borrador
           </button>
+          {onSalir && (
+            <button onClick={onSalir} title="Guarda el borrador y regresa a Propuestas"
+              style={{ padding: '8px 16px', background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text, fontWeight: 500, fontFamily: 'inherit', borderRadius: 999, fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <ArrowLeft style={{ width: 12, height: 12 }} strokeWidth={2} />
+              Guardar y salir
+            </button>
+          )}
           <button onClick={exportar}
             style={{ padding: '8px 18px', background: P.accent, border: 0, color: '#FFF', fontWeight: 600, fontFamily: 'inherit', borderRadius: 999, fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Download style={{ width: 12, height: 12 }} strokeWidth={2} />
