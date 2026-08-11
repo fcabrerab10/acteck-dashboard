@@ -1,130 +1,178 @@
-// GestionCuotasPanel — modal Ferruteck para editar cuotas_mensuales manualmente.
-// Se abre desde Configuración. Sustituye la carga automática desde el ERP
-// (que reescribía todo en cada upload).
+// GestionCuotasPanel — subir Excel de cuotas mensuales por cliente.
+// Ya NO se cargan desde el ERP (para no reescribirse en cada upload).
+// Formato Excel esperado (misma hoja "Cuotas" del ERP):
+//   row 0: header
+//   row 1: años en columnas (ej. col 1 = 2025, col 13 = 2026)
+//   row 2: meses (Ene..Dic × cada año)
+//   row 3: "Etiquetas de fila"
+//   row 4+: filas de clientes (col 0 = nombre) × 12 columnas por año
 //
-// Modelo: 1 fila por (cliente, anio, mes). Editas cuota_min y cuota_ideal.
-// Vista tipo pivot: filas = meses, columnas = min/ideal, con selector año+cliente.
+// El parser detecta bloques de año automáticamente y emite filas
+// { cliente, anio, mes, cuota_min, cuota_ideal } — mismo shape que la BD.
 import React from 'react';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
 
 const P_ACCENT = '#007AFF';
+const XLSX_URL = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
 
-const CLIENTES = [
-  { key: 'digitalife', label: 'Digitalife', color: '#3B82F6' },
-  { key: 'pcel',       label: 'PCEL',       color: '#EF4444' },
-  { key: 'dicotech',   label: 'Dicotech',   color: '#10B981' },
-];
+const NORM_CLIENTE = {
+  'DICOTECH': 'dicotech',
+  'DIGITAL LIFE': 'digitalife',
+  'DIGITALIFE': 'digitalife',
+  'PCEL': 'pcel',
+};
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
+function normalizarCliente(nm) {
+  const up = String(nm || '').trim().toUpperCase();
+  if (NORM_CLIENTE[up]) return NORM_CLIENTE[up];
+  return up.toLowerCase().replace(/\s+/g, '_');
+}
+
+function toNum(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return v;
+  const n = parseFloat(String(v).replace(/[,\s$]/g, ''));
+  return isNaN(n) ? null : n;
+}
+
 function formatMX(n) {
   const v = Number(n);
-  if (!isFinite(v) || v === 0) return '';
+  if (!isFinite(v) || v === 0) return '—';
   return new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 }).format(v);
+}
+
+async function loadSheetJS() {
+  if (window.XLSX) return window.XLSX;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = XLSX_URL; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return window.XLSX;
+}
+
+// Parser espejo del cuotasClientes() de uploads.html
+function parseCuotas(wb) {
+  // Preferimos la hoja "Cuotas"; si no existe, usa la primera hoja del libro.
+  const sheetName = wb.SheetNames.find((n) => n.toLowerCase() === 'cuotas') || wb.SheetNames[0];
+  const sh = wb.Sheets[sheetName];
+  if (!sh) return { rows: [], warning: 'No se encontró ninguna hoja' };
+  const arr = window.XLSX.utils.sheet_to_json(sh, { header: 1, defval: null });
+  if (arr.length < 5) return { rows: [], warning: 'Hoja demasiado corta (mínimo 5 filas)' };
+
+  const headerAnios = arr[1] || [];
+  const bloques = [];
+  for (let c = 0; c < headerAnios.length; c++) {
+    const v = String(headerAnios[c] || '').trim();
+    const m = v.match(/^(20\d{2})$/);
+    if (m) bloques.push({ anio: parseInt(m[1], 10), colStart: c, colEnd: c + 11 });
+  }
+  if (bloques.length === 0) {
+    return { rows: [], warning: 'No se encontraron años en la fila 2 (esperado formato "2025", "2026", ...)' };
+  }
+
+  const out = [];
+  for (let r = 4; r < arr.length; r++) {
+    const row = arr[r];
+    if (!row) continue;
+    const cliente = normalizarCliente(row[0]);
+    if (!cliente || cliente === 'total_general' || cliente === '') continue;
+    for (const b of bloques) {
+      for (let mes = 1; mes <= 12; mes++) {
+        const val = toNum(row[b.colStart + (mes - 1)]);
+        if (val == null || val <= 0) continue;
+        out.push({
+          cliente,
+          anio: b.anio,
+          mes,
+          cuota_min: val,
+          cuota_ideal: val,
+        });
+      }
+    }
+  }
+  return { rows: out, sheetName, bloques };
+}
+
+// Agrupa filas para el preview: { cliente: { anio: [mes×12] } }
+function agrupar(rows) {
+  const map = new Map();
+  for (const r of rows) {
+    if (!map.has(r.cliente)) map.set(r.cliente, new Map());
+    const cliMap = map.get(r.cliente);
+    if (!cliMap.has(r.anio)) cliMap.set(r.anio, new Array(12).fill(0));
+    cliMap.get(r.anio)[r.mes - 1] = r.cuota_min;
+  }
+  const salida = [];
+  for (const [cli, cliMap] of map) {
+    for (const [anio, meses] of cliMap) {
+      salida.push({ cliente: cli, anio, meses, total: meses.reduce((s, v) => s + v, 0) });
+    }
+  }
+  return salida.sort((a, b) => a.cliente.localeCompare(b.cliente) || a.anio - b.anio);
 }
 
 export default function GestionCuotasPanel({ onClose, onSaved }) {
   const { theme } = useTheme();
-  const now = new Date();
-  const [anio, setAnio] = React.useState(now.getFullYear());
-  const [cliente, setCliente] = React.useState('digitalife');
-  const [rows, setRows] = React.useState([]); // [{mes, cuota_min, cuota_ideal, _dirty, _original}]
-  const [loading, setLoading] = React.useState(true);
+  const fileInputRef = React.useRef(null);
+  const [parsed, setParsed] = React.useState(null); // { rows, sheetName, bloques, fileName }
   const [saving, setSaving] = React.useState(false);
+  const [reemplazar, setReemplazar] = React.useState(true);
   const [error, setError] = React.useState(null);
   const [msg, setMsg] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
 
-  const cargar = React.useCallback(async () => {
-    setLoading(true); setError(null); setMsg(null);
+  const handleFile = async (file) => {
+    if (!file) return;
+    setBusy(true); setError(null); setMsg(null); setParsed(null);
     try {
-      const { data, error } = await supabase.from('cuotas_mensuales')
-        .select('mes, cuota_min, cuota_ideal')
-        .eq('cliente', cliente).eq('anio', anio);
-      if (error) throw error;
-      const byMes = new Map((data || []).map((r) => [r.mes, r]));
-      const filas = Array.from({ length: 12 }, (_, i) => {
-        const mes = i + 1;
-        const src = byMes.get(mes) || {};
-        const cm = Number(src.cuota_min || 0);
-        const ci = Number(src.cuota_ideal || 0);
-        return { mes, cuota_min: cm, cuota_ideal: ci, _dirty: false, _original: { cuota_min: cm, cuota_ideal: ci } };
-      });
-      setRows(filas);
+      const XLSX = await loadSheetJS();
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const { rows, warning, sheetName, bloques } = parseCuotas(wb);
+      if (warning) throw new Error(warning);
+      if (rows.length === 0) throw new Error('El Excel no contiene filas de cuotas válidas');
+      setParsed({ rows, sheetName, bloques, fileName: file.name });
     } catch (e) {
-      setError(e.message || 'Error al cargar');
-    } finally { setLoading(false); }
-  }, [cliente, anio]);
-
-  React.useEffect(() => { cargar(); }, [cargar]);
-
-  const editRow = (mes, patch) => {
-    setRows((prev) => prev.map((r) => r.mes === mes ? {
-      ...r, ...patch,
-      _dirty: (patch.cuota_min ?? r.cuota_min) !== r._original.cuota_min
-           || (patch.cuota_ideal ?? r.cuota_ideal) !== r._original.cuota_ideal,
-    } : r));
-  };
-
-  const copiarMinAIdeal = () => {
-    setRows((prev) => prev.map((r) => ({
-      ...r, cuota_ideal: r.cuota_min,
-      _dirty: r.cuota_min !== r._original.cuota_ideal || r.cuota_min !== r._original.cuota_min,
-    })));
-  };
-
-  const limpiarTodo = () => {
-    setRows((prev) => prev.map((r) => ({
-      ...r, cuota_min: 0, cuota_ideal: 0,
-      _dirty: r._original.cuota_min !== 0 || r._original.cuota_ideal !== 0,
-    })));
+      setError(e.message || 'No se pudo leer el archivo');
+    } finally { setBusy(false); }
   };
 
   const guardar = async () => {
+    if (!parsed) return;
     setSaving(true); setError(null); setMsg(null);
     try {
-      // Upsert TODAS las filas del año/cliente (12 meses).
-      // Los meses con ambas cuotas en 0 se borran para no dejar filas vacías.
-      const payload = rows.filter((r) => Number(r.cuota_min) > 0 || Number(r.cuota_ideal) > 0)
-        .map((r) => ({
-          cliente, anio, mes: r.mes,
-          cuota_min: Number(r.cuota_min) || 0,
-          cuota_ideal: Number(r.cuota_ideal) || 0,
-        }));
-      const toDelete = rows.filter((r) => Number(r.cuota_min) === 0 && Number(r.cuota_ideal) === 0
-        && (r._original.cuota_min !== 0 || r._original.cuota_ideal !== 0))
-        .map((r) => r.mes);
-
-      if (payload.length > 0) {
-        const { error: upErr } = await supabase.from('cuotas_mensuales').upsert(payload, { onConflict: 'cliente,mes,anio' });
+      // Si reemplazar=true, borramos primero todas las (cliente, anio) presentes en el excel.
+      if (reemplazar) {
+        const pares = new Map(); // key = cliente:anio
+        for (const r of parsed.rows) pares.set(`${r.cliente}:${r.anio}`, { cliente: r.cliente, anio: r.anio });
+        for (const { cliente, anio } of pares.values()) {
+          const { error: delErr } = await supabase.from('cuotas_mensuales')
+            .delete().eq('cliente', cliente).eq('anio', anio);
+          if (delErr) throw delErr;
+        }
+      }
+      // Upsert por lotes de 500
+      const CHUNK = 500;
+      for (let i = 0; i < parsed.rows.length; i += CHUNK) {
+        const slice = parsed.rows.slice(i, i + CHUNK);
+        const { error: upErr } = await supabase.from('cuotas_mensuales')
+          .upsert(slice, { onConflict: 'cliente,mes,anio' });
         if (upErr) throw upErr;
       }
-      if (toDelete.length > 0) {
-        const { error: delErr } = await supabase.from('cuotas_mensuales').delete()
-          .eq('cliente', cliente).eq('anio', anio).in('mes', toDelete);
-        if (delErr) throw delErr;
-      }
-      setMsg(`✓ Guardado · ${payload.length} meses${toDelete.length ? ` · ${toDelete.length} borrados` : ''}`);
-      // Refrescar _original para que _dirty se limpie
-      setRows((prev) => prev.map((r) => ({ ...r, _dirty: false, _original: { cuota_min: r.cuota_min, cuota_ideal: r.cuota_ideal } })));
+      const pares = new Set(parsed.rows.map((r) => `${r.cliente}:${r.anio}`));
+      setMsg(`✓ Cargadas ${parsed.rows.length} filas · ${pares.size} combinaciones (cliente × año)`);
       onSaved?.();
     } catch (e) {
       setError(e.message || 'Error al guardar');
     } finally { setSaving(false); }
   };
 
-  const dirty = rows.some((r) => r._dirty);
-  const totalMin = rows.reduce((s, r) => s + (Number(r.cuota_min) || 0), 0);
-  const totalIdeal = rows.reduce((s, r) => s + (Number(r.cuota_ideal) || 0), 0);
-  const anios = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
-  const clienteInfo = CLIENTES.find((c) => c.key === cliente);
-
-  const inputStyle = (isDirty) => ({
-    width: '100%', padding: '6px 10px', fontSize: 12, fontFamily: '"SF Mono", ui-monospace, monospace',
-    background: theme.bg, border: `1px solid ${isDirty ? P_ACCENT + '66' : theme.border}`, borderRadius: 6,
-    color: theme.text, outline: 'none', textAlign: 'right', fontWeight: 600,
-  });
+  const grupos = parsed ? agrupar(parsed.rows) : [];
 
   return (
     <div style={{
@@ -133,11 +181,11 @@ export default function GestionCuotasPanel({ onClose, onSaved }) {
       fontFamily: TYPO.fontText, padding: 20,
     }} onClick={onClose}>
       <div style={{
-        background: theme.surface, borderRadius: 16, width: '100%', maxWidth: 720,
+        background: theme.surface, borderRadius: 16, width: '100%', maxWidth: 900,
         maxHeight: '90vh', display: 'flex', flexDirection: 'column',
         boxShadow: '0 20px 60px rgba(0,0,0,0.25)', border: `1px solid ${theme.border}`,
       }} onClick={(e) => e.stopPropagation()}>
-        {/* Header negro estilo Ferruteck */}
+        {/* Header negro Ferruteck */}
         <div style={{ background: '#000', color: '#F5F5F7', padding: '18px 22px', borderRadius: '16px 16px 0 0', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>🎯</div>
           <div>
@@ -145,131 +193,130 @@ export default function GestionCuotasPanel({ onClose, onSaved }) {
               Cuotas mensuales
             </h3>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>
-              Editas a mano · ya no se reescriben desde el ERP
+              Subes un Excel con todas las cuotas · reemplaza las de los años/clientes que traiga
             </div>
           </div>
           <button onClick={onClose} style={{ marginLeft: 'auto', background: 'transparent', border: 0, cursor: 'pointer', color: 'rgba(255,255,255,0.6)', fontSize: 20, padding: 4 }}>✕</button>
         </div>
 
-        {/* Controles: cliente + año */}
-        <div style={{ display: 'flex', gap: 8, padding: '14px 22px', borderBottom: `1px solid ${theme.border}`, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {CLIENTES.map((c) => (
-              <button key={c.key} onClick={() => setCliente(c.key)}
+        {/* Cuerpo */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px' }}>
+          {!parsed && (
+            <div style={{
+              border: `2px dashed ${theme.border}`, borderRadius: 14, padding: 40,
+              textAlign: 'center', background: theme.bg,
+            }}
+              onDragOver={(e) => { e.preventDefault(); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const f = e.dataTransfer.files?.[0];
+                if (f) handleFile(f);
+              }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
+              <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: theme.text, fontFamily: TYPO.fontDisplay }}>
+                {busy ? 'Leyendo Excel…' : 'Arrastra el Excel de cuotas aquí'}
+              </h4>
+              <p style={{ margin: '6px 0 14px', fontSize: 11, color: theme.textMuted, lineHeight: 1.5 }}>
+                Mismo formato que la hoja "Cuotas" del ERP. Se detectan los años automáticamente.<br />
+                Filas = clientes · columnas = 12 meses por año.
+              </p>
+              <button onClick={() => fileInputRef.current?.click()} disabled={busy}
                 style={{
-                  padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                  border: `1px solid ${cliente === c.key ? c.color : theme.border}`,
-                  background: cliente === c.key ? `${c.color}18` : 'transparent',
-                  color: cliente === c.key ? c.color : theme.text, fontFamily: 'inherit',
+                  padding: '9px 18px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+                  cursor: busy ? 'not-allowed' : 'pointer', border: 0,
+                  background: '#000', color: '#fff', fontFamily: 'inherit', opacity: busy ? 0.5 : 1,
                 }}>
-                <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 999, background: c.color, marginRight: 6, verticalAlign: 'middle' }} />
-                {c.label}
+                {busy ? 'Procesando…' : 'Elegir archivo…'}
               </button>
-            ))}
-          </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-            {anios.map((a) => (
-              <button key={a} onClick={() => setAnio(a)}
-                style={{
-                  padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                  border: `1px solid ${anio === a ? P_ACCENT : theme.border}`,
-                  background: anio === a ? `${P_ACCENT}18` : 'transparent',
-                  color: anio === a ? P_ACCENT : theme.text, fontFamily: 'inherit',
-                }}>{a}</button>
-            ))}
-          </div>
-        </div>
+              <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }}
+                onChange={(e) => handleFile(e.target.files?.[0])} />
+            </div>
+          )}
 
-        {/* Tabla */}
-        <div style={{ flex: 1, overflow: 'auto', padding: '4px 22px' }}>
-          {loading ? (
-            <div style={{ padding: 40, textAlign: 'center', fontSize: 12, color: theme.textMuted }}>Cargando cuotas…</div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 12 }}>
-              <thead>
-                <tr>
-                  {['Mes', 'Cuota mín ($)', 'Cuota ideal ($)'].map((h, i) => (
-                    <th key={i} style={{
-                      position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
-                      textAlign: i === 0 ? 'left' : 'right', padding: '10px 8px',
-                      fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
-                      color: theme.textMuted, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap',
-                    }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.mes} style={{ borderTop: `1px solid ${theme.border}` }}>
-                    <td style={{ padding: '6px 8px', width: 100 }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: theme.text }}>
-                        {MESES[r.mes - 1]}
-                      </span>
-                      <span style={{ fontSize: 10, color: theme.textMuted, marginLeft: 6 }}>{anio}</span>
-                    </td>
-                    <td style={{ padding: '6px 8px', width: 180 }}>
-                      <input type="text" inputMode="numeric"
-                        value={r.cuota_min ? formatMX(r.cuota_min) : ''}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/[^0-9]/g, '');
-                          editRow(r.mes, { cuota_min: Number(raw) || 0 });
-                        }}
-                        placeholder="0"
-                        style={inputStyle(r._dirty && r.cuota_min !== r._original.cuota_min)} />
-                    </td>
-                    <td style={{ padding: '6px 8px', width: 180 }}>
-                      <input type="text" inputMode="numeric"
-                        value={r.cuota_ideal ? formatMX(r.cuota_ideal) : ''}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/[^0-9]/g, '');
-                          editRow(r.mes, { cuota_ideal: Number(raw) || 0 });
-                        }}
-                        placeholder="0"
-                        style={inputStyle(r._dirty && r.cuota_ideal !== r._original.cuota_ideal)} />
-                    </td>
-                  </tr>
-                ))}
-                {/* Totales */}
-                <tr style={{ borderTop: `2px solid ${theme.border}` }}>
-                  <td style={{ padding: '10px 8px', fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total {anio}</td>
-                  <td style={{ padding: '10px 8px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: theme.text, fontFamily: '"SF Mono", ui-monospace, monospace' }}>${formatMX(totalMin) || '0'}</td>
-                  <td style={{ padding: '10px 8px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: theme.text, fontFamily: '"SF Mono", ui-monospace, monospace' }}>${formatMX(totalIdeal) || '0'}</td>
-                </tr>
-              </tbody>
-            </table>
+          {parsed && (
+            <div>
+              {/* Resumen */}
+              <div style={{
+                display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
+                padding: '10px 14px', background: theme.bg, border: `1px solid ${theme.border}`,
+                borderRadius: 12, marginBottom: 14,
+              }}>
+                <div style={{ fontSize: 11, color: theme.textMuted }}>
+                  <strong style={{ color: theme.text }}>{parsed.fileName}</strong>
+                  <span> · hoja "{parsed.sheetName}" · {parsed.rows.length} filas · años: {parsed.bloques.map((b) => b.anio).join(', ')}</span>
+                </div>
+                <button onClick={() => { setParsed(null); setError(null); setMsg(null); }}
+                  style={{
+                    marginLeft: 'auto', padding: '5px 12px', borderRadius: 999, fontSize: 10.5,
+                    fontWeight: 600, cursor: 'pointer', border: `1px solid ${theme.border}`,
+                    background: 'transparent', color: theme.textMuted, fontFamily: 'inherit',
+                  }}>Cambiar archivo</button>
+              </div>
+
+              {/* Tabla preview */}
+              <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11 }}>
+                  <thead>
+                    <tr style={{ background: theme.bg }}>
+                      <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: `1px solid ${theme.border}` }}>Cliente</th>
+                      <th style={{ padding: '10px 8px', textAlign: 'center', fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: `1px solid ${theme.border}` }}>Año</th>
+                      {MESES.map((m) => (
+                        <th key={m} style={{ padding: '10px 4px', textAlign: 'right', fontSize: 9, fontWeight: 600, color: theme.textMuted, borderBottom: `1px solid ${theme.border}` }}>{m}</th>
+                      ))}
+                      <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: 9, fontWeight: 700, color: theme.text, borderBottom: `1px solid ${theme.border}` }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grupos.map((g, i) => (
+                      <tr key={`${g.cliente}-${g.anio}`} style={{ borderTop: i > 0 ? `1px solid ${theme.border}` : 0 }}>
+                        <td style={{ padding: '8px 12px', fontWeight: 600, color: theme.text, textTransform: 'capitalize' }}>{g.cliente}</td>
+                        <td style={{ padding: '8px 8px', textAlign: 'center', color: theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace' }}>{g.anio}</td>
+                        {g.meses.map((v, mi) => (
+                          <td key={mi} style={{ padding: '8px 4px', textAlign: 'right', color: v > 0 ? theme.text : theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10 }}>
+                            {v > 0 ? formatMX(v) : '—'}
+                          </td>
+                        ))}
+                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: theme.text, fontFamily: '"SF Mono", ui-monospace, monospace' }}>${formatMX(g.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 14, cursor: 'pointer', padding: '10px 12px', background: theme.bg, borderRadius: 10, border: `1px solid ${theme.border}` }}>
+                <input type="checkbox" checked={reemplazar} onChange={(e) => setReemplazar(e.target.checked)}
+                  style={{ marginTop: 2 }} />
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: theme.text }}>Reemplazar cuotas existentes de los años cargados</div>
+                  <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 2, lineHeight: 1.4 }}>
+                    Recomendado. Borra las cuotas actuales de cada (cliente × año) presente en el Excel antes de insertar.
+                    Sin esto, sólo se agregan las filas nuevas y se actualizan las existentes por (cliente, mes, año).
+                  </div>
+                </div>
+              </label>
+            </div>
           )}
         </div>
 
         {/* Footer */}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', padding: '14px 22px', borderTop: `1px solid ${theme.border}`, background: theme.bg, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={copiarMinAIdeal} disabled={loading}
-              style={{ padding: '6px 10px', borderRadius: 999, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', border: `1px solid ${theme.border}`, background: 'transparent', color: theme.textMuted, fontFamily: 'inherit' }}>
-              Copiar mín → ideal
-            </button>
-            <button onClick={limpiarTodo} disabled={loading}
-              style={{ padding: '6px 10px', borderRadius: 999, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', border: `1px solid ${theme.border}`, background: 'transparent', color: theme.textMuted, fontFamily: 'inherit' }}>
-              Limpiar
-            </button>
-          </div>
-          <div style={{ fontSize: 11, minWidth: 200, flex: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 11, minWidth: 200, flex: 1 }}>
             {error && <span style={{ color: '#B91C1C', fontWeight: 600 }}>⚠ {error}</span>}
             {msg && <span style={{ color: '#166534', fontWeight: 600 }}>{msg}</span>}
-            {!error && !msg && dirty && <span style={{ color: theme.textMuted }}>Cambios sin guardar en {clienteInfo?.label} · {anio}</span>}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onClose}
               style={{ padding: '9px 16px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: theme.surface, color: theme.text, fontFamily: 'inherit', border: `1px solid ${theme.border}` }}>
-              {dirty ? 'Cancelar' : 'Cerrar'}
+              Cerrar
             </button>
-            <button onClick={guardar} disabled={!dirty || saving}
+            <button onClick={guardar} disabled={!parsed || saving}
               style={{
                 padding: '9px 16px', borderRadius: 999, fontSize: 12, fontWeight: 600,
-                cursor: dirty && !saving ? 'pointer' : 'not-allowed',
-                border: 0, background: dirty && !saving ? '#000' : theme.border,
-                color: '#fff', fontFamily: 'inherit', opacity: dirty && !saving ? 1 : 0.5,
+                cursor: parsed && !saving ? 'pointer' : 'not-allowed',
+                border: 0, background: parsed && !saving ? '#000' : theme.border,
+                color: '#fff', fontFamily: 'inherit', opacity: parsed && !saving ? 1 : 0.5,
               }}>
-              {saving ? 'Guardando…' : 'Guardar cambios'}
+              {saving ? 'Cargando…' : parsed ? `Cargar ${parsed.rows.length} cuotas` : 'Cargar cuotas'}
             </button>
           </div>
         </div>
