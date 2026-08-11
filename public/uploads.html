@@ -217,6 +217,7 @@ const SOURCES = [
       { table:'guias_erp', onConflict:'mov,movid', parser:'guiasErp', label:'Guías por factura (hoja Guias · alimenta Tracking Pedidos)', replace:true }
     ]
   },
+  { id:'cuotas-anuales', grupo:'globales', tipo:'updated', statusKey:'cuotas_mensuales', title:'Cuotas mensuales por cliente', desc:'Archivo anual con las cuotas mensuales por cliente (hoja "Cuotas"). Formato pivot: filas = clientes, columnas = 12 meses × año. Se detectan los años automáticamente en la fila 2. Sube 1 vez al año — reemplaza todas las cuotas de los años presentes en el archivo antes de insertar. Ya no se carga desde "Actualizaciones ERP" para evitar que se reescriba en cada upload.', file:'Cuotas <AÑO>.xlsx', table:'cuotas_mensuales', onConflict:'cliente,mes,anio', parser:'cuotasClientes', replaceAniosDinamico:true },
   { id:'roadmap', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Roadmap', desc:'Archivo Roadmap.xlsx (Hoja1). 6 columnas: Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2. Replace completo — fuente única de marca/categoría/familia por SKU para todo el dashboard.', file:'Roadmap.xlsx', table:'roadmap_sku', onConflict:'sku', parser:'roadmap', replace:true },
   { id:'lista-precios-sellout', grupo:'globales', tipo:'updated', statusKey:'promos_temporada', title:'Lista de Precios · Promoción mensual', desc:'Archivo mensual "Lista de Precios Mayoreo AAA <AÑO> <MES>.xlsx". La columna "Sell Out" contiene el % de promoción del mes sobre Mayoreo AAA (ej. 0.05 = 5%). Se guarda como campaña "Sell Out · <MES> <AÑO>" en promos_temporada.', file:'Lista de Precios Mayoreo AAA <AÑO> <MES>.xlsx', table:'promos_temporada', onConflict:'sku,anio,mes,campania', parser:'sellOutMensual',
     extraSlot: {
@@ -3207,7 +3208,18 @@ async function handleUpload(src){
 
       // Replace por años: el servidor borra esos años antes del primer chunk
       // (para que desaparezcan los SKUs que ya no estén en el Excel).
-      await postChunks(src, src.table, src.onConflict, rows, src.replaceAnios, deletePeriodos);
+      // replaceAniosDinamico: computa los años desde los datos parseados
+      // (útil para cuotas anuales, donde el conjunto de años cambia con el archivo).
+      let replaceAniosFinal = src.replaceAnios;
+      if (src.replaceAniosDinamico && rows.length > 0) {
+        const setAnios = new Set();
+        for (const r of rows) if (r.anio != null) setAnios.add(Number(r.anio));
+        replaceAniosFinal = Array.from(setAnios).sort();
+        if (replaceAniosFinal.length > 0) {
+          appendLog(src, `Replace dinámico por año: ${replaceAniosFinal.join(', ')}`);
+        }
+      }
+      await postChunks(src, src.table, src.onConflict, rows, replaceAniosFinal, deletePeriodos);
     }
 
     // Auto-recalculate intermediate tables after certain uploads
