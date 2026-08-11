@@ -211,7 +211,9 @@ const SOURCES = [
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true },
       { table:'compras_oc', onConflict:'movid,articulo', parser:'comprasOC', label:'POs de Compras (Vw_TablaH_Compras)', replace:true },
       { table:'precios_sku', onConflict:'sku,lista,anio,mes', parser:'preciosERP', label:'Precios por lista (Vw_TablaM_Precios)', replace:true },
-      { table:'cuotas_mensuales', onConflict:'cliente,mes,anio', parser:'cuotasClientes', label:'Cuotas mensuales por cliente (hoja Cuotas)', replaceAnios:[2025,2026] },
+      // Cuotas mensuales: ya NO se cargan desde el ERP. Se administran manualmente
+      // desde Configuración → "Cuotas mensuales por cliente" para que no se
+      // reescriban en cada actualización del ERP.
       { table:'guias_erp', onConflict:'mov,movid', parser:'guiasErp', label:'Guías por factura (hoja Guias · alimenta Tracking Pedidos)', replace:true }
     ]
   },

@@ -11,6 +11,7 @@ import { useTheme } from '../../lib/themeContext';
 import { THEMES } from '../../lib/themeTokens';
 import WizardNuevoUsuario from './WizardNuevoUsuario';
 import { toast } from '../../lib/toast';
+import GestionCuotasPanel from '../../components/GestionCuotasPanel';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Configuración — Gestión de usuarios y permisos granulares
@@ -158,6 +159,7 @@ export default function Configuracion({ session }) {
   const [busqueda, setBusqueda] = useState("");
   const [miUserId, setMiUserId] = useState(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [showCuotas, setShowCuotas] = useState(false);
 
   useEffect(() => {
     fetchUsuarios();
@@ -361,13 +363,26 @@ export default function Configuracion({ session }) {
           <h2 className="text-2xl font-bold text-gray-800">Configuración</h2>
           <p className="text-sm text-gray-400">Gestión de usuarios y permisos granulares</p>
         </div>
-        <button
-          onClick={() => setShowWizard(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition"
-        >
-          ＋ Nuevo colaborador
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowCuotas(true)}
+            className="px-4 py-2 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-black transition"
+            title="Editar cuotas mensuales por cliente (ya no se cargan desde el ERP)"
+          >
+            🎯 Cuotas mensuales
+          </button>
+          <button
+            onClick={() => setShowWizard(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition"
+          >
+            ＋ Nuevo colaborador
+          </button>
+        </div>
       </div>
+
+      {showCuotas && (
+        <GestionCuotasPanel onClose={() => setShowCuotas(false)} />
+      )}
 
       {msg && (
         <div className={"mb-4 p-3 rounded-xl text-sm " + (msg.startsWith("Error") ? "bg-red-50 text-red-600 border border-red-200" : "bg-green-50 text-green-600 border border-green-200")}>
