@@ -74,8 +74,9 @@ export default function SellInDrillDown(props) {
           supabase.from('facturacion_clientes')
             .select('cliente_nombre,cliente_key,canal,anio,mes,piezas,monto')
             .eq('sku', sku).in('anio', [anioPrev, anioActual]),
-          supabase.from('precios_sku')
-            .select('lista,precio').eq('sku', sku).eq('anio', anioActual).eq('mes', mesActual),
+          // Precios vigentes por lista desde vista canónica (1 fila por sku+lista, precio más reciente).
+          supabase.from('v_estrategia_precios_lista')
+            .select('lista,precio').eq('sku', sku),
           supabase.from('inventario_acteck')
             .select('no_almacen,disponible').eq('articulo', sku),
           supabase.from('promos_temporada')

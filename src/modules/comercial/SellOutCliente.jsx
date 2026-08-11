@@ -2473,9 +2473,10 @@ function SkuDrillDown({ sku, skuInfo, meta, anioActual, anioPrev, mesActual, sel
                 .gte('fecha', `${anioPrev}-01-01`);
         const [txRes, precioRes] = await Promise.all([
           txPromise,
-          supabase.from('precios_sku')
+          // Precio vigente por lista desde vista canónica (1 fila por sku+lista, precio más reciente).
+          supabase.from('v_estrategia_precios_lista')
             .select('precio').eq('sku', sku).eq('lista', meta.listaPrecio)
-            .eq('anio', anioActual).eq('mes', mesActual).maybeSingle(),
+            .maybeSingle(),
         ]);
         if (cancelled) return;
         let rows = txRes.data || [];

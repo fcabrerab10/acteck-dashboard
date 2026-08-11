@@ -2066,9 +2066,10 @@ function SkuDrillInline({ theme, P, isDark, skuRow, anio, anioPrev, mesActual, s
   useEffect(() => {
     setLoadingPrecio(true);
     (async () => {
-      const { data } = await supabase.from('precios_sku')
+      // Precio vigente DICOTECH desde vista canónica (1 fila por sku+lista, precio más reciente).
+      const { data } = await supabase.from('v_estrategia_precios_lista')
         .select('precio').eq('sku', sku).eq('lista', 'DICOTECH')
-        .eq('anio', anio).eq('mes', mesActual).maybeSingle();
+        .maybeSingle();
       setPrecioLista(data?.precio ? Number(data.precio) : null);
       setLoadingPrecio(false);
     })();
