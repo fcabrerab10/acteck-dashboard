@@ -20,7 +20,7 @@ export default function ForecastCliente({ cliente, clienteKey }) {
     const anioActual = new Date().getFullYear();
     Promise.all([
       supabase.from('ventas_mensuales').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),
-      supabase.from('sell_in_sku').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),
+      supabase.from('facturacion_clientes').select('sku,anio,mes,piezas,monto').eq('cliente_key', clienteKey).then(function(r) { return r.data || []; }),
       fetchSelloutSku(clienteKey, anioActual),
       fetchInventarioCliente(clienteKey),
       supabase.from('inventario_en_camino').select('*').eq('cliente', clienteKey).then(function(r) { return r.data || []; }),

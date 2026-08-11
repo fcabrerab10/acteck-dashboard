@@ -107,7 +107,7 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
 
       const [ecHistR, siR, prR, soRaw] = await Promise.all([
         supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true }),
-        supabase.from('sell_in_sku').select('sku, mes, monto_pesos, piezas').eq('cliente', clienteKey).eq('anio', anio),
+        supabase.from('facturacion_clientes').select('sku, mes, monto, piezas').eq('cliente_key', clienteKey).eq('anio', anio),
         supabase.from('productos_cliente').select('sku, marca, precio_venta').eq('cliente', clienteKey),
         // Sell out con paginación (Digitalife tiene ~20K rows)
         fetchAll('sellout_detalle', 'fecha, total, cantidad, no_parte, marca', (q) => q.eq('cliente', clienteKey).gte('fecha', anioAntIni)),
@@ -401,7 +401,7 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
     sellInSku.forEach(r => {
       if (!meses.includes(Number(r.mes))) return;
       const marca = normMarca(skuMap[String(r.sku)]?.marca);
-      siByMarca[marca] = (siByMarca[marca] || 0) + (Number(r.monto_pesos) || 0);
+      siByMarca[marca] = (siByMarca[marca] || 0) + (Number(r.monto) || 0);
     });
 
     // Sell Out agregado por marca (sellout_detalle: derivar mes+anio de fecha)

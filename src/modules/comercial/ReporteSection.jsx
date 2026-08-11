@@ -807,8 +807,10 @@ function ExpandedDetail({ sku, descripcion, roadmap, invTotal, invDisp, invApart
         supabase.from('embarques_compras')
           .select('po, fecha_emision, arribo_cedis, po_qty, cbm, contenedor, estatus')
           .eq('codigo', sku),
-        // sell_in_sku histórico de este SKU → costo promedio (para valuar PCEL)
-        supabase.from('sell_in_sku').select('cliente, piezas, monto_pesos').eq('sku', sku),
+        // facturacion_clientes histórico de este SKU → costo promedio (para valuar PCEL)
+        // Migrado desde sell_in_sku; mapeo cliente_key→cliente, monto→monto_pesos abajo.
+        supabase.from('facturacion_clientes').select('cliente_key, piezas, monto').eq('sku', sku)
+          .then((res) => ({ ...res, data: (res.data || []).map((r) => ({ cliente: r.cliente_key, piezas: r.piezas, monto_pesos: r.monto })) })),
         // sellout_pcel para este SKU últimos 3 meses → MXN a costo coherente
         // con la tarjeta de PCEL en Resumen Clientes.
         supabase.from('sellout_pcel').select('anio, semana, vta_semana, costo_promedio')

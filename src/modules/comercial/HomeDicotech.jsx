@@ -108,7 +108,7 @@ export default function HomeDicotech({ cliente, clienteKey }) {
 
       const [ecHistR, siR, cfgR, soMesR, soSucR] = await Promise.all([
         supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true }),
-        supabase.from('sell_in_sku').select('sku, mes, monto_pesos, piezas').eq('cliente', clienteKey).eq('anio', anio),
+        supabase.from('facturacion_clientes').select('sku, mes, monto, piezas').eq('cliente_key', clienteKey).eq('anio', anio),
         supabase.from('clientes_credito_config').select('*').eq('cliente', clienteKey).maybeSingle(),
         // Sell out mensual precalculado (vista dedicada Dicotech)
         supabase.from('v_sellout_dicotech_mensual').select('anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas').in('anio', [anio - 1, anio]),

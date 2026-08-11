@@ -110,7 +110,7 @@ export default function HomePcel({ cliente, clienteKey }) {
 
       const [ecHistR, siR, prR, soMenR, soMarR] = await Promise.all([
         supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true }),
-        supabase.from('sell_in_sku').select('sku, mes, monto_pesos, piezas').eq('cliente', clienteKey).eq('anio', anio),
+        supabase.from('facturacion_clientes').select('sku, mes, monto, piezas').eq('cliente_key', clienteKey).eq('anio', anio),
         supabase.from('productos_cliente').select('sku, marca, precio_venta').eq('cliente', clienteKey),
         // Sell out mensual PCEL (agregado)
         supabase.from('v_sellout_pcel_mensual').select('anio,mes,piezas,monto,tx,skus_distintos').in('anio', [anio - 1, anio]),

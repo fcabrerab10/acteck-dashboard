@@ -123,8 +123,10 @@ function useResumenData() {
         fetchAll(() => supabase.from('sellout_pcel_mensual')
           .select('sku, anio, mes, piezas')
           .eq('anio', anioActual)),
-        fetchAll(() => supabase.from('sell_in_sku')
-          .select('cliente, sku, piezas, monto_pesos')
+        // Migrado a facturacion_clientes (canónico). Se mapea abajo cliente_key→cliente
+        // y monto→monto_pesos para no romper consumidores downstream.
+        fetchAll(() => supabase.from('facturacion_clientes')
+          .select('cliente_key, sku, piezas, monto')
           .gte('anio', anioActual - 1)),
         fetchAll(() => supabase.from('estados_cuenta')
           .select('id, cliente, fecha_corte, anio, semana')
@@ -162,7 +164,8 @@ function useResumenData() {
         selloutSku:        soRows      || [],
         selloutPcelSemanal:  soPcelRows    || [],
         selloutPcelMensual:  soPcelMenRows || [],
-        sellInSku:         siRows      || [],
+        // Mapeo compat: cliente_key→cliente, monto→monto_pesos para preservar consumidores.
+        sellInSku: (siRows || []).map((r) => ({ cliente: r.cliente_key, sku: r.sku, piezas: r.piezas, monto_pesos: r.monto })),
         estadosCuenta:     ecRecientes || [],
         estadosCuentaDetalle: ecDetRows || [],
       });

@@ -62,7 +62,7 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
       const [ecRes, siRes, cfgRes] = await Promise.all([
         supabase.from('estados_cuenta').select('*').eq('cliente', clienteKey)
           .order('anio', { ascending: false }).order('semana', { ascending: false }).limit(2),
-        supabase.from('sell_in_sku').select('mes, monto_pesos').eq('cliente', clienteKey).eq('anio', anio),
+        supabase.from('facturacion_clientes').select('mes, monto').eq('cliente_key', clienteKey).eq('anio', anio),
         supabase.from('clientes_credito_config').select('*').eq('cliente', clienteKey).maybeSingle(),
       ]);
       const ecArr = ecRes.data || [];
@@ -78,7 +78,7 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
         setDetalle(detAll.filter(r => r.estado_cuenta_id === ecActual?.id));
         setDetallePrev(detAll.filter(r => r.estado_cuenta_id === ecPrev?.id));
       } else { setDetalle([]); setDetallePrev([]); }
-      setSellIn((siRes.data || []).reduce((s, r) => s + (Number(r.monto_pesos) || 0), 0));
+      setSellIn((siRes.data || []).reduce((s, r) => s + (Number(r.monto) || 0), 0));
       setLoading(false);
     })();
   }, [clienteKey]);
