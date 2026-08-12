@@ -77,8 +77,10 @@ export default function SellInDrillDown(props) {
           // Precios vigentes por lista desde vista canónica (1 fila por sku+lista, precio más reciente).
           supabase.from('v_estrategia_precios_lista')
             .select('lista,precio').eq('sku', sku),
+          // Fernando (2026-08-12): usar inventario (físico total) en vez de disponible.
+          // Sólo Propuestas usa disponible.
           supabase.from('inventario_acteck')
-            .select('no_almacen,disponible').eq('articulo', sku),
+            .select('no_almacen,inventario').eq('articulo', sku),
           supabase.from('promos_temporada')
             .select('campania,promo_pct').eq('sku', sku).eq('anio', anioActual).eq('mes', mesActual),
         ]);
@@ -209,8 +211,8 @@ export default function SellInDrillDown(props) {
   const precioPromReal = totalYTD.piezas > 0 ? totalYTD.monto / totalYTD.piezas : null;
   const yieldPct = precioAAAneto && precioPromReal ? (precioPromReal / precioAAAneto * 100) : null;
 
-  const stockTotal = inv.reduce((s, r) => s + (Number(r?.disponible) || 0), 0);
-  const numAlmacenes = inv.filter((r) => (Number(r?.disponible) || 0) > 0).length;
+  const stockTotal = inv.reduce((s, r) => s + (Number(r?.inventario) || 0), 0);
+  const numAlmacenes = inv.filter((r) => (Number(r?.inventario) || 0) > 0).length;
   const ventaPromMes = closedCount > 0 ? (totalYTD.piezas / closedCount) : 0;
   const cobertura = ventaPromMes > 0 ? (stockTotal / ventaPromMes) : null;
 

@@ -884,7 +884,9 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
         const [oc, emb, inv] = await Promise.all([
           supabase.from('compras_oc').select('articulo, descripcion').in('articulo', chunk),
           supabase.from('embarques_compras').select('codigo, descripcion').in('codigo', chunk),
-          supabase.from('inventario_acteck').select('articulo, costopromedio, disponible').in('articulo', chunk),
+          // Fernando (2026-08-12): usar inventario (físico total) en vez de disponible.
+          // Sólo Propuestas usa disponible; el resto del dashboard usa inventario.
+          supabase.from('inventario_acteck').select('articulo, costopromedio, inventario').in('articulo', chunk),
         ]);
         (oc.data || []).forEach((r) => { if (r.descripcion && !mapDesc.has(r.articulo)) mapDesc.set(r.articulo, r.descripcion); });
         (emb.data || []).forEach((r) => { if (r.descripcion && !mapDesc.has(r.codigo)) mapDesc.set(r.codigo, r.descripcion); });
@@ -893,7 +895,7 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
         (inv.data || []).forEach((r) => {
           const sku = r.articulo;
           const c = Number(r.costopromedio) || 0;
-          const d = Number(r.disponible) || 0;
+          const d = Number(r.inventario) || 0;
           if (!sku || c <= 0) return;
           if (!tmp.has(sku)) tmp.set(sku, { sumWC: 0, sumW: 0, sumC: 0, n: 0 });
           const t = tmp.get(sku);

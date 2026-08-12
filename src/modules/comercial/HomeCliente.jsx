@@ -347,7 +347,9 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
         supabase.from("estados_cuenta").select("*").eq("cliente", clienteKey).order("anio", { ascending: false }).order("semana", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("archivado", false).order("created_at", { ascending: false }),
         fetchAllPages(() => supabase.from("productos_cliente").select("sku,marca,precio_venta").eq("cliente", clienteKey)),
-        fetchAllPages(() => supabase.from("inventario_acteck").select("articulo,no_almacen,disponible").in("no_almacen", ACTECK_ALMACENES)),
+        // Fernando (2026-08-12): usar inventario (físico total) en vez de disponible.
+        // Sólo Propuestas usa disponible.
+        fetchAllPages(() => supabase.from("inventario_acteck").select("articulo,no_almacen,inventario").in("no_almacen", ACTECK_ALMACENES)),
       ]);
       setSellInSku(siData);
       setSellOutSku(soData);
@@ -569,7 +571,7 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
     const actStockBySku = {};
     invActeck.forEach(r => {
       if (!r.articulo) return;
-      actStockBySku[r.articulo] = (actStockBySku[r.articulo] || 0) + (Number(r.disponible) || 0);
+      actStockBySku[r.articulo] = (actStockBySku[r.articulo] || 0) + (Number(r.inventario) || 0);
     });
     // Inventory cliente by SKU
     const stockBySku = {};
