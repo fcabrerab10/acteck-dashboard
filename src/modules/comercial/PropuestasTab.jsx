@@ -2602,14 +2602,35 @@ function KpiFit({ theme, P, icon, iconBg, iconColor, chip, value, valueColor, no
 // ════════════════════════════════════════════════════════════════════
 // fetchAll y helpers async — preservados
 // ════════════════════════════════════════════════════════════════════
+// Paginador genérico (Supabase corta en 1000 filas por defecto).
+async function fetchAllPagesLocal(qFactory, pageSize = 1000) {
+  const out = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await qFactory().range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    out.push(...data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return out;
+}
+
 async function fetchAll(clienteKey) {
   const mm = mesesCerrados();
   const anioMin = Math.min(...mm.map((m) => m.anio));
   const anioMax = Math.max(...mm.map((m) => m.anio));
 
-  const [roadmapRes, invAckRes, invCliRes, preciosRes, costosRes, sellout90, selloutMes, cuotaRes, spiffsRes] = await Promise.all([
+  // inventario_acteck tiene ~43K filas; sin paginar Supabase corta en 1000 y
+  // el Armador pierde almacenes → invActeck queda muy por debajo del real.
+  // Sacamos esta query fuera del Promise.all para paginarla.
+  const invAckDataP = fetchAllPagesLocal(() =>
+    supabase.from('inventario_acteck').select('articulo,disponible,no_almacen'));
+
+  const [roadmapRes, invAckData, invCliRes, preciosRes, costosRes, sellout90, selloutMes, cuotaRes, spiffsRes] = await Promise.all([
     supabase.from('roadmap_sku').select('sku,marca,familia,categoria,descripcion,rdmp'),
-    supabase.from('inventario_acteck').select('articulo,disponible,no_almacen'),
+    invAckDataP,
     supabase.from('inventario_cliente').select('sku,stock,titulo,anio,semana').eq('cliente', clienteKey),
     // Vista canónica: mismos precios que la pestaña Estrategia de Precios.
     // Trae 1 fila por (sku, lista) con el precio más reciente.
@@ -2631,7 +2652,7 @@ async function fetchAll(clienteKey) {
 
   const ALMACENES_COMERCIALES = new Set([1, 2, 3, 6, 9, 12, 14, 15, 16, 17, 19, 25, 44, 64, 71]);
   const invAck = new Map();
-  for (const r of invAckRes.data || []) {
+  for (const r of invAckData || []) {
     if (!ALMACENES_COMERCIALES.has(Number(r.no_almacen))) continue;
     invAck.set(r.articulo, (invAck.get(r.articulo) || 0) + (Number(r.disponible) || 0));
   }
