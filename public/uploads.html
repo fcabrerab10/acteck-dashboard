@@ -3154,7 +3154,7 @@ async function handleUpload(src){
               ...(rows[0].campania && (sub.parser === 'promosTemporada' || sub.parser === 'sellOutMensual') ? { campania: rows[0].campania } : {}),
             }]
           : null;
-        await postChunks(src, sub.table, sub.onConflict, rows, sub.replaceAnios, deletePeriodos);
+        await postChunks(src, sub.table, sub.onConflict, rows, sub.replaceAnios, deletePeriodos, sub.replace);
       }
     // Estados de cuenta and Roadmap+Precios have special handling
     } else if (src.parser === 'estadoCuenta') {
@@ -3222,7 +3222,7 @@ async function handleUpload(src){
           appendLog(src, `Replace dinámico por año: ${replaceAniosFinal.join(', ')}`);
         }
       }
-      await postChunks(src, src.table, src.onConflict, rows, replaceAniosFinal, deletePeriodos);
+      await postChunks(src, src.table, src.onConflict, rows, replaceAniosFinal, deletePeriodos, src.replace);
     }
 
     // Auto-recalculate intermediate tables after certain uploads
@@ -3342,7 +3342,7 @@ async function handleSync(src){
   }
 }
 
-async function postChunks(src, table, onConflict, rows, deleteAnios, deletePeriodos){
+async function postChunks(src, table, onConflict, rows, deleteAnios, deletePeriodos, deleteAll){
   // Deduplicate: keep last occurrence per conflict key to avoid
   // "ON CONFLICT cannot affect row a second time" errors
   const keys = onConflict.split(',').map(k => k.trim());
@@ -3370,6 +3370,10 @@ async function postChunks(src, table, onConflict, rows, deleteAnios, deletePerio
       payload.deletePeriodos = deletePeriodos;
       const lbl = deletePeriodos.map(p => `${p.anio}-${String(p.mes).padStart(2,'0')}`).join(', ');
       appendLog(src, `  Replace periodos: ${lbl} (borrando antes del primer chunk)`);
+    }
+    if (i === 0 && deleteAll) {
+      payload.deleteAll = true;
+      appendLog(src, `  Replace TOTAL: borrando toda la tabla ${table} antes del primer chunk`);
     }
     const r = await fetch('/api/import-central', {
       method:'POST',

@@ -56,9 +56,28 @@ export default async function handler(req, res) {
   if (!perfil) return;
 
   try {
-    const { table, rows, deleteAnios, deletePeriodos } = req.body || {};
+    const { table, rows, deleteAnios, deletePeriodos, deleteAll } = req.body || {};
     if (!table || !ALLOWED[table]) return res.status(400).json({ error: 'invalid table. allowed: ' + Object.keys(ALLOWED).join(', ') });
     if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'rows[] required' });
+
+    // deleteAll: borra TODA la tabla antes del primer chunk. Se usa para tablas
+    // con replace:true (inventario_acteck, compras_oc, precios_sku, roadmap_sku,
+    // guias_erp) donde el snapshot completo llega en cada upload y queremos
+    // eliminar las filas que ya no aparezcan en el archivo nuevo.
+    if (deleteAll) {
+      // Usar el primer campo del onConflict como filtro "not null" (borra todo).
+      const pkCol = String(ALLOWED[table]).split(',')[0].trim();
+      if (!pkCol) return res.status(500).json({ error: 'deleteAll: no pk col resolvable', table });
+      const delUrl = `${SB_URL}/rest/v1/${table}?${pkCol}=not.is.null`;
+      const dr = await fetch(delUrl, {
+        method: 'DELETE',
+        headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, Prefer: 'return=minimal' },
+      });
+      if (!dr.ok) {
+        const txt = await dr.text();
+        return res.status(dr.status).json({ error: 'deleteAll failed', detail: txt.slice(0, 500), table, pkCol });
+      }
+    }
 
     // Si vienen deleteAnios, borramos esos años de la tabla ANTES del upsert.
     // Solo aplica al primer chunk del cliente (cliente envía deleteAnios:[...] una vez).
