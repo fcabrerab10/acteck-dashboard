@@ -8,6 +8,7 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { ClipboardList, Search, ChevronRight, Download, X, Sparkles, ArrowLeft, Save, Trash2 } from 'lucide-react';
 import SinAcceso from '../../components/SinAcceso';
+import { FerrutekLoader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
 
