@@ -172,10 +172,13 @@ export default function MobileShell({
   // Detectar tab activo en modo cliente
   const activeCliTab = cliMode ? paginaActiva : null;
 
-  // Detectar dominio activo en modo global (para highlight de pill)
+  // Detectar dominio activo en modo global (para highlight de pill).
+  // resumenClientes está listado dentro del dominio "Interno" como shortcut,
+  // pero ya tiene su propio pill "Inicio" — se ignora aquí para no activar dos pills.
   const activeDom = useMemo(() => {
     if (cliMode) return null;
     if (vistaActual === 'configuracion') return null;
+    if (paginaActiva === 'resumenClientes') return null;
     for (const d of DOMINIOS) {
       if (d.items?.some(i => i.id === paginaActiva)) return d.id;
       if (d.sections) {
