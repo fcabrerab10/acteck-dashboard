@@ -1342,24 +1342,16 @@ function HeatmapMesEntidadCard({ theme, P, isDark, selloutGeneral, anio, mesActu
   const restCount = Math.max(0, filtradas.length - TOP_N);
   const totalYTD = entidades.reduce((s, r) => s + r.total, 0);
 
-  // Escala de opacidad: usar sqrt para dar más contraste en valores bajos
-  const cellStyleFor = (v) => {
-    if (!v || v <= 0) {
-      return {
-        background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
-        color: theme.textMuted, fontWeight: 500,
-      };
-    }
-    const pct = maxCelda > 0 ? Math.sqrt(v / maxCelda) : 0;
-    // Rango de opacidad: 0.10 → 0.72
-    const alpha = 0.10 + pct * 0.62;
-    // Texto legible: negro sobre fondo claro, blanco sobre fondo saturado (>0.5)
-    const useLight = alpha > 0.5;
-    return {
-      background: `${dimColor}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`,
-      color: useLight ? '#FFF' : theme.text,
-      fontWeight: 600,
-    };
+  // 4 buckets discretos — mismo lenguaje que la TablaSKU de abajo (heatCell).
+  // Devuelve null si la celda está vacía → se pinta un guion.
+  const heatPill = (v) => {
+    if (v == null || v <= 0) return null;
+    const r = maxCelda > 0 ? (v / maxCelda) : 0;
+    const b = dimColor;
+    if (r > 0.75) return { bg: b, color: '#FFF', weight: 600 };
+    if (r > 0.50) return { bg: isDark ? `${b}73` : `${b}59`, color: '#FFF', weight: 600 };
+    if (r > 0.25) return { bg: `${b}2E`, color: theme.text, weight: 600 };
+    return { bg: `${b}14`, color: theme.textMuted, weight: 500 };
   };
 
   const dimTitle = dim === 'sucursal' ? 'Sucursal' : dim === 'cliente' ? 'Cliente' : 'Vendedor';
@@ -1410,10 +1402,11 @@ function HeatmapMesEntidadCard({ theme, P, isDark, selloutGeneral, anio, mesActu
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: theme.textMuted, fontWeight: 500 }}>
           <span>bajo</span>
-          <div style={{ display: 'flex', height: 6, width: 120, borderRadius: 2, overflow: 'hidden', border: `1px solid ${theme.border}` }}>
-            {[0.10, 0.24, 0.38, 0.52, 0.66, 0.72].map((a, i) => (
-              <span key={i} style={{ flex: 1, background: `${dimColor}${Math.round(a * 255).toString(16).padStart(2, '0')}` }} />
-            ))}
+          <div style={{ display: 'inline-flex', gap: 3 }}>
+            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 6, background: `${dimColor}14`, color: theme.textMuted, fontSize: 9, fontWeight: 500 }}>·</span>
+            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 6, background: `${dimColor}2E`, color: theme.text, fontSize: 9, fontWeight: 600 }}>·</span>
+            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 6, background: isDark ? `${dimColor}73` : `${dimColor}59`, color: '#FFF', fontSize: 9, fontWeight: 600 }}>·</span>
+            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 6, background: dimColor, color: '#FFF', fontSize: 9, fontWeight: 600 }}>·</span>
           </div>
           <span>alto</span>
         </div>
@@ -1471,18 +1464,27 @@ function HeatmapMesEntidadCard({ theme, P, isDark, selloutGeneral, anio, mesActu
                   }}>{r.tipo === 'fisica' ? 'Física' : 'Online'}</span>
                 )}
               </div>
-              {r.meses.map((v, i) => (
-                <div key={i} style={{
-                  ...cellStyleFor(v),
-                  borderBottom: `1px solid ${theme.border}`,
-                  fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  height: 34, textAlign: 'center', padding: 0,
-                  fontVariantNumeric: 'tabular-nums',
-                }} title={v > 0 ? `${MESES[i]} · ${fmt.moneyFull(v)}` : `${MESES[i]} · sin ventas`}>
-                  {v > 0 ? fmt.money(v) : '—'}
-                </div>
-              ))}
+              {r.meses.map((v, i) => {
+                const h = heatPill(v);
+                return (
+                  <div key={i} style={{
+                    borderBottom: `1px solid ${theme.border}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                    padding: '4px 6px', opacity: (i + 1) > mesActual ? 0.5 : 1,
+                  }} title={v > 0 ? `${MESES[i]} · ${fmt.moneyFull(v)}` : `${MESES[i]} · sin ventas`}>
+                    {h ? (
+                      <span style={{
+                        display: 'inline-block', padding: '3px 7px', borderRadius: 6,
+                        background: h.bg, color: h.color, fontWeight: h.weight,
+                        fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10,
+                        minWidth: 36, textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+                      }}>{fmt.money(v)}</span>
+                    ) : (
+                      <span style={{ color: theme.textSubtle || theme.textMuted, fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10 }}>—</span>
+                    )}
+                  </div>
+                );
+              })}
               <div style={{
                 borderBottom: `1px solid ${theme.border}`,
                 fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, fontWeight: 700,
