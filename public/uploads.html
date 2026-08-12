@@ -453,48 +453,40 @@ const PARSERS = {
       99: { nombre:'NO COMERCIAL',               cedis:'ALMACENES MEXICO' },
       100:{ nombre:'NO COMERCIAL',               cedis:'ALMACENES GUADALAJARA' },
     };
-    const sh = wb.Sheets['Inventario'];
+    // Fuente canónica: hoja "Vw_TablaH_Inventario" (tabular limpio).
+    // Antes se leía la hoja "Inventario" (pivot con 5 subcolumnas por almacén)
+    // que era frágil: al cambiar el orden de subcolumnas mapeaba mal
+    // (no_almacen quedaba con valores como 93, 4828, 449102 en vez de 1, 3, 44).
+    const sh = wb.Sheets['Vw_TablaH_Inventario']
+            || wb.Sheets['VwTablaHInventario']
+            || wb.Sheets['Inventario_Tabular'];
     if (!sh) return [];
-    const arr = XLSX.utils.sheet_to_json(sh, {header:1, defval:null, raw:true});
-    if (arr.length < 6) return [];
-    const almacenesRow = arr[3] || [];  // row 3: números de almacén
-    // Detectar cols de cada almacén (uno cada 5 cols empezando col 1)
-    const almBlocks = [];  // { colBase, no_almacen }
-    for (let c = 1; c < almacenesRow.length; c++) {
-      const v = almacenesRow[c];
-      if (v == null || v === 'Total general') continue;
-      const n = toInt(v);
-      if (n == null) continue;
-      almBlocks.push({ colBase: c, no_almacen: n });
-    }
+    const rows = XLSX.utils.sheet_to_json(sh, { defval: null });
     const out = [];
-    for (let r = 5; r < arr.length; r++) {
-      const row = arr[r];
-      if (!row) continue;
-      const articulo = toStr(row[0]);
-      if (!articulo || articulo === 'Total general') continue;
-      for (const b of almBlocks) {
-        const inventario     = toNum(row[b.colBase]);
-        const disponible     = toNum(row[b.colBase + 1]);
-        const costopromedio  = toNum(row[b.colBase + 2]);
-        const costodisponible= toNum(row[b.colBase + 3]);
-        const costoinventario= toNum(row[b.colBase + 4]);
-        // Solo emitir si hay stock o costo (evita fila fantasma cero)
-        if ((inventario ?? 0) === 0 && (disponible ?? 0) === 0 && (costoinventario ?? 0) === 0) continue;
-        const meta = ALM_META[b.no_almacen] || {};
-        out.push({
-          articulo,
-          no_almacen: b.no_almacen,
-          no_cedis: 0,
-          almacen_nombre: meta.nombre || `ALMACEN ${b.no_almacen}`,
-          cedis: meta.cedis || null,
-          disponible,
-          inventario,
-          costopromedio,
-          costodisponible,
-          costoinventario,
-        });
-      }
+    for (const r of rows) {
+      const articulo = toStr(r.articulo || r.Articulo);
+      if (!articulo) continue;
+      const no_almacen = toInt(r.No_Almacen ?? r.no_almacen);
+      if (no_almacen == null) continue;
+      const inventario     = toNum(r.inventario);
+      const disponible     = toNum(r.disponible);
+      const costopromedio  = toNum(r.costopromedio);
+      const costodisponible= toNum(r.CostoDisponible ?? r.costodisponible);
+      const costoinventario= toNum(r.CostoInventario ?? r.costoinventario);
+      if ((inventario ?? 0) === 0 && (disponible ?? 0) === 0 && (costoinventario ?? 0) === 0) continue;
+      const meta = ALM_META[no_almacen] || {};
+      out.push({
+        articulo,
+        no_almacen,
+        no_cedis: toInt(r.No_cedis ?? r.no_cedis) ?? 0,
+        almacen_nombre: toStr(r.Almacen_nombre ?? r.almacen_nombre) || meta.nombre || `ALMACEN ${no_almacen}`,
+        cedis: toStr(r.cedis) || meta.cedis || null,
+        disponible,
+        inventario,
+        costopromedio,
+        costodisponible,
+        costoinventario,
+      });
     }
     return out;
   },
