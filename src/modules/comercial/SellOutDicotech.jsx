@@ -824,6 +824,10 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
           emptyMsg="Sin datos de clientes" />
       </div>
 
+      {/* Heatmap Mes × Entidad · toggle Sucursal / Cliente / Vendedor */}
+      <HeatmapMesEntidadCard theme={theme} P={P} isDark={isDark}
+        selloutGeneral={selloutGeneral} anio={anio} mesActual={mesActual} />
+
       {/* Ferruteck strip */}
       <FerruteckStrip recos={copilotRecos} />
 
@@ -1286,6 +1290,272 @@ function FoRow({ color, kind, name, monto, pct, tx, clientes, ticket, theme }) {
       </div>
     </div>
   );
+}
+
+// ═══════════════ Heatmap Mes × Entidad (Sucursal / Cliente / Vendedor) ═══════════════
+// Grid tipo Numbers: 12 columnas de meses + YTD. Intensidad de color = venta.
+// Toggle en toolbar para cambiar la dimensión que se muestra en las filas.
+function HeatmapMesEntidadCard({ theme, P, isDark, selloutGeneral, anio, mesActual }) {
+  const [dim, setDim] = useState('sucursal'); // sucursal | cliente | vendedor
+  const [busqueda, setBusqueda] = useState('');
+  const TOP_N = 10;
+  const [expanded, setExpanded] = useState(false);
+
+  // Color por dimensión (mismo lenguaje que rankings existentes)
+  const dimColor = dim === 'sucursal' ? P.accent : dim === 'cliente' ? P.teal : P.indigo;
+
+  // Agregado: entidad × mes → monto
+  const { entidades, maxCelda } = useMemo(() => {
+    const field = dim === 'sucursal' ? 'sucursal' : dim === 'cliente' ? 'cliente_nombre' : 'vendedor_nombre';
+    const map = new Map();
+    let max = 0;
+    for (const r of selloutGeneral) {
+      if (Number(r.anio) !== anio) continue;
+      const m = Number(r.mes);
+      if (!(m >= 1 && m <= 12)) continue;
+      const raw = (r[field] ?? '').toString().trim();
+      const key = raw || '(sin dato)';
+      if (!map.has(key)) map.set(key, { name: key, meses: Array(12).fill(0), total: 0 });
+      const row = map.get(key);
+      const imp = Number(r.importe) || 0;
+      row.meses[m - 1] += imp;
+      row.total += imp;
+    }
+    // Enriquecer labels para sucursal
+    const list = Array.from(map.values()).map((row) => {
+      const meta = dim === 'sucursal' ? metaSuc(row.name) : null;
+      const label = meta ? meta.label : row.name;
+      const tipo = meta ? meta.tipo : null;
+      for (const v of row.meses) if (v > max) max = v;
+      return { ...row, label, tipo };
+    }).sort((a, b) => b.total - a.total);
+    return { entidades: list, maxCelda: max };
+  }, [selloutGeneral, anio, dim]);
+
+  const filtradas = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return entidades;
+    return entidades.filter((r) => (r.label || r.name).toLowerCase().includes(q));
+  }, [entidades, busqueda]);
+
+  const visibles = expanded ? filtradas : filtradas.slice(0, TOP_N);
+  const restCount = Math.max(0, filtradas.length - TOP_N);
+  const totalYTD = entidades.reduce((s, r) => s + r.total, 0);
+
+  // Escala de opacidad: usar sqrt para dar más contraste en valores bajos
+  const cellStyleFor = (v) => {
+    if (!v || v <= 0) {
+      return {
+        background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+        color: theme.textMuted, fontWeight: 500,
+      };
+    }
+    const pct = maxCelda > 0 ? Math.sqrt(v / maxCelda) : 0;
+    // Rango de opacidad: 0.10 → 0.72
+    const alpha = 0.10 + pct * 0.62;
+    // Texto legible: negro sobre fondo claro, blanco sobre fondo saturado (>0.5)
+    const useLight = alpha > 0.5;
+    return {
+      background: `${dimColor}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`,
+      color: useLight ? '#FFF' : theme.text,
+      fontWeight: 600,
+    };
+  };
+
+  const dimTitle = dim === 'sucursal' ? 'Sucursal' : dim === 'cliente' ? 'Cliente' : 'Vendedor';
+  const dimPlural = dim === 'sucursal' ? 'sucursales' : dim === 'cliente' ? 'clientes' : 'vendedores';
+
+  const pillStyle = (active) => ({
+    padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+    fontFamily: 'inherit',
+    border: `1px solid ${active ? 'transparent' : theme.border}`,
+    background: active ? `${dimColor}18` : 'transparent',
+    color: active ? dimColor : theme.textMuted,
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    transition: 'all 180ms cubic-bezier(.4,0,.2,1)',
+  });
+
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '14px 16px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div>
+          <h5 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
+            Ventas por mes · {dimTitle}
+            <span style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textSubtle || theme.textMuted, fontWeight: 500, fontStyle: 'italic', marginLeft: 8 }}>
+              intensidad = venta
+            </span>
+          </h5>
+          <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 2 }}>
+            {entidades.length} {dimPlural} · YTD {anio} {fmt.money(totalYTD)}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={() => { setDim('sucursal'); setExpanded(false); setBusqueda(''); }} style={pillStyle(dim === 'sucursal')}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: P.accent, display: 'inline-block' }} />
+            Sucursal
+          </button>
+          <button onClick={() => { setDim('cliente'); setExpanded(false); setBusqueda(''); }} style={pillStyle(dim === 'cliente')}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: P.teal, display: 'inline-block' }} />
+            Cliente
+          </button>
+          <button onClick={() => { setDim('vendedor'); setExpanded(false); setBusqueda(''); }} style={pillStyle(dim === 'vendedor')}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: P.indigo, display: 'inline-block' }} />
+            Vendedor
+          </button>
+        </div>
+      </div>
+
+      {/* Leyenda + buscador (solo para cliente/vendedor donde suele haber muchos) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: theme.textMuted, fontWeight: 500 }}>
+          <span>bajo</span>
+          <div style={{ display: 'flex', height: 6, width: 120, borderRadius: 2, overflow: 'hidden', border: `1px solid ${theme.border}` }}>
+            {[0.10, 0.24, 0.38, 0.52, 0.66, 0.72].map((a, i) => (
+              <span key={i} style={{ flex: 1, background: `${dimColor}${Math.round(a * 255).toString(16).padStart(2, '0')}` }} />
+            ))}
+          </div>
+          <span>alto</span>
+        </div>
+        {(dim === 'cliente' || dim === 'vendedor') && (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto',
+            padding: '5px 10px', borderRadius: 999, background: theme.bg,
+            border: `1px solid ${theme.border}`, fontSize: 11,
+          }}>
+            <Search size={12} style={{ color: theme.textMuted }} strokeWidth={2.2} />
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+              placeholder={`Buscar ${dimTitle.toLowerCase()}…`}
+              style={{ border: 0, outline: 0, background: 'transparent', fontSize: 11, color: theme.text, width: 180, fontFamily: 'inherit' }} />
+          </div>
+        )}
+      </div>
+
+      {/* Tabla scroll horizontal si no cabe */}
+      <div style={{ overflowX: 'auto' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: `minmax(160px, 220px) repeat(12, minmax(46px, 1fr)) minmax(78px, 90px)`,
+          fontFamily: TYPO.fontText, fontSize: 11,
+          minWidth: 780,
+        }}>
+          {/* Header */}
+          <div style={headHeatFirst(theme)}>{dimTitle}</div>
+          {MESES.map((m, i) => (
+            <div key={m} style={{
+              ...headHeat(theme),
+              color: (i + 1) === mesActual ? theme.text : theme.textMuted,
+              fontWeight: (i + 1) === mesActual ? 700 : 600,
+            }}>{m}</div>
+          ))}
+          <div style={{ ...headHeat(theme), textAlign: 'right', paddingRight: 12, color: theme.text }}>YTD</div>
+
+          {/* Filas */}
+          {visibles.map((r) => (
+            <React.Fragment key={r.name}>
+              <div style={{
+                padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 6,
+                borderBottom: `1px solid ${theme.border}`,
+                color: theme.text, fontSize: 11.5, fontWeight: 500,
+                overflow: 'hidden',
+              }} title={r.label}>
+                <span style={{
+                  width: 6, height: 6, borderRadius: 999, background: dimColor, flexShrink: 0,
+                  opacity: r.tipo === 'online' ? 0.5 : 1,
+                }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
+                {r.tipo && (
+                  <span style={{
+                    fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+                    color: theme.textMuted, marginLeft: 'auto', flexShrink: 0,
+                  }}>{r.tipo === 'fisica' ? 'Física' : 'Online'}</span>
+                )}
+              </div>
+              {r.meses.map((v, i) => (
+                <div key={i} style={{
+                  ...cellStyleFor(v),
+                  borderBottom: `1px solid ${theme.border}`,
+                  fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 9.5,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  height: 34, textAlign: 'center', padding: 0,
+                  fontVariantNumeric: 'tabular-nums',
+                }} title={v > 0 ? `${MESES[i]} · ${fmt.moneyFull(v)}` : `${MESES[i]} · sin ventas`}>
+                  {v > 0 ? fmt.money(v) : '—'}
+                </div>
+              ))}
+              <div style={{
+                borderBottom: `1px solid ${theme.border}`,
+                fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, fontWeight: 700,
+                color: theme.text, textAlign: 'right', paddingRight: 12,
+                display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                fontVariantNumeric: 'tabular-nums',
+              }}>{fmt.money(r.total)}</div>
+            </React.Fragment>
+          ))}
+
+          {/* Fila total */}
+          <div style={{
+            padding: '9px 12px', color: theme.text, fontWeight: 700, fontSize: 11,
+            fontFamily: TYPO.fontDisplay, letterSpacing: '-0.01em',
+            borderTop: `2px solid ${theme.border}`,
+            display: 'flex', alignItems: 'center',
+          }}>Total {dimPlural}</div>
+          {MESES.map((m, i) => {
+            const total = filtradas.reduce((s, r) => s + (r.meses[i] || 0), 0);
+            return (
+              <div key={m} style={{
+                borderTop: `2px solid ${theme.border}`,
+                fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10, fontWeight: 700,
+                color: total > 0 ? theme.text : theme.textMuted, textAlign: 'center', padding: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                height: 36, fontVariantNumeric: 'tabular-nums',
+              }}>{total > 0 ? fmt.money(total) : '—'}</div>
+            );
+          })}
+          <div style={{
+            borderTop: `2px solid ${theme.border}`,
+            fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11.5, fontWeight: 700,
+            color: theme.text, textAlign: 'right', paddingRight: 12,
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+            fontVariantNumeric: 'tabular-nums',
+          }}>{fmt.money(filtradas.reduce((s, r) => s + r.total, 0))}</div>
+        </div>
+      </div>
+
+      {/* Ver todos */}
+      {restCount > 0 && (
+        <button onClick={() => setExpanded((v) => !v)}
+          onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = dimColor; e.currentTarget.style.color = dimColor; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = theme.border; e.currentTarget.style.color = theme.textMuted; }}
+          style={{
+            marginTop: 10, padding: '8px 14px', width: '100%',
+            border: `1px solid ${theme.border}`, borderRadius: 999,
+            background: 'transparent', color: theme.textMuted,
+            fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 500,
+            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            transition: 'all 180ms cubic-bezier(.4,0,.2,1)',
+          }}>
+          {expanded ? `Ver menos ▴` : `+ Ver los ${filtradas.length} ${dimPlural} ▾`}
+        </button>
+      )}
+
+      {entidades.length === 0 && (
+        <div style={{ padding: '20px 4px', textAlign: 'center', color: theme.textMuted, fontSize: 11 }}>Sin datos.</div>
+      )}
+    </div>
+  );
+}
+
+function headHeat(theme) {
+  return {
+    padding: '10px 4px', textAlign: 'center', fontSize: 9, fontWeight: 600,
+    letterSpacing: '0.06em', textTransform: 'uppercase',
+    color: theme.textMuted, borderBottom: `1px solid ${theme.border}`,
+    background: theme.surface,
+  };
+}
+function headHeatFirst(theme) {
+  return { ...headHeat(theme), textAlign: 'left', paddingLeft: 12 };
 }
 
 // ═══════════════ Ranking sucursales · mini-cards grid 3×2 + drill inline ═══════════════
