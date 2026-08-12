@@ -19,12 +19,17 @@
     const esSuper = perfil?.es_super_admin === true || perfil?.rol === 'super_admin';
     if (!esSuper) { alert('Sólo el Super Admin puede acceder a esta página.'); window.location.href = '/'; }
     else {
-      // Wrap fetch para inyectar Authorization en llamadas a /api/*
+      // Wrap fetch para inyectar Authorization en llamadas a /api/*.
+      // Pide sesión fresca en cada request para evitar HTTP 401 "Token inválido"
+      // durante cargas largas (ERP tarda 5-15 min y el JWT expira en 1h).
       const origFetch = window.fetch.bind(window);
-      window.fetch = (input, init = {}) => {
+      window.fetch = async (input, init = {}) => {
         const url = typeof input === 'string' ? input : input.url;
         if (url && url.startsWith('/api/')) {
-          init.headers = { ...(init.headers || {}), authorization: `Bearer ${session.access_token}` };
+          // getSession() usa el refresh_token si el access_token está cerca de expirar
+          const { data: { session: fresh } } = await supa.auth.getSession();
+          const token = fresh?.access_token || session.access_token;
+          init.headers = { ...(init.headers || {}), authorization: `Bearer ${token}` };
         }
         return origFetch(input, init);
       };
