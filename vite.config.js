@@ -73,8 +73,31 @@ export default defineConfig({
         globIgnores: ['**/react-query-devtools*', '**/node_modules/**'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
         navigateFallbackDenylist: [/^\/api\//, /^\/uploads\.html$/],
+        // El SW nuevo toma control inmediatamente al detectarse deploy nuevo
+        // (sin esperar a que se cierren todas las tabs). Combinado con
+        // registerType:'autoUpdate' arriba y el listener onNeedRefresh del
+        // app garantiza que el usuario nunca quede con index.html stale
+        // apuntando a chunks JS que ya no existen (bug del 404 de assets).
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
-          // Fuentes/assets estáticos → CacheFirst
+          // Navegación (index.html) → SIEMPRE Network primero. Si offline,
+          // fallback al cache. Esto evita servir HTML viejo con referencias
+          // a bundles JS que ya no existen tras un deploy.
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'acteck-html',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          // Fuentes/assets estáticos → CacheFirst (los hashes son únicos
+          // por build, así que si el HTML se actualiza vía NetworkFirst,
+          // apunta a los hashes nuevos automáticamente).
           {
             urlPattern: ({ request }) =>
               request.destination === 'style' ||
