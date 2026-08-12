@@ -7,6 +7,7 @@ import {
   Package, TrendingUp, Percent, ChevronRight, Search, Download,
 } from 'lucide-react';
 import SinAcceso from '../../components/SinAcceso';
+import { FerrutekLoader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
 
@@ -443,12 +444,7 @@ export default function InventarioGlobal() {
   }, [kpis, porCedis, filasEfectivas]);
 
   if (loading) {
-    return (
-      <div className="p-12 text-center text-gray-400">
-        <Activity className="w-10 h-10 mx-auto mb-3" />
-        Cargando inventario…
-      </div>
-    );
+    return <FerrutekLoader label="Cargando inventario…" sub="Ferruteck está trayendo stock, roadmap y sucursales de los 3 clientes" minHeight={480} />;
   }
   if (filas.length === 0) {
     return (
