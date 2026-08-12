@@ -69,8 +69,11 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Excluir chunks pesados y el devtools de React Query del precache
-        globIgnores: ['**/react-query-devtools*', '**/node_modules/**'],
+        // Excluir chunks pesados, devtools de React Query y uploads.html del
+        // precache. uploads.html DEBE venir siempre de red porque contiene los
+        // parsers Excel que se actualizan seguido; si el SW lo cachea se rompe
+        // silenciosamente la carga del ERP.
+        globIgnores: ['**/react-query-devtools*', '**/node_modules/**', '**/uploads.html'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
         navigateFallbackDenylist: [/^\/api\//, /^\/uploads\.html$/],
         // El SW nuevo toma control inmediatamente al detectarse deploy nuevo
@@ -82,6 +85,14 @@ export default defineConfig({
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         runtimeCaching: [
+          // uploads.html → SIEMPRE red, JAMÁS cache. Es un HTML monolítico que
+          // contiene los parsers Excel embebidos y se actualiza seguido. Si el
+          // SW sirve una versión vieja los uploads llegan mal parseados a
+          // Supabase (bug del inventario con no_almacen=93/4828/449102).
+          {
+            urlPattern: /\/uploads\.html($|\?)/,
+            handler: 'NetworkOnly',
+          },
           // Navegación (index.html) → SIEMPRE Network primero. Si offline,
           // fallback al cache. Esto evita servir HTML viejo con referencias
           // a bundles JS que ya no existen tras un deploy.

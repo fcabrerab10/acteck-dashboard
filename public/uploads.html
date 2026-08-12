@@ -3,7 +3,41 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- Impedir cache del navegador: los parsers Excel viven aquí y se actualizan
+     seguido, si el navegador cachea una versión vieja las cargas rompen. -->
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <title>Actualizar datos — Acteck Dashboard</title>
+<!-- Self-nuke: al abrir esta página, si hay service worker registrado en el
+     scope raíz que pudiera estar cacheando /uploads.html (bug histórico),
+     lo desregistra y borra sus caches. La página se recarga sola una vez
+     para venir 100% fresh del servidor. Se ejecuta sólo si detecta rastro
+     del bug (cache "workbox-*" con /uploads.html); si no, es no-op. -->
+<script>
+(async function nukeStaleSW(){
+  try {
+    if (!('serviceWorker' in navigator) || !('caches' in window)) return;
+    if (sessionStorage.getItem('__uploads_nuked') === '1') return;
+    const cacheNames = await caches.keys();
+    let dirty = false;
+    for (const name of cacheNames) {
+      const cache = await caches.open(name);
+      const keys = await cache.keys();
+      if (keys.some((k) => k.url && k.url.includes('/uploads.html'))) {
+        dirty = true;
+        await caches.delete(name);
+      }
+    }
+    if (dirty) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const r of regs) await r.unregister();
+      sessionStorage.setItem('__uploads_nuked', '1');
+      location.reload();
+    }
+  } catch (e) { console.warn('[nukeStaleSW]', e); }
+})();
+</script>
 <!-- Gate de seguridad: sólo super_admin. Además wrapea fetch() para inyectar Bearer <token> en /api/*. -->
 <script type="module">
   document.documentElement.style.visibility = 'hidden';
