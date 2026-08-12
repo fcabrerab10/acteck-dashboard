@@ -308,6 +308,9 @@ const PARSERS = {
   //   row 4+: SKU en col 0, precios por lista en col 1-9
   // Se filtran solo las 5 listas comerciales activas.
   preciosERP(wb){
+    // Fuente canónica: hoja "Vw_TablaM_Precios" (formato tabular limpio:
+    // Lista | Moneda | Articulo | Precio). Antes se leía "Listas de Precios"
+    // (vista pivot) pero era frágil con distintos formatos de encabezado.
     const LISTAS_INCLUIDAS = new Set([
       'API PROVISIONAL',
       'DECME PROVISIONAL',
@@ -315,31 +318,26 @@ const PARSERS = {
       'Mayoreo AAA',
       'PCEL PROVISIONAL',
     ]);
-    const sh = wb.Sheets['Listas de Precios'];
+    // Tolerante al nombre — Vw_TablaM_Precios canónico, con fallback a variantes.
+    const sh = wb.Sheets['Vw_TablaM_Precios']
+            || wb.Sheets['VwTablaMPrecios']
+            || wb.Sheets['Precios']
+            || wb.Sheets['Listas de Precios'];
     if (!sh) return [];
-    const arr = XLSX.utils.sheet_to_json(sh, {header:1, defval:null, raw:false});
-    if (arr.length < 5) return [];
-    const headerRow = arr[3] || [];
-    // Mapear índice de columna → nombre de lista (solo las incluidas)
-    const listaByCol = {};
-    for (let c = 1; c < headerRow.length; c++) {
-      const nm = toStr(headerRow[c]);
-      if (LISTAS_INCLUIDAS.has(nm)) listaByCol[c] = nm;
-    }
+    const rows = XLSX.utils.sheet_to_json(sh, { defval: null });
     const now = new Date();
     const anio = now.getFullYear();
     const mes = now.getMonth() + 1;
     const out = [];
-    for (let r = 4; r < arr.length; r++) {
-      const row = arr[r];
-      if (!row) continue;
-      const sku = toStr(row[0]);
-      if (!sku || sku === 'Total general') continue;
-      for (const [colStr, lista] of Object.entries(listaByCol)) {
-        const precio = toNum(row[parseInt(colStr)]);
-        if (precio == null || precio <= 0) continue;
-        out.push({ sku, lista, moneda: 'PESOS', anio, mes, precio });
-      }
+    for (const r of rows) {
+      const lista = toStr(r.Lista || r.lista);
+      if (!lista || !LISTAS_INCLUIDAS.has(lista)) continue;
+      const sku = toStr(r.Articulo || r.articulo || r.SKU || r.sku);
+      if (!sku) continue;
+      const precio = toNum(r.Precio || r.precio);
+      if (precio == null || precio <= 0) continue;
+      const moneda = toStr(r.Moneda || r.moneda) || 'PESOS';
+      out.push({ sku, lista, moneda, anio, mes, precio });
     }
     return out;
   },
@@ -2291,7 +2289,9 @@ const PARSERS = {
         }
       }
     }
-    if (!sheetName) throw new Error(`No encontré la hoja de guías. Hojas del archivo: ${wb.SheetNames.join(' | ')}`);
+    // Guías es opcional dentro del ERP: si no está la hoja, devolvemos [] y
+    // el uploader lo reporta como "0 filas" sin romper el resto del combined.
+    if (!sheetName) { console.warn('[guiasErp] Sin hoja de guías en el archivo (opcional)'); return []; }
     const sh = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sh, {defval:null});
     const toISOtz = (v) => {
@@ -2338,7 +2338,8 @@ const PARSERS = {
         guias:           toStr(r.guias)?.replace(/[\r\n]+/g, ' ').trim() || null,
       });
     }
-    if (out.length === 0) throw new Error('Hoja "Guias" está vacía o sin (Mov, Movid).');
+    // Igual que arriba: hoja vacía o sin columnas Mov/Movid → 0 filas, no error.
+    if (out.length === 0) console.warn(`[guiasErp] Hoja "${sheetName}" sin filas útiles (falta Mov/Movid)`);
     return out;
   },
 };
