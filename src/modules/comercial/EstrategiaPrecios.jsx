@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import SinAcceso from '../../components/SinAcceso';
+import { FerrutekLoader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
 import {
@@ -366,12 +367,7 @@ export default function EstrategiaPrecios() {
   };
 
   if (loading) {
-    return (
-      <div style={{ padding: 60, textAlign: 'center', color: theme.textMuted, fontFamily: TYPO.fontText }}>
-        <Activity style={{ width: 32, height: 32, marginBottom: 12 }} />
-        <div style={{ fontSize: 12 }}>Cargando estrategia de precios…</div>
-      </div>
-    );
+    return <FerrutekLoader label="Cargando estrategia de precios…" sub="Ferruteck está trayendo listas, roadmap y sell-in por SKU" minHeight={480} />;
   }
 
   // KPIs consolidados

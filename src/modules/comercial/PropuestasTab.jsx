@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { ClipboardList, Search, ChevronRight, Download, X, Sparkles, ArrowLeft, Save } from 'lucide-react';
+import { ClipboardList, Search, ChevronRight, Download, X, Sparkles, ArrowLeft, Save, Trash2 } from 'lucide-react';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
@@ -931,6 +931,28 @@ function PropuestaCard({ r, theme, isDark, P, onAbrir, onRefresh }) {
           padding: '2px 7px', borderRadius: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em',
           textTransform: 'uppercase', background: pill.bg, color: pill.color, fontFamily: '"SF Mono", ui-monospace, monospace',
         }}>{pill.label}</span>
+        {estado === 'Borrador' && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const label = `${cli?.label || r.clienteLabel} · ${r.nombre || 'Cierre'}`;
+              if (!confirm(`¿Eliminar el borrador "${label}"?\n\nEsta acción no se puede deshacer.`)) return;
+              removeReciente(r.id);
+              onRefresh();
+            }}
+            title="Eliminar borrador"
+            style={{
+              width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              background: 'transparent', border: 0, borderRadius: 6, cursor: 'pointer',
+              color: theme.textMuted, flexShrink: 0, padding: 0,
+              transition: 'background 160ms, color 160ms',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = `${P.red}15`; e.currentTarget.style.color = P.red; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = theme.textMuted; }}
+          >
+            <Trash2 size={13} strokeWidth={2} />
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px 12px', fontSize: 11, marginBottom: 8 }}>
