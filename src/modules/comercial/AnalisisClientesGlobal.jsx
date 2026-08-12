@@ -8,6 +8,7 @@ import {
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
+import { FerrutekLoader } from '../../components';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
 } from 'recharts';
@@ -521,12 +522,7 @@ export default function AnalisisClientesGlobal() {
   , [clientesAct]);
 
   if (loading) {
-    return (
-      <div style={{ padding: 48, textAlign: 'center', color: theme.textMuted, background: theme.bg, minHeight: '100%', fontFamily: TYPO.fontText }}>
-        <Activity style={{ width: 40, height: 40, margin: '0 auto 12px', color: theme.textSubtle, strokeWidth: 1.5 }} />
-        Cargando análisis por cliente…
-      </div>
-    );
+    return <FerrutekLoader label="Cargando análisis por cliente…" sub="Ferruteck está trayendo canales, cobertura y sell-in" minHeight={480} />;
   }
   if (canalAct.length === 0) {
     return (

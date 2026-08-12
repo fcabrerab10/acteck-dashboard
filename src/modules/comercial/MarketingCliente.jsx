@@ -4,6 +4,7 @@ import { Megaphone, CalendarDays } from 'lucide-react';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaCliente, puedeVerPestanaCliente } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
+import { FerrutekLoader } from '../../components';
 
 // ═══════════ CONFIG DE TIPOS DE ACTIVIDAD ═══════════════════════
 // Cada tipo tiene color, icono y lista de métricas específicas
@@ -351,7 +352,7 @@ export default function MarketingCliente({ cliente, clienteKey }) {
   }, [anio, mesSel, actividadesDelMes]);
 
   // ─── Render ──────────────────────────────────────────────────
-  if (loading) return <div style={{ textAlign: "center", padding: 60, color: "#64748b" }}>Cargando marketing...</div>;
+  if (loading) return <FerrutekLoader label="Cargando marketing…" sub="Ferruteck está trayendo campañas, inversión y actividades" minHeight={480} />;
 
   const tipoMeta = (tipo) => TIPOS[tipo] || { label: tipo || "?", color: "#94A3B8", bg: "#F1F5F9", icon: "📌", metricas: [] };
 

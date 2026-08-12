@@ -16,6 +16,7 @@ import {
   CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
 import * as XLSX from 'xlsx-js-style';
+import { FerrutekLoader } from '../../components';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -455,7 +456,7 @@ export default function SellInCliente({ clienteKey }) {
   };
 
   if (loading) {
-    return <div className="p-12 text-center text-gray-400">Cargando Sell In de {meta.nombre}…</div>;
+    return <FerrutekLoader label={`Cargando Sell In de ${meta.nombre}…`} sub="Ferruteck está trayendo facturación, inventario y roadmap" minHeight={480} />;
   }
 
   const pctMTD = mesActualData.cuota?.ideal ? mesActualData.monto / mesActualData.cuota.ideal * 100 : null;

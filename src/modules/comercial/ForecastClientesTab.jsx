@@ -21,6 +21,7 @@ import { puedeEditarPestanaGlobal, puedeVerPestanaGlobal } from '../../lib/permi
 import SinAcceso from '../../components/SinAcceso';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
+import { FerrutekLoader } from '../../components';
 
 /**
  * Forecast Clientes v3 — Planeación de compras (Acteck)
@@ -1330,7 +1331,7 @@ export default function ForecastClientesTab() {
   }
 
   if (data.loading) {
-    return <div className="p-6 text-gray-400">Cargando forecast de clientes…</div>;
+    return <FerrutekLoader label="Cargando S&OP…" sub="Ferruteck está trayendo forecast, cuotas y sell-in de los 3 clientes" minHeight={480} />;
   }
 
   const borradorActivo = sol.borradores.find((b) => b.id === borradorActivoId) || null;

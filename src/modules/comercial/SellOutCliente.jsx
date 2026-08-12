@@ -12,6 +12,7 @@ import * as XLSX from 'xlsx-js-style';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
+import { FerrutekLoader } from '../../components';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -647,7 +648,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   };
 
   if (loading) {
-    return <div className="p-12 text-center text-gray-400">Cargando Sell Out de {meta.nombre}…</div>;
+    return <FerrutekLoader label={`Cargando Sell Out de ${meta.nombre}…`} sub="Ferruteck está trayendo sellout, sucursales y clientes finales" minHeight={480} />;
   }
 
   return (

@@ -566,11 +566,7 @@ export default function PropuestasTab() {
 
   // ── Loading / error ──
   if (loading) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center', color: theme.textMuted, fontSize: 12, fontFamily: TYPO.fontText }}>
-        Cargando data de {cliente?.label}…
-      </div>
-    );
+    return <FerrutekLoader label={`Cargando ${cliente?.label || 'cliente'}…`} sub="Ferruteck está trayendo inventario, sell-out, precios y roadmap" minHeight={480} />;
   }
   if (error) {
     return (

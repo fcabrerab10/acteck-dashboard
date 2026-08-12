@@ -11,6 +11,7 @@ import {
   Package, DollarSign,
 } from 'lucide-react';
 import { parseDigitalifeExcel, parsePCELPdf } from './parsersOC';
+import { FerrutekLoader } from '../../components';
 
 /**
  * Órdenes de Compra — Sprint 3
@@ -170,7 +171,7 @@ export default function OrdenesCompraTab() {
     data.reload();
   }
 
-  if (data.loading) return <div className="p-6 text-gray-400">Cargando órdenes de compra…</div>;
+  if (data.loading) return <FerrutekLoader label="Cargando órdenes de compra…" sub="Ferruteck está trayendo POs, guías y facturación" minHeight={480} />;
 
   return (
     <div className="p-6 space-y-5">
