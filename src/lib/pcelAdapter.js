@@ -25,9 +25,15 @@ async function fetchAllPages(qFactory, pageSize = 1000) {
   const out = [];
   let from = 0;
   for (;;) {
-    const { data, error } = await qFactory().range(from, from + pageSize - 1);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
+    let lastErr = null; let data = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const res = await qFactory().range(from, from + pageSize - 1);
+      if (!res.error) { data = res.data || []; break; }
+      lastErr = res.error;
+      await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+    }
+    if (data == null) throw lastErr;
+    if (data.length === 0) break;
     out.push(...data);
     if (data.length < pageSize) break;
     from += pageSize;

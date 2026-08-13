@@ -10,15 +10,23 @@ import { supabase } from './supabase';
 // ─── Paginación estándar (misma lógica que los módulos ya usan) ───
 const PAGE = 1000;
 async function fetchAll(table, select, extra = (q) => q) {
-  let all = [];
+  const all = [];
+  const firstCol = (select || 'id').split(',')[0].trim();
+  const orderCol = /(^|,)\s*id\s*(,|$)/i.test(select) ? 'id' : firstCol;
   let from = 0;
   while (true) {
-    let q = supabase.from(table).select(select).range(from, from + PAGE - 1);
-    q = extra(q);
-    const { data, error } = await q;
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    all = all.concat(data);
+    let lastErr = null; let data = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let q = supabase.from(table).select(select).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
+      q = extra(q);
+      const res = await q;
+      if (!res.error) { data = res.data || []; break; }
+      lastErr = res.error;
+      await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+    }
+    if (data == null) throw lastErr;
+    if (data.length === 0) break;
+    all.push(...data);
     if (data.length < PAGE) break;
     from += PAGE;
   }

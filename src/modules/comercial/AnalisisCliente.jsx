@@ -39,10 +39,20 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
   async function fetchAllPages(queryFactory) {
     var PAGE = 1000, all = [], from = 0;
     while (true) {
-      var res = await queryFactory().range(from, from + PAGE - 1);
-      if (res.error || !res.data) break;
-      all = all.concat(res.data);
-      if (res.data.length < PAGE) break;
+      var lastErr = null; var data = null;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        var res = await queryFactory().range(from, from + PAGE - 1);
+        if (!res.error) { data = res.data || []; break; }
+        lastErr = res.error;
+        await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+      }
+      if (data == null) {
+        console.warn('[fetchAllPages] chunk from=' + from + ' falló tras 3 intentos:', lastErr);
+        return all;
+      }
+      if (data.length === 0) break;
+      all = all.concat(data);
+      if (data.length < PAGE) break;
       from += PAGE;
     }
     return all;

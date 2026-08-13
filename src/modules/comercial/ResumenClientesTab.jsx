@@ -91,8 +91,18 @@ function useResumenData() {
     async function fetchAll(qFactory, pageSize = 1000) {
       const all = []; let from = 0;
       while (true) {
-        const { data, error } = await qFactory().range(from, from + pageSize - 1);
-        if (error || !data || data.length === 0) break;
+        let lastErr = null; let data = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const res = await qFactory().range(from, from + pageSize - 1);
+          if (!res.error) { data = res.data || []; break; }
+          lastErr = res.error;
+          await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+        }
+        if (data == null) {
+          console.warn(`[fetchAll] chunk from=${from} falló tras 3 intentos:`, lastErr);
+          return all;
+        }
+        if (data.length === 0) break;
         all.push(...data);
         if (data.length < pageSize) break;
         from += pageSize;

@@ -315,12 +315,22 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
   // Factory pattern: each page creates a fresh query (supabase-js builders are single-use)
   async function fetchAllPages(queryFactory) {
     const PAGE = 1000;
-    let all = [];
+    const all = [];
     let from = 0;
     while (true) {
-      const { data, error } = await queryFactory().range(from, from + PAGE - 1);
-      if (error || !data) break;
-      all = all.concat(data);
+      let lastErr = null; let data = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await queryFactory().range(from, from + PAGE - 1);
+        if (!res.error) { data = res.data || []; break; }
+        lastErr = res.error;
+        await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+      }
+      if (data == null) {
+        console.warn(`[fetchAllPages] chunk from=${from} falló tras 3 intentos:`, lastErr);
+        return all;
+      }
+      if (data.length === 0) break;
+      all.push(...data);
       if (data.length < PAGE) break;
       from += PAGE;
     }

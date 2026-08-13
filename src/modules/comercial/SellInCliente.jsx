@@ -54,13 +54,26 @@ const fmtMoneyShort = (n) => {
 
 const PAGE = 1000;
 async function fetchAll(table, select, extra = (q) => q) {
-  let acc = []; let from = 0;
+  const acc = [];
+  const firstCol = (select || 'id').split(',')[0].trim();
+  const orderCol = /(^|,)\s*id\s*(,|$)/i.test(select) ? 'id' : firstCol;
+  let from = 0;
   while (true) {
-    let q = supabase.from(table).select(select).range(from, from + PAGE - 1);
-    q = extra(q);
-    const { data, error } = await q;
-    if (error || !data || data.length === 0) break;
-    acc = acc.concat(data);
+    let lastErr = null; let data = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let q = supabase.from(table).select(select).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
+      q = extra(q);
+      const res = await q;
+      if (!res.error) { data = res.data || []; break; }
+      lastErr = res.error;
+      await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+    }
+    if (data == null) {
+      console.warn(`[fetchAll] ${table} chunk from=${from} falló tras 3 intentos:`, lastErr);
+      return acc;
+    }
+    if (data.length === 0) break;
+    acc.push(...data);
     if (data.length < PAGE) break;
     from += PAGE;
   }

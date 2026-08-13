@@ -229,11 +229,23 @@ export default function PagosCliente({ cliente, clienteKey }) {
       const anio = new Date().getFullYear();
       // Paginación para sellout_sku
       const fetchAll = async (qs) => {
-        let all = [], from = 0, PAGE = 1000;
+        const all = []; let from = 0; const PAGE = 1000;
+        const firstCol = (qs || 'id').split(',')[0].trim();
+        const orderCol = /(^|,)\s*id\s*(,|$)/i.test(qs) ? 'id' : firstCol;
         while (true) {
-          const { data } = await supabase.from("sellout_sku").select(qs).eq("cliente", clienteKey).eq("anio", anio).range(from, from + PAGE - 1);
-          if (!data || data.length === 0) break;
-          all = all.concat(data);
+          let lastErr = null; let data = null;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const res = await supabase.from("sellout_sku").select(qs).eq("cliente", clienteKey).eq("anio", anio).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
+            if (!res.error) { data = res.data || []; break; }
+            lastErr = res.error;
+            await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+          }
+          if (data == null) {
+            console.warn(`[fetchAll] sellout_sku chunk from=${from} falló tras 3 intentos:`, lastErr);
+            return all;
+          }
+          if (data.length === 0) break;
+          all.push(...data);
           if (data.length < PAGE) break;
           from += PAGE;
         }
@@ -247,14 +259,25 @@ export default function PagosCliente({ cliente, clienteKey }) {
       // Se usa para el ranking de SPIFF vendedores (top 5 por mes).
       const vendedoresProm = clienteKey === "dicotech"
         ? (async () => {
-            let all = [], from = 0, PAGE = 1000;
+            const all = []; let from = 0; const PAGE = 1000;
             while (true) {
-              const { data } = await supabase.from("sellout_general")
-                .select("mes,vendedor_nombre,importe")
-                .ilike("mayorista", "%dicotech%").eq("anio", anio)
-                .range(from, from + PAGE - 1);
-              if (!data || data.length === 0) break;
-              all = all.concat(data);
+              let lastErr = null; let data = null;
+              for (let attempt = 0; attempt < 3; attempt++) {
+                const res = await supabase.from("sellout_general")
+                  .select("mes,vendedor_nombre,importe")
+                  .ilike("mayorista", "%dicotech%").eq("anio", anio)
+                  .order("mes", { ascending: true })
+                  .range(from, from + PAGE - 1);
+                if (!res.error) { data = res.data || []; break; }
+                lastErr = res.error;
+                await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+              }
+              if (data == null) {
+                console.warn(`[vendedoresProm] sellout_general chunk from=${from} falló tras 3 intentos:`, lastErr);
+                return { data: all };
+              }
+              if (data.length === 0) break;
+              all.push(...data);
               if (data.length < PAGE) break;
               from += PAGE;
             }
