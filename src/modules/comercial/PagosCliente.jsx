@@ -218,6 +218,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [digiSellOut26, setDigiSellOut26] = useState({});
   const [digiCuotas, setDigiCuotas] = useState([]);
   const [dicoSellIn, setDicoSellIn] = useState({});      // Dicotech: sell-in mensual $
+  const [dicoVendedoresPorMes, setDicoVendedoresPorMes] = useState({}); // { "2026-08": [{nombre, monto}, ...] } ordenado desc
   const [spiffPagos, setSpiffPagos] = useState({});  // Digitalife: { "2026-01": pagoRow } | Dicotech: { "2026-01-SI": ..., "2026-01-SO": ... }
   const [spiffLoading, setSpiffLoading] = useState(false);
 
@@ -242,12 +243,49 @@ export default function PagosCliente({ cliente, clienteKey }) {
       const siProm = clienteKey === "dicotech"
         ? supabase.from("sell_in_sku").select("mes,monto_pesos").eq("cliente", clienteKey).eq("anio", anio)
         : Promise.resolve({ data: [] });
-      const [soData, cuotasData, existingSpiffPagos, siRes] = await Promise.all([
+      // Vendedores Dicotech: sellout_general del año, agregado por (mes, vendedor).
+      // Se usa para el ranking de SPIFF vendedores (top 5 por mes).
+      const vendedoresProm = clienteKey === "dicotech"
+        ? (async () => {
+            let all = [], from = 0, PAGE = 1000;
+            while (true) {
+              const { data } = await supabase.from("sellout_general")
+                .select("mes,vendedor_nombre,importe")
+                .ilike("mayorista", "%dicotech%").eq("anio", anio)
+                .range(from, from + PAGE - 1);
+              if (!data || data.length === 0) break;
+              all = all.concat(data);
+              if (data.length < PAGE) break;
+              from += PAGE;
+            }
+            return { data: all };
+          })()
+        : Promise.resolve({ data: [] });
+      const [soData, cuotasData, existingSpiffPagos, siRes, vendRes] = await Promise.all([
         fetchAll("mes,monto_pesos"),
         supabase.from("cuotas_mensuales").select("mes,cuota_min,cuota_ideal,cuota_minima_interna").eq("cliente", clienteKey).eq("anio", anio).order("mes"),
         supabase.from("pagos").select("*").eq("cliente", clienteKey).eq("categoria", "spiff"),
         siProm,
+        vendedoresProm,
       ]);
+      // Agregar vendedores por mes → ordenados desc
+      const vendByMes = {}; // { "2026-08": Map<vendedor,monto> }
+      (vendRes.data || []).forEach(r => {
+        const m = Number(r.mes);
+        if (!(m >= 1 && m <= 12)) return;
+        const nombre = (r.vendedor_nombre || "").trim() || "(sin vendedor)";
+        const importe = Number(r.importe) || 0;
+        const key = `${anio}-${String(m).padStart(2, "0")}`;
+        if (!vendByMes[key]) vendByMes[key] = new Map();
+        vendByMes[key].set(nombre, (vendByMes[key].get(nombre) || 0) + importe);
+      });
+      const vendFinal = {};
+      Object.entries(vendByMes).forEach(([k, mp]) => {
+        vendFinal[k] = Array.from(mp.entries())
+          .map(([nombre, monto]) => ({ nombre, monto }))
+          .sort((a, b) => b.monto - a.monto);
+      });
+      setDicoVendedoresPorMes(vendFinal);
       const byMes = {};
       soData.forEach(r => { const m = Number(r.mes); byMes[m] = (byMes[m] || 0) + (Number(r.monto_pesos) || 0); });
       setDigiSellOut26(byMes);
@@ -357,56 +395,48 @@ export default function PagosCliente({ cliente, clienteKey }) {
   // (1) Sell-In tiered mensual: 131%+=0.15%, 115-130%=0.12%, 95-114.99%=0.09%
   // (2) Sell-Out flat mensual: 95%+=0.06%
   // Cuota SO = cuota_min Sell-In × 1.06 (cuota_factor)
-  // Lee config desde lineamientos.spiff (modo:"dual")
-  const spiffDicotechCalc = React.useMemo(() => {
-    if (clienteKey !== "dicotech" || digiCuotas.length === 0) return null;
-    const cfg = lineamientos?.spiff || {};
-    if (cfg.modo !== "dual") return null;
-    const siTiers = ((cfg.sell_in?.tiers) || []).map(t => ({
-      umbral: Number(t.min_alcance) || 0,
-      pct: Number(t.pct) || 0,
-      label: t.label || "",
-    })).sort((a, b) => b.umbral - a.umbral);
-    const soPctFijo = Number(cfg.sell_out?.pct_fijo) || 0;
-    const soMinAlcance = Number(cfg.sell_out?.min_alcance) || 0.95;
-    const soCuotaFactorDefault = Number(cfg.sell_out?.cuota_factor) || 1.06;
-    // Overrides por mes (AAAA-MM → factor). Permite manejar el cambio
-    // histórico (Ene-May 2026 = 1.05, Jun+ = 1.06) sin tocar código.
-    const soFactorOverrides = cfg.sell_out?.cuota_factor_override_meses || {};
+  // ═══ SPIFF Dicotech v2 (flat_v2) ═══
+  // (1) Compradora: pct fijo × sell-in mensual (facturacion_clientes).
+  // (2) Vendedores: top 5 por sell-out del mes (sellout_general/vendedor_nombre)
+  //     que superen cuota_min_vendedor. Premios de texto libre configurables por mes.
+  const spiffDicoCompradoraPct = Number(lineamientos?.spiff?.compradora_pct) || 0.0037;
+  const spiffDicoVendedoresMeses = lineamientos?.spiff?.vendedores_meses || {};
 
+  const spiffDicotechCalc = React.useMemo(() => {
+    if (clienteKey !== "dicotech") return null;
     const anio = new Date().getFullYear();
     const results = [];
     for (let m = 1; m <= 12; m++) {
-      const cRow = digiCuotas.find(x => Number(x.mes) === m);
-      const cuotaSI = cRow ? Number(cRow.cuota_min) || 0 : 0;
-      const ymKey = `${anio}-${String(m).padStart(2,"0")}`;
-      const soCuotaFactor = soFactorOverrides[ymKey] != null
-        ? Number(soFactorOverrides[ymKey])
-        : soCuotaFactorDefault;
-      const cuotaSO = cuotaSI * soCuotaFactor;
-      const siActual = Number(dicoSellIn[m]) || 0;
-      const soActual = Number(digiSellOut26[m]) || 0;
-      const alcanceSI = cuotaSI > 0 ? siActual / cuotaSI : 0;
-      const alcanceSO = cuotaSO > 0 ? soActual / cuotaSO : 0;
-      const tierSI = siTiers.find(t => alcanceSI >= t.umbral) || null;
-      const comisionSI = tierSI ? siActual * tierSI.pct : 0;
-      const aplicaSO = alcanceSO >= soMinAlcance;
-      const comisionSO = aplicaSO ? soActual * soPctFijo : 0;
       const keyMes = `${anio}-${String(m).padStart(2, "0")}`;
+      const siActual = Number(dicoSellIn[m]) || 0;
+      const comisionSI = siActual * spiffDicoCompradoraPct;
+      const vendedoresMes = dicoVendedoresPorMes[keyMes] || [];
+      const cfgMes = spiffDicoVendedoresMeses[keyMes] || {};
+      const cuotaMin = Number(cfgMes.cuota_min) || 0;
+      const premios = Array.isArray(cfgMes.premios) ? cfgMes.premios : ["", "", "", "", ""];
+      // Top 5 que superen cuota mínima (si cuotaMin=0, todos califican)
+      const ganadores = vendedoresMes
+        .filter(v => v.monto >= cuotaMin)
+        .slice(0, 5)
+        .map((v, i) => ({ ...v, posicion: i + 1, premio: premios[i] || "" }));
       results.push({
-        mes: m, cuotaSI, cuotaSO, siActual, soActual,
-        alcanceSI, alcanceSO, tierSI, comisionSI, comisionSO,
-        soPctFijo, soMinAlcance, aplicaSO,
+        mes: m,
+        siActual,
+        comisionSI,
+        vendedoresMes,       // lista completa para debug/tooltip
+        ganadores,           // top 5 con cuota mínima aplicada
+        cuotaMin,
+        premios,             // 5 slots
         pagoSI: spiffPagos[`${keyMes}-SI`],
-        pagoSO: spiffPagos[`${keyMes}-SO`],
+        // No hay pagoSO $ porque los premios son texto libre — se paga fuera del sistema.
       });
     }
     return results;
-  }, [clienteKey, digiCuotas, dicoSellIn, digiSellOut26, spiffPagos, lineamientos]);
+  }, [clienteKey, dicoSellIn, dicoVendedoresPorMes, spiffPagos, spiffDicoCompradoraPct, spiffDicoVendedoresMeses]);
 
   const spiffDicotechTotalYTD = React.useMemo(() => {
     if (!spiffDicotechCalc) return { si: 0, so: 0, total: 0 };
-    let si = 0, so = 0;
+    let si = 0;
     for (const c of spiffDicotechCalc) {
       const sumar = (pago, calcAmt) => {
         if (pago && pago.estatus === "cancelado") return 0;
@@ -414,10 +444,30 @@ export default function PagosCliente({ cliente, clienteKey }) {
         return calcAmt;
       };
       si += sumar(c.pagoSI, c.comisionSI);
-      so += sumar(c.pagoSO, c.comisionSO);
     }
-    return { si, so, total: si + so };
+    return { si, so: 0, total: si };
   }, [spiffDicotechCalc]);
+
+  // Guardar config de SPIFF Dicotech (compradora_pct global, o cuota/premios por mes)
+  const guardarSpiffDicoConfig = React.useCallback(async (patch) => {
+    const configPrev = lineamientos?.spiff || { modo: "flat_v2", compradora_pct: 0.0037, vendedores_meses: {} };
+    const configNueva = {
+      modo: "flat_v2",
+      compradora_pct: patch.compradora_pct != null ? Number(patch.compradora_pct) : (Number(configPrev.compradora_pct) || 0.0037),
+      vendedores_meses: { ...(configPrev.vendedores_meses || {}) },
+    };
+    if (patch.mesKey) {
+      const prevMes = configNueva.vendedores_meses[patch.mesKey] || { cuota_min: 0, premios: ["","","","",""] };
+      configNueva.vendedores_meses[patch.mesKey] = {
+        cuota_min: patch.cuota_min != null ? Number(patch.cuota_min) : Number(prevMes.cuota_min) || 0,
+        premios: patch.premios != null ? patch.premios : (prevMes.premios || ["","","","",""]),
+      };
+    }
+    const { error } = await supabase.from("lineamientos_cliente")
+      .upsert({ cliente: "dicotech", tipo: "spiff", config: configNueva }, { onConflict: "cliente,tipo" });
+    if (error) { alert("Error guardando SPIFF config: " + error.message); return; }
+    setLineamientos(prev => ({ ...prev, spiff: configNueva }));
+  }, [lineamientos]);
 
   // Crear pago SPIFF dual (Dicotech). tipo = "SI" | "SO"
   // forzado=true permite generar el pago aunque no alcance la cuota mínima
@@ -3226,10 +3276,10 @@ export default function PagosCliente({ cliente, clienteKey }) {
             </div>
           )}
 
-          {/* ═══ Calculadora SPIFF DUAL Dicotech (Sell-In tiered + Sell-Out flat) ═══ */}
+          {/* ═══ SPIFF Dicotech v2 · Compradora (SI × %) + Vendedores (top 5 SO con premios de texto) ═══ */}
           {clienteKey === "dicotech" && catActiva === "spiff" && spiffDicotechCalc && (
             <div className="space-y-6 mb-6">
-              {/* Header con totales YTD */}
+              {/* Header con totales YTD + % editable compradora */}
               <div className="bg-white rounded-2xl shadow-sm p-5">
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
@@ -3238,49 +3288,47 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       <h3 className="text-lg font-bold text-gray-800">SPIFF Dicotech {new Date().getFullYear()}</h3>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      Calculadora dual: SPIFF Sell-In con tiers de cumplimiento + SPIFF Sell-Out flat. Cuota SO = Cuota Sell-In × factor (varía por mes: revisa Lineamientos para el detalle).
+                      <strong>Compradora:</strong> % editable × sell-in del mes (facturación Revko). <strong>Vendedores:</strong> top 5 del sell-out del mes con cuota mínima y premios editables por mes.
                     </p>
                   </div>
-                  <div className="flex gap-6">
+                  <div className="flex gap-6 items-center">
                     <div className="text-right">
-                      <p className="text-[10px] text-gray-400 uppercase">SPIFF SI YTD</p>
-                      <p className="text-xl font-bold text-indigo-600">{formatMXN(spiffDicotechTotalYTD.si)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-gray-400 uppercase">SPIFF SO YTD</p>
-                      <p className="text-xl font-bold text-emerald-600">{formatMXN(spiffDicotechTotalYTD.so)}</p>
+                      <p className="text-[10px] text-gray-400 uppercase">% Compradora</p>
+                      <div className="flex items-center gap-1 justify-end">
+                        <input type="number" step="0.001" min="0" max="10"
+                          defaultValue={(spiffDicoCompradoraPct * 100).toFixed(3)}
+                          onBlur={(e) => {
+                            const pct = Number(e.target.value) / 100;
+                            if (pct !== spiffDicoCompradoraPct && pct >= 0 && pct <= 0.1) {
+                              guardarSpiffDicoConfig({ compradora_pct: pct });
+                            }
+                          }}
+                          className="w-20 text-right text-lg font-bold text-indigo-600 border border-gray-200 rounded px-2 py-0.5 focus:border-indigo-400 focus:outline-none" />
+                        <span className="text-lg font-bold text-indigo-600">%</span>
+                      </div>
                     </div>
                     <div className="text-right border-l border-gray-200 pl-6">
-                      <p className="text-[10px] text-gray-400 uppercase">Total YTD</p>
-                      <p className="text-2xl font-bold text-purple-700">{formatMXN(spiffDicotechTotalYTD.total)}</p>
+                      <p className="text-[10px] text-gray-400 uppercase">Comisión Compradora YTD</p>
+                      <p className="text-2xl font-bold text-purple-700">{formatMXN(spiffDicotechTotalYTD.si)}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* SPIFF Sell-In */}
+              {/* SPIFF Compradora — flat % × sell-in */}
               <div className="bg-white rounded-2xl shadow-sm p-5">
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                  <h4 className="font-bold text-indigo-700 inline-flex items-center gap-2">📥 SPIFF Sell-In (tiers de cumplimiento)</h4>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    {(lineamientos?.spiff?.sell_in?.tiers || []).slice().sort((a,b)=>(b.min_alcance||0)-(a.min_alcance||0)).map((t,i) => (
-                      <span key={i} className="px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700">
-                        <strong>{t.label || ((t.min_alcance*100).toFixed(0)+"%+")}</strong> · {((t.pct||0)*100).toFixed(2)}%
-                      </span>
-                    ))}
-                    <span className="px-3 py-1 rounded-full bg-gray-50 border border-gray-200 text-gray-400">&lt;95% → Sin SPIFF</span>
-                  </div>
+                  <h4 className="font-bold text-indigo-700 inline-flex items-center gap-2">
+                    👤 SPIFF Compradora <span className="text-xs text-gray-400 font-normal">(sell-in Revko × {(spiffDicoCompradoraPct*100).toFixed(3)}%)</span>
+                  </h4>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-200 bg-gray-50">
                         <th className="text-left py-2 px-3 font-semibold text-gray-600">Mes</th>
-                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Cuota SI</th>
                         <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell-In Real</th>
-                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Alcance</th>
-                        <th className="text-center py-2 px-3 font-semibold text-gray-600">Tier</th>
-                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Comisión</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Comisión ({(spiffDicoCompradoraPct*100).toFixed(3)}%)</th>
                         <th className="text-center py-2 px-3 font-semibold text-gray-600">Acción</th>
                       </tr>
                     </thead>
@@ -3290,19 +3338,10 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         const p = c.pagoSI;
                         const isNoAplica = p && p.estatus === "cancelado";
                         const isGenerado = p && p.estatus !== "cancelado";
-                        const alcancePct = (c.alcanceSI * 100).toFixed(0);
-                        let alcanceColor = "#94a3b8";
-                        if (c.alcanceSI >= 1.31) alcanceColor = "#10b981";
-                        else if (c.alcanceSI >= 1.15) alcanceColor = "#3b82f6";
-                        else if (c.alcanceSI >= 0.95) alcanceColor = "#6366f1";
-                        else if (c.siActual > 0) alcanceColor = "#ef4444";
                         return (
                           <tr key={`si-${c.mes}`} className={`border-b border-gray-100 ${isNoAplica ? "opacity-50" : ""}`}>
                             <td className="py-2 px-3 font-medium text-gray-800">{MESES_F[c.mes - 1]}</td>
-                            <td className="py-2 px-3 text-right text-gray-500 text-xs">{formatMXN(c.cuotaSI)}</td>
                             <td className="py-2 px-3 text-right text-gray-700 font-medium">{c.siActual > 0 ? formatMXN(c.siActual) : "—"}</td>
-                            <td className="py-2 px-3 text-right font-bold" style={{ color: alcanceColor }}>{c.siActual > 0 ? alcancePct + "%" : "—"}</td>
-                            <td className="py-2 px-3 text-center">{c.tierSI ? <span className="text-xs px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 font-semibold">{c.tierSI.label}</span> : <span className="text-gray-300">—</span>}</td>
                             <td className="py-2 px-3 text-right font-bold text-indigo-700">{isNoAplica ? <span className="text-gray-400">—</span> : c.comisionSI > 0 ? formatMXN(c.comisionSI) : <span className="text-gray-300">—</span>}</td>
                             <td className="py-2 px-3 text-center">
                               {isNoAplica ? (
@@ -3312,15 +3351,10 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                   <span className={`text-xs px-2 py-1 rounded ${p.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}</span>
                                   <button onClick={() => revertirSpiff(p.id)} className="text-xs text-red-500 hover:text-red-700">🗑</button>
                                 </div>
-                              ) : c.tierSI && c.comisionSI > 0 ? (
+                              ) : c.comisionSI > 0 ? (
                                 <div className="flex gap-1 justify-center flex-wrap">
                                   <button onClick={() => crearSpiffDicotechPago(c, "SI", false)} className="text-xs bg-indigo-600 text-white rounded px-2 py-1 hover:bg-indigo-700">Generar</button>
                                   <button onClick={() => marcarSpiffDicotechNoAplica(c.mes, "SI")} className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
-                                </div>
-                              ) : c.siActual > 0 ? (
-                                <div className="flex gap-1 justify-center flex-wrap">
-                                  <button onClick={() => crearSpiffDicotechPago(c, "SI", true)} className="text-xs bg-amber-500 text-white rounded px-2 py-1 hover:bg-amber-600" title="Pagar aunque no llegue a cuota mínima">💸 Pagar manual</button>
-                                  <button onClick={() => marcarSpiffDicotechNoAplica(c.mes, "SI")} className="text-xs bg-gray-100 text-gray-500 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
                                 </div>
                               ) : <span className="text-xs text-gray-300">Sin datos</span>}
                             </td>
@@ -3332,75 +3366,115 @@ export default function PagosCliente({ cliente, clienteKey }) {
                 </div>
               </div>
 
-              {/* SPIFF Sell-Out */}
+              {/* SPIFF Vendedores — top 5 por mes con premios editables */}
               <div className="bg-white rounded-2xl shadow-sm p-5">
-                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                  <h4 className="font-bold text-emerald-700 inline-flex items-center gap-2">📤 SPIFF Sell-Out (flat {((lineamientos?.spiff?.sell_out?.pct_fijo || 0)*100).toFixed(2)}%)</h4>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="px-3 py-1 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700">
-                      <strong>≥{((lineamientos?.spiff?.sell_out?.min_alcance || 0.95)*100).toFixed(0)}%</strong> alcance → {((lineamientos?.spiff?.sell_out?.pct_fijo || 0)*100).toFixed(2)}%
-                    </span>
-                    <span className="px-3 py-1 rounded-full bg-gray-50 border border-gray-200 text-gray-400">&lt;{((lineamientos?.spiff?.sell_out?.min_alcance || 0.95)*100).toFixed(0)}% → Sin SPIFF</span>
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <h4 className="font-bold text-emerald-700 inline-flex items-center gap-2">
+                    🏆 SPIFF Vendedores <span className="text-xs text-gray-400 font-normal">(top 5 por sell-out mensual)</span>
+                  </h4>
+                  <div className="text-xs text-gray-500">
+                    Configura la cuota mínima y los 5 premios de cada mes. Se calcula el ranking automáticamente desde el sell-out real.
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Mes</th>
-                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Cuota SO</th>
-                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell-Out Real</th>
-                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Alcance</th>
-                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Comisión</th>
-                        <th className="text-center py-2 px-3 font-semibold text-gray-600">Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {spiffDicotechCalc.map(c => {
-                        const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-                        const p = c.pagoSO;
-                        const isNoAplica = p && p.estatus === "cancelado";
-                        const isGenerado = p && p.estatus !== "cancelado";
-                        const alcancePct = (c.alcanceSO * 100).toFixed(0);
-                        let alcanceColor = "#94a3b8";
-                        if (c.alcanceSO >= 1.20) alcanceColor = "#10b981";
-                        else if (c.alcanceSO >= 0.95) alcanceColor = "#059669";
-                        else if (c.soActual > 0) alcanceColor = "#ef4444";
-                        return (
-                          <tr key={`so-${c.mes}`} className={`border-b border-gray-100 ${isNoAplica ? "opacity-50" : ""}`}>
-                            <td className="py-2 px-3 font-medium text-gray-800">{MESES_F[c.mes - 1]}</td>
-                            <td className="py-2 px-3 text-right text-gray-500 text-xs">{formatMXN(c.cuotaSO)}</td>
-                            <td className="py-2 px-3 text-right text-gray-700 font-medium">{c.soActual > 0 ? formatMXN(c.soActual) : "—"}</td>
-                            <td className="py-2 px-3 text-right font-bold" style={{ color: alcanceColor }}>{c.soActual > 0 ? alcancePct + "%" : "—"}</td>
-                            <td className="py-2 px-3 text-right font-bold text-emerald-700">{isNoAplica ? <span className="text-gray-400">—</span> : c.comisionSO > 0 ? formatMXN(c.comisionSO) : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2 px-3 text-center">
-                              {isNoAplica ? (
-                                <button onClick={() => revertirSpiff(p.id)} className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1">↺ Revertir</button>
-                              ) : isGenerado ? (
-                                <div className="flex items-center gap-1 justify-center">
-                                  <span className={`text-xs px-2 py-1 rounded ${p.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}</span>
-                                  <button onClick={() => revertirSpiff(p.id)} className="text-xs text-red-500 hover:text-red-700">🗑</button>
-                                </div>
-                              ) : c.aplicaSO && c.comisionSO > 0 ? (
-                                <div className="flex gap-1 justify-center flex-wrap">
-                                  <button onClick={() => crearSpiffDicotechPago(c, "SO", false)} className="text-xs bg-emerald-600 text-white rounded px-2 py-1 hover:bg-emerald-700">Generar</button>
-                                  <button onClick={() => marcarSpiffDicotechNoAplica(c.mes, "SO")} className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
-                                </div>
-                              ) : c.soActual > 0 ? (
-                                <div className="flex gap-1 justify-center flex-wrap">
-                                  <button onClick={() => crearSpiffDicotechPago(c, "SO", true)} className="text-xs bg-amber-500 text-white rounded px-2 py-1 hover:bg-amber-600" title="Pagar aunque no llegue a cuota mínima">💸 Pagar manual</button>
-                                  <button onClick={() => marcarSpiffDicotechNoAplica(c.mes, "SO")} className="text-xs bg-gray-100 text-gray-500 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
-                                </div>
-                              ) : <span className="text-xs text-gray-300">Sin datos</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className="space-y-3">
+                  {spiffDicotechCalc.map(c => {
+                    const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+                    const anio = new Date().getFullYear();
+                    const mesKey = `${anio}-${String(c.mes).padStart(2,"0")}`;
+                    const hoy = new Date();
+                    const esMesActual = c.mes === (hoy.getMonth() + 1) && anio === hoy.getFullYear();
+                    const esFuturo = anio === hoy.getFullYear() && c.mes > (hoy.getMonth() + 1);
+                    const sinData = c.vendedoresMes.length === 0;
+                    return (
+                      <details key={`vend-${c.mes}`} className={`border rounded-xl ${esMesActual ? "border-emerald-200 bg-emerald-50/30" : "border-gray-200 bg-white"}`} open={esMesActual}>
+                        <summary className="px-4 py-3 cursor-pointer flex items-center justify-between flex-wrap gap-2 select-none">
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-semibold text-gray-800">{MESES_F[c.mes - 1]} {anio}</span>
+                            {esMesActual && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">Mes actual</span>}
+                            {esFuturo && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Pendiente</span>}
+                            {sinData && !esFuturo && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Sin data Revko</span>}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {c.vendedoresMes.length > 0 && <>{c.vendedoresMes.length} vendedores · <strong className="text-gray-700">{c.ganadores.length}</strong> califican</>}
+                            {c.cuotaMin > 0 && <> · cuota mín <strong className="text-gray-700">{formatMXN(c.cuotaMin)}</strong></>}
+                          </div>
+                        </summary>
+                        <div className="px-4 pb-4 border-t border-gray-100">
+                          {/* Config del mes: cuota mín + premios */}
+                          <div className="grid grid-cols-1 md:grid-cols-6 gap-2 my-3 items-end">
+                            <div className="md:col-span-1">
+                              <label className="text-[10px] uppercase text-gray-400 font-semibold tracking-wide block mb-1">Cuota mín $</label>
+                              <input type="number" min="0" step="1000"
+                                defaultValue={c.cuotaMin || ""}
+                                placeholder="0"
+                                onBlur={(e) => {
+                                  const v = Number(e.target.value) || 0;
+                                  if (v !== c.cuotaMin) guardarSpiffDicoConfig({ mesKey, cuota_min: v });
+                                }}
+                                className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:border-emerald-400 focus:outline-none" />
+                            </div>
+                            {[0,1,2,3,4].map(i => (
+                              <div key={i}>
+                                <label className="text-[10px] uppercase text-gray-400 font-semibold tracking-wide block mb-1">Premio #{i+1}</label>
+                                <input type="text"
+                                  defaultValue={c.premios[i] || ""}
+                                  placeholder="Ej. Tarjeta $500 Amazon"
+                                  onBlur={(e) => {
+                                    const nuevos = [...c.premios];
+                                    nuevos[i] = e.target.value.trim();
+                                    if (nuevos[i] !== (c.premios[i] || "")) {
+                                      guardarSpiffDicoConfig({ mesKey, premios: nuevos });
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:border-emerald-400 focus:outline-none" />
+                              </div>
+                            ))}
+                          </div>
+                          {/* Ranking */}
+                          {c.ganadores.length > 0 ? (
+                            <table className="w-full text-sm mt-3">
+                              <thead>
+                                <tr className="border-b border-gray-200 bg-gray-50">
+                                  <th className="text-left py-2 px-3 font-semibold text-gray-600 w-12">#</th>
+                                  <th className="text-left py-2 px-3 font-semibold text-gray-600">Vendedor</th>
+                                  <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell-Out</th>
+                                  <th className="text-left py-2 px-3 font-semibold text-gray-600">Premio</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {c.ganadores.map((g) => (
+                                  <tr key={g.posicion} className="border-b border-gray-100">
+                                    <td className="py-2 px-3">
+                                      <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
+                                        g.posicion === 1 ? "bg-yellow-100 text-yellow-700" :
+                                        g.posicion === 2 ? "bg-gray-100 text-gray-700" :
+                                        g.posicion === 3 ? "bg-orange-100 text-orange-700" :
+                                        "bg-gray-50 text-gray-500"
+                                      }`}>{g.posicion}</span>
+                                    </td>
+                                    <td className="py-2 px-3 font-medium text-gray-800">{g.nombre}</td>
+                                    <td className="py-2 px-3 text-right font-mono text-gray-700">{formatMXN(g.monto)}</td>
+                                    <td className="py-2 px-3 text-emerald-700 font-medium">{g.premio || <span className="text-gray-300 italic">— sin definir —</span>}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          ) : sinData ? (
+                            <div className="text-xs text-gray-500 py-4 text-center bg-gray-50 rounded">Sin datos de Revko para este mes. Sube el archivo semanal en <code>/uploads.html</code>.</div>
+                          ) : c.vendedoresMes.length > 0 && c.ganadores.length === 0 ? (
+                            <div className="text-xs text-amber-700 py-4 text-center bg-amber-50 rounded">
+                              Hay {c.vendedoresMes.length} vendedores pero ninguno supera la cuota mínima de {formatMXN(c.cuotaMin)}. Baja la cuota o revisa la data.
+                            </div>
+                          ) : (
+                            <div className="text-xs text-gray-500 py-4 text-center">Sin vendedores por mostrar.</div>
+                          )}
+                        </div>
+                      </details>
+                    );
+                  })}
                 </div>
-                <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                  💡 <strong>Pagar manual:</strong> el botón ámbar aparece cuando hay datos pero no se llegó a la cuota mínima. Te permite pagar de todos modos con el monto que decidas.
+                <div className="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500">
+                  💡 <strong>Premios de texto libre:</strong> pueden ser tarjetas de regalo, productos, dinero, etc. Se guardan por mes en Supabase para historial auditable. Los pagos concretos se registran fuera del sistema (no van a la tabla <code>pagos</code>).
                 </div>
               </div>
             </div>
