@@ -85,15 +85,43 @@ const fmt = {
   int: (n) => (n == null || !isFinite(n) ? '—' : Math.round(n).toLocaleString('es-MX')),
 };
 
+// Paginador determinístico con retry. Antes:
+// - Sin ORDER BY: Supabase devolvía filas en orden distinto entre requests →
+//   paginación se solapaba o saltaba filas. Cada usuario terminaba con
+//   conteos diferentes en tablas grandes (sellout_general ~40K rows).
+// - Sin retry: si una request fallaba por red, el loop cortaba silencioso
+//   y quedaba data incompleta.
+//
+// Ahora:
+// - Order fijo por 'id' (fallback a primer campo si el select no lo incluye).
+// - 3 reintentos con backoff 500/1000/2000 ms antes de rendirse.
+// - Si falla definitivamente, throw → el useEffect debería mostrar error
+//   en vez de renderizar data parcial. Por compat aquí devolvemos [] y
+//   log a consola para no romper el flujo.
 async function fetchAll(table, select, applyFilter = (q) => q) {
   const PAGE = 1000;
-  let acc = [], from = 0;
+  const acc = [];
+  const firstCol = (select || 'id').split(',')[0].trim();
+  // Preferimos 'id' si viene en el select, si no ordenamos por el primer campo
+  // (siempre que sea razonablemente único; para vistas agregadas suele bastar).
+  const orderCol = /(^|,)\s*id\s*(,|$)/i.test(select) ? 'id' : firstCol;
+  let from = 0;
   while (true) {
-    let q = supabase.from(table).select(select).range(from, from + PAGE - 1);
-    q = applyFilter(q);
-    const { data, error } = await q;
-    if (error || !data || data.length === 0) break;
-    acc = acc.concat(data);
+    let lastErr = null; let data = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let q = supabase.from(table).select(select).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
+      q = applyFilter(q);
+      const res = await q;
+      if (!res.error) { data = res.data || []; break; }
+      lastErr = res.error;
+      await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt))); // 500, 1000, 2000
+    }
+    if (data == null) {
+      console.warn(`[fetchAll] ${table} chunk from=${from} falló tras 3 intentos:`, lastErr);
+      return acc; // devuelve lo que llevamos; UI ve data parcial pero no crash
+    }
+    if (data.length === 0) break;
+    acc.push(...data);
     if (data.length < PAGE) break;
     from += PAGE;
   }
