@@ -3311,87 +3311,151 @@ export default function PagosCliente({ cliente, clienteKey }) {
             </div>
           )}
 
-          {/* ═══ SPIFF Dicotech v2 · Compradora (SI × %) + Vendedores (top 5 SO con premios de texto) ═══ */}
-          {clienteKey === "dicotech" && catActiva === "spiff" && spiffDicotechCalc && (
-            <div className="space-y-6 mb-6">
-              {/* Header con totales YTD + % editable compradora */}
-              <div className="bg-white rounded-2xl shadow-sm p-5">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">🚀</span>
-                      <h3 className="text-lg font-bold text-gray-800">SPIFF Dicotech {new Date().getFullYear()}</h3>
+          {/* ═══ SPIFF Dicotech v2 · rediseño Ferruteck ═══ */}
+          {clienteKey === "dicotech" && catActiva === "spiff" && spiffDicotechCalc && (() => {
+            const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+            const anio = new Date().getFullYear();
+            const hoy = new Date();
+            const mesActualIdx = hoy.getMonth() + 1;
+            // Estilos base
+            const cardBase = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' };
+            const heroBlack = { background: '#000', color: '#F5F5F7', padding: '20px 24px' };
+            const eyebrow = { fontFamily: TYPO.fontText, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' };
+            const title = { fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.022em', fontSize: 22, margin: 0 };
+            const subCard = { padding: '18px 22px' };
+            const sectionH = { fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 };
+            const sectionSub = { fontSize: 11, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText };
+            const thStyle = { fontFamily: TYPO.fontText, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, textAlign: 'left' };
+            const tdStyle = { fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, padding: '10px 12px', borderBottom: `1px solid ${theme.border}` };
+            const monoNum = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
+            const pillBase = (accent) => ({
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '5px 11px', borderRadius: 999, fontFamily: TYPO.fontText,
+              fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.005em',
+              background: `${accent}15`, color: accent, border: `1px solid ${accent}30`,
+            });
+            const inputBase = {
+              background: theme.bg, border: `1px solid ${theme.border}`,
+              borderRadius: 10, padding: '8px 10px', fontSize: 12,
+              fontFamily: TYPO.fontText, color: theme.text, outline: 'none',
+              width: '100%', transition: 'border 160ms',
+            };
+            const btnPrimary = {
+              background: '#000', color: '#fff', border: 0, borderRadius: 999,
+              padding: '7px 14px', fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
+              cursor: 'pointer', letterSpacing: '-0.005em',
+            };
+            const btnGhost = {
+              background: 'transparent', color: theme.textMuted, border: `1px solid ${theme.border}`,
+              borderRadius: 999, padding: '7px 14px', fontFamily: TYPO.fontText,
+              fontSize: 11, fontWeight: 500, cursor: 'pointer', letterSpacing: '-0.005em',
+            };
+            return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, fontFamily: TYPO.fontText }}>
+
+              {/* Hero card negro estilo Ferruteck */}
+              <div style={cardBase}>
+                <div style={heroBlack}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 280 }}>
+                      <div style={eyebrow}>SPIFF · Dicotech {anio}</div>
+                      <h3 style={{ ...title, color: '#F5F5F7', marginTop: 6 }}>Compradora y vendedores.</h3>
+                      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: '10px 0 0', maxWidth: 520, lineHeight: 1.5 }}>
+                        Compradora: <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{(spiffDicoCompradoraPct * 100).toFixed(3)}%</strong> × sell-in Revko del mes. Vendedores: top 5 por sell-out con cuota mínima y premios editables por mes.
+                      </p>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      <strong>Compradora:</strong> % editable × sell-in del mes (facturación Revko). <strong>Vendedores:</strong> top 5 del sell-out del mes con cuota mínima y premios editables por mes.
-                    </p>
-                  </div>
-                  <div className="flex gap-6 items-center">
-                    <div className="text-right">
-                      <p className="text-[10px] text-gray-400 uppercase">% Compradora</p>
-                      <div className="flex items-center gap-1 justify-end">
-                        <input type="number" step="0.001" min="0" max="10"
-                          defaultValue={(spiffDicoCompradoraPct * 100).toFixed(3)}
-                          onBlur={(e) => {
-                            const pct = Number(e.target.value) / 100;
-                            if (pct !== spiffDicoCompradoraPct && pct >= 0 && pct <= 0.1) {
-                              guardarSpiffDicoConfig({ compradora_pct: pct });
-                            }
-                          }}
-                          className="w-20 text-right text-lg font-bold text-indigo-600 border border-gray-200 rounded px-2 py-0.5 focus:border-indigo-400 focus:outline-none" />
-                        <span className="text-lg font-bold text-indigo-600">%</span>
+                    <div style={{ display: 'flex', gap: 28, alignItems: 'flex-end' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={eyebrow}>% Compradora</div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, justifyContent: 'flex-end', marginTop: 6 }}>
+                          <input type="number" step="0.001" min="0" max="10"
+                            defaultValue={(spiffDicoCompradoraPct * 100).toFixed(3)}
+                            onBlur={(e) => {
+                              const pct = Number(e.target.value) / 100;
+                              if (pct !== spiffDicoCompradoraPct && pct >= 0 && pct <= 0.1) {
+                                guardarSpiffDicoConfig({ compradora_pct: pct });
+                              }
+                            }}
+                            style={{
+                              width: 78, textAlign: 'right', background: 'rgba(255,255,255,0.08)',
+                              border: '1px solid rgba(255,255,255,0.14)', borderRadius: 10,
+                              color: '#F5F5F7', padding: '6px 10px',
+                              fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600,
+                              letterSpacing: '-0.02em', outline: 'none', ...monoNum,
+                            }} />
+                          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, color: '#F5F5F7' }}>%</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right border-l border-gray-200 pl-6">
-                      <p className="text-[10px] text-gray-400 uppercase">Comisión Compradora YTD</p>
-                      <p className="text-2xl font-bold text-purple-700">{formatMXN(spiffDicotechTotalYTD.si)}</p>
+                      <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.14)', paddingLeft: 24 }}>
+                        <div style={eyebrow}>Comisión YTD</div>
+                        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.024em', color: '#F5F5F7', marginTop: 4, ...monoNum }}>
+                          {formatMXN(spiffDicotechTotalYTD.si)}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* SPIFF Compradora — flat % × sell-in */}
-              <div className="bg-white rounded-2xl shadow-sm p-5">
-                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                  <h4 className="font-bold text-indigo-700 inline-flex items-center gap-2">
-                    👤 SPIFF Compradora <span className="text-xs text-gray-400 font-normal">(sell-in Revko × {(spiffDicoCompradoraPct*100).toFixed(3)}%)</span>
-                  </h4>
+              {/* SPIFF Compradora */}
+              <div style={cardBase}>
+                <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <h4 style={sectionH}>SPIFF Compradora</h4>
+                      <p style={sectionSub}>Sell-in Revko × {(spiffDicoCompradoraPct*100).toFixed(3)}% · Beatriz Reyes</p>
+                    </div>
+                    <span style={pillBase(theme.accent || '#007AFF')}>Mensual</span>
+                  </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
                     <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Mes</th>
-                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell-In Real</th>
-                        <th className="text-right py-2 px-3 font-semibold text-gray-600">Comisión ({(spiffDicoCompradoraPct*100).toFixed(3)}%)</th>
-                        <th className="text-center py-2 px-3 font-semibold text-gray-600">Acción</th>
+                      <tr>
+                        <th style={thStyle}>Mes</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Sell-In real</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Comisión</th>
+                        <th style={{ ...thStyle, textAlign: 'right', paddingRight: 22 }}>Acción</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {spiffDicotechCalc.map(c => {
-                        const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+                      {spiffDicotechCalc.map((c, idx) => {
                         const p = c.pagoSI;
                         const isNoAplica = p && p.estatus === "cancelado";
                         const isGenerado = p && p.estatus !== "cancelado";
+                        const isFuturo = c.mes > mesActualIdx;
+                        const rowMuted = isNoAplica || isFuturo;
                         return (
-                          <tr key={`si-${c.mes}`} className={`border-b border-gray-100 ${isNoAplica ? "opacity-50" : ""}`}>
-                            <td className="py-2 px-3 font-medium text-gray-800">{MESES_F[c.mes - 1]}</td>
-                            <td className="py-2 px-3 text-right text-gray-700 font-medium">{c.siActual > 0 ? formatMXN(c.siActual) : "—"}</td>
-                            <td className="py-2 px-3 text-right font-bold text-indigo-700">{isNoAplica ? <span className="text-gray-400">—</span> : c.comisionSI > 0 ? formatMXN(c.comisionSI) : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2 px-3 text-center">
+                          <tr key={`si-${c.mes}`}>
+                            <td style={{ ...tdStyle, opacity: rowMuted ? 0.45 : 1, fontWeight: c.mes === mesActualIdx ? 600 : 500 }}>
+                              {MESES_F[c.mes - 1]}
+                              {c.mes === mesActualIdx && <span style={{ ...pillBase(theme.accent || '#007AFF'), marginLeft: 8, fontSize: 9, padding: '2px 8px' }}>Mes actual</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'right', color: theme.text, opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 500 }}>
+                              {c.siActual > 0 ? formatMXN(c.siActual) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 600, color: isNoAplica ? theme.textMuted : theme.text }}>
+                              {c.comisionSI > 0 ? formatMXN(c.comisionSI) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'right', paddingRight: 22 }}>
                               {isNoAplica ? (
-                                <button onClick={() => revertirSpiff(p.id)} className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1">↺ Revertir</button>
+                                <button onClick={() => revertirSpiff(p.id)} style={btnGhost}>↺ Revertir</button>
                               ) : isGenerado ? (
-                                <div className="flex items-center gap-1 justify-center">
-                                  <span className={`text-xs px-2 py-1 rounded ${p.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}</span>
-                                  <button onClick={() => revertirSpiff(p.id)} className="text-xs text-red-500 hover:text-red-700">🗑</button>
-                                </div>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={pillBase(p.estatus === "pagado" ? '#34C759' : '#FF9500')}>
+                                    {p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}
+                                  </span>
+                                  <button onClick={() => revertirSpiff(p.id)} title="Eliminar pago"
+                                    style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 13, padding: '4px 6px' }}>🗑</button>
+                                </span>
                               ) : c.comisionSI > 0 ? (
-                                <div className="flex gap-1 justify-center flex-wrap">
-                                  <button onClick={() => crearSpiffDicotechPago(c, "SI", false)} className="text-xs bg-indigo-600 text-white rounded px-2 py-1 hover:bg-indigo-700">Generar</button>
-                                  <button onClick={() => marcarSpiffDicotechNoAplica(c.mes, "SI")} className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
-                                </div>
-                              ) : <span className="text-xs text-gray-300">Sin datos</span>}
+                                <span style={{ display: 'inline-flex', gap: 6 }}>
+                                  <button onClick={() => crearSpiffDicotechPago(c, "SI", false)} style={btnPrimary}>Generar</button>
+                                  <button onClick={() => marcarSpiffDicotechNoAplica(c.mes, "SI")} style={btnGhost}>No aplica</button>
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted }}>Sin datos</span>
+                              )}
                             </td>
                           </tr>
                         );
@@ -3401,44 +3465,58 @@ export default function PagosCliente({ cliente, clienteKey }) {
                 </div>
               </div>
 
-              {/* SPIFF Vendedores — top 5 por mes con premios editables */}
-              <div className="bg-white rounded-2xl shadow-sm p-5">
-                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                  <h4 className="font-bold text-emerald-700 inline-flex items-center gap-2">
-                    🏆 SPIFF Vendedores <span className="text-xs text-gray-400 font-normal">(top 5 por sell-out mensual)</span>
-                  </h4>
-                  <div className="text-xs text-gray-500">
-                    Configura la cuota mínima y los 5 premios de cada mes. Se calcula el ranking automáticamente desde el sell-out real.
+              {/* SPIFF Vendedores */}
+              <div style={cardBase}>
+                <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <h4 style={sectionH}>SPIFF Vendedores Dicotech</h4>
+                      <p style={sectionSub}>Top 5 del sell-out del mes que superen la cuota mínima · premios de texto libre editables por mes.</p>
+                    </div>
+                    <span style={pillBase('#34C759')}>Ranking mensual</span>
                   </div>
                 </div>
-                <div className="space-y-3">
-                  {spiffDicotechCalc.map(c => {
-                    const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-                    const anio = new Date().getFullYear();
+                <div style={{ padding: '14px 22px 22px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {spiffDicotechCalc.map((c) => {
                     const mesKey = `${anio}-${String(c.mes).padStart(2,"0")}`;
-                    const hoy = new Date();
-                    const esMesActual = c.mes === (hoy.getMonth() + 1) && anio === hoy.getFullYear();
-                    const esFuturo = anio === hoy.getFullYear() && c.mes > (hoy.getMonth() + 1);
+                    const esMesActual = c.mes === mesActualIdx;
+                    const esFuturo = c.mes > mesActualIdx;
                     const sinData = c.vendedoresMes.length === 0;
                     return (
-                      <details key={`vend-${c.mes}`} className={`border rounded-xl ${esMesActual ? "border-emerald-200 bg-emerald-50/30" : "border-gray-200 bg-white"}`} open={esMesActual}>
-                        <summary className="px-4 py-3 cursor-pointer flex items-center justify-between flex-wrap gap-2 select-none">
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm font-semibold text-gray-800">{MESES_F[c.mes - 1]} {anio}</span>
-                            {esMesActual && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">Mes actual</span>}
-                            {esFuturo && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Pendiente</span>}
-                            {sinData && !esFuturo && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Sin data Revko</span>}
+                      <details key={`vend-${c.mes}`}
+                        style={{
+                          background: esMesActual ? `${theme.accent || '#007AFF'}0A` : theme.bg,
+                          border: `1px solid ${esMesActual ? (theme.accent || '#007AFF') + '40' : theme.border}`,
+                          borderRadius: 12,
+                          overflow: 'hidden',
+                          opacity: esFuturo ? 0.55 : 1,
+                        }}
+                        open={esMesActual}>
+                        <summary style={{
+                          padding: '12px 16px', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          gap: 12, flexWrap: 'wrap', listStyle: 'none', userSelect: 'none',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text }}>
+                              {MESES_F[c.mes - 1]} {anio}
+                            </span>
+                            {esMesActual && <span style={pillBase(theme.accent || '#007AFF')}>Mes actual</span>}
+                            {esFuturo && <span style={pillBase(theme.textMuted)}>Pendiente</span>}
+                            {sinData && !esFuturo && <span style={pillBase('#FF9500')}>Sin data Revko</span>}
                           </div>
-                          <div className="text-xs text-gray-500">
-                            {c.vendedoresMes.length > 0 && <>{c.vendedoresMes.length} vendedores · <strong className="text-gray-700">{c.ganadores.length}</strong> califican</>}
-                            {c.cuotaMin > 0 && <> · cuota mín <strong className="text-gray-700">{formatMXN(c.cuotaMin)}</strong></>}
+                          <div style={{ fontSize: 11, color: theme.textMuted, display: 'flex', gap: 10, alignItems: 'center', ...monoNum }}>
+                            {c.vendedoresMes.length > 0 && (
+                              <span>{c.vendedoresMes.length} vendedores · <strong style={{ color: theme.text, fontWeight: 600 }}>{c.ganadores.length}</strong> califican</span>
+                            )}
+                            {c.cuotaMin > 0 && <span>· cuota mín <strong style={{ color: theme.text, fontWeight: 600 }}>{formatMXN(c.cuotaMin)}</strong></span>}
                           </div>
                         </summary>
-                        <div className="px-4 pb-4 border-t border-gray-100">
-                          {/* Config del mes: cuota mín + premios */}
-                          <div className="grid grid-cols-1 md:grid-cols-6 gap-2 my-3 items-end">
-                            <div className="md:col-span-1">
-                              <label className="text-[10px] uppercase text-gray-400 font-semibold tracking-wide block mb-1">Cuota mín $</label>
+                        <div style={{ padding: '4px 16px 18px', borderTop: `1px solid ${theme.border}` }}>
+                          {/* Config del mes */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr', gap: 10, marginTop: 14 }}>
+                            <div>
+                              <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 6 }}>Cuota mín $</div>
                               <input type="number" min="0" step="1000"
                                 defaultValue={c.cuotaMin || ""}
                                 placeholder="0"
@@ -3446,14 +3524,16 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                   const v = Number(e.target.value) || 0;
                                   if (v !== c.cuotaMin) guardarSpiffDicoConfig({ mesKey, cuota_min: v });
                                 }}
-                                className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:border-emerald-400 focus:outline-none" />
+                                onFocus={(e) => { e.currentTarget.style.borderColor = theme.accent || '#007AFF'; }}
+                                onBlurCapture={(e) => { e.currentTarget.style.borderColor = theme.border; }}
+                                style={{ ...inputBase, ...monoNum }} />
                             </div>
                             {[0,1,2,3,4].map(i => (
                               <div key={i}>
-                                <label className="text-[10px] uppercase text-gray-400 font-semibold tracking-wide block mb-1">Premio #{i+1}</label>
+                                <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 6 }}>Premio #{i+1}</div>
                                 <input type="text"
                                   defaultValue={c.premios[i] || ""}
-                                  placeholder="Ej. Tarjeta $500 Amazon"
+                                  placeholder="Ej. Tarjeta $500"
                                   onBlur={(e) => {
                                     const nuevos = [...c.premios];
                                     nuevos[i] = e.target.value.trim();
@@ -3461,59 +3541,71 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                       guardarSpiffDicoConfig({ mesKey, premios: nuevos });
                                     }
                                   }}
-                                  className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:border-emerald-400 focus:outline-none" />
+                                  onFocus={(e) => { e.currentTarget.style.borderColor = theme.accent || '#007AFF'; }}
+                                  onBlurCapture={(e) => { e.currentTarget.style.borderColor = theme.border; }}
+                                  style={inputBase} />
                               </div>
                             ))}
                           </div>
                           {/* Ranking */}
-                          {c.ganadores.length > 0 ? (
-                            <table className="w-full text-sm mt-3">
-                              <thead>
-                                <tr className="border-b border-gray-200 bg-gray-50">
-                                  <th className="text-left py-2 px-3 font-semibold text-gray-600 w-12">#</th>
-                                  <th className="text-left py-2 px-3 font-semibold text-gray-600">Vendedor</th>
-                                  <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell-Out</th>
-                                  <th className="text-left py-2 px-3 font-semibold text-gray-600">Premio</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {c.ganadores.map((g) => (
-                                  <tr key={g.posicion} className="border-b border-gray-100">
-                                    <td className="py-2 px-3">
-                                      <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
-                                        g.posicion === 1 ? "bg-yellow-100 text-yellow-700" :
-                                        g.posicion === 2 ? "bg-gray-100 text-gray-700" :
-                                        g.posicion === 3 ? "bg-orange-100 text-orange-700" :
-                                        "bg-gray-50 text-gray-500"
-                                      }`}>{g.posicion}</span>
-                                    </td>
-                                    <td className="py-2 px-3 font-medium text-gray-800">{g.nombre}</td>
-                                    <td className="py-2 px-3 text-right font-mono text-gray-700">{formatMXN(g.monto)}</td>
-                                    <td className="py-2 px-3 text-emerald-700 font-medium">{g.premio || <span className="text-gray-300 italic">— sin definir —</span>}</td>
+                          <div style={{ marginTop: 16 }}>
+                            {c.ganadores.length > 0 ? (
+                              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                                <thead>
+                                  <tr>
+                                    <th style={{ ...thStyle, width: 48, textAlign: 'center' }}>#</th>
+                                    <th style={thStyle}>Vendedor</th>
+                                    <th style={{ ...thStyle, textAlign: 'right' }}>Sell-Out</th>
+                                    <th style={{ ...thStyle, width: '40%' }}>Premio</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          ) : sinData ? (
-                            <div className="text-xs text-gray-500 py-4 text-center bg-gray-50 rounded">Sin datos de Revko para este mes. Sube el archivo semanal en <code>/uploads.html</code>.</div>
-                          ) : c.vendedoresMes.length > 0 && c.ganadores.length === 0 ? (
-                            <div className="text-xs text-amber-700 py-4 text-center bg-amber-50 rounded">
-                              Hay {c.vendedoresMes.length} vendedores pero ninguno supera la cuota mínima de {formatMXN(c.cuotaMin)}. Baja la cuota o revisa la data.
-                            </div>
-                          ) : (
-                            <div className="text-xs text-gray-500 py-4 text-center">Sin vendedores por mostrar.</div>
-                          )}
+                                </thead>
+                                <tbody>
+                                  {c.ganadores.map((g) => {
+                                    const medalBg = g.posicion === 1 ? '#FFD60A' : g.posicion === 2 ? '#AEAEB2' : g.posicion === 3 ? '#FF9500' : theme.border;
+                                    const medalColor = g.posicion <= 3 ? '#000' : theme.textMuted;
+                                    return (
+                                      <tr key={g.posicion}>
+                                        <td style={{ ...tdStyle, textAlign: 'center' }}>
+                                          <span style={{
+                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                            width: 24, height: 24, borderRadius: 999,
+                                            background: medalBg, color: medalColor,
+                                            fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 700,
+                                          }}>{g.posicion}</span>
+                                        </td>
+                                        <td style={{ ...tdStyle, fontWeight: 500 }}>{g.nombre}</td>
+                                        <td style={{ ...tdStyle, textAlign: 'right', ...monoNum, fontWeight: 600 }}>{formatMXN(g.monto)}</td>
+                                        <td style={{ ...tdStyle, color: g.premio ? theme.text : (theme.textSubtle || theme.textMuted), fontStyle: g.premio ? 'normal' : 'italic' }}>
+                                          {g.premio || '— sin definir —'}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            ) : sinData ? (
+                              <div style={{ padding: '20px 16px', textAlign: 'center', fontSize: 11.5, color: theme.textMuted, background: theme.bg, borderRadius: 10, border: `1px dashed ${theme.border}` }}>
+                                Sin datos de Revko para este mes. Sube el archivo semanal en <code style={{ background: theme.border, padding: '2px 6px', borderRadius: 4 }}>/uploads.html</code>.
+                              </div>
+                            ) : (
+                              <div style={{ padding: '20px 16px', textAlign: 'center', fontSize: 11.5, color: '#FF9500', background: '#FF95000A', borderRadius: 10, border: '1px solid #FF950033' }}>
+                                Hay {c.vendedoresMes.length} vendedores pero ninguno supera la cuota mínima de {formatMXN(c.cuotaMin)}. Baja la cuota o revisa la data.
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </details>
                     );
                   })}
                 </div>
-                <div className="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                  💡 <strong>Premios de texto libre:</strong> pueden ser tarjetas de regalo, productos, dinero, etc. Se guardan por mes en Supabase para historial auditable. Los pagos concretos se registran fuera del sistema (no van a la tabla <code>pagos</code>).
+                <div style={{ padding: '12px 22px', borderTop: `1px solid ${theme.border}`, fontSize: 11, color: theme.textMuted, background: theme.bg }}>
+                  💡 <strong style={{ color: theme.text, fontWeight: 600 }}>Premios de texto libre:</strong> pueden ser tarjetas de regalo, productos, dinero, etc. Se guardan por mes en Supabase con historial auditable. Los pagos se registran fuera del sistema.
                 </div>
               </div>
+
             </div>
-          )}
+          );
+          })()}
 
           {/* ═══ Fondo MKT Trimestral Interno Dicotech ═══ */}
           {clienteKey === "dicotech" && catActiva === "fondoMkt" && dicoFondoTablaMensual && (
