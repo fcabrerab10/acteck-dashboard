@@ -3607,107 +3607,148 @@ export default function PagosCliente({ cliente, clienteKey }) {
           );
           })()}
 
-          {/* ═══ Fondo MKT Trimestral Interno Dicotech ═══ */}
-          {clienteKey === "dicotech" && catActiva === "fondoMkt" && dicoFondoTablaMensual && (
-            <div className="space-y-6 mb-6">
-              {/* Header con saldos actuales */}
-              <div className="bg-white rounded-2xl shadow-sm p-5">
-                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">💰</span>
-                    <h3 className="text-lg font-bold text-gray-800">Fondos MKT Dicotech {new Date().getFullYear()}</h3>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    Plan MKT contratado: <strong>{formatMXN(dicoFondoTablaMensual.planMonto)}/mes</strong>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-[10px] uppercase tracking-wide text-emerald-700 font-semibold">Fondo MKT Cliente</span>
-                      <span className="text-[10px] text-emerald-600">visible al cliente</span>
+          {/* ═══ Fondo MKT Trimestral Interno Dicotech · rediseño Ferruteck ═══ */}
+          {clienteKey === "dicotech" && catActiva === "fondoMkt" && dicoFondoTablaMensual && (() => {
+            const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+            const anio = new Date().getFullYear();
+            const mesActual = new Date().getMonth() + 1;
+            const cardBase = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' };
+            const heroBlack = { background: '#000', color: '#F5F5F7', padding: '20px 24px' };
+            const eyebrow = { fontFamily: TYPO.fontText, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' };
+            const title = { fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.022em', fontSize: 22, margin: 0, color: '#F5F5F7' };
+            const subCard = { padding: '18px 22px' };
+            const sectionH = { fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 };
+            const sectionSub = { fontSize: 11, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText };
+            const thStyle = { fontFamily: TYPO.fontText, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, textAlign: 'left' };
+            const tdStyle = { fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, padding: '10px 12px', borderBottom: `1px solid ${theme.border}` };
+            const monoNum = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
+            const pillBase = (accent) => ({
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '5px 11px', borderRadius: 999, fontFamily: TYPO.fontText,
+              fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.005em',
+              background: `${accent}15`, color: accent, border: `1px solid ${accent}30`,
+            });
+            const COL_CLI = '#34C759';
+            const COL_INT = '#AF52DE';
+            const COL_NEG = '#FF3B30';
+            const fmtSaldo = (n) => {
+              const s = formatMXN(n);
+              return n < 0 ? <span style={{ color: COL_NEG }}>{s}</span> : s;
+            };
+            return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, fontFamily: TYPO.fontText }}>
+
+              {/* Hero card negro */}
+              <div style={cardBase}>
+                <div style={heroBlack}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 280 }}>
+                      <div style={eyebrow}>Fondos MKT · Dicotech {anio}</div>
+                      <h3 style={{ ...title, marginTop: 6 }}>Cliente e interno.</h3>
+                      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: '10px 0 0', maxWidth: 560, lineHeight: 1.5 }}>
+                        <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>Fondo Interno</strong> = 1% × sell-in mes (siempre). <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>Fondo MKT Cliente</strong> = tier % según alcance Q acumulado. El plan MKT mensual se descuenta del fondo cliente primero, del interno si no alcanza.
+                      </p>
+                      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', margin: '10px 0 0' }}>
+                        Plan MKT contratado: <strong style={{ color: 'rgba(255,255,255,0.75)', fontWeight: 500, ...monoNum }}>{formatMXN(dicoFondoTablaMensual.planMonto)}/mes</strong>
+                      </p>
                     </div>
-                    <p className={`text-2xl font-bold mt-1 ${dicoFondoTablaMensual.saldoCliActual < 0 ? "text-red-600" : "text-emerald-900"}`}>{formatMXN(dicoFondoTablaMensual.saldoCliActual)}</p>
-                    <p className="text-[10px] text-emerald-700 mt-0.5">Saldo final del año (con generaciones y aplicaciones)</p>
-                  </div>
-                  <div className="bg-purple-50 border border-purple-100 rounded-lg p-3">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-[10px] uppercase tracking-wide text-purple-700 font-semibold">Fondo Interno (Acteck)</span>
-                      <span className="text-[10px] text-purple-600">🔒 interno</span>
+                    <div style={{ display: 'flex', gap: 28, alignItems: 'flex-end' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={eyebrow}>Fondo Cliente</div>
+                        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.024em', color: dicoFondoTablaMensual.saldoCliActual < 0 ? COL_NEG : '#F5F5F7', marginTop: 4, ...monoNum }}>
+                          {formatMXN(dicoFondoTablaMensual.saldoCliActual)}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>visible al cliente</div>
+                      </div>
+                      <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.14)', paddingLeft: 24 }}>
+                        <div style={eyebrow}>Fondo Interno</div>
+                        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.024em', color: dicoFondoTablaMensual.saldoIntActual < 0 ? COL_NEG : '#F5F5F7', marginTop: 4, ...monoNum }}>
+                          {formatMXN(dicoFondoTablaMensual.saldoIntActual)}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>interno · Acteck</div>
+                      </div>
                     </div>
-                    <p className={`text-2xl font-bold mt-1 ${dicoFondoTablaMensual.saldoIntActual < 0 ? "text-red-600" : "text-purple-900"}`}>{formatMXN(dicoFondoTablaMensual.saldoIntActual)}</p>
-                    <p className="text-[10px] text-purple-700 mt-0.5">1% del sell-in mensual SIEMPRE · no visible al cliente</p>
                   </div>
-                </div>
-                <div className="mt-3 text-xs text-gray-500">
-                  💡 Reglas: <strong>Fondo Interno</strong> = 1% × sell-in mes (siempre). <strong>Fondo MKT Cliente</strong> = tier % según alcance Q acumulado (0.75% si Q&lt;90%, 0.75/1.00/1.25% según tier). El plan MKT mensual se descuenta del fondo cliente primero, del interno si no alcanza.
                 </div>
               </div>
 
-              {/* Tabla mensual estilo Excel del cliente */}
-              <div className="bg-white rounded-2xl shadow-sm p-5">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+              {/* Tabla mensual */}
+              <div style={cardBase}>
+                <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <h4 style={sectionH}>Detalle mensual de fondos</h4>
+                      <p style={sectionSub}>Saldos iniciales, generaciones y aplicaciones por mes.</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <span style={pillBase(COL_CLI)}>Cliente</span>
+                      <span style={pillBase(COL_INT)}>Interno</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
                     <thead>
-                      <tr className="border-b-2 border-gray-200 bg-emerald-50">
-                        <th rowSpan={2} className="text-left py-2 px-2 font-semibold text-gray-700 align-bottom">Mes</th>
-                        <th colSpan={4} className="text-center py-1 px-2 font-bold text-emerald-700 border-b border-emerald-200">FONDO MKT CLIENTE</th>
-                        <th colSpan={4} className="text-center py-1 px-2 font-bold text-purple-700 border-b border-purple-200 border-l-2 border-l-gray-300">FONDO INTERNO</th>
-                        <th rowSpan={2} className="text-center py-2 px-2 font-semibold text-gray-700 align-bottom border-l-2 border-l-gray-300">Aplicaciones</th>
+                      <tr>
+                        <th rowSpan={2} style={{ ...thStyle, verticalAlign: 'bottom' }}>Mes</th>
+                        <th colSpan={4} style={{ ...thStyle, textAlign: 'center', color: COL_CLI, borderBottom: `1px solid ${COL_CLI}30` }}>Fondo MKT Cliente</th>
+                        <th colSpan={4} style={{ ...thStyle, textAlign: 'center', color: COL_INT, borderBottom: `1px solid ${COL_INT}30`, borderLeft: `1px solid ${theme.border}` }}>Fondo Interno</th>
+                        <th rowSpan={2} style={{ ...thStyle, textAlign: 'center', verticalAlign: 'bottom', borderLeft: `1px solid ${theme.border}` }}>Aplicaciones</th>
                       </tr>
-                      <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="text-right py-2 px-2 font-semibold text-emerald-700">Saldo inicio</th>
-                        <th className="text-right py-2 px-2 font-semibold text-emerald-700">Generación</th>
-                        <th className="text-right py-2 px-2 font-semibold text-emerald-700">Aplicación</th>
-                        <th className="text-right py-2 px-2 font-semibold text-emerald-700 border-r-2 border-r-gray-300">Saldo final</th>
-                        <th className="text-right py-2 px-2 font-semibold text-purple-700">Saldo inicio</th>
-                        <th className="text-right py-2 px-2 font-semibold text-purple-700">Generación</th>
-                        <th className="text-right py-2 px-2 font-semibold text-purple-700">Aplicación</th>
-                        <th className="text-right py-2 px-2 font-semibold text-purple-700 border-r-2 border-r-gray-300">Saldo final</th>
+                      <tr>
+                        <th style={{ ...thStyle, textAlign: 'right', color: COL_CLI }}>Saldo inicio</th>
+                        <th style={{ ...thStyle, textAlign: 'right', color: COL_CLI }}>Generación</th>
+                        <th style={{ ...thStyle, textAlign: 'right', color: COL_CLI }}>Aplicación</th>
+                        <th style={{ ...thStyle, textAlign: 'right', color: COL_CLI }}>Saldo final</th>
+                        <th style={{ ...thStyle, textAlign: 'right', color: COL_INT, borderLeft: `1px solid ${theme.border}` }}>Saldo inicio</th>
+                        <th style={{ ...thStyle, textAlign: 'right', color: COL_INT }}>Generación</th>
+                        <th style={{ ...thStyle, textAlign: 'right', color: COL_INT }}>Aplicación</th>
+                        <th style={{ ...thStyle, textAlign: 'right', color: COL_INT }}>Saldo final</th>
                       </tr>
                     </thead>
                     <tbody>
                       {dicoFondoTablaMensual.filas.map(f => {
-                        const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-                        const yaPagado = f.aplicaciones.length > 0;
-                        const mesActual = new Date().getMonth() + 1;
                         const esFuturo = f.mes > mesActual;
-                        const fmtSaldo = (n) => {
-                          const s = formatMXN(n);
-                          return n < 0 ? <span className="text-red-600">-{s.replace("$-","$")}</span> : s;
-                        };
+                        const esMesActual = f.mes === mesActual;
+                        const rowOp = esFuturo ? 0.4 : 1;
                         return (
-                          <tr key={f.mes} className={`border-b border-gray-100 ${esFuturo ? "opacity-40" : ""}`}>
-                            <td className="py-2 px-2 font-medium text-gray-800">{MESES_F[f.mes-1]}</td>
+                          <tr key={f.mes}>
+                            <td style={{ ...tdStyle, opacity: rowOp, fontWeight: esMesActual ? 600 : 500 }}>
+                              {MESES_F[f.mes-1]}
+                              {esMesActual && <span style={{ ...pillBase(theme.accent || '#007AFF'), marginLeft: 8, fontSize: 9, padding: '2px 8px' }}>Mes actual</span>}
+                            </td>
                             {/* Fondo MKT Cliente */}
-                            <td className="py-2 px-2 text-right text-gray-500">{fmtSaldo(f.saldoCliInicio)}</td>
-                            <td className="py-2 px-2 text-right text-emerald-700 font-semibold">{f.genCli > 0 ? formatMXN(f.genCli) : "—"}</td>
-                            <td className="py-2 px-2 text-right text-red-600">{f.apliCli > 0 ? "-" + formatMXN(f.apliCli) : "—"}</td>
-                            <td className={`py-2 px-2 text-right font-bold border-r-2 border-r-gray-300 ${f.saldoCliFinal < 0 ? "text-red-600" : "text-gray-800"}`}>{fmtSaldo(f.saldoCliFinal)}</td>
+                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, color: theme.textMuted, ...monoNum }}>{fmtSaldo(f.saldoCliInicio)}</td>
+                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, color: f.genCli > 0 ? COL_CLI : theme.textSubtle || theme.textMuted, fontWeight: 600, ...monoNum }}>{f.genCli > 0 ? formatMXN(f.genCli) : '—'}</td>
+                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, color: f.apliCli > 0 ? COL_NEG : theme.textSubtle || theme.textMuted, ...monoNum }}>{f.apliCli > 0 ? '-' + formatMXN(f.apliCli) : '—'}</td>
+                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, fontWeight: 700, ...monoNum, color: f.saldoCliFinal < 0 ? COL_NEG : theme.text }}>{fmtSaldo(f.saldoCliFinal)}</td>
                             {/* Fondo Interno */}
-                            <td className="py-2 px-2 text-right text-gray-500">{fmtSaldo(f.saldoIntInicio)}</td>
-                            <td className="py-2 px-2 text-right text-purple-700 font-semibold">{f.genInt > 0 ? formatMXN(f.genInt) : "—"}</td>
-                            <td className="py-2 px-2 text-right text-red-600">{f.apliInt > 0 ? "-" + formatMXN(f.apliInt) : "—"}</td>
-                            <td className={`py-2 px-2 text-right font-bold border-r-2 border-r-gray-300 ${f.saldoIntFinal < 0 ? "text-red-600" : "text-gray-800"}`}>{fmtSaldo(f.saldoIntFinal)}</td>
-                            {/* Aplicaciones del mes (vinculadas a pagos manuales) */}
-                            <td className="py-2 px-2 text-center">
+                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, color: theme.textMuted, borderLeft: `1px solid ${theme.border}`, ...monoNum }}>{fmtSaldo(f.saldoIntInicio)}</td>
+                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, color: f.genInt > 0 ? COL_INT : theme.textSubtle || theme.textMuted, fontWeight: 600, ...monoNum }}>{f.genInt > 0 ? formatMXN(f.genInt) : '—'}</td>
+                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, color: f.apliInt > 0 ? COL_NEG : theme.textSubtle || theme.textMuted, ...monoNum }}>{f.apliInt > 0 ? '-' + formatMXN(f.apliInt) : '—'}</td>
+                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, fontWeight: 700, ...monoNum, color: f.saldoIntFinal < 0 ? COL_NEG : theme.text }}>{fmtSaldo(f.saldoIntFinal)}</td>
+                            {/* Aplicaciones */}
+                            <td style={{ ...tdStyle, textAlign: 'center', borderLeft: `1px solid ${theme.border}` }}>
                               {esFuturo ? (
-                                <span className="text-[10px] text-gray-300">Futuro</span>
+                                <span style={{ fontSize: 10, color: theme.textSubtle || theme.textMuted }}>Futuro</span>
                               ) : f.aplicaciones.length > 0 ? (
-                                <div className="flex flex-col items-center gap-0.5">
-                                  {f.aplicaciones.map(a => (
-                                    <div key={a.id} className="flex items-center gap-1">
-                                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${a.tipo_fondo === "interno" ? "bg-purple-100 text-purple-700" : "bg-emerald-100 text-emerald-700"}`}>
-                                        {a.tipo_fondo === "interno" ? "Int" : "Cli"}: {formatMXN(Number(a.monto))}
-                                      </span>
-                                      <button onClick={() => revertirMovimientoFondo(a.id)}
-                                              className="text-[10px] text-red-500 hover:text-red-700"
-                                              title="Revertir aplicación (no borra el pago, solo el movimiento del fondo)">🗑</button>
-                                    </div>
-                                  ))}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                  {f.aplicaciones.map(a => {
+                                    const c = a.tipo_fondo === 'interno' ? COL_INT : COL_CLI;
+                                    return (
+                                      <div key={a.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                        <span style={{ ...pillBase(c), fontSize: 10, padding: '3px 9px', ...monoNum }}>
+                                          {a.tipo_fondo === 'interno' ? 'Int' : 'Cli'}: {formatMXN(Number(a.monto))}
+                                        </span>
+                                        <button onClick={() => revertirMovimientoFondo(a.id)}
+                                                title="Revertir aplicación (no borra el pago, solo el movimiento del fondo)"
+                                                style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 12, padding: '2px 4px' }}>🗑</button>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               ) : (
-                                <span className="text-[10px] text-gray-300">—</span>
+                                <span style={{ fontSize: 10, color: theme.textSubtle || theme.textMuted }}>—</span>
                               )}
                             </td>
                           </tr>
@@ -3716,131 +3757,197 @@ export default function PagosCliente({ cliente, clienteKey }) {
                     </tbody>
                   </table>
                 </div>
-                <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500 space-y-1">
-                  <p>💡 <strong>Esta tabla solo muestra los saldos.</strong> Para registrar un pago que descuente de los fondos, ve a <strong>"+ Nuevo registro"</strong> arriba y usa el selector <em>"¿De qué fondo sale el pago?"</em> al final del formulario. Ahí puedes:</p>
-                  <ul className="list-disc list-inside pl-2 space-y-0.5">
-                    <li><span className="text-emerald-700 font-semibold">Auto split</span> — toma del fondo cliente primero, completa con interno</li>
-                    <li><span className="text-emerald-600 font-semibold">Todo del cliente</span> / <span className="text-purple-600 font-semibold">Todo del interno</span> — atajos</li>
-                    <li>O escribir un monto específico en cada fondo (split a tu medida)</li>
+                <div style={{ padding: '12px 22px', borderTop: `1px solid ${theme.border}`, fontSize: 11, color: theme.textMuted, background: theme.bg, lineHeight: 1.55 }}>
+                  <div style={{ marginBottom: 4 }}>
+                    <strong style={{ color: theme.text, fontWeight: 600 }}>Esta tabla solo muestra los saldos.</strong> Para registrar un pago que descuente de los fondos, usa <strong style={{ color: theme.text, fontWeight: 600 }}>“+ Nuevo registro”</strong> arriba y el selector <em>“¿De qué fondo sale el pago?”</em> al final del formulario:
+                  </div>
+                  <ul style={{ margin: '4px 0 6px 18px', padding: 0 }}>
+                    <li><span style={{ color: COL_CLI, fontWeight: 600 }}>Auto split</span> — toma del fondo cliente primero, completa con interno.</li>
+                    <li><span style={{ color: COL_CLI, fontWeight: 600 }}>Todo del cliente</span> / <span style={{ color: COL_INT, fontWeight: 600 }}>Todo del interno</span> — atajos.</li>
+                    <li>O escribir un monto específico en cada fondo (split a tu medida).</li>
                   </ul>
-                  <p>Los movimientos quedan vinculados al pago vía <code className="bg-gray-100 px-1 rounded">pago_id</code> — si borras el pago, las aplicaciones se reverten automáticamente.</p>
+                  <div>Los movimientos quedan vinculados al pago vía <code style={{ background: theme.border, padding: '1px 6px', borderRadius: 4, fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontSize: 10.5 }}>pago_id</code> — si borras el pago, las aplicaciones se revierten automáticamente.</div>
                 </div>
               </div>
             </div>
-          )}
+          );
+          })()}
 
-          {/* ═══ Rebate Trimestral Dicotech (Fondo para Generación Sell Out) ═══ */}
-          {clienteKey === "dicotech" && catActiva === "rebate" && dicoRebateCalc && (
-            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">🎁</span>
-                    <h3 className="text-lg font-bold text-gray-800">Rebate Dicotech {new Date().getFullYear()}</h3>
+          {/* ═══ Rebate Trimestral Dicotech · rediseño Ferruteck ═══ */}
+          {clienteKey === "dicotech" && catActiva === "rebate" && dicoRebateCalc && (() => {
+            const anio = new Date().getFullYear();
+            const cardBase = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' };
+            const heroBlack = { background: '#000', color: '#F5F5F7', padding: '20px 24px' };
+            const eyebrow = { fontFamily: TYPO.fontText, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' };
+            const title = { fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.022em', fontSize: 22, margin: 0, color: '#F5F5F7' };
+            const subCard = { padding: '18px 22px' };
+            const sectionH = { fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 };
+            const sectionSub = { fontSize: 11, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText };
+            const thStyle = { fontFamily: TYPO.fontText, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, textAlign: 'left' };
+            const tdStyle = { fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, padding: '10px 12px', borderBottom: `1px solid ${theme.border}` };
+            const monoNum = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
+            const pillBase = (accent) => ({
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '5px 11px', borderRadius: 999, fontFamily: TYPO.fontText,
+              fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.005em',
+              background: `${accent}15`, color: accent, border: `1px solid ${accent}30`,
+            });
+            const btnPrimary = {
+              background: '#000', color: '#fff', border: 0, borderRadius: 999,
+              padding: '7px 14px', fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
+              cursor: 'pointer', letterSpacing: '-0.005em',
+            };
+            const btnGhost = {
+              background: 'transparent', color: theme.textMuted, border: `1px solid ${theme.border}`,
+              borderRadius: 999, padding: '7px 14px', fontFamily: TYPO.fontText,
+              fontSize: 11, fontWeight: 500, cursor: 'pointer', letterSpacing: '-0.005em',
+            };
+            const btnWarn = {
+              background: '#FF9500', color: '#fff', border: 0, borderRadius: 999,
+              padding: '7px 14px', fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
+              cursor: 'pointer', letterSpacing: '-0.005em',
+            };
+            const COL_REBATE = '#FF3B30';
+            const nombreOficial = lineamientos?.rebate?.nombre_oficial || "Fondo para Generación Sell Out";
+            const primerTierPct = ((lineamientos?.rebate?.tiers?.[0]?.pct || 0.02) * 100).toFixed(2);
+            const alcanceMinPago = ((lineamientos?.rebate?.alcance_minimo_pago || 0.90) * 100).toFixed(0);
+            return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, fontFamily: TYPO.fontText }}>
+
+              {/* Hero card negro */}
+              <div style={cardBase}>
+                <div style={heroBlack}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 280 }}>
+                      <div style={eyebrow}>Rebate · Dicotech {anio}</div>
+                      <h3 style={{ ...title, marginTop: 6 }}>Rebate trimestral por alcance.</h3>
+                      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: '10px 0 0', maxWidth: 560, lineHeight: 1.5 }}>
+                        {nombreOficial} · trimestral · <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{primerTierPct}%</strong> sobre Sell-In del Q si alcance ≥ <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{alcanceMinPago}%</strong>.
+                      </p>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={eyebrow}>Acumulado YTD</div>
+                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.024em', color: '#F5F5F7', marginTop: 4, ...monoNum }}>
+                        {formatMXN(dicoRebateTotalYTD)}
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {lineamientos?.rebate?.nombre_oficial || "Fondo para Generación Sell Out"} · Trimestral · {((lineamientos?.rebate?.tiers?.[0]?.pct || 0.02)*100).toFixed(2)}% sobre Sell-In del Q si alcance ≥ {((lineamientos?.rebate?.alcance_minimo_pago || 0.90)*100).toFixed(0)}%
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] text-gray-400 uppercase">Acumulado YTD</p>
-                  <p className="text-2xl font-bold text-red-600">{formatMXN(dicoRebateTotalYTD)}</p>
                 </div>
               </div>
 
               {/* Tiers info */}
-              <div className="flex flex-wrap gap-2 mb-4 text-xs">
-                {(lineamientos?.rebate?.tiers || []).slice().sort((a,b) => Number(b.min_alcance) - Number(a.min_alcance)).map((t, i) => (
-                  <span key={i} className="px-3 py-1 rounded-full bg-red-50 border border-red-100 text-red-700">
-                    <strong>{t.label}</strong> · {(Number(t.pct)*100).toFixed(2)}%
+              <div style={cardBase}>
+                <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <h4 style={sectionH}>Tiers vigentes</h4>
+                      <p style={sectionSub}>Umbral de alcance sobre cuota Q para aplicar el % de rebate.</p>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ padding: '14px 22px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {(lineamientos?.rebate?.tiers || []).slice().sort((a,b) => Number(b.min_alcance) - Number(a.min_alcance)).map((t, i) => (
+                    <span key={i} style={pillBase(COL_REBATE)}>
+                      <strong style={{ fontWeight: 700 }}>{t.label}</strong>
+                      <span style={{ opacity: 0.65 }}>·</span>
+                      <span style={monoNum}>{(Number(t.pct) * 100).toFixed(2)}%</span>
+                    </span>
+                  ))}
+                  <span style={pillBase(theme.textMuted)}>
+                    &lt; {alcanceMinPago}% → sin rebate auto
                   </span>
-                ))}
-                <span className="px-3 py-1 rounded-full bg-gray-50 border border-gray-200 text-gray-400">
-                  &lt; 90% → Sin rebate auto
-                </span>
+                </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 bg-gray-50">
-                      <th className="text-left py-2 px-3 font-semibold text-gray-600">Trimestre</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Cuota Q</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell-In Q</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Alcance</th>
-                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Tier</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Rebate</th>
-                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dicoRebateCalc.map(q => {
-                      const p = q.pagoExistente;
-                      const isNoAplica = p && p.estatus === "cancelado";
-                      const isGenerado = p && p.estatus !== "cancelado";
-                      const alcancePct = (q.alcance * 100).toFixed(0);
-                      let alcanceColor = "#94a3b8";
-                      if (q.alcance >= 1.30) alcanceColor = "#10b981";
-                      else if (q.alcance >= 1.15) alcanceColor = "#3b82f6";
-                      else if (q.alcance >= 0.90) alcanceColor = "#dc2626";
-                      else if (q.sellInQ > 0) alcanceColor = "#ef4444";
-                      return (
-                        <tr key={q.q} className={`border-b border-gray-100 ${isNoAplica ? "opacity-50" : ""}`}>
-                          <td className="py-2 px-3 font-medium text-gray-800">{q.label}</td>
-                          <td className="py-2 px-3 text-right text-gray-500 text-xs">{formatMXN(q.cuotaQ)}</td>
-                          <td className="py-2 px-3 text-right text-gray-700 font-medium">{q.sellInQ > 0 ? formatMXN(q.sellInQ) : "—"}</td>
-                          <td className="py-2 px-3 text-right font-bold" style={{ color: alcanceColor }}>{q.sellInQ > 0 ? alcancePct + "%" : "—"}</td>
-                          <td className="py-2 px-3 text-center text-xs">
-                            {q.tier ? <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 font-semibold">{q.tier.label}</span> : <span className="text-gray-300">—</span>}
-                          </td>
-                          <td className="py-2 px-3 text-right font-bold text-red-700">
-                            {isNoAplica ? <span className="text-gray-400">—</span> : q.rebateAuto > 0 ? formatMXN(q.rebateAuto) : <span className="text-gray-300">—</span>}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            {isNoAplica ? (
-                              <button onClick={() => revertirSpiff(p.id)}
-                                      className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1">↺ Revertir</button>
-                            ) : isGenerado ? (
-                              <div className="flex items-center gap-1 justify-center">
-                                <span className={`text-xs px-2 py-1 rounded ${p.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
-                                  {p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}
+              {/* Tabla trimestral */}
+              <div style={cardBase}>
+                <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <h4 style={sectionH}>Rebate por trimestre</h4>
+                      <p style={sectionSub}>Alcance, tier y generación de pago por Q.</p>
+                    </div>
+                    <span style={pillBase(COL_REBATE)}>Trimestral</span>
+                  </div>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Trimestre</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Cuota Q</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Sell-In Q</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Alcance</th>
+                        <th style={{ ...thStyle, textAlign: 'center' }}>Tier</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Rebate</th>
+                        <th style={{ ...thStyle, textAlign: 'right', paddingRight: 22 }}>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dicoRebateCalc.map(q => {
+                        const p = q.pagoExistente;
+                        const isNoAplica = p && p.estatus === "cancelado";
+                        const isGenerado = p && p.estatus !== "cancelado";
+                        const alcancePct = (q.alcance * 100).toFixed(0);
+                        let alcanceColor = theme.textMuted;
+                        if (q.alcance >= 1.30) alcanceColor = '#34C759';
+                        else if (q.alcance >= 1.15) alcanceColor = theme.accent || '#007AFF';
+                        else if (q.alcance >= 0.90) alcanceColor = COL_REBATE;
+                        else if (q.sellInQ > 0) alcanceColor = '#FF9500';
+                        return (
+                          <tr key={q.q} style={{ opacity: isNoAplica ? 0.5 : 1 }}>
+                            <td style={{ ...tdStyle, fontWeight: 600 }}>{q.label}</td>
+                            <td style={{ ...tdStyle, textAlign: 'right', color: theme.textMuted, ...monoNum }}>{formatMXN(q.cuotaQ)}</td>
+                            <td style={{ ...tdStyle, textAlign: 'right', ...monoNum, fontWeight: 500 }}>
+                              {q.sellInQ > 0 ? formatMXN(q.sellInQ) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: alcanceColor, ...monoNum }}>
+                              {q.sellInQ > 0 ? alcancePct + "%" : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'center' }}>
+                              {q.tier ? <span style={pillBase(COL_REBATE)}>{q.tier.label}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: isNoAplica ? theme.textMuted : (q.rebateAuto > 0 ? COL_REBATE : theme.text), ...monoNum }}>
+                              {isNoAplica ? <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span> : q.rebateAuto > 0 ? formatMXN(q.rebateAuto) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'right', paddingRight: 22 }}>
+                              {isNoAplica ? (
+                                <button onClick={() => revertirSpiff(p.id)} style={btnGhost}>↺ Revertir</button>
+                              ) : isGenerado ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={pillBase(p.estatus === "pagado" ? '#34C759' : '#FF9500')}>
+                                    {p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}
+                                  </span>
+                                  <button onClick={() => revertirSpiff(p.id)} title="Eliminar pago"
+                                          style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 13, padding: '4px 6px' }}>🗑</button>
                                 </span>
-                                <button onClick={() => revertirSpiff(p.id)}
-                                        className="text-xs text-red-500 hover:text-red-700"
-                                        title="Eliminar pago">🗑</button>
-                              </div>
-                            ) : q.cumple && q.rebateAuto > 0 ? (
-                              <div className="flex gap-1 justify-center flex-wrap">
-                                <button onClick={() => generarRebateDicotech(q, false)}
-                                        className="text-xs bg-red-600 text-white rounded px-2 py-1 hover:bg-red-700">
-                                  Generar
-                                </button>
-                                <button onClick={() => marcarRebateDicotechNoAplica(q)}
-                                        className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
-                              </div>
-                            ) : q.sellInQ > 0 ? (
-                              <div className="flex gap-1 justify-center flex-wrap">
-                                <button onClick={() => generarRebateDicotech(q, true)}
-                                        className="text-xs bg-amber-500 text-white rounded px-2 py-1 hover:bg-amber-600"
-                                        title="Pagar aunque no llegue a 90%">
-                                  💸 Pagar manual
-                                </button>
-                                <button onClick={() => marcarRebateDicotechNoAplica(q)}
-                                        className="text-xs bg-gray-100 text-gray-500 rounded px-2 py-1 hover:bg-gray-200">No aplica</button>
-                              </div>
-                            ) : <span className="text-xs text-gray-300">Sin datos</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                💡 <strong>Fecha de pago automática:</strong> día 15 del mes posterior al cierre del Q (ej. Q1 → 15 Abril) · El rebate es 2% para todos los tiers ≥ 90% — los tiers se conservan para mostrar el alcance real del Q.
+                              ) : q.cumple && q.rebateAuto > 0 ? (
+                                <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                                  <button onClick={() => generarRebateDicotech(q, false)} style={btnPrimary}>Generar</button>
+                                  <button onClick={() => marcarRebateDicotechNoAplica(q)} style={btnGhost}>No aplica</button>
+                                </span>
+                              ) : q.sellInQ > 0 ? (
+                                <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                                  <button onClick={() => generarRebateDicotech(q, true)} title="Pagar aunque no llegue a 90%" style={btnWarn}>Pagar manual</button>
+                                  <button onClick={() => marcarRebateDicotechNoAplica(q)} style={btnGhost}>No aplica</button>
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted }}>Sin datos</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ padding: '12px 22px', borderTop: `1px solid ${theme.border}`, fontSize: 11, color: theme.textMuted, background: theme.bg, lineHeight: 1.55 }}>
+                  <strong style={{ color: theme.text, fontWeight: 600 }}>Fecha de pago automática:</strong> día 15 del mes posterior al cierre del Q (ej. Q1 → 15 Abril) · El rebate es {primerTierPct}% para todos los tiers ≥ {alcanceMinPago}% — los tiers se conservan para mostrar el alcance real del Q.
+                </div>
               </div>
             </div>
-          )}
+          );
+          })()}
 
           {/* {/* ═══ Calculadora REBATE Trimestral PCEL ═══ */}
           {clienteKey === "pcel" && catActiva === "rebate" && pcelCalc && (
