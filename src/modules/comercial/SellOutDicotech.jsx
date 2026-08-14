@@ -99,26 +99,38 @@ const fmt = {
 //   en vez de renderizar data parcial. Por compat aquí devolvemos [] y
 //   log a consola para no romper el flujo.
 async function fetchAll(table, select, applyFilter = (q) => q) {
-  const PAGE = 1000;
+  // sellout_general devuelve HTTP 500 intermitente con ilike+range+order
+  // (índice no cubre bien el filtro). Usamos chunks de 500 para tablas de
+  // transacciones y de 1000 para el resto. También subimos retries a 6
+  // porque en producción se observaron rachas de 3 500s consecutivos.
+  const HEAVY_TABLES = new Set(['sellout_general', 'sellout_detalle', 'facturacion_clientes']);
+  const PAGE = HEAVY_TABLES.has(table) ? 500 : 1000;
+  const MAX_RETRIES = 6;
+  const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
+
   const acc = [];
   const firstCol = (select || 'id').split(',')[0].trim();
-  // Preferimos 'id' si viene en el select, si no ordenamos por el primer campo
-  // (siempre que sea razonablemente único; para vistas agregadas suele bastar).
   const orderCol = /(^|,)\s*id\s*(,|$)/i.test(select) ? 'id' : firstCol;
   let from = 0;
   while (true) {
     let lastErr = null; let data = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       let q = supabase.from(table).select(select).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
       q = applyFilter(q);
       const res = await q;
       if (!res.error) { data = res.data || []; break; }
       lastErr = res.error;
-      await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt))); // 500, 1000, 2000
+      if (attempt < MAX_RETRIES - 1) {
+        console.warn(`[fetchAll] ${table} chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
+        await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
+      }
     }
     if (data == null) {
-      console.warn(`[fetchAll] ${table} chunk from=${from} falló tras 3 intentos:`, lastErr);
-      return acc; // devuelve lo que llevamos; UI ve data parcial pero no crash
+      // Falló definitivamente. Lanzamos throw para que el useEffect muestre
+      // error visible en vez de renderizar data parcial (que es exactamente
+      // lo que causaba discrepancias entre usuarios).
+      console.error(`[fetchAll] ${table} chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
+      throw new Error(`No se pudo cargar ${table} completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
     }
     if (data.length === 0) break;
     acc.push(...data);
@@ -159,30 +171,41 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
   const [familiaFilter, setFamiliaFilter] = useState(null);
   const [sucursalDrill, setSucursalDrill] = useState(null); // sucursal expandida en el ranking
   const [skuDrill, setSkuDrill] = useState(null); // { sku, descripcion, ... } → abre modal
+  const [fetchError, setFetchError] = useState(null);
 
   useEffect(() => {
     setLoading(true);
+    setFetchError(null);
     (async () => {
-      const [mes, skuMes, sucMes, invSuc, general] = await Promise.all([
-        fetchAll('v_sellout_dicotech_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
-        fetchAll('v_sellout_dicotech_sku_mes', 'sku,anio,mes,piezas,monto',
-          (q) => q.in('anio', [anioPrev, anio])),
-        fetchAll('v_sellout_dicotech_sucursal_mes', 'sucursal,anio,mes,piezas,monto,tx,clientes_distintos',
-          (q) => q.eq('anio', anio)),
-        fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
-          (q) => q.eq('cliente', clienteKey)),
-        // FIX audit #3: ilike en vez de eq strict. La columna 'mayorista' puede
-        // guardar 'DICOTECH', 'Dicotech', 'dicotech', 'DICO'… El eq('DICOTECH')
-        // dejaba la vista vacía si el schema no matcheaba mayúsculas exactas.
-        fetchAll('sellout_general', 'anio,mes,sku,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe',
-          (q) => q.ilike('mayorista', '%dicotech%').in('anio', [anioPrev, anio])),
-      ]);
-      setMensual(mes);
-      setSkuMesRaw(skuMes);
-      setSucursalMes(sucMes);
-      setInventarioSucursal(invSuc);
-      setSelloutGeneral(general);
-      setLoading(false);
+      try {
+        const [mes, skuMes, sucMes, invSuc, general] = await Promise.all([
+          fetchAll('v_sellout_dicotech_mensual', 'anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas'),
+          fetchAll('v_sellout_dicotech_sku_mes', 'sku,anio,mes,piezas,monto',
+            (q) => q.in('anio', [anioPrev, anio])),
+          fetchAll('v_sellout_dicotech_sucursal_mes', 'sucursal,anio,mes,piezas,monto,tx,clientes_distintos',
+            (q) => q.eq('anio', anio)),
+          fetchAll('inventario_cliente_sucursal', 'sku,sucursal,stock,valor,costo_convenio,anio,semana',
+            (q) => q.eq('cliente', clienteKey)),
+          // FIX audit #3: ilike en vez de eq strict. La columna 'mayorista' puede
+          // guardar 'DICOTECH', 'Dicotech', 'dicotech', 'DICO'… El eq('DICOTECH')
+          // dejaba la vista vacía si el schema no matcheaba mayúsculas exactas.
+          fetchAll('sellout_general', 'anio,mes,sku,cliente_nombre,vendedor_nombre,sucursal,cantidad,precio_unitario,importe',
+            (q) => q.ilike('mayorista', '%dicotech%').in('anio', [anioPrev, anio])),
+        ]);
+        setMensual(mes);
+        setSkuMesRaw(skuMes);
+        setSucursalMes(sucMes);
+        setInventarioSucursal(invSuc);
+        setSelloutGeneral(general);
+        setLoading(false);
+      } catch (err) {
+        // fetchAll ahora throwea si algún chunk queda sin data tras retries.
+        // Mostramos un mensaje claro en vez de renderizar con data parcial
+        // (que causaba las discrepancias entre usuarios).
+        console.error('[SellOutDicotech] Error cargando datos:', err);
+        setFetchError(err.message || String(err));
+        setLoading(false);
+      }
     })();
   }, [clienteKey, anio, anioPrev]);
 
@@ -709,6 +732,24 @@ export default function SellOutDicotech({ clienteKey = 'dicotech' }) {
 
   if (loading) {
     return <FerrutekLoader label="Cargando Sell Out…" sub={`Trayendo sell out de ${clienteKey}`} minHeight={480} />;
+  }
+  if (fetchError) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center', color: theme.text, fontFamily: TYPO.fontText }}>
+        <div style={{ maxWidth: 520, margin: '0 auto', background: `${P.red}0A`, border: `1px solid ${P.red}66`, borderRadius: 14, padding: 24 }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>⚠️</div>
+          <h3 style={{ margin: 0, fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, color: P.red }}>No se pudo cargar Sell Out completo</h3>
+          <p style={{ fontSize: 12, color: theme.textMuted, margin: '8px 0 16px', lineHeight: 1.5 }}>
+            Supabase devolvió error en algún chunk tras 6 reintentos. Los números que se mostrarían serían incompletos, así que preferimos avisar en vez de mentir con data parcial.
+          </p>
+          <p style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textSubtle || theme.textMuted, background: theme.surface, padding: '8px 12px', borderRadius: 8, textAlign: 'left', overflow: 'auto' }}>{fetchError}</p>
+          <button onClick={() => window.location.reload()}
+            style={{ marginTop: 14, padding: '9px 18px', borderRadius: 999, border: 0, background: P.accent, color: '#fff', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
