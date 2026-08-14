@@ -220,6 +220,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [dicoSellIn, setDicoSellIn] = useState({});      // Dicotech: sell-in mensual $
   const [dicoVendedoresPorMes, setDicoVendedoresPorMes] = useState({}); // { "2026-08": [{nombre, monto}, ...] } ordenado desc
   const [spiffPagos, setSpiffPagos] = useState({});  // Digitalife: { "2026-01": pagoRow } | Dicotech: { "2026-01-SI": ..., "2026-01-SO": ... }
+  const [spiffPctUnlocked, setSpiffPctUnlocked] = useState(false); // Candado del % compradora — evita edits accidentales.
+  const spiffPctInputRef = React.useRef(null);
   const [spiffLoading, setSpiffLoading] = useState(false);
 
   useEffect(() => {
@@ -3366,24 +3368,55 @@ export default function PagosCliente({ cliente, clienteKey }) {
                     </div>
                     <div style={{ display: 'flex', gap: 28, alignItems: 'flex-end' }}>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={eyebrow}>% Compradora</div>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, justifyContent: 'flex-end', marginTop: 6 }}>
-                          <input type="number" step="0.001" min="0" max="10"
-                            defaultValue={(spiffDicoCompradoraPct * 100).toFixed(3)}
-                            onBlur={(e) => {
-                              const pct = Number(e.target.value) / 100;
-                              if (pct !== spiffDicoCompradoraPct && pct >= 0 && pct <= 0.1) {
-                                guardarSpiffDicoConfig({ compradora_pct: pct });
+                        <div style={eyebrow}>% Compradora {spiffPctUnlocked && <span style={{ color: '#FF9F0A', marginLeft: 4 }}>· editando</span>}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
+                          <button
+                            onClick={() => {
+                              if (spiffPctUnlocked) {
+                                setSpiffPctUnlocked(false);
+                              } else {
+                                if (!confirm('¿Desbloquear edición del % Compradora?\n\nEste valor afecta todos los cálculos de comisión SPIFF.')) return;
+                                setSpiffPctUnlocked(true);
+                                setTimeout(() => spiffPctInputRef.current?.focus(), 50);
                               }
                             }}
+                            title={spiffPctUnlocked ? 'Bloquear · click para prevenir cambios' : 'Desbloquear · click para editar'}
                             style={{
-                              width: 78, textAlign: 'right', background: 'rgba(255,255,255,0.08)',
-                              border: '1px solid rgba(255,255,255,0.14)', borderRadius: 10,
-                              color: '#F5F5F7', padding: '6px 10px',
-                              fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600,
-                              letterSpacing: '-0.02em', outline: 'none', ...monoNum,
-                            }} />
-                          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, color: '#F5F5F7' }}>%</span>
+                              background: spiffPctUnlocked ? 'rgba(255,159,10,0.16)' : 'rgba(255,255,255,0.06)',
+                              border: `1px solid ${spiffPctUnlocked ? 'rgba(255,159,10,0.4)' : 'rgba(255,255,255,0.14)'}`,
+                              color: spiffPctUnlocked ? '#FF9F0A' : 'rgba(255,255,255,0.7)',
+                              borderRadius: 10, width: 34, height: 34,
+                              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 15, padding: 0, transition: 'all 160ms',
+                            }}>
+                            {spiffPctUnlocked ? '🔓' : '🔒'}
+                          </button>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                            <input ref={spiffPctInputRef} type="number" step="0.001" min="0" max="10"
+                              key={spiffDicoCompradoraPct}
+                              defaultValue={(spiffDicoCompradoraPct * 100).toFixed(3)}
+                              readOnly={!spiffPctUnlocked}
+                              onBlur={(e) => {
+                                if (!spiffPctUnlocked) return;
+                                const pct = Number(e.target.value) / 100;
+                                if (pct !== spiffDicoCompradoraPct && pct >= 0 && pct <= 0.1) {
+                                  guardarSpiffDicoConfig({ compradora_pct: pct });
+                                }
+                                setSpiffPctUnlocked(false);
+                              }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setSpiffPctUnlocked(false); e.currentTarget.blur(); } }}
+                              style={{
+                                width: 108, textAlign: 'right',
+                                background: spiffPctUnlocked ? 'rgba(255,159,10,0.10)' : 'rgba(255,255,255,0.06)',
+                                border: `1px solid ${spiffPctUnlocked ? 'rgba(255,159,10,0.5)' : 'rgba(255,255,255,0.12)'}`,
+                                borderRadius: 10, color: '#F5F5F7', padding: '8px 12px',
+                                fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600,
+                                letterSpacing: '-0.02em', outline: 'none',
+                                opacity: spiffPctUnlocked ? 1 : 0.85, cursor: spiffPctUnlocked ? 'text' : 'not-allowed',
+                                transition: 'all 160ms', ...monoNum,
+                              }} />
+                            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, color: '#F5F5F7' }}>%</span>
+                          </div>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.14)', paddingLeft: 24 }}>
