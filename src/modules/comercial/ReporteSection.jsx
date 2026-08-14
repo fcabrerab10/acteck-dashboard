@@ -74,27 +74,38 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
   // Helper: pagina sobre Supabase (que limita a 1000 filas por defecto).
   // inventario_acteck tiene 10k+ filas, así que necesitamos traerlo en chunks.
   async function fetchAllRows(tableName, selectCols, filters = (q) => q) {
-    const PAGE = 1000;
-    const out = [];
+    const HEAVY_TABLES = new Set(['sellout_general', 'sellout_detalle', 'facturacion_clientes']);
+    const PAGE = HEAVY_TABLES.has(tableName) ? 500 : 1000;
+    const MAX_RETRIES = 6;
+    const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
+
+    const acc = [];
     const firstCol = (selectCols || 'id').split(',')[0].trim();
     const orderCol = /(^|,)\s*id\s*(,|$)/i.test(selectCols) ? 'id' : firstCol;
     let from = 0;
     while (true) {
       let lastErr = null; let data = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const q = filters(supabase.from(tableName).select(selectCols).order(orderCol, { ascending: true })).range(from, from + PAGE - 1);
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        let q = supabase.from(tableName).select(selectCols).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
+        q = filters(q);
         const res = await q;
         if (!res.error) { data = res.data || []; break; }
         lastErr = res.error;
-        await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+        if (attempt < MAX_RETRIES - 1) {
+          console.warn(`[fetchAllRows] ${tableName} chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
+          await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
+        }
       }
-      if (data == null) { console.error(`fetchAllRows ${tableName} from=${from} falló tras 3 intentos:`, lastErr); return out; }
+      if (data == null) {
+        console.error(`[fetchAllRows] ${tableName} chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
+        throw new Error(`No se pudo cargar ${tableName} completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
+      }
       if (data.length === 0) break;
-      out.push(...data);
+      acc.push(...data);
       if (data.length < PAGE) break;
       from += PAGE;
     }
-    return out;
+    return acc;
   }
 
   async function cargar() {

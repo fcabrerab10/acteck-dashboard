@@ -313,28 +313,32 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
 
   // ─── PAGINATED FETCH (PostgREST max 1000 rows per request) ──────────────────
   // Factory pattern: each page creates a fresh query (supabase-js builders are single-use)
-  async function fetchAllPages(queryFactory) {
-    const PAGE = 1000;
-    const all = [];
+  async function fetchAllPages(queryFactory, pageSize = 1000) {
+    const MAX_RETRIES = 6;
+    const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
+    const acc = [];
     let from = 0;
     while (true) {
       let lastErr = null; let data = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await queryFactory().range(from, from + PAGE - 1);
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        const res = await queryFactory().range(from, from + pageSize - 1);
         if (!res.error) { data = res.data || []; break; }
         lastErr = res.error;
-        await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+        if (attempt < MAX_RETRIES - 1) {
+          console.warn(`[fetchAllPages] chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
+          await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
+        }
       }
       if (data == null) {
-        console.warn(`[fetchAllPages] chunk from=${from} falló tras 3 intentos:`, lastErr);
-        return all;
+        console.error(`[fetchAllPages] chunk from=${from} falló tras ${MAX_RETRIES} intentos.`);
+        throw new Error(`Paginación falló en chunk ${from}. Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
       }
       if (data.length === 0) break;
-      all.push(...data);
-      if (data.length < PAGE) break;
-      from += PAGE;
+      acc.push(...data);
+      if (data.length < pageSize) break;
+      from += pageSize;
     }
-    return all;
+    return acc;
   }
 
   // ─── FETCH ALL DATA ─────────────────────────────────────────────────────────

@@ -2605,23 +2605,31 @@ function KpiFit({ theme, P, icon, iconBg, iconColor, chip, value, valueColor, no
 // ════════════════════════════════════════════════════════════════════
 // Paginador genérico (Supabase corta en 1000 filas por defecto).
 async function fetchAllPagesLocal(qFactory, pageSize = 1000) {
-  const out = [];
+  const MAX_RETRIES = 6;
+  const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
+  const acc = [];
   let from = 0;
-  for (;;) {
+  while (true) {
     let lastErr = null; let data = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       const res = await qFactory().range(from, from + pageSize - 1);
       if (!res.error) { data = res.data || []; break; }
       lastErr = res.error;
-      await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+      if (attempt < MAX_RETRIES - 1) {
+        console.warn(`[fetchAllPagesLocal] chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
+        await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
+      }
     }
-    if (data == null) throw lastErr;
+    if (data == null) {
+      console.error(`[fetchAllPagesLocal] chunk from=${from} falló tras ${MAX_RETRIES} intentos.`);
+      throw new Error(`Paginación falló en chunk ${from}. Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
+    }
     if (data.length === 0) break;
-    out.push(...data);
+    acc.push(...data);
     if (data.length < pageSize) break;
     from += pageSize;
   }
-  return out;
+  return acc;
 }
 
 async function fetchAll(clienteKey) {

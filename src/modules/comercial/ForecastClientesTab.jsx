@@ -86,20 +86,26 @@ function useForecastData() {
 
   // Helper paginador (PostgREST corta a 1000)
   async function fetchAll(qFactory, pageSize = 1000) {
+    // v2: 6 retries backoff hasta 16s + throw en vez de partial.
+    const MAX_RETRIES = 6;
+    const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
     const all = [];
     let from = 0;
     // eslint-disable-next-line no-constant-condition
     while (true) {
       let lastErr = null; let data = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         const res = await qFactory().range(from, from + pageSize - 1);
         if (!res.error) { data = res.data || []; break; }
         lastErr = res.error;
-        await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+        if (attempt < MAX_RETRIES - 1) {
+          console.warn(`[fetchAll] chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
+          await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
+        }
       }
       if (data == null) {
-        console.warn(`[fetchAll] chunk from=${from} falló tras 3 intentos:`, lastErr);
-        return all;
+        console.error(`[fetchAll] chunk from=${from} falló tras ${MAX_RETRIES} intentos.`);
+        throw new Error(`Paginación falló en chunk ${from}. Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
       }
       if (data.length === 0) break;
       all.push(...data);

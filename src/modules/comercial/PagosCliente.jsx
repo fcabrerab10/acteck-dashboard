@@ -229,20 +229,26 @@ export default function PagosCliente({ cliente, clienteKey }) {
       const anio = new Date().getFullYear();
       // Paginación para sellout_sku
       const fetchAll = async (qs) => {
+        // v2: 6 retries backoff hasta 16s + throw. sellout_sku no es HEAVY, PAGE=1000.
         const all = []; let from = 0; const PAGE = 1000;
+        const MAX_RETRIES = 6;
+        const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
         const firstCol = (qs || 'id').split(',')[0].trim();
         const orderCol = /(^|,)\s*id\s*(,|$)/i.test(qs) ? 'id' : firstCol;
         while (true) {
           let lastErr = null; let data = null;
-          for (let attempt = 0; attempt < 3; attempt++) {
+          for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
             const res = await supabase.from("sellout_sku").select(qs).eq("cliente", clienteKey).eq("anio", anio).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
             if (!res.error) { data = res.data || []; break; }
             lastErr = res.error;
-            await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+            if (attempt < MAX_RETRIES - 1) {
+              console.warn(`[fetchAll] sellout_sku chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
+              await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
+            }
           }
           if (data == null) {
-            console.warn(`[fetchAll] sellout_sku chunk from=${from} falló tras 3 intentos:`, lastErr);
-            return all;
+            console.error(`[fetchAll] sellout_sku chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
+            throw new Error(`No se pudo cargar sellout_sku completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
           }
           if (data.length === 0) break;
           all.push(...data);
@@ -259,10 +265,13 @@ export default function PagosCliente({ cliente, clienteKey }) {
       // Se usa para el ranking de SPIFF vendedores (top 5 por mes).
       const vendedoresProm = clienteKey === "dicotech"
         ? (async () => {
-            const all = []; let from = 0; const PAGE = 1000;
+            // v2: sellout_general es HEAVY_TABLE → PAGE=500, 6 retries + throw.
+            const all = []; let from = 0; const PAGE = 500;
+            const MAX_RETRIES = 6;
+            const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
             while (true) {
               let lastErr = null; let data = null;
-              for (let attempt = 0; attempt < 3; attempt++) {
+              for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
                 const res = await supabase.from("sellout_general")
                   .select("mes,vendedor_nombre,importe")
                   .ilike("mayorista", "%dicotech%").eq("anio", anio)
@@ -270,11 +279,14 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   .range(from, from + PAGE - 1);
                 if (!res.error) { data = res.data || []; break; }
                 lastErr = res.error;
-                await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+                if (attempt < MAX_RETRIES - 1) {
+                  console.warn(`[vendedoresProm] sellout_general chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
+                  await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
+                }
               }
               if (data == null) {
-                console.warn(`[vendedoresProm] sellout_general chunk from=${from} falló tras 3 intentos:`, lastErr);
-                return { data: all };
+                console.error(`[vendedoresProm] sellout_general chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
+                throw new Error(`No se pudo cargar sellout_general completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
               }
               if (data.length === 0) break;
               all.push(...data);

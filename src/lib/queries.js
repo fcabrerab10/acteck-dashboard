@@ -10,27 +10,45 @@ import { supabase } from './supabase';
 // ─── Paginación estándar (misma lógica que los módulos ya usan) ───
 const PAGE = 1000;
 async function fetchAll(table, select, extra = (q) => q) {
-  const all = [];
+  // sellout_general devuelve HTTP 500 intermitente con ilike+range+order
+  // (índice no cubre bien el filtro). Usamos chunks de 500 para tablas de
+  // transacciones y de 1000 para el resto. También subimos retries a 6
+  // porque en producción se observaron rachas de 3 500s consecutivos.
+  const HEAVY_TABLES = new Set(['sellout_general', 'sellout_detalle', 'facturacion_clientes']);
+  const PAGE = HEAVY_TABLES.has(table) ? 500 : 1000;
+  const MAX_RETRIES = 6;
+  const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
+
+  const acc = [];
   const firstCol = (select || 'id').split(',')[0].trim();
   const orderCol = /(^|,)\s*id\s*(,|$)/i.test(select) ? 'id' : firstCol;
   let from = 0;
   while (true) {
     let lastErr = null; let data = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       let q = supabase.from(table).select(select).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
       q = extra(q);
       const res = await q;
       if (!res.error) { data = res.data || []; break; }
       lastErr = res.error;
-      await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+      if (attempt < MAX_RETRIES - 1) {
+        console.warn(`[fetchAll] ${table} chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
+        await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
+      }
     }
-    if (data == null) throw lastErr;
+    if (data == null) {
+      // Falló definitivamente. Lanzamos throw para que el useEffect muestre
+      // error visible en vez de renderizar data parcial (que es exactamente
+      // lo que causaba discrepancias entre usuarios).
+      console.error(`[fetchAll] ${table} chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
+      throw new Error(`No se pudo cargar ${table} completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
+    }
     if (data.length === 0) break;
-    all.push(...data);
+    acc.push(...data);
     if (data.length < PAGE) break;
     from += PAGE;
   }
-  return all;
+  return acc;
 }
 
 // ─── Roadmap SKU ───
