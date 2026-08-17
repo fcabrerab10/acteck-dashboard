@@ -222,6 +222,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [spiffPagos, setSpiffPagos] = useState({});  // Digitalife: { "2026-01": pagoRow } | Dicotech: { "2026-01-SI": ..., "2026-01-SO": ... }
   const [spiffPctUnlocked, setSpiffPctUnlocked] = useState(false); // Candado del % compradora — evita edits accidentales.
   const spiffPctInputRef = React.useRef(null);
+  const [spiffDigiTiersUnlocked, setSpiffDigiTiersUnlocked] = useState(false); // Candado global de los % de tiers Digitalife.
   const [spiffLoading, setSpiffLoading] = useState(false);
 
   useEffect(() => {
@@ -512,6 +513,25 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (error) { alert("Error guardando SPIFF config: " + error.message); return; }
     setLineamientos(prev => ({ ...prev, spiff: configNueva }));
   }, [lineamientos]);
+
+  // Guarda un solo tier del SPIFF Digitalife (por key: alto/medio/basico).
+  // Preserva el resto de la config existente.
+  const guardarSpiffDigiTier = React.useCallback(async (tierKey, nuevoPct) => {
+    const cfg = lineamientos?.spiff || {};
+    const tiersActuales = Array.isArray(cfg.tiers) && cfg.tiers.length > 0
+      ? cfg.tiers.map(t => ({ ...t }))
+      : SPIFF_TIERS.map(t => ({ min_alcance: t.umbral, pct: t.pct, key: t.key, icon: t.icon, label: t.label }));
+    const tiersActualizados = tiersActuales.map(t => {
+      const k = t.key || (Number(t.min_alcance ?? t.umbral) >= 1.20 ? 'alto' : Number(t.min_alcance ?? t.umbral) >= 1.00 ? 'medio' : 'basico');
+      if (k === tierKey) return { ...t, pct: Number(nuevoPct) };
+      return t;
+    });
+    const configNueva = { ...cfg, tiers: tiersActualizados };
+    const { error } = await supabase.from("lineamientos_cliente")
+      .upsert({ cliente: "digitalife", tipo: "spiff", config: configNueva }, { onConflict: "cliente,tipo" });
+    if (error) { alert("Error guardando SPIFF Digitalife: " + error.message); return; }
+    setLineamientos(prev => ({ ...prev, spiff: configNueva }));
+  }, [lineamientos, SPIFF_TIERS]);
 
   // Crear pago SPIFF dual (Dicotech). tipo = "SI" | "SO"
   // forzado=true permite generar el pago aunque no alcance la cuota mínima
@@ -3192,133 +3212,242 @@ export default function PagosCliente({ cliente, clienteKey }) {
             </div>
           )}
 
-          {/* Calculadora SPIFF Digitalife — por crecimiento de Sellout */}
-          {clienteKey === "digitalife" && catActiva === "spiff" && spiffCalc && (
-            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">🚀</span>
-                    <h3 className="text-lg font-bold text-gray-800">SPIFF por Crecimiento — Digitalife {new Date().getFullYear()}</h3>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Cuota anual SO: {formatMXN(SPIFF_CUOTA_ANUAL)} · {(SPIFF_H1_PCT*100).toFixed(0)}% H1 / {((1-SPIFF_H1_PCT)*100).toFixed(0)}% H2 · Temporalidad SI intra-semestre · Tope {formatMXN(SPIFF_TOPE)}/mes
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-400 uppercase">Acumulado YTD</p>
-                  <p className="text-2xl font-bold text-purple-600">{formatMXN(spiffTotalYTD)}</p>
-                </div>
-              </div>
+          {/* ═══ SPIFF Digitalife · rediseño Ferruteck ═══ */}
+          {clienteKey === "digitalife" && catActiva === "spiff" && spiffCalc && (() => {
+            const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+            const anio = new Date().getFullYear();
+            const hoy = new Date();
+            const mesActualIdx = hoy.getMonth() + 1;
+            // Estilos base (mismos tokens que Dicotech)
+            const cardBase = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' };
+            const heroBlack = { background: '#000', color: '#F5F5F7', padding: '20px 24px' };
+            const eyebrow = { fontFamily: TYPO.fontText, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' };
+            const title = { fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.022em', fontSize: 22, margin: 0 };
+            const subCard = { padding: '18px 22px' };
+            const sectionH = { fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 };
+            const sectionSub = { fontSize: 11, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText };
+            const thStyle = { fontFamily: TYPO.fontText, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, textAlign: 'left' };
+            const tdStyle = { fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, padding: '10px 12px', borderBottom: `1px solid ${theme.border}` };
+            const monoNum = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
+            const pillBase = (accent) => ({
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '5px 11px', borderRadius: 999, fontFamily: TYPO.fontText,
+              fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.005em',
+              background: `${accent}15`, color: accent, border: `1px solid ${accent}30`,
+            });
+            const btnPrimary = {
+              background: '#000', color: '#fff', border: 0, borderRadius: 999,
+              padding: '7px 14px', fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
+              cursor: 'pointer', letterSpacing: '-0.005em',
+            };
+            const btnGhost = {
+              background: 'transparent', color: theme.textMuted, border: `1px solid ${theme.border}`,
+              borderRadius: 999, padding: '7px 14px', fontFamily: TYPO.fontText,
+              fontSize: 11, fontWeight: 500, cursor: 'pointer', letterSpacing: '-0.005em',
+            };
+            // Tiers ordenados de mayor a menor umbral
+            const tiersOrdenados = [...SPIFF_TIERS].sort((a, b) => b.umbral - a.umbral);
+            return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, fontFamily: TYPO.fontText }}>
 
-              {/* Tiers info */}
-              <div className="flex flex-wrap gap-2 mb-4 text-xs">
-                {[...SPIFF_TIERS].reverse().map(t => (
-                  <span key={t.key} className="px-3 py-1 rounded-full bg-gray-50 border border-gray-200 text-gray-700">
-                    {t.icon} <strong>{t.label}</strong> · {(t.umbral * 100).toFixed(0)}%+ alcance · {(t.pct * 100).toFixed(2)}%
-                  </span>
-                ))}
-                <span className="px-3 py-1 rounded-full bg-gray-50 border border-gray-200 text-gray-400">
-                  &lt;90% → Sin SPIFF
-                </span>
+              {/* Hero card negro */}
+              <div style={cardBase}>
+                <div style={heroBlack}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 280, flex: 1 }}>
+                      <div style={eyebrow}>SPIFF · Digitalife {anio}</div>
+                      <h3 style={{ ...title, color: '#F5F5F7', marginTop: 6 }}>Por crecimiento de sell-out.</h3>
+                      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: '10px 0 0', maxWidth: 560, lineHeight: 1.5 }}>
+                        Cuota anual SO <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{formatMXN(SPIFF_CUOTA_ANUAL)}</strong> ·
+                        {' '}<strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{(SPIFF_H1_PCT*100).toFixed(0)}%</strong> H1 /
+                        {' '}<strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{((1-SPIFF_H1_PCT)*100).toFixed(0)}%</strong> H2 ·
+                        {' '}Tope <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{formatMXN(SPIFF_TOPE)}</strong>/mes.
+                      </p>
+                    </div>
+                    <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.14)', paddingLeft: 24 }}>
+                      <div style={eyebrow}>Comisión YTD</div>
+                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.024em', color: '#F5F5F7', marginTop: 4, ...monoNum }}>
+                        {formatMXN(spiffTotalYTD)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tiers editables con candado */}
+                  <div style={{ display: 'flex', gap: 12, marginTop: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ ...eyebrow, marginBottom: 6 }}>
+                        Tiers de comisión {spiffDigiTiersUnlocked && <span style={{ color: '#FF9F0A', marginLeft: 4 }}>· editando</span>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => {
+                            if (spiffDigiTiersUnlocked) { setSpiffDigiTiersUnlocked(false); return; }
+                            if (!confirm('¿Desbloquear edición de los % de tiers?\n\nEstos porcentajes afectan todos los cálculos de comisión SPIFF.')) return;
+                            setSpiffDigiTiersUnlocked(true);
+                          }}
+                          title={spiffDigiTiersUnlocked ? 'Bloquear' : 'Desbloquear para editar'}
+                          style={{
+                            background: spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.16)' : 'rgba(255,255,255,0.06)',
+                            border: `1px solid ${spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.4)' : 'rgba(255,255,255,0.14)'}`,
+                            color: spiffDigiTiersUnlocked ? '#FF9F0A' : 'rgba(255,255,255,0.7)',
+                            borderRadius: 10, width: 34, height: 34, cursor: 'pointer',
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 15, padding: 0, transition: 'all 160ms',
+                          }}>
+                          {spiffDigiTiersUnlocked ? '🔓' : '🔒'}
+                        </button>
+                        {tiersOrdenados.map((t) => (
+                          <div key={t.key} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 8,
+                            background: spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.10)' : 'rgba(255,255,255,0.06)',
+                            border: `1px solid ${spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.4)' : 'rgba(255,255,255,0.12)'}`,
+                            borderRadius: 10, padding: '6px 12px',
+                          }}>
+                            <span style={{ fontSize: 16 }}>{t.icon}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 60 }}>
+                              <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>
+                                {t.label} · {(t.umbral * 100).toFixed(0)}%+
+                              </span>
+                              <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginTop: 2 }}>
+                                <input type="number" step="0.01" min="0" max="10"
+                                  key={`${t.key}-${t.pct}`}
+                                  defaultValue={(t.pct * 100).toFixed(2)}
+                                  readOnly={!spiffDigiTiersUnlocked}
+                                  onBlur={(e) => {
+                                    if (!spiffDigiTiersUnlocked) return;
+                                    const nuevoPct = Number(e.target.value) / 100;
+                                    if (nuevoPct !== t.pct && nuevoPct >= 0 && nuevoPct <= 0.1) {
+                                      guardarSpiffDigiTier(t.key, nuevoPct);
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') e.currentTarget.blur();
+                                    if (e.key === 'Escape') { setSpiffDigiTiersUnlocked(false); e.currentTarget.blur(); }
+                                  }}
+                                  style={{
+                                    width: 54, textAlign: 'right', background: 'transparent',
+                                    border: 0, color: '#F5F5F7', padding: 0,
+                                    fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600,
+                                    letterSpacing: '-0.01em', outline: 'none', ...monoNum,
+                                    cursor: spiffDigiTiersUnlocked ? 'text' : 'not-allowed',
+                                  }} />
+                                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, color: '#F5F5F7' }}>%</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <span style={{ ...pillBase('rgba(255,255,255,0.4)'), background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          &lt;{(Math.min(...tiersOrdenados.map(t => t.umbral)) * 100).toFixed(0)}% → sin SPIFF
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Tabla mensual */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 bg-gray-50">
-                      <th className="text-left py-2 px-3 font-semibold text-gray-600">Mes</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Cuota SI Mín</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Cuota SO Mín</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Sell Out Real</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Alcance</th>
-                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Tier</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Comisión</th>
-                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {spiffCalc.map(c => {
-                      const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-                      const p = c.pagoExistente;
-                      const isNoAplica = p && p.estatus === "cancelado";
-                      const isGenerado = p && p.estatus !== "cancelado";
-                      const alcancePct = (c.alcance * 100).toFixed(0);
-                      let alcanceColor = "#94a3b8";
-                      if (c.alcance >= 1.20) alcanceColor = "#10b981";
-                      else if (c.alcance >= 1.00) alcanceColor = "#3b82f6";
-                      else if (c.alcance >= 0.90) alcanceColor = "#f59e0b";
-                      else if (c.soActual > 0) alcanceColor = "#ef4444";
-                      return (
-                        <tr key={c.mes} className={`border-b border-gray-100 ${isNoAplica ? "opacity-50" : ""}`}>
-                          <td className="py-2 px-3 font-medium text-gray-800">{MESES_F[c.mes - 1]}</td>
-                          <td className="py-2 px-3 text-right text-gray-500 text-xs">{formatMXN(c.cuotaSI)}</td>
-                          <td className="py-2 px-3 text-right text-gray-700">
-                            {formatMXN(c.cuotaSOMin)}
-                            {c.ajustado && <span className="ml-1 text-[10px] text-blue-600" title="Cuota ajustada manualmente">⚙</span>}
-                          </td>
-                          <td className="py-2 px-3 text-right text-gray-700 font-medium">{c.soActual > 0 ? formatMXN(c.soActual) : "—"}</td>
-                          <td className="py-2 px-3 text-right font-bold" style={{ color: alcanceColor }}>
-                            {c.soActual > 0 ? alcancePct + "%" : "—"}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            {c.tier ? <span className="text-lg" title={c.tier.label}>{c.tier.icon}</span> : <span className="text-gray-300">—</span>}
-                          </td>
-                          <td className="py-2 px-3 text-right font-bold text-purple-700">
-                            {isNoAplica ? <span className="text-gray-400">—</span> : c.comision > 0 ? formatMXN(c.comision) : <span className="text-gray-300">—</span>}
-                            {c.capped && !isNoAplica && <div className="text-xs text-gray-400">cap</div>}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            {isNoAplica ? (
-                              <button
-                                onClick={() => revertirSpiff(p.id)}
-                                className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded px-2 py-1"
-                                title="Revertir 'No aplica'"
-                              >↺ Revertir</button>
-                            ) : isGenerado ? (
-                              <div className="flex items-center gap-1 justify-center">
-                                <span className={`text-xs px-2 py-1 rounded ${p.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
-                                  {p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}
+              <div style={cardBase}>
+                <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <h4 style={sectionH}>SPIFF por Crecimiento</h4>
+                      <p style={sectionSub}>Cuota SO por mes con temporalidad SI · tier automático según alcance real.</p>
+                    </div>
+                    <span style={pillBase(theme.accent || '#007AFF')}>Mensual</span>
+                  </div>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Mes</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Cuota SI</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Cuota SO</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Sell-Out real</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Alcance</th>
+                        <th style={{ ...thStyle, textAlign: 'center' }}>Tier</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Comisión</th>
+                        <th style={{ ...thStyle, textAlign: 'right', paddingRight: 22 }}>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {spiffCalc.map((c) => {
+                        const p = c.pagoExistente;
+                        const isNoAplica = p && p.estatus === "cancelado";
+                        const isGenerado = p && p.estatus !== "cancelado";
+                        const isFuturo = c.mes > mesActualIdx;
+                        const rowMuted = isNoAplica || isFuturo;
+                        let alcanceColor = theme.textMuted;
+                        if (c.alcance >= 1.20) alcanceColor = '#34C759';
+                        else if (c.alcance >= 1.00) alcanceColor = theme.accent || '#007AFF';
+                        else if (c.alcance >= 0.90) alcanceColor = '#FF9500';
+                        else if (c.soActual > 0) alcanceColor = '#FF3B30';
+                        return (
+                          <tr key={c.mes}>
+                            <td style={{ ...tdStyle, opacity: rowMuted ? 0.45 : 1, fontWeight: c.mes === mesActualIdx ? 600 : 500 }}>
+                              {MESES_F[c.mes - 1]}
+                              {c.mes === mesActualIdx && <span style={{ ...pillBase(theme.accent || '#007AFF'), marginLeft: 8, fontSize: 9, padding: '2px 8px' }}>Mes actual</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'right', color: theme.textMuted, opacity: rowMuted ? 0.45 : 1, ...monoNum, fontSize: 11 }}>
+                              {formatMXN(c.cuotaSI)}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'right', color: theme.text, opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 500 }}>
+                              {formatMXN(c.cuotaSOMin)}
+                              {c.ajustado && <span style={{ marginLeft: 6, fontSize: 10, color: theme.accent || '#007AFF' }} title="Cuota ajustada manualmente">⚙</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 500 }}>
+                              {c.soActual > 0 ? formatMXN(c.soActual) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 700, color: alcanceColor }}>
+                              {c.soActual > 0 ? `${(c.alcance * 100).toFixed(0)}%` : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'center', opacity: rowMuted ? 0.45 : 1 }}>
+                              {c.tier ? <span style={{ fontSize: 18 }} title={c.tier.label}>{c.tier.icon}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 700, color: isNoAplica ? theme.textMuted : theme.text }}>
+                              {c.comision > 0 ? (
+                                <>
+                                  {formatMXN(c.comision)}
+                                  {c.capped && !isNoAplica && <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 500, marginTop: 1 }}>cap</div>}
+                                </>
+                              ) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'right', paddingRight: 22 }}>
+                              {isNoAplica ? (
+                                <button onClick={() => revertirSpiff(p.id)} style={btnGhost}>↺ Revertir</button>
+                              ) : isGenerado ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={pillBase(p.estatus === "pagado" ? '#34C759' : '#FF9500')}>
+                                    {p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}
+                                  </span>
+                                  <button onClick={() => revertirSpiff(p.id)} title="Eliminar pago"
+                                    style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 13, padding: '4px 6px' }}>🗑</button>
                                 </span>
-                                <button
-                                  onClick={() => revertirSpiff(p.id)}
-                                  className="text-xs text-red-500 hover:text-red-700"
-                                  title="Eliminar pago"
-                                >🗑</button>
-                              </div>
-                            ) : c.tier && c.comision > 0 ? (
-                              <div className="flex gap-1 justify-center flex-wrap">
-                                <button
-                                  onClick={() => crearSpiffPago(c)}
-                                  className="text-xs bg-purple-600 text-white rounded px-2 py-1 hover:bg-purple-700"
-                                ><Wallet className="w-3.5 h-3.5 inline mr-1" />Generar pago</button>
-                                <button
-                                  onClick={() => marcarSpiffNoAplica(c.mes)}
-                                  className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 hover:bg-gray-200"
-                                >No aplica</button>
-                              </div>
-                            ) : c.soActual > 0 ? (
-                              <button
-                                onClick={() => marcarSpiffNoAplica(c.mes)}
-                                className="text-xs bg-gray-100 text-gray-500 rounded px-2 py-1 hover:bg-gray-200"
-                              >No aplica</button>
-                            ) : (
-                              <span className="text-xs text-gray-300">Sin datos</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                              ) : c.tier && c.comision > 0 ? (
+                                <span style={{ display: 'inline-flex', gap: 6 }}>
+                                  <button onClick={() => crearSpiffPago(c)} style={btnPrimary}>Generar</button>
+                                  <button onClick={() => marcarSpiffNoAplica(c.mes)} style={btnGhost}>No aplica</button>
+                                </span>
+                              ) : c.soActual > 0 ? (
+                                <button onClick={() => marcarSpiffNoAplica(c.mes)} style={btnGhost}>No aplica</button>
+                              ) : (
+                                <span style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted }}>Sin datos</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ padding: '12px 22px', borderTop: `1px solid ${theme.border}`, fontSize: 11, color: theme.textMuted, background: theme.bg }}>
+                  💡 <strong style={{ color: theme.text, fontWeight: 600 }}>Fecha de pago automática:</strong> día 15 del mes siguiente · <strong style={{ color: theme.text, fontWeight: 600 }}>Responsable:</strong> PM Digitalife
+                </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                💡 <strong>Fecha de pago automática:</strong> día 15 del mes siguiente · <strong>Responsable:</strong> PM Digitalife
-              </div>
             </div>
-          )}
+          );
+          })()}
 
           {/* ═══ SPIFF Dicotech v2 · rediseño Ferruteck ═══ */}
           {clienteKey === "dicotech" && catActiva === "spiff" && spiffDicotechCalc && (() => {
