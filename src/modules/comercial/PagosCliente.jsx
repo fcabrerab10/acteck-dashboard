@@ -784,20 +784,35 @@ export default function PagosCliente({ cliente, clienteKey }) {
     flash(`✓ SPIFF ${tipo} ${mesLabel} marcado como No aplica`);
   };
 
-  const crearSpiffPago = async (calc) => {
+  // forzado=true: calcula comisión con SO × flat_pct aunque no cumpla el
+  // umbral. Se usa para el botón "Pagar manual" cuando Fernando decide
+  // recompensar aunque el mes no haya llegado a la cuota SO.
+  const crearSpiffPago = async (calc, forzado = false) => {
     if (!canEdit) return;
     const mesLabel = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][calc.mes - 1];
     const anio = new Date().getFullYear();
     const nextMes = calc.mes === 12 ? 1 : calc.mes + 1;
     const nextAnio = calc.mes === 12 ? anio + 1 : anio;
     const fechaCompromiso = `${nextAnio}-${String(nextMes).padStart(2, "0")}-15`;
+    // Cuando es forzado, calcula el monto que le tocaría si aplicara.
+    const montoForzado = calc.soActual * (Number(lineamientos?.spiff?.flat_pct) || 0.0016);
+    const montoFinal = forzado ? montoForzado : calc.comision;
+    if (!(montoFinal > 0)) {
+      alert('El monto calculado es cero, no se puede generar el pago.');
+      return;
+    }
+    if (forzado) {
+      const okMsg = `¿Pagar SPIFF de ${mesLabel} aunque no cumpla el umbral?\n\nMonto: ${formatMXN(montoFinal)}\nAlcance real: ${(calc.alcance*100).toFixed(0)}% (umbral ${(SPIFF_MIN_ALCANCE*100).toFixed(0)}%)`;
+      if (!confirm(okMsg)) return;
+    }
+    const notasBase = `Sell Out: ${formatMXN(calc.soActual)} · Cuota SO Mín: ${formatMXN(calc.cuotaSOMin)} · Alcance ${(calc.alcance*100).toFixed(0)}%`;
     const row = {
       cliente: clienteKey, categoria: "spiff", folio: null,
-      concepto: `SPIFF ${mesLabel} ${anio} — ${calc.tier?.label || "Sin tier"}`,
-      monto: calc.comision,
+      concepto: `SPIFF ${mesLabel} ${anio}${forzado ? ' — pago manual (no cumplió umbral)' : (calc.tier?.label ? ` — ${calc.tier.label}` : '')}`,
+      monto: montoFinal,
       estatus: "pendiente", fecha_compromiso: fechaCompromiso,
       responsable: "PM Digitalife",
-      notas: `Sell Out: ${formatMXN(calc.soActual)} · Cuota SO Mín: ${formatMXN(calc.cuotaSOMin)} · Alcance ${(calc.alcance*100).toFixed(0)}%${calc.capped ? " · Capeado a " + formatMXN(SPIFF_TOPE) : ""}`,
+      notas: notasBase + (forzado ? ' · pago FORZADO (bajo umbral)' : (calc.capped ? ` · Capeado a ${formatMXN(SPIFF_TOPE)}` : '')),
     };
     const { data, error } = await supabase.from("pagos").insert(row).select().single();
     if (error) {
@@ -806,7 +821,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
       return;
     }
     setSpiffPagos(p => ({ ...p, [`${anio}-${String(calc.mes).padStart(2, "0")}`]: data }));
-    flash("✓ Pago SPIFF generado");
+    flash(forzado ? "✓ Pago SPIFF forzado (no cumplió umbral)" : "✓ Pago SPIFF generado");
   };
 
   const marcarSpiffNoAplica = async (mes) => {
@@ -3401,7 +3416,16 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                   <button onClick={() => marcarSpiffNoAplica(c.mes)} style={btnGhost}>No aplica</button>
                                 </span>
                               ) : tieneSO ? (
-                                <button onClick={() => marcarSpiffNoAplica(c.mes)} style={btnGhost}>No aplica</button>
+                                <span style={{ display: 'inline-flex', gap: 6 }}>
+                                  <button onClick={() => crearSpiffPago(c, true)}
+                                    title={`Pagar manualmente aunque no cumpla el umbral · monto ${formatMXN(c.soActual * SPIFF_FLAT_PCT)}`}
+                                    style={{
+                                      background: '#FF9500', color: '#fff', border: 0, borderRadius: 999,
+                                      padding: '7px 14px', fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
+                                      cursor: 'pointer', letterSpacing: '-0.005em',
+                                    }}>💸 Pagar manual</button>
+                                  <button onClick={() => marcarSpiffNoAplica(c.mes)} style={btnGhost}>No aplica</button>
+                                </span>
                               ) : (
                                 <span style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted }}>Sin datos</span>
                               )}
