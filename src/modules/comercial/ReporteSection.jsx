@@ -80,8 +80,15 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
     const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
 
     const acc = [];
-    const firstCol = (selectCols || 'id').split(',')[0].trim();
-    const orderCol = /(^|,)\s*id\s*(,|$)/i.test(selectCols) ? 'id' : firstCol;
+    // BUG-FIX: cuando selectCols === '*' o el primer campo es '*', antes se ejecutaba
+    // .order('*') y Supabase respondía HTTP 400 → 6 retries fallaban → throw →
+    // React Query devolvía data:[] silenciosamente.
+    const orderCol = (() => {
+      if (!selectCols || selectCols === '*') return 'id';
+      if (/(^|,)\s*id\s*(,|$)/i.test(selectCols)) return 'id';
+      const first = selectCols.split(',')[0].trim();
+      return first === '*' ? 'id' : first;
+    })();
     let from = 0;
     while (true) {
       let lastErr = null; let data = null;

@@ -235,8 +235,15 @@ export default function PagosCliente({ cliente, clienteKey }) {
         const all = []; let from = 0; const PAGE = 1000;
         const MAX_RETRIES = 6;
         const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-        const firstCol = (qs || 'id').split(',')[0].trim();
-        const orderCol = /(^|,)\s*id\s*(,|$)/i.test(qs) ? 'id' : firstCol;
+        // BUG-FIX: cuando qs === '*' o el primer campo es '*', antes se ejecutaba
+          // .order('*') y Supabase respondía HTTP 400 → 6 retries fallaban → throw →
+          // React Query devolvía data:[] silenciosamente.
+          const orderCol = (() => {
+            if (!qs || qs === '*') return 'id';
+            if (/(^|,)\s*id\s*(,|$)/i.test(qs)) return 'id';
+            const first = qs.split(',')[0].trim();
+            return first === '*' ? 'id' : first;
+          })();
         while (true) {
           let lastErr = null; let data = null;
           for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
