@@ -780,6 +780,10 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango }) {
   const line2025 = data.map((d, i) => `${xOf(i)},${yOf(d.sellInPrev)}`).join(' ');
   const lineCuota = data.map((d, i) => `${xOf(i)},${yOf(d.cuota)}`).join(' ');
   const lineCuotaMin = data.map((d, i) => `${xOf(i)},${yOf(d.cuotaMin || 0)}`).join(' ');
+  // Dicotech tiene cuota_min === cuota_ideal en todos los meses (por diseño).
+  // Cuando son iguales, dibujamos una sola línea gruesa en vez de dos superpuestas
+  // (una tapaba a la otra y el resultado era una línea casi invisible).
+  const cuotaMinIgualIdeal = data.every((d) => Number(d.cuotaMin || 0) === Number(d.cuota || 0));
   const hovered = hoverIdx != null ? data[hoverIdx] : null;
   const currentDatum = idxActual >= 0 ? data[idxActual] : null;
   const yTicks = [0, 0.25, 0.50, 0.75, 1].map(f => ({ v: maxV * f, y: padT + chartH * (1 - f) }));
@@ -837,16 +841,30 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango }) {
       <div style={{ display: 'flex', gap: 14, padding: '6px 0 8px', flexWrap: 'wrap', borderBottom: `1px solid ${theme.divider || theme.border}`, marginBottom: 6 }}>
         <SumStat theme={theme} k={<><Dot color={theme.textMuted} />SI {anioPrev}</>} v={fmtMoney(sums.s2025)} vColor={theme.textMuted} />
         <SumStat theme={theme} k={<><Dot color={P.accent} />SI {anio}</>} v={fmtMoney(sums.s2026)} vColor={theme.text} />
-        <SumStat theme={theme} k={<><Dot color={P.orange} dashed />Cuota mín</>} v={fmtMoney(sums.cuotaMin)} vColor={theme.text} />
-        <SumStat theme={theme} k={<><Dot color={P.orange} dashed />Cuota ideal</>} v={fmtMoney(sums.cuota)} vColor={theme.text} />
+        {cuotaMinIgualIdeal ? (
+          <SumStat theme={theme} k={<><Dot color={P.orange} dashed />Cuota</>} v={fmtMoney(sums.cuota)} vColor={theme.text} />
+        ) : (
+          <>
+            <SumStat theme={theme} k={<><Dot color={P.orange} dashed />Cuota mín</>} v={fmtMoney(sums.cuotaMin)} vColor={theme.text} />
+            <SumStat theme={theme} k={<><Dot color={P.orange} dashed />Cuota ideal</>} v={fmtMoney(sums.cuota)} vColor={theme.text} />
+          </>
+        )}
         {sums.deltaYoY != null && (
           <SumStat theme={theme} k="Δ YoY" v={`${sums.deltaYoY >= 0 ? '+' : ''}${sums.deltaYoY.toFixed(1)}%`} vColor={sums.deltaYoY >= 0 ? P.green : P.red} />
         )}
-        {sums.deltaCuotaMin != null && (
-          <SumStat theme={theme} k="Δ vs mín" v={`${sums.deltaCuotaMin >= 0 ? '+' : ''}${sums.deltaCuotaMin.toFixed(1)}%`} vColor={sums.deltaCuotaMin >= 0 ? P.green : P.red} />
-        )}
-        {sums.deltaCuota != null && (
-          <SumStat theme={theme} k="Δ vs ideal" v={`${sums.deltaCuota >= 0 ? '+' : ''}${sums.deltaCuota.toFixed(1)}%`} vColor={sums.deltaCuota >= 0 ? P.green : P.red} />
+        {cuotaMinIgualIdeal ? (
+          sums.deltaCuota != null && (
+            <SumStat theme={theme} k="Δ vs cuota" v={`${sums.deltaCuota >= 0 ? '+' : ''}${sums.deltaCuota.toFixed(1)}%`} vColor={sums.deltaCuota >= 0 ? P.green : P.red} />
+          )
+        ) : (
+          <>
+            {sums.deltaCuotaMin != null && (
+              <SumStat theme={theme} k="Δ vs mín" v={`${sums.deltaCuotaMin >= 0 ? '+' : ''}${sums.deltaCuotaMin.toFixed(1)}%`} vColor={sums.deltaCuotaMin >= 0 ? P.green : P.red} />
+            )}
+            {sums.deltaCuota != null && (
+              <SumStat theme={theme} k="Δ vs ideal" v={`${sums.deltaCuota >= 0 ? '+' : ''}${sums.deltaCuota.toFixed(1)}%`} vColor={sums.deltaCuota >= 0 ? P.green : P.red} />
+            )}
+          </>
         )}
       </div>
 
@@ -872,8 +890,10 @@ function TimelineLineal({ theme, P, data, sums, rango, onChangeRango }) {
           ))}
           {area2026 && <path d={area2026} fill={`url(#${gradId})`} />}
           <polyline points={line2025} fill="none" stroke={theme.textMuted} strokeWidth="2" opacity="0.55" />
-          <polyline points={lineCuotaMin} fill="none" stroke={P.orange} strokeWidth="1.5" strokeDasharray="2 4" opacity="0.55" />
-          <polyline points={lineCuota} fill="none" stroke={P.orange} strokeWidth="2" strokeDasharray="5 4" opacity="0.85" />
+          {!cuotaMinIgualIdeal && (
+            <polyline points={lineCuotaMin} fill="none" stroke={P.orange} strokeWidth="1.5" strokeDasharray="2 4" opacity="0.55" />
+          )}
+          <polyline points={lineCuota} fill="none" stroke={P.orange} strokeWidth={cuotaMinIgualIdeal ? 2.5 : 2} strokeDasharray="6 4" opacity="1" />
           <polyline points={line2026} fill="none" stroke={P.accent} strokeWidth="3" />
           {cerrados.map((d, i) => {
             const cx = xOf(i), cy = yOf(d.sellIn);
