@@ -215,6 +215,11 @@ export default function PagosCliente({ cliente, clienteKey }) {
     Number(lineamientos?.spiff?.tope_mensual) || 4000,
     [lineamientos]
   );
+  // % único (modo flat_v2). Reemplaza los tiers y el tope. Fallback: 0.16%.
+  const SPIFF_FLAT_PCT = React.useMemo(() =>
+    Number(lineamientos?.spiff?.flat_pct) || 0.0016,
+    [lineamientos]
+  );
   const [digiSellOut26, setDigiSellOut26] = useState({});
   const [digiCuotas, setDigiCuotas] = useState([]);
   const [dicoSellIn, setDicoSellIn] = useState({});      // Dicotech: sell-in mensual $
@@ -407,24 +412,26 @@ export default function PagosCliente({ cliente, clienteKey }) {
       }
     }
 
-    // Paso 4: calcular tier y comisión
+    // Paso 4: calcular comisión FLAT (sin tiers, sin tope).
+    // % único editable en config (SPIFF_FLAT_PCT, default 0.16%).
     const results = [];
     for (let m = 1; m <= 12; m++) {
       const cRow = digiCuotas.find(x => Number(x.mes) === m);
       const cuotaSI = cRow ? Number(cRow.cuota_min) || 0 : 0;
-      const cuotaSOMin = baseCuotaSO[m];
+      const cuotaSOMin = baseCuotaSO[m]; // se conserva para info/histórico
       const soActual = digiSellOut26[m] || 0;
       const alcance = cuotaSOMin > 0 ? soActual / cuotaSOMin : 0;
-      const tier = SPIFF_TIERS.find(t => alcance >= t.umbral);
-      const comisionRaw = tier ? soActual * tier.pct : 0;
-      const comision = Math.min(comisionRaw, SPIFF_TOPE);
-      const capped = comisionRaw > SPIFF_TOPE;
+      const comision = soActual * SPIFF_FLAT_PCT;
       const ajustado = SPIFF_CUOTA_OVERRIDES[m] !== undefined;
       const key = `${anio}-${String(m).padStart(2, "0")}`;
-      results.push({ mes: m, cuotaSI, cuotaSOMin, soActual, alcance, tier, comisionRaw, comision, capped, ajustado, pagoExistente: spiffPagos[key] });
+      results.push({
+        mes: m, cuotaSI, cuotaSOMin, soActual, alcance,
+        tier: null, comisionRaw: comision, comision, capped: false, ajustado,
+        pagoExistente: spiffPagos[key],
+      });
     }
     return results;
-  }, [clienteKey, digiCuotas, digiSellOut26, spiffPagos]);
+  }, [clienteKey, digiCuotas, digiSellOut26, spiffPagos, SPIFF_FLAT_PCT]);
 
   const spiffTotalYTD = React.useMemo(() => {
     if (!spiffCalc) return 0;
@@ -514,24 +521,17 @@ export default function PagosCliente({ cliente, clienteKey }) {
     setLineamientos(prev => ({ ...prev, spiff: configNueva }));
   }, [lineamientos]);
 
-  // Guarda un solo tier del SPIFF Digitalife (por key: alto/medio/basico).
-  // Preserva el resto de la config existente.
-  const guardarSpiffDigiTier = React.useCallback(async (tierKey, nuevoPct) => {
+  // Guarda el % único (flat) del SPIFF Digitalife.
+  // Preserva el resto de la config existente (tiers viejos, tope, etc.)
+  // para no romper si algún día se quisiera revertir el modelo.
+  const guardarSpiffDigiFlatPct = React.useCallback(async (nuevoPct) => {
     const cfg = lineamientos?.spiff || {};
-    const tiersActuales = Array.isArray(cfg.tiers) && cfg.tiers.length > 0
-      ? cfg.tiers.map(t => ({ ...t }))
-      : SPIFF_TIERS.map(t => ({ min_alcance: t.umbral, pct: t.pct, key: t.key, icon: t.icon, label: t.label }));
-    const tiersActualizados = tiersActuales.map(t => {
-      const k = t.key || (Number(t.min_alcance ?? t.umbral) >= 1.20 ? 'alto' : Number(t.min_alcance ?? t.umbral) >= 1.00 ? 'medio' : 'basico');
-      if (k === tierKey) return { ...t, pct: Number(nuevoPct) };
-      return t;
-    });
-    const configNueva = { ...cfg, tiers: tiersActualizados };
+    const configNueva = { ...cfg, flat_pct: Number(nuevoPct) };
     const { error } = await supabase.from("lineamientos_cliente")
       .upsert({ cliente: "digitalife", tipo: "spiff", config: configNueva }, { onConflict: "cliente,tipo" });
     if (error) { alert("Error guardando SPIFF Digitalife: " + error.message); return; }
     setLineamientos(prev => ({ ...prev, spiff: configNueva }));
-  }, [lineamientos, SPIFF_TIERS]);
+  }, [lineamientos]);
 
   // Crear pago SPIFF dual (Dicotech). tipo = "SI" | "SO"
   // forzado=true permite generar el pago aunque no alcance la cuota mínima
@@ -3256,89 +3256,69 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
                     <div style={{ minWidth: 280, flex: 1 }}>
                       <div style={eyebrow}>SPIFF · Digitalife {anio}</div>
-                      <h3 style={{ ...title, color: '#F5F5F7', marginTop: 6 }}>Por crecimiento de sell-out.</h3>
+                      <h3 style={{ ...title, color: '#F5F5F7', marginTop: 6 }}>Por sell-out del mes.</h3>
                       <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: '10px 0 0', maxWidth: 560, lineHeight: 1.5 }}>
-                        Cuota anual SO <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{formatMXN(SPIFF_CUOTA_ANUAL)}</strong> ·
-                        {' '}<strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{(SPIFF_H1_PCT*100).toFixed(0)}%</strong> H1 /
-                        {' '}<strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{((1-SPIFF_H1_PCT)*100).toFixed(0)}%</strong> H2 ·
-                        {' '}Tope <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{formatMXN(SPIFF_TOPE)}</strong>/mes.
+                        <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{(SPIFF_FLAT_PCT * 100).toFixed(3)}%</strong> flat × sell-out real del mes. Sin tiers ni tope.
                       </p>
                     </div>
-                    <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.14)', paddingLeft: 24 }}>
-                      <div style={eyebrow}>Comisión YTD</div>
-                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.024em', color: '#F5F5F7', marginTop: 4, ...monoNum }}>
-                        {formatMXN(spiffTotalYTD)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Tiers editables con candado */}
-                  <div style={{ display: 'flex', gap: 12, marginTop: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ ...eyebrow, marginBottom: 6 }}>
-                        Tiers de comisión {spiffDigiTiersUnlocked && <span style={{ color: '#FF9F0A', marginLeft: 4 }}>· editando</span>}
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button
-                          onClick={() => {
-                            if (spiffDigiTiersUnlocked) { setSpiffDigiTiersUnlocked(false); return; }
-                            if (!confirm('¿Desbloquear edición de los % de tiers?\n\nEstos porcentajes afectan todos los cálculos de comisión SPIFF.')) return;
-                            setSpiffDigiTiersUnlocked(true);
-                          }}
-                          title={spiffDigiTiersUnlocked ? 'Bloquear' : 'Desbloquear para editar'}
-                          style={{
-                            background: spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.16)' : 'rgba(255,255,255,0.06)',
-                            border: `1px solid ${spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.4)' : 'rgba(255,255,255,0.14)'}`,
-                            color: spiffDigiTiersUnlocked ? '#FF9F0A' : 'rgba(255,255,255,0.7)',
-                            borderRadius: 10, width: 34, height: 34, cursor: 'pointer',
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 15, padding: 0, transition: 'all 160ms',
-                          }}>
-                          {spiffDigiTiersUnlocked ? '🔓' : '🔒'}
-                        </button>
-                        {tiersOrdenados.map((t) => (
-                          <div key={t.key} style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 8,
-                            background: spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.10)' : 'rgba(255,255,255,0.06)',
-                            border: `1px solid ${spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.4)' : 'rgba(255,255,255,0.12)'}`,
-                            borderRadius: 10, padding: '6px 12px',
-                          }}>
-                            <span style={{ fontSize: 16 }}>{t.icon}</span>
-                            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 60 }}>
-                              <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>
-                                {t.label} · {(t.umbral * 100).toFixed(0)}%+
-                              </span>
-                              <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginTop: 2 }}>
-                                <input type="number" step="0.01" min="0" max="10"
-                                  key={`${t.key}-${t.pct}`}
-                                  defaultValue={(t.pct * 100).toFixed(2)}
-                                  readOnly={!spiffDigiTiersUnlocked}
-                                  onBlur={(e) => {
-                                    if (!spiffDigiTiersUnlocked) return;
-                                    const nuevoPct = Number(e.target.value) / 100;
-                                    if (nuevoPct !== t.pct && nuevoPct >= 0 && nuevoPct <= 0.1) {
-                                      guardarSpiffDigiTier(t.key, nuevoPct);
-                                    }
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') e.currentTarget.blur();
-                                    if (e.key === 'Escape') { setSpiffDigiTiersUnlocked(false); e.currentTarget.blur(); }
-                                  }}
-                                  style={{
-                                    width: 54, textAlign: 'right', background: 'transparent',
-                                    border: 0, color: '#F5F5F7', padding: 0,
-                                    fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600,
-                                    letterSpacing: '-0.01em', outline: 'none', ...monoNum,
-                                    cursor: spiffDigiTiersUnlocked ? 'text' : 'not-allowed',
-                                  }} />
-                                <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, color: '#F5F5F7' }}>%</span>
-                              </div>
-                            </div>
+                    <div style={{ display: 'flex', gap: 28, alignItems: 'flex-end' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={eyebrow}>% SPIFF {spiffDigiTiersUnlocked && <span style={{ color: '#FF9F0A', marginLeft: 4 }}>· editando</span>}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
+                          <button
+                            onClick={() => {
+                              if (spiffDigiTiersUnlocked) { setSpiffDigiTiersUnlocked(false); return; }
+                              if (!confirm('¿Desbloquear edición del % SPIFF?\n\nAfecta todos los cálculos de comisión Digitalife.')) return;
+                              setSpiffDigiTiersUnlocked(true);
+                            }}
+                            title={spiffDigiTiersUnlocked ? 'Bloquear' : 'Desbloquear para editar'}
+                            style={{
+                              background: spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.16)' : 'rgba(255,255,255,0.06)',
+                              border: `1px solid ${spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.4)' : 'rgba(255,255,255,0.14)'}`,
+                              color: spiffDigiTiersUnlocked ? '#FF9F0A' : 'rgba(255,255,255,0.7)',
+                              borderRadius: 10, width: 34, height: 34, cursor: 'pointer',
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 15, padding: 0, transition: 'all 160ms',
+                            }}>
+                            {spiffDigiTiersUnlocked ? '🔓' : '🔒'}
+                          </button>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                            <input type="number" step="0.001" min="0" max="10"
+                              key={SPIFF_FLAT_PCT}
+                              defaultValue={(SPIFF_FLAT_PCT * 100).toFixed(3)}
+                              readOnly={!spiffDigiTiersUnlocked}
+                              onBlur={(e) => {
+                                if (!spiffDigiTiersUnlocked) return;
+                                const pct = Number(e.target.value) / 100;
+                                if (pct !== SPIFF_FLAT_PCT && pct >= 0 && pct <= 0.1) {
+                                  guardarSpiffDigiFlatPct(pct);
+                                }
+                                setSpiffDigiTiersUnlocked(false);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') e.currentTarget.blur();
+                                if (e.key === 'Escape') { setSpiffDigiTiersUnlocked(false); e.currentTarget.blur(); }
+                              }}
+                              style={{
+                                width: 108, textAlign: 'right',
+                                background: spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.10)' : 'rgba(255,255,255,0.06)',
+                                border: `1px solid ${spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.5)' : 'rgba(255,255,255,0.12)'}`,
+                                borderRadius: 10, color: '#F5F5F7', padding: '8px 12px',
+                                fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600,
+                                letterSpacing: '-0.02em', outline: 'none',
+                                opacity: spiffDigiTiersUnlocked ? 1 : 0.85,
+                                cursor: spiffDigiTiersUnlocked ? 'text' : 'not-allowed',
+                                transition: 'all 160ms', ...monoNum,
+                              }} />
+                            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, color: '#F5F5F7' }}>%</span>
                           </div>
-                        ))}
-                        <span style={{ ...pillBase('rgba(255,255,255,0.4)'), background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                          &lt;{(Math.min(...tiersOrdenados.map(t => t.umbral)) * 100).toFixed(0)}% → sin SPIFF
-                        </span>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.14)', paddingLeft: 24 }}>
+                        <div style={eyebrow}>Comisión YTD</div>
+                        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.024em', color: '#F5F5F7', marginTop: 4, ...monoNum }}>
+                          {formatMXN(spiffTotalYTD)}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -3350,8 +3330,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
                 <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
                     <div>
-                      <h4 style={sectionH}>SPIFF por Crecimiento</h4>
-                      <p style={sectionSub}>Cuota SO por mes con temporalidad SI · tier automático según alcance real.</p>
+                      <h4 style={sectionH}>SPIFF mensual</h4>
+                      <p style={sectionSub}>Sell-out real × {(SPIFF_FLAT_PCT * 100).toFixed(3)}% · sin tope.</p>
                     </div>
                     <span style={pillBase(theme.accent || '#007AFF')}>Mensual</span>
                   </div>
@@ -3361,12 +3341,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
                     <thead>
                       <tr>
                         <th style={thStyle}>Mes</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Cuota SI</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Cuota SO</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Sell-Out real</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Alcance</th>
-                        <th style={{ ...thStyle, textAlign: 'center' }}>Tier</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Comisión</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Comisión ({(SPIFF_FLAT_PCT * 100).toFixed(3)}%)</th>
                         <th style={{ ...thStyle, textAlign: 'right', paddingRight: 22 }}>Acción</th>
                       </tr>
                     </thead>
@@ -3377,40 +3353,17 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         const isGenerado = p && p.estatus !== "cancelado";
                         const isFuturo = c.mes > mesActualIdx;
                         const rowMuted = isNoAplica || isFuturo;
-                        let alcanceColor = theme.textMuted;
-                        if (c.alcance >= 1.20) alcanceColor = '#34C759';
-                        else if (c.alcance >= 1.00) alcanceColor = theme.accent || '#007AFF';
-                        else if (c.alcance >= 0.90) alcanceColor = '#FF9500';
-                        else if (c.soActual > 0) alcanceColor = '#FF3B30';
                         return (
                           <tr key={c.mes}>
                             <td style={{ ...tdStyle, opacity: rowMuted ? 0.45 : 1, fontWeight: c.mes === mesActualIdx ? 600 : 500 }}>
                               {MESES_F[c.mes - 1]}
                               {c.mes === mesActualIdx && <span style={{ ...pillBase(theme.accent || '#007AFF'), marginLeft: 8, fontSize: 9, padding: '2px 8px' }}>Mes actual</span>}
                             </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', color: theme.textMuted, opacity: rowMuted ? 0.45 : 1, ...monoNum, fontSize: 11 }}>
-                              {formatMXN(c.cuotaSI)}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', color: theme.text, opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 500 }}>
-                              {formatMXN(c.cuotaSOMin)}
-                              {c.ajustado && <span style={{ marginLeft: 6, fontSize: 10, color: theme.accent || '#007AFF' }} title="Cuota ajustada manualmente">⚙</span>}
-                            </td>
                             <td style={{ ...tdStyle, textAlign: 'right', opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 500 }}>
                               {c.soActual > 0 ? formatMXN(c.soActual) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
                             </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 700, color: alcanceColor }}>
-                              {c.soActual > 0 ? `${(c.alcance * 100).toFixed(0)}%` : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'center', opacity: rowMuted ? 0.45 : 1 }}>
-                              {c.tier ? <span style={{ fontSize: 18 }} title={c.tier.label}>{c.tier.icon}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
-                            </td>
                             <td style={{ ...tdStyle, textAlign: 'right', opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 700, color: isNoAplica ? theme.textMuted : theme.text }}>
-                              {c.comision > 0 ? (
-                                <>
-                                  {formatMXN(c.comision)}
-                                  {c.capped && !isNoAplica && <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 500, marginTop: 1 }}>cap</div>}
-                                </>
-                              ) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
+                              {c.comision > 0 ? formatMXN(c.comision) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'right', paddingRight: 22 }}>
                               {isNoAplica ? (
@@ -3423,7 +3376,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                   <button onClick={() => revertirSpiff(p.id)} title="Eliminar pago"
                                     style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 13, padding: '4px 6px' }}>🗑</button>
                                 </span>
-                              ) : c.tier && c.comision > 0 ? (
+                              ) : c.comision > 0 ? (
                                 <span style={{ display: 'inline-flex', gap: 6 }}>
                                   <button onClick={() => crearSpiffPago(c)} style={btnPrimary}>Generar</button>
                                   <button onClick={() => marcarSpiffNoAplica(c.mes)} style={btnGhost}>No aplica</button>
