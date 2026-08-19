@@ -116,10 +116,11 @@ function useResumenData() {
       return all;
     }
     (async () => {
-      const [vaRes, cmRes, invDigi, invPcel, invDico, dsoRes, ccRes, soRows, soPcelRows, soPcelMenRows, siRows, ecRows] = await Promise.all([
-        supabase.from('v_ventas_mensuales_agg')
-          .select('cliente, anio, mes, sell_in, sell_out')
-          .gte('anio', anioActual - 1),
+      const [cmRes, invDigi, invPcel, invDico, dsoRes, ccRes, soRows, soPcelRows, soPcelMenRows, siRows, ecRows] = await Promise.all([
+        // NOTA: antes se leía v_ventas_mensuales_agg pero esa vista quedó desactualizada
+        // tras la migración sell_in_sku → facturacion_clientes (2026-05). Ahora se
+        // construye ventasAgg en el cliente uniendo facturacion_clientes (SI real)
+        // y sellout_sku (SO) más abajo.
         supabase.from('cuotas_mensuales')
           .select('cliente, mes, anio, cuota_min, cuota_ideal')
           .eq('anio', anioActual),
@@ -132,22 +133,44 @@ function useResumenData() {
           .select('cliente, plazo_dias_credito, linea_credito_usd'),
         fetchAll(() => supabase.from('sellout_sku')
           .select('cliente, anio, mes, sku, piezas, monto_pesos')
-          .eq('anio', anioActual)),
+          .gte('anio', anioActual - 1)),
         fetchAll(() => supabase.from('sellout_pcel')
           .select('sku, anio, semana, vta_semana, costo_promedio')
           .eq('anio', anioActual)),
         fetchAll(() => supabase.from('sellout_pcel_mensual')
           .select('sku, anio, mes, piezas')
           .eq('anio', anioActual)),
-        // Migrado a facturacion_clientes (canónico). Se mapea abajo cliente_key→cliente
-        // y monto→monto_pesos para no romper consumidores downstream.
+        // Fuente canónica de sell-in real: facturacion_clientes.
+        // Agregamos anio y mes al select para poder construir ventasAgg abajo.
         fetchAll(() => supabase.from('facturacion_clientes')
-          .select('cliente_key, sku, piezas, monto')
+          .select('cliente_key, sku, piezas, monto, anio, mes')
           .gte('anio', anioActual - 1)),
         fetchAll(() => supabase.from('estados_cuenta')
           .select('id, cliente, fecha_corte, anio, semana')
           .order('fecha_corte', { ascending: true })),
       ]);
+
+      // Construir ventasAgg (cliente × anio × mes → sell_in + sell_out)
+      // desde las fuentes reales, sin depender de v_ventas_mensuales_agg.
+      const vaMap = new Map(); // key = `${cliente}|${anio}|${mes}`
+      const vaKey = (cli, a, m) => `${cli}|${a}|${m}`;
+      for (const r of (siRows || [])) {
+        const cli = r.cliente_key, a = Number(r.anio) || 0, m = Number(r.mes) || 0;
+        if (!cli || !a || !m) continue;
+        const k = vaKey(cli, a, m);
+        const cur = vaMap.get(k) || { cliente: cli, anio: a, mes: m, sell_in: 0, sell_out: 0 };
+        cur.sell_in += Number(r.monto) || 0;
+        vaMap.set(k, cur);
+      }
+      for (const r of (soRows || [])) {
+        const cli = r.cliente, a = Number(r.anio) || 0, m = Number(r.mes) || 0;
+        if (!cli || !a || !m) continue;
+        const k = vaKey(cli, a, m);
+        const cur = vaMap.get(k) || { cliente: cli, anio: a, mes: m, sell_in: 0, sell_out: 0 };
+        cur.sell_out += Number(r.monto_pesos) || 0;
+        vaMap.set(k, cur);
+      }
+      const ventasAggBuilt = Array.from(vaMap.values());
 
       const invCombinado = [
         ...(invDigi || []).map((r) => ({ ...r, cliente: 'digitalife' })),
@@ -172,7 +195,7 @@ function useResumenData() {
 
       setState({
         loading: false,
-        ventasAgg:         vaRes.data  || [],
+        ventasAgg:         ventasAggBuilt,
         cuotasMensuales:   cmRes.data  || [],
         inventarioCliente: invCombinado,
         dsoReal:           dsoRes.data || [],
