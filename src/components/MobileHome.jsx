@@ -46,15 +46,41 @@ export default function MobileHome({ perfil, onNavegar }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [v, c, dso, p] = await Promise.all([
-        // Traer todos los meses del año, luego escogemos el último con data
-        supabase.from('v_ventas_mensuales_agg').select('cliente,anio,mes,sell_in').eq('anio', MES_ACTUAL.anio),
+      // NOTA: la vista v_ventas_mensuales_agg quedó desactualizada tras la
+      // migración sell_in_sku → facturacion_clientes (mayo 2026). Consumimos
+      // directo la fuente canónica y agregamos por (cliente, mes) en cliente.
+      // Paginamos porque facturacion_clientes tiene >50K filas.
+      const fetchFactPage = async (from) => {
+        const res = await supabase.from('facturacion_clientes')
+          .select('cliente_key,mes,monto')
+          .eq('anio', MES_ACTUAL.anio)
+          .range(from, from + 999);
+        return res.data || [];
+      };
+      const factRows = [];
+      for (let from = 0; from < 100000; from += 1000) {
+        const chunk = await fetchFactPage(from);
+        factRows.push(...chunk);
+        if (chunk.length < 1000) break;
+      }
+      const vAggMap = new Map(); // key = `${cliente}|${mes}`
+      for (const r of factRows) {
+        const cli = r.cliente_key, m = Number(r.mes) || 0;
+        if (!cli || !m) continue;
+        const k = `${cli}|${m}`;
+        const cur = vAggMap.get(k) || { cliente: cli, anio: MES_ACTUAL.anio, mes: m, sell_in: 0 };
+        cur.sell_in += Number(r.monto) || 0;
+        vAggMap.set(k, cur);
+      }
+      const vDataBuilt = Array.from(vAggMap.values());
+
+      const [c, dso, p] = await Promise.all([
         supabase.from('cuotas_mensuales').select('cliente,anio,mes,cuota_min,cuota_ideal,cuota_meta').eq('anio', MES_ACTUAL.anio),
         supabase.from('v_dso_real').select('cliente,saldo_actual_total,saldo_vencido,dso_real,dso_erp'),
         supabase.from('pendientes_equipo').select('id', { count: 'exact', head: true }).eq('estatus', 'pendiente'),
       ]);
       if (!alive) return;
-      setVentas(v.data || []);
+      setVentas(vDataBuilt);
       setCuotas(c.data || []);
 
       // Cartera map por cliente
@@ -71,7 +97,7 @@ export default function MobileHome({ perfil, onNavegar }) {
       setPendCount(p.count || 0);
 
       // Detectar el último mes con al menos un dato de sell_in > 0
-      const mesesConData = new Set((v.data || []).filter(r => Number(r.sell_in) > 0).map(r => Number(r.mes)));
+      const mesesConData = new Set(vDataBuilt.filter(r => Number(r.sell_in) > 0).map(r => Number(r.mes)));
       const ultimoMes = Math.max(0, ...Array.from(mesesConData));
       if (ultimoMes > 0) setMesData(ultimoMes);
     })();
