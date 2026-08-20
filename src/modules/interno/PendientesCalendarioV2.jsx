@@ -1311,13 +1311,60 @@ function ModalActions({ theme, onClose, saving, disabled }) {
 // ═══════════════ Modal Nueva Minuta ═══════════════
 function NuevaMinutaModal({ theme, isDark, internos, yoId, onClose, onSave }) {
   const hoyISO = toISO(new Date());
-  const [titulo, setTitulo] = useState('');
-  const [fechaReunion, setFechaReunion] = useState(hoyISO);
-  const [cliente, setCliente] = useState('otro');
-  const [contenido, setContenido] = useState('');
-  const [asistentesSel, setAsistentesSel] = useState(yoId ? [yoId] : []);
-  const [acuerdos, setAcuerdos] = useState([]);
+  const DRAFT_KEY = `minuta_draft_v1_${yoId || 'anon'}`;
+  // Hidratar borrador si existe (solo una vez, al montar)
+  const initialDraft = (() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return null;
+      const d = JSON.parse(raw);
+      // Solo recuperar si tiene contenido significativo
+      const tieneContenido = (d?.titulo || '').trim() || (d?.contenido || '').trim() || (Array.isArray(d?.acuerdos) && d.acuerdos.some(a => (a?.descripcion || '').trim()));
+      return tieneContenido ? d : null;
+    } catch { return null; }
+  })();
+  const [titulo, setTitulo] = useState(initialDraft?.titulo || '');
+  const [fechaReunion, setFechaReunion] = useState(initialDraft?.fecha_reunion || hoyISO);
+  const [cliente, setCliente] = useState(initialDraft?.cliente || 'otro');
+  const [contenido, setContenido] = useState(initialDraft?.contenido || '');
+  const [asistentesSel, setAsistentesSel] = useState(initialDraft?.asistentesSel || (yoId ? [yoId] : []));
+  const [acuerdos, setAcuerdos] = useState(initialDraft?.acuerdos || []);
   const [saving, setSaving] = useState(false);
+  const [borradorRecuperado, setBorradorRecuperado] = useState(!!initialDraft);
+  const [savedFlag, setSavedFlag] = useState(false); // para no advertir en beforeunload tras submit exitoso
+
+  // Autosave a localStorage en cada cambio
+  useEffect(() => {
+    if (saving || savedFlag) return;
+    const tieneContenido = titulo.trim() || contenido.trim() || acuerdos.some(a => (a?.descripcion || '').trim());
+    try {
+      if (tieneContenido) {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ titulo, fecha_reunion: fechaReunion, cliente, contenido, asistentesSel, acuerdos, _savedAt: new Date().toISOString() }));
+      } else {
+        localStorage.removeItem(DRAFT_KEY);
+      }
+    } catch {}
+  }, [titulo, fechaReunion, cliente, contenido, asistentesSel, acuerdos, saving, savedFlag, DRAFT_KEY]);
+
+  // Advertir si el usuario intenta cerrar/refrescar con contenido sin guardar
+  useEffect(() => {
+    function beforeUnload(e) {
+      if (savedFlag || saving) return;
+      const tieneContenido = titulo.trim() || contenido.trim() || acuerdos.some(a => (a?.descripcion || '').trim());
+      if (!tieneContenido) return;
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    }
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [titulo, contenido, acuerdos, saving, savedFlag]);
+
+  function descartarBorrador() {
+    try { localStorage.removeItem(DRAFT_KEY); } catch {}
+    setTitulo(''); setFechaReunion(hoyISO); setCliente('otro'); setContenido(''); setAsistentesSel(yoId ? [yoId] : []); setAcuerdos([]);
+    setBorradorRecuperado(false);
+  }
 
   function toggleAsistente(uid) {
     setAsistentesSel(prev => prev.includes(uid) ? prev.filter(x => x !== uid) : [...prev, uid]);
@@ -1349,11 +1396,25 @@ function NuevaMinutaModal({ theme, isDark, internos, yoId, onClose, onSave }) {
     });
     setSaving(false);
     if (ok === false) return;
+    // Éxito: limpiar draft para no re-hidratar en próxima apertura
+    setSavedFlag(true);
+    try { localStorage.removeItem(DRAFT_KEY); } catch {}
   }
 
   return (
-    <ModalShell theme={theme} isDark={isDark} title="Nueva minuta" subtitle="Título, asistentes, notas y acuerdos" onClose={onClose}>
+    <ModalShell theme={theme} isDark={isDark} title="Nueva minuta" subtitle="Título, asistentes, notas y acuerdos · guardado automático" onClose={onClose}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {borradorRecuperado && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', borderRadius: 10, background: `${theme.accent}15`, border: `1px solid ${theme.accent}55`, fontSize: 11 }}>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text }}>
+              📝 Borrador recuperado de sesión anterior
+            </span>
+            <button type="button" onClick={descartarBorrador}
+              style={{ padding: '3px 10px', borderRadius: 999, border: `1px solid ${theme.border}`, background: 'transparent', color: theme.textMuted, fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, cursor: 'pointer' }}>
+              Descartar
+            </button>
+          </div>
+        )}
         <Field label="Título" theme={theme}>
           <input autoFocus value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ej. Reunión semanal Digitalife"
             style={inputStyle(theme)} />
