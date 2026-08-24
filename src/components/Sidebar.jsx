@@ -29,6 +29,7 @@ const MENU_A_PERMISO_GLOBAL = {
   cobranzaGlobal:   'cobranza_global',
   forecastClientes: 'forecast_clientes',
   estrategiaPrecios:'estrategia_precios',
+  forecastReservas: 'forecast_reservas',
   ordenesCompra:    'ordenes_compra',
   adminInterna:     'admin_interna',
   telemetria:       '__super_admin_only__', // sentinel: solo Fernando
@@ -113,6 +114,7 @@ const MENU_CONFIG = [
       { id: 'resumenClientes',  label: 'Resumen de Clientes', icon: BarChart3 },
       { id: 'propuestas',       label: 'Propuestas',          icon: ClipboardList },
       { id: 'estrategiaPrecios',label: 'Estrategia de Precios', icon: TrendingUp },
+      { id: 'forecastReservas', label: 'Forecast · Reservas', icon: Target },
       { id: 'ordenesCompra',    label: 'Tracking Pedidos',    icon: FileCheck },
       {
         type: 'subgrupo',

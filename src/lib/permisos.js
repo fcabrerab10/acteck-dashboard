@@ -175,6 +175,7 @@ export const PESTANAS_GLOBALES = [
   { id: "cobranza_global",    label: "Cobranza",              desc: "Aging y DSO consolidados de los 3 clientes" },
   { id: "forecast_clientes",  label: "S&OP",                  desc: "Planeación de compras cross-cliente (Sales & Operations Planning)" },
   { id: "estrategia_precios", label: "Estrategia de Precios", desc: "Pricing por cliente y por SKU" },
+  { id: "forecast_reservas",  label: "Forecast · Reservas",   desc: "Reservas de arribos por cliente (preventa)" },
   { id: "ordenes_compra",     label: "Tracking Pedidos",      desc: "Gestión de OCs, fill rate y cruce con ERP" },
   { id: "admin_interna",      label: "Administración Interna", desc: "Pendientes & Calendario del equipo" },
   { id: "axon_mexico",        label: "Axon de México",        desc: "Nueva empresa para gestión de e-commerce" },

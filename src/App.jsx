@@ -12,7 +12,7 @@ import {
   BarChart3, Target, ClipboardList, Settings as SettingsIcon, Building2,
   Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator,
 } from 'lucide-react';
-import { HomeCliente, HomeDigitalife, HomeDicotech, HomePcel, CreditoCobranza, CreditoCobranzaV2, PagosCliente, EstrategiaProducto, MarketingCliente, MarketingClienteV2, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, SellInCliente, SellInClienteV2, SellInDicotech, SellInPcel, TrackingPedidos, SellOutCliente, SellOutClienteV2, SellOutDicotech, SellOutPcel } from './modules/comercial';
+import { HomeCliente, HomeDigitalife, HomeDicotech, HomePcel, CreditoCobranza, CreditoCobranzaV2, PagosCliente, EstrategiaProducto, MarketingCliente, MarketingClienteV2, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, ForecastReservas, SellInCliente, SellInClienteV2, SellInDicotech, SellInPcel, TrackingPedidos, SellOutCliente, SellOutClienteV2, SellOutDicotech, SellOutPcel } from './modules/comercial';
 import EstadoResultados from './modules/general/EstadoResultados';
 import VisionGeneral from './modules/comercial/VisionGeneral';
 import ReporteTab from './modules/comercial/ReporteTab';
@@ -221,6 +221,7 @@ const GLOBAL_PAGES_INFO = {
   cobranzaGlobal:   { label: 'Cobranza',               icon: HandCoins },
   forecastClientes: { label: 'S&OP',                   icon: Target },
   estrategiaPrecios:{ label: 'Estrategia de Precios',  icon: TrendingUp },
+  forecastReservas: { label: 'Forecast · Reservas',    icon: Target },
   ordenesCompra:    { label: 'Tracking Pedidos',        icon: Target },
   adminInterna:     { label: 'Administración Interna', icon: Building2 },
   axonMexico:       { label: 'Axon de México',          icon: Building2 },
@@ -314,14 +315,14 @@ export default function App() {
 
   
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
-    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','ordenesCompra','adminInterna','telemetria','axonMexico','buscar']), []);
+    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','axonMexico','buscar']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
       try { return localStorage.getItem('nav_pagina') || 'home'; } catch { return 'home'; }
     });
     const [clienteActivo, setClienteActivo] = useState(() => {
       try {
         const pag = localStorage.getItem('nav_pagina') || 'home';
-        const globals = new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','ordenesCompra','adminInterna','telemetria','axonMexico','buscar']);
+        const globals = new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','axonMexico','buscar']);
         if (globals.has(pag)) return null;
         return localStorage.getItem('nav_cliente') || 'digitalife';
       } catch { return 'digitalife'; }
@@ -597,6 +598,11 @@ export default function App() {
                   ? <MobileEstrategiaPrecios onBack={() => handleNavegar(null, 'resumenClientes')} onNavegar={handleNavegar} />
                   : <EstrategiaPrecios />)
               : <SinAcceso motivo="No tienes acceso a Estrategia de Precios." />
+          )}
+          {paginaActiva === "forecastReservas" && (
+            puedeVerPestanaGlobal(perfil, "forecast_reservas")
+              ? <ForecastReservas />
+              : <SinAcceso motivo="No tienes acceso a Forecast · Reservas." />
           )}
           {paginaActiva === "ordenesCompra" && (
             puedeVerPestanaGlobal(perfil, "ordenes_compra")
