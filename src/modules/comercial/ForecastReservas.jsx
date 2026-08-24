@@ -54,8 +54,8 @@ function toISO(d) { return d.toISOString().slice(0, 10); }
 
 export default function ForecastReservas() {
   const { theme, isDark } = useTheme();
-  const { perfil } = usePerfil();
-  const yoId = perfil?.user_id;
+  const perfil = usePerfil();
+  const yoId = perfil?.user_id || null;
 
   const hoy = useMemo(() => new Date(), []);
   const anioObj = hoy.getFullYear();
@@ -84,7 +84,7 @@ export default function ForecastReservas() {
 
   // ─── Fetch inicial ──────────────────────────────────────────
   useEffect(() => {
-    if (!DB_CONFIGURED || !yoId) return;
+    if (!DB_CONFIGURED) return;
     let cancelled = false;
     (async () => {
       setLoading(true); setError(null);
@@ -112,11 +112,13 @@ export default function ForecastReservas() {
             .select('codigo, arribo_almacen, po_qty, shp_qty, contenedor')
             .gte('arribo_almacen', toISO(hoy)).lte('arribo_almacen', toISO(trecs))).catch(e => { console.error('embarques_compras:', e); return []; }),
           // Propuesta activa: 2 queries separadas para no depender de FK-embed de PostgREST
-          supabase.from('forecast_propuestas')
-            .select('*')
-            .eq('creado_por', yoId).eq('estatus', 'borrador')
-            .order('created_at', { ascending: false }).limit(1).maybeSingle()
-            .catch(e => { console.error('forecast_propuestas:', e); return { data: null }; }),
+          yoId
+            ? supabase.from('forecast_propuestas')
+                .select('*')
+                .eq('creado_por', yoId).eq('estatus', 'borrador')
+                .order('created_at', { ascending: false }).limit(1).maybeSingle()
+                .then(r => r).catch(e => { console.error('forecast_propuestas:', e); return { data: null }; })
+            : Promise.resolve({ data: null }),
         ]);
 
         if (cancelled) return;
@@ -342,7 +344,6 @@ export default function ForecastReservas() {
 
   // ─── Render ───────────────────────────────────────────────
   if (!DB_CONFIGURED) return <div style={{ padding: 40, color: theme.textMuted }}>DB no configurada.</div>;
-  if (!yoId) return <div style={{ padding: 40 }}><FerrutekLoader label="Esperando perfil…" /></div>;
   if (loading) return <div style={{ padding: 40 }}><FerrutekLoader label="Cargando forecast…" /></div>;
   if (error) return (
     <div style={{ padding: 20, maxWidth: 720, margin: '40px auto', background: '#FBECEA', border: '1px solid #C0392B', borderRadius: 12, color: '#C0392B' }}>
