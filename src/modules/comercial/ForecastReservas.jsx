@@ -420,9 +420,9 @@ export default function ForecastReservas() {
             <button onClick={() => setSoloConBrecha(v => !v)}
               style={{
                 padding: '8px 14px', borderRadius: 999,
-                border: `1px solid ${soloConBrecha ? '#1D4FD8' : theme.border}`,
+                border: `1px solid ${soloConBrecha ? theme.accent : theme.border}`,
                 background: soloConBrecha ? (isDark ? '#0F1830' : '#E7EEFF') : theme.surface,
-                color: soloConBrecha ? '#1D4FD8' : theme.text,
+                color: soloConBrecha ? theme.accent : theme.text,
                 fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: soloConBrecha ? 600 : 500, cursor: 'pointer',
               }}>
               {soloConBrecha ? '✓ ' : ''}Solo con brecha ({filasBase.length})
@@ -434,7 +434,7 @@ export default function ForecastReservas() {
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${theme.border}` }}>
               <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', margin: 0 }}>Detalle por SKU</h3>
               <span style={{ fontSize: 11, color: theme.textMuted }}>
-                <b style={{ color: theme.text, fontWeight: 600 }}>{filasFiltradas.length}</b> SKUs · <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#1D4FD8', verticalAlign: 'middle', marginRight: 4 }} />en propuesta
+                <b style={{ color: theme.text, fontWeight: 600 }}>{filasFiltradas.length}</b> SKUs · <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: theme.accent, verticalAlign: 'middle', marginRight: 4 }} />en propuesta
               </span>
             </div>
             <div style={{ overflowX: 'auto' }}>
@@ -458,7 +458,11 @@ export default function ForecastReservas() {
                     const l = lineas[f.sku];
                     const enPropuesta = !!l;
                     return (
-                      <tr key={f.sku} style={{ borderTop: `1px solid ${theme.divider || theme.border}`, background: enPropuesta ? 'rgba(52,199,89,0.05)' : 'transparent', transition: 'background 160ms ease' }}>
+                      <tr key={f.sku} style={{
+                        borderTop: `1px solid ${theme.divider || theme.hairline || theme.border}`,
+                        background: enPropuesta ? 'rgba(0,122,255,0.03)' : 'transparent',
+                        transition: 'background 160ms ease',
+                      }}>
                         <Td theme={theme} l><span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600 }}>{f.sku}</span></Td>
                         <Td theme={theme} l>
                           <div title={`${f.descripcion}${f.marca ? ' · ' + f.marca : ''}${f.familia ? ' · ' + f.familia : ''}`}
@@ -475,26 +479,18 @@ export default function ForecastReservas() {
                         ))}
                         <Td theme={theme} bl={groupSep}><span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, color: theme.accent, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(f.recomendado)}</span></Td>
                         <Td theme={theme}>
-                          {enPropuesta ? (
-                            <ReservoInput
-                              value={Number(l.reservo) || 0}
-                              max={f.recomendado}
-                              confirmado={l.estado === 'confirmado' || l.estado === 'parcial'}
-                              onChange={(v) => upsertLinea(f, { reservo: v, estado: propuesta?.estatus === 'generada' ? 'pend_confirmar' : 'draft' })}
-                              onClear={() => eliminarLinea(f.sku)}
-                            />
-                          ) : (
-                            <button onClick={() => upsertLinea(f, { reservo: f.recomendado })}
-                              style={{
-                                padding: '6px 12px', borderRadius: 999,
-                                background: '#1D4FD8', color: '#FFF', border: 0, cursor: 'pointer',
-                                fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600,
-                              }}>
-                              + Agregar {fmtInt(f.recomendado)} ▸
-                            </button>
-                          )}
+                          <ReservoInput
+                            value={Number(l?.reservo) || 0}
+                            recom={f.recomendado}
+                            confirmado={l?.estado === 'confirmado' || l?.estado === 'parcial'}
+                            accent={theme.accent}
+                            onChange={(v) => {
+                              if (v === 0 && l?.id) return eliminarLinea(f.sku);
+                              if (v > 0) upsertLinea(f, { reservo: v, estado: propuesta?.estatus === 'generada' ? 'pend_confirmar' : 'draft' });
+                            }}
+                          />
                         </Td>
-                        <Td theme={theme}><EstadoPill estado={l?.estado || 'draft'} confirmado={l?.confirmado} reservo={l?.reservo} recom={f.recomendado} /></Td>
+                        <Td theme={theme}><EstadoPill estado={l?.estado || 'draft'} confirmado={l?.confirmado} reservo={l?.reservo} recom={f.recomendado} accent={theme.accent} /></Td>
                       </tr>
                     );
                   })}
@@ -516,7 +512,7 @@ export default function ForecastReservas() {
                 <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 700, letterSpacing: '-0.01em', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
                   Mi Propuesta
                   {Object.keys(lineas).length > 0 && (
-                    <span style={{ background: '#1D4FD8', color: '#FFF', fontSize: 10, padding: '1px 7px', borderRadius: 999, fontWeight: 700 }}>{Object.keys(lineas).length}</span>
+                    <span style={{ background: theme.accent, color: '#FFF', fontSize: 10, padding: '1px 7px', borderRadius: 999, fontWeight: 700 }}>{Object.keys(lineas).length}</span>
                   )}
                 </div>
               </div>
@@ -540,8 +536,8 @@ export default function ForecastReservas() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', padding: '0 16px 16px', gap: 12 }}>
               <div style={{ padding: '12px 14px', background: isDark ? '#0F1830' : '#E7EEFF', borderRadius: 10 }}>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#1D4FD8' }}>Piezas</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: '#1D4FD8', fontVariantNumeric: 'tabular-nums' }}>{fmtInt(kpis.totalReservo)}</div>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.accent }}>Piezas</div>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: theme.accent, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(kpis.totalReservo)}</div>
                 <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2 }}>de {fmtInt(kpis.totalRecom)} recom.</div>
               </div>
               <div style={{ padding: '12px 14px', background: isDark ? '#0F2B1E' : '#E4F5EB', borderRadius: 10 }}>
@@ -608,11 +604,12 @@ function Th({ theme, children, l, c, w, bg, color, bl }) {
 }
 function Td({ theme, children, l, c, bg, bl }) {
   return <td style={{
-    padding: '7px 10px',
+    padding: '5px 10px',
     textAlign: l ? 'left' : (c ? 'center' : 'right'),
     verticalAlign: 'middle', background: bg,
     borderLeft: bl ? `1px solid ${bl}` : undefined,
     fontSize: 12, color: theme.text, fontFamily: TYPO.fontText,
+    whiteSpace: 'nowrap',
   }}>{children}</td>;
 }
 
@@ -640,35 +637,38 @@ function RoadmapChip({ r }) {
   const s = map[R] || { bg: '#F2F2F4', color: '#A1A1A6' };
   return <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 6, letterSpacing: '0.04em', minWidth: 40, background: s.bg, color: s.color }}>{R || '—'}</span>;
 }
-function ReservoInput({ value, max, confirmado, onChange, onClear }) {
+function ReservoInput({ value, recom, confirmado, onChange, accent = '#007AFF' }) {
   const [local, setLocal] = useState(String(value ?? 0));
   useEffect(() => { setLocal(String(value ?? 0)); }, [value]);
-  const dirty = Number(local) !== value;
+  const numLocal = Number(local) || 0;
+  const dirty = numLocal !== value;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
       <input value={local}
+        placeholder="0"
         onChange={e => setLocal(e.target.value.replace(/[^\d]/g, ''))}
-        onBlur={() => { const n = Number(local) || 0; if (n !== value) onChange(n); if (n === 0) onClear(); }}
+        onFocus={e => e.currentTarget.select()}
+        onBlur={() => { const n = Number(local) || 0; if (n !== value) onChange(n); }}
         onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
         style={{
-          width: 74, padding: '6px 10px', borderRadius: 8, textAlign: 'right',
-          border: `1px solid ${confirmado ? '#0F8F4F' : (dirty ? '#1D4FD8' : '#E5E5E9')}`,
-          background: confirmado ? '#E4F5EB' : (dirty ? '#E7EEFF' : 'transparent'),
-          color: confirmado ? '#0F8F4F' : (dirty ? '#1D4FD8' : 'inherit'),
-          fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 600, outline: 'none',
+          width: 68, padding: '4px 8px', borderRadius: 6, textAlign: 'right',
+          border: `1px solid ${confirmado ? '#34C759' : (numLocal > 0 ? accent : 'transparent')}`,
+          background: confirmado ? 'rgba(52,199,89,0.10)' : (numLocal > 0 ? 'rgba(0,122,255,0.06)' : 'transparent'),
+          color: confirmado ? '#34C759' : (numLocal > 0 ? accent : '#A1A1A6'),
+          fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 600, outline: 'none',
         }} />
-      <span style={{ color: '#A1A1A6', fontSize: 10, fontFamily: TYPO.fontDisplay, fontWeight: 500 }}>/ {fmtInt(max)}</span>
+      <span style={{ color: '#A1A1A6', fontSize: 10, fontFamily: 'SF Mono, ui-monospace, monospace', fontWeight: 500 }}>/ {fmtInt(recom)}</span>
     </span>
   );
 }
-function EstadoPill({ estado, confirmado, reservo, recom }) {
+function EstadoPill({ estado, confirmado, reservo, recom, accent = '#007AFF' }) {
   const styles = {
-    draft:         { bg: '#F0F0F2', color: '#6E6E73', label: 'Borrador' },
-    pend_confirmar:{ bg: '#E7EEFF', color: '#1D4FD8', label: 'Pend. confirmar' },
-    confirmado:    { bg: '#E4F5EB', color: '#0F8F4F', label: 'Confirmado ✓' },
-    parcial:       { bg: '#FFF3DF', color: '#B87400', label: `Parcial ${fmtInt(confirmado)}/${fmtInt(recom)}` },
-    no_aplica:     { bg: '#FBECEA', color: '#C0392B', label: 'No aplica' },
+    draft:         { bg: 'transparent', color: '#A1A1A6', label: '—' },
+    pend_confirmar:{ bg: 'rgba(0,122,255,0.10)', color: accent, label: 'Pendiente' },
+    confirmado:    { bg: 'rgba(52,199,89,0.12)', color: '#34C759', label: 'Confirmado' },
+    parcial:       { bg: 'rgba(255,149,0,0.12)', color: '#FF9500', label: `Parcial ${fmtInt(confirmado)}/${fmtInt(recom)}` },
+    no_aplica:     { bg: 'rgba(255,59,48,0.12)', color: '#FF3B30', label: 'No aplica' },
   };
   const s = styles[estado] || styles.draft;
-  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, padding: '4px 10px', borderRadius: 999, background: s.bg, color: s.color }}>{s.label}</span>;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, padding: '3px 9px', borderRadius: 999, background: s.bg, color: s.color }}>{s.label}</span>;
 }
