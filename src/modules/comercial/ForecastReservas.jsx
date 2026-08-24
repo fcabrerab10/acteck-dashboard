@@ -357,43 +357,41 @@ export default function ForecastReservas() {
   return (
     <div style={{ padding: '20px 20px 60px', maxWidth: 1520, margin: '0 auto' }}>
 
-      {/* Hero */}
+      {/* Hero editorial · estilo S&OP */}
       <div style={{
-        background: '#0A0A0A', color: '#FFF', borderRadius: 16, padding: '22px 26px',
-        display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 36, alignItems: 'center', marginBottom: 16,
+        display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 24,
+        background: '#0A0A0A', color: '#F5F5F7',
+        borderRadius: 14, padding: '18px 22px', marginBottom: 12,
+        alignItems: 'center',
       }}>
         <div>
-          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)' }}>
-            Dir. Comercial · Clientes Propios · Forecast · {NOMBRES_MES[mesObj]} {anioObj}
-          </div>
-          <h1 style={{ fontFamily: TYPO.fontDisplay, fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', margin: '6px 0 4px' }}>Forecast.</h1>
-          <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', maxWidth: 640 }}>
-            <b style={{ color: '#FFF' }}>{filasBase.length} SKUs.</b>{' '}
-            <b style={{ color: '#F4A79E' }}>{kpis.skusConBrecha} con brecha</b>,{' '}
-            <b style={{ color: '#B4C7FF' }}>{kpis.skusEnPropuesta} en propuesta activa</b>.
-            Arma tu propuesta seleccionando SKUs con la cantidad que reservarás en Acteck.
-          </div>
+          <p style={{
+            fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em',
+            color: 'rgba(255,255,255,0.55)', fontWeight: 500, fontFamily: TYPO.fontText, margin: 0,
+          }}>
+            Dirección Comercial · Forecast · {NOMBRES_MES[mesObj]} {anioObj}
+          </p>
+          <h2 style={{
+            fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em',
+            color: '#F5F5F7', margin: '4px 0 6px', lineHeight: 1.15,
+          }}>
+            Reservas de arribos por cliente.
+          </h2>
+          <p style={{
+            color: 'rgba(255,255,255,0.72)', fontSize: 12, lineHeight: 1.55, margin: 0, maxWidth: 600,
+            fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums',
+          }}>
+            <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{filasBase.length} SKUs</strong>.
+            {kpis.skusConBrecha > 0 && <> <strong style={{ color: '#FF6961', fontWeight: 500 }}>{kpis.skusConBrecha} con brecha</strong>,</>}
+            {kpis.skusEnPropuesta > 0 && <> <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{kpis.skusEnPropuesta} en propuesta</strong>,</>}
+            {' '}Arma tu propuesta seleccionando SKUs con la cantidad que reservarás en Acteck.
+          </p>
         </div>
-        <div style={{ paddingLeft: 28, borderLeft: '1px solid rgba(255,255,255,0.10)', display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)' }}>SKUs c/ brecha</div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: '#FF9484' }}>{fmtInt(kpis.skusConBrecha)}</div>
-            <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>{fmtInt(kpis.totalRecom)} pz recomendadas</div>
-          </div>
-          <div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)' }}>Propuesta activa</div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>{fmtInt(kpis.totalReservo)} pz</div>
-            <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>{kpis.skusEnPropuesta} SKUs</div>
-          </div>
-        </div>
-        <div style={{ paddingLeft: 28, borderLeft: '1px solid rgba(255,255,255,0.10)', display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)' }}>Próx. arribo</div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: '#8EE6AC' }}>
-              {kpis.proxArribo ? new Date(kpis.proxArribo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '—'}
-            </div>
-            <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>{arribos.length} embarques en 3 meses</div>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
+          <HeroStat label="SKUs c/ brecha" value={fmtInt(kpis.skusConBrecha)} sub={`${fmtInt(kpis.totalRecom)} pz recom.`} color="#FF6961" />
+          <HeroStat label="Propuesta activa" value={`${fmtInt(kpis.totalReservo)} pz`} sub={`${kpis.skusEnPropuesta} SKUs`} color="#F5F5F7" />
+          <HeroStat label="Próx. arribo" value={kpis.proxArribo ? new Date(kpis.proxArribo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '—'} sub={`${arribos.length} embarques 3m`} color="#34D158" />
+          <HeroStat label="Método" value="Velocity 6m" sub="promedio sell-out" color="#F5F5F7" />
         </div>
       </div>
 
@@ -443,24 +441,16 @@ export default function ForecastReservas() {
               <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 12.5, minWidth: 1100 }}>
                 <thead>
                   <tr>
-                    <ThSup theme={theme} colspan={3} />
-                    <ThSup theme={theme} color={theme.textMuted} bl={groupSep}>Digitalife</ThSup>
-                    <ThSup theme={theme} color={theme.textMuted}>PCEL</ThSup>
-                    <ThSup theme={theme} color={theme.textMuted}>Dicotech</ThSup>
-                    <ThSup theme={theme} color={theme.textMuted} colspan={3} bl={groupSep}>Próximos arribos</ThSup>
-                    <ThSup theme={theme} colspan={3} bl={groupSep} />
-                  </tr>
-                  <tr>
-                    <Th theme={theme} l w={80}>Roadmap</Th>
-                    <Th theme={theme} l w={100}>SKU</Th>
+                    <Th theme={theme} l w={110}>SKU</Th>
                     <Th theme={theme} l>Descripción</Th>
-                    <Th theme={theme} bl={groupSep}>Necesita</Th>
-                    <Th theme={theme}>Necesita</Th>
-                    <Th theme={theme}>Necesita</Th>
-                    {proxMeses.map((m, i) => <Th key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined}>{m.label}</Th>)}
-                    <Th theme={theme} color="#1D4FD8" bl={groupSep}>Recom.</Th>
-                    <Th theme={theme}>Reservo</Th>
-                    <Th theme={theme}>Estado</Th>
+                    <Th theme={theme} w={72}>Roadmap</Th>
+                    <Th theme={theme} bl={groupSep} w={72}>Digitalife</Th>
+                    <Th theme={theme} w={64}>PCEL</Th>
+                    <Th theme={theme} w={72}>Dicotech</Th>
+                    {proxMeses.map((m, i) => <Th key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined} w={68}>Arribo {m.label}</Th>)}
+                    <Th theme={theme} bl={groupSep} w={72} color={theme.accent}>Recom.</Th>
+                    <Th theme={theme} w={112}>Reservo</Th>
+                    <Th theme={theme} w={128}>Estado</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -468,21 +458,22 @@ export default function ForecastReservas() {
                     const l = lineas[f.sku];
                     const enPropuesta = !!l;
                     return (
-                      <tr key={f.sku}>
-                        <Td theme={theme} l><RoadmapChip r={f.roadmap} /></Td>
-                        <Td theme={theme} l><span style={{ fontFamily: TYPO.fontMono || 'monospace', fontSize: 11.5, fontWeight: 600, color: '#1D4FD8' }}>{f.sku}</span></Td>
+                      <tr key={f.sku} style={{ borderTop: `1px solid ${theme.divider || theme.border}`, background: enPropuesta ? 'rgba(52,199,89,0.05)' : 'transparent', transition: 'background 160ms ease' }}>
+                        <Td theme={theme} l><span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600 }}>{f.sku}</span></Td>
                         <Td theme={theme} l>
-                          <div title={`${f.descripcion}${f.marca ? ' · ' + f.marca : ''}`} style={{ fontFamily: TYPO.fontText, fontWeight: 500, fontSize: 12.5, color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 420 }}>
-                            {f.descripcion}
+                          <div title={`${f.descripcion}${f.marca ? ' · ' + f.marca : ''}${f.familia ? ' · ' + f.familia : ''}`}
+                            style={{ fontFamily: TYPO.fontText, fontWeight: 400, fontSize: 12, color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 340 }}>
+                            {f.descripcion || '—'}
                           </div>
                         </Td>
+                        <Td theme={theme} c><RoadmapChip r={f.roadmap} /></Td>
                         <Td theme={theme} bl={groupSep}><NumCell n={f.necesidad_dgl} /></Td>
                         <Td theme={theme}><NumCell n={f.necesidad_pce} /></Td>
                         <Td theme={theme}><NumCell n={f.necesidad_dct} /></Td>
                         {proxMeses.map((m, i) => (
                           <Td key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined}><NumCell n={f.arribosPorMes[m.key]} strong={f.arribosPorMes[m.key] > 0} /></Td>
                         ))}
-                        <Td theme={theme} bl={groupSep}><span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 700, color: '#1D4FD8', fontVariantNumeric: 'tabular-nums' }}>{fmtInt(f.recomendado)}</span></Td>
+                        <Td theme={theme} bl={groupSep}><span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, color: theme.accent, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(f.recomendado)}</span></Td>
                         <Td theme={theme}>
                           {enPropuesta ? (
                             <ReservoInput
@@ -601,45 +592,53 @@ function StepChip({ theme, n, lb, sub, active, done }) {
   );
 }
 
-function ThSup({ theme, children, bg, color, colspan = 1, bl }) {
-  return (
-    <th colSpan={colspan} style={{
-      fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600,
-      letterSpacing: '0.12em', textTransform: 'uppercase', color: color || theme.textMuted,
-      textAlign: 'center', padding: '10px 8px', borderBottom: `1px solid ${theme.border}`,
-      background: bg || theme.surface,
-      borderLeft: bl ? `1px solid ${bl}` : undefined,
-    }}>{children || ''}</th>
-  );
-}
-function Th({ theme, children, l, w, bg, color, bl }) {
+function Th({ theme, children, l, c, w, bg, color, bl }) {
   return (
     <th style={{
       fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600,
       letterSpacing: '0.10em', textTransform: 'uppercase', color: color || theme.textMuted,
-      textAlign: l ? 'left' : 'right', padding: '10px 10px',
+      textAlign: l ? 'left' : (c ? 'center' : 'right'),
+      padding: '10px 10px',
       borderBottom: `1px solid ${theme.border}`, background: bg || theme.surface,
       whiteSpace: 'nowrap', width: w,
       borderLeft: bl ? `1px solid ${bl}` : undefined,
+      position: 'sticky', top: 0, zIndex: 2,
     }}>{children}</th>
   );
 }
-function Td({ theme, children, l, bg, bl }) {
+function Td({ theme, children, l, c, bg, bl }) {
   return <td style={{
-    padding: '8px 10px', borderBottom: `1px solid ${theme.divider || theme.border}`,
-    textAlign: l ? 'left' : 'right', verticalAlign: 'middle', background: bg,
+    padding: '7px 10px',
+    textAlign: l ? 'left' : (c ? 'center' : 'right'),
+    verticalAlign: 'middle', background: bg,
     borderLeft: bl ? `1px solid ${bl}` : undefined,
+    fontSize: 12, color: theme.text, fontFamily: TYPO.fontText,
   }}>{children}</td>;
+}
+
+function HeroStat({ label, value, sub, color }) {
+  return (
+    <div>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>{label}</div>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color, marginTop: 2 }}>{value}</div>
+      <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.55)', marginTop: 1 }}>{sub}</div>
+    </div>
+  );
 }
 function NumCell({ n, strong }) {
   const v = Number(n) || 0;
-  return <span style={{ fontVariantNumeric: 'tabular-nums', fontFamily: TYPO.fontDisplay, fontWeight: strong ? 700 : 500, color: v === 0 ? '#A1A1A6' : 'inherit' }}>{fmtNum(v)}</span>;
+  return <span style={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: strong ? 600 : 500, color: v === 0 ? '#A1A1A6' : 'inherit' }}>{fmtNum(v)}</span>;
 }
 function RoadmapChip({ r }) {
   const R = (r || '').toUpperCase();
-  const bg = R === 'RMI' ? '#F2C744' : R === 'RML' ? '#F5D96A' : (R === 'EOL' ? '#F2F2F4' : '#F2F2F4');
-  const color = R === 'EOL' ? '#6E6E73' : '#5D4300';
-  return <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 6, letterSpacing: '0.04em', minWidth: 44, background: bg, color }}>{R || '—'}</span>;
+  // paleta S&OP (RMI/RML amarillo · EOL gris)
+  const map = {
+    RMI: { bg: '#F2C744', color: '#5D4300' },
+    RML: { bg: '#F5D96A', color: '#5D4300' },
+    EOL: { bg: '#F2F2F4', color: '#6E6E73' },
+  };
+  const s = map[R] || { bg: '#F2F2F4', color: '#A1A1A6' };
+  return <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 6, letterSpacing: '0.04em', minWidth: 40, background: s.bg, color: s.color }}>{R || '—'}</span>;
 }
 function ReservoInput({ value, max, confirmado, onChange, onClear }) {
   const [local, setLocal] = useState(String(value ?? 0));
