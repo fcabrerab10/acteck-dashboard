@@ -59,7 +59,7 @@ export default function ForecastReservas() {
   const anioObj = hoy.getFullYear();
   const mesObj = hoy.getMonth() + 1;
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   // Datos base
@@ -340,8 +340,15 @@ export default function ForecastReservas() {
 
   // ─── Render ───────────────────────────────────────────────
   if (!DB_CONFIGURED) return <div style={{ padding: 40, color: theme.textMuted }}>DB no configurada.</div>;
+  if (!yoId) return <div style={{ padding: 40 }}><FerrutekLoader label="Esperando perfil…" /></div>;
   if (loading) return <div style={{ padding: 40 }}><FerrutekLoader label="Cargando forecast…" /></div>;
-  if (error) return <div style={{ padding: 20, color: '#C0392B' }}>{error}</div>;
+  if (error) return (
+    <div style={{ padding: 20, maxWidth: 720, margin: '40px auto', background: '#FBECEA', border: '1px solid #C0392B', borderRadius: 12, color: '#C0392B' }}>
+      <b style={{ fontFamily: TYPO.fontDisplay, fontSize: 14 }}>Error cargando forecast</b>
+      <pre style={{ fontSize: 11, marginTop: 8, whiteSpace: 'pre-wrap' }}>{error}</pre>
+      <button onClick={() => location.reload()} style={{ marginTop: 8, padding: '6px 14px', borderRadius: 999, background: '#C0392B', color: '#FFF', border: 0, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600 }}>Reintentar</button>
+    </div>
+  );
 
   const step = propuesta?.estatus === 'generada' ? 3 : (Object.keys(lineas).length > 0 ? 2 : 1);
 
