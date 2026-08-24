@@ -97,7 +97,7 @@ export default function ForecastReservas() {
 
         // Fetch en paralelo, cada uno con manejo propio (no aborta todo si uno falla)
         const [rmRes, soRows, ctRes, faRows, embRows, propRes] = await Promise.all([
-          supabase.from('roadmap_sku').select('sku, descripcion, marca, familia, rdmp'),
+          supabase.from('roadmap_sku').select('sku, descripcion, marca, familia, rdmp, sort_order').order('sort_order', { ascending: true, nullsFirst: false }),
           fetchAll(() => supabase.from('sellout_sku')
             .select('cliente, anio, mes, sku, piezas')
             .gte('anio', anioMin)).catch(e => { console.error('sellout_sku:', e); return []; }),
@@ -107,9 +107,11 @@ export default function ForecastReservas() {
           fetchAll(() => supabase.from('facturacion_clientes')
             .select('cliente_key, sku, piezas, anio, mes')
             .eq('anio', anioObj).eq('mes', mesObj)).catch(e => { console.error('facturacion_clientes:', e); return []; }),
+          // arribo_almacen está vacío en toda la tabla — usamos fallback:
+          // arribo_cedis (3.5k filas) o eta_puerto (4.1k filas)
           fetchAll(() => supabase.from('embarques_compras')
-            .select('codigo, arribo_almacen, po_qty, shp_qty, contenedor')
-            .gte('arribo_almacen', toISO(hoy)).lte('arribo_almacen', toISO(trecs))).catch(e => { console.error('embarques_compras:', e); return []; }),
+            .select('codigo, arribo_almacen, arribo_cedis, eta_puerto, po_qty, shp_qty, contenedor'))
+            .catch(e => { console.error('embarques_compras:', e); return []; }),
           // Propuesta activa: 2 queries separadas para no depender de FK-embed de PostgREST
           yoId
             ? supabase.from('forecast_propuestas')
@@ -175,12 +177,15 @@ export default function ForecastReservas() {
     return out;
   }, [sellout]);
 
-  // Arribos: agrupar por (sku, año-mes)
+  // Arribos: agrupar por (sku, año-mes). Fallback de fecha:
+  //   arribo_almacen → arribo_cedis → eta_puerto
   const arribosPorSku = useMemo(() => {
-    const map = new Map(); // sku → { mesLabel: totalPz }
+    const map = new Map();
     for (const e of arribos) {
-      if (!e.codigo || !e.arribo_almacen) continue;
-      const d = new Date(e.arribo_almacen);
+      if (!e.codigo) continue;
+      const fecha = e.arribo_almacen || e.arribo_cedis || e.eta_puerto;
+      if (!fecha) continue;
+      const d = new Date(fecha);
       if (isNaN(d)) continue;
       const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
       const qty = Number(e.shp_qty) || Number(e.po_qty) || 0;
@@ -225,6 +230,7 @@ export default function ForecastReservas() {
         marca: rm.marca || '',
         familia: rm.familia || '',
         roadmap: (rm.rdmp || '').toUpperCase(),
+        sort_order: rm.sort_order,
         necesidad_dgl: vDgl,
         necesidad_pce: vPce,
         necesidad_dct: vDct,
@@ -232,7 +238,8 @@ export default function ForecastReservas() {
         arribosPorMes: arrPorMes,
       });
     }
-    return rows.sort((a, b) => b.recomendado - a.recomendado);
+    // Orden por defecto del roadmap (sort_order)
+    return rows;
   }, [roadmap, velocity, arribosPorSku, proxMeses, lineas]);
 
   const filasFiltradas = useMemo(() => {
@@ -409,33 +416,36 @@ export default function ForecastReservas() {
 
         <div style={{ minWidth: 0 }}>
 
-          {/* Filters */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '10px 12px', marginBottom: 12 }}>
-            <div style={{ flex: 1, minWidth: 260, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: theme.bg, borderRadius: 9, color: theme.textMuted, fontSize: 12.5 }}>
-              <Search size={14} />
-              <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
-                placeholder="Buscar SKU · descripción · marca · familia"
-                style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', color: theme.text, fontFamily: TYPO.fontText, fontSize: 12.5 }} />
-            </div>
-            <button onClick={() => setSoloConBrecha(v => !v)}
-              style={{
-                padding: '8px 14px', borderRadius: 999,
-                border: `1px solid ${soloConBrecha ? theme.accent : theme.border}`,
-                background: soloConBrecha ? (isDark ? '#0F1830' : '#E7EEFF') : theme.surface,
-                color: soloConBrecha ? theme.accent : theme.text,
-                fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: soloConBrecha ? 600 : 500, cursor: 'pointer',
-              }}>
-              {soloConBrecha ? '✓ ' : ''}Solo con brecha ({filasBase.length})
-            </button>
-          </div>
-
-          {/* Tabla */}
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${theme.border}` }}>
-              <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', margin: 0 }}>Detalle por SKU</h3>
-              <span style={{ fontSize: 11, color: theme.textMuted }}>
-                <b style={{ color: theme.text, fontWeight: 600 }}>{filasFiltradas.length}</b> SKUs · <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: theme.accent, verticalAlign: 'middle', marginRight: 4 }} />en propuesta
-              </span>
+          {/* Card unificada: Header negro con buscador + tabla */}
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' }}>
+            {/* Header negro con búsqueda inline */}
+            <div style={{ background: '#0A0A0A', color: '#FFF', padding: '12px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+                <div>
+                  <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', margin: 0, color: '#FFF' }}>Detalle por SKU</h3>
+                  <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>
+                    <b style={{ color: '#FFF', fontWeight: 600 }}>{filasFiltradas.length}</b> SKUs · click para drill · <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: '#5EABFF', verticalAlign: 'middle', marginRight: 4 }} />en propuesta
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                <div style={{ flex: 1, minWidth: 240, display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: 'rgba(255,255,255,0.08)', borderRadius: 999, color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>
+                  <Search size={13} />
+                  <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                    placeholder="Buscar SKU · descripción · marca · familia"
+                    style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', color: '#FFF', fontFamily: TYPO.fontText, fontSize: 12 }} />
+                </div>
+                <button onClick={() => setSoloConBrecha(v => !v)}
+                  style={{
+                    padding: '7px 14px', borderRadius: 999,
+                    border: `1px solid ${soloConBrecha ? '#5EABFF' : 'rgba(255,255,255,0.16)'}`,
+                    background: soloConBrecha ? 'rgba(94,171,255,0.16)' : 'transparent',
+                    color: soloConBrecha ? '#5EABFF' : 'rgba(255,255,255,0.72)',
+                    fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: soloConBrecha ? 600 : 500, cursor: 'pointer',
+                  }}>
+                  {soloConBrecha ? '✓ ' : ''}Solo con brecha ({filasBase.length})
+                </button>
+              </div>
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 12.5, minWidth: 1100 }}>
@@ -505,22 +515,23 @@ export default function ForecastReservas() {
 
         {/* Sidebar */}
         <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 20 }}>
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
-            <div style={{ padding: '14px 16px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' }}>
+            {/* Header negro */}
+            <div style={{ background: '#0A0A0A', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.textMuted }}>Forecast · Reservas</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 700, letterSpacing: '-0.01em', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>Forecast · Reservas</div>
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, color: '#FFF' }}>
                   Mi Propuesta
                   {Object.keys(lineas).length > 0 && (
-                    <span style={{ background: theme.accent, color: '#FFF', fontSize: 10, padding: '1px 7px', borderRadius: 999, fontWeight: 700 }}>{Object.keys(lineas).length}</span>
+                    <span style={{ background: '#CDE64A', color: '#050505', fontSize: 10, padding: '1px 7px', borderRadius: 999, fontWeight: 700 }}>{Object.keys(lineas).length}</span>
                   )}
                 </div>
               </div>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#0F8F4F', fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>
-                <span style={{ width: 6, height: 6, borderRadius: 999, background: '#0F8F4F' }} />Autoguardado
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#8EE6AC', fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>
+                <span style={{ width: 6, height: 6, borderRadius: 999, background: '#8EE6AC' }} />Autoguardado
               </span>
             </div>
-            <div style={{ padding: '0 16px 14px' }}>
+            <div style={{ padding: '14px 16px 14px' }}>
               <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.10em', fontWeight: 600, color: theme.textMuted, marginBottom: 4 }}>Nombre</div>
               <input
                 value={propuesta?.nombre || `Preventa & Reservas · ${NOMBRES_MES[mesObj]} ${anioObj}`}
@@ -629,12 +640,15 @@ function NumCell({ n, strong }) {
 function RoadmapChip({ r }) {
   const R = (r || '').toUpperCase();
   // paleta S&OP (RMI/RML amarillo · EOL gris)
+  // paleta clara y bien diferenciable
   const map = {
-    RMI: { bg: '#F2C744', color: '#5D4300' },
-    RML: { bg: '#F5D96A', color: '#5D4300' },
-    EOL: { bg: '#F2F2F4', color: '#6E6E73' },
+    RMI: { bg: '#F2C744', color: '#5D4300' },              // amarillo
+    RML: { bg: 'rgba(52,199,89,0.18)', color: '#0F8F4F' }, // verde
+    RMD: { bg: 'rgba(0,122,255,0.14)', color: '#0057D9' }, // azul
+    RMN: { bg: 'rgba(175,82,222,0.15)', color: '#7128B8' },// morado
+    EOL: { bg: '#F2F2F4', color: '#6E6E73' },              // gris
   };
-  const s = map[R] || { bg: '#F2F2F4', color: '#A1A1A6' };
+  const s = map[R] || { bg: '#F5F5F7', color: '#A1A1A6' };
   return <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 6, letterSpacing: '0.04em', minWidth: 40, background: s.bg, color: s.color }}>{R || '—'}</span>;
 }
 function ReservoInput({ value, recom, confirmado, onChange, accent = '#007AFF' }) {
