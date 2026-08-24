@@ -22,12 +22,10 @@ import { Search, ChevronDown, Zap, CheckCircle2, XCircle, AlertCircle } from 'lu
 
 const NOMBRES_MES = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const CLIENTES = [
-  { key: 'digitalife', label: 'Digitalife', short: 'DGL', band: '#F5EFFF', bandDark: '#1D1730', txt: '#5B3EAA', txtDark: '#B9A3F0' },
-  { key: 'pcel',        label: 'PCEL',      short: 'PCE', band: '#EAF5EC', bandDark: '#122614', txt: '#2A7A44', txtDark: '#9CD2AA' },
-  { key: 'dicotech',    label: 'Dicotech',  short: 'DCT', band: '#FEF3E4', bandDark: '#2A1C0C', txt: '#8B5A1F', txtDark: '#E0B77E' },
+  { key: 'digitalife', label: 'Digitalife', short: 'DGL', txt: '#6B6B70', txtDark: '#A1A1A6' },
+  { key: 'pcel',       label: 'PCEL',       short: 'PCE', txt: '#6B6B70', txtDark: '#A1A1A6' },
+  { key: 'dicotech',   label: 'Dicotech',   short: 'DCT', txt: '#6B6B70', txtDark: '#A1A1A6' },
 ];
-const BAND_ARR_LIGHT = '#F2F2F4';
-const BAND_ARR_DARK = '#1C1C1F';
 const LIME = '#CDE64A';
 
 // Paginación estándar. Requiere `.order()` en la query para que PostgREST
@@ -80,7 +78,8 @@ export default function ForecastReservas() {
   const [soloConBrecha, setSoloConBrecha] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const bandArr = isDark ? BAND_ARR_DARK : BAND_ARR_LIGHT;
+  const bandArr = 'transparent';
+  const groupSep = isDark ? '#232326' : '#E5E5E9';
 
   // ─── Fetch inicial ──────────────────────────────────────────
   useEffect(() => {
@@ -445,19 +444,21 @@ export default function ForecastReservas() {
                 <thead>
                   <tr>
                     <ThSup theme={theme} colspan={3} />
-                    {CLIENTES.map(c => (
-                      <ThSup key={c.key} theme={theme} bg={isDark ? c.bandDark : c.band} color={isDark ? c.txtDark : c.txt}>{c.label}</ThSup>
-                    ))}
-                    <ThSup theme={theme} bg={bandArr} color={theme.textMuted} colspan={3}>Próximos arribos</ThSup>
-                    <ThSup theme={theme} colspan={3} />
+                    <ThSup theme={theme} color={theme.textMuted} bl={groupSep}>Digitalife</ThSup>
+                    <ThSup theme={theme} color={theme.textMuted}>PCEL</ThSup>
+                    <ThSup theme={theme} color={theme.textMuted}>Dicotech</ThSup>
+                    <ThSup theme={theme} color={theme.textMuted} colspan={3} bl={groupSep}>Próximos arribos</ThSup>
+                    <ThSup theme={theme} colspan={3} bl={groupSep} />
                   </tr>
                   <tr>
                     <Th theme={theme} l w={80}>Roadmap</Th>
-                    <Th theme={theme} l w={110}>SKU</Th>
+                    <Th theme={theme} l w={100}>SKU</Th>
                     <Th theme={theme} l>Descripción</Th>
-                    {CLIENTES.map(c => <Th key={c.key} theme={theme} bg={isDark ? c.bandDark : c.band}>Necesita</Th>)}
-                    {proxMeses.map(m => <Th key={m.key} theme={theme} bg={bandArr}>{m.label}</Th>)}
-                    <Th theme={theme} color="#1D4FD8">Recom.</Th>
+                    <Th theme={theme} bl={groupSep}>Necesita</Th>
+                    <Th theme={theme}>Necesita</Th>
+                    <Th theme={theme}>Necesita</Th>
+                    {proxMeses.map((m, i) => <Th key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined}>{m.label}</Th>)}
+                    <Th theme={theme} color="#1D4FD8" bl={groupSep}>Recom.</Th>
                     <Th theme={theme}>Reservo</Th>
                     <Th theme={theme}>Estado</Th>
                   </tr>
@@ -471,16 +472,17 @@ export default function ForecastReservas() {
                         <Td theme={theme} l><RoadmapChip r={f.roadmap} /></Td>
                         <Td theme={theme} l><span style={{ fontFamily: TYPO.fontMono || 'monospace', fontSize: 11.5, fontWeight: 600, color: '#1D4FD8' }}>{f.sku}</span></Td>
                         <Td theme={theme} l>
-                          <span style={{ fontFamily: TYPO.fontText, fontWeight: 500, fontSize: 12.5, color: theme.text, display: 'block' }}>{f.descripcion}</span>
-                          <span style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 1 }}>{f.marca}{f.familia ? ` · ${f.familia}` : ''}</span>
+                          <div title={`${f.descripcion}${f.marca ? ' · ' + f.marca : ''}`} style={{ fontFamily: TYPO.fontText, fontWeight: 500, fontSize: 12.5, color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 420 }}>
+                            {f.descripcion}
+                          </div>
                         </Td>
-                        <Td theme={theme} bg={isDark ? CLIENTES[0].bandDark : CLIENTES[0].band}><NumCell n={f.necesidad_dgl} /></Td>
-                        <Td theme={theme} bg={isDark ? CLIENTES[1].bandDark : CLIENTES[1].band}><NumCell n={f.necesidad_pce} /></Td>
-                        <Td theme={theme} bg={isDark ? CLIENTES[2].bandDark : CLIENTES[2].band}><NumCell n={f.necesidad_dct} /></Td>
-                        {proxMeses.map(m => (
-                          <Td key={m.key} theme={theme} bg={bandArr}><NumCell n={f.arribosPorMes[m.key]} strong={f.arribosPorMes[m.key] > 0} /></Td>
+                        <Td theme={theme} bl={groupSep}><NumCell n={f.necesidad_dgl} /></Td>
+                        <Td theme={theme}><NumCell n={f.necesidad_pce} /></Td>
+                        <Td theme={theme}><NumCell n={f.necesidad_dct} /></Td>
+                        {proxMeses.map((m, i) => (
+                          <Td key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined}><NumCell n={f.arribosPorMes[m.key]} strong={f.arribosPorMes[m.key] > 0} /></Td>
                         ))}
-                        <Td theme={theme}><span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 700, color: '#1D4FD8', fontVariantNumeric: 'tabular-nums' }}>{fmtInt(f.recomendado)}</span></Td>
+                        <Td theme={theme} bl={groupSep}><span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 700, color: '#1D4FD8', fontVariantNumeric: 'tabular-nums' }}>{fmtInt(f.recomendado)}</span></Td>
                         <Td theme={theme}>
                           {enPropuesta ? (
                             <ReservoInput
@@ -599,29 +601,35 @@ function StepChip({ theme, n, lb, sub, active, done }) {
   );
 }
 
-function ThSup({ theme, children, bg, color, colspan = 1 }) {
+function ThSup({ theme, children, bg, color, colspan = 1, bl }) {
   return (
     <th colSpan={colspan} style={{
       fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600,
       letterSpacing: '0.12em', textTransform: 'uppercase', color: color || theme.textMuted,
       textAlign: 'center', padding: '10px 8px', borderBottom: `1px solid ${theme.border}`,
       background: bg || theme.surface,
+      borderLeft: bl ? `1px solid ${bl}` : undefined,
     }}>{children || ''}</th>
   );
 }
-function Th({ theme, children, l, w, bg, color }) {
+function Th({ theme, children, l, w, bg, color, bl }) {
   return (
     <th style={{
       fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600,
       letterSpacing: '0.10em', textTransform: 'uppercase', color: color || theme.textMuted,
-      textAlign: l ? 'left' : 'right', padding: '12px 10px',
+      textAlign: l ? 'left' : 'right', padding: '10px 10px',
       borderBottom: `1px solid ${theme.border}`, background: bg || theme.surface,
       whiteSpace: 'nowrap', width: w,
+      borderLeft: bl ? `1px solid ${bl}` : undefined,
     }}>{children}</th>
   );
 }
-function Td({ theme, children, l, bg }) {
-  return <td style={{ padding: '11px 10px', borderBottom: `1px solid ${theme.divider || theme.border}`, textAlign: l ? 'left' : 'right', verticalAlign: 'middle', background: bg }}>{children}</td>;
+function Td({ theme, children, l, bg, bl }) {
+  return <td style={{
+    padding: '8px 10px', borderBottom: `1px solid ${theme.divider || theme.border}`,
+    textAlign: l ? 'left' : 'right', verticalAlign: 'middle', background: bg,
+    borderLeft: bl ? `1px solid ${bl}` : undefined,
+  }}>{children}</td>;
 }
 function NumCell({ n, strong }) {
   const v = Number(n) || 0;
