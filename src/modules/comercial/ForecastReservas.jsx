@@ -333,16 +333,15 @@ export default function ForecastReservas() {
       cobertura.pcel.reservo        += f.necesidad_pce * ratio;
       cobertura.dicotech.reservo    += f.necesidad_dct * ratio;
     }
-    // Top SKUs sin cubrir (gap descendente)
-    const sinCubrir = filasBase
+    // SKUs en la propuesta (reservo > 0), ordenados por reservo descendente
+    const enPropuesta = filasBase
       .map(f => {
         const reservo = Number(lineas[f.sku]?.reservo) || 0;
         return { ...f, reservo, gap: f.recomendado - reservo };
       })
-      .filter(f => f.gap > 0)
-      .sort((a, b) => b.gap - a.gap);
-    const gapTotal = sinCubrir.reduce((a, r) => a + r.gap, 0);
-    return { cobertura, sinCubrir, gapTotal };
+      .filter(f => f.reservo > 0)
+      .sort((a, b) => b.reservo - a.reservo);
+    return { cobertura, enPropuesta };
   }, [filasBase, lineas]);
 
   // ─── Persistencia ──────────────────────────────────────────
@@ -821,26 +820,26 @@ function MiPropuestaContent({ theme, isDark, kpis, stats, lineas, propuesta, sav
         })}
       </div>
 
-      {/* SKUs sin cubrir */}
-      {stats.sinCubrir.length > 0 && (
+      {/* SKUs en la propuesta */}
+      {stats.enPropuesta.length > 0 && (
         <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme.hairline || theme.border}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-            <span style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 700 }}>SKUs sin cubrir</span>
-            <span style={{ color: '#FF3B30', fontWeight: 600, fontSize: 10.5 }}>{stats.sinCubrir.length} SKUs · {fmtInt(stats.gapTotal)} pz</span>
+            <span style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 700 }}>SKUs en la propuesta</span>
+            <span style={{ color: theme.accent, fontWeight: 600, fontSize: 10.5 }}>{stats.enPropuesta.length} SKUs · {fmtInt(totalReservo)} pz</span>
           </div>
-          {stats.sinCubrir.slice(0, 3).map(s => (
+          {stats.enPropuesta.slice(0, 5).map(s => (
             <div key={s.sku} onClick={() => onVerSku(s.sku)}
               style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, padding: '8px 0', borderBottom: `1px solid ${theme.divider || theme.border}`, fontSize: 11.5, cursor: 'pointer' }}>
               <div style={{ minWidth: 0 }}>
                 <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.accent, fontWeight: 600, display: 'block' }}>{s.sku}</span>
                 <div title={s.descripcion} style={{ fontSize: 11, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200, marginTop: 1 }}>{s.descripcion}</div>
               </div>
-              <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, color: s.gap > 500 ? '#FF3B30' : '#FF9500', alignSelf: 'center', whiteSpace: 'nowrap' }}>−{fmtInt(s.gap)}<span style={{ fontSize: 9.5, color: theme.textFaint || theme.textMuted, fontWeight: 500, marginLeft: 2, fontFamily: TYPO.fontDisplay }}>pz</span></span>
+              <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, color: theme.text, alignSelf: 'center', whiteSpace: 'nowrap' }}>{fmtInt(s.reservo)}<span style={{ fontSize: 9.5, color: theme.textFaint || theme.textMuted, fontWeight: 500, marginLeft: 2, fontFamily: TYPO.fontDisplay }}>pz</span></span>
             </div>
           ))}
-          {stats.sinCubrir.length > 3 && (
+          {stats.enPropuesta.length > 5 && (
             <div style={{ marginTop: 8, textAlign: 'center', fontSize: 10.5, color: theme.accent, fontWeight: 600 }}>
-              +{stats.sinCubrir.length - 3} más en la tabla ›
+              +{stats.enPropuesta.length - 5} más en la tabla ›
             </div>
           )}
         </div>
