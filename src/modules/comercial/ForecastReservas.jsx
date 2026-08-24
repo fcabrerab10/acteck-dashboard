@@ -308,11 +308,42 @@ export default function ForecastReservas() {
     const skusConBrecha = filasBase.length;
     const skusEnPropuesta = Object.keys(lineas).length;
     const proxArribo = arribos
-      .map(e => e.arribo_almacen)
+      .map(e => e.arribo_almacen || e.arribo_cedis || e.eta_puerto)
       .filter(Boolean)
       .sort()[0] || null;
     return { totalRecom, totalReservo, skusConBrecha, skusEnPropuesta, proxArribo };
   }, [filasBase, lineas, arribos]);
+
+  // Cobertura por cliente + top SKUs sin cubrir (para tarjeta Mi Propuesta)
+  const propuestaStats = useMemo(() => {
+    // Cobertura por cliente: sumar necesidad y reservado (prorrateo por SKU)
+    const cobertura = {
+      digitalife: { recom: 0, reservo: 0 },
+      pcel:        { recom: 0, reservo: 0 },
+      dicotech:    { recom: 0, reservo: 0 },
+    };
+    for (const f of filasBase) {
+      cobertura.digitalife.recom += f.necesidad_dgl;
+      cobertura.pcel.recom        += f.necesidad_pce;
+      cobertura.dicotech.recom    += f.necesidad_dct;
+      const l = lineas[f.sku];
+      if (!l || !l.reservo || f.recomendado === 0) continue;
+      const ratio = Number(l.reservo) / f.recomendado;
+      cobertura.digitalife.reservo += f.necesidad_dgl * ratio;
+      cobertura.pcel.reservo        += f.necesidad_pce * ratio;
+      cobertura.dicotech.reservo    += f.necesidad_dct * ratio;
+    }
+    // Top SKUs sin cubrir (gap descendente)
+    const sinCubrir = filasBase
+      .map(f => {
+        const reservo = Number(lineas[f.sku]?.reservo) || 0;
+        return { ...f, reservo, gap: f.recomendado - reservo };
+      })
+      .filter(f => f.gap > 0)
+      .sort((a, b) => b.gap - a.gap);
+    const gapTotal = sinCubrir.reduce((a, r) => a + r.gap, 0);
+    return { cobertura, sinCubrir, gapTotal };
+  }, [filasBase, lineas]);
 
   // ─── Persistencia ──────────────────────────────────────────
   // Asegurar propuesta activa (crea borrador si no existe)
@@ -603,50 +634,26 @@ export default function ForecastReservas() {
                 <span style={{ width: 6, height: 6, borderRadius: 999, background: '#8EE6AC' }} />Autoguardado
               </span>
             </div>
-            <div style={{ padding: '14px 16px 14px' }}>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.10em', fontWeight: 600, color: theme.textMuted, marginBottom: 4 }}>Nombre</div>
-              <input
-                value={propuesta?.nombre || `Preventa & Reservas · ${NOMBRES_MES[mesObj]} ${anioObj}`}
-                onChange={async e => {
-                  const p = await asegurarPropuesta();
-                  setPropuesta(prev => ({ ...prev, nombre: e.target.value }));
-                  await supabase.from('forecast_propuestas').update({ nombre: e.target.value }).eq('id', p.id);
-                }}
-                style={{ width: '100%', padding: '8px 10px', border: `1px solid ${theme.border}`, background: theme.bg, borderRadius: 8, fontSize: 12, fontFamily: TYPO.fontText, color: theme.text, outline: 'none' }} />
-              <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 6 }}>
-                {Object.keys(lineas).length} SKUs · {propuesta?.estatus === 'generada' ? 'Generada' : 'Borrador'}
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', padding: '0 16px 16px', gap: 12 }}>
-              <div style={{ padding: '12px 14px', background: isDark ? '#0F1830' : '#E7EEFF', borderRadius: 10 }}>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: theme.accent }}>Piezas</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: theme.accent, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(kpis.totalReservo)}</div>
-                <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2 }}>de {fmtInt(kpis.totalRecom)} recom.</div>
-              </div>
-              <div style={{ padding: '12px 14px', background: isDark ? '#0F2B1E' : '#E4F5EB', borderRadius: 10 }}>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#0F8F4F' }}>SKUs</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: '#0F8F4F', fontVariantNumeric: 'tabular-nums' }}>{Object.keys(lineas).length}</div>
-                <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2 }}>en propuesta</div>
-              </div>
-            </div>
-            <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <button
-                disabled={saving || Object.keys(lineas).length === 0 || propuesta?.estatus === 'generada'}
-                onClick={generarPropuesta}
-                style={{
-                  width: '100%', padding: '9px 16px', borderRadius: 999,
-                  background: propuesta?.estatus === 'generada' ? theme.border : '#0A0A0A',
-                  color: '#FFF', border: 0, cursor: (saving || Object.keys(lineas).length === 0) ? 'not-allowed' : 'pointer',
-                  fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600,
-                  opacity: (saving || Object.keys(lineas).length === 0) ? 0.55 : 1,
-                }}>
-                {propuesta?.estatus === 'generada' ? '✓ Propuesta generada' : 'Generar propuesta →'}
-              </button>
-              <button onClick={vaciarPropuesta} disabled={Object.keys(lineas).length === 0}
-                style={{ width: '100%', padding: '9px 16px', borderRadius: 999, background: theme.surface, color: theme.textMuted, border: `1px solid ${theme.border}`, cursor: Object.keys(lineas).length === 0 ? 'not-allowed' : 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, opacity: Object.keys(lineas).length === 0 ? 0.5 : 1 }}>
-                Vaciar propuesta
-              </button>
-            </div>
+            <MiPropuestaContent
+              theme={theme} isDark={isDark}
+              kpis={kpis}
+              stats={propuestaStats}
+              lineas={lineas}
+              propuesta={propuesta}
+              saving={saving}
+              onGenerar={generarPropuesta}
+              onVaciar={vaciarPropuesta}
+              nombre={propuesta?.nombre || `Preventa & Reservas · ${NOMBRES_MES[mesObj]} ${anioObj}`}
+              onRenombrar={async (v) => {
+                const p = await asegurarPropuesta();
+                setPropuesta(prev => ({ ...prev, nombre: v }));
+                await supabase.from('forecast_propuestas').update({ nombre: v }).eq('id', p.id);
+              }}
+              onVerSku={(sku) => {
+                setBusqueda(sku);
+                setExpandedSku(sku);
+              }}
+            />
           </div>
         </aside>
 
@@ -741,6 +748,122 @@ function ReservoInput({ value, recom, confirmado, onChange, accent = '#007AFF' }
         color: confirmado ? '#34C759' : (numLocal > 0 ? accent : '#A1A1A6'),
         fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 600, outline: 'none',
       }} />
+  );
+}
+
+// ─── Tarjeta Mi Propuesta (híbrido A+B) ───────────────
+function MiPropuestaContent({ theme, isDark, kpis, stats, lineas, propuesta, saving, onGenerar, onVaciar, nombre, onRenombrar, onVerSku }) {
+  const CLIS = [
+    { key: 'digitalife', label: 'Digitalife', dot: '#AF52DE' },
+    { key: 'pcel',       label: 'PCEL',       dot: '#34C759' },
+    { key: 'dicotech',   label: 'Dicotech',   dot: '#FF9500' },
+  ];
+  const totalRecom = kpis.totalRecom || 0;
+  const totalReservo = kpis.totalReservo || 0;
+  const pctCubierto = totalRecom > 0 ? Math.round((totalReservo / totalRecom) * 100) : 0;
+  const faltantes = Math.max(0, totalRecom - totalReservo);
+  const numLineas = Object.keys(lineas).length;
+  const generada = propuesta?.estatus === 'generada';
+
+  const colorPct = (p) => p >= 95 ? '#34C759' : p >= 70 ? '#FF9500' : '#FF3B30';
+
+  // Editor de nombre (input controlado local)
+  const [nombreLocal, setNombreLocal] = useState(nombre);
+  useEffect(() => setNombreLocal(nombre), [nombre]);
+
+  return (
+    <>
+      {/* Nombre editable */}
+      <div style={{ padding: '12px 16px 12px', borderBottom: `1px solid ${theme.hairline || theme.border}` }}>
+        <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.10em', fontWeight: 700, color: theme.textFaint || theme.textMuted, marginBottom: 4 }}>Nombre</div>
+        <input value={nombreLocal}
+          onChange={e => setNombreLocal(e.target.value)}
+          onBlur={() => { if (nombreLocal !== nombre) onRenombrar(nombreLocal); }}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          style={{ width: '100%', padding: '7px 10px', border: `1px solid ${theme.border}`, background: theme.bg, borderRadius: 8, fontSize: 12, fontFamily: TYPO.fontText, color: theme.text, outline: 'none' }} />
+      </div>
+
+      {/* Hero KPI · piezas total */}
+      <div style={{ padding: '14px 16px 12px', background: `linear-gradient(180deg, rgba(0,122,255,0.05) 0%, transparent 100%)`, borderBottom: `1px solid ${theme.hairline || theme.border}` }}>
+        <div style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 700 }}>Piezas reservadas</div>
+        <div style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: theme.accent, lineHeight: 1, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+          {fmtInt(totalReservo)} <span style={{ fontSize: 12, color: theme.textMuted, fontWeight: 500 }}>/ {fmtInt(totalRecom)} pz</span>
+        </div>
+        <div style={{ fontSize: 11.5, color: theme.textMuted, marginTop: 5 }}>
+          <b style={{ color: theme.text, fontWeight: 600 }}>{pctCubierto}% de la necesidad</b>
+          {faltantes > 0 && <> · <b style={{ color: '#FF9500', fontWeight: 600 }}>{fmtInt(faltantes)} pz</b> por reservar</>}
+        </div>
+      </div>
+
+      {/* Cobertura por cliente */}
+      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme.hairline || theme.border}` }}>
+        <div style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 700, marginBottom: 8 }}>Cobertura por cliente</div>
+        {CLIS.map(cli => {
+          const c = stats.cobertura[cli.key];
+          const pct = c.recom > 0 ? Math.round((c.reservo / c.recom) * 100) : 0;
+          const col = colorPct(pct);
+          return (
+            <div key={cli.key} style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, fontSize: 11.5 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 500, color: theme.text }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 999, background: cli.dot }} />
+                  {cli.label}
+                </span>
+                <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                  <b style={{ color: col, fontWeight: 700 }}>{pct}%</b> · {fmtInt(c.reservo)} / {fmtInt(c.recom)}
+                </span>
+              </div>
+              <div style={{ height: 5, borderRadius: 999, background: theme.divider || '#F2F2F4', overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: 999, background: col, width: `${Math.min(100, pct)}%`, transition: 'width 300ms ease' }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* SKUs sin cubrir */}
+      {stats.sinCubrir.length > 0 && (
+        <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme.hairline || theme.border}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+            <span style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 700 }}>SKUs sin cubrir</span>
+            <span style={{ color: '#FF3B30', fontWeight: 600, fontSize: 10.5 }}>{stats.sinCubrir.length} SKUs · {fmtInt(stats.gapTotal)} pz</span>
+          </div>
+          {stats.sinCubrir.slice(0, 3).map(s => (
+            <div key={s.sku} onClick={() => onVerSku(s.sku)}
+              style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, padding: '8px 0', borderBottom: `1px solid ${theme.divider || theme.border}`, fontSize: 11.5, cursor: 'pointer' }}>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.accent, fontWeight: 600, display: 'block' }}>{s.sku}</span>
+                <div title={s.descripcion} style={{ fontSize: 11, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200, marginTop: 1 }}>{s.descripcion}</div>
+              </div>
+              <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, color: s.gap > 500 ? '#FF3B30' : '#FF9500', alignSelf: 'center', whiteSpace: 'nowrap' }}>−{fmtInt(s.gap)}<span style={{ fontSize: 9.5, color: theme.textFaint || theme.textMuted, fontWeight: 500, marginLeft: 2, fontFamily: TYPO.fontDisplay }}>pz</span></span>
+            </div>
+          ))}
+          {stats.sinCubrir.length > 3 && (
+            <div style={{ marginTop: 8, textAlign: 'center', fontSize: 10.5, color: theme.accent, fontWeight: 600 }}>
+              +{stats.sinCubrir.length - 3} más en la tabla ›
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Acciones */}
+      <div style={{ padding: '14px 16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <button disabled={saving || numLineas === 0 || generada} onClick={onGenerar}
+          style={{
+            width: '100%', padding: '10px 16px', borderRadius: 999,
+            background: generada ? theme.border : '#0A0A0A',
+            color: '#FFF', border: 0, cursor: (saving || numLineas === 0) ? 'not-allowed' : 'pointer',
+            fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600,
+            opacity: (saving || numLineas === 0) ? 0.55 : 1,
+          }}>
+          {generada ? '✓ Propuesta generada' : 'Generar propuesta →'}
+        </button>
+        <button onClick={onVaciar} disabled={numLineas === 0}
+          style={{ width: '100%', padding: '10px 16px', borderRadius: 999, background: 'transparent', color: theme.textMuted, border: `1px solid ${theme.border}`, cursor: numLineas === 0 ? 'not-allowed' : 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, opacity: numLineas === 0 ? 0.5 : 1 }}>
+          Vaciar propuesta
+        </button>
+      </div>
+    </>
   );
 }
 
