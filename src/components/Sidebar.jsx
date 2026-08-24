@@ -114,7 +114,7 @@ const MENU_CONFIG = [
       { id: 'resumenClientes',  label: 'Resumen de Clientes', icon: BarChart3 },
       { id: 'propuestas',       label: 'Propuestas',          icon: ClipboardList },
       { id: 'estrategiaPrecios',label: 'Estrategia de Precios', icon: TrendingUp },
-      { id: 'forecastReservas', label: 'Forecast · Reservas', icon: Target },
+      { id: 'forecastReservas', label: 'Forecast', icon: Target },
       { id: 'ordenesCompra',    label: 'Tracking Pedidos',    icon: FileCheck },
       {
         type: 'subgrupo',

@@ -221,7 +221,7 @@ const GLOBAL_PAGES_INFO = {
   cobranzaGlobal:   { label: 'Cobranza',               icon: HandCoins },
   forecastClientes: { label: 'S&OP',                   icon: Target },
   estrategiaPrecios:{ label: 'Estrategia de Precios',  icon: TrendingUp },
-  forecastReservas: { label: 'Forecast · Reservas',    icon: Target },
+  forecastReservas: { label: 'Forecast',    icon: Target },
   ordenesCompra:    { label: 'Tracking Pedidos',        icon: Target },
   adminInterna:     { label: 'Administración Interna', icon: Building2 },
   axonMexico:       { label: 'Axon de México',          icon: Building2 },

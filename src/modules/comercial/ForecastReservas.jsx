@@ -94,34 +94,33 @@ export default function ForecastReservas() {
         // Ventana próximos 3 meses para arribos
         const trecs = new Date(hoy); trecs.setMonth(trecs.getMonth() + 3);
 
-        const [
-          rmRes,
-          soRows,
-          ctRes,
-          faRows,
-          embRows,
-          propRes,
-        ] = await Promise.all([
+        // Fetch en paralelo, cada uno con manejo propio (no aborta todo si uno falla)
+        const [rmRes, soRows, ctRes, faRows, embRows, propRes] = await Promise.all([
           supabase.from('roadmap_sku').select('sku, descripcion, marca, familia, rdmp'),
           fetchAll(() => supabase.from('sellout_sku')
             .select('cliente, anio, mes, sku, piezas')
-            .gte('anio', anioMin)),
+            .gte('anio', anioMin)).catch(e => { console.error('sellout_sku:', e); return []; }),
           supabase.from('cuotas_mensuales')
             .select('cliente, anio, mes, cuota_min, cuota_ideal')
             .eq('anio', anioObj).eq('mes', mesObj),
           fetchAll(() => supabase.from('facturacion_clientes')
             .select('cliente_key, sku, piezas, anio, mes')
-            .eq('anio', anioObj).eq('mes', mesObj)),
+            .eq('anio', anioObj).eq('mes', mesObj)).catch(e => { console.error('facturacion_clientes:', e); return []; }),
           fetchAll(() => supabase.from('embarques_compras')
             .select('codigo, arribo_almacen, po_qty, shp_qty, contenedor')
-            .gte('arribo_almacen', toISO(hoy)).lte('arribo_almacen', toISO(trecs))),
+            .gte('arribo_almacen', toISO(hoy)).lte('arribo_almacen', toISO(trecs))).catch(e => { console.error('embarques_compras:', e); return []; }),
+          // Propuesta activa: 2 queries separadas para no depender de FK-embed de PostgREST
           supabase.from('forecast_propuestas')
-            .select('*, forecast_propuesta_lineas(*)')
+            .select('*')
             .eq('creado_por', yoId).eq('estatus', 'borrador')
-            .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+            .order('created_at', { ascending: false }).limit(1).maybeSingle()
+            .catch(e => { console.error('forecast_propuestas:', e); return { data: null }; }),
         ]);
 
         if (cancelled) return;
+
+        if (rmRes.error) throw new Error('roadmap_sku: ' + rmRes.error.message);
+        if (ctRes.error) console.warn('cuotas_mensuales:', ctRes.error.message);
 
         setRoadmap(rmRes.data || []);
         setSellout(soRows || []);
@@ -129,11 +128,14 @@ export default function ForecastReservas() {
         setFacturacion(faRows || []);
         setArribos(embRows || []);
 
-        // Propuesta activa o crear un borrador vacío en memoria
+        // Propuesta activa: si existe, cargar sus líneas en query separada
         if (propRes.data) {
           setPropuesta(propRes.data);
+          const { data: linRows, error: linErr } = await supabase
+            .from('forecast_propuesta_lineas').select('*').eq('propuesta_id', propRes.data.id);
+          if (linErr) console.warn('forecast_propuesta_lineas:', linErr.message);
           const lin = {};
-          for (const l of (propRes.data.forecast_propuesta_lineas || [])) lin[l.sku] = l;
+          for (const l of (linRows || [])) lin[l.sku] = l;
           setLineas(lin);
         } else {
           setPropuesta(null);
@@ -355,7 +357,7 @@ export default function ForecastReservas() {
           <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)' }}>
             Dir. Comercial · Clientes Propios · Forecast · {NOMBRES_MES[mesObj]} {anioObj}
           </div>
-          <h1 style={{ fontFamily: TYPO.fontDisplay, fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', margin: '6px 0 4px' }}>Reservas de arribos por cliente.</h1>
+          <h1 style={{ fontFamily: TYPO.fontDisplay, fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', margin: '6px 0 4px' }}>Forecast.</h1>
           <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', maxWidth: 640 }}>
             <b style={{ color: '#FFF' }}>{filasBase.length} SKUs.</b>{' '}
             <b style={{ color: '#F4A79E' }}>{kpis.skusConBrecha} con brecha</b>,{' '}
