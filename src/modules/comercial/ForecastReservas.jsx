@@ -77,6 +77,8 @@ export default function ForecastReservas() {
   const [busqueda, setBusqueda] = useState('');
   const [soloConBrecha, setSoloConBrecha] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [expandedSku, setExpandedSku] = useState(null);
+  const [drillYear, setDrillYear] = useState(anioObj);
 
   const bandArr = 'transparent';
   const groupSep = isDark ? '#232326' : '#E5E5E9';
@@ -88,9 +90,8 @@ export default function ForecastReservas() {
     (async () => {
       setLoading(true); setError(null);
       try {
-        // Ventana 6 meses hacia atrás
-        const seis = new Date(hoy); seis.setMonth(seis.getMonth() - 6);
-        const anioMin = seis.getFullYear();
+        // Ventana: últimos 3 años (para poder cambiar de año en el drill)
+        const anioMin = anioObj - 2;
 
         // Ventana próximos 3 meses para arribos
         const trecs = new Date(hoy); trecs.setMonth(trecs.getMonth() + 3);
@@ -158,12 +159,18 @@ export default function ForecastReservas() {
   // ─── Cálculos ──────────────────────────────────────────────
   // Velocity SO por (cliente, sku) = promedio piezas últimos 6 meses completos
   const velocity = useMemo(() => {
-    const map = new Map(); // key = `${cliente}|${sku}` → { total, meses:Set }
+    // ventana móvil de últimos 6 meses (para no incluir meses viejos si sellout trae varios años)
+    const seis = new Date(hoy); seis.setMonth(seis.getMonth() - 6);
+    const yMin = seis.getFullYear(), mMin = seis.getMonth() + 1;
+    const enVentana = (a, m) => (a > yMin) || (a === yMin && m >= mMin);
+    const map = new Map();
     for (const r of sellout) {
       const cli = r.cliente, sku = r.sku;
       if (!cli || !sku) continue;
+      const a = Number(r.anio), m = Number(r.mes);
+      if (!enVentana(a, m)) continue;
       const k = `${cli}|${sku}`;
-      const key = `${r.anio}-${r.mes}`;
+      const key = `${a}-${m}`;
       const cur = map.get(k) || { total: 0, meses: new Set() };
       cur.total += Number(r.piezas) || 0;
       cur.meses.add(key);
@@ -175,6 +182,29 @@ export default function ForecastReservas() {
       out[k] = v.total / n;
     }
     return out;
+  }, [sellout, hoy]);
+
+  // Matriz drill: sku → { cliente: { mes: piezas } } por año
+  const soPorSkuAnio = useMemo(() => {
+    // sku → año → cliente → mes → piezas
+    const map = new Map();
+    for (const r of sellout) {
+      if (!r.sku || !r.cliente) continue;
+      const a = Number(r.anio), m = Number(r.mes);
+      if (!a || !m) continue;
+      let bySku = map.get(r.sku); if (!bySku) { bySku = new Map(); map.set(r.sku, bySku); }
+      let byAnio = bySku.get(a);   if (!byAnio) { byAnio = new Map(); bySku.set(a, byAnio); }
+      let byCli = byAnio.get(r.cliente); if (!byCli) { byCli = {}; byAnio.set(r.cliente, byCli); }
+      byCli[m] = (byCli[m] || 0) + (Number(r.piezas) || 0);
+    }
+    return map;
+  }, [sellout]);
+
+  // Años disponibles en sellout (para tabs del drill)
+  const aniosDisponibles = useMemo(() => {
+    const s = new Set();
+    for (const r of sellout) if (r.anio) s.add(Number(r.anio));
+    return Array.from(s).sort((a, b) => b - a);
   }, [sellout]);
 
   // Arribos: agrupar por (sku, año-mes). Fallback de fecha:
@@ -467,12 +497,21 @@ export default function ForecastReservas() {
                   {filasFiltradas.map(f => {
                     const l = lineas[f.sku];
                     const enPropuesta = !!l;
+                    const expanded = expandedSku === f.sku;
+                    const toggle = () => setExpandedSku(prev => prev === f.sku ? null : f.sku);
                     return (
-                      <tr key={f.sku} style={{
-                        borderTop: `1px solid ${theme.divider || theme.hairline || theme.border}`,
-                        background: enPropuesta ? 'rgba(0,122,255,0.03)' : 'transparent',
-                        transition: 'background 160ms ease',
-                      }}>
+                      <React.Fragment key={f.sku}>
+                      <tr onClick={(e) => {
+                          // No expandir si clickeaste en input/botón
+                          const tag = (e.target.tagName || '').toUpperCase();
+                          if (tag === 'INPUT' || tag === 'BUTTON') return;
+                          toggle();
+                        }}
+                        style={{
+                          borderTop: `1px solid ${theme.divider || theme.hairline || theme.border}`,
+                          background: expanded ? 'rgba(0,122,255,0.05)' : (enPropuesta ? 'rgba(0,122,255,0.03)' : 'transparent'),
+                          transition: 'background 160ms ease', cursor: 'pointer',
+                        }}>
                         <Td theme={theme} l><span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600 }}>{f.sku}</span></Td>
                         <Td theme={theme} l>
                           <div title={`${f.descripcion}${f.marca ? ' · ' + f.marca : ''}${f.familia ? ' · ' + f.familia : ''}`}
@@ -502,6 +541,23 @@ export default function ForecastReservas() {
                         </Td>
                         <Td theme={theme}><EstadoPill estado={l?.estado || 'draft'} confirmado={l?.confirmado} reservo={l?.reservo} recom={f.recomendado} accent={theme.accent} /></Td>
                       </tr>
+                      {expanded && (
+                        <tr>
+                          <td colSpan={11} style={{ padding: 0, background: theme.bg, borderTop: `1px solid ${theme.divider || theme.border}`, borderBottom: `2px solid ${theme.border}` }}>
+                            <HeatmapDrill
+                              sku={f.sku}
+                              matriz={soPorSkuAnio.get(f.sku)}
+                              aniosDisponibles={aniosDisponibles}
+                              drillYear={drillYear}
+                              setDrillYear={setDrillYear}
+                              theme={theme}
+                              isDark={isDark}
+                              onClose={() => setExpandedSku(null)}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     );
                   })}
                   {filasFiltradas.length === 0 && (
@@ -675,6 +731,151 @@ function ReservoInput({ value, recom, confirmado, onChange, accent = '#007AFF' }
     </span>
   );
 }
+// ─── Heatmap Drill ───────────────────────────────────────
+// Pill por celda: fondo azul con intensidad relativa al máximo del SKU.
+// Filas = clientes canónicos (DGL/PCE/DCT), columnas = 12 meses.
+function HeatmapDrill({ sku, matriz, aniosDisponibles, drillYear, setDrillYear, theme, isDark, onClose }) {
+  // matriz: Map<anio, Map<cliente, {mes: piezas}>> del SKU
+  const yearData = matriz?.get(drillYear) || null;
+  const CLIS = [
+    { key: 'digitalife', label: 'Digitalife', dot: '#AF52DE' },
+    { key: 'pcel',       label: 'PCEL',       dot: '#34C759' },
+    { key: 'dicotech',   label: 'Dicotech',   dot: '#FF9500' },
+  ];
+
+  // Calcular máximo del SKU en el año para escalar intensidad
+  let maxCell = 0;
+  if (yearData) {
+    for (const cli of CLIS) {
+      const byMes = yearData.get(cli.key) || {};
+      for (let m = 1; m <= 12; m++) {
+        const v = byMes[m] || 0;
+        if (v > maxCell) maxCell = v;
+      }
+    }
+  }
+
+  const totalesMes = Array.from({ length: 12 }, () => 0);
+  const totalesCli = {};
+
+  const pillStyle = (val) => {
+    if (!val || val === 0) return { bg: 'transparent', color: '#C7C7CC', border: 'transparent' };
+    const ratio = maxCell > 0 ? val / maxCell : 0;
+    // 5 niveles de intensidad iOS blue
+    let bg, color;
+    if (ratio < 0.15)      { bg = 'rgba(0,122,255,0.08)'; color = theme.text; }
+    else if (ratio < 0.35) { bg = 'rgba(0,122,255,0.16)'; color = theme.text; }
+    else if (ratio < 0.55) { bg = 'rgba(0,122,255,0.28)'; color = '#0057D9'; }
+    else if (ratio < 0.75) { bg = 'rgba(0,122,255,0.60)'; color = '#FFF'; }
+    else                   { bg = '#007AFF'; color = '#FFF'; }
+    return { bg, color };
+  };
+
+  return (
+    <div style={{ padding: '18px 20px 20px' }}>
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
+        <div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.textMuted }}>Sell-out piezas · cliente × mes</div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, marginTop: 2 }}>Intensidad relativa al máximo del SKU en el año</div>
+        </div>
+        <div style={{ display: 'inline-flex', gap: 3, padding: 3, background: theme.divider || '#F2F2F4', borderRadius: 999 }}>
+          {(aniosDisponibles.length ? aniosDisponibles : [drillYear]).map(a => (
+            <button key={a} onClick={() => setDrillYear(a)}
+              style={{
+                padding: '5px 14px', borderRadius: 999, border: 0,
+                background: a === drillYear ? theme.surface : 'transparent',
+                color: a === drillYear ? theme.text : theme.textMuted,
+                fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+                boxShadow: a === drillYear ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+              }}>
+              {a}
+            </button>
+          ))}
+          <button onClick={onClose} title="Cerrar"
+            style={{
+              marginLeft: 6, padding: '5px 10px', borderRadius: 999, border: 0,
+              background: 'transparent', color: theme.textMuted, cursor: 'pointer',
+              fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 400,
+            }}>×</button>
+        </div>
+      </div>
+
+      {/* Tabla heatmap */}
+      <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '4px 3px', fontSize: 11.5 }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 600, padding: '4px 8px', width: 140 }}>Cliente</th>
+            {NOMBRES_MES.slice(1).map(m => (
+              <th key={m} style={{ textAlign: 'center', fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 600, padding: '4px 0' }}>{m}</th>
+            ))}
+            <th style={{ textAlign: 'right', fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 600, padding: '4px 8px', borderLeft: `1px solid ${theme.border}`, width: 70 }}>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {CLIS.map(cli => {
+            const byMes = (yearData && yearData.get(cli.key)) || {};
+            let total = 0;
+            const cells = [];
+            for (let m = 1; m <= 12; m++) {
+              const v = byMes[m] || 0;
+              total += v;
+              totalesMes[m - 1] += v;
+              cells.push({ m, v });
+            }
+            totalesCli[cli.key] = total;
+            return (
+              <tr key={cli.key}>
+                <td style={{ padding: '4px 8px', fontFamily: TYPO.fontDisplay, fontWeight: 500, fontSize: 12, color: theme.text }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: cli.dot, marginRight: 8, verticalAlign: 'middle' }} />
+                  {cli.label}
+                </td>
+                {cells.map(({ m, v }) => {
+                  const s = pillStyle(v);
+                  return (
+                    <td key={m} style={{ padding: 0, textAlign: 'center' }}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        minWidth: 40, height: 24, padding: '0 8px', borderRadius: 999,
+                        background: s.bg, color: v > 0 ? s.color : '#C7C7CC',
+                        fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, fontWeight: 600,
+                        fontVariantNumeric: 'tabular-nums',
+                      }}>{v > 0 ? fmtInt(v) : '—'}</span>
+                    </td>
+                  );
+                })}
+                <td style={{ padding: '4px 8px', textAlign: 'right', borderLeft: `1px solid ${theme.border}`, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 12, fontWeight: 700, color: theme.text }}>{fmtInt(total)}</td>
+              </tr>
+            );
+          })}
+          {/* Fila Total mes */}
+          <tr>
+            <td style={{ padding: '8px 8px 4px', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 10, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textMuted, borderTop: `1px solid ${theme.border}` }}>Total mes</td>
+            {totalesMes.map((t, i) => (
+              <td key={i} style={{ padding: '8px 0 4px', textAlign: 'center', borderTop: `1px solid ${theme.border}`, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, color: t > 0 ? theme.text : '#C7C7CC' }}>{t > 0 ? fmtInt(t) : '—'}</td>
+            ))}
+            <td style={{ padding: '8px 8px 4px', textAlign: 'right', borderTop: `1px solid ${theme.border}`, borderLeft: `1px solid ${theme.border}`, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 13, fontWeight: 700, color: theme.accent }}>{fmtInt(totalesMes.reduce((a, b) => a + b, 0))}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* Legend */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 14, fontSize: 10.5, color: theme.textMuted }}>
+        <span>Menor</span>
+        <span style={{ display: 'inline-flex', gap: 3 }}>
+          {[0.10, 0.20, 0.35, 0.55, 0.80].map((op, i) => (
+            <span key={i} style={{ display: 'inline-block', width: 22, height: 12, borderRadius: 999, background: i === 4 ? '#007AFF' : `rgba(0,122,255,${op})` }} />
+          ))}
+        </span>
+        <span>Mayor</span>
+        {!yearData && (
+          <span style={{ marginLeft: 'auto', color: theme.textFaint || theme.textMuted, fontStyle: 'italic' }}>Sin datos de sell-out para {drillYear} en este SKU.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function EstadoPill({ estado, confirmado, reservo, recom, accent = '#007AFF' }) {
   const styles = {
     draft:         { bg: 'transparent', color: '#A1A1A6', label: '—' },
