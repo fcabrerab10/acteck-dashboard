@@ -19,6 +19,7 @@ import { puedeEditarPestanaGlobal, CLIENTES as CLIENTES_LIST, PESTANAS_CLIENTE, 
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { toast } from '../../lib/toast';
+import { hydrateDraft, useDraftAutosave, useBeforeUnloadGuard, discardDraft } from '../../lib/useDraft';
 import {
   Plus, X, Search, ChevronLeft, ChevronRight, ChevronRight as ChevRight,
   AlertTriangle, Users, Calendar as CalendarIcon,
@@ -1135,24 +1136,43 @@ function MinutaModal({ theme, isDark, minuta, nombrePorUserId, colorPorUserId, t
 // ═══════════════ Modal Evento ═══════════════
 function EventoModal({ theme, isDark, internos, yoId, onClose, onSave }) {
   const hoyISO = toISO(new Date());
-  const [titulo, setTitulo] = useState('');
-  const [tipo, setTipo] = useState('reunion');
-  const [fechaIni, setFechaIni] = useState(hoyISO);
-  const [fechaFin, setFechaFin] = useState(hoyISO);
-  const [responsable, setResponsable] = useState(yoId || '');
-  const [notas, setNotas] = useState('');
+  const DRAFT_KEY = `evento_draft_v1_${yoId || 'anon'}`;
+  const defaults = { titulo: '', tipo: 'reunion', fechaIni: hoyISO, fechaFin: hoyISO, responsable: yoId || '', notas: '' };
+  const hasContent = (v) => !!((v.titulo || '').trim() || (v.notas || '').trim());
+  const [{ value: hydrated, recovered: initRecovered }] = useState(() => [hydrateDraft(DRAFT_KEY, defaults, hasContent)]);
+  const [titulo, setTitulo] = useState(hydrated.titulo);
+  const [tipo, setTipo] = useState(hydrated.tipo);
+  const [fechaIni, setFechaIni] = useState(hydrated.fechaIni);
+  const [fechaFin, setFechaFin] = useState(hydrated.fechaFin);
+  const [responsable, setResponsable] = useState(hydrated.responsable);
+  const [notas, setNotas] = useState(hydrated.notas);
   const [saving, setSaving] = useState(false);
+  const [borradorRecuperado, setBorradorRecuperado] = useState(initRecovered);
+  const [savedFlag, setSavedFlag] = useState(false);
+  const values = { titulo, tipo, fechaIni, fechaFin, responsable, notas };
+  useDraftAutosave(DRAFT_KEY, values, saving || savedFlag, hasContent);
+  useBeforeUnloadGuard(hasContent(values) && !saving && !savedFlag);
+
+  function descartarBorrador() {
+    discardDraft(DRAFT_KEY);
+    setTitulo(''); setTipo('reunion'); setFechaIni(hoyISO); setFechaFin(hoyISO); setResponsable(yoId || ''); setNotas('');
+    setBorradorRecuperado(false);
+  }
 
   async function submit(e) {
     e?.preventDefault();
     if (!titulo.trim() || !fechaIni) return;
     setSaving(true);
-    await onSave({ titulo: titulo.trim(), tipo, fecha_ini: fechaIni, fecha_fin: fechaFin || fechaIni, responsable, notas });
+    const ok = await onSave({ titulo: titulo.trim(), tipo, fecha_ini: fechaIni, fecha_fin: fechaFin || fechaIni, responsable, notas });
     setSaving(false);
+    if (ok === false) return;
+    setSavedFlag(true);
+    discardDraft(DRAFT_KEY);
   }
   return (
-    <ModalShell theme={theme} isDark={isDark} title="Nuevo evento" subtitle="Reunión, vacaciones, home office o salida" onClose={onClose}>
+    <ModalShell theme={theme} isDark={isDark} title="Nuevo evento" subtitle="Reunión, vacaciones, home office o salida · guardado automático" onClose={onClose}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {borradorRecuperado && <DraftBanner theme={theme} onDiscard={descartarBorrador} />}
         <Field label="Título" theme={theme}>
           <input autoFocus value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ej. Junta con proveedor"
             style={inputStyle(theme)} />
@@ -1195,24 +1215,43 @@ function EventoModal({ theme, isDark, internos, yoId, onClose, onSave }) {
 
 // ═══════════════ Modal Tarea ═══════════════
 function TareaModal({ theme, isDark, internos, yoId, onClose, onSave }) {
-  const [tarea, setTarea] = useState('');
-  const [cuenta, setCuenta] = useState('otro');
-  const [prioridad, setPrioridad] = useState('media');
-  const [fechaLimite, setFechaLimite] = useState('');
-  const [responsable, setResponsable] = useState(yoId || '');
-  const [notas, setNotas] = useState('');
+  const DRAFT_KEY = `tarea_draft_v1_${yoId || 'anon'}`;
+  const defaults = { tarea: '', cuenta: 'otro', prioridad: 'media', fechaLimite: '', responsable: yoId || '', notas: '' };
+  const hasContent = (v) => !!((v.tarea || '').trim() || (v.notas || '').trim());
+  const [{ value: hydrated, recovered: initRecovered }] = useState(() => [hydrateDraft(DRAFT_KEY, defaults, hasContent)]);
+  const [tarea, setTarea] = useState(hydrated.tarea);
+  const [cuenta, setCuenta] = useState(hydrated.cuenta);
+  const [prioridad, setPrioridad] = useState(hydrated.prioridad);
+  const [fechaLimite, setFechaLimite] = useState(hydrated.fechaLimite);
+  const [responsable, setResponsable] = useState(hydrated.responsable);
+  const [notas, setNotas] = useState(hydrated.notas);
   const [saving, setSaving] = useState(false);
+  const [borradorRecuperado, setBorradorRecuperado] = useState(initRecovered);
+  const [savedFlag, setSavedFlag] = useState(false);
+  const values = { tarea, cuenta, prioridad, fechaLimite, responsable, notas };
+  useDraftAutosave(DRAFT_KEY, values, saving || savedFlag, hasContent);
+  useBeforeUnloadGuard(hasContent(values) && !saving && !savedFlag);
+
+  function descartarBorrador() {
+    discardDraft(DRAFT_KEY);
+    setTarea(''); setCuenta('otro'); setPrioridad('media'); setFechaLimite(''); setResponsable(yoId || ''); setNotas('');
+    setBorradorRecuperado(false);
+  }
 
   async function submit(e) {
     e?.preventDefault();
     if (!tarea.trim()) return;
     setSaving(true);
-    await onSave({ tarea: tarea.trim(), cuenta, prioridad, fecha_limite: fechaLimite || null, responsable, notas });
+    const ok = await onSave({ tarea: tarea.trim(), cuenta, prioridad, fecha_limite: fechaLimite || null, responsable, notas });
     setSaving(false);
+    if (ok === false) return;
+    setSavedFlag(true);
+    discardDraft(DRAFT_KEY);
   }
   return (
-    <ModalShell theme={theme} isDark={isDark} title="Nueva tarea" subtitle="Asignar pendiente al equipo" onClose={onClose}>
+    <ModalShell theme={theme} isDark={isDark} title="Nueva tarea" subtitle="Asignar pendiente al equipo · guardado automático" onClose={onClose}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {borradorRecuperado && <DraftBanner theme={theme} onDiscard={descartarBorrador} />}
         <Field label="Tarea" theme={theme}>
           <input autoFocus value={tarea} onChange={(e) => setTarea(e.target.value)} placeholder="¿Qué hay que hacer?"
             style={inputStyle(theme)} />
@@ -1297,6 +1336,20 @@ function inputStyle(theme) {
     fontFamily: TYPO.fontText, outline: 'none', width: '100%',
   };
 }
+function DraftBanner({ theme, onDiscard }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', borderRadius: 10, background: `${theme.accent}15`, border: `1px solid ${theme.accent}55`, fontSize: 11 }}>
+      <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text }}>
+        📝 Borrador recuperado de sesión anterior
+      </span>
+      <button type="button" onClick={onDiscard}
+        style={{ padding: '3px 10px', borderRadius: 999, border: `1px solid ${theme.border}`, background: 'transparent', color: theme.textMuted, fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, cursor: 'pointer' }}>
+        Descartar
+      </button>
+    </div>
+  );
+}
+
 function ModalActions({ theme, onClose, saving, disabled }) {
   return (
     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
@@ -1312,56 +1365,24 @@ function ModalActions({ theme, onClose, saving, disabled }) {
 function NuevaMinutaModal({ theme, isDark, internos, yoId, onClose, onSave }) {
   const hoyISO = toISO(new Date());
   const DRAFT_KEY = `minuta_draft_v1_${yoId || 'anon'}`;
-  // Hidratar borrador si existe (solo una vez, al montar)
-  const initialDraft = (() => {
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (!raw) return null;
-      const d = JSON.parse(raw);
-      // Solo recuperar si tiene contenido significativo
-      const tieneContenido = (d?.titulo || '').trim() || (d?.contenido || '').trim() || (Array.isArray(d?.acuerdos) && d.acuerdos.some(a => (a?.descripcion || '').trim()));
-      return tieneContenido ? d : null;
-    } catch { return null; }
-  })();
-  const [titulo, setTitulo] = useState(initialDraft?.titulo || '');
-  const [fechaReunion, setFechaReunion] = useState(initialDraft?.fecha_reunion || hoyISO);
-  const [cliente, setCliente] = useState(initialDraft?.cliente || 'otro');
-  const [contenido, setContenido] = useState(initialDraft?.contenido || '');
-  const [asistentesSel, setAsistentesSel] = useState(initialDraft?.asistentesSel || (yoId ? [yoId] : []));
-  const [acuerdos, setAcuerdos] = useState(initialDraft?.acuerdos || []);
+  const defaults = { titulo: '', fecha_reunion: hoyISO, cliente: 'otro', contenido: '', asistentesSel: yoId ? [yoId] : [], acuerdos: [] };
+  const hasContent = (v) => !!((v.titulo || '').trim() || (v.contenido || '').trim() || (Array.isArray(v.acuerdos) && v.acuerdos.some(a => (a?.descripcion || '').trim())));
+  const [{ value: hydrated, recovered: initRecovered }] = useState(() => [hydrateDraft(DRAFT_KEY, defaults, hasContent)]);
+  const [titulo, setTitulo] = useState(hydrated.titulo);
+  const [fechaReunion, setFechaReunion] = useState(hydrated.fecha_reunion);
+  const [cliente, setCliente] = useState(hydrated.cliente);
+  const [contenido, setContenido] = useState(hydrated.contenido);
+  const [asistentesSel, setAsistentesSel] = useState(hydrated.asistentesSel);
+  const [acuerdos, setAcuerdos] = useState(hydrated.acuerdos);
   const [saving, setSaving] = useState(false);
-  const [borradorRecuperado, setBorradorRecuperado] = useState(!!initialDraft);
-  const [savedFlag, setSavedFlag] = useState(false); // para no advertir en beforeunload tras submit exitoso
-
-  // Autosave a localStorage en cada cambio
-  useEffect(() => {
-    if (saving || savedFlag) return;
-    const tieneContenido = titulo.trim() || contenido.trim() || acuerdos.some(a => (a?.descripcion || '').trim());
-    try {
-      if (tieneContenido) {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ titulo, fecha_reunion: fechaReunion, cliente, contenido, asistentesSel, acuerdos, _savedAt: new Date().toISOString() }));
-      } else {
-        localStorage.removeItem(DRAFT_KEY);
-      }
-    } catch {}
-  }, [titulo, fechaReunion, cliente, contenido, asistentesSel, acuerdos, saving, savedFlag, DRAFT_KEY]);
-
-  // Advertir si el usuario intenta cerrar/refrescar con contenido sin guardar
-  useEffect(() => {
-    function beforeUnload(e) {
-      if (savedFlag || saving) return;
-      const tieneContenido = titulo.trim() || contenido.trim() || acuerdos.some(a => (a?.descripcion || '').trim());
-      if (!tieneContenido) return;
-      e.preventDefault();
-      e.returnValue = '';
-      return '';
-    }
-    window.addEventListener('beforeunload', beforeUnload);
-    return () => window.removeEventListener('beforeunload', beforeUnload);
-  }, [titulo, contenido, acuerdos, saving, savedFlag]);
+  const [borradorRecuperado, setBorradorRecuperado] = useState(initRecovered);
+  const [savedFlag, setSavedFlag] = useState(false);
+  const values = { titulo, fecha_reunion: fechaReunion, cliente, contenido, asistentesSel, acuerdos };
+  useDraftAutosave(DRAFT_KEY, values, saving || savedFlag, hasContent);
+  useBeforeUnloadGuard(hasContent(values) && !saving && !savedFlag);
 
   function descartarBorrador() {
-    try { localStorage.removeItem(DRAFT_KEY); } catch {}
+    discardDraft(DRAFT_KEY);
     setTitulo(''); setFechaReunion(hoyISO); setCliente('otro'); setContenido(''); setAsistentesSel(yoId ? [yoId] : []); setAcuerdos([]);
     setBorradorRecuperado(false);
   }
@@ -1396,25 +1417,14 @@ function NuevaMinutaModal({ theme, isDark, internos, yoId, onClose, onSave }) {
     });
     setSaving(false);
     if (ok === false) return;
-    // Éxito: limpiar draft para no re-hidratar en próxima apertura
     setSavedFlag(true);
-    try { localStorage.removeItem(DRAFT_KEY); } catch {}
+    discardDraft(DRAFT_KEY);
   }
 
   return (
     <ModalShell theme={theme} isDark={isDark} title="Nueva minuta" subtitle="Título, asistentes, notas y acuerdos · guardado automático" onClose={onClose}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {borradorRecuperado && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', borderRadius: 10, background: `${theme.accent}15`, border: `1px solid ${theme.accent}55`, fontSize: 11 }}>
-            <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text }}>
-              📝 Borrador recuperado de sesión anterior
-            </span>
-            <button type="button" onClick={descartarBorrador}
-              style={{ padding: '3px 10px', borderRadius: 999, border: `1px solid ${theme.border}`, background: 'transparent', color: theme.textMuted, fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, cursor: 'pointer' }}>
-              Descartar
-            </button>
-          </div>
-        )}
+        {borradorRecuperado && <DraftBanner theme={theme} onDiscard={descartarBorrador} />}
         <Field label="Título" theme={theme}>
           <input autoFocus value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ej. Reunión semanal Digitalife"
             style={inputStyle(theme)} />

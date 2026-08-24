@@ -12,6 +12,7 @@ import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
+import { hydrateDraft, useDraftAutosave, useBeforeUnloadGuard, discardDraft } from '../../lib/useDraft';
 import { puedeEditarPestanaCliente } from '../../lib/permisos';
 import { Sparkles, Search, Mail, Video, Image as ImageIcon, Smartphone, PartyPopper, Check, Pencil, Trash2, RotateCcw, Calendar, DollarSign, User, Lock } from 'lucide-react';
 
@@ -327,14 +328,31 @@ export default function MarketingClienteV2({ cliente, clienteKey }) {
   }, [actividades, anio, filterTipo, filterMarca]);
 
   // CRUD
+  const MKT_DRAFT_KEY = `mkt_actividad_draft_v1_${ck}`;
+  const mktHasContent = (v) => !!((v?.nombre || '').trim() || (v?.mensaje || '').trim() || (v?.notas || '').trim() || Number(v?.inversion) > 0);
+  const [mktDraftRecovered, setMktDraftRecovered] = useState(false);
+  // Autosave del form solo cuando showForm && !editId (nueva actividad)
+  useDraftAutosave(MKT_DRAFT_KEY, form, !showForm || !!editId || saving, mktHasContent);
+  useBeforeUnloadGuard(showForm && !editId && !saving && mktHasContent(form));
+
   const openNew = () => {
     if (!canEdit) return;
     const d = new Date();
     const day = d.getFullYear() === anio && d.getMonth() + 1 === mesSel ? d.getDate() : (diaSel || Math.min(new Date().getDate(), 28));
     const fecha = `${anio}-${String(mesSel).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    setForm({ ...emptyForm(), fecha });
+    const base = { ...emptyForm(), fecha };
+    const { value: hydrated, recovered } = hydrateDraft(MKT_DRAFT_KEY, base, mktHasContent);
+    setForm(hydrated);
+    setMktDraftRecovered(recovered);
     setEditId(null);
     setShowForm(true);
+  };
+  const discardMktDraft = () => {
+    discardDraft(MKT_DRAFT_KEY);
+    const d = new Date();
+    const day = d.getFullYear() === anio && d.getMonth() + 1 === mesSel ? d.getDate() : (diaSel || Math.min(new Date().getDate(), 28));
+    setForm({ ...emptyForm(), fecha: `${anio}-${String(mesSel).padStart(2, '0')}-${String(day).padStart(2, '0')}` });
+    setMktDraftRecovered(false);
   };
   const openEdit = (a) => {
     if (!canEdit) return;
@@ -398,6 +416,8 @@ export default function MarketingClienteV2({ cliente, clienteKey }) {
       if (editId) setActividades(p => p.map(a => a.id === editId ? saved : a));
       else setActividades(p => [...p.filter(a => a.id !== saved.id), saved]);
     }
+    if (!editId) discardDraft(MKT_DRAFT_KEY); // limpiar borrador solo al éxito
+    setMktDraftRecovered(false);
     closeForm();
   };
   const doDelete = async () => {
@@ -784,6 +804,8 @@ export default function MarketingClienteV2({ cliente, clienteKey }) {
         <ActivityFormModal
           theme={theme} bgAlt={bgAlt} accentSoft={accentSoft} accentBg={accentBg}
           form={form} setForm={setForm} editId={editId} saving={saving}
+          draftRecovered={mktDraftRecovered && !editId}
+          onDiscardDraft={discardMktDraft}
           onSave={save} onClose={closeForm}
           onDelete={editId ? () => { const a = actividades.find(x => x.id === editId); setConfirmDelete({ id: editId, nombre: a?.nombre || '' }); closeForm(); } : null}
           cliente={cliente || ck}
@@ -1052,7 +1074,7 @@ function ActivityCard({ a, theme, canEdit, onEdit, onDelete, onToggle }) {
 }
 
 // ═══════════ Modal formulario ═══════════════════════
-function ActivityFormModal({ theme, bgAlt, accentSoft, accentBg, form, setForm, editId, saving, onSave, onClose, onDelete, cliente }) {
+function ActivityFormModal({ theme, bgAlt, accentSoft, accentBg, form, setForm, editId, saving, onSave, onClose, onDelete, cliente, draftRecovered, onDiscardDraft }) {
   const tipoMeta = TIPOS[form.tipo] || TIPOS.mailing;
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const setMet = (k, v) => setForm(f => ({ ...f, metricas: { ...f.metricas, [k]: v === '' ? null : (isNaN(v) ? v : Number(v)) } }));
@@ -1074,6 +1096,12 @@ function ActivityFormModal({ theme, bgAlt, accentSoft, accentBg, form, setForm, 
         </div>
         {/* Body */}
         <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }}>
+          {draftRecovered && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', borderRadius: 10, background: `${accentSoft || theme.accent + '15'}`, border: `1px solid ${theme.accent}55`, fontSize: 11 }}>
+              <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text }}>📝 Borrador recuperado de sesión anterior</span>
+              <button type="button" onClick={onDiscardDraft} style={{ padding: '3px 10px', borderRadius: 999, border: `1px solid ${theme.border}`, background: 'transparent', color: theme.textMuted, fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, cursor: 'pointer' }}>Descartar</button>
+            </div>
+          )}
           <div>
             <FieldLb theme={theme}>Tipo de actividad</FieldLb>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
