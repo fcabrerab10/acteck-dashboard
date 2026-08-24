@@ -75,7 +75,9 @@ export default function ForecastReservas() {
 
   // UI state
   const [busqueda, setBusqueda] = useState('');
-  const [soloConBrecha, setSoloConBrecha] = useState(true);
+  const [filtroCliente, setFiltroCliente] = useState('todos');   // 'todos' | 'digitalife' | 'pcel' | 'dicotech'
+  const [filtroMarca, setFiltroMarca] = useState('todas');       // 'todas' | 'acteck' | 'balam rush'
+  const [filtroStock, setFiltroStock] = useState('todos');       // 'todos' | 'sin_arribo' | 'con_arribo'
   const [saving, setSaving] = useState(false);
   const [expandedSku, setExpandedSku] = useState(null);
   const [drillYear, setDrillYear] = useState(anioObj);
@@ -275,11 +277,29 @@ export default function ForecastReservas() {
   const filasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return filasBase.filter(r => {
-      if (soloConBrecha && r.recomendado === 0) return false;
+      // Filtro cliente: solo SKUs que ese cliente compra (necesidad > 0)
+      if (filtroCliente !== 'todos') {
+        const key = 'necesidad_' + (filtroCliente === 'digitalife' ? 'dgl' : filtroCliente === 'pcel' ? 'pce' : 'dct');
+        if ((r[key] || 0) === 0) return false;
+      }
+      // Filtro marca
+      if (filtroMarca !== 'todas' && (r.marca || '').toLowerCase() !== filtroMarca) return false;
+      // Filtro stock/arribos
+      const totalArribos = Object.values(r.arribosPorMes || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+      if (filtroStock === 'con_arribo' && totalArribos === 0) return false;
+      if (filtroStock === 'sin_arribo' && totalArribos > 0) return false;
+      // Búsqueda
       if (!q) return true;
       return (r.sku + ' ' + r.descripcion + ' ' + r.marca + ' ' + r.familia).toLowerCase().includes(q);
     });
-  }, [filasBase, busqueda, soloConBrecha]);
+  }, [filasBase, busqueda, filtroCliente, filtroMarca, filtroStock]);
+
+  // Marcas únicas del roadmap para el dropdown
+  const marcasDisponibles = useMemo(() => {
+    const s = new Set();
+    for (const r of roadmap) if (r.marca) s.add(r.marca.toLowerCase());
+    return Array.from(s).sort();
+  }, [roadmap]);
 
   // KPIs hero
   const kpis = useMemo(() => {
@@ -432,15 +452,6 @@ export default function ForecastReservas() {
         </div>
       </div>
 
-      {/* Workflow */}
-      <div style={{ display: 'flex', alignItems: 'center', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: 5, marginBottom: 14 }}>
-        <StepChip theme={theme} n={1} lb="Borrador" sub={`${Object.keys(lineas).length} SKUs`} active={step === 1} done={step > 1} />
-        <div style={{ width: 1, height: 20, background: theme.border, margin: '0 4px' }} />
-        <StepChip theme={theme} n={2} lb="Generar propuesta de preventa & reservas" sub={propuesta?.generado_at ? 'Generada' : 'Se guarda en Landing'} active={step === 2} done={step > 2} />
-        <div style={{ width: 1, height: 20, background: theme.border, margin: '0 4px' }} />
-        <StepChip theme={theme} n={3} lb="Confirmar reservado" sub="" active={step === 3} done={false} />
-      </div>
-
       {/* Layout main + sidebar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 16, alignItems: 'start' }}>
 
@@ -448,33 +459,38 @@ export default function ForecastReservas() {
 
           {/* Card unificada: Header negro con buscador + tabla */}
           <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' }}>
-            {/* Header negro con búsqueda inline */}
+            {/* Header negro con búsqueda + filtros */}
             <div style={{ background: '#0A0A0A', color: '#FFF', padding: '12px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
                 <div>
                   <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', margin: 0, color: '#FFF' }}>Detalle por SKU</h3>
                   <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>
-                    <b style={{ color: '#FFF', fontWeight: 600 }}>{filasFiltradas.length}</b> SKUs · click para drill · <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: '#5EABFF', verticalAlign: 'middle', marginRight: 4 }} />en propuesta
+                    <b style={{ color: '#FFF', fontWeight: 600 }}>{filasFiltradas.length}</b> de {filasBase.length} SKUs · click en fila para drill · <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: '#5EABFF', verticalAlign: 'middle', marginRight: 4 }} />en propuesta
                   </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 240, maxWidth: 300, padding: '6px 12px', background: 'rgba(255,255,255,0.08)', borderRadius: 999, color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>
+                  <Search size={12} />
+                  <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                    placeholder="Buscar SKU · descripción"
+                    style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', color: '#FFF', fontFamily: TYPO.fontText, fontSize: 11.5, minWidth: 0 }} />
                 </div>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                <div style={{ flex: 1, minWidth: 240, display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: 'rgba(255,255,255,0.08)', borderRadius: 999, color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>
-                  <Search size={13} />
-                  <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
-                    placeholder="Buscar SKU · descripción · marca · familia"
-                    style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', color: '#FFF', fontFamily: TYPO.fontText, fontSize: 12 }} />
-                </div>
-                <button onClick={() => setSoloConBrecha(v => !v)}
-                  style={{
-                    padding: '7px 14px', borderRadius: 999,
-                    border: `1px solid ${soloConBrecha ? '#5EABFF' : 'rgba(255,255,255,0.16)'}`,
-                    background: soloConBrecha ? 'rgba(94,171,255,0.16)' : 'transparent',
-                    color: soloConBrecha ? '#5EABFF' : 'rgba(255,255,255,0.72)',
-                    fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: soloConBrecha ? 600 : 500, cursor: 'pointer',
-                  }}>
-                  {soloConBrecha ? '✓ ' : ''}Solo con brecha ({filasBase.length})
-                </button>
+                <DarkSelect label="Cliente" value={filtroCliente} onChange={setFiltroCliente}
+                  options={[
+                    { v: 'todos', l: 'Todos los clientes' },
+                    { v: 'digitalife', l: 'Digitalife' },
+                    { v: 'pcel', l: 'PCEL' },
+                    { v: 'dicotech', l: 'Dicotech' },
+                  ]} />
+                <DarkSelect label="Marca" value={filtroMarca} onChange={setFiltroMarca}
+                  options={[{ v: 'todas', l: 'Todas las marcas' }, ...marcasDisponibles.map(m => ({ v: m, l: m.replace(/\b\w/g, c => c.toUpperCase()) }))]} />
+                <DarkSelect label="Arribos" value={filtroStock} onChange={setFiltroStock}
+                  options={[
+                    { v: 'todos', l: 'Todos' },
+                    { v: 'con_arribo', l: 'Con arribo próximo' },
+                    { v: 'sin_arribo', l: 'Sin arribo próximo' },
+                  ]} />
               </div>
             </div>
             <div style={{ overflowX: 'auto' }}>
@@ -711,24 +727,40 @@ function ReservoInput({ value, recom, confirmado, onChange, accent = '#007AFF' }
   const [local, setLocal] = useState(String(value ?? 0));
   useEffect(() => { setLocal(String(value ?? 0)); }, [value]);
   const numLocal = Number(local) || 0;
-  const dirty = numLocal !== value;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
-      <input value={local}
-        placeholder="0"
-        onChange={e => setLocal(e.target.value.replace(/[^\d]/g, ''))}
-        onFocus={e => e.currentTarget.select()}
-        onBlur={() => { const n = Number(local) || 0; if (n !== value) onChange(n); }}
-        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+    <input value={local}
+      placeholder="0"
+      onChange={e => setLocal(e.target.value.replace(/[^\d]/g, ''))}
+      onFocus={e => e.currentTarget.select()}
+      onBlur={() => { const n = Number(local) || 0; if (n !== value) onChange(n); }}
+      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      style={{
+        width: 72, padding: '5px 10px', borderRadius: 6, textAlign: 'right',
+        border: `1px solid ${confirmado ? '#34C759' : (numLocal > 0 ? accent : 'transparent')}`,
+        background: confirmado ? 'rgba(52,199,89,0.10)' : (numLocal > 0 ? 'rgba(0,122,255,0.06)' : 'transparent'),
+        color: confirmado ? '#34C759' : (numLocal > 0 ? accent : '#A1A1A6'),
+        fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 600, outline: 'none',
+      }} />
+  );
+}
+
+function DarkSelect({ label, value, onChange, options }) {
+  return (
+    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 999, padding: '5px 4px 5px 12px', border: '1px solid rgba(255,255,255,0.10)' }}>
+      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', fontWeight: 600 }}>{label}</span>
+      <select value={value} onChange={e => onChange(e.target.value)}
         style={{
-          width: 68, padding: '4px 8px', borderRadius: 6, textAlign: 'right',
-          border: `1px solid ${confirmado ? '#34C759' : (numLocal > 0 ? accent : 'transparent')}`,
-          background: confirmado ? 'rgba(52,199,89,0.10)' : (numLocal > 0 ? 'rgba(0,122,255,0.06)' : 'transparent'),
-          color: confirmado ? '#34C759' : (numLocal > 0 ? accent : '#A1A1A6'),
-          fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 600, outline: 'none',
-        }} />
-      <span style={{ color: '#A1A1A6', fontSize: 10, fontFamily: 'SF Mono, ui-monospace, monospace', fontWeight: 500 }}>/ {fmtInt(recom)}</span>
-    </span>
+          appearance: 'none', border: 0, background: 'transparent', color: '#FFF',
+          fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+          padding: '2px 22px 2px 4px', outline: 'none',
+          backgroundImage: 'linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.55) 50%), linear-gradient(135deg, rgba(255,255,255,0.55) 50%, transparent 50%)',
+          backgroundPosition: 'calc(100% - 12px) 50%, calc(100% - 8px) 50%',
+          backgroundSize: '4px 4px, 4px 4px',
+          backgroundRepeat: 'no-repeat',
+        }}>
+        {options.map(o => <option key={o.v} value={o.v} style={{ background: '#0A0A0A', color: '#FFF' }}>{o.l}</option>)}
+      </select>
+    </label>
   );
 }
 // ─── Heatmap Drill ───────────────────────────────────────
