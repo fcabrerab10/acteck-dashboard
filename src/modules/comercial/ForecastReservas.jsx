@@ -30,12 +30,14 @@ const BAND_ARR_LIGHT = '#F2F2F4';
 const BAND_ARR_DARK = '#1C1C1F';
 const LIME = '#CDE64A';
 
-// Paginación estándar
-async function fetchAll(qFactory, pageSize = 1000) {
+// Paginación estándar. Requiere `.order()` en la query para que PostgREST
+// devuelva chunks estables — sin order puede repetir/skipar filas o loopar.
+async function fetchAll(qFactory, orderCol = 'id', pageSize = 1000) {
   const acc = [];
   let from = 0;
-  for (;;) {
-    const q = qFactory().range(from, from + pageSize - 1);
+  const MAX_ITERS = 100; // guardrail: 100 * 1000 = 100k filas máximo
+  for (let i = 0; i < MAX_ITERS; i++) {
+    const q = qFactory().order(orderCol, { ascending: true }).range(from, from + pageSize - 1);
     const { data, error } = await q;
     if (error) throw error;
     if (!data || data.length === 0) break;
