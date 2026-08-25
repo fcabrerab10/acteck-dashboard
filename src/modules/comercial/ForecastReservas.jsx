@@ -527,12 +527,12 @@ export default function ForecastReservas() {
       {vista === 'landing' && (
         <ForecastLanding
           propuestas={propuestasCerradas}
+          propuestaAbierta={propuestaAbierta}
+          setPropuestaAbierta={setPropuestaAbierta}
           theme={theme}
           isDark={isDark}
           onNueva={() => setVista('armador')}
-          onAbrir={(p) => setPropuestaAbierta(p)}
           onReabrir={async (p) => {
-            // Reabrir como borrador (para seguir editando)
             const { error } = await supabase.from('forecast_propuestas')
               .update({ estatus: 'borrador' }).eq('id', p.id);
             if (error) { alert('Error: ' + error.message); return; }
@@ -546,14 +546,29 @@ export default function ForecastReservas() {
           onEliminar={async (p) => {
             if (!confirm(`¿Eliminar "${p.nombre}"?`)) return;
             await supabase.from('forecast_propuestas').delete().eq('id', p.id);
+            if (propuestaAbierta?.id === p.id) setPropuestaAbierta(null);
             await cargarLanding();
           }}
+          onConfirmarLinea={async (linea, confirmado) => {
+            let estado = 'confirmado';
+            if (confirmado === 0) estado = 'no_aplica';
+            else if (confirmado < Number(linea.reservo)) estado = 'parcial';
+            const { error } = await supabase.from('forecast_propuesta_lineas')
+              .update({ confirmado, estado }).eq('id', linea.id);
+            if (error) { alert('Error: ' + error.message); return; }
+            await cargarLanding();
+            // Actualizar la propuesta abierta con la línea nueva
+            setPropuestaAbierta(prev => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                forecast_propuesta_lineas: (prev.forecast_propuesta_lineas || []).map(l =>
+                  l.id === linea.id ? { ...l, confirmado, estado } : l
+                ),
+              };
+            });
+          }}
         />
-      )}
-
-      {/* Detalle propuesta cerrada (modal) */}
-      {propuestaAbierta && (
-        <PropuestaDetalleModal propuesta={propuestaAbierta} theme={theme} isDark={isDark} onClose={() => setPropuestaAbierta(null)} />
       )}
 
       {/* Layout main + sidebar */}
@@ -844,11 +859,20 @@ function ReservoInput({ value, recom, confirmado, onChange, accent = '#007AFF' }
 }
 
 // ─── Landing de Propuestas ────────────────────────────
-function ForecastLanding({ propuestas, theme, isDark, onNueva, onAbrir, onReabrir, onEliminar }) {
+function ForecastLanding({ propuestas, propuestaAbierta, setPropuestaAbierta, theme, isDark, onNueva, onReabrir, onEliminar, onConfirmarLinea }) {
   const estatusStyle = (est) => ({
     generada: { bg: 'rgba(0,122,255,0.10)', color: theme.accent, label: 'Generada' },
     cerrada:  { bg: 'rgba(52,199,89,0.12)', color: '#34C759', label: 'Cerrada' },
   }[est] || { bg: 'transparent', color: theme.textMuted, label: est });
+
+  const [colsN, setColsN] = useState(3); // aproximación de columnas por breakpoint
+  useEffect(() => {
+    const on = () => {
+      const w = window.innerWidth;
+      setColsN(w >= 1400 ? 4 : w >= 1100 ? 3 : w >= 780 ? 2 : 1);
+    };
+    on(); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on);
+  }, []);
 
   return (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' }}>
@@ -864,8 +888,8 @@ function ForecastLanding({ propuestas, theme, isDark, onNueva, onAbrir, onReabri
           Aún no tienes propuestas generadas. Arma una en el <b style={{ color: theme.text }}>Armador</b>.
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, padding: 16 }}>
-          {propuestas.map(p => {
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${colsN}, minmax(0, 1fr))`, gap: 12, padding: 16 }}>
+          {propuestas.map((p, idx) => {
             const lineas = p.forecast_propuesta_lineas || [];
             const nSkus = lineas.length;
             const totalPz = lineas.reduce((a, l) => a + (Number(l.reservo) || 0), 0);
@@ -874,11 +898,22 @@ function ForecastLanding({ propuestas, theme, isDark, onNueva, onAbrir, onReabri
             const dct = lineas.reduce((a, l) => a + (Number(l.reservo) || 0) * ((Number(l.necesidad_dct) || 0) / Math.max(1, Number(l.recomendado) || 0)), 0);
             const st = estatusStyle(p.estatus);
             const fecha = p.generado_at ? new Date(p.generado_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
-            return (
-              <div key={p.id} onClick={() => onAbrir(p)}
-                style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: 14, cursor: 'pointer', transition: 'border-color 160ms ease' }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = theme.text}
-                onMouseLeave={e => e.currentTarget.style.borderColor = theme.border}>
+            const abierta = propuestaAbierta?.id === p.id;
+
+            // Insertar panel expandido después del último item de la fila que contiene la card abierta
+            const esUltimoDeFila = ((idx + 1) % colsN === 0) || (idx === propuestas.length - 1);
+            const abrirEnEstaFila = abierta || (propuestaAbierta && propuestas.slice(Math.floor(idx / colsN) * colsN, Math.floor(idx / colsN) * colsN + colsN).some(x => x.id === propuestaAbierta.id));
+            const showPanelAqui = abrirEnEstaFila && esUltimoDeFila;
+
+            const card = (
+              <div key={p.id} onClick={() => setPropuestaAbierta(abierta ? null : p)}
+                style={{
+                  background: theme.surface,
+                  border: `1px solid ${abierta ? theme.accent : theme.border}`,
+                  borderRadius: 12, padding: 14, cursor: 'pointer', transition: 'border-color 160ms ease',
+                }}
+                onMouseEnter={e => { if (!abierta) e.currentTarget.style.borderColor = theme.text; }}
+                onMouseLeave={e => { if (!abierta) e.currentTarget.style.borderColor = theme.border; }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</div>
@@ -893,11 +928,22 @@ function ForecastLanding({ propuestas, theme, isDark, onNueva, onAbrir, onReabri
                   <span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 999, background: '#FF9500', marginRight: 4, verticalAlign: 'middle' }} />DCT {fmtInt(dct)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, paddingTop: 10, borderTop: `1px solid ${theme.divider || theme.border}` }} onClick={e => e.stopPropagation()}>
-                  <button onClick={() => onAbrir(p)} style={{ flex: 1, padding: '6px 10px', borderRadius: 999, background: 'transparent', color: theme.text, border: `1px solid ${theme.border}`, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600 }}>Ver detalle</button>
+                  <button onClick={() => setPropuestaAbierta(abierta ? null : p)} style={{ flex: 1, padding: '6px 10px', borderRadius: 999, background: abierta ? theme.accent : 'transparent', color: abierta ? '#FFF' : theme.text, border: `1px solid ${abierta ? theme.accent : theme.border}`, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600 }}>{abierta ? 'Cerrar detalle' : 'Ver detalle'}</button>
                   <button onClick={() => onReabrir(p)} style={{ flex: 1, padding: '6px 10px', borderRadius: 999, background: 'transparent', color: theme.accent, border: `1px solid ${theme.accent}`, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600 }}>Reabrir</button>
                   <button onClick={() => onEliminar(p)} title="Eliminar" style={{ padding: '6px 10px', borderRadius: 999, background: 'transparent', color: theme.textFaint || theme.textMuted, border: `1px solid ${theme.border}`, cursor: 'pointer', fontSize: 12, lineHeight: 1 }}>×</button>
                 </div>
               </div>
+            );
+
+            return (
+              <React.Fragment key={p.id}>
+                {card}
+                {showPanelAqui && propuestaAbierta && (
+                  <div style={{ gridColumn: `1 / -1` }}>
+                    <PropuestaDetallePanel propuesta={propuestaAbierta} theme={theme} isDark={isDark} onConfirmarLinea={onConfirmarLinea} onClose={() => setPropuestaAbierta(null)} />
+                  </div>
+                )}
+              </React.Fragment>
             );
           })}
         </div>
@@ -906,44 +952,81 @@ function ForecastLanding({ propuestas, theme, isDark, onNueva, onAbrir, onReabri
   );
 }
 
-function PropuestaDetalleModal({ propuesta, theme, isDark, onClose }) {
+// ─── Panel de detalle (inline, no modal) ────────────────
+function PropuestaDetallePanel({ propuesta, theme, isDark, onConfirmarLinea, onClose }) {
   const lineas = propuesta.forecast_propuesta_lineas || [];
-  const totalPz = lineas.reduce((a, l) => a + (Number(l.reservo) || 0), 0);
+  const totalReservo = lineas.reduce((a, l) => a + (Number(l.reservo) || 0), 0);
+  const totalConfirmado = lineas.reduce((a, l) => a + (l.confirmado == null ? 0 : Number(l.confirmado)), 0);
+  const nConf = lineas.filter(l => l.estado === 'confirmado' || l.estado === 'parcial' || l.estado === 'no_aplica').length;
+
+  const estadoStyle = (est) => ({
+    pend_confirmar: { bg: 'rgba(0,122,255,0.10)', color: theme.accent, label: 'Pendiente' },
+    confirmado:     { bg: 'rgba(52,199,89,0.12)', color: '#34C759', label: 'Confirmado' },
+    parcial:        { bg: 'rgba(255,149,0,0.12)', color: '#FF9500', label: 'Parcial' },
+    no_aplica:      { bg: 'rgba(255,59,48,0.12)', color: '#FF3B30', label: 'No aplica' },
+  }[est] || { bg: 'transparent', color: theme.textMuted, label: est });
+
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, maxWidth: 720, width: '100%', maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ background: '#0A0A0A', color: '#FFF', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>Propuesta</div>
-            <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, margin: '2px 0 0', color: '#FFF' }}>{propuesta.nombre}</h3>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>{lineas.length} SKUs · {fmtInt(totalPz)} pz · {propuesta.generado_at ? new Date(propuesta.generado_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</div>
-          </div>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.10)', border: 0, color: '#FFF', width: 28, height: 28, borderRadius: 999, cursor: 'pointer', fontSize: 16 }}>×</button>
+    <div style={{ marginTop: 8, background: theme.bg, borderRadius: 12, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>Confirmar reservado</div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, marginTop: 2 }}>{nConf} de {lineas.length} SKUs confirmados · {fmtInt(totalConfirmado)} / {fmtInt(totalReservo)} pz</div>
         </div>
-        <div style={{ overflow: 'auto', padding: 0 }}>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 12 }}>
-            <thead>
-              <tr>
-                <th style={{ position: 'sticky', top: 0, background: theme.surface, textAlign: 'left', padding: '10px 14px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>SKU</th>
-                <th style={{ position: 'sticky', top: 0, background: theme.surface, textAlign: 'left', padding: '10px 14px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Descripción</th>
-                <th style={{ position: 'sticky', top: 0, background: theme.surface, textAlign: 'right', padding: '10px 14px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Reservo</th>
-                <th style={{ position: 'sticky', top: 0, background: theme.surface, textAlign: 'right', padding: '10px 14px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineas.map(l => (
-                <tr key={l.id}>
-                  <td style={{ padding: '7px 14px', fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600, borderBottom: `1px solid ${theme.divider || theme.border}` }}>{l.sku}</td>
-                  <td style={{ padding: '7px 14px', color: theme.text, borderBottom: `1px solid ${theme.divider || theme.border}` }}>{l.descripcion || '—'}</td>
-                  <td style={{ padding: '7px 14px', textAlign: 'right', fontFamily: 'SF Mono, ui-monospace, monospace', fontWeight: 700, color: theme.text, borderBottom: `1px solid ${theme.divider || theme.border}` }}>{fmtInt(l.reservo)}</td>
-                  <td style={{ padding: '7px 14px', textAlign: 'right', color: theme.textMuted, fontSize: 11, borderBottom: `1px solid ${theme.divider || theme.border}` }}>{l.estado}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <button onClick={onClose} style={{ padding: '6px 12px', borderRadius: 999, background: 'transparent', color: theme.textMuted, border: `1px solid ${theme.border}`, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600 }}>Cerrar</button>
+      </div>
+
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11.5 }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>SKU</th>
+              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>Descripción</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>Reservo</th>
+              <th style={{ textAlign: 'center', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>Confirmado</th>
+              <th style={{ textAlign: 'center', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>Acciones</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lineas.map(l => <LineaConfirmarRow key={l.id} linea={l} theme={theme} isDark={isDark} estadoStyle={estadoStyle} onConfirmar={onConfirmarLinea} />)}
+          </tbody>
+        </table>
       </div>
     </div>
+  );
+}
+
+function LineaConfirmarRow({ linea, theme, isDark, estadoStyle, onConfirmar }) {
+  const reservo = Number(linea.reservo) || 0;
+  const [local, setLocal] = useState(linea.confirmado == null ? '' : String(linea.confirmado));
+  useEffect(() => { setLocal(linea.confirmado == null ? '' : String(linea.confirmado)); }, [linea.confirmado]);
+  const s = estadoStyle(linea.estado);
+
+  return (
+    <tr>
+      <td style={{ padding: '7px 12px', fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600, borderBottom: `1px solid ${theme.divider || theme.border}` }}>{linea.sku}</td>
+      <td style={{ padding: '7px 12px', color: theme.text, borderBottom: `1px solid ${theme.divider || theme.border}`, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={linea.descripcion}>{linea.descripcion || '—'}</td>
+      <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'SF Mono, ui-monospace, monospace', fontWeight: 700, color: theme.text, borderBottom: `1px solid ${theme.divider || theme.border}` }}>{fmtInt(reservo)}</td>
+      <td style={{ padding: '7px 12px', textAlign: 'center', borderBottom: `1px solid ${theme.divider || theme.border}` }}>
+        <input value={local}
+          placeholder="—"
+          onChange={e => setLocal(e.target.value.replace(/[^\d]/g, ''))}
+          onFocus={e => e.currentTarget.select()}
+          onBlur={() => { const n = Number(local); if (!isNaN(n) && n !== Number(linea.confirmado)) onConfirmar(linea, Math.min(n, reservo)); }}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          style={{ width: 72, padding: '4px 8px', borderRadius: 6, textAlign: 'right', border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, fontWeight: 600, outline: 'none' }} />
+      </td>
+      <td style={{ padding: '7px 12px', textAlign: 'center', borderBottom: `1px solid ${theme.divider || theme.border}`, whiteSpace: 'nowrap' }}>
+        <button onClick={() => onConfirmar(linea, reservo)} title="Se reservó todo"
+          style={{ padding: '3px 10px', borderRadius: 999, background: 'rgba(52,199,89,0.12)', color: '#34C759', border: 0, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, marginRight: 4 }}>✓ Todo</button>
+        <button onClick={() => onConfirmar(linea, 0)} title="No se pudo reservar"
+          style={{ padding: '3px 10px', borderRadius: 999, background: 'rgba(255,59,48,0.10)', color: '#FF3B30', border: 0, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600 }}>× Nada</button>
+      </td>
+      <td style={{ padding: '7px 12px', textAlign: 'right', borderBottom: `1px solid ${theme.divider || theme.border}` }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: s.bg, color: s.color }}>{linea.estado === 'parcial' && linea.confirmado != null ? `Parcial ${fmtInt(linea.confirmado)}` : s.label}</span>
+      </td>
+    </tr>
   );
 }
 
