@@ -82,6 +82,9 @@ export default function ForecastReservas() {
   const [saving, setSaving] = useState(false);
   const [expandedSku, setExpandedSku] = useState(null);
   const [drillYear, setDrillYear] = useState(anioObj);
+  const [vista, setVista] = useState('armador'); // 'armador' | 'landing'
+  const [propuestasCerradas, setPropuestasCerradas] = useState([]);
+  const [propuestaAbierta, setPropuestaAbierta] = useState(null); // propuesta seleccionada del landing
 
   const bandArr = 'transparent';
   const groupSep = isDark ? '#232326' : '#E5E5E9';
@@ -413,6 +416,14 @@ export default function ForecastReservas() {
     await supabase.from('forecast_propuesta_lineas').delete().eq('id', l.id);
   }, [lineas]);
 
+  const cargarLanding = useCallback(async () => {
+    const { data, error } = await supabase.from('forecast_propuestas')
+      .select('*, forecast_propuesta_lineas(id, sku, descripcion, marca, reservo, estado, necesidad_dgl, necesidad_pce, necesidad_dct, recomendado)')
+      .neq('estatus', 'borrador')
+      .order('generado_at', { ascending: false, nullsFirst: false });
+    if (!error && data) setPropuestasCerradas(data);
+  }, []);
+
   const generarPropuesta = useCallback(async () => {
     if (!propuesta) { alert('No hay líneas en la propuesta.'); return; }
     if (Object.keys(lineas).length === 0) { alert('Agrega al menos un SKU antes de generar la propuesta.'); return; }
@@ -420,22 +431,21 @@ export default function ForecastReservas() {
     const { error } = await supabase.from('forecast_propuestas')
       .update({ estatus: 'generada', generado_at: new Date().toISOString() })
       .eq('id', propuesta.id);
-    setSaving(false);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { setSaving(false); alert('Error: ' + error.message); return; }
     // Marcar todas las líneas draft como pend_confirmar
     await supabase.from('forecast_propuesta_lineas')
       .update({ estado: 'pend_confirmar' })
       .eq('propuesta_id', propuesta.id).eq('estado', 'draft');
-    // Refrescar
-    const { data: refreshed } = await supabase.from('forecast_propuestas')
-      .select('*, forecast_propuesta_lineas(*)').eq('id', propuesta.id).single();
-    if (refreshed) {
-      setPropuesta(refreshed);
-      const lin = {};
-      for (const l of (refreshed.forecast_propuesta_lineas || [])) lin[l.sku] = l;
-      setLineas(lin);
-    }
-  }, [propuesta, lineas]);
+    // Refrescar landing y limpiar propuesta activa (crea nuevo borrador al vuelo)
+    await cargarLanding();
+    setPropuesta(null);
+    setLineas({});
+    setSaving(false);
+    setVista('landing');
+  }, [propuesta, lineas, cargarLanding]);
+
+  // Cargar landing al montar
+  useEffect(() => { cargarLanding(); }, [cargarLanding]);
 
   const vaciarPropuesta = useCallback(async () => {
     if (!propuesta) return;
@@ -498,7 +508,56 @@ export default function ForecastReservas() {
         </div>
       </div>
 
+      {/* Switcher vista */}
+      <div style={{ display: 'inline-flex', gap: 2, padding: 3, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999, marginBottom: 12 }}>
+        {[
+          { k: 'armador', l: 'Armador' },
+          { k: 'landing',  l: `Propuestas (${propuestasCerradas.length})` },
+        ].map(t => (
+          <button key={t.k} onClick={() => setVista(t.k)}
+            style={{
+              padding: '6px 14px', borderRadius: 999, border: 0,
+              background: vista === t.k ? '#0A0A0A' : 'transparent',
+              color: vista === t.k ? '#FFF' : theme.textMuted,
+              fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            }}>{t.l}</button>
+        ))}
+      </div>
+
+      {vista === 'landing' && (
+        <ForecastLanding
+          propuestas={propuestasCerradas}
+          theme={theme}
+          isDark={isDark}
+          onNueva={() => setVista('armador')}
+          onAbrir={(p) => setPropuestaAbierta(p)}
+          onReabrir={async (p) => {
+            // Reabrir como borrador (para seguir editando)
+            const { error } = await supabase.from('forecast_propuestas')
+              .update({ estatus: 'borrador' }).eq('id', p.id);
+            if (error) { alert('Error: ' + error.message); return; }
+            await cargarLanding();
+            setPropuesta(p);
+            const lin = {};
+            for (const l of (p.forecast_propuesta_lineas || [])) lin[l.sku] = l;
+            setLineas(lin);
+            setVista('armador');
+          }}
+          onEliminar={async (p) => {
+            if (!confirm(`¿Eliminar "${p.nombre}"?`)) return;
+            await supabase.from('forecast_propuestas').delete().eq('id', p.id);
+            await cargarLanding();
+          }}
+        />
+      )}
+
+      {/* Detalle propuesta cerrada (modal) */}
+      {propuestaAbierta && (
+        <PropuestaDetalleModal propuesta={propuestaAbierta} theme={theme} isDark={isDark} onClose={() => setPropuestaAbierta(null)} />
+      )}
+
       {/* Layout main + sidebar */}
+      {vista === 'armador' && (
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 16, alignItems: 'start' }}>
 
         <div style={{ minWidth: 0 }}>
@@ -684,6 +743,7 @@ export default function ForecastReservas() {
         </aside>
 
       </div>
+      )}
 
     </div>
   );
@@ -780,6 +840,110 @@ function ReservoInput({ value, recom, confirmado, onChange, accent = '#007AFF' }
         color: confirmado ? '#34C759' : (numLocal > 0 ? accent : '#A1A1A6'),
         fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, fontWeight: 600, outline: 'none',
       }} />
+  );
+}
+
+// ─── Landing de Propuestas ────────────────────────────
+function ForecastLanding({ propuestas, theme, isDark, onNueva, onAbrir, onReabrir, onEliminar }) {
+  const estatusStyle = (est) => ({
+    generada: { bg: 'rgba(0,122,255,0.10)', color: theme.accent, label: 'Generada' },
+    cerrada:  { bg: 'rgba(52,199,89,0.12)', color: '#34C759', label: 'Cerrada' },
+  }[est] || { bg: 'transparent', color: theme.textMuted, label: est });
+
+  return (
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' }}>
+      <div style={{ background: '#0A0A0A', color: '#FFF', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>Landing · Propuestas de Forecast</div>
+          <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', margin: '2px 0 0', color: '#FFF' }}>{propuestas.length} propuesta{propuestas.length === 1 ? '' : 's'} generada{propuestas.length === 1 ? '' : 's'}</h3>
+        </div>
+        <button onClick={onNueva} style={{ padding: '8px 16px', borderRadius: 999, background: '#CDE64A', color: '#050505', border: 0, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600 }}>+ Nueva propuesta</button>
+      </div>
+      {propuestas.length === 0 ? (
+        <div style={{ padding: 40, textAlign: 'center', color: theme.textMuted, fontSize: 12.5 }}>
+          Aún no tienes propuestas generadas. Arma una en el <b style={{ color: theme.text }}>Armador</b>.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, padding: 16 }}>
+          {propuestas.map(p => {
+            const lineas = p.forecast_propuesta_lineas || [];
+            const nSkus = lineas.length;
+            const totalPz = lineas.reduce((a, l) => a + (Number(l.reservo) || 0), 0);
+            const dgl = lineas.reduce((a, l) => a + (Number(l.reservo) || 0) * ((Number(l.necesidad_dgl) || 0) / Math.max(1, Number(l.recomendado) || 0)), 0);
+            const pce = lineas.reduce((a, l) => a + (Number(l.reservo) || 0) * ((Number(l.necesidad_pce) || 0) / Math.max(1, Number(l.recomendado) || 0)), 0);
+            const dct = lineas.reduce((a, l) => a + (Number(l.reservo) || 0) * ((Number(l.necesidad_dct) || 0) / Math.max(1, Number(l.recomendado) || 0)), 0);
+            const st = estatusStyle(p.estatus);
+            const fecha = p.generado_at ? new Date(p.generado_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
+            return (
+              <div key={p.id} onClick={() => onAbrir(p)}
+                style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: 14, cursor: 'pointer', transition: 'border-color 160ms ease' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = theme.text}
+                onMouseLeave={e => e.currentTarget.style.borderColor = theme.border}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</div>
+                    <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 2 }}>{fecha} · {nSkus} SKU{nSkus === 1 ? '' : 's'}</div>
+                  </div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{st.label}</span>
+                </div>
+                <div style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: theme.accent, fontVariantNumeric: 'tabular-nums', marginBottom: 8 }}>{fmtInt(totalPz)} <span style={{ fontSize: 11, color: theme.textMuted, fontWeight: 500 }}>pz</span></div>
+                <div style={{ display: 'flex', gap: 10, fontSize: 10.5, color: theme.textMuted, marginBottom: 12 }}>
+                  <span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 999, background: '#AF52DE', marginRight: 4, verticalAlign: 'middle' }} />DGL {fmtInt(dgl)}</span>
+                  <span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 999, background: '#34C759', marginRight: 4, verticalAlign: 'middle' }} />PCE {fmtInt(pce)}</span>
+                  <span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 999, background: '#FF9500', marginRight: 4, verticalAlign: 'middle' }} />DCT {fmtInt(dct)}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 6, paddingTop: 10, borderTop: `1px solid ${theme.divider || theme.border}` }} onClick={e => e.stopPropagation()}>
+                  <button onClick={() => onAbrir(p)} style={{ flex: 1, padding: '6px 10px', borderRadius: 999, background: 'transparent', color: theme.text, border: `1px solid ${theme.border}`, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600 }}>Ver detalle</button>
+                  <button onClick={() => onReabrir(p)} style={{ flex: 1, padding: '6px 10px', borderRadius: 999, background: 'transparent', color: theme.accent, border: `1px solid ${theme.accent}`, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600 }}>Reabrir</button>
+                  <button onClick={() => onEliminar(p)} title="Eliminar" style={{ padding: '6px 10px', borderRadius: 999, background: 'transparent', color: theme.textFaint || theme.textMuted, border: `1px solid ${theme.border}`, cursor: 'pointer', fontSize: 12, lineHeight: 1 }}>×</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PropuestaDetalleModal({ propuesta, theme, isDark, onClose }) {
+  const lineas = propuesta.forecast_propuesta_lineas || [];
+  const totalPz = lineas.reduce((a, l) => a + (Number(l.reservo) || 0), 0);
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, maxWidth: 720, width: '100%', maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ background: '#0A0A0A', color: '#FFF', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>Propuesta</div>
+            <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, margin: '2px 0 0', color: '#FFF' }}>{propuesta.nombre}</h3>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>{lineas.length} SKUs · {fmtInt(totalPz)} pz · {propuesta.generado_at ? new Date(propuesta.generado_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.10)', border: 0, color: '#FFF', width: 28, height: 28, borderRadius: 999, cursor: 'pointer', fontSize: 16 }}>×</button>
+        </div>
+        <div style={{ overflow: 'auto', padding: 0 }}>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th style={{ position: 'sticky', top: 0, background: theme.surface, textAlign: 'left', padding: '10px 14px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>SKU</th>
+                <th style={{ position: 'sticky', top: 0, background: theme.surface, textAlign: 'left', padding: '10px 14px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Descripción</th>
+                <th style={{ position: 'sticky', top: 0, background: theme.surface, textAlign: 'right', padding: '10px 14px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Reservo</th>
+                <th style={{ position: 'sticky', top: 0, background: theme.surface, textAlign: 'right', padding: '10px 14px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lineas.map(l => (
+                <tr key={l.id}>
+                  <td style={{ padding: '7px 14px', fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600, borderBottom: `1px solid ${theme.divider || theme.border}` }}>{l.sku}</td>
+                  <td style={{ padding: '7px 14px', color: theme.text, borderBottom: `1px solid ${theme.divider || theme.border}` }}>{l.descripcion || '—'}</td>
+                  <td style={{ padding: '7px 14px', textAlign: 'right', fontFamily: 'SF Mono, ui-monospace, monospace', fontWeight: 700, color: theme.text, borderBottom: `1px solid ${theme.divider || theme.border}` }}>{fmtInt(l.reservo)}</td>
+                  <td style={{ padding: '7px 14px', textAlign: 'right', color: theme.textMuted, fontSize: 11, borderBottom: `1px solid ${theme.divider || theme.border}` }}>{l.estado}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }
 
