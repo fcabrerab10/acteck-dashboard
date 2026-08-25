@@ -539,21 +539,21 @@ export default function ForecastReservas() {
               </div>
             </div>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 12.5, minWidth: 1100 }}>
+              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11.5, minWidth: 980 }}>
                 <thead>
                   <tr>
-                    <Th theme={theme} c w={28}></Th>
-                    <Th theme={theme} l w={110}>SKU</Th>
+                    <Th theme={theme} c w={22}></Th>
+                    <Th theme={theme} l w={98}>SKU</Th>
                     <Th theme={theme} l>Descripción</Th>
-                    <Th theme={theme} w={72}>Roadmap</Th>
-                    <Th theme={theme} bl={groupSep} w={72}>Digitalife</Th>
-                    <Th theme={theme} w={64}>PCEL</Th>
-                    <Th theme={theme} w={72}>Dicotech</Th>
-                    {proxMeses.map((m, i) => <Th key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined} w={68}>Arribo {m.label}</Th>)}
-                    <Th theme={theme} bl={groupSep} w={64}>Inv</Th>
-                    <Th theme={theme} w={64} color={theme.accent}>Recom.</Th>
-                    <Th theme={theme} w={112}>Reservo</Th>
-                    <Th theme={theme} w={128}>Estado</Th>
+                    <Th theme={theme} c w={58}>Roadmap</Th>
+                    <Th theme={theme} bl={groupSep} w={58}>Digitalife</Th>
+                    <Th theme={theme} w={54}>PCEL</Th>
+                    <Th theme={theme} w={58}>Dicotech</Th>
+                    {proxMeses.map((m, i) => <Th key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined} w={58}>Arribo {m.label}</Th>)}
+                    <Th theme={theme} bl={groupSep} w={52}>Inv</Th>
+                    <Th theme={theme} w={54} color={theme.accent}>Recom.</Th>
+                    <Th theme={theme} w={82}>Reservo</Th>
+                    <Th theme={theme} w={104}>Estado</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -585,7 +585,7 @@ export default function ForecastReservas() {
                         <Td theme={theme} l><span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600 }}>{f.sku}</span></Td>
                         <Td theme={theme} l>
                           <div title={`${f.descripcion}${f.marca ? ' · ' + f.marca : ''}${f.familia ? ' · ' + f.familia : ''}`}
-                            style={{ fontFamily: TYPO.fontText, fontWeight: 400, fontSize: 12, color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 340 }}>
+                            style={{ fontFamily: TYPO.fontText, fontWeight: 400, fontSize: 11.5, color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 260 }}>
                             {f.descripcion || '—'}
                           </div>
                         </Td>
@@ -706,12 +706,12 @@ function Th({ theme, children, l, c, w, bg, color, bl }) {
   const align = l ? 'left' : (c ? 'center' : 'right');
   return (
     <th style={{
-      fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600,
-      letterSpacing: '0.10em', textTransform: 'uppercase', color: color || theme.textMuted,
+      fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 600,
+      letterSpacing: '0.08em', textTransform: 'uppercase', color: color || theme.textMuted,
       textAlign: align,
-      paddingTop: 10, paddingBottom: 10,
-      paddingLeft: l ? 12 : (c ? 8 : 6),
-      paddingRight: (l || c) ? 6 : 12,
+      paddingTop: 6, paddingBottom: 6,
+      paddingLeft: l ? 10 : (c ? 6 : 4),
+      paddingRight: (l || c) ? 4 : 10,
       borderBottom: `1px solid ${theme.border}`, background: bg || theme.surface,
       whiteSpace: 'nowrap', width: w,
       borderLeft: bl ? `1px solid ${bl}` : undefined,
@@ -722,13 +722,13 @@ function Th({ theme, children, l, c, w, bg, color, bl }) {
 function Td({ theme, children, l, c, bg, bl }) {
   const align = l ? 'left' : (c ? 'center' : 'right');
   return <td style={{
-    paddingTop: 5, paddingBottom: 5,
-    paddingLeft: l ? 12 : (c ? 8 : 6),
-    paddingRight: (l || c) ? 6 : 12,
+    paddingTop: 3, paddingBottom: 3,
+    paddingLeft: l ? 10 : (c ? 6 : 4),
+    paddingRight: (l || c) ? 4 : 10,
     textAlign: align,
     verticalAlign: 'middle', background: bg,
     borderLeft: bl ? `1px solid ${bl}` : undefined,
-    fontSize: 12, color: theme.text, fontFamily: TYPO.fontText,
+    fontSize: 11.5, color: theme.text, fontFamily: TYPO.fontText,
     whiteSpace: 'nowrap',
   }}>{children}</td>;
 }
@@ -758,7 +758,7 @@ function RoadmapChip({ r }) {
     EOL: { bg: '#F2F2F4', color: '#6E6E73' },              // gris
   };
   const s = map[R] || { bg: '#F5F5F7', color: '#A1A1A6' };
-  return <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 6, letterSpacing: '0.04em', minWidth: 40, background: s.bg, color: s.color }}>{R || '—'}</span>;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 5, letterSpacing: '0.04em', minWidth: 36, background: s.bg, color: s.color }}>{R || '—'}</span>;
 }
 function ReservoInput({ value, recom, confirmado, onChange, accent = '#007AFF' }) {
   const [local, setLocal] = useState(String(value ?? 0));
@@ -772,11 +772,11 @@ function ReservoInput({ value, recom, confirmado, onChange, accent = '#007AFF' }
       onBlur={() => { const n = Number(local) || 0; if (n !== value) onChange(n); }}
       onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
       style={{
-        width: 72, padding: '5px 10px', borderRadius: 6, textAlign: 'right',
+        width: 62, padding: '3px 8px', borderRadius: 5, textAlign: 'right',
         border: `1px solid ${confirmado ? '#34C759' : (numLocal > 0 ? accent : 'transparent')}`,
         background: confirmado ? 'rgba(52,199,89,0.10)' : (numLocal > 0 ? 'rgba(0,122,255,0.06)' : 'transparent'),
         color: confirmado ? '#34C759' : (numLocal > 0 ? accent : '#A1A1A6'),
-        fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 600, outline: 'none',
+        fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, fontWeight: 600, outline: 'none',
       }} />
   );
 }
@@ -1059,5 +1059,5 @@ function EstadoPill({ estado, confirmado, reservo, recom, accent = '#007AFF' }) 
     no_aplica:     { bg: 'rgba(255,59,48,0.12)', color: '#FF3B30', label: 'No aplica' },
   };
   const s = styles[estado] || styles.draft;
-  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, padding: '3px 9px', borderRadius: 999, background: s.bg, color: s.color }}>{s.label}</span>;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: s.bg, color: s.color }}>{s.label}</span>;
 }
