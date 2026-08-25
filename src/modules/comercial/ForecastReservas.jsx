@@ -539,21 +539,21 @@ export default function ForecastReservas() {
               </div>
             </div>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11.5, minWidth: 980 }}>
+              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11.5, tableLayout: 'fixed' }}>
                 <thead>
                   <tr>
-                    <Th theme={theme} c w={22}></Th>
-                    <Th theme={theme} l w={98}>SKU</Th>
+                    <Th theme={theme} c w={20}></Th>
+                    <Th theme={theme} l w={92}>SKU</Th>
                     <Th theme={theme} l>Descripción</Th>
-                    <Th theme={theme} c w={58}>Roadmap</Th>
-                    <Th theme={theme} bl={groupSep} w={58}>Digitalife</Th>
-                    <Th theme={theme} w={54}>PCEL</Th>
-                    <Th theme={theme} w={58}>Dicotech</Th>
-                    {proxMeses.map((m, i) => <Th key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined} w={58}>Arribo {m.label}</Th>)}
-                    <Th theme={theme} bl={groupSep} w={52}>Inv</Th>
-                    <Th theme={theme} w={54} color={theme.accent}>Recom.</Th>
-                    <Th theme={theme} w={82}>Reservo</Th>
-                    <Th theme={theme} w={104}>Estado</Th>
+                    <Th theme={theme} c w={54}>Roadmap</Th>
+                    <Th theme={theme} bl={groupSep} w={54}>Digitalife</Th>
+                    <Th theme={theme} w={48}>PCEL</Th>
+                    <Th theme={theme} w={54}>Dicotech</Th>
+                    {proxMeses.map((m, i) => <Th key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined} w={52}>{m.label}</Th>)}
+                    <Th theme={theme} bl={groupSep} w={48}>Inv</Th>
+                    <Th theme={theme} w={50} color={theme.accent}>Recom</Th>
+                    <Th theme={theme} w={72}>Reservo</Th>
+                    <Th theme={theme} w={82}>Estado</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1055,9 +1055,9 @@ function EstadoPill({ estado, confirmado, reservo, recom, accent = '#007AFF' }) 
     draft:         { bg: 'transparent', color: '#A1A1A6', label: '—' },
     pend_confirmar:{ bg: 'rgba(0,122,255,0.10)', color: accent, label: 'Pendiente' },
     confirmado:    { bg: 'rgba(52,199,89,0.12)', color: '#34C759', label: 'Confirmado' },
-    parcial:       { bg: 'rgba(255,149,0,0.12)', color: '#FF9500', label: `Parcial ${fmtInt(confirmado)}/${fmtInt(recom)}` },
-    no_aplica:     { bg: 'rgba(255,59,48,0.12)', color: '#FF3B30', label: 'No aplica' },
+    parcial:       { bg: 'rgba(255,149,0,0.12)', color: '#FF9500', label: `Parcial` },
+    no_aplica:     { bg: 'rgba(255,59,48,0.12)', color: '#FF3B30', label: 'N/A' },
   };
   const s = styles[estado] || styles.draft;
-  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: s.bg, color: s.color }}>{s.label}</span>;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: s.bg, color: s.color, whiteSpace: 'nowrap' }}>{s.label}</span>;
 }
