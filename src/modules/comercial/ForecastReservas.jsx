@@ -641,9 +641,9 @@ export default function ForecastReservas() {
           </div>
         </div>
 
-        {/* Sidebar sticky con scroll propio si es más alta que el viewport */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 20, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }}>
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' }}>
+        {/* Sidebar sticky con altura del viewport */}
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 20, maxHeight: 'calc(100vh - 40px)' }}>
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 40px)' }}>
             {/* Header negro */}
             <div style={{ background: '#0A0A0A', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -678,6 +678,7 @@ export default function ForecastReservas() {
                 setBusqueda(sku);
                 setExpandedSku(sku);
               }}
+              onEliminarSku={(sku) => eliminarLinea(sku)}
             />
           </div>
         </aside>
@@ -783,7 +784,7 @@ function ReservoInput({ value, recom, confirmado, onChange, accent = '#007AFF' }
 }
 
 // ─── Tarjeta Mi Propuesta (híbrido A+B) ───────────────
-function MiPropuestaContent({ theme, isDark, kpis, stats, lineas, propuesta, saving, onGenerar, onVaciar, nombre, onRenombrar, onVerSku }) {
+function MiPropuestaContent({ theme, isDark, kpis, stats, lineas, propuesta, saving, onGenerar, onVaciar, nombre, onRenombrar, onVerSku, onEliminarSku }) {
   const CLIS = [
     { key: 'digitalife', label: 'Digitalife', dot: '#AF52DE' },
     { key: 'pcel',       label: 'PCEL',       dot: '#34C759' },
@@ -804,6 +805,8 @@ function MiPropuestaContent({ theme, isDark, kpis, stats, lineas, propuesta, sav
 
   return (
     <>
+      {/* Contenido scrolleable */}
+      <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
       {/* Nombre editable */}
       <div style={{ padding: '12px 16px 12px', borderBottom: `1px solid ${theme.hairline || theme.border}` }}>
         <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.10em', fontWeight: 700, color: theme.textFaint || theme.textMuted, marginBottom: 4 }}>Nombre</div>
@@ -852,33 +855,38 @@ function MiPropuestaContent({ theme, isDark, kpis, stats, lineas, propuesta, sav
         })}
       </div>
 
-      {/* SKUs en la propuesta */}
+      {/* SKUs en la propuesta · lista con scroll interno */}
       {stats.enPropuesta.length > 0 && (
-        <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme.hairline || theme.border}` }}>
+        <div style={{ padding: '12px 16px 4px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
             <span style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 700 }}>SKUs en la propuesta</span>
             <span style={{ color: theme.accent, fontWeight: 600, fontSize: 10.5 }}>{stats.enPropuesta.length} SKUs · {fmtInt(totalReservo)} pz</span>
           </div>
-          {stats.enPropuesta.slice(0, 5).map(s => (
-            <div key={s.sku} onClick={() => onVerSku(s.sku)}
-              style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, padding: '8px 0', borderBottom: `1px solid ${theme.divider || theme.border}`, fontSize: 11.5, cursor: 'pointer' }}>
-              <div style={{ minWidth: 0 }}>
-                <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.accent, fontWeight: 600, display: 'block' }}>{s.sku}</span>
-                <div title={s.descripcion} style={{ fontSize: 11, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200, marginTop: 1 }}>{s.descripcion}</div>
+          <div style={{ maxHeight: 220, overflowY: 'auto', margin: '0 -6px', padding: '0 6px' }}>
+            {stats.enPropuesta.map(s => (
+              <div key={s.sku}
+                style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6, padding: '7px 4px', borderBottom: `1px solid ${theme.divider || theme.border}`, fontSize: 11.5, alignItems: 'center' }}>
+                <div onClick={() => onVerSku(s.sku)} style={{ minWidth: 0, cursor: 'pointer' }}>
+                  <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.accent, fontWeight: 600, display: 'block' }}>{s.sku}</span>
+                  <div title={s.descripcion} style={{ fontSize: 11, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180, marginTop: 1 }}>{s.descripcion}</div>
+                </div>
+                <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, color: theme.text, whiteSpace: 'nowrap' }}>{fmtInt(s.reservo)}<span style={{ fontSize: 9.5, color: theme.textFaint || theme.textMuted, fontWeight: 500, marginLeft: 2, fontFamily: TYPO.fontDisplay }}>pz</span></span>
+                <button onClick={(e) => { e.stopPropagation(); onEliminarSku && onEliminarSku(s.sku); }}
+                  title="Quitar de la propuesta"
+                  style={{ width: 22, height: 22, borderRadius: 999, border: 0, background: 'transparent', color: theme.textFaint || theme.textMuted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,59,48,0.10)'; e.currentTarget.style.color = '#FF3B30'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = theme.textFaint || theme.textMuted; }}>
+                  ×
+                </button>
               </div>
-              <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, color: theme.text, alignSelf: 'center', whiteSpace: 'nowrap' }}>{fmtInt(s.reservo)}<span style={{ fontSize: 9.5, color: theme.textFaint || theme.textMuted, fontWeight: 500, marginLeft: 2, fontFamily: TYPO.fontDisplay }}>pz</span></span>
-            </div>
-          ))}
-          {stats.enPropuesta.length > 5 && (
-            <div style={{ marginTop: 8, textAlign: 'center', fontSize: 10.5, color: theme.accent, fontWeight: 600 }}>
-              +{stats.enPropuesta.length - 5} más en la tabla ›
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
+      </div>{/* fin contenido scrolleable */}
 
-      {/* Acciones */}
-      <div style={{ padding: '14px 16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Acciones · pie fijo */}
+      <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, borderTop: `1px solid ${theme.hairline || theme.border}`, background: theme.surface, flexShrink: 0 }}>
         <button disabled={saving || numLineas === 0 || generada} onClick={onGenerar}
           style={{
             width: '100%', padding: '10px 16px', borderRadius: 999,
