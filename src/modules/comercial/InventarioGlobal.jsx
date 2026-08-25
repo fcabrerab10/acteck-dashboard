@@ -244,11 +244,11 @@ export default function InventarioGlobal() {
       .sort((a, b) => b.valor - a.valor);
   }, [filasEfectivas]);
 
-  // ── Almacenes comerciales fijos para la tabla (5 columnas Apple) ──
-  // 1=GEN GDL · 3=GEN MEX · 2=GEN COL · 6=DECME MEX · 9=ML
-  const almacenesActivos = [1, 3, 2, 6, 9];
-  const CEDIS_ALMACEN = { 1: 'ALMACENES GUADALAJARA', 3: 'ALMACENES MEXICO', 2: 'ALMACENES COLOTLAN', 6: 'ALMACENES MEXICO', 9: 'ALMACENES GUADALAJARA' };
-  const shortAlmacen = (n) => ({ 1: 'GEN GDL', 3: 'GEN MEX', 2: 'GEN COL', 6: 'DECME MEX', 9: 'ML' }[n] || `Alm ${n}`);
+  // ── Almacenes comerciales fijos para la tabla ──
+  // 1=GEN GDL · 3=GEN MEX · 2=GEN COL · 6=DECME MEX · 9=ML · 16=RETAIL GDL · 17=RETAIL MEX
+  const almacenesActivos = [1, 3, 2, 6, 9, 16, 17];
+  const CEDIS_ALMACEN = { 1: 'ALMACENES GUADALAJARA', 3: 'ALMACENES MEXICO', 2: 'ALMACENES COLOTLAN', 6: 'ALMACENES MEXICO', 9: 'ALMACENES GUADALAJARA', 16: 'ALMACENES GUADALAJARA', 17: 'ALMACENES MEXICO' };
+  const shortAlmacen = (n) => ({ 1: 'GEN GDL', 3: 'GEN MEX', 2: 'GEN COL', 6: 'DECME MEX', 9: 'ML', 16: 'RETAIL GDL', 17: 'RETAIL MEX' }[n] || `Alm ${n}`);
 
   // ── Tabla SKU × almacén ──
   const filasTabla = useMemo(() => {
