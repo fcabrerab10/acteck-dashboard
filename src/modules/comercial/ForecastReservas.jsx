@@ -920,7 +920,18 @@ function ForecastLanding({ propuestas, propuestaAbierta, setPropuestaAbierta, av
           <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>Landing · Propuestas de Forecast</div>
           <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', margin: '2px 0 0', color: '#FFF' }}>{propuestas.length} propuesta{propuestas.length === 1 ? '' : 's'} generada{propuestas.length === 1 ? '' : 's'}</h3>
         </div>
-        <button onClick={onNueva} style={{ padding: '8px 16px', borderRadius: 999, background: '#CDE64A', color: '#050505', border: 0, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600 }}>+ Nueva propuesta</button>
+        <button onClick={onNueva}
+          style={{
+            padding: '8px 16px', borderRadius: 999,
+            background: '#FFF', color: '#0A0A0A', border: 0, cursor: 'pointer',
+            fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600,
+            boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+            transition: 'transform 120ms ease, box-shadow 160ms ease',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.20)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.15)'; e.currentTarget.style.transform = 'none'; }}>
+          + Nueva propuesta
+        </button>
       </div>
 
       {/* Panel de avisos disparados */}
@@ -990,11 +1001,18 @@ function ForecastLanding({ propuestas, propuestaAbierta, setPropuestaAbierta, av
               <div key={p.id} onClick={() => setPropuestaAbierta(abierta ? null : p)}
                 style={{
                   background: theme.surface,
-                  border: `1px solid ${abierta ? theme.accent : theme.border}`,
-                  borderRadius: 12, padding: 14, cursor: 'pointer', transition: 'border-color 160ms ease',
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 12, padding: 14, cursor: 'pointer',
+                  transition: 'box-shadow 220ms ease, transform 220ms ease',
+                  boxShadow: abierta
+                    ? (isDark
+                        ? '0 8px 24px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.35)'
+                        : '0 12px 28px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.05)')
+                    : 'none',
+                  transform: abierta ? 'translateY(-1px)' : 'none',
                 }}
-                onMouseEnter={e => { if (!abierta) e.currentTarget.style.borderColor = theme.text; }}
-                onMouseLeave={e => { if (!abierta) e.currentTarget.style.borderColor = theme.border; }}>
+                onMouseEnter={e => { if (!abierta) e.currentTarget.style.boxShadow = isDark ? '0 4px 12px rgba(0,0,0,0.35)' : '0 4px 12px rgba(0,0,0,0.06)'; }}
+                onMouseLeave={e => { if (!abierta) e.currentTarget.style.boxShadow = 'none'; }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</div>
@@ -1009,7 +1027,16 @@ function ForecastLanding({ propuestas, propuestaAbierta, setPropuestaAbierta, av
                   <span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 999, background: '#FF9500', marginRight: 4, verticalAlign: 'middle' }} />DCT {fmtInt(dct)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, paddingTop: 10, borderTop: `1px solid ${theme.divider || theme.border}` }} onClick={e => e.stopPropagation()}>
-                  <button onClick={() => setPropuestaAbierta(abierta ? null : p)} style={{ flex: 1, padding: '6px 10px', borderRadius: 999, background: abierta ? theme.accent : 'transparent', color: abierta ? '#FFF' : theme.text, border: `1px solid ${abierta ? theme.accent : theme.border}`, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600 }}>{abierta ? 'Cerrar detalle' : 'Ver detalle'}</button>
+                  <button onClick={() => setPropuestaAbierta(abierta ? null : p)}
+                    style={{
+                      flex: 1, padding: '6px 10px', borderRadius: 999,
+                      background: abierta ? '#0A0A0A' : 'transparent',
+                      color: abierta ? '#FFF' : theme.text,
+                      border: `1px solid ${abierta ? '#0A0A0A' : theme.border}`,
+                      cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600,
+                    }}>
+                    {abierta ? 'Cerrar detalle' : 'Ver detalle'}
+                  </button>
                   <button onClick={() => onReabrir(p)} style={{ flex: 1, padding: '6px 10px', borderRadius: 999, background: 'transparent', color: theme.accent, border: `1px solid ${theme.accent}`, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600 }}>Reabrir</button>
                   <button onClick={() => onEliminar(p)} title="Eliminar" style={{ padding: '6px 10px', borderRadius: 999, background: 'transparent', color: theme.textFaint || theme.textMuted, border: `1px solid ${theme.border}`, cursor: 'pointer', fontSize: 12, lineHeight: 1 }}>×</button>
                 </div>
