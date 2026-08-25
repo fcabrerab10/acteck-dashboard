@@ -2674,12 +2674,16 @@ async function fetchAll(clienteKey) {
     fetchSpiffsActivos(),
   ]);
 
-  // INV ACK = SUM(inventario) sobre TODOS los almacenes, para coincidir con
-  // la columna "Total pz" de la pestaña Inventario. Antes usaba `disponible`
-  // filtrado a 15 almacenes comerciales, lo cual daba números menores y
-  // desalineados con el resto del dashboard.
+  // INV ACK = SUM(inventario) sobre los almacenes COMERCIALES (excluye
+  // Muestras, Remisiones, Activo fijo y Refacturación), igual que la pestaña
+  // Inventario con el toggle "Solo comerciales" activado.
+  // Comerciales = 1, 2, 3 (General), 16, 17 (Retail), 6, 19 (DECME),
+  //   25, 71 (E-commerce), 9 (ML), 14 (Página web), 12 (Refacciones),
+  //   44, 64 (Empaque dañado), 15 (Stock rotation).
+  const ALM_COMERCIALES = new Set([1, 2, 3, 16, 17, 6, 19, 25, 71, 9, 14, 12, 44, 64, 15]);
   const invAck = new Map();
   for (const r of invAckData || []) {
+    if (!ALM_COMERCIALES.has(Number(r.no_almacen))) continue;
     invAck.set(r.articulo, (invAck.get(r.articulo) || 0) + (Number(r.inventario) || 0));
   }
   for (const [k, v] of invAck.entries()) invAck.set(k, Math.round(v));
