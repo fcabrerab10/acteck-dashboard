@@ -641,8 +641,8 @@ export default function ForecastReservas() {
           </div>
         </div>
 
-        {/* Sidebar */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 20 }}>
+        {/* Sidebar sticky con scroll propio si es más alta que el viewport */}
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 20, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }}>
           <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' }}>
             {/* Header negro */}
             <div style={{ background: '#0A0A0A', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
