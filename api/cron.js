@@ -391,6 +391,150 @@ https://acteck-dashboard.vercel.app/  → Administración Interna → Actividad 
   return { dia, mesEval, anioEval, pendientes: pendientes.length, enviados };
 }
 
+// ═════════════════════ TASK · Forecast avisos de arribo ════════════════════════
+// Corre diario. Toma forecast_avisos con fecha_disparo <= hoy y sin
+// email_enviado_at. Manda mail a Fernando + Karolina con los avisos del día
+// (agrupados en un solo email por batch) y marca email_enviado_at.
+// ══════════════════════════════════════════════════════════════════════════════
+async function taskForecastAvisos() {
+  const hoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+  const hoyISO = hoy.toISOString().slice(0, 10);
+
+  // Cargar avisos disparados sin email enviado
+  const avRes = await fetch(
+    `${SB_URL}/rest/v1/forecast_avisos?select=id,linea_id,propuesta_id,tipo,fecha_disparo,fecha_arribo,piezas_a_reservar&fecha_disparo=lte.${hoyISO}&email_enviado_at=is.null&order=fecha_arribo.asc`,
+    { headers: { apikey: SRK, Authorization: 'Bearer ' + SRK } }
+  );
+  const avisos = await avRes.json();
+  if (!Array.isArray(avisos) || avisos.length === 0) {
+    return { skip: 'No hay avisos pendientes de enviar', hoy: hoyISO };
+  }
+
+  // Enriquecer con datos del SKU y propuesta
+  const lineIds = [...new Set(avisos.map(a => a.linea_id))];
+  const propIds = [...new Set(avisos.map(a => a.propuesta_id))];
+  const [linRes, propRes] = await Promise.all([
+    fetch(`${SB_URL}/rest/v1/forecast_propuesta_lineas?select=id,sku,descripcion,marca,reservo&id=in.(${lineIds.join(',')})`, { headers: { apikey: SRK, Authorization: 'Bearer ' + SRK } }),
+    fetch(`${SB_URL}/rest/v1/forecast_propuestas?select=id,nombre&id=in.(${propIds.join(',')})`, { headers: { apikey: SRK, Authorization: 'Bearer ' + SRK } }),
+  ]);
+  const lineas = await linRes.json();
+  const propuestas = await propRes.json();
+  const lineaById = Object.fromEntries((lineas || []).map(l => [l.id, l]));
+  const propById  = Object.fromEntries((propuestas || []).map(p => [p.id, p]));
+
+  const SMTP_USER = process.env.SMTP_USER;
+  const SMTP_PASS = process.env.SMTP_PASS;
+  const TO_FERNANDO = process.env.SMTP_TO_FERNANDO || 'fernando.cabrera@acteck.com';
+  const TO_KAROLINA = process.env.SMTP_TO_KAROLINA || 'karolina.veliz@acteck.com';
+  if (!SMTP_USER || !SMTP_PASS) {
+    // Sin SMTP: marcamos los avisos igualmente para que no se acumulen
+    // (Fernando los sigue viendo en el panel del dashboard).
+    return { skip: 'SMTP_USER/SMTP_PASS no configurados — avisos NO marcados como enviados', avisos: avisos.length };
+  }
+
+  const { default: nodemailer } = await import('nodemailer');
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com', port: 465, secure: true,
+    auth: { user: SMTP_USER, pass: SMTP_PASS.replace(/\s+/g, '') },
+  });
+
+  const fmtN = (n) => new Intl.NumberFormat('es-MX').format(Math.round(Number(n) || 0));
+  const fmtF = (iso) => {
+    if (!iso) return '—';
+    const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+    const M = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    return `${d} ${M[m - 1]} ${y}`;
+  };
+
+  // Partir avisos en dos grupos: HOY (dia) y anticipo (3dias)
+  const hoyAvisos = avisos.filter(a => a.tipo === 'dia');
+  const anticipoAvisos = avisos.filter(a => a.tipo === '3dias');
+
+  const rowsHtml = (arr) => arr.map(a => {
+    const l = lineaById[a.linea_id] || {};
+    const p = propById[a.propuesta_id] || {};
+    return `<tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #EEE;font-family:monospace;color:#007AFF;font-weight:600">${l.sku || '—'}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #EEE">${(l.descripcion || '').replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c])}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #EEE;text-align:right;font-family:monospace;font-weight:700">${fmtN(a.piezas_a_reservar)} pz</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #EEE;color:#666">${fmtF(a.fecha_arribo)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #EEE;color:#888;font-size:11px">${(p.nombre || '')}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:640px;margin:0 auto;color:#111">
+    <h1 style="font-size:20px;font-weight:600;letter-spacing:-0.01em;margin:0 0 4px">🔔 Avisos de arribo · Forecast</h1>
+    <p style="font-size:13px;color:#666;margin:0 0 20px">${fmtF(hoyISO)} · ${avisos.length} aviso${avisos.length === 1 ? '' : 's'} pendiente${avisos.length === 1 ? '' : 's'}</p>
+
+    ${hoyAvisos.length > 0 ? `
+    <h2 style="font-size:14px;font-weight:700;color:#FF3B30;margin:16px 0 8px;letter-spacing:0.02em;text-transform:uppercase">🚨 Arriban HOY · ${hoyAvisos.length}</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;background:#FDF3F2;border-radius:8px;overflow:hidden;margin-bottom:20px">
+      <thead><tr>
+        <th style="padding:8px 12px;text-align:left;font-size:10.5px;color:#888;font-weight:600;background:#FBECEA">SKU</th>
+        <th style="padding:8px 12px;text-align:left;font-size:10.5px;color:#888;font-weight:600;background:#FBECEA">Descripción</th>
+        <th style="padding:8px 12px;text-align:right;font-size:10.5px;color:#888;font-weight:600;background:#FBECEA">Reservar</th>
+        <th style="padding:8px 12px;text-align:left;font-size:10.5px;color:#888;font-weight:600;background:#FBECEA">Arribo</th>
+        <th style="padding:8px 12px;text-align:left;font-size:10.5px;color:#888;font-weight:600;background:#FBECEA">Propuesta</th>
+      </tr></thead>
+      <tbody>${rowsHtml(hoyAvisos)}</tbody>
+    </table>` : ''}
+
+    ${anticipoAvisos.length > 0 ? `
+    <h2 style="font-size:14px;font-weight:700;color:#007AFF;margin:16px 0 8px;letter-spacing:0.02em;text-transform:uppercase">📅 Arriban en 3 días · ${anticipoAvisos.length}</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;background:#F3F7FF;border-radius:8px;overflow:hidden;margin-bottom:20px">
+      <thead><tr>
+        <th style="padding:8px 12px;text-align:left;font-size:10.5px;color:#888;font-weight:600;background:#E7EEFF">SKU</th>
+        <th style="padding:8px 12px;text-align:left;font-size:10.5px;color:#888;font-weight:600;background:#E7EEFF">Descripción</th>
+        <th style="padding:8px 12px;text-align:right;font-size:10.5px;color:#888;font-weight:600;background:#E7EEFF">Reservar</th>
+        <th style="padding:8px 12px;text-align:left;font-size:10.5px;color:#888;font-weight:600;background:#E7EEFF">Arribo</th>
+        <th style="padding:8px 12px;text-align:left;font-size:10.5px;color:#888;font-weight:600;background:#E7EEFF">Propuesta</th>
+      </tr></thead>
+      <tbody>${rowsHtml(anticipoAvisos)}</tbody>
+    </table>` : ''}
+
+    <p style="font-size:12px;color:#666;margin:24px 0 8px">
+      Marca como visto y ejecuta las reservas en:<br>
+      <a href="https://acteck-dashboard.vercel.app/" style="color:#007AFF;text-decoration:none;font-weight:600">Dashboard → Interno → Forecast → Propuestas</a>
+    </p>
+    <p style="font-size:10.5px;color:#AAA;margin-top:24px">Este correo se genera automáticamente por el cron diario de Forecast · Dashboard Acteck</p>
+  </div>`;
+
+  const texto = `Avisos de arribo · ${fmtF(hoyISO)}\n\n` +
+    (hoyAvisos.length > 0 ? `ARRIBAN HOY (${hoyAvisos.length}):\n` + hoyAvisos.map(a => {
+      const l = lineaById[a.linea_id] || {}; const p = propById[a.propuesta_id] || {};
+      return `  · ${l.sku} — ${l.descripcion} — reservar ${fmtN(a.piezas_a_reservar)} pz · ${p.nombre}`;
+    }).join('\n') + '\n\n' : '') +
+    (anticipoAvisos.length > 0 ? `ARRIBAN EN 3 DÍAS (${anticipoAvisos.length}):\n` + anticipoAvisos.map(a => {
+      const l = lineaById[a.linea_id] || {}; const p = propById[a.propuesta_id] || {};
+      return `  · ${l.sku} — ${l.descripcion} — reservar ${fmtN(a.piezas_a_reservar)} pz · ${p.nombre} · arribo ${fmtF(a.fecha_arribo)}`;
+    }).join('\n') + '\n\n' : '') +
+    `Marca como visto y ejecuta las reservas: https://acteck-dashboard.vercel.app/`;
+
+  const subject = hoyAvisos.length > 0
+    ? `🚨 ${hoyAvisos.length} SKU${hoyAvisos.length === 1 ? '' : 's'} arriban HOY · Forecast`
+    : `📅 ${anticipoAvisos.length} SKU${anticipoAvisos.length === 1 ? '' : 's'} arriban en 3 días · Forecast`;
+
+  try {
+    const info = await transporter.sendMail({
+      from: `"Dashboard Acteck · Forecast" <${SMTP_USER}>`,
+      to: [TO_FERNANDO, TO_KAROLINA].join(','),
+      subject,
+      text: texto,
+      html,
+    });
+    // Marcar todos los avisos como enviados
+    const ids = avisos.map(a => a.id);
+    await fetch(
+      `${SB_URL}/rest/v1/forecast_avisos?id=in.(${ids.join(',')})`,
+      { method: 'PATCH', headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ email_enviado_at: new Date().toISOString() }) }
+    );
+    return { enviados: avisos.length, hoy_arriban: hoyAvisos.length, anticipo_3dias: anticipoAvisos.length, msg_id: info.messageId, to: [TO_FERNANDO, TO_KAROLINA] };
+  } catch (e) {
+    return { error: e.message, avisos: avisos.length };
+  }
+}
+
 // ═════════════════════ TASK · Recordatorio tracking pedidos ═════════════════════
 // Detecta OCs abiertas cuyo updated_at es > 24h y le manda email a Karolina
 // (con Cc a Fernando) listando cuántas necesitan atención.
@@ -507,10 +651,12 @@ export default async function handler(req, res) {
       result = await taskRecordatorioEvaluacion();
     } else if (task === 'recordatorio-tracking') {
       result = await taskRecordatorioTracking();
+    } else if (task === 'forecast-avisos') {
+      result = await taskForecastAvisos();
     } else {
       return res.status(400).json({
         error: 'task inválido',
-        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking',
+        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos',
       });
     }
     if (result.status && result.error) return res.status(result.status).json(result);
