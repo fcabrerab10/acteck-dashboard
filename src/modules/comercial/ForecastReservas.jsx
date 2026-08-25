@@ -68,6 +68,7 @@ export default function ForecastReservas() {
   const [cuotas, setCuotas] = useState([]);
   const [facturacion, setFacturacion] = useState([]);
   const [arribos, setArribos] = useState([]); // embarques_compras próximos 3m
+  const [inventario, setInventario] = useState([]); // inventario_acteck
 
   // Propuesta activa (borrador único por usuario)
   const [propuesta, setPropuesta] = useState(null); // { id, nombre, estatus, ... }
@@ -99,7 +100,7 @@ export default function ForecastReservas() {
         const trecs = new Date(hoy); trecs.setMonth(trecs.getMonth() + 3);
 
         // Fetch en paralelo, cada uno con manejo propio (no aborta todo si uno falla)
-        const [rmRes, soRows, ctRes, faRows, embRows, propRes] = await Promise.all([
+        const [rmRes, soRows, ctRes, faRows, embRows, invRows, propRes] = await Promise.all([
           supabase.from('roadmap_sku').select('sku, descripcion, marca, familia, rdmp, sort_order').order('sort_order', { ascending: true, nullsFirst: false }),
           fetchAll(() => supabase.from('sellout_sku')
             .select('cliente, anio, mes, sku, piezas')
@@ -115,6 +116,8 @@ export default function ForecastReservas() {
           fetchAll(() => supabase.from('embarques_compras')
             .select('codigo, arribo_almacen, arribo_cedis, eta_puerto, po_qty, shp_qty, contenedor'))
             .catch(e => { console.error('embarques_compras:', e); return []; }),
+          fetchAll(() => supabase.from('inventario_acteck').select('articulo, inventario'))
+            .catch(e => { console.error('inventario_acteck:', e); return []; }),
           // Propuesta activa: 2 queries separadas para no depender de FK-embed de PostgREST
           yoId
             ? supabase.from('forecast_propuestas')
@@ -135,6 +138,7 @@ export default function ForecastReservas() {
         setCuotas(ctRes.data || []);
         setFacturacion(faRows || []);
         setArribos(embRows || []);
+        setInventario(invRows || []);
 
         // Propuesta activa: si existe, cargar sus líneas en query separada
         if (propRes.data) {
@@ -209,6 +213,16 @@ export default function ForecastReservas() {
     return Array.from(s).sort((a, b) => b - a);
   }, [sellout]);
 
+  // Inventario Acteck: total por SKU (suma de todos los almacenes)
+  const inventarioPorSku = useMemo(() => {
+    const map = new Map();
+    for (const r of inventario) {
+      if (!r.articulo) continue;
+      map.set(r.articulo, (map.get(r.articulo) || 0) + (Number(r.inventario) || 0));
+    }
+    return map;
+  }, [inventario]);
+
   // Arribos: agrupar por (sku, año-mes). Fallback de fecha:
   //   arribo_almacen → arribo_cedis → eta_puerto
   const arribosPorSku = useMemo(() => {
@@ -263,6 +277,7 @@ export default function ForecastReservas() {
         familia: rm.familia || '',
         roadmap: (rm.rdmp || '').toUpperCase(),
         sort_order: rm.sort_order,
+        inventario: inventarioPorSku.get(rm.sku) || 0,
         necesidad_dgl: vDgl,
         necesidad_pce: vPce,
         necesidad_dct: vDct,
@@ -272,7 +287,7 @@ export default function ForecastReservas() {
     }
     // Orden por defecto del roadmap (sort_order)
     return rows;
-  }, [roadmap, velocity, arribosPorSku, proxMeses, lineas]);
+  }, [roadmap, velocity, arribosPorSku, proxMeses, lineas, inventarioPorSku]);
 
   const filasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -535,7 +550,8 @@ export default function ForecastReservas() {
                     <Th theme={theme} w={64}>PCEL</Th>
                     <Th theme={theme} w={72}>Dicotech</Th>
                     {proxMeses.map((m, i) => <Th key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined} w={68}>Arribo {m.label}</Th>)}
-                    <Th theme={theme} bl={groupSep} w={72} color={theme.accent}>Recom.</Th>
+                    <Th theme={theme} bl={groupSep} w={64}>Inv</Th>
+                    <Th theme={theme} w={64} color={theme.accent}>Recom.</Th>
                     <Th theme={theme} w={112}>Reservo</Th>
                     <Th theme={theme} w={128}>Estado</Th>
                   </tr>
@@ -580,7 +596,8 @@ export default function ForecastReservas() {
                         {proxMeses.map((m, i) => (
                           <Td key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined}><NumCell n={f.arribosPorMes[m.key]} strong={f.arribosPorMes[m.key] > 0} /></Td>
                         ))}
-                        <Td theme={theme} bl={groupSep}><span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, color: theme.accent, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(f.recomendado)}</span></Td>
+                        <Td theme={theme} bl={groupSep}><NumCell n={f.inventario} strong={f.inventario > 0} /></Td>
+                        <Td theme={theme}><span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, color: theme.accent, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(f.recomendado)}</span></Td>
                         <Td theme={theme}>
                           <ReservoInput
                             value={Number(l?.reservo) || 0}
@@ -597,7 +614,7 @@ export default function ForecastReservas() {
                       </tr>
                       {expanded && (
                         <tr>
-                          <td colSpan={12} style={{ padding: 0, background: theme.bg, borderTop: `1px solid ${theme.divider || theme.border}`, borderBottom: `2px solid ${theme.border}` }}>
+                          <td colSpan={13} style={{ padding: 0, background: theme.bg, borderTop: `1px solid ${theme.divider || theme.border}`, borderBottom: `2px solid ${theme.border}` }}>
                             <HeatmapDrill
                               sku={f.sku}
                               matriz={soPorSkuAnio.get(f.sku)}
@@ -615,7 +632,7 @@ export default function ForecastReservas() {
                     );
                   })}
                   {filasFiltradas.length === 0 && (
-                    <tr><td colSpan={12} style={{ padding: 40, textAlign: 'center', color: theme.textMuted }}>No hay SKUs que mostrar con los filtros actuales.</td></tr>
+                    <tr><td colSpan={13} style={{ padding: 40, textAlign: 'center', color: theme.textMuted }}>No hay SKUs que mostrar con los filtros actuales.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -686,12 +703,15 @@ function StepChip({ theme, n, lb, sub, active, done }) {
 }
 
 function Th({ theme, children, l, c, w, bg, color, bl }) {
+  const align = l ? 'left' : (c ? 'center' : 'right');
   return (
     <th style={{
       fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 600,
       letterSpacing: '0.10em', textTransform: 'uppercase', color: color || theme.textMuted,
-      textAlign: l ? 'left' : (c ? 'center' : 'right'),
-      padding: '10px 10px',
+      textAlign: align,
+      paddingTop: 10, paddingBottom: 10,
+      paddingLeft: l ? 12 : (c ? 8 : 6),
+      paddingRight: (l || c) ? 6 : 12,
       borderBottom: `1px solid ${theme.border}`, background: bg || theme.surface,
       whiteSpace: 'nowrap', width: w,
       borderLeft: bl ? `1px solid ${bl}` : undefined,
@@ -700,9 +720,12 @@ function Th({ theme, children, l, c, w, bg, color, bl }) {
   );
 }
 function Td({ theme, children, l, c, bg, bl }) {
+  const align = l ? 'left' : (c ? 'center' : 'right');
   return <td style={{
-    padding: '5px 10px',
-    textAlign: l ? 'left' : (c ? 'center' : 'right'),
+    paddingTop: 5, paddingBottom: 5,
+    paddingLeft: l ? 12 : (c ? 8 : 6),
+    paddingRight: (l || c) ? 6 : 12,
+    textAlign: align,
     verticalAlign: 'middle', background: bg,
     borderLeft: bl ? `1px solid ${bl}` : undefined,
     fontSize: 12, color: theme.text, fontFamily: TYPO.fontText,
