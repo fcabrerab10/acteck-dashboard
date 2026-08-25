@@ -85,6 +85,7 @@ export default function ForecastReservas() {
   const [vista, setVista] = useState('armador'); // 'armador' | 'landing'
   const [propuestasCerradas, setPropuestasCerradas] = useState([]);
   const [propuestaAbierta, setPropuestaAbierta] = useState(null); // propuesta seleccionada del landing
+  const [avisos, setAvisos] = useState([]);
 
   const bandArr = 'transparent';
   const groupSep = isDark ? '#232326' : '#E5E5E9';
@@ -416,9 +417,18 @@ export default function ForecastReservas() {
     await supabase.from('forecast_propuesta_lineas').delete().eq('id', l.id);
   }, [lineas]);
 
+  const cargarAvisos = useCallback(async () => {
+    const hoyISO = toISO(hoy);
+    const { data } = await supabase.from('forecast_avisos')
+      .select('*, forecast_propuesta_lineas(sku, descripcion, marca)')
+      .lte('fecha_disparo', hoyISO)
+      .order('fecha_disparo', { ascending: false });
+    setAvisos(data || []);
+  }, [hoy]);
+
   const cargarLanding = useCallback(async () => {
     const { data, error } = await supabase.from('forecast_propuestas')
-      .select('*, forecast_propuesta_lineas(id, sku, descripcion, marca, reservo, estado, necesidad_dgl, necesidad_pce, necesidad_dct, recomendado)')
+      .select('*, forecast_propuesta_lineas(id, sku, descripcion, marca, reservo, confirmado, estado, necesidad_dgl, necesidad_pce, necesidad_dct, recomendado, crm_subido_at, comprado_at, fecha_arribo_estimada, piezas_a_reservar_arribo)')
       .neq('estatus', 'borrador')
       .order('generado_at', { ascending: false, nullsFirst: false });
     if (!error && data) setPropuestasCerradas(data);
@@ -444,8 +454,8 @@ export default function ForecastReservas() {
     setVista('landing');
   }, [propuesta, lineas, cargarLanding]);
 
-  // Cargar landing al montar
-  useEffect(() => { cargarLanding(); }, [cargarLanding]);
+  // Cargar landing y avisos al montar
+  useEffect(() => { cargarLanding(); cargarAvisos(); }, [cargarLanding, cargarAvisos]);
 
   const vaciarPropuesta = useCallback(async () => {
     if (!propuesta) return;
@@ -529,6 +539,14 @@ export default function ForecastReservas() {
           propuestas={propuestasCerradas}
           propuestaAbierta={propuestaAbierta}
           setPropuestaAbierta={setPropuestaAbierta}
+          avisos={avisos}
+          onAvisoVisto={async (aviso) => {
+            const vistoBy = Array.isArray(aviso.visto_por) ? aviso.visto_por : [];
+            if (vistoBy.includes(yoId)) return;
+            const next = [...vistoBy, yoId];
+            await supabase.from('forecast_avisos').update({ visto_por: next }).eq('id', aviso.id);
+            await cargarAvisos();
+          }}
           theme={theme}
           isDark={isDark}
           onNueva={() => setVista('armador')}
@@ -549,21 +567,42 @@ export default function ForecastReservas() {
             if (propuestaAbierta?.id === p.id) setPropuestaAbierta(null);
             await cargarLanding();
           }}
-          onConfirmarLinea={async (linea, confirmado) => {
-            let estado = 'confirmado';
-            if (confirmado === 0) estado = 'no_aplica';
-            else if (confirmado < Number(linea.reservo)) estado = 'parcial';
+          yoId={yoId}
+          onActualizarLinea={async (linea, patch) => {
             const { error } = await supabase.from('forecast_propuesta_lineas')
-              .update({ confirmado, estado }).eq('id', linea.id);
+              .update(patch).eq('id', linea.id);
             if (error) { alert('Error: ' + error.message); return; }
+
+            // Si acaba de marcar comprado + tiene fecha_arribo → generar avisos
+            const nuevoComprado = patch.comprado_at && !linea.comprado_at;
+            const fechaArribo = patch.fecha_arribo_estimada || linea.fecha_arribo_estimada;
+            const piezas = patch.piezas_a_reservar_arribo ?? linea.piezas_a_reservar_arribo ?? linea.reservo;
+            if (nuevoComprado && fechaArribo) {
+              const d = new Date(fechaArribo);
+              const tresDiasAntes = new Date(d); tresDiasAntes.setDate(d.getDate() - 3);
+              const avisos = [
+                { linea_id: linea.id, propuesta_id: linea.propuesta_id || propuestaAbierta?.id, tipo: '3dias', fecha_disparo: toISO(tresDiasAntes), fecha_arribo: toISO(d), piezas_a_reservar: piezas },
+                { linea_id: linea.id, propuesta_id: linea.propuesta_id || propuestaAbierta?.id, tipo: 'dia',   fecha_disparo: toISO(d), fecha_arribo: toISO(d), piezas_a_reservar: piezas },
+              ];
+              await supabase.from('forecast_avisos').upsert(avisos, { onConflict: 'linea_id,tipo' });
+              await cargarAvisos();
+            }
+            // Si cambió la fecha de arribo de una línea ya comprada → actualizar avisos existentes
+            if (!nuevoComprado && patch.fecha_arribo_estimada && linea.comprado_at) {
+              const d = new Date(patch.fecha_arribo_estimada);
+              const tresDiasAntes = new Date(d); tresDiasAntes.setDate(d.getDate() - 3);
+              await supabase.from('forecast_avisos').update({ fecha_disparo: toISO(tresDiasAntes), fecha_arribo: toISO(d), piezas_a_reservar: piezas }).eq('linea_id', linea.id).eq('tipo', '3dias');
+              await supabase.from('forecast_avisos').update({ fecha_disparo: toISO(d),           fecha_arribo: toISO(d), piezas_a_reservar: piezas }).eq('linea_id', linea.id).eq('tipo', 'dia');
+              await cargarAvisos();
+            }
+
             await cargarLanding();
-            // Actualizar la propuesta abierta con la línea nueva
             setPropuestaAbierta(prev => {
               if (!prev) return prev;
               return {
                 ...prev,
                 forecast_propuesta_lineas: (prev.forecast_propuesta_lineas || []).map(l =>
-                  l.id === linea.id ? { ...l, confirmado, estado } : l
+                  l.id === linea.id ? { ...l, ...patch } : l
                 ),
               };
             });
@@ -859,7 +898,7 @@ function ReservoInput({ value, recom, confirmado, onChange, accent = '#007AFF' }
 }
 
 // ─── Landing de Propuestas ────────────────────────────
-function ForecastLanding({ propuestas, propuestaAbierta, setPropuestaAbierta, theme, isDark, onNueva, onReabrir, onEliminar, onConfirmarLinea }) {
+function ForecastLanding({ propuestas, propuestaAbierta, setPropuestaAbierta, avisos = [], onAvisoVisto, yoId, theme, isDark, onNueva, onReabrir, onEliminar, onActualizarLinea }) {
   const estatusStyle = (est) => ({
     generada: { bg: 'rgba(0,122,255,0.10)', color: theme.accent, label: 'Generada' },
     cerrada:  { bg: 'rgba(52,199,89,0.12)', color: '#34C759', label: 'Cerrada' },
@@ -883,6 +922,48 @@ function ForecastLanding({ propuestas, propuestaAbierta, setPropuestaAbierta, th
         </div>
         <button onClick={onNueva} style={{ padding: '8px 16px', borderRadius: 999, background: '#CDE64A', color: '#050505', border: 0, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600 }}>+ Nueva propuesta</button>
       </div>
+
+      {/* Panel de avisos disparados */}
+      {avisos.length > 0 && (
+        <div style={{ padding: 16, borderBottom: `1px solid ${theme.hairline || theme.border}` }}>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: '#FF9500', marginBottom: 8 }}>🔔 Avisos de arribo · {avisos.length}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {avisos.slice(0, 5).map(a => {
+              const vistoBy = Array.isArray(a.visto_por) ? a.visto_por : [];
+              const noVisto = !vistoBy.includes(yoId);
+              const lin = a.forecast_propuesta_lineas || {};
+              const fArribo = new Date(a.fecha_arribo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+              const es3d = a.tipo === '3dias';
+              return (
+                <div key={a.id} onClick={() => onAvisoVisto && onAvisoVisto(a)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '9px 12px', borderRadius: 10,
+                    background: noVisto ? 'rgba(255,149,0,0.08)' : 'transparent',
+                    border: `1px solid ${noVisto ? 'rgba(255,149,0,0.25)' : theme.hairline || theme.border}`,
+                    cursor: 'pointer', fontSize: 12,
+                  }}>
+                  <span style={{ display: 'inline-flex', padding: '3px 8px', borderRadius: 999, background: es3d ? 'rgba(0,122,255,0.10)' : 'rgba(255,59,48,0.10)', color: es3d ? theme.accent : '#FF3B30', fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    {es3d ? '3 días antes' : 'HOY'}
+                  </span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text }}>
+                      {lin.descripcion || lin.sku}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 1 }}>
+                      <b style={{ color: theme.text }}>{lin.sku}</b> · arribo {fArribo} · reservar <b style={{ color: theme.accent }}>{fmtInt(a.piezas_a_reservar)} pz</b>
+                    </div>
+                  </div>
+                  {noVisto && <span style={{ width: 8, height: 8, borderRadius: 999, background: '#FF9500', flexShrink: 0 }} title="No visto" />}
+                </div>
+              );
+            })}
+            {avisos.length > 5 && (
+              <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', paddingTop: 4 }}>+{avisos.length - 5} avisos más</div>
+            )}
+          </div>
+        </div>
+      )}
       {propuestas.length === 0 ? (
         <div style={{ padding: 40, textAlign: 'center', color: theme.textMuted, fontSize: 12.5 }}>
           Aún no tienes propuestas generadas. Arma una en el <b style={{ color: theme.text }}>Armador</b>.
@@ -940,7 +1021,7 @@ function ForecastLanding({ propuestas, propuestaAbierta, setPropuestaAbierta, th
                 {card}
                 {showPanelAqui && propuestaAbierta && (
                   <div style={{ gridColumn: `1 / -1` }}>
-                    <PropuestaDetallePanel propuesta={propuestaAbierta} theme={theme} isDark={isDark} onConfirmarLinea={onConfirmarLinea} onClose={() => setPropuestaAbierta(null)} />
+                    <PropuestaDetallePanel propuesta={propuestaAbierta} yoId={yoId} theme={theme} isDark={isDark} onActualizarLinea={onActualizarLinea} onClose={() => setPropuestaAbierta(null)} />
                   </div>
                 )}
               </React.Fragment>
@@ -952,26 +1033,25 @@ function ForecastLanding({ propuestas, propuestaAbierta, setPropuestaAbierta, th
   );
 }
 
-// ─── Panel de detalle (inline, no modal) ────────────────
-function PropuestaDetallePanel({ propuesta, theme, isDark, onConfirmarLinea, onClose }) {
+// ─── Panel de detalle (inline) · seguimiento en 2 pasos ────
+function PropuestaDetallePanel({ propuesta, yoId, theme, isDark, onActualizarLinea, onClose }) {
   const lineas = propuesta.forecast_propuesta_lineas || [];
   const totalReservo = lineas.reduce((a, l) => a + (Number(l.reservo) || 0), 0);
-  const totalConfirmado = lineas.reduce((a, l) => a + (l.confirmado == null ? 0 : Number(l.confirmado)), 0);
-  const nConf = lineas.filter(l => l.estado === 'confirmado' || l.estado === 'parcial' || l.estado === 'no_aplica').length;
-
-  const estadoStyle = (est) => ({
-    pend_confirmar: { bg: 'rgba(0,122,255,0.10)', color: theme.accent, label: 'Pendiente' },
-    confirmado:     { bg: 'rgba(52,199,89,0.12)', color: '#34C759', label: 'Confirmado' },
-    parcial:        { bg: 'rgba(255,149,0,0.12)', color: '#FF9500', label: 'Parcial' },
-    no_aplica:      { bg: 'rgba(255,59,48,0.12)', color: '#FF3B30', label: 'No aplica' },
-  }[est] || { bg: 'transparent', color: theme.textMuted, label: est });
+  const nCrm = lineas.filter(l => l.crm_subido_at).length;
+  const nComp = lineas.filter(l => l.comprado_at).length;
 
   return (
     <div style={{ marginTop: 8, background: theme.bg, borderRadius: 12, padding: '14px 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div>
-          <div style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>Confirmar reservado</div>
-          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, marginTop: 2 }}>{nConf} de {lineas.length} SKUs confirmados · {fmtInt(totalConfirmado)} / {fmtInt(totalReservo)} pz</div>
+          <div style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>Seguimiento por SKU</div>
+          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, marginTop: 2 }}>
+            <span style={{ color: nCrm === lineas.length ? '#34C759' : theme.text }}>{nCrm}/{lineas.length} CRM</span>
+            {' · '}
+            <span style={{ color: nComp === lineas.length ? '#34C759' : theme.text }}>{nComp}/{lineas.length} Compradas</span>
+            {' · '}
+            <span style={{ color: theme.textMuted, fontWeight: 500 }}>{fmtInt(totalReservo)} pz totales</span>
+          </div>
         </div>
         <button onClick={onClose} style={{ padding: '6px 12px', borderRadius: 999, background: 'transparent', color: theme.textMuted, border: `1px solid ${theme.border}`, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600 }}>Cerrar</button>
       </div>
@@ -980,51 +1060,100 @@ function PropuestaDetallePanel({ propuesta, theme, isDark, onConfirmarLinea, onC
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11.5 }}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>SKU</th>
-              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>Descripción</th>
-              <th style={{ textAlign: 'right', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>Reservo</th>
-              <th style={{ textAlign: 'center', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>Confirmado</th>
-              <th style={{ textAlign: 'center', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>Acciones</th>
-              <th style={{ textAlign: 'right', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>Estado</th>
+              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>SKU</th>
+              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Descripción</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Reservo</th>
+              <th style={{ textAlign: 'center', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>1 · CRM</th>
+              <th style={{ textAlign: 'center', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>2 · Comprado</th>
+              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Arribo estimado</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Pz a reservar</th>
             </tr>
           </thead>
           <tbody>
-            {lineas.map(l => <LineaConfirmarRow key={l.id} linea={l} theme={theme} isDark={isDark} estadoStyle={estadoStyle} onConfirmar={onConfirmarLinea} />)}
+            {lineas.map(l => <LineaSeguimientoRow key={l.id} linea={l} yoId={yoId} theme={theme} isDark={isDark} onActualizar={onActualizarLinea} />)}
           </tbody>
         </table>
+      </div>
+      <div style={{ marginTop: 10, fontSize: 10.5, color: theme.textMuted, lineHeight: 1.5 }}>
+        Al marcar <b style={{ color: theme.text }}>Comprado</b> con fecha de arribo se crean 2 avisos automáticos: uno 3 días antes y otro el día del arribo. Fernando y Karolina reciben notificación cuando lleguen.
       </div>
     </div>
   );
 }
 
-function LineaConfirmarRow({ linea, theme, isDark, estadoStyle, onConfirmar }) {
+function LineaSeguimientoRow({ linea, yoId, theme, isDark, onActualizar }) {
   const reservo = Number(linea.reservo) || 0;
-  const [local, setLocal] = useState(linea.confirmado == null ? '' : String(linea.confirmado));
-  useEffect(() => { setLocal(linea.confirmado == null ? '' : String(linea.confirmado)); }, [linea.confirmado]);
-  const s = estadoStyle(linea.estado);
+  const [pzLocal, setPzLocal] = useState(linea.piezas_a_reservar_arribo == null ? String(reservo) : String(linea.piezas_a_reservar_arribo));
+  const [fecha, setFecha] = useState(linea.fecha_arribo_estimada || '');
+  useEffect(() => { setFecha(linea.fecha_arribo_estimada || ''); }, [linea.fecha_arribo_estimada]);
+  useEffect(() => { setPzLocal(linea.piezas_a_reservar_arribo == null ? String(reservo) : String(linea.piezas_a_reservar_arribo)); }, [linea.piezas_a_reservar_arribo, reservo]);
+
+  const crmDone = !!linea.crm_subido_at;
+  const compDone = !!linea.comprado_at;
+
+  const toggleCrm = () => {
+    onActualizar(linea, crmDone
+      ? { crm_subido_at: null, crm_subido_por: null }
+      : { crm_subido_at: new Date().toISOString(), crm_subido_por: yoId, estado: 'subido_crm' }
+    );
+  };
+  const toggleComp = () => {
+    if (compDone) {
+      onActualizar(linea, { comprado_at: null, comprado_por: null });
+    } else {
+      if (!fecha) { alert('Captura primero la fecha de arribo estimada.'); return; }
+      onActualizar(linea, {
+        comprado_at: new Date().toISOString(),
+        comprado_por: yoId,
+        fecha_arribo_estimada: fecha,
+        piezas_a_reservar_arribo: Number(pzLocal) || reservo,
+        estado: 'comprado',
+      });
+    }
+  };
+
+  const chk = (done, onClick, label) => (
+    <button onClick={onClick} title={label}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '3px 10px', borderRadius: 999, border: 0, cursor: 'pointer',
+        background: done ? 'rgba(52,199,89,0.14)' : 'transparent',
+        color: done ? '#0F8F4F' : theme.textMuted,
+        boxShadow: done ? 'none' : `inset 0 0 0 1px ${theme.border}`,
+        fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600,
+      }}>
+      <span style={{
+        width: 12, height: 12, borderRadius: 3,
+        background: done ? '#34C759' : 'transparent',
+        boxShadow: done ? 'none' : `inset 0 0 0 1.5px ${theme.textFaint || theme.textMuted}`,
+        color: '#FFF', fontSize: 9, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+      }}>{done ? '✓' : ''}</span>
+      {done ? 'Hecho' : label}
+    </button>
+  );
+
+  const tdBase = { padding: '7px 12px', borderBottom: `1px solid ${theme.divider || theme.border}` };
 
   return (
     <tr>
-      <td style={{ padding: '7px 12px', fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600, borderBottom: `1px solid ${theme.divider || theme.border}` }}>{linea.sku}</td>
-      <td style={{ padding: '7px 12px', color: theme.text, borderBottom: `1px solid ${theme.divider || theme.border}`, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={linea.descripcion}>{linea.descripcion || '—'}</td>
-      <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'SF Mono, ui-monospace, monospace', fontWeight: 700, color: theme.text, borderBottom: `1px solid ${theme.divider || theme.border}` }}>{fmtInt(reservo)}</td>
-      <td style={{ padding: '7px 12px', textAlign: 'center', borderBottom: `1px solid ${theme.divider || theme.border}` }}>
-        <input value={local}
-          placeholder="—"
-          onChange={e => setLocal(e.target.value.replace(/[^\d]/g, ''))}
+      <td style={{ ...tdBase, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600 }}>{linea.sku}</td>
+      <td style={{ ...tdBase, color: theme.text, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={linea.descripcion}>{linea.descripcion || '—'}</td>
+      <td style={{ ...tdBase, textAlign: 'right', fontFamily: 'SF Mono, ui-monospace, monospace', fontWeight: 700, color: theme.text }}>{fmtInt(reservo)}</td>
+      <td style={{ ...tdBase, textAlign: 'center' }}>{chk(crmDone, toggleCrm, 'Subir')}</td>
+      <td style={{ ...tdBase, textAlign: 'center' }}>{chk(compDone, toggleComp, 'Comprar')}</td>
+      <td style={{ ...tdBase }}>
+        <input type="date" value={fecha}
+          onChange={e => setFecha(e.target.value)}
+          onBlur={() => { if (fecha !== (linea.fecha_arribo_estimada || '')) onActualizar(linea, { fecha_arribo_estimada: fecha || null }); }}
+          style={{ padding: '3px 6px', borderRadius: 6, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, fontSize: 11, outline: 'none' }} />
+      </td>
+      <td style={{ ...tdBase, textAlign: 'right' }}>
+        <input value={pzLocal}
+          onChange={e => setPzLocal(e.target.value.replace(/[^\d]/g, ''))}
           onFocus={e => e.currentTarget.select()}
-          onBlur={() => { const n = Number(local); if (!isNaN(n) && n !== Number(linea.confirmado)) onConfirmar(linea, Math.min(n, reservo)); }}
+          onBlur={() => { const n = Number(pzLocal); if (!isNaN(n) && n !== (linea.piezas_a_reservar_arribo ?? reservo)) onActualizar(linea, { piezas_a_reservar_arribo: n }); }}
           onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          style={{ width: 72, padding: '4px 8px', borderRadius: 6, textAlign: 'right', border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, fontWeight: 600, outline: 'none' }} />
-      </td>
-      <td style={{ padding: '7px 12px', textAlign: 'center', borderBottom: `1px solid ${theme.divider || theme.border}`, whiteSpace: 'nowrap' }}>
-        <button onClick={() => onConfirmar(linea, reservo)} title="Se reservó todo"
-          style={{ padding: '3px 10px', borderRadius: 999, background: 'rgba(52,199,89,0.12)', color: '#34C759', border: 0, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, marginRight: 4 }}>✓ Todo</button>
-        <button onClick={() => onConfirmar(linea, 0)} title="No se pudo reservar"
-          style={{ padding: '3px 10px', borderRadius: 999, background: 'rgba(255,59,48,0.10)', color: '#FF3B30', border: 0, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600 }}>× Nada</button>
-      </td>
-      <td style={{ padding: '7px 12px', textAlign: 'right', borderBottom: `1px solid ${theme.divider || theme.border}` }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: s.bg, color: s.color }}>{linea.estado === 'parcial' && linea.confirmado != null ? `Parcial ${fmtInt(linea.confirmado)}` : s.label}</span>
+          style={{ width: 66, padding: '3px 8px', borderRadius: 6, textAlign: 'right', border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, fontWeight: 600, outline: 'none' }} />
       </td>
     </tr>
   );
