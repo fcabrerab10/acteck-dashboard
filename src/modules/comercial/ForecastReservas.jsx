@@ -918,14 +918,15 @@ function HeatmapDrill({ sku, matriz, aniosDisponibles, drillYear, setDrillYear, 
 
   const totalesMes = Array.from({ length: 12 }, () => 0);
 
+  // Estilo tipo Sell Out Dicotech: pill azul suave solo destaca los TOP.
+  // Los demás valores se muestran como texto plano (sin fondo).
   const pillStyle = (val) => {
-    if (!val) return { bg: 'transparent', color: '#C7C7CC' };
+    if (!val) return { bg: 'transparent', color: '#C7C7CC', border: 'transparent' };
     const ratio = maxCell > 0 ? val / maxCell : 0;
-    if (ratio < 0.20)      return { bg: 'rgba(0,122,255,0.08)', color: theme.text };
-    else if (ratio < 0.40) return { bg: 'rgba(0,122,255,0.18)', color: theme.text };
-    else if (ratio < 0.60) return { bg: 'rgba(0,122,255,0.32)', color: '#0057D9' };
-    else if (ratio < 0.80) return { bg: 'rgba(0,122,255,0.55)', color: '#FFF' };
-    else                   return { bg: '#007AFF',              color: '#FFF' };
+    // Top del año (≥60% del máximo del SKU) → pill azul iOS suave
+    if (ratio >= 0.60) return { bg: 'rgba(0,122,255,0.12)', color: '#0057D9', border: 'transparent' };
+    // El resto → texto plano
+    return { bg: 'transparent', color: theme.text, border: 'transparent' };
   };
 
   const cellTh = { fontFamily: TYPO.fontDisplay, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 600, padding: '2px 0', textAlign: 'center' };
@@ -1013,14 +1014,11 @@ function HeatmapDrill({ sku, matriz, aniosDisponibles, drillYear, setDrillYear, 
       </table>
 
       {/* Legend compacta */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: 9.5, color: theme.textMuted }}>
-        <span>Menor</span>
-        <span style={{ display: 'inline-flex', gap: 2 }}>
-          {[0.08, 0.18, 0.32, 0.55, 1].map((op, i) => (
-            <span key={i} style={{ display: 'inline-block', width: 14, height: 8, borderRadius: 999, background: i === 4 ? '#007AFF' : `rgba(0,122,255,${op})` }} />
-          ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, fontSize: 9.5, color: theme.textMuted }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ display: 'inline-block', minWidth: 22, height: 14, borderRadius: 999, background: 'rgba(0,122,255,0.12)' }} />
+          Meses top (≥60% del máximo)
         </span>
-        <span>Mayor</span>
         {!yearData && (
           <span style={{ marginLeft: 'auto', color: theme.textFaint || theme.textMuted, fontStyle: 'italic' }}>Sin datos de sell-out para {drillYear}</span>
         )}
