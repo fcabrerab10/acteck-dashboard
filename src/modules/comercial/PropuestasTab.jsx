@@ -2643,10 +2643,16 @@ async function fetchAll(clienteKey) {
   const invAckDataP = fetchAllPagesLocal(() =>
     supabase.from('inventario_acteck').select('articulo,disponible,no_almacen'));
 
+  // Para PCEL el inventario del cliente vive en sellout_pcel.inventario
+  // (no en inventario_cliente, que solo tiene DGL y DCT).
+  const invCliQuery = clienteKey === 'pcel'
+    ? supabase.from('sellout_pcel').select('modelo,inventario,anio,semana').not('modelo', 'is', null).limit(50000)
+    : supabase.from('inventario_cliente').select('sku,stock,titulo,anio,semana').eq('cliente', clienteKey);
+
   const [roadmapRes, invAckData, invCliRes, preciosRes, costosRes, sellout90, selloutMes, cuotaRes, spiffsRes] = await Promise.all([
     supabase.from('roadmap_sku').select('sku,marca,familia,categoria,descripcion,rdmp'),
     invAckDataP,
-    supabase.from('inventario_cliente').select('sku,stock,titulo,anio,semana').eq('cliente', clienteKey),
+    invCliQuery,
     // Vista canónica: mismos precios que la pestaña Estrategia de Precios.
     // Trae 1 fila por (sku, lista) con el precio más reciente.
     supabase.from('v_estrategia_precios_lista').select('sku,lista,precio'),
@@ -2677,10 +2683,14 @@ async function fetchAll(clienteKey) {
   const invCliTitulos = new Map();
   for (const r of invCliRes.data || []) {
     const key = (Number(r.anio) || 0) * 100 + (Number(r.semana) || 0);
-    const prev = invCli.get(r.sku);
+    // Normalización: PCEL usa `modelo` + `inventario`; otros usan `sku` + `stock`
+    const skuKey = clienteKey === 'pcel' ? r.modelo : r.sku;
+    const stockVal = clienteKey === 'pcel' ? (Number(r.inventario) || 0) : (Number(r.stock) || 0);
+    if (!skuKey) continue;
+    const prev = invCli.get(skuKey);
     if (!prev || prev.key < key) {
-      invCli.set(r.sku, { key, stock: Number(r.stock) || 0 });
-      if (r.titulo) invCliTitulos.set(r.sku, r.titulo);
+      invCli.set(skuKey, { key, stock: stockVal });
+      if (r.titulo) invCliTitulos.set(skuKey, r.titulo);
     }
   }
   const preciosPorSku = new Map();
@@ -2817,22 +2827,28 @@ async function fetchSellout(clienteKey, mm, anioMin, anioMax) {
       });
   }
   if (clienteKey === 'pcel') {
-    // sellout_pcel trae los últimos 3 meses en columnas vta_mes_1/2/3
-    // relativo a la SEMANA. mm[0] = mes anterior, mm[1] = anterior al anterior, mm[2] = 3 atrás.
+    // sellout_pcel trae los últimos 3 meses en columnas vta_mes_actual, vta_mes_1, vta_mes_2
+    // relativo a la SEMANA. `_actual` = mes cursando, `_1` = mes anterior, `_2` = 2 atrás.
+    // vta_mes_3 en el archivo siempre viene null, por eso no lo usamos.
+    // Además: el SKU del roadmap (AC-XXXX) vive en la columna `modelo`,
+    // NO en `sku` (que trae el código interno de PCEL como "345094").
     const { data } = await supabase.from('sellout_pcel')
-      .select('sku,anio,semana,vta_mes_1,vta_mes_2,vta_mes_3')
-      .gte('anio', anioMax - 1).limit(50000);
+      .select('modelo,anio,semana,vta_mes_actual,vta_mes_1,vta_mes_2')
+      .gte('anio', anioMax - 1).not('modelo', 'is', null).limit(50000);
     const byKey = new Map();
     for (const r of data || []) {
+      if (!r.modelo) continue;
       const key = (Number(r.anio) || 0) * 100 + (Number(r.semana) || 0);
-      const prev = byKey.get(r.sku);
-      if (!prev || prev.key < key) byKey.set(r.sku, { key, r });
+      const prev = byKey.get(r.modelo);
+      if (!prev || prev.key < key) byKey.set(r.modelo, { key, r });
     }
     const out = [];
     for (const { r } of byKey.values()) {
-      const cols = [Number(r.vta_mes_1) || 0, Number(r.vta_mes_2) || 0, Number(r.vta_mes_3) || 0];
+      // mm[0] = mes anterior a hoy, mm[1] = 2 atrás, mm[2] = 3 atrás
+      // Mapeo: vta_mes_1 = mm[0], vta_mes_2 = mm[1], vta_mes_actual = mes en curso (no lo usamos aquí)
+      const cols = [Number(r.vta_mes_1) || 0, Number(r.vta_mes_2) || 0, 0];
       mm.forEach((m, i) => {
-        if (cols[i] > 0) out.push({ sku: r.sku, cantidad: cols[i], anio: m.anio, mes: m.mes });
+        if (cols[i] > 0) out.push({ sku: r.modelo, cantidad: cols[i], anio: m.anio, mes: m.mes });
       });
     }
     return out;
