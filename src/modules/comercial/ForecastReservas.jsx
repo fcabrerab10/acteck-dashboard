@@ -116,7 +116,8 @@ export default function ForecastReservas() {
           fetchAll(() => supabase.from('embarques_compras')
             .select('codigo, arribo_almacen, arribo_cedis, eta_puerto, po_qty, shp_qty, contenedor'))
             .catch(e => { console.error('embarques_compras:', e); return []; }),
-          fetchAll(() => supabase.from('inventario_acteck').select('articulo, inventario'))
+          // inventario_acteck NO tiene columna 'id' — orderamos por 'articulo'
+          fetchAll(() => supabase.from('inventario_acteck').select('articulo, inventario'), 'articulo')
             .catch(e => { console.error('inventario_acteck:', e); return []; }),
           // Propuesta activa: 2 queries separadas para no depender de FK-embed de PostgREST
           yoId
