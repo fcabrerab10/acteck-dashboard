@@ -2640,8 +2640,11 @@ async function fetchAll(clienteKey) {
   // inventario_acteck tiene ~43K filas; sin paginar Supabase corta en 1000 y
   // el Armador pierde almacenes → invActeck queda muy por debajo del real.
   // Sacamos esta query fuera del Promise.all para paginarla.
+  // Traemos también 'inventario' (total) porque INV ACK debe coincidir con la
+  // columna "Total pz" de la pestaña Inventario, que suma inventario de TODOS
+  // los almacenes (no solo comerciales).
   const invAckDataP = fetchAllPagesLocal(() =>
-    supabase.from('inventario_acteck').select('articulo,disponible,no_almacen'));
+    supabase.from('inventario_acteck').select('articulo,inventario,disponible,no_almacen'));
 
   // Para PCEL el inventario del cliente vive en sellout_pcel.inventario
   // (no en inventario_cliente, que solo tiene DGL y DCT).
@@ -2671,11 +2674,13 @@ async function fetchAll(clienteKey) {
     fetchSpiffsActivos(),
   ]);
 
-  const ALMACENES_COMERCIALES = new Set([1, 2, 3, 6, 9, 12, 14, 15, 16, 17, 19, 25, 44, 64, 71]);
+  // INV ACK = SUM(inventario) sobre TODOS los almacenes, para coincidir con
+  // la columna "Total pz" de la pestaña Inventario. Antes usaba `disponible`
+  // filtrado a 15 almacenes comerciales, lo cual daba números menores y
+  // desalineados con el resto del dashboard.
   const invAck = new Map();
   for (const r of invAckData || []) {
-    if (!ALMACENES_COMERCIALES.has(Number(r.no_almacen))) continue;
-    invAck.set(r.articulo, (invAck.get(r.articulo) || 0) + (Number(r.disponible) || 0));
+    invAck.set(r.articulo, (invAck.get(r.articulo) || 0) + (Number(r.inventario) || 0));
   }
   for (const [k, v] of invAck.entries()) invAck.set(k, Math.round(v));
 
