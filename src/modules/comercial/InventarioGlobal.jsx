@@ -89,9 +89,12 @@ const TIPO_ALMACEN = {
   5: 'Refacturación',
 };
 const tipoDe = (n) => TIPO_ALMACEN[n] || 'No comercial';
-// Fuente única de comerciales = tabla almacenes_config (1,2,3,6,14,16,17,25,44).
-// Cualquier cambio se hace ahí y se refleja en Inventario, Propuestas y S&OP.
-const ALM_COMERCIALES = new Set([1, 2, 3, 6, 14, 16, 17, 25, 44]);
+// Fuente única de comerciales = tabla almacenes_config (comercial=true).
+// Lista actual: 1,2,3 (General), 6,19 (DECME), 9 (ML), 12 (Refacciones),
+// 14,16,17 (Retail), 15 (Stock rotation), 25,71 (E-commerce),
+// 44,64 (Empaque dañado).
+// Editar la tabla en Supabase para agregar/quitar; luego actualizar este Set.
+const ALM_COMERCIALES = new Set([1, 2, 3, 6, 9, 12, 14, 15, 16, 17, 19, 25, 44, 64, 71]);
 const esComercial = (n) => ALM_COMERCIALES.has(Number(n));
 
 const COLOR_TIPO = {
@@ -248,10 +251,12 @@ export default function InventarioGlobal() {
   }, [filasEfectivas]);
 
   // ── Almacenes comerciales fijos para la tabla ──
-  // Coinciden con almacenes_config (comercial=true): 1, 2, 3, 6, 14, 16, 17, 25, 44
-  const almacenesActivos = [1, 3, 2, 6, 16, 17, 14, 25, 44];
-  const CEDIS_ALMACEN = { 1: 'ALMACENES GUADALAJARA', 3: 'ALMACENES MEXICO', 2: 'ALMACENES COLOTLAN', 6: 'ALMACENES MEXICO', 16: 'ALMACENES GUADALAJARA', 17: 'ALMACENES MEXICO', 14: 'ALMACENES GUADALAJARA', 25: 'ALMACENES MEXICO', 44: 'ALMACENES GUADALAJARA' };
-  const shortAlmacen = (n) => ({ 1: 'GEN GDL', 3: 'GEN MEX', 2: 'GEN COL', 6: 'DECME MEX', 16: 'RETAIL GDL', 17: 'RETAIL MEX', 14: 'RETAIL 14', 25: 'PROPIO', 44: 'EMP DAÑADO' }[n] || `Alm ${n}`);
+  // Coinciden con almacenes_config (comercial=true). El grid muestra los
+  // 6 principales; el resto (12, 15, 25, 44, 64, 71) queda como "Otros"
+  // agrupados en el drill del SKU si tiene stock.
+  const almacenesActivos = [1, 3, 2, 6, 19, 9, 16, 17];
+  const CEDIS_ALMACEN = { 1: 'ALMACENES GUADALAJARA', 3: 'ALMACENES MEXICO', 2: 'ALMACENES COLOTLAN', 6: 'ALMACENES MEXICO', 19: 'ALMACENES GUADALAJARA', 9: 'ALMACENES GUADALAJARA', 16: 'ALMACENES GUADALAJARA', 17: 'ALMACENES MEXICO' };
+  const shortAlmacen = (n) => ({ 1: 'GEN GDL', 3: 'GEN MEX', 2: 'GEN COL', 6: 'DECME MEX', 19: 'DECME GDL', 9: 'ML', 16: 'RETAIL GDL', 17: 'RETAIL MEX', 14: 'RETAIL 14', 25: 'PROPIO', 44: 'EMP DAÑ GDL', 64: 'EMP DAÑ MEX', 71: 'ECOM TULT', 12: 'REFACC', 15: 'STOCK ROT' }[n] || `Alm ${n}`);
 
   // ── Tabla SKU × almacén ──
   const filasTabla = useMemo(() => {

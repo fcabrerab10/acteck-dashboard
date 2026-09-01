@@ -2674,11 +2674,11 @@ async function fetchAll(clienteKey) {
     fetchSpiffsActivos(),
   ]);
 
-  // INV ACK = SUM(inventario) sobre los 9 almacenes COMERCIALES definidos
+  // INV ACK = SUM(inventario) sobre los almacenes COMERCIALES definidos
   // en la tabla almacenes_config (comercial=true). Misma lista que
   // v_inventario_comercial (usada por S&OP) y el toggle de la pestaña
   // Inventario. Fuente única de verdad.
-  const ALM_COMERCIALES = new Set([1, 2, 3, 6, 14, 16, 17, 25, 44]);
+  const ALM_COMERCIALES = new Set([1, 2, 3, 6, 9, 12, 14, 15, 16, 17, 19, 25, 44, 64, 71]);
   const invAck = new Map();
   for (const r of invAckData || []) {
     if (!ALM_COMERCIALES.has(Number(r.no_almacen))) continue;
