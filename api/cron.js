@@ -158,7 +158,7 @@ async function upsertChunks(rows) {
   const errors = [];
   for (let i = 0; i < rows.length; i += CHUNK) {
     const batch = rows.slice(i, i + CHUNK);
-    const r = await fetch(`${SB_URL}/rest/v1/embarques_compras?on_conflict=po,codigo`, {
+    const r = await fetch(`${SB_URL}/rest/v1/embarques_compras?on_conflict=po,codigo,arribo_cedis,shp_qty`, {
       method: 'POST',
       headers: {
         apikey: SRK,

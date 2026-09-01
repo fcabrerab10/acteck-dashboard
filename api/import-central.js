@@ -28,7 +28,11 @@ const ALLOWED = {
   catalogo_sku_pcel:     'sku',
   estados_cuenta:        'cliente,anio,semana',
   estados_cuenta_detalle:'id',
-  embarques_compras:     'po,codigo,contenedor',
+  // Anchor por recibo: una PO puede llegar en varios shipments legítimos,
+  // pero (po, codigo, arribo_cedis, shp_qty) debe ser único. Hay constraint
+  // UNIQUE en la BD respaldando esto. Antes usaba (po,codigo,contenedor) y
+  // permitía filas duplicadas exactas cuando el Excel origen las tenía.
+  embarques_compras:     'po,codigo,arribo_cedis,shp_qty',
   facturacion_clientes:  'cliente_nombre,sku,anio,mes',
   estados_resultados:    'razon_social,anio,mes,cuenta_norm',
   compras_oc:            'movid,articulo',
