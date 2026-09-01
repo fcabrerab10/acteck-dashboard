@@ -2559,16 +2559,23 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
                   padding: '8px 0', borderTop: i > 0 ? `1px solid ${theme.divider || theme.border}` : 'none',
                 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 8, alignItems: 'center', fontSize: 11 }}>
-                    <span style={{
-                      fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em',
-                      padding: '2px 6px', borderRadius: 4,
-                      background: e.estatus === 'TRANSITO MARITIMO' ? `${theme.accent}22`
-                        : e.estatus === 'PROXIMO A ZARPAR' ? `${theme.orange || '#FF9500'}22`
-                        : `${theme.textMuted}22`,
-                      color: e.estatus === 'TRANSITO MARITIMO' ? theme.accent
-                        : e.estatus === 'PROXIMO A ZARPAR' ? (theme.orange || '#FF9500')
-                        : theme.textMuted,
-                    }}>{(e.estatus || 'OTRO').slice(0, 12)}</span>
+                    {(() => {
+                      const est = String(e.estatus || '').toUpperCase();
+                      let bg = `${theme.textMuted}22`, color = theme.textMuted, label = est || 'OTRO';
+                      if (est === 'TRANSITO MARITIMO') { bg = `${theme.accent}22`; color = theme.accent; label = 'TRÁNSITO'; }
+                      else if (est === 'PROXIMO A ZARPAR') { bg = `${theme.orange || '#FF9500'}22`; color = theme.orange || '#FF9500'; label = 'ZARPARÁ'; }
+                      else if (est === 'EN PRODUCCION') { bg = `${theme.textMuted}22`; color = theme.text; label = 'PRODUCCIÓN'; }
+                      else if (est === 'EN RESGUARDO') { bg = `${(theme.accent)}18`; color = theme.accent; label = 'RESGUARDO'; }
+                      else if (est === 'EN ESPERA DE CONSOLIDAR') { bg = `${theme.textMuted}22`; color = theme.textMuted; label = 'CONSOLIDAR'; }
+                      else if (est === 'PENDIENTE MODULAR') { bg = `${theme.orange || '#FF9500'}18`; color = theme.orange || '#FF9500'; label = 'PENDIENTE'; }
+                      return (
+                        <span style={{
+                          fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em',
+                          padding: '2px 6px', borderRadius: 4, background: bg, color,
+                          whiteSpace: 'nowrap',
+                        }}>{label}</span>
+                      );
+                    })()}
                     <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
                       {e.po ? `PO-${e.po}` : '—'} · <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{FMT_N(e.cantidad)}</strong> pz
                       {e.contenedor && <> · <span style={{ color: theme.textSubtle }}>{e.contenedor}</span></>}
