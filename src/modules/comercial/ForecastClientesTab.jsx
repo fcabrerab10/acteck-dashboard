@@ -1744,10 +1744,11 @@ function SortHeader({ theme, col, label, width, align = 'left', onSort, sortCol,
   return (
     <th style={{
       position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
-      textAlign: align, padding: '9px 10px', width,
+      textAlign: align, padding: '9px 6px', width,
       fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 9.5,
       textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted,
       borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap',
+      overflow: 'hidden', textOverflow: 'ellipsis',
       cursor: clickable ? 'pointer' : 'default',
     }} onClick={clickable ? () => onSort(col) : undefined}>
       {label && (
@@ -1775,7 +1776,7 @@ function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, 
           <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs · click para drill · <span style={{ color: theme.green }}>■</span> en export
         </span>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums', tableLayout: 'fixed' }}>
           <thead>
             <tr>
@@ -1927,7 +1928,7 @@ function SugNota({ kind, theme, tip }) {
 
 // ────────── Row ──────────
 function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud, enExport, cantidadEnExport, theme, isDark }) {
-  const cellS = { padding: '7px 10px', fontSize: 12, color: theme.text, fontFamily: TYPO.fontText, verticalAlign: 'middle' };
+  const cellS = { padding: '7px 6px', fontSize: 12, color: theme.text, fontFamily: TYPO.fontText, verticalAlign: 'middle', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
   const numS = { ...cellS, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, textAlign: 'right' };
   const boldS = { ...cellS, fontFamily: TYPO.fontDisplay, fontWeight: 700, fontSize: 12.5, letterSpacing: '-0.01em', textAlign: 'right' };
   const rowBg = expanded ? (isDark ? 'rgba(10,132,255,0.08)' : 'rgba(0,122,255,0.04)') :
@@ -1945,11 +1946,11 @@ function ForecastRow({ r, expanded, onToggle, onAgregarSolicitud, enExport, cant
         background: rowBg, cursor: 'pointer',
         transition: 'background 160ms ease',
       }}>
-        <td style={{ ...cellS, width: 24, textAlign: 'center', color: expanded ? theme.accent : theme.textSubtle }}>
+        <td style={{ ...cellS, textAlign: 'center', color: expanded ? theme.accent : theme.textSubtle }}>
           {expanded ? '▾' : '▸'}
         </td>
-        <td style={{ ...cellS, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600 }}>{r.sku}</td>
-        <td style={{ ...cellS, maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
+        <td style={{ ...cellS, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sku}</td>
+        <td style={{ ...cellS, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
         <td style={{ ...cellS, textAlign: 'center' }}><RoadmapChip estado={r.roadmapEstado} theme={theme} /></td>
         <td style={numS}>{FMT_N(r.inv)}</td>
         <td style={numS}>{r.traCant > 0 ? FMT_N(r.traCant) : <span style={{ color: theme.textSubtle }}>—</span>}</td>
