@@ -2127,18 +2127,18 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
         background: isDark
           ? 'linear-gradient(90deg, rgba(10,132,255,0.08) 0%, rgba(10,132,255,0) 45%), ' + theme.surface
           : 'linear-gradient(90deg, rgba(0,122,255,0.05) 0%, rgba(0,122,255,0) 45%), ' + theme.surface,
-        border: `1px solid ${theme.accent}33`, borderRadius: 10, padding: '10px 14px',
+        border: `1px solid ${theme.accent}33`, borderRadius: 10, padding: '7px 12px',
       }}>
         <div style={{
           display: 'grid', gridTemplateColumns: 'auto auto 1fr auto auto auto auto',
-          gap: 14, alignItems: 'center',
+          gap: 10, alignItems: 'center',
         }}>
           {/* Input cantidad */}
           <div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: theme.accent, marginBottom: 3 }}>
+            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: theme.accent, marginBottom: 1 }}>
               Simulador
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <QtyBtn onClick={() => setQty((q) => Math.max(0, q - (cntPz || 100)))} theme={theme}>−</QtyBtn>
               <input
                 type="text"
@@ -2148,30 +2148,30 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
                   setQty(raw ? Number(raw) : 0);
                 }}
                 style={{
-                  width: 88, textAlign: 'center', fontFamily: TYPO.fontDisplay, fontSize: 22,
+                  width: 74, textAlign: 'center', fontFamily: TYPO.fontDisplay, fontSize: 17,
                   fontWeight: 600, letterSpacing: '-0.02em', color: theme.text, fontVariantNumeric: 'tabular-nums',
                   border: 0, background: 'transparent', outline: 'none',
                 }}
               />
               <QtyBtn onClick={() => setQty((q) => q + (cntPz || 100))} theme={theme}>+</QtyBtn>
             </div>
-            <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textMuted, fontWeight: 500, textAlign: 'center', marginTop: 1, letterSpacing: '-0.005em' }}>
+            <div style={{ fontFamily: TYPO.fontText, fontSize: 9, color: theme.textMuted, fontWeight: 500, textAlign: 'center', marginTop: 0, letterSpacing: '-0.005em' }}>
               pz{cntPz > 0 ? ` · ${(qty / cntPz).toFixed(qty % cntPz === 0 ? 0 : 1)} cnt` : ''}
             </div>
           </div>
 
           {/* Presets */}
-          <div style={{ display: 'flex', gap: 5 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
             {presets.map((v, i) => (
               <button
                 key={i}
                 onClick={() => setQty(v)}
                 style={{
-                  padding: '6px 9px', borderRadius: 6,
+                  padding: '4px 7px', borderRadius: 5,
                   border: `1px solid ${qty === v ? theme.text : theme.border}`,
                   background: qty === v ? theme.text : 'transparent',
                   color: qty === v ? (isDark ? '#000' : '#FFF') : theme.textMuted,
-                  fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, cursor: 'pointer',
+                  fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, cursor: 'pointer',
                   letterSpacing: '-0.005em', whiteSpace: 'nowrap',
                 }}>
                 {presetLabels[i]}
@@ -2180,7 +2180,7 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
           </div>
 
           <div />
-          <div style={{ width: 1, height: 32, background: theme.divider || theme.border }} />
+          <div style={{ width: 1, height: 24, background: theme.divider || theme.border }} />
 
           {/* KPIs vivos */}
           <SimKpi lbl="USD"        val={usdComprometido > 0 ? `$${Math.round(usdComprometido).toLocaleString('es-MX')}` : '—'} sub="al últ. costo" theme={theme} subDim />
@@ -2191,9 +2191,9 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
           <button
             onClick={onConfirmar}
             style={{
-              padding: '9px 16px', borderRadius: 10,
+              padding: '6px 12px', borderRadius: 8,
               background: enExport ? (theme.green || '#30D158') : (theme.accent || '#0A84FF'),
-              color: '#FFF', border: 0, fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600,
+              color: '#FFF', border: 0, fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600,
               cursor: 'pointer', letterSpacing: '-0.005em', whiteSpace: 'nowrap',
             }}>
             {enExport ? 'Actualizar cantidad' : 'Agregar al export'}
@@ -2215,8 +2215,8 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
           const cbmU = Number(uc.cbmUnitario || 0);
           return (
             <div style={{
-              display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr', gap: 16,
-              paddingTop: 10, marginTop: 12, borderTop: `1px solid ${theme.divider || theme.border}`,
+              display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr', gap: 10,
+              paddingTop: 6, marginTop: 7, borderTop: `1px solid ${theme.divider || theme.border}`,
               alignItems: 'baseline',
             }}>
               <SimField lbl="Proveedor"       val={r.supplier || '—'} sub={r.ltMuestras > 0 ? `${r.ltMuestras} OCs históricas` : 'sin histórico'} theme={theme} truncate />
@@ -2638,12 +2638,12 @@ function MiniKpi({ label, value, u, sub, color, theme, borderLeft, dim }) {
 function SimKpi({ lbl, val, valU, valColor, sub, subDim, theme }) {
   return (
     <div style={{ textAlign: 'right' }}>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 2 }}>{lbl}</div>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: valColor || theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 1 }}>{lbl}</div>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.02em', color: valColor || theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
         {val}
-        {valU && <span style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textMuted, fontWeight: 500, marginLeft: 2 }}>{valU}</span>}
+        {valU && <span style={{ fontFamily: TYPO.fontText, fontSize: 9, color: theme.textMuted, fontWeight: 500, marginLeft: 2 }}>{valU}</span>}
       </div>
-      {sub && <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: subDim ? theme.textMuted : '#1C7A34', fontWeight: subDim ? 500 : 600, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{sub}</div>}
+      {sub && <div style={{ fontFamily: TYPO.fontText, fontSize: 9, color: subDim ? theme.textMuted : '#1C7A34', fontWeight: subDim ? 500 : 600, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{sub}</div>}
     </div>
   );
 }
@@ -2653,8 +2653,8 @@ function QtyBtn({ children, onClick, theme }) {
     <button
       onClick={onClick}
       style={{
-        width: 26, height: 26, borderRadius: 7, border: `1px solid ${theme.border}`,
-        background: theme.surface, fontSize: 13, color: theme.text, cursor: 'pointer',
+        width: 22, height: 22, borderRadius: 6, border: `1px solid ${theme.border}`,
+        background: theme.surface, fontSize: 12, color: theme.text, cursor: 'pointer',
         fontFamily: TYPO.fontDisplay, fontWeight: 600, lineHeight: 1,
       }}>{children}</button>
   );
@@ -2699,14 +2699,14 @@ function NumPill({ value, theme, highlight, strong }) {
 function SimField({ lbl, val, sub, theme, mono, color, truncate }) {
   return (
     <div style={{ minWidth: 0 }}>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 2 }}>{lbl}</div>
+      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 1 }}>{lbl}</div>
       <div style={{
         fontFamily: mono ? 'SF Mono, ui-monospace, monospace' : TYPO.fontDisplay,
-        fontSize: 13, fontWeight: 600, letterSpacing: mono ? 0 : '-0.01em',
-        color: color || theme.text, fontVariantNumeric: 'tabular-nums',
+        fontSize: 11.5, fontWeight: 600, letterSpacing: mono ? 0 : '-0.01em',
+        color: color || theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2,
         ...(truncate ? { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } : {}),
       }} title={truncate ? String(val) : undefined}>{val}</div>
-      {sub && <div style={{ fontFamily: TYPO.fontText, fontSize: 10, color: theme.textMuted, fontWeight: 500, marginTop: 1, letterSpacing: '-0.005em' }}>{sub}</div>}
+      {sub && <div style={{ fontFamily: TYPO.fontText, fontSize: 8.5, color: theme.textMuted, fontWeight: 500, marginTop: 0, letterSpacing: '-0.005em', lineHeight: 1.2 }}>{sub}</div>}
     </div>
   );
 }
