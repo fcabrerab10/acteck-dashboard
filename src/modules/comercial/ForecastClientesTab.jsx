@@ -2101,7 +2101,10 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
           </h3>
           <div style={{ fontFamily: TYPO.fontText, fontSize: 11, color: 'rgba(245,245,247,0.6)', marginTop: 4, letterSpacing: '-0.005em' }}>
             {r.marca || 'Sin marca'} · <strong style={{ color: '#F5F5F7', fontWeight: 600 }}>{r.supplier || 'Sin proveedor'}</strong>
-            {cntPz > 0 && ` · 1 cnt = ${FMT_N(cntPz)} pz`}
+            {cntPz > 0
+              ? ` · 1 cnt = ${FMT_N(cntPz)} pz`
+              : (r.tieneCompras && <> · <span style={{ color: theme.orange || '#FF9500', fontSize: 10.5, fontStyle: 'italic' }} title="Todas las compras históricas fueron consolidadas — aún no se ha comprado un contenedor completo de este SKU">⚠ sin contenedor completo aún</span></>)
+            }
             {costoUnit > 0 && <> · <strong style={{ color: theme.green || '#30D158', fontWeight: 600 }}>${costoUnit.toFixed(2)} USD</strong></>}
           </div>
         </div>
@@ -2219,7 +2222,14 @@ function ExpandedDetail({ r, theme, isDark, onAgregarSolicitud, enExport, cantid
               <SimField lbl="Proveedor"       val={r.supplier || '—'} sub={r.ltMuestras > 0 ? `${r.ltMuestras} OCs históricas` : 'sin histórico'} theme={theme} truncate />
               <SimField lbl="Costo prom USD"  val={r.costoPromedioUsd > 0 ? `$${r.costoPromedioUsd.toFixed(2)}` : '—'} theme={theme} mono />
               <SimField lbl="Últ. costo USD"  val={r.ultimoCostoUsd > 0 ? `$${Number(r.ultimoCostoUsd).toFixed(2)}` : '—'} theme={theme} mono color={semGreen} />
-              <SimField lbl="Pz / cnt"        val={cntPz > 0 ? FMT_N(cntPz) : (r.tieneCompras ? '—' : 'sin data')} theme={theme} mono color={cntPz > 0 ? theme.text : (theme.orange || '#FF9500')} />
+              <SimField
+                lbl="Pz / cnt"
+                val={cntPz > 0 ? FMT_N(cntPz) : (r.tieneCompras ? '—' : 'sin data')}
+                sub={cntPz > 0 ? '' : (r.tieneCompras ? 'sin contenedor completo aún' : '')}
+                theme={theme}
+                mono
+                color={cntPz > 0 ? theme.text : (theme.orange || '#FF9500')}
+              />
               <SimField lbl="Lead time"       val={ltMostrar > 0 ? `${Math.round(ltMostrar)} d` : '—'} sub={ltSub} theme={theme} mono color={ltDecl > 0 ? theme.text : theme.textMuted} />
               <SimField lbl="Tipo carga"      val={tipoCargaShort} sub={uc.tipoContenedor || ''} theme={theme} />
               <SimField lbl="CBM unit"        val={cbmU > 0 ? cbmU.toFixed(3) : '—'} sub={cbmU > 0 && cntPz > 0 ? `${(cbmU * cntPz).toFixed(1)} m³ por cnt` : ''} theme={theme} mono />
