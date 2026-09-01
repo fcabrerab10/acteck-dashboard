@@ -1776,19 +1776,19 @@ function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, 
         </span>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums', tableLayout: 'fixed' }}>
           <thead>
             <tr>
-              <SortHeader theme={theme} width={22} />
-              <SortHeader theme={theme} col="sku" label="SKU" width={95} onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} width={20} />
+              <SortHeader theme={theme} col="sku" label="SKU" width={88} onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
               <SortHeader theme={theme} label="Descripción" />
-              <SortHeader theme={theme} col="rdmp" label="Roadmap" width={70} align="center" />
-              <SortHeader theme={theme} col="inv" label="Inv" width={64} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="traCant" label="Tránsito" width={64} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="traEta" label="Próx arribo" width={82} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="demandaMesErp" label="Dem 3m" width={78} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="coberturaDiasErp" label="Días inv" width={72} align="center" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
-              <SortHeader theme={theme} col="sugerido" label="Sugerido de compra" width={140} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="rdmp" label="Roadmap" width={54} align="center" />
+              <SortHeader theme={theme} col="inv" label="Inv" width={56} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="traCant" label="Tránsito" width={62} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="traEta" label="Arribo" width={62} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="demandaMesErp" label="Dem 3m" width={62} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="coberturaDiasErp" label="Días inv" width={60} align="center" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
+              <SortHeader theme={theme} col="sugerido" label="Sugerido" width={112} align="right" onSort={onSort} sortCol={sortCol} sortDir={sortDir} />
             </tr>
           </thead>
           <tbody>
