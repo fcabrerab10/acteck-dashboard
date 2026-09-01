@@ -62,6 +62,7 @@ export default function SellInDrillDown(props) {
   const [inv, setInv] = useState([]);
   const [promos, setPromos] = useState([]);
   const [hoverMes, setHoverMes] = useState(null); // 0-11 or null
+  const [mostrarCola, setMostrarCola] = useState(false);
 
   // ── 2) Fetch on-demand con try/catch ──
   useEffect(() => {
@@ -106,10 +107,12 @@ export default function SellInDrillDown(props) {
       for (const r of fact) {
         if (r?.anio !== anioActual) continue;
         const k = r?.cliente_nombre || '(sin nombre)';
-        if (!m.has(k)) m.set(k, { nombre: k, canal: r?.canal || 'MAYOREO', clienteKey: r?.cliente_key, piezas: 0, monto: 0, prevMonto: 0, prevPiezas: 0 });
+        if (!m.has(k)) m.set(k, { nombre: k, canal: r?.canal || 'MAYOREO', clienteKey: r?.cliente_key, piezas: 0, monto: 0, prevMonto: 0, prevPiezas: 0, mensual: Array(12).fill(0) });
         const it = m.get(k);
         it.piezas += Number(r?.piezas) || 0;
         it.monto  += Number(r?.monto)  || 0;
+        const mi = Number(r?.mes) - 1;
+        if (mi >= 0 && mi < 12) it.mensual[mi] += Number(r?.piezas) || 0;
       }
       for (const r of fact) {
         if (r?.anio !== anioPrev) continue;
@@ -118,15 +121,41 @@ export default function SellInDrillDown(props) {
         m.get(k).prevMonto += Number(r?.monto) || 0;
         m.get(k).prevPiezas += Number(r?.piezas) || 0;
       }
-      const arr = Array.from(m.values()).sort((a, b) => b.monto - a.monto);
+      const arr = Array.from(m.values()).sort((a, b) => b.piezas - a.piezas);
+      const totPz = arr.reduce((s, x) => s + x.piezas, 0);
       const tot = arr.reduce((s, x) => s + x.monto, 0);
       return arr.map((v) => ({
         ...v,
         pct: tot ? (v.monto / tot * 100) : 0,
+        pctPz: totPz ? (v.piezas / totPz * 100) : 0,
         yoy: v.prevMonto > 0 ? ((v.monto - v.prevMonto) / v.prevMonto * 100) : null,
+        yoyPz: v.prevPiezas > 0 ? ((v.piezas - v.prevPiezas) / v.prevPiezas * 100) : null,
       }));
     } catch { return []; }
   }, [fact, anioActual, anioPrev]);
+
+  // Pareto: clientes que concentran el 80% (por piezas)
+  const paretoData = useMemo(() => {
+    const ord = clientesAgregados;
+    let acum = 0, corte = 0;
+    const withAcum = ord.map((c, i) => {
+      acum += (c.pctPz || 0);
+      if (acum < 80) corte = i + 1;
+      else if (corte === i) corte = i + 1;
+      return { ...c, pctAcum: acum };
+    });
+    // Asegurar que corte llegue al primer índice que cruza 80
+    if (corte === 0 && withAcum.length > 0) corte = 1;
+    else if (corte < withAcum.length) {
+      // avanzar hasta el índice donde se cruza 80
+      let a = 0;
+      for (let i = 0; i < withAcum.length; i++) {
+        a += (withAcum[i].pctPz || 0);
+        if (a >= 80) { corte = i + 1; break; }
+      }
+    }
+    return { ord: withAcum, corte };
+  }, [clientesAgregados]);
 
   const totalYTD = useMemo(() => {
     try {
@@ -301,9 +330,9 @@ export default function SellInDrillDown(props) {
         )}
       </div>
 
-      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {/* 4 Insight cards Apple Fitness */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* Banda 1 · 4 Insight cards + Precios inline (5 cols) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr) minmax(240px, 1.4fr)', gap: 8, alignItems: 'stretch' }}>
           <InsightCard
             IconComp={TrendingUp} tone={yoy6m == null ? 'purple' : yoy6m >= 0 ? 'green' : 'red'}
             chip="Tendencia"
@@ -346,12 +375,73 @@ export default function SellInDrillDown(props) {
               : <>Cobertura sana en almacenes.</>
             }
           />
+
+          {/* Precios inline (5 chips) — misma banda que los KPIs */}
+          <div style={{
+            background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12,
+            padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 92,
+            position: 'relative',
+          }}>
+            <div style={{ position: 'absolute', left: 0, top: 8, bottom: 8, width: 2, background: orange, borderRadius: 2 }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 6 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: theme.textMuted }}>
+                Precios · {mesActualLabel}
+              </span>
+              {yieldPct != null && (
+                <span style={{ fontSize: 9, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>Yield {yieldPct.toFixed(1)}%</span>
+              )}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 3, marginTop: 2, paddingLeft: 6 }}>
+              {[
+                { k: 'AAA', l: 'Mayoreo AAA', v: precioAAAneto },
+                { k: 'DICO', l: 'DICOTECH', v: precioMap['DICOTECH'] },
+                { k: 'PCEL', l: 'PCEL PROVISIONAL', v: precioMap['PCEL PROVISIONAL'] },
+                { k: 'API', l: 'API PROVISIONAL', v: precioMap['API PROVISIONAL'] },
+                { k: 'DECME', l: 'DECME PROVISIONAL', v: precioMap['DECME PROVISIONAL'] },
+              ].map((p) => {
+                const isAAA = p.k === 'AAA';
+                return (
+                  <div key={p.k} style={{
+                    padding: '3px 5px', borderRadius: 5,
+                    background: isAAA ? `${blue}12` : (theme.divider || theme.border),
+                    textAlign: 'center',
+                  }} title={p.l}>
+                    <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: isAAA ? blue : theme.textMuted }}>{p.k}</div>
+                    <div style={{
+                      fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, fontWeight: 600,
+                      fontVariantNumeric: 'tabular-nums', marginTop: 1, color: theme.text,
+                    }}>{p.v != null ? formatMXN(p.v) : '—'}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginTop: 'auto', paddingLeft: 6, paddingTop: 4, borderTop: `1px solid ${theme.divider || theme.border}` }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: theme.textMuted }}>Prom real</div>
+                <div style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: yieldPct == null ? theme.textMuted : yieldPct >= 95 ? green : yieldPct >= 85 ? orange : red, marginTop: 1 }}>
+                  {precioPromReal ? formatMXN(precioPromReal) : '—'}
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: theme.textMuted }}>Promo</div>
+                <div style={{ fontSize: 11, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: promoEfectiva.pct > 0 ? green : theme.textMuted, marginTop: 1 }}>
+                  {promoEfectiva.pct > 0 ? `−${(promoEfectiva.pct * 100).toFixed(1)}%` : 'Sin campaña'}
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: theme.textMuted }}>Stock</div>
+                <div style={{ fontSize: 11, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: stockTotal <= 0 ? red : theme.text, marginTop: 1 }}>
+                  {fmtInt(stockTotal)} pz · {numAlmacenes} alm
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Detalle 2-col: chart + top clientes | precios + stock */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 10 }}>
-          {/* Chart + top clientes */}
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '10px 12px' }}>
+        {/* Banda 2 · Chart + Top clientes (2 cols) */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 8 }}>
+          {/* Chart 12 meses */}
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '8px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
               <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Evolución 12 meses</p>
               <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
@@ -359,7 +449,7 @@ export default function SellInDrillDown(props) {
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anioPrev}</span>
               </div>
             </div>
-            <div style={{ width: '100%', height: 128 }}>
+            <div style={{ width: '100%', height: 90 }}>
               <ResponsiveContainer>
                 <AreaChart data={serieChart} margin={{ top: 6, right: 4, left: -8, bottom: 0 }}>
                   <defs>
@@ -432,68 +522,251 @@ export default function SellInDrillDown(props) {
             )}
           </div>
 
-          {/* Precios + Stock */}
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '10px 12px' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-              <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Precio · {mesActualLabel} {anioActual}</p>
-              {yieldPct != null && <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>Yield {yieldPct.toFixed(1)}%</span>}
+          {/* Top clientes (banda 2 · derecha) */}
+          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '8px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+              <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>
+                Top clientes
+              </p>
+              <span style={{ fontSize: 10, color: theme.accent, fontWeight: 600 }}>{clientesAgregados.length} distintos</span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {precioAAA != null && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '6px 10px', borderRadius: 8, background: `${blue}12` }}>
-                  <span style={{ fontSize: 11, color: theme.text, fontWeight: 500 }}>
-                    Mayoreo AAA <span style={{ fontSize: 10, color: theme.textMuted, marginLeft: 4, fontWeight: 400 }}>{promoEfectiva.pct > 0 ? 'neto' : 'lista'}</span>
-                  </span>
-                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{formatMXN(precioAAAneto)}</span>
-                </div>
-              )}
-              {['DICOTECH', 'PCEL PROVISIONAL', 'API PROVISIONAL', 'DECME PROVISIONAL'].map((l) => (
-                precioMap[l] != null && (
-                  <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', fontSize: 11, color: theme.text }}>
-                    <span style={{ fontWeight: 500 }}>{l.replace(' PROVISIONAL', '')}</span>
-                    <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatMXN(precioMap[l])}</span>
-                  </div>
-                )
-              ))}
-              {Object.keys(precioMap).length === 0 && (
-                <span style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>Sin precios cargados para este mes</span>
-              )}
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', marginTop: 12, paddingTop: 10, borderTop: `1px solid ${theme.border}` }}>
-              <div style={{ padding: '2px 12px 2px 0', borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column' }}>
-                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Prom real {anioActual}</p>
-                <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: yieldPct == null ? theme.textMuted : yieldPct >= 95 ? green : yieldPct >= 85 ? orange : red, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>
-                  {precioPromReal ? formatMXN(precioPromReal) : '—'}
-                </p>
-                <p style={{ fontSize: 10, color: theme.textMuted, margin: '2px 0 0' }}>{yieldPct ? `${yieldPct.toFixed(1)}% del AAA` : 'Sin venta YTD'}</p>
+            {topN.length === 0 ? (
+              <p style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>Sin facturación en {anioActual}.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: 4 }}>
+                {topN.slice(0, 4).map((c) => {
+                  const canalKey = String(c.canal || '').toUpperCase();
+                  const canalCol = canalKey === 'MAYOREO' ? purple : canalKey === 'DISTRIBUIDOR' ? blue : canalKey === 'E-COMMERCE' ? (theme.teal || '#5AC8FA') : canalKey === 'MOSTRADOR' ? green : theme.textMuted;
+                  const barW = Math.max(2, ((c.pct || 0) / maxPct) * 100);
+                  return (
+                    <div key={c.nombre} style={{ padding: '3px 0', borderBottom: `1px dashed ${theme.border}` }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
+                        <span style={{ fontSize: 8.5, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: `${canalCol}22`, color: canalCol, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          {canalKey === 'E-COMMERCE' ? 'E-com' : (canalKey.charAt(0) + canalKey.slice(1).toLowerCase()).slice(0, 8)}
+                        </span>
+                        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nombre}</span>
+                        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{(c.pct || 0).toFixed(1)}%</span>
+                        {c.yoy != null && (
+                          <span style={{ fontSize: 9, color: c.yoy >= 0 ? green : red, fontWeight: 600, fontVariantNumeric: 'tabular-nums', minWidth: 34, textAlign: 'right' }}>{c.yoy >= 0 ? '+' : ''}{c.yoy.toFixed(0)}%</span>
+                        )}
+                      </div>
+                      <div style={{ height: 2, borderRadius: 999, background: theme.border, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${barW}%`, background: canalCol, borderRadius: 999 }} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <div style={{ padding: '2px 0 2px 12px', display: 'flex', flexDirection: 'column' }}>
-                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Promo Julio</p>
-                <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: promoEfectiva.pct > 0 ? green : theme.textMuted, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>
-                  {promoEfectiva.pct > 0 ? `−${(promoEfectiva.pct * 100).toFixed(1)}%` : '—'}
-                </p>
-                <p style={{ fontSize: 10, color: theme.textMuted, margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={promoEfectiva.campanias.join(' · ')}>
-                  {promoEfectiva.campanias.length ? promoEfectiva.campanias.join(' · ') : 'Sin campaña este mes'}
-                </p>
+            )}
+            {topN.length > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, paddingTop: 6, borderTop: `1px solid ${theme.border}`, fontSize: 9.5, color: theme.textMuted }}>
+                <span><strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{top3Pct.toFixed(1)}%</strong> top 3</span>
+                <span>{clientesAgregados.length} clientes total</span>
               </div>
-            </div>
-
-            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '14px 0 8px' }}>Stock</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-              <div style={{ padding: '2px 12px 2px 0', borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column' }}>
-                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Inventario</p>
-                <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: stockTotal <= 0 ? red : theme.text, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{fmtInt(stockTotal)} pz</p>
-                <p style={{ fontSize: 10, color: theme.textMuted, margin: '2px 0 0' }}>{numAlmacenes} almacenes</p>
-              </div>
-              <div style={{ padding: '2px 0 2px 12px', display: 'flex', flexDirection: 'column' }}>
-                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Cobertura</p>
-                <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: covTone === 'bad' ? red : covTone === 'warn' ? orange : covTone === 'good' ? green : theme.textMuted, fontVariantNumeric: 'tabular-nums', margin: '2px 0 0' }}>{covLabel}</p>
-                <p style={{ fontSize: 10, color: theme.textMuted, margin: '2px 0 0' }}>{covSub}</p>
-              </div>
-            </div>
+            )}
           </div>
         </div>
+
+        {/* Banda 3 · Heatmap Pareto cliente × mes */}
+        {clientesAgregados.length > 0 && (() => {
+          const pareto = paretoData.ord.slice(0, paretoData.corte);
+          const cola = paretoData.ord.slice(paretoData.corte);
+          const colaMensual = Array(12).fill(0).map((_, mi) => cola.reduce((a, c) => a + (c.mensual?.[mi] || 0), 0));
+          const colaTotal = cola.reduce((a, c) => a + c.piezas, 0);
+          const colaPct = cola.reduce((a, c) => a + (c.pctPz || 0), 0);
+          const totalesMes = Array(12).fill(0).map((_, mi) => clientesAgregados.reduce((a, c) => a + (c.mensual?.[mi] || 0), 0));
+          const totalMaxMes = Math.max(0, ...totalesMes);
+          const grandTotal = totalesMes.reduce((a, b) => a + b, 0);
+
+          const nivel = (v, max) => {
+            if (!v || v <= 0 || !max) return 0;
+            const r = v / max;
+            if (r < 0.15) return 1;
+            if (r < 0.35) return 2;
+            if (r < 0.60) return 3;
+            if (r < 0.85) return 4;
+            return 5;
+          };
+          const heatBg = (lv) => {
+            if (lv === 0) return 'transparent';
+            const alphas = [0, 0.05, 0.11, 0.20, 0.30, 0.44];
+            return theme.mode === 'dark' ? `rgba(10,132,255,${alphas[lv]})` : `rgba(0,122,255,${alphas[lv]})`;
+          };
+          const heatColor = (lv) => (lv >= 4 ? blue : theme.text);
+          const HeatCell = ({ v, max }) => {
+            if (!v || v <= 0) return <span style={{ color: theme.textSubtle, fontSize: 11 }}>—</span>;
+            const lv = nivel(v, max);
+            return (
+              <span style={{
+                display: 'inline-block', padding: '2px 7px', borderRadius: 999,
+                background: heatBg(lv), color: heatColor(lv),
+                fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums',
+                fontSize: 11, fontWeight: lv >= 4 ? 700 : 500,
+                letterSpacing: '-0.01em', minWidth: 32, textAlign: 'center', lineHeight: 1.3,
+              }}>{Math.round(v).toLocaleString('es-MX')}</span>
+            );
+          };
+          const NumPillC = ({ value, strong }) => {
+            const n = Number(value || 0);
+            if (!n) return <span style={{ color: theme.textSubtle, fontSize: 11 }}>—</span>;
+            return (
+              <span style={{
+                display: 'inline-block', padding: '2px 7px', borderRadius: 999,
+                background: theme.mode === 'dark' ? `rgba(10,132,255,${strong ? 0.11 : 0.05})` : `rgba(0,122,255,${strong ? 0.11 : 0.05})`,
+                color: theme.text,
+                fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums',
+                fontSize: strong ? 11.5 : 11, fontWeight: strong ? 700 : 500,
+                letterSpacing: '-0.01em', minWidth: 32, textAlign: 'center', lineHeight: 1.3,
+              }}>{Math.round(n).toLocaleString('es-MX')}</span>
+            );
+          };
+          const PctPill = ({ pct }) => (
+            <span style={{
+              display: 'inline-block', padding: '1px 6px', borderRadius: 999,
+              background: theme.mode === 'dark' ? 'rgba(255,159,10,0.14)' : 'rgba(255,149,0,0.12)',
+              color: orange,
+              fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums',
+              fontSize: 10, fontWeight: 700, letterSpacing: '-0.005em', minWidth: 30, textAlign: 'center',
+            }}>{pct >= 1 ? `${Math.round(pct)}%` : pct > 0 ? `${pct.toFixed(1)}%` : '—'}</span>
+          );
+
+          const th = { padding: '5px 6px', fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: `1px solid ${theme.divider || theme.border}`, textAlign: 'right' };
+          const thL = { ...th, textAlign: 'left' };
+          const td = { padding: '4px 6px', textAlign: 'right', verticalAlign: 'middle', borderBottom: `1px solid ${theme.divider || theme.border}` };
+          const tdL = { ...td, textAlign: 'left' };
+
+          const renderFila = (p, i, esMenor = false) => {
+            const maxCli = Math.max(0, ...(p.mensual || []));
+            const canalKey = String(p.canal || '').toUpperCase();
+            const canalCol = canalKey === 'MAYOREO' ? purple : canalKey === 'DISTRIBUIDOR' ? blue : canalKey === 'E-COMMERCE' ? (theme.teal || '#5AC8FA') : canalKey === 'MOSTRADOR' ? green : theme.textMuted;
+            return (
+              <tr key={`c-${i}-${p.nombre}`}>
+                <td style={{ ...tdL, padding: '4px 6px 4px 8px', fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10, color: theme.textMuted, fontWeight: 600, fontVariantNumeric: 'tabular-nums', width: 22 }}>{i + 1}</td>
+                <td style={tdL}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, paddingLeft: esMenor ? 12 : 0 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 50, background: canalCol, flex: '0 0 6px' }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text, letterSpacing: '-0.01em', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }}>{p.nombre}</div>
+                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textSubtle, marginTop: 1, lineHeight: 1.1 }}>
+                        {canalKey || '—'}{p.yoy != null ? <> · YoY <span style={{ color: p.yoy >= 0 ? green : red, fontWeight: 700 }}>{p.yoy >= 0 ? '+' : ''}{p.yoy.toFixed(0)}%</span></> : ''}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                {(p.mensual || []).map((v, mi) => (
+                  <td key={mi} style={td}><HeatCell v={v} max={maxCli} /></td>
+                ))}
+                <td style={td}><NumPillC value={p.piezas / 12} /></td>
+                <td style={td}><NumPillC value={p.piezas} strong /></td>
+                <td style={td}><PctPill pct={p.pctPz} /></td>
+                <td style={{ ...td, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
+                  {(p.pctAcum ?? 0).toFixed(1)}%
+                </td>
+              </tr>
+            );
+          };
+
+          return (
+            <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '8px 12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 6, marginBottom: 2, borderBottom: `1px solid ${theme.divider || theme.border}`, gap: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
+                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text }}>Consumo cliente × mes · Pareto 80%</span>
+                  <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, color: theme.textMuted, fontWeight: 500 }}>
+                    {clientesAgregados.length} clientes · intensidad = mes vs pico del cliente
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted }}>
+                  <span>−</span>
+                  {[0.05, 0.11, 0.20, 0.30, 0.44].map((a, i) => (
+                    <span key={i} style={{ width: 12, height: 8, borderRadius: 2, background: theme.mode === 'dark' ? `rgba(10,132,255,${a})` : `rgba(0,122,255,${a})` }} />
+                  ))}
+                  <span>+</span>
+                  <span style={{ width: 1, height: 10, background: theme.divider || theme.border, margin: '0 3px' }} />
+                  <span style={{ padding: '1px 6px', borderRadius: 999, background: theme.mode === 'dark' ? 'rgba(255,159,10,0.14)' : 'rgba(255,149,0,0.12)', color: orange, fontSize: 9, fontWeight: 700 }}>80%</span>
+                </div>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...thL, width: 22 }}>#</th>
+                      <th style={thL}>Cliente</th>
+                      {MESES.map((m, i) => <th key={i} style={th}>{m}</th>)}
+                      <th style={th}>Prom /m</th>
+                      <th style={th}>Total</th>
+                      <th style={th}>%</th>
+                      <th style={th}>Acum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pareto.map((p, i) => renderFila(p, i))}
+                    {cola.length > 0 && (
+                      <tr>
+                        <td colSpan={MESES.length + 6} style={{ padding: 0 }}>
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px',
+                            background: theme.mode === 'dark' ? 'rgba(255,159,10,0.05)' : 'rgba(255,149,0,0.04)',
+                            borderTop: `1px dashed ${orange}`, borderBottom: `1px dashed ${orange}`,
+                          }}>
+                            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: orange }}>Corte Pareto · 80%</span>
+                            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, color: theme.textMuted, fontWeight: 500 }}>
+                              {pareto.length} cliente{pareto.length === 1 ? '' : 's'} concentran el {(pareto[pareto.length - 1]?.pctAcum ?? 0).toFixed(1)}% de la venta
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {cola.length > 0 && (
+                      <tr
+                        onClick={() => setMostrarCola((v) => !v)}
+                        style={{ cursor: 'pointer', background: theme.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)' }}
+                      >
+                        <td style={{ ...tdL, padding: '4px 6px 4px 8px', color: blue, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10, fontWeight: 600 }}>
+                          {mostrarCola ? '▾' : '▸'}
+                        </td>
+                        <td style={tdL}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: 50, background: theme.textMuted, flex: '0 0 6px' }} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: blue, letterSpacing: '-0.01em', lineHeight: 1.15 }}>
+                                Cola larga · {cola.length} cliente{cola.length === 1 ? '' : 's'} menores
+                              </div>
+                              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textSubtle, marginTop: 1, lineHeight: 1.1 }}>
+                                {colaPct.toFixed(1)}% restante · click para {mostrarCola ? 'colapsar' : 'expandir'}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        {colaMensual.map((v, mi) => (
+                          <td key={mi} style={td}><HeatCell v={v} max={Math.max(0, ...colaMensual)} /></td>
+                        ))}
+                        <td style={td}><NumPillC value={colaTotal / 12} /></td>
+                        <td style={td}><NumPillC value={colaTotal} strong /></td>
+                        <td style={td}><PctPill pct={colaPct} /></td>
+                        <td style={{ ...td, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>100.0%</td>
+                      </tr>
+                    )}
+                    {mostrarCola && cola.map((p, i) => renderFila(p, pareto.length + i, true))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={2} style={{ padding: '6px 6px 4px', borderTop: `1px solid ${theme.divider || theme.border}`, textAlign: 'left', fontFamily: TYPO.fontDisplay, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>
+                        Total {clientesAgregados.length} clientes
+                      </td>
+                      {totalesMes.map((v, i) => (
+                        <td key={i} style={{ padding: '6px 6px 4px', textAlign: 'right', borderTop: `1px solid ${theme.divider || theme.border}` }}><HeatCell v={v} max={totalMaxMes} /></td>
+                      ))}
+                      <td style={{ padding: '6px 6px 4px', textAlign: 'right', borderTop: `1px solid ${theme.divider || theme.border}` }}><NumPillC value={grandTotal / 12} strong /></td>
+                      <td style={{ padding: '6px 6px 4px', textAlign: 'right', borderTop: `1px solid ${theme.divider || theme.border}` }}><NumPillC value={grandTotal} strong /></td>
+                      <td style={{ padding: '6px 6px 4px', textAlign: 'right', borderTop: `1px solid ${theme.divider || theme.border}`, fontFamily: TYPO.fontDisplay, fontSize: 10, color: theme.textMuted, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>100%</td>
+                      <td style={{ borderTop: `1px solid ${theme.divider || theme.border}` }} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Alert compacta si aplica */}
         {cobertura != null && (cobertura < 1.5 || cobertura > 6) && (
