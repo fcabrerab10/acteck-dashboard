@@ -284,32 +284,33 @@ export default function SellInDrillDown(props) {
     const kpiColMap = { pos: green, neg: red, warn: orange, neutral: theme.text };
     return (
       <div style={{
-        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12,
-        padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 92,
+        background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10,
+        padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 2, minHeight: 72,
         fontFamily: TYPO.fontText, cursor: 'default',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{
-            width: 26, height: 26, borderRadius: 8, background: iconBgMap[tone], color: iconColMap[tone],
+            width: 18, height: 18, borderRadius: 5, background: iconBgMap[tone], color: iconColMap[tone],
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <IconComp style={{ width: 13, height: 13 }} strokeWidth={1.8} />
+            <IconComp style={{ width: 10, height: 10 }} strokeWidth={2} />
           </div>
           {chip && (
             <span style={{
-              fontSize: 9, padding: '2px 7px', borderRadius: 999,
+              fontSize: 8, padding: '1px 5px', borderRadius: 999,
               background: theme.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-              color: theme.textMuted, fontWeight: 500,
+              color: theme.textMuted, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
             }}>{chip}</span>
           )}
         </div>
         <div style={{
-          fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em',
-          color: kpiColMap[kpiTone] || theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 2, lineHeight: 1,
+          fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em',
+          color: kpiColMap[kpiTone] || theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 1, lineHeight: 1,
         }}>{kpi}</div>
         <div style={{
-          fontSize: 11, fontWeight: 400, color: theme.textMuted,
-          lineHeight: 1.3, marginTop: 'auto',
+          fontSize: 9.5, fontWeight: 400, color: theme.textMuted,
+          lineHeight: 1.2, marginTop: 'auto',
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>{headline}</div>
       </div>
     );
@@ -330,7 +331,7 @@ export default function SellInDrillDown(props) {
         )}
       </div>
 
-      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {/* Banda 1 · 4 Insight cards + Precios inline (5 cols) */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr) minmax(240px, 1.4fr)', gap: 8, alignItems: 'stretch' }}>
           <InsightCard
@@ -378,8 +379,8 @@ export default function SellInDrillDown(props) {
 
           {/* Precios inline (5 chips) — misma banda que los KPIs */}
           <div style={{
-            background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12,
-            padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 92,
+            background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10,
+            padding: '6px 10px 6px 8px', display: 'flex', flexDirection: 'column', gap: 3, minHeight: 72,
             position: 'relative',
           }}>
             <div style={{ position: 'absolute', left: 0, top: 8, bottom: 8, width: 2, background: orange, borderRadius: 2 }} />
@@ -439,7 +440,7 @@ export default function SellInDrillDown(props) {
         </div>
 
         {/* Banda 2 · Chart + Top clientes (2 cols) */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           {/* Chart 12 meses */}
           <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '8px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -449,7 +450,7 @@ export default function SellInDrillDown(props) {
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anioPrev}</span>
               </div>
             </div>
-            <div style={{ width: '100%', height: 90 }}>
+            <div style={{ width: '100%', height: 68 }}>
               <ResponsiveContainer>
                 <AreaChart data={serieChart} margin={{ top: 6, right: 4, left: -8, bottom: 0 }}>
                   <defs>
@@ -472,54 +473,6 @@ export default function SellInDrillDown(props) {
               </ResponsiveContainer>
             </div>
 
-            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: '14px 0 8px' }}>
-              Top clientes · {clientesAgregados.length} distintos
-            </p>
-            {topN.length === 0 ? (
-              <p style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>Sin facturación en {anioActual}.</p>
-            ) : (
-              <div style={{ display: 'grid', gap: 6 }}>
-                {topN.map((c) => {
-                  const canalKey = String(c.canal || '').toUpperCase();
-                  const canalCol = canalKey === 'MAYOREO' ? purple : canalKey === 'DISTRIBUIDOR' ? blue : canalKey === 'E-COMMERCE' ? (theme.teal || '#5AC8FA') : canalKey === 'MOSTRADOR' ? green : theme.textMuted;
-                  const barW = Math.max(2, ((c.pct || 0) / maxPct) * 100);
-                  return (
-                    <div key={c.nombre} style={{ padding: '4px 0', borderBottom: `1px dashed ${theme.border}` }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 3 }}>
-                        <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 999, background: `${canalCol}22`, color: canalCol, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                          {canalKey === 'E-COMMERCE' ? 'E-com' : (canalKey.charAt(0) + canalKey.slice(1).toLowerCase()).slice(0, 8)}
-                        </span>
-                        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 500, color: theme.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nombre}</span>
-                        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{(c.pct || 0).toFixed(1)}%</span>
-                      </div>
-                      <div style={{ height: 3, borderRadius: 999, background: theme.border, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${barW}%`, background: canalCol, borderRadius: 999 }} />
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-                        <span>{fmtInt(c.piezas)} pz · {formatMXN(c.monto)}</span>
-                        {c.yoy != null ? (
-                          <span style={{ color: c.yoy >= 0 ? green : red, fontWeight: 500 }}>{c.yoy >= 0 ? '+' : ''}{c.yoy.toFixed(0)}% YoY</span>
-                        ) : c.piezas > 0 ? (
-                          <span style={{ color: green, fontWeight: 500 }}>nuevo</span>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {topN.length > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: `1px solid ${theme.border}` }}>
-                <div>
-                  <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', margin: 0 }}>{top3Pct.toFixed(1)}%</p>
-                  <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Top 3 concentran</p>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <p style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums', margin: 0 }}>{clientesAgregados.length}</p>
-                  <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Clientes distintos</p>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Top clientes (banda 2 · derecha) */}
@@ -632,7 +585,7 @@ export default function SellInDrillDown(props) {
 
           const th = { padding: '5px 6px', fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: `1px solid ${theme.divider || theme.border}`, textAlign: 'right' };
           const thL = { ...th, textAlign: 'left' };
-          const td = { padding: '4px 6px', textAlign: 'right', verticalAlign: 'middle', borderBottom: `1px solid ${theme.divider || theme.border}` };
+          const td = { padding: '3px 6px', textAlign: 'right', verticalAlign: 'middle', borderBottom: `1px solid ${theme.divider || theme.border}` };
           const tdL = { ...td, textAlign: 'left' };
 
           const renderFila = (p, i, esMenor = false) => {
@@ -643,14 +596,19 @@ export default function SellInDrillDown(props) {
               <tr key={`c-${i}-${p.nombre}`}>
                 <td style={{ ...tdL, padding: '4px 6px 4px 8px', fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10, color: theme.textMuted, fontWeight: 600, fontVariantNumeric: 'tabular-nums', width: 22 }}>{i + 1}</td>
                 <td style={tdL}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, paddingLeft: esMenor ? 12 : 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, paddingLeft: esMenor ? 12 : 0 }}>
                     <span style={{ width: 6, height: 6, borderRadius: 50, background: canalCol, flex: '0 0 6px' }} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text, letterSpacing: '-0.01em', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }}>{p.nombre}</div>
-                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textSubtle, marginTop: 1, lineHeight: 1.1 }}>
-                        {canalKey || '—'}{p.yoy != null ? <> · YoY <span style={{ color: p.yoy >= 0 ? green : red, fontWeight: 700 }}>{p.yoy >= 0 ? '+' : ''}{p.yoy.toFixed(0)}%</span></> : ''}
-                      </div>
-                    </div>
+                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{p.nombre}</span>
+                    {canalKey && (
+                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: canalCol, background: `${canalCol}18`, padding: '1px 4px', borderRadius: 3, flexShrink: 0 }}>
+                        {canalKey === 'E-COMMERCE' ? 'E-com' : canalKey.slice(0, 6)}
+                      </span>
+                    )}
+                    {p.yoy != null && (
+                      <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 9, fontWeight: 700, color: p.yoy >= 0 ? green : red, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                        {p.yoy >= 0 ? '+' : ''}{p.yoy.toFixed(0)}%
+                      </span>
+                    )}
                   </div>
                 </td>
                 {(p.mensual || []).map((v, mi) => (
