@@ -134,26 +134,21 @@ export default function SellInDrillDown(props) {
     } catch { return []; }
   }, [fact, anioActual, anioPrev]);
 
-  // Pareto: clientes que concentran el 80% (por piezas)
+  // Pareto: clientes que concentran el 80% (por piezas).
+  // corte = índice (1-based) del PRIMER cliente que hace que el acumulado
+  // alcance o cruce el 80%. Todos los que siguen van en la cola larga.
   const paretoData = useMemo(() => {
     const ord = clientesAgregados;
-    let acum = 0, corte = 0;
-    const withAcum = ord.map((c, i) => {
+    let acum = 0;
+    const withAcum = ord.map((c) => {
       acum += (c.pctPz || 0);
-      if (acum < 80) corte = i + 1;
-      else if (corte === i) corte = i + 1;
       return { ...c, pctAcum: acum };
     });
-    // Asegurar que corte llegue al primer índice que cruza 80
-    if (corte === 0 && withAcum.length > 0) corte = 1;
-    else if (corte < withAcum.length) {
-      // avanzar hasta el índice donde se cruza 80
-      let a = 0;
-      for (let i = 0; i < withAcum.length; i++) {
-        a += (withAcum[i].pctPz || 0);
-        if (a >= 80) { corte = i + 1; break; }
-      }
+    let corte = 0;
+    for (let i = 0; i < withAcum.length; i++) {
+      if ((withAcum[i].pctAcum || 0) >= 80) { corte = i + 1; break; }
     }
+    if (corte === 0 && withAcum.length > 0) corte = withAcum.length;
     return { ord: withAcum, corte };
   }, [clientesAgregados]);
 
