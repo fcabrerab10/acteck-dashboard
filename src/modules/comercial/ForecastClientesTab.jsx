@@ -444,7 +444,10 @@ function calcularForecast(data, horizonteMeses) {
     const demandaTotalHor = demHor.digitalife + demHor.pcel;
     const demandaMesTotal = demMes.digitalife + demMes.pcel;
 
-    const inv = Number(invBySku[sku]?.disponible || 0);
+    // S&OP usa `inventario` (no `disponible`) sobre almacenes comerciales
+    // según v_inventario_comercial + almacenes_config, para coincidir con
+    // el criterio del resto del dashboard (Propuestas, Inventario).
+    const inv = Number(invBySku[sku]?.inventario || 0);
     const tra = traBySku[sku];
     const traCant = Number(tra?.cantidad || 0);
     const traEta  = tra?.eta_mas_cercana || null;

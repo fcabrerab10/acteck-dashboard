@@ -89,7 +89,10 @@ const TIPO_ALMACEN = {
   5: 'Refacturación',
 };
 const tipoDe = (n) => TIPO_ALMACEN[n] || 'No comercial';
-const esComercial = (n) => TIPO_ALMACEN[n] && !['Activo fijo', 'Muestras', 'Remisiones', 'Refacturación'].includes(TIPO_ALMACEN[n]);
+// Fuente única de comerciales = tabla almacenes_config (1,2,3,6,14,16,17,25,44).
+// Cualquier cambio se hace ahí y se refleja en Inventario, Propuestas y S&OP.
+const ALM_COMERCIALES = new Set([1, 2, 3, 6, 14, 16, 17, 25, 44]);
+const esComercial = (n) => ALM_COMERCIALES.has(Number(n));
 
 const COLOR_TIPO = {
   'General':        PALETTE.blue,
@@ -245,10 +248,10 @@ export default function InventarioGlobal() {
   }, [filasEfectivas]);
 
   // ── Almacenes comerciales fijos para la tabla ──
-  // 1=GEN GDL · 3=GEN MEX · 2=GEN COL · 6=DECME MEX · 9=ML · 16=RETAIL GDL · 17=RETAIL MEX
-  const almacenesActivos = [1, 3, 2, 6, 9, 16, 17];
-  const CEDIS_ALMACEN = { 1: 'ALMACENES GUADALAJARA', 3: 'ALMACENES MEXICO', 2: 'ALMACENES COLOTLAN', 6: 'ALMACENES MEXICO', 9: 'ALMACENES GUADALAJARA', 16: 'ALMACENES GUADALAJARA', 17: 'ALMACENES MEXICO' };
-  const shortAlmacen = (n) => ({ 1: 'GEN GDL', 3: 'GEN MEX', 2: 'GEN COL', 6: 'DECME MEX', 9: 'ML', 16: 'RETAIL GDL', 17: 'RETAIL MEX' }[n] || `Alm ${n}`);
+  // Coinciden con almacenes_config (comercial=true): 1, 2, 3, 6, 14, 16, 17, 25, 44
+  const almacenesActivos = [1, 3, 2, 6, 16, 17, 14, 25, 44];
+  const CEDIS_ALMACEN = { 1: 'ALMACENES GUADALAJARA', 3: 'ALMACENES MEXICO', 2: 'ALMACENES COLOTLAN', 6: 'ALMACENES MEXICO', 16: 'ALMACENES GUADALAJARA', 17: 'ALMACENES MEXICO', 14: 'ALMACENES GUADALAJARA', 25: 'ALMACENES MEXICO', 44: 'ALMACENES GUADALAJARA' };
+  const shortAlmacen = (n) => ({ 1: 'GEN GDL', 3: 'GEN MEX', 2: 'GEN COL', 6: 'DECME MEX', 16: 'RETAIL GDL', 17: 'RETAIL MEX', 14: 'RETAIL 14', 25: 'PROPIO', 44: 'EMP DAÑADO' }[n] || `Alm ${n}`);
 
   // ── Tabla SKU × almacén ──
   const filasTabla = useMemo(() => {
