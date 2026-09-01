@@ -439,84 +439,36 @@ export default function SellInDrillDown(props) {
           </div>
         </div>
 
-        {/* Banda 2 · Chart + Top clientes (2 cols) */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          {/* Chart 12 meses */}
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '8px 12px' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-              <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>Evolución 12 meses</p>
-              <div style={{ display: 'inline-flex', gap: 10, fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: blue }} />{anioActual}</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anioPrev}</span>
-              </div>
+        {/* Banda 2 · Chart 12 meses (ancho completo) */}
+        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '6px 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 2 }}>
+            <p style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 700, margin: 0 }}>Evolución 12 meses · piezas SI</p>
+            <div style={{ display: 'inline-flex', gap: 10, fontSize: 9.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: blue }} />{anioActual}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 2, borderRadius: 1, background: theme.textMuted, opacity: 0.55 }} />{anioPrev}</span>
             </div>
-            <div style={{ width: '100%', height: 68 }}>
-              <ResponsiveContainer>
-                <AreaChart data={serieChart} margin={{ top: 6, right: 4, left: -8, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id={`fillSku-${String(sku).replace(/\W/g, '').slice(0, 20)}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={blue} stopOpacity={0.20} />
-                      <stop offset="100%" stopColor={blue} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
-                  <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
-                  <YAxis tickFormatter={(v) => v == null ? '' : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={36} />
-                  <Tooltip
-                    formatter={(v, name) => [fmtInt(v) + ' pz', name]}
-                    contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}
-                    labelStyle={{ color: theme.textMuted, fontWeight: 500 }}
-                  />
-                  <Area type="monotone" dataKey={`${anioPrev}`} stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
-                  <Area type="monotone" dataKey={`${anioActual}`} stroke={blue} strokeWidth={2.4} fill={`url(#fillSku-${String(sku).replace(/\W/g, '').slice(0, 20)})`} dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: blue, strokeWidth: 2.5 }} isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
           </div>
-
-          {/* Top clientes (banda 2 · derecha) */}
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '8px 12px' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-              <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, fontWeight: 600, margin: 0 }}>
-                Top clientes
-              </p>
-              <span style={{ fontSize: 10, color: theme.accent, fontWeight: 600 }}>{clientesAgregados.length} distintos</span>
-            </div>
-            {topN.length === 0 ? (
-              <p style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>Sin facturación en {anioActual}.</p>
-            ) : (
-              <div style={{ display: 'grid', gap: 4 }}>
-                {topN.slice(0, 4).map((c) => {
-                  const canalKey = String(c.canal || '').toUpperCase();
-                  const canalCol = canalKey === 'MAYOREO' ? purple : canalKey === 'DISTRIBUIDOR' ? blue : canalKey === 'E-COMMERCE' ? (theme.teal || '#5AC8FA') : canalKey === 'MOSTRADOR' ? green : theme.textMuted;
-                  const barW = Math.max(2, ((c.pct || 0) / maxPct) * 100);
-                  return (
-                    <div key={c.nombre} style={{ padding: '3px 0', borderBottom: `1px dashed ${theme.border}` }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
-                        <span style={{ fontSize: 8.5, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: `${canalCol}22`, color: canalCol, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          {canalKey === 'E-COMMERCE' ? 'E-com' : (canalKey.charAt(0) + canalKey.slice(1).toLowerCase()).slice(0, 8)}
-                        </span>
-                        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 500, color: theme.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nombre}</span>
-                        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>{(c.pct || 0).toFixed(1)}%</span>
-                        {c.yoy != null && (
-                          <span style={{ fontSize: 9, color: c.yoy >= 0 ? green : red, fontWeight: 600, fontVariantNumeric: 'tabular-nums', minWidth: 34, textAlign: 'right' }}>{c.yoy >= 0 ? '+' : ''}{c.yoy.toFixed(0)}%</span>
-                        )}
-                      </div>
-                      <div style={{ height: 2, borderRadius: 999, background: theme.border, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${barW}%`, background: canalCol, borderRadius: 999 }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {topN.length > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, paddingTop: 6, borderTop: `1px solid ${theme.border}`, fontSize: 9.5, color: theme.textMuted }}>
-                <span><strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{top3Pct.toFixed(1)}%</strong> top 3</span>
-                <span>{clientesAgregados.length} clientes total</span>
-              </div>
-            )}
+          <div style={{ width: '100%', height: 76 }}>
+            <ResponsiveContainer>
+              <AreaChart data={serieChart} margin={{ top: 4, right: 4, left: -8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id={`fillSku-${String(sku).replace(/\W/g, '').slice(0, 20)}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={blue} stopOpacity={0.20} />
+                    <stop offset="100%" stopColor={blue} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke={theme.border} vertical={false} strokeOpacity={0.6} />
+                <XAxis dataKey="mes" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} interval={0} />
+                <YAxis tickFormatter={(v) => v == null ? '' : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={false} tickLine={false} width={36} />
+                <Tooltip
+                  formatter={(v, name) => [fmtInt(v) + ' pz', name]}
+                  contentStyle={{ fontSize: 12, borderRadius: 10, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}
+                  labelStyle={{ color: theme.textMuted, fontWeight: 500 }}
+                />
+                <Area type="monotone" dataKey={`${anioPrev}`} stroke={theme.textMuted} strokeOpacity={0.55} strokeWidth={1.4} fill="none" dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey={`${anioActual}`} stroke={blue} strokeWidth={2.4} fill={`url(#fillSku-${String(sku).replace(/\W/g, '').slice(0, 20)})`} dot={false} activeDot={{ r: 4, fill: theme.surface, stroke: blue, strokeWidth: 2.5 }} isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
