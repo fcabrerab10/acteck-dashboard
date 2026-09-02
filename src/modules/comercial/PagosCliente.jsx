@@ -655,67 +655,68 @@ export default function PagosCliente({ cliente, clienteKey }) {
     flash("✓ Movimiento revertido");
   };
 
-  // ── Rebate trimestral Dicotech ──
-  // 2% del sell-in del Q si el alcance es ≥ 90%. Pago al cierre del Q.
-  // Si no llega, botón ámbar permite pagar manual con monto a discreción.
-  // Lee config desde lineamientos.rebate (tiers, alcance_minimo_pago).
+  // ── Rebate MENSUAL Dicotech ──
+  // % del sell-in del mes según tier (≥90%, ≥115%, ≥130%, ≥150%).
+  // Pago al día 15 del mes siguiente. Si no llega al mínimo, botón ámbar
+  // permite pagar manual. Lee config desde lineamientos.rebate.
   const dicoRebateCalc = React.useMemo(() => {
     if (clienteKey !== "dicotech" || digiCuotas.length === 0) return null;
     const cfg = lineamientos?.rebate || {};
     const tiers = (cfg.tiers || []).slice().sort((a, b) => Number(b.min_alcance) - Number(a.min_alcance));
     const alcanceMin = Number(cfg.alcance_minimo_pago) || 0.90;
-    const QUARTERS = [[1,2,3], [4,5,6], [7,8,9], [10,11,12]];
-    const labels = ["Q1 (Ene-Mar)", "Q2 (Abr-Jun)", "Q3 (Jul-Sep)", "Q4 (Oct-Dic)"];
-    return QUARTERS.map((meses, qi) => {
-      const cuotaQ = meses.reduce((s, m) => {
-        const r = digiCuotas.find(x => Number(x.mes) === m);
-        return s + (r ? Number(r.cuota_min) || 0 : 0);
-      }, 0);
-      const sellInQ = meses.reduce((s, m) => s + (Number(dicoSellIn[m]) || 0), 0);
-      const alcance = cuotaQ > 0 ? sellInQ / cuotaQ : 0;
+    const MESES_LABEL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    return Array.from({ length: 12 }, (_, i) => {
+      const mes = i + 1;
+      const cuotaRow = digiCuotas.find(x => Number(x.mes) === mes);
+      const cuota = cuotaRow ? Number(cuotaRow.cuota_min) || 0 : 0;
+      const sellIn = Number(dicoSellIn[mes]) || 0;
+      const alcance = cuota > 0 ? sellIn / cuota : 0;
       const tier = tiers.find(t => alcance >= Number(t.min_alcance)) || null;
       const cumple = alcance >= alcanceMin;
-      const rebateAuto = cumple && tier ? sellInQ * Number(tier.pct) : 0;
-      // Pago existente (categoría='rebate' con concepto que matchee el Q)
+      const rebateAuto = cumple && tier ? sellIn * Number(tier.pct) : 0;
+      // Pago existente por mes (concepto "Rebate <mes> <anio>")
       const pagoExistente = registros.find(r => {
         if (r.categoria !== "rebate" || r.cliente !== clienteKey) return false;
-        const mm = r.concepto?.match(/Q(\d)/);
-        return mm && Number(mm[1]) === qi + 1;
+        const mm = r.concepto?.match(/Rebate\s+(\d{1,2})/);
+        return mm && Number(mm[1]) === mes;
       });
       return {
-        q: qi + 1, label: labels[qi], meses, cuotaQ, sellInQ, alcance,
+        mes, label: MESES_LABEL[i], cuota, sellIn, alcance,
         tier, cumple, alcanceMin, rebateAuto,
         pagoExistente,
+        // aliases para compat con código viejo si algo los usa
+        q: mes, cuotaQ: cuota, sellInQ: sellIn,
       };
     });
   }, [clienteKey, digiCuotas, dicoSellIn, lineamientos, registros]);
 
   const dicoRebateTotalYTD = React.useMemo(() => {
     if (!dicoRebateCalc) return 0;
-    return dicoRebateCalc.reduce((s, q) => {
-      const p = q.pagoExistente;
+    return dicoRebateCalc.reduce((s, m) => {
+      const p = m.pagoExistente;
       if (p && p.estatus === "cancelado") return s;
       if (p) return s + (Number(p.monto) || 0);
-      return s + q.rebateAuto;
+      return s + m.rebateAuto;
     }, 0);
   }, [dicoRebateCalc]);
 
-  const generarRebateDicotech = async (q, forzado = false) => {
+  const generarRebateDicotech = async (m, forzado = false) => {
     if (!canEdit) return;
     const anio = new Date().getFullYear();
-    // Fecha de pago = día 15 del mes después del cierre del Q
-    const mesCierre = q.q * 3;
-    const fechaCompromiso = `${anio}-${String(mesCierre + 1).padStart(2, "0")}-15`;
-    let monto = q.rebateAuto;
+    // Fecha de pago = día 15 del mes SIGUIENTE al mes del rebate
+    const nextMes = m.mes === 12 ? 1 : m.mes + 1;
+    const nextAnio = m.mes === 12 ? anio + 1 : anio;
+    const fechaCompromiso = `${nextAnio}-${String(nextMes).padStart(2, "0")}-15`;
+    let monto = m.rebateAuto;
     if (forzado) {
       const tiers = lineamientos?.rebate?.tiers || [];
       const pctSugerido = tiers[tiers.length - 1]?.pct || 0.02;
-      const sugerido = q.sellInQ * Number(pctSugerido);
+      const sugerido = m.sellIn * Number(pctSugerido);
       const input = window.prompt(
-        `Rebate manual ${q.label} ${anio}\n\n` +
-        `Cuota del Q: ${formatMXN(q.cuotaQ)}\n` +
-        `Sell-In del Q: ${formatMXN(q.sellInQ)}\n` +
-        `Alcance: ${(q.alcance*100).toFixed(0)}% (no alcanzó ${(q.alcanceMin*100).toFixed(0)}%)\n\n` +
+        `Rebate manual ${m.label} ${anio}\n\n` +
+        `Cuota del mes: ${formatMXN(m.cuota)}\n` +
+        `Sell-In del mes: ${formatMXN(m.sellIn)}\n` +
+        `Alcance: ${(m.alcance*100).toFixed(0)}% (no alcanzó ${(m.alcanceMin*100).toFixed(0)}%)\n\n` +
         `Sugerido (${(pctSugerido*100).toFixed(2)}% del sell-in): ${formatMXN(sugerido)}\n\n` +
         `Ingresa el monto a pagar (MXN):`,
         sugerido.toFixed(0)
@@ -728,29 +729,30 @@ export default function PagosCliente({ cliente, clienteKey }) {
       cliente: clienteKey,
       categoria: "rebate",
       folio: null,
-      concepto: `Rebate Q${q.q} ${anio}${forzado ? " — manual" : ""}`,
+      concepto: `Rebate ${String(m.mes).padStart(2, "0")} ${m.label} ${anio}${forzado ? " — manual" : ""}`,
       monto,
       estatus: "pendiente",
       fecha_compromiso: fechaCompromiso,
       responsable: "Acteck",
       notas: forzado
-        ? `Pago manual: alcance ${(q.alcance*100).toFixed(0)}% (no llegó al ${(q.alcanceMin*100).toFixed(0)}%) · Sell-In Q: ${formatMXN(q.sellInQ)}`
-        : `${(Number(q.tier?.pct || 0.02)*100).toFixed(2)}% × ${formatMXN(q.sellInQ)} · alcance ${(q.alcance*100).toFixed(0)}% · ${q.tier?.label || ""}`,
+        ? `Pago manual: alcance ${(m.alcance*100).toFixed(0)}% (no llegó al ${(m.alcanceMin*100).toFixed(0)}%) · Sell-In: ${formatMXN(m.sellIn)}`
+        : `${(Number(m.tier?.pct || 0.02)*100).toFixed(2)}% × ${formatMXN(m.sellIn)} · alcance ${(m.alcance*100).toFixed(0)}% · ${m.tier?.label || ""}`,
     };
     const { data, error } = await supabase.from("pagos").insert(row).select().single();
     if (error) { alert("Error: " + error.message); return; }
     setRegistros(prev => [...prev, data]);
-    flash(`✓ Rebate ${q.label} generado: ${formatMXN(monto)}`);
+    flash(`✓ Rebate ${m.label} generado: ${formatMXN(monto)}`);
   };
 
-  const marcarRebateDicotechNoAplica = async (q) => {
+  const marcarRebateDicotechNoAplica = async (m) => {
     if (!canEdit) return;
     const anio = new Date().getFullYear();
-    const mesCierre = q.q * 3;
-    const fechaCompromiso = `${anio}-${String(mesCierre + 1).padStart(2, "0")}-15`;
+    const nextMes = m.mes === 12 ? 1 : m.mes + 1;
+    const nextAnio = m.mes === 12 ? anio + 1 : anio;
+    const fechaCompromiso = `${nextAnio}-${String(nextMes).padStart(2, "0")}-15`;
     const row = {
       cliente: clienteKey, categoria: "rebate", folio: null,
-      concepto: `Rebate Q${q.q} ${anio} — No aplica`,
+      concepto: `Rebate ${String(m.mes).padStart(2, "0")} ${m.label} ${anio} — No aplica`,
       monto: 0, estatus: "cancelado",
       fecha_compromiso: fechaCompromiso,
       responsable: "Fernando Cabrera",
@@ -759,7 +761,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const { data, error } = await supabase.from("pagos").insert(row).select().single();
     if (error) { alert("Error: " + error.message); return; }
     setRegistros(prev => [...prev, data]);
-    flash(`✓ Rebate ${q.label} marcado No aplica`);
+    flash(`✓ Rebate ${m.label} marcado No aplica`);
   };
 
   const marcarSpiffDicotechNoAplica = async (mes, tipo) => {
@@ -3938,7 +3940,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
           );
           })()}
 
-          {/* ═══ Rebate Trimestral Dicotech · rediseño Ferruteck ═══ */}
+          {/* ═══ Rebate MENSUAL Dicotech · rediseño Ferruteck ═══ */}
           {clienteKey === "dicotech" && catActiva === "rebate" && dicoRebateCalc && (() => {
             const anio = new Date().getFullYear();
             const cardBase = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' };
@@ -3985,9 +3987,9 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
                     <div style={{ minWidth: 280 }}>
                       <div style={eyebrow}>Rebate · Dicotech {anio}</div>
-                      <h3 style={{ ...title, marginTop: 6 }}>Rebate trimestral por alcance.</h3>
+                      <h3 style={{ ...title, marginTop: 6 }}>Rebate mensual por alcance.</h3>
                       <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: '10px 0 0', maxWidth: 560, lineHeight: 1.5 }}>
-                        {nombreOficial} · trimestral · <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{primerTierPct}%</strong> sobre Sell-In del Q si alcance ≥ <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{alcanceMinPago}%</strong>.
+                        {nombreOficial} · mensual · desde <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{primerTierPct}%</strong> sobre Sell-In del mes si alcance ≥ <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{alcanceMinPago}%</strong>.
                       </p>
                     </div>
                     <div style={{ textAlign: 'right' }}>
@@ -4006,7 +4008,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
                     <div>
                       <h4 style={sectionH}>Tiers vigentes</h4>
-                      <p style={sectionSub}>Umbral de alcance sobre cuota Q para aplicar el % de rebate.</p>
+                      <p style={sectionSub}>Umbral de alcance sobre la cuota mensual para aplicar el % de rebate.</p>
                     </div>
                   </div>
                 </div>
@@ -4024,24 +4026,24 @@ export default function PagosCliente({ cliente, clienteKey }) {
                 </div>
               </div>
 
-              {/* Tabla trimestral */}
+              {/* Tabla mensual */}
               <div style={cardBase}>
                 <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
                     <div>
-                      <h4 style={sectionH}>Rebate por trimestre</h4>
-                      <p style={sectionSub}>Alcance, tier y generación de pago por Q.</p>
+                      <h4 style={sectionH}>Rebate por mes</h4>
+                      <p style={sectionSub}>Alcance, tier y generación de pago por mes.</p>
                     </div>
-                    <span style={pillBase(COL_REBATE)}>Trimestral</span>
+                    <span style={pillBase(COL_REBATE)}>Mensual</span>
                   </div>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
                     <thead>
                       <tr>
-                        <th style={thStyle}>Trimestre</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Cuota Q</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Sell-In Q</th>
+                        <th style={thStyle}>Mes</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Cuota</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Sell-In</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Alcance</th>
                         <th style={{ ...thStyle, textAlign: 'center' }}>Tier</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Rebate</th>
@@ -4049,31 +4051,32 @@ export default function PagosCliente({ cliente, clienteKey }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {dicoRebateCalc.map(q => {
-                        const p = q.pagoExistente;
+                      {dicoRebateCalc.map(m => {
+                        const p = m.pagoExistente;
                         const isNoAplica = p && p.estatus === "cancelado";
                         const isGenerado = p && p.estatus !== "cancelado";
-                        const alcancePct = (q.alcance * 100).toFixed(0);
+                        const alcancePct = (m.alcance * 100).toFixed(0);
                         let alcanceColor = theme.textMuted;
-                        if (q.alcance >= 1.30) alcanceColor = '#34C759';
-                        else if (q.alcance >= 1.15) alcanceColor = theme.accent || '#007AFF';
-                        else if (q.alcance >= 0.90) alcanceColor = COL_REBATE;
-                        else if (q.sellInQ > 0) alcanceColor = '#FF9500';
+                        if (m.alcance >= 1.50) alcanceColor = '#34C759';
+                        else if (m.alcance >= 1.30) alcanceColor = '#30B455';
+                        else if (m.alcance >= 1.15) alcanceColor = theme.accent || '#007AFF';
+                        else if (m.alcance >= 0.90) alcanceColor = COL_REBATE;
+                        else if (m.sellIn > 0) alcanceColor = '#FF9500';
                         return (
-                          <tr key={q.q} style={{ opacity: isNoAplica ? 0.5 : 1 }}>
-                            <td style={{ ...tdStyle, fontWeight: 600 }}>{q.label}</td>
-                            <td style={{ ...tdStyle, textAlign: 'right', color: theme.textMuted, ...monoNum }}>{formatMXN(q.cuotaQ)}</td>
+                          <tr key={m.mes} style={{ opacity: isNoAplica ? 0.5 : 1 }}>
+                            <td style={{ ...tdStyle, fontWeight: 600 }}>{m.label}</td>
+                            <td style={{ ...tdStyle, textAlign: 'right', color: theme.textMuted, ...monoNum }}>{formatMXN(m.cuota)}</td>
                             <td style={{ ...tdStyle, textAlign: 'right', ...monoNum, fontWeight: 500 }}>
-                              {q.sellInQ > 0 ? formatMXN(q.sellInQ) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
+                              {m.sellIn > 0 ? formatMXN(m.sellIn) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: alcanceColor, ...monoNum }}>
-                              {q.sellInQ > 0 ? alcancePct + "%" : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
+                              {m.sellIn > 0 ? alcancePct + "%" : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'center' }}>
-                              {q.tier ? <span style={pillBase(COL_REBATE)}>{q.tier.label}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
+                              {m.tier ? <span style={pillBase(COL_REBATE)}>{m.tier.label}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
                             </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: isNoAplica ? theme.textMuted : (q.rebateAuto > 0 ? COL_REBATE : theme.text), ...monoNum }}>
-                              {isNoAplica ? <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span> : q.rebateAuto > 0 ? formatMXN(q.rebateAuto) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
+                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: isNoAplica ? theme.textMuted : (m.rebateAuto > 0 ? COL_REBATE : theme.text), ...monoNum }}>
+                              {isNoAplica ? <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span> : m.rebateAuto > 0 ? formatMXN(m.rebateAuto) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'right', paddingRight: 22 }}>
                               {isNoAplica ? (
@@ -4086,15 +4089,15 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                   <button onClick={() => revertirSpiff(p.id)} title="Eliminar pago"
                                           style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 13, padding: '4px 6px' }}>🗑</button>
                                 </span>
-                              ) : q.cumple && q.rebateAuto > 0 ? (
+                              ) : m.cumple && m.rebateAuto > 0 ? (
                                 <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                                  <button onClick={() => generarRebateDicotech(q, false)} style={btnPrimary}>Generar</button>
-                                  <button onClick={() => marcarRebateDicotechNoAplica(q)} style={btnGhost}>No aplica</button>
+                                  <button onClick={() => generarRebateDicotech(m, false)} style={btnPrimary}>Generar</button>
+                                  <button onClick={() => marcarRebateDicotechNoAplica(m)} style={btnGhost}>No aplica</button>
                                 </span>
-                              ) : q.sellInQ > 0 ? (
+                              ) : m.sellIn > 0 ? (
                                 <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                                  <button onClick={() => generarRebateDicotech(q, true)} title="Pagar aunque no llegue a 90%" style={btnWarn}>Pagar manual</button>
-                                  <button onClick={() => marcarRebateDicotechNoAplica(q)} style={btnGhost}>No aplica</button>
+                                  <button onClick={() => generarRebateDicotech(m, true)} title={`Pagar aunque no llegue a ${alcanceMinPago}%`} style={btnWarn}>Pagar manual</button>
+                                  <button onClick={() => marcarRebateDicotechNoAplica(m)} style={btnGhost}>No aplica</button>
                                 </span>
                               ) : (
                                 <span style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted }}>Sin datos</span>
@@ -4107,7 +4110,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   </table>
                 </div>
                 <div style={{ padding: '12px 22px', borderTop: `1px solid ${theme.border}`, fontSize: 11, color: theme.textMuted, background: theme.bg, lineHeight: 1.55 }}>
-                  <strong style={{ color: theme.text, fontWeight: 600 }}>Fecha de pago automática:</strong> día 15 del mes posterior al cierre del Q (ej. Q1 → 15 Abril) · El rebate es {primerTierPct}% para todos los tiers ≥ {alcanceMinPago}% — los tiers se conservan para mostrar el alcance real del Q.
+                  <strong style={{ color: theme.text, fontWeight: 600 }}>Fecha de pago automática:</strong> día 15 del mes siguiente (ej. rebate de Enero → 15 Febrero). El % aplicado depende del tier que alcance el mes.
                 </div>
               </div>
             </div>
