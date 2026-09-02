@@ -258,14 +258,6 @@ const SOURCES = [
   },
   { id:'cuotas-anuales', grupo:'globales', tipo:'updated', statusKey:'cuotas_mensuales', title:'Cuotas mensuales por cliente', desc:'Archivo anual con las cuotas mensuales por cliente (hoja "Cuotas"). Formato pivot: filas = clientes, columnas = 12 meses × año. Se detectan los años automáticamente en la fila 2. Sube 1 vez al año — reemplaza todas las cuotas de los años presentes en el archivo antes de insertar. Ya no se carga desde "Actualizaciones ERP" para evitar que se reescriba en cada upload.', file:'Cuotas <AÑO>.xlsx', table:'cuotas_mensuales', onConflict:'cliente,mes,anio', parser:'cuotasClientes', replaceAniosDinamico:true },
   { id:'roadmap', grupo:'globales', tipo:'updated', statusKey:'roadmap', title:'Roadmap', desc:'Archivo Roadmap.xlsx (Hoja1). 6 columnas: Marca · Categoría · Familia · Artículo · Roadmap · Descripción 2. Replace completo — fuente única de marca/categoría/familia por SKU para todo el dashboard.', file:'Roadmap.xlsx', table:'roadmap_sku', onConflict:'sku', parser:'roadmap', replace:true },
-  { id:'lista-precios-sellout', grupo:'globales', tipo:'updated', statusKey:'promos_temporada', title:'Lista de Precios · Promoción mensual', desc:'Archivo mensual "Lista de Precios Mayoreo AAA <AÑO> <MES>.xlsx". La columna "Sell Out" contiene el % de promoción del mes sobre Mayoreo AAA (ej. 0.05 = 5%). Se guarda como campaña "Sell Out · <MES> <AÑO>" en promos_temporada.', file:'Lista de Precios Mayoreo AAA <AÑO> <MES>.xlsx', table:'promos_temporada', onConflict:'sku,anio,mes,campania', parser:'sellOutMensual',
-    extraSlot: {
-      id:'promos-temporada-extra', title:'Promoción por temporada (extra, opcional)',
-      desc:'Solo si hay campaña adicional al Sell Out mensual (ej. "Promociones Exclusivas Back to School Jul2026.xlsx"). Se aplica encima del precio ya con Sell Out.',
-      file:'Promociones Exclusivas <CAMPAÑA> <MES><AÑO>.xlsx',
-      table:'promos_temporada', onConflict:'sku,anio,mes,campania', parser:'promosTemporada',
-    }
-  },
   { id:'master-embarques', grupo:'globales', tipo:'updated', statusKey:'embarques', title:'Master Embarques', desc:'Archivo único Master Embarques.xlsx con 7 hojas: histórico POs (2026, 2025, 2024, 2022-2023) → embarques_compras; Programación Arribos (logística por contenedor) → programacion_arribos; SN (series generadas por PO/SKU) → series_generadas; Proveedores (catálogo canónico) → proveedores_master. Upsert de embarques por (PO, CODIGO, CONTENEDOR) — soporta POs partidas en varios shipments. Auto-sync diario desde Google Sheets si MASTER_EMBARQUES_SHEET_ID está configurado.', file:'Master Embarques.xlsx',
     cronEndpoint:'/api/cron?task=sync-master-embarques',
     combined: [
