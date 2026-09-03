@@ -233,7 +233,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [digiSellOut26, setDigiSellOut26] = useState({});
   const [digiCuotas, setDigiCuotas] = useState([]);
   const [dicoSellIn, setDicoSellIn] = useState({});      // Dicotech: sell-in mensual $
-  const [rebateModal, setRebateModal] = useState(null);  // { mesRebate, pctSeleccionado }
+  const [pctPorMes, setPctPorMes] = useState({});  // { [mes]: pct override elegido en la fila }
   const [dicoVendedoresPorMes, setDicoVendedoresPorMes] = useState({}); // { "2026-08": [{nombre, monto}, ...] } ordenado desc
   const [spiffPagos, setSpiffPagos] = useState({});  // Digitalife: { "2026-01": pagoRow } | Dicotech: { "2026-01-SI": ..., "2026-01-SO": ... }
   const [spiffPctUnlocked, setSpiffPctUnlocked] = useState(false); // Candado del % compradora — evita edits accidentales.
@@ -4050,6 +4050,14 @@ export default function PagosCliente({ cliente, clienteKey }) {
                         else if (m.alcance >= 1.15) alcanceColor = theme.accent || '#007AFF';
                         else if (m.alcance >= 0.90) alcanceColor = COL_REBATE;
                         else if (m.sellIn > 0) alcanceColor = '#FF9500';
+                        // Tiers ordenados desc para el selector
+                        const tiersOrd = (lineamientos?.rebate?.tiers || []).slice().sort((a, b) => Number(b.min_alcance) - Number(a.min_alcance));
+                        // % efectivo = override elegido en la fila, o el tier auto (0 si no cumple)
+                        const pctAuto = Number(m.tier?.pct || 0);
+                        const pctSel = pctPorMes[m.mes] != null ? Number(pctPorMes[m.mes]) : pctAuto;
+                        const tierSel = tiersOrd.find(t => Number(t.pct) === pctSel) || null;
+                        const montoSel = Math.round(m.sellIn * pctSel);
+                        const esOverride = pctSel !== pctAuto;
                         return (
                           <tr key={m.mes} style={{ opacity: isNoAplica ? 0.5 : 1 }}>
                             <td style={{ ...tdStyle, fontWeight: 600 }}>{m.label}</td>
@@ -4061,10 +4069,48 @@ export default function PagosCliente({ cliente, clienteKey }) {
                               {m.sellIn > 0 ? alcancePct + "%" : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'center' }}>
-                              {m.tier ? <span style={pillBase(COL_REBATE)}>{m.tier.label}</span> : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
+                              {m.sellIn > 0 && !isGenerado && !isNoAplica ? (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                  <select
+                                    value={pctSel}
+                                    onChange={(e) => setPctPorMes(prev => ({ ...prev, [m.mes]: Number(e.target.value) }))}
+                                    disabled={!canEdit}
+                                    style={{
+                                      fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
+                                      padding: '5px 10px', borderRadius: 999,
+                                      border: `1px solid ${esOverride ? '#FF9500' : COL_REBATE}30`,
+                                      background: `${esOverride ? '#FF9500' : COL_REBATE}15`,
+                                      color: esOverride ? '#FF9500' : COL_REBATE,
+                                      cursor: canEdit ? 'pointer' : 'not-allowed',
+                                      outline: 'none',
+                                    }}
+                                    title={esOverride ? `Override — auto: ${m.tier?.label || 'sin tier'}` : 'Tier sugerido según alcance'}
+                                  >
+                                    {tiersOrd.map((t, i) => {
+                                      const isAuto = Number(t.pct) === pctAuto;
+                                      return (
+                                        <option key={i} value={Number(t.pct)}>
+                                          {(Number(t.pct) * 100).toFixed(2)}% — {t.label}{isAuto ? ' (sugerido)' : ''}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                  {esOverride && (
+                                    <button
+                                      onClick={() => setPctPorMes(prev => { const n = { ...prev }; delete n[m.mes]; return n; })}
+                                      title="Restaurar sugerido"
+                                      style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 12, padding: '2px 4px' }}
+                                    >↺</button>
+                                  )}
+                                </div>
+                              ) : m.tier ? (
+                                <span style={pillBase(COL_REBATE)}>{m.tier.label}</span>
+                              ) : (
+                                <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
+                              )}
                             </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: isNoAplica ? theme.textMuted : (m.rebateAuto > 0 ? COL_REBATE : theme.text), ...monoNum }}>
-                              {isNoAplica ? <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span> : m.rebateAuto > 0 ? formatMXN(m.rebateAuto) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
+                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: isNoAplica ? theme.textMuted : (montoSel > 0 ? COL_REBATE : theme.text), ...monoNum }}>
+                              {isNoAplica ? <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span> : montoSel > 0 ? formatMXN(montoSel) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'right', paddingRight: 22 }}>
                               {isNoAplica ? (
@@ -4077,14 +4123,19 @@ export default function PagosCliente({ cliente, clienteKey }) {
                                   <button onClick={() => revertirSpiff(p.id)} title="Eliminar pago"
                                           style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 13, padding: '4px 6px' }}>🗑</button>
                                 </span>
-                              ) : m.cumple && m.rebateAuto > 0 ? (
+                              ) : m.sellIn > 0 && montoSel > 0 ? (
                                 <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                                  <button onClick={() => setRebateModal({ m, pctSel: Number(m.tier?.pct || 0) })} style={btnPrimary}>Generar…</button>
+                                  <button
+                                    onClick={() => generarRebateDicotech(m, pctSel)}
+                                    style={m.cumple || esOverride ? btnPrimary : btnWarn}
+                                    title={!m.cumple ? `Pagar aunque no llegue a ${alcanceMinPago}%` : ''}
+                                  >
+                                    Generar
+                                  </button>
                                   <button onClick={() => marcarRebateDicotechNoAplica(m)} style={btnGhost}>No aplica</button>
                                 </span>
                               ) : m.sellIn > 0 ? (
                                 <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                                  <button onClick={() => setRebateModal({ m, pctSel: Number((lineamientos?.rebate?.tiers || []).slice().sort((a,b)=>a.min_alcance-b.min_alcance)[0]?.pct || 0.02) })} title={`Pagar aunque no llegue a ${alcanceMinPago}%`} style={btnWarn}>Pagar manual…</button>
                                   <button onClick={() => marcarRebateDicotechNoAplica(m)} style={btnGhost}>No aplica</button>
                                 </span>
                               ) : (
@@ -4102,120 +4153,6 @@ export default function PagosCliente({ cliente, clienteKey }) {
                 </div>
               </div>
 
-              {/* Modal: elegir tier al generar rebate */}
-              {rebateModal && (() => {
-                const m = rebateModal.m;
-                const tiersOrd = (lineamientos?.rebate?.tiers || []).slice().sort((a, b) => Number(b.min_alcance) - Number(a.min_alcance));
-                const pctAuto = Number(m.tier?.pct || 0);
-                const pctSel = rebateModal.pctSel;
-                const montoSel = Math.round(m.sellIn * pctSel);
-                const alcancePct = (m.alcance * 100).toFixed(0);
-                return (
-                  <div
-                    onClick={(e) => { if (e.target === e.currentTarget) setRebateModal(null); }}
-                    style={{
-                      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      zIndex: 9999, padding: 20,
-                    }}
-                  >
-                    <div style={{
-                      background: theme.surface, borderRadius: 16, padding: 24,
-                      maxWidth: 480, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-                      fontFamily: TYPO.fontText,
-                    }}>
-                      <div style={{ marginBottom: 16 }}>
-                        <div style={{ fontFamily: TYPO.fontText, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: theme.textMuted }}>
-                          Generar rebate · {m.label}
-                        </div>
-                        <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', margin: '6px 0 0', color: theme.text }}>
-                          Elige el % a aplicar
-                        </h3>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16, padding: '12px 14px', background: theme.bg, borderRadius: 10, border: `1px solid ${theme.border}` }}>
-                        <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted }}>Sell-In</div>
-                          <div style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: theme.text, marginTop: 2 }}>{formatMXN(m.sellIn)}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted }}>Cuota</div>
-                          <div style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: theme.text, marginTop: 2 }}>{formatMXN(m.cuota)}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted }}>Alcance</div>
-                          <div style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 13, fontWeight: 700, color: m.cumple ? '#34C759' : '#FF9500', marginTop: 2 }}>{alcancePct}%</div>
-                        </div>
-                      </div>
-
-                      <div style={{ marginBottom: 16 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 8 }}>
-                          Tiers disponibles {pctAuto > 0 && <span style={{ color: '#34C759', textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>· sugerido según alcance</span>}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {tiersOrd.map((t, i) => {
-                            const p = Number(t.pct);
-                            const isAuto = p === pctAuto;
-                            const isSel = p === pctSel;
-                            const monto = Math.round(m.sellIn * p);
-                            return (
-                              <label key={i} style={{
-                                display: 'flex', alignItems: 'center', gap: 12,
-                                padding: '10px 14px', borderRadius: 10,
-                                border: `1.5px solid ${isSel ? COL_REBATE : theme.border}`,
-                                background: isSel ? `${COL_REBATE}12` : theme.bg,
-                                cursor: 'pointer', transition: 'all 0.15s',
-                              }}>
-                                <input
-                                  type="radio"
-                                  name="rebate-pct"
-                                  checked={isSel}
-                                  onChange={() => setRebateModal({ ...rebateModal, pctSel: p })}
-                                  style={{ accentColor: COL_REBATE, width: 16, height: 16 }}
-                                />
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, color: theme.text }}>{(p * 100).toFixed(2)}%</span>
-                                    <span style={{ fontSize: 11, color: theme.textMuted }}>· {t.label}</span>
-                                    {isAuto && (
-                                      <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: '#34C75922', color: '#34C759', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Sugerido</span>
-                                    )}
-                                  </div>
-                                </div>
-                                <div style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: theme.text, fontVariantNumeric: 'tabular-nums' }}>
-                                  {formatMXN(monto)}
-                                </div>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, borderTop: `1px solid ${theme.border}` }}>
-                        <div>
-                          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted }}>Monto a pagar</div>
-                          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 20, fontWeight: 600, color: COL_REBATE, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{formatMXN(montoSel)}</div>
-                        </div>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button onClick={() => setRebateModal(null)} style={btnGhost}>Cancelar</button>
-                          <button
-                            onClick={async () => {
-                              const mm = rebateModal.m;
-                              const pp = rebateModal.pctSel;
-                              setRebateModal(null);
-                              await generarRebateDicotech(mm, pp);
-                            }}
-                            disabled={pctSel <= 0}
-                            style={{ ...btnPrimary, opacity: pctSel <= 0 ? 0.4 : 1, cursor: pctSel <= 0 ? 'not-allowed' : 'pointer' }}
-                          >
-                            Generar {formatMXN(montoSel)}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
             </div>
           );
           })()}
