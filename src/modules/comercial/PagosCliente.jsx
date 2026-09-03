@@ -3963,6 +3963,9 @@ export default function PagosCliente({ cliente, clienteKey }) {
               cursor: 'pointer', letterSpacing: '-0.005em',
             };
             const COL_REBATE = '#FF3B30';
+            // Paleta por posición del tier (ordenados desc por min_alcance)
+            // 0=más alto → verde, 1=azul, 2=violeta, 3=rojo, resto=ámbar
+            const COLS_TIER = ['#34C759', '#007AFF', '#AF52DE', '#FF3B30', '#FF9500'];
             const nombreOficial = lineamientos?.rebate?.nombre_oficial || "Fondo para Generación Sell Out";
             const primerTierPct = ((lineamientos?.rebate?.tiers?.[0]?.pct || 0.02) * 100).toFixed(2);
             const alcanceMinPago = ((lineamientos?.rebate?.alcance_minimo_pago || 0.90) * 100).toFixed(0);
@@ -4001,13 +4004,16 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   </div>
                 </div>
                 <div style={{ padding: '14px 22px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {(lineamientos?.rebate?.tiers || []).slice().sort((a,b) => Number(b.min_alcance) - Number(a.min_alcance)).map((t, i) => (
-                    <span key={i} style={pillBase(COL_REBATE)}>
-                      <strong style={{ fontWeight: 700 }}>{t.label}</strong>
-                      <span style={{ opacity: 0.65 }}>·</span>
-                      <span style={monoNum}>{(Number(t.pct) * 100).toFixed(2)}%</span>
-                    </span>
-                  ))}
+                  {(lineamientos?.rebate?.tiers || []).slice().sort((a,b) => Number(b.min_alcance) - Number(a.min_alcance)).map((t, i) => {
+                    const col = COLS_TIER[i] || COL_REBATE;
+                    return (
+                      <span key={i} style={pillBase(col)}>
+                        <strong style={{ fontWeight: 700 }}>{t.label}</strong>
+                        <span style={{ opacity: 0.65 }}>·</span>
+                        <span style={monoNum}>{(Number(t.pct) * 100).toFixed(2)}%</span>
+                      </span>
+                    );
+                  })}
                   <span style={pillBase(theme.textMuted)}>
                     &lt; {alcanceMinPago}% → sin rebate auto
                   </span>
@@ -4069,43 +4075,51 @@ export default function PagosCliente({ cliente, clienteKey }) {
                               {m.sellIn > 0 ? alcancePct + "%" : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'center' }}>
-                              {m.sellIn > 0 && !isGenerado && !isNoAplica ? (
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                  <select
-                                    value={pctSel}
-                                    onChange={(e) => setPctPorMes(prev => ({ ...prev, [m.mes]: Number(e.target.value) }))}
-                                    disabled={!canEdit}
-                                    style={{
-                                      fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
-                                      padding: '5px 10px', borderRadius: 999,
-                                      border: `1px solid ${esOverride ? '#FF9500' : COL_REBATE}30`,
-                                      background: `${esOverride ? '#FF9500' : COL_REBATE}15`,
-                                      color: esOverride ? '#FF9500' : COL_REBATE,
-                                      cursor: canEdit ? 'pointer' : 'not-allowed',
-                                      outline: 'none',
-                                    }}
-                                    title={esOverride ? `Override — auto: ${m.tier?.label || 'sin tier'}` : 'Tier sugerido según alcance'}
-                                  >
-                                    {tiersOrd.map((t, i) => {
-                                      const isAuto = Number(t.pct) === pctAuto;
-                                      return (
+                              {m.sellIn > 0 && !isGenerado && !isNoAplica ? (() => {
+                                const idxSel = tiersOrd.findIndex(t => Number(t.pct) === pctSel);
+                                const colSel = idxSel >= 0 ? (COLS_TIER[idxSel] || COL_REBATE) : theme.textMuted;
+                                return (
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    <select
+                                      value={pctSel}
+                                      onChange={(e) => setPctPorMes(prev => ({ ...prev, [m.mes]: Number(e.target.value) }))}
+                                      disabled={!canEdit}
+                                      style={{
+                                        fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, fontWeight: 700,
+                                        padding: '3px 6px', borderRadius: 6,
+                                        border: `1px solid ${colSel}40`,
+                                        background: `${colSel}15`,
+                                        color: colSel,
+                                        cursor: canEdit ? 'pointer' : 'not-allowed',
+                                        outline: 'none', minWidth: 56, textAlign: 'center',
+                                        fontVariantNumeric: 'tabular-nums',
+                                      }}
+                                      title={esOverride ? `Override — sugerido: ${(pctAuto*100).toFixed(2)}% (${m.tier?.label || 'sin tier'})` : `Sugerido según alcance · ${m.tier?.label || ''}`}
+                                    >
+                                      {tiersOrd.map((t, i) => (
                                         <option key={i} value={Number(t.pct)}>
-                                          {(Number(t.pct) * 100).toFixed(2)}% — {t.label}{isAuto ? ' (sugerido)' : ''}
+                                          {(Number(t.pct) * 100).toFixed(2)}%
                                         </option>
-                                      );
-                                    })}
-                                  </select>
-                                  {esOverride && (
-                                    <button
-                                      onClick={() => setPctPorMes(prev => { const n = { ...prev }; delete n[m.mes]; return n; })}
-                                      title="Restaurar sugerido"
-                                      style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 12, padding: '2px 4px' }}
-                                    >↺</button>
-                                  )}
-                                </div>
-                              ) : m.tier ? (
-                                <span style={pillBase(COL_REBATE)}>{m.tier.label}</span>
-                              ) : (
+                                      ))}
+                                    </select>
+                                    {esOverride && (
+                                      <button
+                                        onClick={() => setPctPorMes(prev => { const n = { ...prev }; delete n[m.mes]; return n; })}
+                                        title="Restaurar sugerido"
+                                        style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 11, padding: 0, lineHeight: 1 }}
+                                      >↺</button>
+                                    )}
+                                  </div>
+                                );
+                              })() : m.tier ? (() => {
+                                const idxAuto = tiersOrd.findIndex(t => Number(t.pct) === Number(m.tier.pct));
+                                const colAuto = idxAuto >= 0 ? (COLS_TIER[idxAuto] || COL_REBATE) : COL_REBATE;
+                                return (
+                                  <span style={{ ...pillBase(colAuto), padding: '3px 8px', fontSize: 10, fontFamily: 'SF Mono, ui-monospace, monospace', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                                    {(Number(m.tier.pct) * 100).toFixed(2)}%
+                                  </span>
+                                );
+                              })() : (
                                 <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
                               )}
                             </td>
