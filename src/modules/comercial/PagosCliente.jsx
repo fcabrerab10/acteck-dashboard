@@ -3965,7 +3965,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
             const COL_REBATE = '#FF3B30';
             // Paleta por posición del tier (ordenados desc por min_alcance)
             // 0=más alto → verde, 1=azul, 2=violeta, 3=rojo, resto=ámbar
-            const COLS_TIER = ['#34C759', '#007AFF', '#AF52DE', '#FF3B30', '#FF9500'];
+            const COLS_TIER = ['#34C759', '#007AFF', '#AF52DE', '#FFCC00', '#FF9500'];
             const nombreOficial = lineamientos?.rebate?.nombre_oficial || "Fondo para Generación Sell Out";
             const primerTierPct = ((lineamientos?.rebate?.tiers?.[0]?.pct || 0.02) * 100).toFixed(2);
             const alcanceMinPago = ((lineamientos?.rebate?.alcance_minimo_pago || 0.90) * 100).toFixed(0);
