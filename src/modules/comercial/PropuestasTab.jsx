@@ -2659,13 +2659,18 @@ async function fetchAll(clienteKey) {
     if (clienteKey === 'pcel') {
       return supabase.from('sellout_pcel').select('modelo,inventario,anio,semana').not('modelo', 'is', null).limit(50000);
     }
-    // 1) obtener la última (anio, semana) del cliente
+    // 1) obtener la última (anio, semana) del cliente. IMPORTANTE:
+    // inventario_cliente tiene ~1400 filas con (anio, semana) NULL para
+    // digitalife (data legacy); DESC por default es NULLS FIRST, así que
+    // sin nullsFirst:false el "más reciente" salía NULL y no había fix.
     const { data: ult } = await supabase
       .from('inventario_cliente')
       .select('anio,semana')
       .eq('cliente', clienteKey)
-      .order('anio', { ascending: false })
-      .order('semana', { ascending: false })
+      .not('anio', 'is', null)
+      .not('semana', 'is', null)
+      .order('anio', { ascending: false, nullsFirst: false })
+      .order('semana', { ascending: false, nullsFirst: false })
       .limit(1);
     const ultAnio = ult?.[0]?.anio;
     const ultSemana = ult?.[0]?.semana;
@@ -2850,10 +2855,18 @@ async function fetchSellout(clienteKey, mm, anioMin, anioMax) {
   const mesesSet = new Set(mm.map((m) => `${m.anio}-${String(m.mes).padStart(2, '0')}`));
 
   if (clienteKey === 'digitalife') {
-    const { data } = await supabase.from('sellout_detalle')
-      .select('no_parte,cantidad,fecha')
-      .eq('cliente', 'digitalife')
-      .gte('fecha', `${anioMin}-01-01`).limit(200000);
+    // Filtrar por rango de fechas de los 3 meses target (no todo desde
+    // anioMin) para reducir volumen antes de paginar. Supabase corta en
+    // 1000 aunque pases .limit(200000); hay que paginar sí o sí.
+    const mesesOrd = [...mm].sort((a, b) => a.anio * 100 + a.mes - (b.anio * 100 + b.mes));
+    const fIni = `${mesesOrd[0].anio}-${String(mesesOrd[0].mes).padStart(2, '0')}-01`;
+    const finM = new Date(mesesOrd[mesesOrd.length - 1].anio, mesesOrd[mesesOrd.length - 1].mes, 0);
+    const fFin = `${finM.getFullYear()}-${String(finM.getMonth() + 1).padStart(2, '0')}-${String(finM.getDate()).padStart(2, '0')}`;
+    const data = await fetchAllPagesLocal(() =>
+      supabase.from('sellout_detalle')
+        .select('no_parte,cantidad,fecha')
+        .eq('cliente', 'digitalife')
+        .gte('fecha', fIni).lte('fecha', fFin));
     return (data || [])
       .filter((r) => mesesSet.has(String(r.fecha).slice(0, 7)))
       .map((r) => {
