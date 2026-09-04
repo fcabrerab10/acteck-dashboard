@@ -1122,7 +1122,7 @@ function VistaClientePicker({ theme, isDark, onElegir, onBack }) {
                 </div>
                 {/* Stats */}
                 <div style={{ padding: '14px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px' }}>
-                  <Stat label="Cuota Ago" value={fmtCompact(cuota)} />
+                  <Stat label={`Cuota ${MES_LABEL[MES_ACTUAL.mes - 1]}`} value={fmtCompact(cuota)} />
                   <Stat label="Facturado" value={cuota > 0 ? `${fmtCompact(facturado)} · ${pctCumpl.toFixed(0)}%` : fmtCompact(facturado)} />
                   <Stat label="Gap" value={gap > 0 ? fmtCompact(gap) : '✓ Cumplida'} color={gap > 0 ? gapCol : '#30D158'} />
                   <Stat label="Días" value={`${diasRestantes}d`} />
