@@ -25,11 +25,17 @@ const FAMILIA_DIGITALIFE_HOJA = {
 };
 const familiaHoja = (familia) => FAMILIA_DIGITALIFE_HOJA[familia] || 'Todo lo demás';
 
-// Meses cerrados anteriores al actual (los últimos 3)
+// Meses cerrados anteriores al actual (los últimos 3).
+// Salta el mes inmediato anterior durante los primeros 10 días del mes en
+// curso — el sellout de la última semana suele cargarse ~día 8-10, así que
+// hasta entonces el mes anterior está incompleto y falsea el promedio 3M.
+// Ej.: 3-sep → May/Jun/Jul · 15-sep → Jun/Jul/Ago.
 function mesesCerrados() {
   const hoy = new Date();
+  const dia = hoy.getDate();
+  const skip = dia < 10 ? 1 : 0; // saltar el mes anterior si aún está en carga
   const arr = [];
-  for (let i = 1; i <= 3; i++) {
+  for (let i = 1 + skip; i <= 3 + skip; i++) {
     const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
     arr.push({ anio: d.getFullYear(), mes: d.getMonth() + 1 });
   }
