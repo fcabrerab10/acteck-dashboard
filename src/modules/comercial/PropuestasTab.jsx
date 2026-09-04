@@ -26,17 +26,13 @@ const FAMILIA_DIGITALIFE_HOJA = {
 const familiaHoja = (familia) => FAMILIA_DIGITALIFE_HOJA[familia] || 'Todo lo demás';
 
 // Meses cerrados anteriores al actual (los últimos 3).
-// Perdón de 3 días: sólo se salta el mes anterior si estamos en los
-// primeros 3 días del mes en curso (aún no llega el corte de fin de mes).
-// Del día 4 en adelante ya se muestra el mes anterior — un día de datos
-// faltante no distorsiona significativamente el promedio 3M.
-// Ej.: 3-sep → May/Jun/Jul · 4-sep → Jun/Jul/Ago.
+// Siempre incluye el mes anterior inmediato, aunque le falten 1-3 días de
+// sellout. Fernando: 'un día no nos afecta tanto'.
+// Ej.: cualquier día de sep → Jun/Jul/Ago.
 function mesesCerrados() {
   const hoy = new Date();
-  const dia = hoy.getDate();
-  const skip = dia <= 3 ? 1 : 0;
   const arr = [];
-  for (let i = 1 + skip; i <= 3 + skip; i++) {
+  for (let i = 1; i <= 3; i++) {
     const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
     arr.push({ anio: d.getFullYear(), mes: d.getMonth() + 1 });
   }
@@ -2655,9 +2651,34 @@ async function fetchAll(clienteKey) {
 
   // Para PCEL el inventario del cliente vive en sellout_pcel.inventario
   // (no en inventario_cliente, que solo tiene DGL y DCT).
-  const invCliQuery = clienteKey === 'pcel'
-    ? supabase.from('sellout_pcel').select('modelo,inventario,anio,semana').not('modelo', 'is', null).limit(50000)
-    : supabase.from('inventario_cliente').select('sku,stock,titulo,anio,semana').eq('cliente', clienteKey);
+  // inventario_cliente para Digitalife tiene 25K+ filas (varias semanas ×
+  // 1.3K SKUs); sin paginar Supabase corta en 1000 y quedan filas viejas.
+  // Traemos SOLO la última semana disponible (basta 1 snapshot para el "más
+  // reciente por SKU" que arma el Map de invCli).
+  const invCliQuery = (async () => {
+    if (clienteKey === 'pcel') {
+      return supabase.from('sellout_pcel').select('modelo,inventario,anio,semana').not('modelo', 'is', null).limit(50000);
+    }
+    // 1) obtener la última (anio, semana) del cliente
+    const { data: ult } = await supabase
+      .from('inventario_cliente')
+      .select('anio,semana')
+      .eq('cliente', clienteKey)
+      .order('anio', { ascending: false })
+      .order('semana', { ascending: false })
+      .limit(1);
+    const ultAnio = ult?.[0]?.anio;
+    const ultSemana = ult?.[0]?.semana;
+    if (!ultAnio || !ultSemana) return { data: [] };
+    // 2) traer solo esa semana (≈1.3K filas por cliente, cabe en 1 página)
+    return supabase
+      .from('inventario_cliente')
+      .select('sku,stock,titulo,anio,semana')
+      .eq('cliente', clienteKey)
+      .eq('anio', ultAnio)
+      .eq('semana', ultSemana)
+      .limit(5000);
+  })();
 
   const [roadmapRes, invAckData, invCliRes, preciosRes, costosRes, sellout90, selloutMes, cuotaRes, spiffsRes] = await Promise.all([
     supabase.from('roadmap_sku').select('sku,marca,familia,categoria,descripcion,rdmp'),
