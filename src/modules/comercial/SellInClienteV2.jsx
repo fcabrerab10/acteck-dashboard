@@ -119,10 +119,9 @@ export default function SellInClienteV2({ clienteKey }) {
   // los chips y los bloques mensuales.
   const [aniosSel, setAniosSel] = useState(() => new Set([anio]));
   const aniosDisponibles = useMemo(() => {
-    // Ventana fija: últimos 4 años incluyendo el actual. Si más adelante
-    // queremos leerlos de facturacion_clientes, se cambia por query.
-    return [anio, anioPrev, anio - 2, anio - 3];
-  }, [anio, anioPrev]);
+    // Ventana fija: últimos 4 años ordenados ASC (izquierda → derecha).
+    return [anio - 3, anio - 2, anio - 1, anio];
+  }, [anio]);
   const toggleAnio = (y) => {
     setAniosSel((prev) => {
       const next = new Set(prev);
@@ -1166,31 +1165,34 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
             placeholder="Buscar SKU, descripción, marca…"
             style={{ border: 0, outline: 0, background: 'transparent', flex: 1, fontFamily: TYPO.fontText, fontSize: 11, color: theme.text }} />
         </div>
-        {/* Multi-select de años · chips */}
+        {/* Multi-select de años · segmented control estilo iOS */}
         <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '4px 8px', background: theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
-          border: `1px solid ${theme.border}`, borderRadius: 999, height: 28,
+          display: 'inline-flex', alignItems: 'center', gap: 2,
+          padding: 2, background: theme.mode === 'dark' ? 'rgba(120,120,128,0.24)' : 'rgba(120,120,128,0.12)',
+          borderRadius: 9, height: 30,
         }}>
-          <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, paddingRight: 4, borderRight: `1px solid ${theme.border}`, marginRight: 2 }}>Años</span>
           {aniosDisponibles.map((y) => {
             const on = aniosSel.includes(y);
             const col = anioColor(y, aniosSel, P);
             return (
               <button key={y} onClick={() => onToggleAnio(y)} title={on ? 'Quitar año' : 'Agregar año'}
                 style={{
-                  padding: '3px 9px', borderRadius: 999, cursor: 'pointer',
-                  background: on ? col : 'transparent',
-                  color: on ? '#FFF' : theme.textMuted,
-                  border: `1px solid ${on ? col : 'transparent'}`,
-                  fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600,
-                  letterSpacing: '-0.005em', fontVariantNumeric: 'tabular-nums',
+                  padding: '4px 12px', borderRadius: 7, cursor: 'pointer',
+                  background: on
+                    ? (theme.mode === 'dark' ? 'rgba(99,99,102,0.9)' : '#FFFFFF')
+                    : 'transparent',
+                  color: on ? col : (theme.mode === 'dark' ? 'rgba(235,235,245,0.60)' : 'rgba(60,60,67,0.60)'),
+                  border: 0,
+                  boxShadow: on ? '0 3px 8px rgba(0,0,0,0.12), 0 3px 1px rgba(0,0,0,0.04)' : 'none',
+                  fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: on ? 700 : 500,
+                  letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums',
+                  transition: 'all 180ms cubic-bezier(0.4, 0, 0.2, 1)',
                 }}>{y}</button>
             );
           })}
         </div>
-        <span style={{ marginLeft: 'auto', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
-          <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs
+        <span style={{ marginLeft: 'auto', fontFamily: TYPO.fontDisplay, fontSize: 11, color: theme.textMuted, fontWeight: 500, letterSpacing: '-0.005em' }}>
+          <strong style={{ color: theme.text, fontWeight: 600 }}>{rows.length}</strong> SKUs
         </span>
       </div>
       <div style={{ overflow: 'auto', maxHeight: '65vh' }}>
@@ -1203,15 +1205,27 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
               <SortableHeader theme={theme} col="rdmp" label="RDMP" orden={orden} onToggleSort={onToggleSort} align="left" width={68} rowSpan={2} />
               {aniosSel.map((y) => {
                 const col = anioColor(y, aniosSel, P);
+                const isCurrent = y === anio;
                 return (
                   <th key={`band-${y}`} colSpan={12} style={{
-                    position: 'sticky', top: 0, background: `${col}18`, zIndex: 1,
-                    padding: '4px 8px', textAlign: 'left',
-                    fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, fontWeight: 700,
-                    color: col, letterSpacing: 0, textTransform: 'none',
+                    position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
+                    padding: '6px 12px', textAlign: 'left',
                     borderBottom: `1px solid ${theme.divider || theme.border}`,
-                    borderLeft: `2px solid ${theme.divider || theme.border}`,
-                  }}>{y}</th>
+                    borderLeft: `1px solid ${theme.divider || theme.border}`,
+                  }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '2px 9px 2px 7px', borderRadius: 999,
+                      background: `${col}14`,
+                      fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 700,
+                      color: col, letterSpacing: '-0.005em', textTransform: 'none',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>
+                      <span style={{ width: 6, height: 6, borderRadius: 50, background: col }} />
+                      {y}
+                      {isCurrent && <span style={{ fontSize: 8.5, fontWeight: 600, opacity: 0.7, letterSpacing: '0.04em', textTransform: 'uppercase' }}>· actual</span>}
+                    </span>
+                  </th>
                 );
               })}
               <SortableHeader theme={theme} col="promedio" label="Prom." orden={orden} onToggleSort={onToggleSort} align="right" width={60} rowSpan={2} />
