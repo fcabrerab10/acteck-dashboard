@@ -96,6 +96,22 @@ export function useFacturacion(clienteKey, anios = null, select = '*') {
   });
 }
 
+// Versión consolidada: NO filtra por cliente_key, trae toda la
+// facturación de los años especificados. Útil para la vista "todos los
+// canales" en Sell In cuando queremos ver un SKU que se vende a
+// clientes que no tienen tab dedicado (ARROBA, CVA, PCH, Amazon, ML…).
+export function useFacturacionAll(anios = null, select = '*', enabled = true) {
+  return useQuery({
+    queryKey: ['facturacion_clientes', '__ALL__', anios, select],
+    enabled,
+    queryFn: () =>
+      fetchAll('facturacion_clientes', select, (q) => {
+        if (Array.isArray(anios) && anios.length) return q.in('anio', anios);
+        return q;
+      }),
+  });
+}
+
 // ─── Cuotas mensuales ───
 export function useCuotasMensuales(clienteKey, anio) {
   return useQuery({

@@ -8,7 +8,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useRoadmap, useFacturacion, useCuotasMensuales } from '../../lib/queries';
+import { useRoadmap, useFacturacion, useFacturacionAll, useCuotasMensuales } from '../../lib/queries';
 import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -143,10 +143,22 @@ export default function SellInClienteV2({ clienteKey }) {
   // Años a renderizar en la tabla, ordenados ASC (2024, 2025, 2026).
   const aniosSelOrd = useMemo(() => Array.from(aniosSel).sort((a, b) => a - b), [aniosSel]);
 
+  // Toggle "Consolidado": cuando está activo, la tabla Detalle por SKU
+  // muestra ventas de TODOS los canales (mayoreo, e_commerce, distribuidor,
+  // mostrador…) además del cliente actual, para que aparezcan SKUs que
+  // solo se venden a clientes sin tab dedicado (Amazon, CVA, Mercado Libre…).
+  // Los KPIs superiores del módulo SIGUEN filtrando por clienteKey — el
+  // consolidado solo afecta la tabla.
+  const [consolidado, setConsolidado] = useState(false);
+
   // Cache compartida via useQuery. Mantengo los nombres facturacion/roadmap/cuotas
   // para no romper el resto del módulo.
   const { data: facturacion = [], isLoading: facturacionLoading } =
     useFacturacion(clienteKey, aniosFetch, 'sku,anio,mes,piezas,monto');
+  // Data adicional para la tabla cuando el usuario activa "Consolidado".
+  // Se pide sólo cuando consolidado=true para no gastar red en balde.
+  const { data: facturacionAll = [] } =
+    useFacturacionAll(aniosFetch, 'sku,anio,mes,piezas,monto', consolidado);
   const { data: roadmap = [], isLoading: roadmapLoading } = useRoadmap();
   const { data: cuotas = [], isLoading: cuotasLoading } =
     useCuotasMensuales(clienteKey, anio);
@@ -333,11 +345,13 @@ export default function SellInClienteV2({ clienteKey }) {
   // piezasPorAnio: { [anio]: number[12] }. piezas legacy = piezas del año
   // actual (para no romper el sort por mes y para KPIs YoY que ya usan
   // .piezas[i] del año principal).
+  // Fuente: consolidado ? todos los canales : solo cliente actual.
   const filasSKU = useMemo(() => {
     const acc = new Map();
     const emptyPorAnio = () => Object.fromEntries(aniosSelOrd.map((y) => [y, Array(12).fill(0)]));
+    const facturacionSrc = consolidado ? facturacionAll : facturacion;
     // Matriz Sell In por mes (piezas) + montoSI YTD
-    for (const r of facturacion) {
+    for (const r of facturacionSrc) {
       const y = Number(r.anio);
       if (!aniosSel.has(y)) continue;
       const sku = r.sku;
@@ -410,7 +424,7 @@ export default function SellInClienteV2({ clienteKey }) {
       }
     }
     return rows;
-  }, [facturacion, selloutBySku, roadmapMap, busqueda, orden, anio, mesActual, familiaFilter, aniosSel, aniosSelOrd]);
+  }, [facturacion, facturacionAll, consolidado, selloutBySku, roadmapMap, busqueda, orden, anio, mesActual, familiaFilter, aniosSel, aniosSelOrd]);
 
   const toggleSort = (col) => {
     setOrden((prev) => {
@@ -536,6 +550,7 @@ export default function SellInClienteV2({ clienteKey }) {
         familiaFilter={familiaFilter} onClearFamilia={() => setFamiliaFilter(null)}
         aniosSel={aniosSelOrd} aniosDisponibles={aniosDisponibles} onToggleAnio={toggleAnio}
         anio={anio}
+        consolidado={consolidado} onToggleConsolidado={() => setConsolidado((v) => !v)}
       />
     </div>
   );
@@ -1093,7 +1108,7 @@ function anioColor(y, aniosSel, P) {
   return paleta[idx % paleta.length] || P.textMuted || '#8E8E93';
 }
 
-function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, aniosSel = [], aniosDisponibles = [], onToggleAnio = () => {}, anio }) {
+function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, aniosSel = [], aniosDisponibles = [], onToggleAnio = () => {}, anio, consolidado = false, onToggleConsolidado = () => {} }) {
   const isDark = theme.mode === 'dark';
   // Max celda (piezas mensuales) para heat coloring
   const maxCelda = useMemo(() => {
@@ -1191,6 +1206,27 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
             );
           })}
         </div>
+        {/* Toggle Consolidado — muestra ventas de TODOS los canales */}
+        <button
+          onClick={onToggleConsolidado}
+          title={consolidado ? 'Volver a mostrar solo este cliente' : 'Mostrar ventas de todos los canales (mayoreo, e-commerce, distribuidor, etc.)'}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '5px 12px', borderRadius: 999, cursor: 'pointer',
+            background: consolidado ? P.accent : 'transparent',
+            color: consolidado ? '#FFF' : theme.textMuted,
+            border: `1px solid ${consolidado ? P.accent : theme.border}`,
+            fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600,
+            letterSpacing: '-0.005em', height: 30,
+            transition: 'all 180ms cubic-bezier(0.4, 0, 0.2, 1)',
+          }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: 50,
+            background: consolidado ? '#FFF' : theme.textMuted,
+          }} />
+          {consolidado ? 'Todos los canales' : 'Solo este cliente'}
+        </button>
+
         <span style={{ marginLeft: 'auto', fontFamily: TYPO.fontDisplay, fontSize: 11, color: theme.textMuted, fontWeight: 500, letterSpacing: '-0.005em' }}>
           <strong style={{ color: theme.text, fontWeight: 600 }}>{rows.length}</strong> SKUs
         </span>
