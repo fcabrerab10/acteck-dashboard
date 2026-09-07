@@ -117,7 +117,7 @@ export default function SellInClienteV2({ clienteKey }) {
   // incluyen en el fetch aunque el usuario los deseleccione, para no
   // romper el resto del módulo. Se guardan en aniosSel para renderizar
   // los chips y los bloques mensuales.
-  const [aniosSel, setAniosSel] = useState(() => new Set([anio]));
+  const [aniosSel, setAniosSel] = useState(() => new Set([anioPrev, anio]));
   const aniosDisponibles = useMemo(() => {
     // Ventana fija: últimos 4 años ordenados ASC (izquierda → derecha).
     return [anio - 3, anio - 2, anio - 1, anio];
