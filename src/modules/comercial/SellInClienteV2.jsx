@@ -112,10 +112,42 @@ export default function SellInClienteV2({ clienteKey }) {
   const anioPrev = anio - 1;
   const mesActual = new Date().getMonth() + 1;
 
+  // Multi-año para la tabla Detalle por SKU. Default: sólo año actual.
+  // Los KPIs siguen usando (anio, anioPrev); estos años SIEMPRE se
+  // incluyen en el fetch aunque el usuario los deseleccione, para no
+  // romper el resto del módulo. Se guardan en aniosSel para renderizar
+  // los chips y los bloques mensuales.
+  const [aniosSel, setAniosSel] = useState(() => new Set([anio]));
+  const aniosDisponibles = useMemo(() => {
+    // Ventana fija: últimos 4 años incluyendo el actual. Si más adelante
+    // queremos leerlos de facturacion_clientes, se cambia por query.
+    return [anio, anioPrev, anio - 2, anio - 3];
+  }, [anio, anioPrev]);
+  const toggleAnio = (y) => {
+    setAniosSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(y)) {
+        if (next.size === 1) return prev; // no permitir 0 seleccionados
+        next.delete(y);
+      } else {
+        next.add(y);
+      }
+      return next;
+    });
+  };
+  // Años a pedir a la BD: unión de aniosSel + los que usan los KPIs.
+  const aniosFetch = useMemo(() => {
+    const s = new Set(aniosSel);
+    s.add(anio); s.add(anioPrev);
+    return Array.from(s).sort((a, b) => a - b);
+  }, [aniosSel, anio, anioPrev]);
+  // Años a renderizar en la tabla, ordenados ASC (2024, 2025, 2026).
+  const aniosSelOrd = useMemo(() => Array.from(aniosSel).sort((a, b) => a - b), [aniosSel]);
+
   // Cache compartida via useQuery. Mantengo los nombres facturacion/roadmap/cuotas
   // para no romper el resto del módulo.
   const { data: facturacion = [], isLoading: facturacionLoading } =
-    useFacturacion(clienteKey, [anioPrev, anio], 'sku,anio,mes,piezas,monto');
+    useFacturacion(clienteKey, aniosFetch, 'sku,anio,mes,piezas,monto');
   const { data: roadmap = [], isLoading: roadmapLoading } = useRoadmap();
   const { data: cuotas = [], isLoading: cuotasLoading } =
     useCuotasMensuales(clienteKey, anio);
@@ -298,23 +330,33 @@ export default function SellInClienteV2({ clienteKey }) {
     return arr.slice(0, 8).map((v, i) => ({ ...v, color: palette[i % palette.length] }));
   }, [facturacion, roadmapMap, anio, mesActual, P, theme]);
 
-  // Sell In matriz mensual + totales + Sell Out YTD por SKU
+  // Sell In matriz mensual multi-año + totales + Sell Out YTD por SKU.
+  // piezasPorAnio: { [anio]: number[12] }. piezas legacy = piezas del año
+  // actual (para no romper el sort por mes y para KPIs YoY que ya usan
+  // .piezas[i] del año principal).
   const filasSKU = useMemo(() => {
     const acc = new Map();
+    const emptyPorAnio = () => Object.fromEntries(aniosSelOrd.map((y) => [y, Array(12).fill(0)]));
     // Matriz Sell In por mes (piezas) + montoSI YTD
     for (const r of facturacion) {
-      if (Number(r.anio) !== anio) continue;
+      const y = Number(r.anio);
+      if (!aniosSel.has(y)) continue;
       const sku = r.sku;
-      if (!acc.has(sku)) acc.set(sku, { sku, piezas: Array(12).fill(0), montoSI: 0, piezasSI: 0, montoSO: 0, piezasSO: 0 });
+      if (!acc.has(sku)) acc.set(sku, { sku, piezas: Array(12).fill(0), piezasPorAnio: emptyPorAnio(), montoSI: 0, piezasSI: 0, montoSO: 0, piezasSO: 0 });
       const it = acc.get(sku);
       const mIdx = Number(r.mes) - 1;
-      if (mIdx >= 0 && mIdx < 12) it.piezas[mIdx] += Number(r.piezas) || 0;
-      it.montoSI += Number(r.monto) || 0;
-      it.piezasSI += Number(r.piezas) || 0;
+      if (mIdx >= 0 && mIdx < 12) {
+        if (it.piezasPorAnio[y]) it.piezasPorAnio[y][mIdx] += Number(r.piezas) || 0;
+        if (y === anio) it.piezas[mIdx] += Number(r.piezas) || 0;
+      }
+      if (y === anio) {
+        it.montoSI += Number(r.monto) || 0;
+        it.piezasSI += Number(r.piezas) || 0;
+      }
     }
     // Sell Out por sku (join)
     selloutBySku.forEach((v, sku) => {
-      if (!acc.has(sku)) acc.set(sku, { sku, piezas: Array(12).fill(0), montoSI: 0, piezasSI: 0, montoSO: 0, piezasSO: 0 });
+      if (!acc.has(sku)) acc.set(sku, { sku, piezas: Array(12).fill(0), piezasPorAnio: emptyPorAnio(), montoSI: 0, piezasSI: 0, montoSO: 0, piezasSO: 0 });
       const it = acc.get(sku);
       it.montoSO = v.monto;
       it.piezasSO = v.piezas;
@@ -340,8 +382,9 @@ export default function SellInClienteV2({ clienteKey }) {
         const famCap = famNorm.charAt(0).toUpperCase() + famNorm.slice(1).toLowerCase();
         if (famCap !== familiaFilter) return;
       }
-      // Total = sum meses; Promedio = avg de meses cerrados con venta
-      const total = it.piezas.reduce((a, b) => a + b, 0);
+      // Total = suma de TODOS los años seleccionados; Promedio = avg de
+      // meses cerrados con venta del año actual (referencia).
+      const total = aniosSelOrd.reduce((s, y) => s + (it.piezasPorAnio[y] || []).reduce((a, b) => a + b, 0), 0);
       const cerrados = it.piezas.slice(0, mesActual - 1);
       const conVenta = cerrados.filter((v) => v > 0);
       const promedio = conVenta.length ? conVenta.reduce((a, b) => a + b, 0) / conVenta.length : 0;
@@ -353,8 +396,13 @@ export default function SellInClienteV2({ clienteKey }) {
       const factor = orden.dir === 'asc' ? 1 : -1;
       const isString = ['sku', 'descripcion', 'marca', 'categoria', 'familia', 'rdmp'].includes(orden.col);
       const mesMatch = /^mes-(\d+)$/.exec(orden.col);
+      const mesMatchAnio = /^mes-(\d{4})-(\d+)$/.exec(orden.col);
       if (isString) {
         rows.sort((a, b) => String(a[orden.col] || '').localeCompare(String(b[orden.col] || '')) * factor);
+      } else if (mesMatchAnio) {
+        const yy = Number(mesMatchAnio[1]);
+        const i = Number(mesMatchAnio[2]);
+        rows.sort((a, b) => (((a.piezasPorAnio?.[yy]?.[i] || 0) - (b.piezasPorAnio?.[yy]?.[i] || 0))) * factor);
       } else if (mesMatch) {
         const i = Number(mesMatch[1]);
         rows.sort((a, b) => ((a.piezas[i] || 0) - (b.piezas[i] || 0)) * factor);
@@ -363,7 +411,7 @@ export default function SellInClienteV2({ clienteKey }) {
       }
     }
     return rows;
-  }, [facturacion, selloutBySku, roadmapMap, busqueda, orden, anio, mesActual, familiaFilter]);
+  }, [facturacion, selloutBySku, roadmapMap, busqueda, orden, anio, mesActual, familiaFilter, aniosSel, aniosSelOrd]);
 
   const toggleSort = (col) => {
     setOrden((prev) => {
@@ -487,6 +535,8 @@ export default function SellInClienteV2({ clienteKey }) {
         busqueda={busqueda} onChangeBusqueda={setBusqueda}
         orden={orden} onToggleSort={toggleSort}
         familiaFilter={familiaFilter} onClearFamilia={() => setFamiliaFilter(null)}
+        aniosSel={aniosSelOrd} aniosDisponibles={aniosDisponibles} onToggleAnio={toggleAnio}
+        anio={anio}
       />
     </div>
   );
@@ -1032,7 +1082,19 @@ function FerruStars() {
 // Devuelve las columnas originales del SellInCliente: Marca · SKU · Descripción
 // · Categoría · Roadmap · 12 meses (piezas SI heat map) · Promedio · Total
 // Al final agrega Sell Out YTD: Pzs SO · Monto SO · Ratio SO/SI
-function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia }) {
+// Paleta por año — el año en curso usa accent iOS blue, los anteriores
+// se distribuyen entre morado / gris / naranja para distinguirlos rápido.
+function anioColor(y, aniosSel, P) {
+  if (!aniosSel || aniosSel.length === 0) return P.accent;
+  const anioNow = new Date().getFullYear();
+  if (y === anioNow) return P.accent;
+  const paleta = [P.purple, P.textMuted || '#8E8E93', P.orange, P.teal, P.pink];
+  const prevYears = aniosSel.filter((yy) => yy !== anioNow).sort((a, b) => b - a);
+  const idx = prevYears.indexOf(y);
+  return paleta[idx % paleta.length] || P.textMuted || '#8E8E93';
+}
+
+function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, aniosSel = [], aniosDisponibles = [], onToggleAnio = () => {}, anio }) {
   const isDark = theme.mode === 'dark';
   // Max celda (piezas mensuales) para heat coloring
   const maxCelda = useMemo(() => {
@@ -1104,6 +1166,29 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
             placeholder="Buscar SKU, descripción, marca…"
             style={{ border: 0, outline: 0, background: 'transparent', flex: 1, fontFamily: TYPO.fontText, fontSize: 11, color: theme.text }} />
         </div>
+        {/* Multi-select de años · chips */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '4px 8px', background: theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+          border: `1px solid ${theme.border}`, borderRadius: 999, height: 28,
+        }}>
+          <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, paddingRight: 4, borderRight: `1px solid ${theme.border}`, marginRight: 2 }}>Años</span>
+          {aniosDisponibles.map((y) => {
+            const on = aniosSel.includes(y);
+            const col = anioColor(y, aniosSel, P);
+            return (
+              <button key={y} onClick={() => onToggleAnio(y)} title={on ? 'Quitar año' : 'Agregar año'}
+                style={{
+                  padding: '3px 9px', borderRadius: 999, cursor: 'pointer',
+                  background: on ? col : 'transparent',
+                  color: on ? '#FFF' : theme.textMuted,
+                  border: `1px solid ${on ? col : 'transparent'}`,
+                  fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, fontWeight: 600,
+                  letterSpacing: '-0.005em', fontVariantNumeric: 'tabular-nums',
+                }}>{y}</button>
+            );
+          })}
+        </div>
         <span style={{ marginLeft: 'auto', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
           <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs
         </span>
@@ -1112,16 +1197,41 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>
           <thead>
             <tr>
-              <SortableHeader theme={theme} col="marca" label="Marca" orden={orden} onToggleSort={onToggleSort} align="left" width={90} />
-              <SortableHeader theme={theme} col="sku" label="SKU" orden={orden} onToggleSort={onToggleSort} align="left" width={100} />
-              <SortableHeader theme={theme} col="descripcion" label="Descripción" orden={orden} onToggleSort={onToggleSort} align="left" />
-              <SortableHeader theme={theme} col="categoria" label="Categoría" orden={orden} onToggleSort={onToggleSort} align="left" width={110} />
-              <SortableHeader theme={theme} col="rdmp" label="Roadmap" orden={orden} onToggleSort={onToggleSort} align="left" width={80} />
-              {MESES.map((m, i) => (
-                <SortableHeader key={m} theme={theme} col={`mes-${i}`} label={m} orden={orden} onToggleSort={onToggleSort} align="right" width={54} />
+              <SortableHeader theme={theme} col="marca" label="Marca" orden={orden} onToggleSort={onToggleSort} align="left" width={90} rowSpan={2} />
+              <SortableHeader theme={theme} col="sku" label="SKU" orden={orden} onToggleSort={onToggleSort} align="left" width={100} rowSpan={2} />
+              <SortableHeader theme={theme} col="descripcion" label="Descripción" orden={orden} onToggleSort={onToggleSort} align="left" rowSpan={2} />
+              <SortableHeader theme={theme} col="rdmp" label="RDMP" orden={orden} onToggleSort={onToggleSort} align="left" width={68} rowSpan={2} />
+              {aniosSel.map((y) => {
+                const col = anioColor(y, aniosSel, P);
+                return (
+                  <th key={`band-${y}`} colSpan={12} style={{
+                    position: 'sticky', top: 0, background: `${col}18`, zIndex: 1,
+                    padding: '4px 8px', textAlign: 'left',
+                    fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11, fontWeight: 700,
+                    color: col, letterSpacing: 0, textTransform: 'none',
+                    borderBottom: `1px solid ${theme.divider || theme.border}`,
+                    borderLeft: `2px solid ${theme.divider || theme.border}`,
+                  }}>{y}</th>
+                );
+              })}
+              <SortableHeader theme={theme} col="promedio" label="Prom." orden={orden} onToggleSort={onToggleSort} align="right" width={60} rowSpan={2} />
+              <SortableHeader theme={theme} col="total" label="Total" orden={orden} onToggleSort={onToggleSort} align="right" width={70} rowSpan={2} />
+            </tr>
+            <tr>
+              {aniosSel.map((y) => (
+                MESES.map((m, i) => (
+                  <SortableHeader
+                    key={`${y}-${m}`}
+                    theme={theme}
+                    col={y === anio ? `mes-${i}` : `mes-${y}-${i}`}
+                    label={m}
+                    orden={orden} onToggleSort={onToggleSort}
+                    align="right" width={44}
+                    topOffset={28}
+                    borderLeft={i === 0 ? `2px solid ${theme.divider || theme.border}` : undefined}
+                  />
+                ))
               ))}
-              <SortableHeader theme={theme} col="promedio" label="Prom." orden={orden} onToggleSort={onToggleSort} align="right" width={64} />
-              <SortableHeader theme={theme} col="total" label="Total" orden={orden} onToggleSort={onToggleSort} align="right" width={70} />
             </tr>
           </thead>
           <tbody>
@@ -1131,24 +1241,29 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
                   <td style={cellStyle(theme, 'left')}>{r.marca || '—'}</td>
                   <td style={cellStyle(theme, 'left')}>{r.sku}</td>
                   <td style={{ ...cellStyle(theme, 'left'), maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
-                  <td style={cellStyle(theme, 'left')}>{r.categoria || '—'}</td>
                   <td style={cellStyle(theme, 'left')}>{roadmapChip(r.rdmp) || '—'}</td>
-                  {r.piezas.map((v, i) => {
-                    const h = heatCell(v);
-                    return (
-                      <td key={i} style={{ ...cellStyle(theme, 'right'), padding: '4px 6px', fontFamily: '"SF Mono", ui-monospace, monospace' }}>
-                        {h ? (
-                          <span style={{
-                            display: 'inline-block', padding: '3px 7px', borderRadius: 6,
-                            background: h.bg, color: h.color, fontWeight: h.weight || 500,
-                            minWidth: 34, textAlign: 'right',
-                          }}>{fmt.int(v)}</span>
-                        ) : (
-                          <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
-                        )}
-                      </td>
-                    );
-                  })}
+                  {aniosSel.map((y) => (
+                    (r.piezasPorAnio?.[y] || Array(12).fill(0)).map((v, i) => {
+                      const h = heatCell(v);
+                      return (
+                        <td key={`${y}-${i}`} style={{
+                          ...cellStyle(theme, 'right'), padding: '4px 6px',
+                          fontFamily: '"SF Mono", ui-monospace, monospace',
+                          borderLeft: i === 0 ? `2px solid ${theme.divider || theme.border}` : undefined,
+                        }}>
+                          {h ? (
+                            <span style={{
+                              display: 'inline-block', padding: '3px 7px', borderRadius: 6,
+                              background: h.bg, color: h.color, fontWeight: h.weight || 500,
+                              minWidth: 30, textAlign: 'right',
+                            }}>{fmt.int(v)}</span>
+                          ) : (
+                            <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
+                          )}
+                        </td>
+                      );
+                    })
+                  ))}
                   <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmt.int(Math.round(r.promedio)) : '—'}</td>
                   <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmt.int(r.total) : '—'}</td>
                 </tr>
@@ -1166,16 +1281,17 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
   );
 }
 
-function SortableHeader({ theme, col, label, orden, onToggleSort, align, width }) {
+function SortableHeader({ theme, col, label, orden, onToggleSort, align, width, rowSpan, borderLeft, topOffset = 0 }) {
   const active = orden.col === col;
   const Icon = !active ? ArrowUpDown : orden.dir === 'asc' ? ArrowUp : ArrowDown;
   return (
-    <th style={{
-      position: 'sticky', top: 0, background: theme.surface, zIndex: 1,
+    <th rowSpan={rowSpan} style={{
+      position: 'sticky', top: topOffset, background: theme.surface, zIndex: 1,
       textAlign: align, padding: '9px 10px',
       fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 9.5,
       textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted,
       borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap', width,
+      ...(borderLeft ? { borderLeft } : {}),
     }}>
       <button onClick={() => onToggleSort(col)}
         style={{
