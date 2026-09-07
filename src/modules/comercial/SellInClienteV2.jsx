@@ -154,11 +154,11 @@ export default function SellInClienteV2({ clienteKey }) {
   // Cache compartida via useQuery. Mantengo los nombres facturacion/roadmap/cuotas
   // para no romper el resto del módulo.
   const { data: facturacion = [], isLoading: facturacionLoading } =
-    useFacturacion(clienteKey, aniosFetch, 'sku,anio,mes,piezas,monto');
+    useFacturacion(clienteKey, aniosFetch, 'sku,anio,mes,piezas,monto,cliente_nombre,canal');
   // Data adicional para la tabla cuando el usuario activa "Consolidado".
   // Se pide sólo cuando consolidado=true para no gastar red en balde.
   const { data: facturacionAll = [] } =
-    useFacturacionAll(aniosFetch, 'sku,anio,mes,piezas,monto', consolidado);
+    useFacturacionAll(aniosFetch, 'sku,anio,mes,piezas,monto,cliente_nombre,canal', consolidado);
   const { data: roadmap = [], isLoading: roadmapLoading } = useRoadmap();
   const { data: cuotas = [], isLoading: cuotasLoading } =
     useCuotasMensuales(clienteKey, anio);
@@ -551,6 +551,7 @@ export default function SellInClienteV2({ clienteKey }) {
         aniosSel={aniosSelOrd} aniosDisponibles={aniosDisponibles} onToggleAnio={toggleAnio}
         anio={anio}
         consolidado={consolidado} onToggleConsolidado={() => setConsolidado((v) => !v)}
+        facturacion={facturacion} facturacionAll={facturacionAll}
       />
     </div>
   );
@@ -1108,7 +1109,8 @@ function anioColor(y, aniosSel, P) {
   return paleta[idx % paleta.length] || P.textMuted || '#8E8E93';
 }
 
-function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, aniosSel = [], aniosDisponibles = [], onToggleAnio = () => {}, anio, consolidado = false, onToggleConsolidado = () => {} }) {
+function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, aniosSel = [], aniosDisponibles = [], onToggleAnio = () => {}, anio, consolidado = false, onToggleConsolidado = () => {}, facturacion = [], facturacionAll = [] }) {
+  const [skuAbierto, setSkuAbierto] = useState(null);
   const isDark = theme.mode === 'dark';
   // Max celda (piezas mensuales) para heat coloring
   const maxCelda = useMemo(() => {
@@ -1286,37 +1288,62 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
           </thead>
           <tbody>
             {rows.slice(0, 500).map((r) => {
+              const abierto = skuAbierto === r.sku;
+              const totalCols = 4 + aniosSel.length * 12 + 2;
               return (
-                <tr key={r.sku} style={{ borderTop: `1px solid ${theme.divider || theme.border}` }}>
-                  <td style={cellStyle(theme, 'left')}>{r.marca || '—'}</td>
-                  <td style={cellStyle(theme, 'left')}>{r.sku}</td>
-                  <td style={{ ...cellStyle(theme, 'left'), maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
-                  <td style={cellStyle(theme, 'left')}>{roadmapChip(r.rdmp) || '—'}</td>
-                  {aniosSel.map((y) => (
-                    (r.piezasPorAnio?.[y] || Array(12).fill(0)).map((v, i) => {
-                      const h = heatCell(v);
-                      return (
-                        <td key={`${y}-${i}`} style={{
-                          ...cellStyle(theme, 'right'), padding: '4px 6px',
-                          fontFamily: '"SF Mono", ui-monospace, monospace',
-                          borderLeft: i === 0 ? `2px solid ${theme.divider || theme.border}` : undefined,
-                        }}>
-                          {h ? (
-                            <span style={{
-                              display: 'inline-block', padding: '3px 7px', borderRadius: 6,
-                              background: h.bg, color: h.color, fontWeight: h.weight || 500,
-                              minWidth: 30, textAlign: 'right',
-                            }}>{fmt.int(v)}</span>
-                          ) : (
-                            <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
-                          )}
-                        </td>
-                      );
-                    })
-                  ))}
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmt.int(Math.round(r.promedio)) : '—'}</td>
-                  <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmt.int(r.total) : '—'}</td>
-                </tr>
+                <React.Fragment key={r.sku}>
+                  <tr
+                    onClick={() => setSkuAbierto((prev) => prev === r.sku ? null : r.sku)}
+                    style={{
+                      borderTop: `1px solid ${theme.divider || theme.border}`,
+                      cursor: 'pointer',
+                      background: abierto ? (isDark ? 'rgba(10,132,255,0.06)' : 'rgba(0,122,255,0.04)') : 'transparent',
+                    }}>
+                    <td style={cellStyle(theme, 'left')}>{r.marca || '—'}</td>
+                    <td style={{ ...cellStyle(theme, 'left'), display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ color: theme.textMuted, fontSize: 10, transition: 'transform 150ms', transform: abierto ? 'rotate(90deg)' : 'rotate(0)' }}>▸</span>
+                      {r.sku}
+                    </td>
+                    <td style={{ ...cellStyle(theme, 'left'), maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>{r.descripcion || '—'}</td>
+                    <td style={cellStyle(theme, 'left')}>{roadmapChip(r.rdmp) || '—'}</td>
+                    {aniosSel.map((y) => (
+                      (r.piezasPorAnio?.[y] || Array(12).fill(0)).map((v, i) => {
+                        const h = heatCell(v);
+                        return (
+                          <td key={`${y}-${i}`} style={{
+                            ...cellStyle(theme, 'right'), padding: '4px 6px',
+                            fontFamily: '"SF Mono", ui-monospace, monospace',
+                            borderLeft: i === 0 ? `2px solid ${theme.divider || theme.border}` : undefined,
+                          }}>
+                            {h ? (
+                              <span style={{
+                                display: 'inline-block', padding: '3px 7px', borderRadius: 6,
+                                background: h.bg, color: h.color, fontWeight: h.weight || 500,
+                                minWidth: 30, textAlign: 'right',
+                              }}>{fmt.int(v)}</span>
+                            ) : (
+                              <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
+                            )}
+                          </td>
+                        );
+                      })
+                    ))}
+                    <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace' }}>{r.promedio > 0 ? fmt.int(Math.round(r.promedio)) : '—'}</td>
+                    <td style={{ ...cellStyle(theme, 'right'), fontFamily: '"SF Mono", ui-monospace, monospace', fontWeight: 600 }}>{r.total > 0 ? fmt.int(r.total) : '—'}</td>
+                  </tr>
+                  {abierto && (
+                    <tr>
+                      <td colSpan={totalCols} style={{ padding: '0 0 12px', background: isDark ? 'rgba(10,132,255,0.03)' : 'rgba(0,122,255,0.02)' }}>
+                        <DrillClientesSKU
+                          sku={r.sku}
+                          theme={theme} P={P} isDark={isDark}
+                          facturacion={consolidado ? facturacionAll : facturacion}
+                          aniosSel={aniosSel}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -1362,4 +1389,269 @@ function cellStyle(theme, align) {
     padding: '7px 10px', fontSize: 11.5, fontFamily: TYPO.fontText, color: theme.text,
     textAlign: align, whiteSpace: 'nowrap',
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Drill inline: clientes que se llevan el SKU · heatmap Pareto 80%
+// Estilo S&OP. Ventana = últimos 6 meses cerrados (inclusive el actual).
+// Fuente = facturacion filtrada por SKU. Agrupa por cliente_nombre.
+// ═══════════════════════════════════════════════════════════════════
+function DrillClientesSKU({ sku, theme, P, isDark, facturacion, aniosSel }) {
+  const MESES_S = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const CANAL_COL = {
+    MAYOREO: P.purple, DISTRIBUIDOR: P.accent || '#007AFF',
+    'E-COMMERCE': P.teal || '#5AC8FA', MOSTRADOR: P.green || '#34C759',
+    'RETAIL PROPIOS': P.pink || '#FF375F', 'RETAIL REPRESENTADOS': P.orange || '#FF9500',
+  };
+
+  const { pareto, cola, colaMensual, colaTotal, colaPct, totalesMes, grandTotal, meses } = React.useMemo(() => {
+    // Ventana 6 meses hacia atrás desde el mes actual
+    const hoy = new Date();
+    const mm = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+      mm.push({ anio: d.getFullYear(), mes: d.getMonth() + 1 });
+    }
+    const idxOf = (a, m) => mm.findIndex((x) => x.anio === a && x.mes === m);
+    const byCli = new Map();
+    for (const r of facturacion) {
+      if (r.sku !== sku) continue;
+      const i = idxOf(Number(r.anio), Number(r.mes));
+      if (i < 0) continue;
+      const key = r.cliente_nombre || '(sin nombre)';
+      if (!byCli.has(key)) byCli.set(key, { cliente: key, canal: r.canal || '', mensual: Array(6).fill(0), total: 0 });
+      const it = byCli.get(key);
+      it.mensual[i] += Number(r.piezas) || 0;
+      it.total += Number(r.piezas) || 0;
+      if (!it.canal && r.canal) it.canal = r.canal;
+    }
+    const arr = Array.from(byCli.values())
+      .filter((c) => c.total > 0)
+      .sort((a, b) => b.total - a.total);
+    const grand = arr.reduce((s, x) => s + x.total, 0);
+    let acum = 0, corte = 0;
+    const withAcum = arr.map((c) => {
+      const pct = grand > 0 ? (c.total / grand) * 100 : 0;
+      acum += pct;
+      return { ...c, pct, pctAcum: acum };
+    });
+    for (let i = 0; i < withAcum.length; i++) {
+      if ((withAcum[i].pctAcum || 0) >= 80) { corte = i + 1; break; }
+    }
+    if (corte === 0 && withAcum.length > 0) corte = withAcum.length;
+    const par = withAcum.slice(0, corte);
+    const col = withAcum.slice(corte);
+    const colMen = Array(6).fill(0).map((_, i) => col.reduce((s, c) => s + (c.mensual[i] || 0), 0));
+    const colTot = col.reduce((s, c) => s + c.total, 0);
+    const colPct = grand > 0 ? (colTot / grand) * 100 : 0;
+    const totMes = Array(6).fill(0).map((_, i) => withAcum.reduce((s, c) => s + (c.mensual[i] || 0), 0));
+    return { pareto: par, cola: col, colaMensual: colMen, colaTotal: colTot, colaPct: colPct, totalesMes: totMes, grandTotal: grand, meses: mm };
+  }, [facturacion, sku]);
+
+  const [mostrarCola, setMostrarCola] = React.useState(false);
+  const totalMaxMes = Math.max(0, ...totalesMes);
+
+  if (pareto.length === 0 && cola.length === 0) {
+    return (
+      <div style={{ padding: '14px 20px', color: theme.textMuted, fontSize: 11, fontFamily: TYPO.fontDisplay, textAlign: 'center' }}>
+        No hay ventas del SKU {sku} en los últimos 6 meses.
+      </div>
+    );
+  }
+
+  const nivel = (v, max) => {
+    if (!v || v <= 0 || !max) return 0;
+    const r = v / max;
+    if (r < 0.15) return 1;
+    if (r < 0.35) return 2;
+    if (r < 0.60) return 3;
+    if (r < 0.85) return 4;
+    return 5;
+  };
+  const heatBg = (lv) => {
+    if (lv === 0) return 'transparent';
+    const alphas = [0, 0.05, 0.11, 0.20, 0.30, 0.44];
+    return isDark ? `rgba(10,132,255,${alphas[lv]})` : `rgba(0,122,255,${alphas[lv]})`;
+  };
+  const heatCol = (lv) => (lv >= 4 ? (P.accent || '#007AFF') : theme.text);
+  const HeatCell = ({ v, max }) => {
+    if (!v || v <= 0) return <span style={{ color: theme.textSubtle || theme.textMuted, fontSize: 11 }}>—</span>;
+    const lv = nivel(v, max);
+    return (
+      <span style={{
+        display: 'inline-block', padding: '2px 7px', borderRadius: 999,
+        background: heatBg(lv), color: heatCol(lv),
+        fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums',
+        fontSize: 11, fontWeight: lv >= 4 ? 700 : 500,
+        letterSpacing: '-0.01em', minWidth: 34, textAlign: 'center', lineHeight: 1.3,
+      }}>{Math.round(v).toLocaleString('es-MX')}</span>
+    );
+  };
+  const NumPillC = ({ value, strong }) => {
+    const n = Number(value || 0);
+    if (!n) return <span style={{ color: theme.textSubtle || theme.textMuted, fontSize: 11 }}>—</span>;
+    return (
+      <span style={{
+        display: 'inline-block', padding: '2px 7px', borderRadius: 999,
+        background: isDark ? `rgba(10,132,255,${strong ? 0.11 : 0.05})` : `rgba(0,122,255,${strong ? 0.11 : 0.05})`,
+        color: theme.text, fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums',
+        fontSize: strong ? 11.5 : 11, fontWeight: strong ? 700 : 500,
+        letterSpacing: '-0.01em', minWidth: 34, textAlign: 'center', lineHeight: 1.3,
+      }}>{Math.round(n).toLocaleString('es-MX')}</span>
+    );
+  };
+  const PctPill = ({ pct }) => (
+    <span style={{
+      display: 'inline-block', padding: '1px 6px', borderRadius: 999,
+      background: isDark ? 'rgba(255,159,10,0.14)' : 'rgba(255,149,0,0.12)',
+      color: P.orange || '#FF9500', fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums',
+      fontSize: 10, fontWeight: 700, minWidth: 32, textAlign: 'center',
+    }}>{pct >= 1 ? `${Math.round(pct)}%` : pct > 0 ? `${pct.toFixed(1)}%` : '—'}</span>
+  );
+
+  const th = { padding: '5px 6px', fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, borderBottom: `1px solid ${theme.divider || theme.border}`, textAlign: 'right' };
+  const thL = { ...th, textAlign: 'left' };
+  const td = { padding: '3px 6px', textAlign: 'right', borderBottom: `1px solid ${theme.divider || theme.border}` };
+  const tdL = { ...td, textAlign: 'left' };
+  const orange = P.orange || '#FF9500';
+
+  const renderFila = (p, i, esMenor = false) => {
+    const maxCli = Math.max(0, ...p.mensual);
+    const canalKey = String(p.canal || '').toUpperCase();
+    const canalCol = CANAL_COL[canalKey] || theme.textMuted;
+    return (
+      <tr key={`${i}-${p.cliente}`}>
+        <td style={{ ...tdL, padding: '4px 6px 4px 8px', fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10, color: theme.textMuted, fontWeight: 600, fontVariantNumeric: 'tabular-nums', width: 22 }}>
+          {i + 1}
+        </td>
+        <td style={tdL}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, paddingLeft: esMenor ? 12 : 0 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 50, background: canalCol, flex: '0 0 6px' }} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: theme.text, letterSpacing: '-0.01em', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }}>{p.cliente}</div>
+              {canalKey && (
+                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textSubtle || theme.textMuted, marginTop: 1, lineHeight: 1.1 }}>
+                  {canalKey}
+                </div>
+              )}
+            </div>
+          </div>
+        </td>
+        {p.mensual.map((v, mi) => (
+          <td key={mi} style={td}><HeatCell v={v} max={maxCli} /></td>
+        ))}
+        <td style={td}><NumPillC value={p.total / 6} /></td>
+        <td style={td}><NumPillC value={p.total} strong /></td>
+        <td style={td}><PctPill pct={p.pct} /></td>
+        <td style={{ ...td, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
+          {(p.pctAcum ?? 0).toFixed(1)}%
+        </td>
+      </tr>
+    );
+  };
+
+  return (
+    <div style={{
+      margin: '4px 16px 0', padding: '10px 14px',
+      background: theme.surface, border: `1px solid ${theme.divider || theme.border}`,
+      borderRadius: 10,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 6, marginBottom: 2, borderBottom: `1px solid ${theme.divider || theme.border}`, gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text }}>Consumo por cliente · Pareto 80%</span>
+          <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, color: theme.textMuted, fontWeight: 500 }}>
+            {pareto.length + cola.length} clientes · últimos 6 meses · intensidad = mes vs pico del cliente
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted }}>
+          <span>−</span>
+          {[0.05, 0.11, 0.20, 0.30, 0.44].map((a, i) => (
+            <span key={i} style={{ width: 12, height: 8, borderRadius: 2, background: isDark ? `rgba(10,132,255,${a})` : `rgba(0,122,255,${a})` }} />
+          ))}
+          <span>+</span>
+          <span style={{ width: 1, height: 10, background: theme.divider || theme.border, margin: '0 3px' }} />
+          <span style={{ padding: '1px 6px', borderRadius: 999, background: isDark ? 'rgba(255,159,10,0.14)' : 'rgba(255,149,0,0.12)', color: orange, fontSize: 9, fontWeight: 700 }}>80%</span>
+        </div>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ ...thL, width: 22 }}>#</th>
+              <th style={thL}>Cliente</th>
+              {meses.map((m, i) => <th key={i} style={th}>{MESES_S[m.mes - 1]}</th>)}
+              <th style={th}>Prom /m</th>
+              <th style={th}>Total</th>
+              <th style={th}>%</th>
+              <th style={th}>Acum</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pareto.map((p, i) => renderFila(p, i))}
+            {cola.length > 0 && (
+              <tr>
+                <td colSpan={meses.length + 6} style={{ padding: 0 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px',
+                    background: isDark ? 'rgba(255,159,10,0.05)' : 'rgba(255,149,0,0.04)',
+                    borderTop: `1px dashed ${orange}`, borderBottom: `1px dashed ${orange}`,
+                  }}>
+                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: orange }}>Corte Pareto · 80%</span>
+                    <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, color: theme.textMuted, fontWeight: 500 }}>
+                      {pareto.length} cliente{pareto.length === 1 ? '' : 's'} concentran el {(pareto[pareto.length - 1]?.pctAcum ?? 0).toFixed(1)}% de la venta
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {cola.length > 0 && (
+              <tr
+                onClick={(e) => { e.stopPropagation(); setMostrarCola((v) => !v); }}
+                style={{ cursor: 'pointer', background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)' }}
+              >
+                <td style={{ ...tdL, padding: '4px 6px 4px 8px', color: P.accent, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10, fontWeight: 600 }}>
+                  {mostrarCola ? '▾' : '▸'}
+                </td>
+                <td style={tdL}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 50, background: theme.textMuted, flex: '0 0 6px' }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 500, color: P.accent, letterSpacing: '-0.01em', lineHeight: 1.15 }}>
+                        Cola larga · {cola.length} cliente{cola.length === 1 ? '' : 's'} menores
+                      </div>
+                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 8.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textSubtle || theme.textMuted, marginTop: 1, lineHeight: 1.1 }}>
+                        {colaPct.toFixed(1)}% restante · click para {mostrarCola ? 'colapsar' : 'expandir'}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                {colaMensual.map((v, mi) => (
+                  <td key={mi} style={td}><HeatCell v={v} max={Math.max(0, ...colaMensual)} /></td>
+                ))}
+                <td style={td}><NumPillC value={colaTotal / 6} /></td>
+                <td style={td}><NumPillC value={colaTotal} strong /></td>
+                <td style={td}><PctPill pct={colaPct} /></td>
+                <td style={{ ...td, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>100.0%</td>
+              </tr>
+            )}
+            {mostrarCola && cola.map((p, i) => renderFila(p, pareto.length + i, true))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={2} style={{ padding: '6px 6px 4px', borderTop: `1px solid ${theme.divider || theme.border}`, textAlign: 'left', fontFamily: TYPO.fontDisplay, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>
+                Total {pareto.length + cola.length} clientes
+              </td>
+              {totalesMes.map((v, i) => (
+                <td key={i} style={{ padding: '6px 6px 4px', textAlign: 'right', borderTop: `1px solid ${theme.divider || theme.border}` }}><HeatCell v={v} max={totalMaxMes} /></td>
+              ))}
+              <td style={{ padding: '6px 6px 4px', textAlign: 'right', borderTop: `1px solid ${theme.divider || theme.border}` }}><NumPillC value={grandTotal / 6} strong /></td>
+              <td style={{ padding: '6px 6px 4px', textAlign: 'right', borderTop: `1px solid ${theme.divider || theme.border}` }}><NumPillC value={grandTotal} strong /></td>
+              <td style={{ padding: '6px 6px 4px', textAlign: 'right', borderTop: `1px solid ${theme.divider || theme.border}`, fontFamily: TYPO.fontDisplay, fontSize: 10, color: theme.textMuted, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>100%</td>
+              <td style={{ borderTop: `1px solid ${theme.divider || theme.border}` }} />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
 }
