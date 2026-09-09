@@ -1114,6 +1114,9 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
         }
       }
 
+      // sellout_sku / inventario_cliente / productos_cliente se cachean 5 min:
+      // invalidar para que Home, Análisis y Pagos vean lo recién cargado.
+      try { const { invalidateDataCache } = await import('../../lib/queries'); await invalidateDataCache(); } catch { /* noop */ }
       setMessage(`Cargado: ${counts.productos} productos, ${counts.sellIn} registros sell-in, ${counts.sellOut} sell-out, ${counts.inventario} inventario`);
       if (onUploadComplete) onUploadComplete();
       loadData();

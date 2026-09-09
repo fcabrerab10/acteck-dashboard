@@ -22,6 +22,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
+import { fetchAllQ } from '../../lib/queries';
 
 /**
  * Forecast Clientes v3 — Planeación de compras (Acteck)
@@ -85,34 +86,9 @@ function useForecastData() {
   });
 
   // Helper paginador (PostgREST corta a 1000)
+  // Delegado al motor paginado PARALELO + cache central (lib/queries.js).
   async function fetchAll(qFactory, pageSize = 1000) {
-    // v2: 6 retries backoff hasta 16s + throw en vez de partial.
-    const MAX_RETRIES = 6;
-    const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-    const all = [];
-    let from = 0;
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      let lastErr = null; let data = null;
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        const res = await qFactory().range(from, from + pageSize - 1);
-        if (!res.error) { data = res.data || []; break; }
-        lastErr = res.error;
-        if (attempt < MAX_RETRIES - 1) {
-          console.warn(`[fetchAll] chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-          await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-        }
-      }
-      if (data == null) {
-        console.error(`[fetchAll] chunk from=${from} falló tras ${MAX_RETRIES} intentos.`);
-        throw new Error(`Paginación falló en chunk ${from}. Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-      }
-      if (data.length === 0) break;
-      all.push(...data);
-      if (data.length < pageSize) break;
-      from += pageSize;
-    }
-    return all;
+    return fetchAllQ(qFactory, { pageSize, label: "sop" });
   }
 
   const reload = async () => {
@@ -1072,6 +1048,8 @@ export default function ForecastClientesTab() {
           descartado_en: null,
         }, { onConflict: 'sku' });
       if (errRm) throw errRm;
+      // roadmap_sku se cachea 5 min (fetchAll / useRoadmap): invalidar.
+      try { const { invalidateDataCache } = await import('../../lib/queries'); await invalidateDataCache(); } catch { /* noop */ }
 
       // 2) Calcular el orden deseado
       let nuevoOrden = null;
@@ -1166,6 +1144,7 @@ export default function ForecastClientesTab() {
           descartado_en: new Date().toISOString(),
         }, { onConflict: 'sku' });
       if (error) throw error;
+      try { const { invalidateDataCache } = await import('../../lib/queries'); await invalidateDataCache(); } catch { /* noop */ }
       toast.success(`${sku} descartado`);
       await data.reload();
     } catch (err) {
@@ -1185,6 +1164,7 @@ export default function ForecastClientesTab() {
         .eq('sku', sku)
         .not('descartado_en', 'is', null);
       if (error) throw error;
+      try { const { invalidateDataCache } = await import('../../lib/queries'); await invalidateDataCache(); } catch { /* noop */ }
       toast.success(`${sku} recuperado`);
       await data.reload();
     } catch (err) {

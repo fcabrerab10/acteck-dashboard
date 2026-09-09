@@ -164,6 +164,9 @@ export default function GestionCuotasPanel({ onClose, onSaved }) {
           .upsert(slice, { onConflict: 'cliente,mes,anio' });
         if (upErr) throw upErr;
       }
+      // cuotas_mensuales se cachea 5 min (fetchAll / useCuotasMensuales):
+      // invalidar para que Sell In, Propuestas y Home vean las cuotas nuevas ya.
+      try { const { invalidateDataCache } = await import('../lib/queries'); await invalidateDataCache(); } catch { /* noop */ }
       const pares = new Set(parsed.rows.map((r) => `${r.cliente}:${r.anio}`));
       setMsg(`✓ Cargadas ${parsed.rows.length} filas · ${pares.size} combinaciones (cliente × año)`);
       onSaved?.();

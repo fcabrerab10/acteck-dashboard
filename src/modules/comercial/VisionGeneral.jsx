@@ -15,6 +15,7 @@ import {
   AreaChart, Area,
   XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
 } from 'recharts';
+import { cachedQuery } from '../../lib/queries';
 
 // ────────── Constantes ──────────
 const MESES_LBL  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -449,33 +450,33 @@ export default function VisionGeneral() {
       // requieren ventas_erp completo con marca/familia.
       const [a, p, p2, c, inv, invMarca, cart, q, cRes, cCal, cProx, cSem, cRet, cProv, cAgo, cLT, cYTD,
              sCan, sCanPrev, sMay, sRot, sMen, sMenPrev, sSkus, sCli, sPromo, sPromoSkus] = await Promise.all([
-        supabase.from('v_vision_factura_canal').select('*').eq('anio', anio),
-        supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 1),
-        supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 2),
-        supabase.from('v_vision_factura_clientes').select('*').eq('anio', anio),
-        supabase.from('v_vision_inventario_global').select('*').single(),
-        supabase.from('v_vision_inventario_marca').select('*').order('valor', { ascending: false, nullsFirst: false }),
-        supabase.from('v_vision_cartera_consolidada').select('*'),
-        supabase.from('cuotas_canales').select('*').eq('anio', anio),
-        supabase.from('v_vision_camino_resumen').select('*'),
-        supabase.from('v_vision_camino_calendario').select('*'),
-        supabase.from('v_vision_camino_proximas').select('*').limit(10),
-        supabase.from('v_vision_camino_semanal').select('*').limit(12),
-        supabase.from('v_vision_camino_retrasadas').select('*'),
-        supabase.from('v_vision_camino_proveedores').select('*').limit(8),
-        supabase.from('v_vision_camino_agotados').select('*').limit(10),
-        supabase.from('v_vision_camino_leadtime').select('*').single(),
-        supabase.from('v_vision_camino_compras_ytd').select('*'),
-        supabase.from('v_vision_sellout_canal').select('*').eq('anio', anio),
-        supabase.from('v_vision_sellout_canal').select('*').eq('anio', anio - 1),
-        supabase.from('v_vision_sellout_mayoristas').select('*').eq('anio', anio).order('importe', { ascending: false }),
-        supabase.from('v_vision_sellout_rotacion').select('*').order('rotacion_pct', { ascending: true, nullsFirst: false }),
-        supabase.from('v_vision_sellout_mensual').select('*').eq('anio', anio),
-        supabase.from('v_vision_sellout_mensual').select('*').eq('anio', anio - 1),
-        supabase.from('v_vision_sellout_top_skus').select('*').eq('anio', anio).order('importe', { ascending: false }).limit(10),
-        supabase.from('v_vision_sellout_top_clientes').select('*').eq('anio', anio).order('importe', { ascending: false }).limit(10),
-        supabase.from('v_vision_sellout_promos').select('*').single(),
-        supabase.from('v_vision_sellout_promos_top_skus').select('*').order('importe', { ascending: false }).limit(5),
+        cachedQuery(supabase.from('v_vision_factura_canal').select('*').eq('anio', anio)),
+        cachedQuery(supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 1)),
+        cachedQuery(supabase.from('v_vision_factura_canal').select('*').eq('anio', anio - 2)),
+        cachedQuery(supabase.from('v_vision_factura_clientes').select('*').eq('anio', anio)),
+        cachedQuery(supabase.from('v_vision_inventario_global').select('*').single()),
+        cachedQuery(supabase.from('v_vision_inventario_marca').select('*').order('valor', { ascending: false, nullsFirst: false })),
+        cachedQuery(supabase.from('v_vision_cartera_consolidada').select('*')),
+        cachedQuery(supabase.from('cuotas_canales').select('*').eq('anio', anio)),
+        cachedQuery(supabase.from('v_vision_camino_resumen').select('*')),
+        cachedQuery(supabase.from('v_vision_camino_calendario').select('*')),
+        cachedQuery(supabase.from('v_vision_camino_proximas').select('*').limit(10)),
+        cachedQuery(supabase.from('v_vision_camino_semanal').select('*').limit(12)),
+        cachedQuery(supabase.from('v_vision_camino_retrasadas').select('*')),
+        cachedQuery(supabase.from('v_vision_camino_proveedores').select('*').limit(8)),
+        cachedQuery(supabase.from('v_vision_camino_agotados').select('*').limit(10)),
+        cachedQuery(supabase.from('v_vision_camino_leadtime').select('*').single()),
+        cachedQuery(supabase.from('v_vision_camino_compras_ytd').select('*')),
+        cachedQuery(supabase.from('v_vision_sellout_canal').select('*').eq('anio', anio)),
+        cachedQuery(supabase.from('v_vision_sellout_canal').select('*').eq('anio', anio - 1)),
+        cachedQuery(supabase.from('v_vision_sellout_mayoristas').select('*').eq('anio', anio).order('importe', { ascending: false })),
+        cachedQuery(supabase.from('v_vision_sellout_rotacion').select('*').order('rotacion_pct', { ascending: true, nullsFirst: false })),
+        cachedQuery(supabase.from('v_vision_sellout_mensual').select('*').eq('anio', anio)),
+        cachedQuery(supabase.from('v_vision_sellout_mensual').select('*').eq('anio', anio - 1)),
+        cachedQuery(supabase.from('v_vision_sellout_top_skus').select('*').eq('anio', anio).order('importe', { ascending: false }).limit(10)),
+        cachedQuery(supabase.from('v_vision_sellout_top_clientes').select('*').eq('anio', anio).order('importe', { ascending: false }).limit(10)),
+        cachedQuery(supabase.from('v_vision_sellout_promos').select('*').single()),
+        cachedQuery(supabase.from('v_vision_sellout_promos_top_skus').select('*').order('importe', { ascending: false }).limit(5)),
       ]);
       setMargenAct(a.data || []);
       setMargenPrev(p.data || []);
@@ -487,7 +488,7 @@ export default function VisionGeneral() {
       try {
         const [{ data: skusRoad }, { data: skusInv }] = await Promise.all([
           supabase.from('roadmap_sku').select('sku, familia'),
-          supabase.from('inventario_acteck').select('sku, valor_mxn'),
+          cachedQuery(supabase.from('inventario_acteck').select('sku, valor_mxn')),
         ]);
         if (skusRoad && skusInv) {
           const famMap = new Map((skusRoad || []).map((r) => [String(r.sku), r.familia || 'Sin familia']));

@@ -8,7 +8,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useFacturacion, useCuotasMensuales, useInventarioCliente } from '../../lib/queries';
+import { useFacturacion, useCuotasMensuales, useInventarioCliente , cachedQuery } from '../../lib/queries';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
@@ -97,13 +97,13 @@ export default function HomeDicotech({ cliente, clienteKey }) {
       const fetchAll = async (table, select, applyFilter) => fetchAllCentral(table, select, applyFilter);
 
       const [ecHistR, siR, cfgR, soMesR, soSucR] = await Promise.all([
-        supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true }),
-        supabase.from('facturacion_clientes').select('sku, mes, monto, piezas').eq('cliente_key', clienteKey).eq('anio', anio),
+        cachedQuery(supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true })),
+        cachedQuery(supabase.from('facturacion_clientes').select('sku, mes, monto, piezas').eq('cliente_key', clienteKey).eq('anio', anio)),
         supabase.from('clientes_credito_config').select('*').eq('cliente', clienteKey).maybeSingle(),
         // Sell out mensual precalculado (vista dedicada Dicotech)
-        supabase.from('v_sellout_dicotech_mensual').select('anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas').in('anio', [anio - 1, anio]),
+        cachedQuery(supabase.from('v_sellout_dicotech_mensual').select('anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos,facturas').in('anio', [anio - 1, anio])),
         // Sell out por sucursal + mes (para split por sucursal)
-        supabase.from('v_sellout_dicotech_sucursal_mes').select('sucursal,anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos').eq('anio', anio),
+        cachedQuery(supabase.from('v_sellout_dicotech_sucursal_mes').select('sucursal,anio,mes,piezas,monto,tx,skus_distintos,clientes_distintos').eq('anio', anio)),
       ]);
       if (cancel) return;
       setCortesHist(ecHistR.data || []);

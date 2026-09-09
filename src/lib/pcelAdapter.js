@@ -18,35 +18,13 @@
  */
 
 import { supabase } from "./supabase";
+import { fetchAllQ } from './queries';
 
 // ────────── Helpers ──────────
 // Paginación: Supabase PostgREST limita a 1000 filas por request
+// Delegado al motor paginado PARALELO + cache central (lib/queries.js).
 async function fetchAllPages(qFactory, pageSize = 1000) {
-  const MAX_RETRIES = 6;
-  const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-  const acc = [];
-  let from = 0;
-  while (true) {
-    let lastErr = null; let data = null;
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const res = await qFactory().range(from, from + pageSize - 1);
-      if (!res.error) { data = res.data || []; break; }
-      lastErr = res.error;
-      if (attempt < MAX_RETRIES - 1) {
-        console.warn(`[fetchAllPages] chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-        await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-      }
-    }
-    if (data == null) {
-      console.error(`[fetchAllPages] chunk from=${from} falló tras ${MAX_RETRIES} intentos.`);
-      throw new Error(`Paginación falló en chunk ${from}. Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-    }
-    if (data.length === 0) break;
-    acc.push(...data);
-    if (data.length < pageSize) break;
-    from += pageSize;
-  }
-  return acc;
+  return fetchAllQ(qFactory, { pageSize, label: "pcel" });
 }
 
 // Semana ISO → mes (1-12). Usa el jueves de la semana ISO como referencia.

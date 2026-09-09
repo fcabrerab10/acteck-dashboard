@@ -11,6 +11,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { FerrutekLoader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
+import { fetchAllQ , cachedQuery } from '../../lib/queries';
 
 // ═══ Constantes ═══
 const CLIENTES = [
@@ -1024,7 +1025,7 @@ function VistaClientePicker({ theme, isDark, onElegir, onBack }) {
       // v_ventas_mensuales_agg quedaba desactualizada en varios meses.
       const [cuotas, factRes] = await Promise.all([
         supabase.from('cuotas_mensuales').select('cliente,cuota_min,cuota_ideal').eq('anio', anio).eq('mes', mes).in('cliente', cliKeys),
-        supabase.from('facturacion_clientes').select('cliente_key,monto').eq('anio', anio).eq('mes', mes).in('cliente_key', cliKeys),
+        cachedQuery(supabase.from('facturacion_clientes').select('cliente_key,monto').eq('anio', anio).eq('mes', mes).in('cliente_key', cliKeys)),
       ]);
       const out = {};
       for (const k of cliKeys) out[k] = { cuota: 0, facturado: 0 };
@@ -2607,32 +2608,9 @@ function KpiFit({ theme, P, icon, iconBg, iconColor, chip, value, valueColor, no
 // fetchAll y helpers async — preservados
 // ════════════════════════════════════════════════════════════════════
 // Paginador genérico (Supabase corta en 1000 filas por defecto).
+// Delegado al motor paginado PARALELO + cache central (lib/queries.js).
 async function fetchAllPagesLocal(qFactory, pageSize = 1000) {
-  const MAX_RETRIES = 6;
-  const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-  const acc = [];
-  let from = 0;
-  while (true) {
-    let lastErr = null; let data = null;
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const res = await qFactory().range(from, from + pageSize - 1);
-      if (!res.error) { data = res.data || []; break; }
-      lastErr = res.error;
-      if (attempt < MAX_RETRIES - 1) {
-        console.warn(`[fetchAllPagesLocal] chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-        await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-      }
-    }
-    if (data == null) {
-      console.error(`[fetchAllPagesLocal] chunk from=${from} falló tras ${MAX_RETRIES} intentos.`);
-      throw new Error(`Paginación falló en chunk ${from}. Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-    }
-    if (data.length === 0) break;
-    acc.push(...data);
-    if (data.length < pageSize) break;
-    from += pageSize;
-  }
-  return acc;
+  return fetchAllQ(qFactory, { pageSize, label: "propuestas" });
 }
 
 async function fetchAll(clienteKey) {
@@ -2691,7 +2669,7 @@ async function fetchAll(clienteKey) {
     invCliQuery,
     // Vista canónica: mismos precios que la pestaña Estrategia de Precios.
     // Trae 1 fila por (sku, lista) con el precio más reciente.
-    supabase.from('v_estrategia_precios_lista').select('sku,lista,precio'),
+    cachedQuery(supabase.from('v_estrategia_precios_lista').select('sku,lista,precio')),
     // Costo lo seguimos leyendo de la tabla base porque la vista no lo trae.
     supabase.from('precios_sku')
       .select('sku,costo_promedio,anio,mes')

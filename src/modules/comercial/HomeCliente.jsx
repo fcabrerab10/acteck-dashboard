@@ -12,6 +12,7 @@ import { fetchSelloutSku, fetchInventarioCliente } from '../../lib/pcelAdapter';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaCliente, puedeVerPestanaCliente } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
+import { fetchAllQ , cachedQuery } from '../../lib/queries';
 
 const iconStyle14 = { width: 14, height: 14, verticalAlign: "middle", marginRight: 4 };
 const iconStyle16 = { width: 16, height: 16, verticalAlign: "middle", marginRight: 6 };
@@ -63,6 +64,8 @@ function ActualizarDatosExcel({ cliente, anio, onComplete }) {
         .upsert(registros, { onConflict: "cliente,mes,anio" });
 
       if (error) throw error;
+      // ventas_mensuales se cachea 5 min (fetchAll): invalidar tras el upsert.
+      try { const { invalidateDataCache } = await import('../../lib/queries'); await invalidateDataCache(); } catch { /* noop */ }
       setResultado({ ok: true, msg: registros.length + " meses actualizados" });
       if (onComplete) onComplete();
     } catch (err) {
@@ -313,32 +316,9 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
 
   // ─── PAGINATED FETCH (PostgREST max 1000 rows per request) ──────────────────
   // Factory pattern: each page creates a fresh query (supabase-js builders are single-use)
+  // Delegado al motor paginado PARALELO + cache central (lib/queries.js).
   async function fetchAllPages(queryFactory, pageSize = 1000) {
-    const MAX_RETRIES = 6;
-    const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-    const acc = [];
-    let from = 0;
-    while (true) {
-      let lastErr = null; let data = null;
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        const res = await queryFactory().range(from, from + pageSize - 1);
-        if (!res.error) { data = res.data || []; break; }
-        lastErr = res.error;
-        if (attempt < MAX_RETRIES - 1) {
-          console.warn(`[fetchAllPages] chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-          await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-        }
-      }
-      if (data == null) {
-        console.error(`[fetchAllPages] chunk from=${from} falló tras ${MAX_RETRIES} intentos.`);
-        throw new Error(`Paginación falló en chunk ${from}. Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-      }
-      if (data.length === 0) break;
-      acc.push(...data);
-      if (data.length < pageSize) break;
-      from += pageSize;
-    }
-    return acc;
+    return fetchAllQ(queryFactory, { pageSize, label: "home" });
   }
 
   // ─── FETCH ALL DATA ─────────────────────────────────────────────────────────
@@ -352,13 +332,13 @@ export default function HomeCliente({ cliente, clienteKey, onUploadComplete, isM
       const [siData, soData, mR, imR, minR, invData, cuotasR, sdR, ecR, tareasR, prodData, invActData] = await Promise.all([
         fetchAllPages(() => supabase.from("sell_in_sku").select("*").eq("cliente", clienteKey).eq("anio", anioResumen)),
         fetchSelloutSku(clienteKey, anioResumen),
-        supabase.from("metas_anuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).maybeSingle(),
+        cachedQuery(supabase.from("metas_anuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).maybeSingle()),
         supabase.from("inversion_marketing").select("*").eq("cliente", clienteKey).eq("anio", anioResumen).order("mes"),
         supabase.from("minutas").select("*").eq("cliente", clienteKey).order("fecha_reunion", { ascending: false }).limit(10),
         fetchInventarioCliente(clienteKey),
         supabase.from("cuotas_mensuales").select("*").eq("cliente", clienteKey).eq("anio", anioResumen),
         fetchAllPages(() => supabase.from("sellout_detalle").select("fecha,total,cantidad,no_parte,marca").eq("cliente", clienteKey).gte("fecha", hace56dias)),
-        supabase.from("estados_cuenta").select("*").eq("cliente", clienteKey).order("anio", { ascending: false }).order("semana", { ascending: false }).limit(1).maybeSingle(),
+        cachedQuery(supabase.from("estados_cuenta").select("*").eq("cliente", clienteKey).order("anio", { ascending: false }).order("semana", { ascending: false }).limit(1).maybeSingle()),
         supabase.from("pendientes").select("*").eq("cliente", clienteKey).eq("archivado", false).order("created_at", { ascending: false }),
         fetchAllPages(() => supabase.from("productos_cliente").select("sku,marca,precio_venta").eq("cliente", clienteKey)),
         // Fernando (2026-08-12): usar inventario (físico total) en vez de disponible.

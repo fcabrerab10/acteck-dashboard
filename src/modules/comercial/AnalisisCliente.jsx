@@ -6,6 +6,7 @@ import { fetchSelloutSku, fetchSelloutSkuRango, fetchInventarioCliente } from '.
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
+import { fetchAllQ } from '../../lib/queries';
 
 export default function AnalisisCliente({ cliente, clienteKey }) {
   var perfil = usePerfil();
@@ -36,32 +37,9 @@ export default function AnalisisCliente({ cliente, clienteKey }) {
 
   // Paginated fetch helper (PostgREST caps at 1000 rows)
   // Factory pattern: each page creates a fresh query (supabase-js builders are single-use)
+  // Delegado al motor paginado PARALELO + cache central (lib/queries.js).
   async function fetchAllPages(queryFactory, pageSize = 1000) {
-    const MAX_RETRIES = 6;
-    const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-    const acc = [];
-    let from = 0;
-    while (true) {
-      let lastErr = null; let data = null;
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        const res = await queryFactory().range(from, from + pageSize - 1);
-        if (!res.error) { data = res.data || []; break; }
-        lastErr = res.error;
-        if (attempt < MAX_RETRIES - 1) {
-          console.warn(`[fetchAllPages] chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-          await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-        }
-      }
-      if (data == null) {
-        console.error(`[fetchAllPages] chunk from=${from} falló tras ${MAX_RETRIES} intentos.`);
-        throw new Error(`Paginación falló en chunk ${from}. Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-      }
-      if (data.length === 0) break;
-      acc.push(...data);
-      if (data.length < pageSize) break;
-      from += pageSize;
-    }
-    return acc;
+    return fetchAllQ(queryFactory, { pageSize, label: "analisis" });
   }
 
   React.useEffect(function() {

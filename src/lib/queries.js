@@ -6,6 +6,7 @@
 // ya consultó lo mismo dentro del staleTime (5 min).
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from './supabase';
+import { queryClient } from './queryClient';
 
 // ─── Paginación estándar · PARALELA ───
 // Antes: while-loop secuencial → facturacion_clientes 2 años (54K filas en
@@ -113,17 +114,110 @@ export function orderColFromSelect(select) {
   return first === '*' ? 'id' : first;
 }
 
+// ─── Cache imperativa sobre React Query ───
+// Clave = URL final de PostgREST (tabla + select + filtros + order) sin
+// offset/limit. Determinista y sin necesidad de que cada módulo declare
+// una queryKey. Pasa por queryClient.fetchQuery → dedupe de requests
+// concurrentes, staleTime 5 min, gcTime 30 min y persistencia IndexedDB
+// (misma semántica que los hooks useFacturacion/useRoadmap).
+// Si la data está fresca se devuelve sin red; si está stale se refetchea
+// y se espera (nunca se muestra data vieja > 5 min).
+const CACHE_STALE_MS = 5 * 60 * 1000;
+
+function cacheKeyFromBuilder(q) {
+  try {
+    const u = new URL(q.url.href);
+    u.searchParams.delete('offset');
+    u.searchParams.delete('limit');
+    return u.pathname + '?' + u.searchParams.toString();
+  } catch {
+    return null;
+  }
+}
+
+// Inyecta Prefer: count=exact en un builder ya construido (factories que
+// hicieron .select() sin opciones). headers es un objeto Headers en
+// supabase-js ≥ 2.90; se tolera también el shape Record antiguo.
+function withExactCount(q) {
+  try {
+    const h = q.headers;
+    if (h && typeof h.get === 'function') {
+      const prev = h.get('prefer');
+      if (!/count=/.test(prev || '')) h.set('prefer', [prev, 'count=exact'].filter(Boolean).join(','));
+    } else if (h && typeof h === 'object') {
+      const prev = h['Prefer'] || h['prefer'];
+      if (!/count=/.test(prev || '')) h['Prefer'] = [prev, 'count=exact'].filter(Boolean).join(',');
+    }
+  } catch { /* si no se puede, fetchPaged cae a modo secuencial */ }
+  return q;
+}
+
 async function fetchAll(table, select, extra = (q) => q) {
   const pageSize = HEAVY_TABLES.has(table) ? 500 : 1000;
   const orderCol = orderColFromSelect(select);
-  return fetchPaged((from, to, withCount) => {
+  const makePage = (from, to, withCount) => {
     let q = supabase
       .from(table)
       .select(select, withCount ? { count: 'exact' } : undefined)
       .order(orderCol, { ascending: true })
       .range(from, to);
     return extra(q);
-  }, { pageSize, label: table });
+  };
+  const key = cacheKeyFromBuilder(makePage(0, pageSize - 1, false));
+  const run = () => fetchPaged(makePage, { pageSize, label: table });
+  if (!key) return run();
+  return queryClient.fetchQuery({ queryKey: ['fetchAll', key], queryFn: run, staleTime: CACHE_STALE_MS });
+}
+
+// Variante para módulos que arman el builder ellos mismos:
+//   fetchAllQ(() => supabase.from('t').select('a,b').eq('x', 1), { pageSize, orderCol })
+// La factory NO debe incluir .range(). Si trae .order() se respeta; si no y
+// se pasa orderCol, se añade. Paralelo + cache igual que fetchAll.
+export async function fetchAllQ(qFactory, { pageSize = 1000, orderCol = null, label = 'query' } = {}) {
+  const makePage = (from, to, withCount) => {
+    let q = qFactory();
+    if (orderCol) {
+      let hasOrder = false;
+      try { hasOrder = q.url.searchParams.has('order'); } catch { /* noop */ }
+      if (!hasOrder) q = q.order(orderCol, { ascending: true });
+    }
+    q = q.range(from, to);
+    return withCount ? withExactCount(q) : q;
+  };
+  const key = cacheKeyFromBuilder(makePage(0, pageSize - 1, false));
+  const run = () => fetchPaged(makePage, { pageSize, label });
+  if (!key) return run();
+  return queryClient.fetchQuery({ queryKey: ['fetchAll', key], queryFn: run, staleTime: CACHE_STALE_MS });
+}
+
+// Cache para lecturas puntuales (no paginadas): .single(), .limit(), .maybeSingle()…
+//   const { data } = await cachedQuery(supabase.from('t').select('*').eq('id', 1).single());
+// Devuelve el mismo shape { data, error, count } que await builder, así los
+// call sites no cambian. Sólo cachea GET; cualquier otro método (insert/
+// update/upsert/delete/rpc POST) se ejecuta directo sin cache.
+export async function cachedQuery(builder) {
+  let key = null;
+  try {
+    if (String(builder.method || 'GET').toUpperCase() === 'GET') key = cacheKeyFromBuilder(builder) + '&' + (builder.url.searchParams.get('limit') || '') + '&' + (builder.url.searchParams.get('offset') || '');
+  } catch { key = null; }
+  if (!key) return builder;
+  const res = await queryClient.fetchQuery({
+    queryKey: ['q', key],
+    staleTime: CACHE_STALE_MS,
+    queryFn: async () => {
+      const r = await builder;
+      if (r.error) throw r.error;
+      return { data: r.data, count: r.count ?? null, status: r.status, statusText: r.statusText };
+    },
+  });
+  return { ...res, error: null };
+}
+
+// Invalidar todo lo cacheado por fetchAll/fetchAllQ/cachedQuery (p. ej.
+// tras un upload). uploads.html es otra página, así que hoy basta con el
+// reload; queda expuesto para uso futuro desde la app.
+export function invalidateDataCache() {
+  return queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'fetchAll' || q.queryKey[0] === 'q' });
 }
 
 // ─── Roadmap SKU ───

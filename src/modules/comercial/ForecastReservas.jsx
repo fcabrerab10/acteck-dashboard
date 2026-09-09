@@ -19,6 +19,7 @@ import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
 import { Search, ChevronDown, Zap, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { fetchAllQ } from '../../lib/queries';
 
 const NOMBRES_MES = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const CLIENTES = [
@@ -30,20 +31,9 @@ const LIME = '#CDE64A';
 
 // Paginación estándar. Requiere `.order()` en la query para que PostgREST
 // devuelva chunks estables — sin order puede repetir/skipar filas o loopar.
+// Delegado al motor paginado PARALELO + cache central (lib/queries.js).
 async function fetchAll(qFactory, orderCol = 'id', pageSize = 1000) {
-  const acc = [];
-  let from = 0;
-  const MAX_ITERS = 100; // guardrail: 100 * 1000 = 100k filas máximo
-  for (let i = 0; i < MAX_ITERS; i++) {
-    const q = qFactory().order(orderCol, { ascending: true }).range(from, from + pageSize - 1);
-    const { data, error } = await q;
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    acc.push(...data);
-    if (data.length < pageSize) break;
-    from += pageSize;
-  }
-  return acc;
+  return fetchAllQ(qFactory, { pageSize, orderCol, label: "forecast" });
 }
 
 function fmtInt(n) { return (Math.round(Number(n) || 0)).toLocaleString('es-MX'); }

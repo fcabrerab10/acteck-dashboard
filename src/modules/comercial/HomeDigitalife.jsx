@@ -8,7 +8,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useFacturacion, useCuotasMensuales, useInventarioCliente } from '../../lib/queries';
+import { useFacturacion, useCuotasMensuales, useInventarioCliente , cachedQuery } from '../../lib/queries';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
@@ -96,9 +96,9 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
       const fetchAll = async (table, select, applyFilter) => fetchAllCentral(table, select, applyFilter);
 
       const [ecHistR, siR, prR, soRaw] = await Promise.all([
-        supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true }),
-        supabase.from('facturacion_clientes').select('sku, mes, monto, piezas').eq('cliente_key', clienteKey).eq('anio', anio),
-        supabase.from('productos_cliente').select('sku, marca, precio_venta').eq('cliente', clienteKey),
+        cachedQuery(supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true })),
+        cachedQuery(supabase.from('facturacion_clientes').select('sku, mes, monto, piezas').eq('cliente_key', clienteKey).eq('anio', anio)),
+        cachedQuery(supabase.from('productos_cliente').select('sku, marca, precio_venta').eq('cliente', clienteKey)),
         // Sell out con paginación (Digitalife tiene ~20K rows)
         fetchAll('sellout_detalle', 'fecha, total, cantidad, no_parte, marca', (q) => q.eq('cliente', clienteKey).gte('fecha', anioAntIni)),
       ]);

@@ -9,6 +9,7 @@ import { TrendingUp, AlertTriangle, Target, Package } from 'lucide-react';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
+import { fetchAllQ } from '../../lib/queries';
 
 /**
  * Resumen Clientes v3 — Apple Bento editorial
@@ -88,32 +89,9 @@ function useResumenData() {
   });
 
   useEffect(() => {
+    // Delegado al motor paginado PARALELO + cache central (lib/queries.js).
     async function fetchAll(qFactory, pageSize = 1000) {
-      // v2: 6 retries backoff hasta 16s + throw en vez de partial.
-      const MAX_RETRIES = 6;
-      const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-      const all = []; let from = 0;
-      while (true) {
-        let lastErr = null; let data = null;
-        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-          const res = await qFactory().range(from, from + pageSize - 1);
-          if (!res.error) { data = res.data || []; break; }
-          lastErr = res.error;
-          if (attempt < MAX_RETRIES - 1) {
-            console.warn(`[fetchAll] chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-            await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-          }
-        }
-        if (data == null) {
-          console.error(`[fetchAll] chunk from=${from} falló tras ${MAX_RETRIES} intentos.`);
-          throw new Error(`Paginación falló en chunk ${from}. Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-        }
-        if (data.length === 0) break;
-        all.push(...data);
-        if (data.length < pageSize) break;
-        from += pageSize;
-      }
-      return all;
+      return fetchAllQ(qFactory, { pageSize, label: "resumen" });
     }
     (async () => {
       const [cmRes, invDigi, invPcel, invDico, dsoRes, ccRes, soRows, soPcelRows, soPcelMenRows, siRows, ecRows] = await Promise.all([

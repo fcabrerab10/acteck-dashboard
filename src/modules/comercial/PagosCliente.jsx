@@ -11,6 +11,7 @@ import { NuevaPromocionButton, ListaPromociones } from './PagosPromociones';
 import LineamientosCliente from './LineamientosCliente';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
+import { cachedQuery } from '../../lib/queries';
 
 const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
@@ -858,8 +859,8 @@ export default function PagosCliente({ cliente, clienteKey }) {
     setRebateLoading(true);
     const anio = new Date().getFullYear();
     const [siRes, prodRes] = await Promise.all([
-      supabase.from("sell_in_sku").select("sku,mes,monto_pesos").eq("cliente", clienteKey).eq("anio", anio),
-      supabase.from("productos_cliente").select("sku,categoria").eq("cliente", clienteKey)
+      cachedQuery(supabase.from("sell_in_sku").select("sku,mes,monto_pesos").eq("cliente", clienteKey).eq("anio", anio)),
+      cachedQuery(supabase.from("productos_cliente").select("sku,categoria").eq("cliente", clienteKey))
     ]);
     const catMap = {};
     (prodRes.data || []).forEach(p => { catMap[p.sku] = (p.categoria || "").trim().toLowerCase(); });
@@ -942,7 +943,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (clienteKey !== "pcel" || !DB_CONFIGURED) return;
     const anio = new Date().getFullYear();
     (async () => {
-      const { data } = await supabase.from("sell_in_sku").select("mes,monto_pesos").eq("cliente", "pcel").eq("anio", anio);
+      const { data } = await cachedQuery(supabase.from("sell_in_sku").select("mes,monto_pesos").eq("cliente", "pcel").eq("anio", anio));
       const byMonth = {};
       (data || []).forEach(r => {
         const m = parseInt(r.mes);

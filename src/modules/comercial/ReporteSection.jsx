@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { roadmapStyle, roadmapInfo } from '../../lib/roadmapColors';
 import { EAN_SAT_DATA } from '../../lib/eanSatData';
+import { fetchAll as fetchAllCentral } from '../../lib/queries';
 
 /**
  * ReporteSection — sección colapsable dentro de Resumen Clientes
@@ -73,46 +74,9 @@ export default function ReporteSection({ standalone = false, skusEnRiesgo = null
 
   // Helper: pagina sobre Supabase (que limita a 1000 filas por defecto).
   // inventario_acteck tiene 10k+ filas, así que necesitamos traerlo en chunks.
+  // Delegado al motor paginado PARALELO + cache central (lib/queries.js).
   async function fetchAllRows(tableName, selectCols, filters = (q) => q) {
-    const HEAVY_TABLES = new Set(['sellout_general', 'sellout_detalle', 'facturacion_clientes']);
-    const PAGE = HEAVY_TABLES.has(tableName) ? 500 : 1000;
-    const MAX_RETRIES = 6;
-    const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-
-    const acc = [];
-    // BUG-FIX: cuando selectCols === '*' o el primer campo es '*', antes se ejecutaba
-    // .order('*') y Supabase respondía HTTP 400 → 6 retries fallaban → throw →
-    // React Query devolvía data:[] silenciosamente.
-    const orderCol = (() => {
-      if (!selectCols || selectCols === '*') return 'id';
-      if (/(^|,)\s*id\s*(,|$)/i.test(selectCols)) return 'id';
-      const first = selectCols.split(',')[0].trim();
-      return first === '*' ? 'id' : first;
-    })();
-    let from = 0;
-    while (true) {
-      let lastErr = null; let data = null;
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        let q = supabase.from(tableName).select(selectCols).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
-        q = filters(q);
-        const res = await q;
-        if (!res.error) { data = res.data || []; break; }
-        lastErr = res.error;
-        if (attempt < MAX_RETRIES - 1) {
-          console.warn(`[fetchAllRows] ${tableName} chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-          await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-        }
-      }
-      if (data == null) {
-        console.error(`[fetchAllRows] ${tableName} chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
-        throw new Error(`No se pudo cargar ${tableName} completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-      }
-      if (data.length === 0) break;
-      acc.push(...data);
-      if (data.length < PAGE) break;
-      from += PAGE;
-    }
-    return acc;
+    return fetchAllCentral(tableName, selectCols, filters);
   }
 
   async function cargar() {

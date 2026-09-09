@@ -8,7 +8,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useFacturacion, useCuotasMensuales, useInventarioCliente, useRoadmap } from '../../lib/queries';
+import { useFacturacion, useCuotasMensuales, useInventarioCliente, useRoadmap , cachedQuery } from '../../lib/queries';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { FerrutekLoader } from '../../components';
@@ -99,13 +99,13 @@ export default function HomePcel({ cliente, clienteKey }) {
       const fetchAll = async (table, select, applyFilter) => fetchAllCentral(table, select, applyFilter);
 
       const [ecHistR, siR, prR, soMenR, soMarR] = await Promise.all([
-        supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true }),
-        supabase.from('facturacion_clientes').select('sku, mes, monto, piezas').eq('cliente_key', clienteKey).eq('anio', anio),
-        supabase.from('productos_cliente').select('sku, marca, precio_venta').eq('cliente', clienteKey),
+        cachedQuery(supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true })),
+        cachedQuery(supabase.from('facturacion_clientes').select('sku, mes, monto, piezas').eq('cliente_key', clienteKey).eq('anio', anio)),
+        cachedQuery(supabase.from('productos_cliente').select('sku, marca, precio_venta').eq('cliente', clienteKey)),
         // Sell out mensual PCEL (agregado)
-        supabase.from('v_sellout_pcel_mensual').select('anio,mes,piezas,monto,tx,skus_distintos').in('anio', [anio - 1, anio]),
+        cachedQuery(supabase.from('v_sellout_pcel_mensual').select('anio,mes,piezas,monto,tx,skus_distintos').in('anio', [anio - 1, anio])),
         // Sell out por marca × mes PCEL
-        supabase.from('v_sellout_pcel_marca_mes').select('marca,anio,mes,piezas,monto').in('anio', [anio - 1, anio]),
+        cachedQuery(supabase.from('v_sellout_pcel_marca_mes').select('marca,anio,mes,piezas,monto').in('anio', [anio - 1, anio])),
       ]);
       if (cancel) return;
       setCortesHist(ecHistR.data || []);
