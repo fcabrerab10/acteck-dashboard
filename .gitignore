@@ -5,3 +5,10 @@ dist/
 .DS_Store
 supabase/.temp/
 sellout-tmp.xlsx
+
+# Puente SQL (Mac mini)
+bridge/.env
+bridge/google-sa.json
+bridge/logs/*
+!bridge/logs/.gitkeep
+bridge/node_modules/

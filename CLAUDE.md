@@ -41,9 +41,11 @@ acteck-dashboard/
 │       └── comercial/         — Home*, SellIn*, SellOut*, PagosCliente, ForecastClientesTab (S&OP),
 │                                PropuestasTab, ForecastReservas, VisionGeneral, EstrategiaPrecios, …
 ├── api/
-│   ├── import-central.js      — Upsert por chunks. Whitelist de tablas + unique keys
+│   ├── import-central.js      — Upsert por chunks. Whitelist de tablas + unique keys. Acepta JWT super_admin o x-sync-secret
 │   ├── cron.js                — Tareas programadas (vercel.json)
+│   ├── _embarques.js          — Transformaciones Master Embarques (cron + bridge)
 │   └── admin/
+├── bridge/                    — Puente SQL Server/Sheets → Supabase que corre en la Mac mini (docs/SYNC_SQL_BRIDGE.md)
 ├── supabase/migrations/       — SQL versionado (tablas, vistas, constraints)
 └── .env.local                 — Variables locales (NO commitear)
 ```
@@ -82,6 +84,10 @@ Almacenes comerciales (fuente única `almacenes_config`): `1, 2, 3, 6, 9, 12, 14
 - **Fase 3 (misma fecha):** `facturacion_clientes` ya NO viene del pivot del Excel: la reconstruye `refresh_facturacion_clientes(anios)` desde `erp_ventas` (monto = Fact Neta oficial; piezas = unidades de facturas + devoluciones, sin bonificaciones). La llama `import-central` con `finalize:'refresh_facturacion_clientes'` al terminar la carga de erp_ventas; también refresca `mv_erp_medidas_cliente_mes`. Fernando validó el cuadre en producción el 2026-09-09 (respaldo del pivot ya borrado).
 - Rentabilidad en pantalla: `src/modules/comercial/RentabilidadBloque.jsx` (Visión General global vía `v_erp_medidas_mes`; Sell In por cliente vía `v_erp_medidas_cliente_mes`). Ambas vistas leen la MV (ms); la vista viva por SKU `v_erp_medidas` tarda ~1.5 s y el rol anon la cancela a 3 s: no usarla desde la app sin filtro.
 - Migraciones: `20260909_erp_ventas_medidas.sql` (tabla + vistas) y `20260909_facturacion_desde_erp.sql` (función, MV, vistas mensuales).
+
+### Puente SQL en la Mac mini (2026-09-09)
+
+`bridge/` corre en la Mac mini de la oficina y sustituye las cargas manuales de Ventas/Inventario/Precios (SQL `192.168.0.151`), Cuotas (`192.168.0.213`), Sell Out General (`192.168.0.160`) y Master Embarques (Google Sheets). Lee las vistas con `mssql`, mapea con réplicas de los parsers de `uploads.html` (`bridge/lib/mappers.mjs` — si cambia uno, cambiar el otro) y sube por `POST /api/import-central` con header `x-sync-secret` (`SYNC_SECRET` en Vercel, `isSyncRequest()` en `api/_auth.js`). Deja rastro en `sync_events`/`sync_status` vía `{ table, syncEvent }`. Transformaciones del Master Embarques compartidas en `api/_embarques.js` (las usa también `api/cron.js`). Horarios en `bridge/launchd/`. Guía: `docs/SYNC_SQL_BRIDGE.md`.
 
 ### Tablas que la app SÍ escribe (cuidado con la cache — ver Rendimiento)
 

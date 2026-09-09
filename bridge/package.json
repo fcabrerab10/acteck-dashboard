@@ -1,0 +1,16 @@
+{
+  "name": "acteck-sync-bridge",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Puente SQL Server / Google Sheets → Supabase (vía /api/import-central) para acteck-dashboard. Corre en la Mac mini de la oficina.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test-conn": "node --env-file=.env sync.mjs test",
+    "sync": "node --env-file=.env sync.mjs",
+    "dry": "node --env-file=.env sync.mjs all --dry-run"
+  },
+  "dependencies": {
+    "mssql": "^11.0.1"
+  }
+}

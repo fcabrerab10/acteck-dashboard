@@ -2,13 +2,16 @@
 // Endpoint simple de upsert por chunks. El cliente parsea el Excel y envÃÂ­a
 // lotes de filas ya mapeadas: { table, rows, onConflict }
 //
-// Tablas permitidas y sus unique keys:
-//   inventario_acteck   -> "articulo,no_almacen"
-//   ventas_erp          -> "venta_id,venta_renglon"
-//   sellout_detalle     -> "cliente,fecha,no_parte,row_hash"
-//   inventario_cliente  -> "cliente,sku"
+// Tablas permitidas y sus unique keys: ver ALLOWED abajo.
+//
+// Callers:
+//   · uploads.html (usuario super_admin con JWT de Supabase)
+//   · bridge/ (puente SQL Server → Supabase en la Mac mini de la oficina) con
+//     header `x-sync-secret` (ver docs/SYNC_SQL_BRIDGE.md). El puente además
+//     manda { table, syncEvent:{...} } al terminar cada fuente para dejar
+//     rastro en sync_events / sync_status (mismo historial que el uploader).
 
-import { requireSuperAdmin } from './_auth.js';
+import { requireSuperAdmin, isSyncRequest } from './_auth.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '4mb' } } };
 
@@ -59,12 +62,45 @@ const ALLOWED = {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!SRK) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY missing' });
-  const perfil = await requireSuperAdmin(req, res);
-  if (!perfil) return;
+  const viaPuente = isSyncRequest(req);
+  let perfil = null;
+  if (!viaPuente) {
+    perfil = await requireSuperAdmin(req, res);
+    if (!perfil) return;
+  }
 
   try {
-    const { table, rows, deleteAnios, deletePeriodos, deleteAll, finalize, anios } = req.body || {};
+    const { table, rows, deleteAnios, deletePeriodos, deleteAll, finalize, anios, syncEvent } = req.body || {};
     if (!table || !ALLOWED[table]) return res.status(400).json({ error: 'invalid table. allowed: ' + Object.keys(ALLOWED).join(', ') });
+
+    // syncEvent: bitácora de una corrida del puente (o de cualquier caller).
+    // Inserta en sync_events (historial por tarjeta del uploader) y, si fue
+    // success, actualiza sync_status.<fuente> (badge "última actualización").
+    if (syncEvent && typeof syncEvent === 'object') {
+      const status = ['success', 'error', 'warning'].includes(syncEvent.status) ? syncEvent.status : 'warning';
+      const hdr = { apikey: SRK, Authorization: 'Bearer ' + SRK, 'Content-Type': 'application/json', Prefer: 'return=minimal' };
+      const ev = {
+        src_id: String(syncEvent.src_id || table).slice(0, 100),
+        status_key: syncEvent.status_key ? String(syncEvent.status_key).slice(0, 100) : null,
+        status,
+        filas: syncEvent.filas == null ? null : Math.max(0, parseInt(syncEvent.filas, 10) || 0),
+        filename: syncEvent.filename ? String(syncEvent.filename).slice(0, 300) : null,
+        duracion_ms: syncEvent.duracion_ms == null ? null : Math.max(0, parseInt(syncEvent.duracion_ms, 10) || 0),
+        detalles: syncEvent.detalles && typeof syncEvent.detalles === 'object' ? syncEvent.detalles : null,
+        user_id: perfil?.user_id || null,
+        user_nombre: perfil?.nombre || perfil?.email || String(syncEvent.origen || 'Puente SQL (Mac mini)').slice(0, 100),
+      };
+      const er = await fetch(`${SB_URL}/rest/v1/sync_events`, { method: 'POST', headers: hdr, body: JSON.stringify(ev) });
+      if (!er.ok) return res.status(er.status).json({ error: 'sync_events insert failed', detail: (await er.text()).slice(0, 300) });
+      if (status === 'success' && ev.status_key) {
+        await fetch(`${SB_URL}/rest/v1/sync_status?on_conflict=fuente`, {
+          method: 'POST',
+          headers: { ...hdr, Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({ fuente: ev.status_key, ultima_actualizacion: new Date().toISOString(), registros: ev.filas, meta: { origen: ev.user_nombre, ...(ev.detalles || {}) } }),
+        }).catch(() => {});
+      }
+      return res.status(200).json({ ok: true, table, syncEvent: ev.src_id, status });
+    }
 
     // finalize: paso posterior a la carga de erp_ventas. Reconstruye
     // facturacion_clientes (sell-in canónico) desde erp_ventas con la definición
