@@ -73,6 +73,7 @@ import { useBreakpoint, isMobile, useMobileShell } from './lib/useBreakpoint';
 import MobileNav from './components/MobileNav';
 import MobileShell from './components/MobileShell';
 import BandejaAlertas from './components/BandejaAlertas';
+import { ToastHost } from './components/kit';
 // Pantallas mobile: lazy (sólo se descargan en iPhone/iPad, y sólo la que se abre).
 const MobileHome              = lazy(() => import('./components/MobileHome'));
 const MobileHoy               = lazy(() => import('./components/MobileHoy'));
@@ -813,6 +814,7 @@ export default function App() {
           )}
           </Suspense>
           </PageTransition>
+          <ToastHost />
         </div>
         </main>
 

@@ -93,19 +93,33 @@ export function AppleLoaderFullscreen({ label = 'Cargando…' }) {
   );
 }
 
-// ─── PageTransition — fade+slide sutil al montar cada página ───
+// ─── PageTransition — salida 160 ms (opacity, −4px) → entrada 340 ms (opacity, +8px → 0).
+// Los hijos directos con data-stagger entran con desfase de 60 ms (Ferruteck 2).
 export function PageTransition({ children, keyId }) {
+  const [shown, setShown] = React.useState({ keyId, children });
+  const [leaving, setLeaving] = React.useState(false);
+  React.useEffect(() => {
+    if (keyId === shown.keyId) { setShown({ keyId, children }); return; }
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) { setShown({ keyId, children }); return; }
+    setLeaving(true);
+    const t = setTimeout(() => { setShown({ keyId, children }); setLeaving(false); }, 160);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyId, children]);
   return (
     <>
       <style>{`
-        @keyframes pageEnter {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes pageEnter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pageLeave { to { opacity: 0; transform: translateY(-4px); } }
+        [data-stagger] > * { animation: pageEnter 340ms ${APPLE_EASE} both; }
+        [data-stagger] > *:nth-child(2) { animation-delay: 60ms; }
+        [data-stagger] > *:nth-child(3) { animation-delay: 120ms; }
+        [data-stagger] > *:nth-child(4) { animation-delay: 180ms; }
+        [data-stagger] > *:nth-child(n+5) { animation-delay: 240ms; }
+        @media (prefers-reduced-motion: reduce) { [data-stagger] > * { animation: none; } }
       `}</style>
-      <div key={keyId} style={{
-        animation: `pageEnter 340ms ${APPLE_EASE} both`,
-      }}>{children}</div>
+      <div key={shown.keyId} style={{ animation: leaving ? `pageLeave 160ms ease-in both` : `pageEnter 340ms ${APPLE_EASE} both` }}>{shown.children}</div>
     </>
   );
 }
