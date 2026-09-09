@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import { supabase, DB_CONFIGURED } from './lib/supabase';
 import { apiFetch } from './lib/apiFetch';
 import { DIGITALIFE_REAL, PCEL_REAL, CARTERA_DIGITALIFE, ULTIMO_MES_SI, NOMBRES_MES, ML_SELLOUT_DEFAULT, clientes } from './lib/constants';
@@ -12,20 +12,49 @@ import {
   BarChart3, Target, ClipboardList, Settings as SettingsIcon, Building2,
   Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator,
 } from 'lucide-react';
-import { HomeCliente, HomeDigitalife, HomeDicotech, HomePcel, CreditoCobranza, CreditoCobranzaV2, PagosCliente, EstrategiaProducto, MarketingCliente, MarketingClienteV2, AnalisisCliente, AnalisisClientesGlobal, InventarioGlobal, EstrategiaPrecios, ForecastCliente, ForecastReservas, SellInCliente, SellInClienteV2, SellInDicotech, SellInPcel, TrackingPedidos, SellOutCliente, SellOutClienteV2, SellOutDicotech, SellOutPcel } from './modules/comercial';
-import EstadoResultados from './modules/general/EstadoResultados';
-import VisionGeneral from './modules/comercial/VisionGeneral';
-import ReporteTab from './modules/comercial/ReporteTab';
-import ResumenClientesTab from './modules/comercial/ResumenClientesTab';
-import PropuestasTab from './modules/comercial/PropuestasTab';
-import ForecastClientesTab from './modules/comercial/ForecastClientesTab';
-import TelemetriaPanel from './modules/interno/TelemetriaPanel';
-import AxonMexico from './modules/interno/AxonMexico';
+// ── Pantallas: React.lazy ──────────────────────────────────────────────
+// Cada pantalla es su propio chunk. Antes todas viajaban en index.js
+// (2.2 MB / 527 KB gz) aunque el usuario usara 2 o 3. El shell (Topbar,
+// MobileShell, Login, loaders) sigue estático porque se necesita siempre.
+const HomeCliente            = lazy(() => import('./modules/comercial/HomeCliente'));
+const HomeDigitalife         = lazy(() => import('./modules/comercial/HomeDigitalife'));
+const HomeDicotech           = lazy(() => import('./modules/comercial/HomeDicotech'));
+const HomePcel               = lazy(() => import('./modules/comercial/HomePcel'));
+const CreditoCobranza        = lazy(() => import('./modules/comercial/CreditoCobranza'));
+const CreditoCobranzaV2      = lazy(() => import('./modules/comercial/CreditoCobranzaV2'));
+const PagosCliente           = lazy(() => import('./modules/comercial/PagosCliente'));
+const EstrategiaProducto     = lazy(() => import('./modules/comercial/EstrategiaProducto'));
+const MarketingCliente       = lazy(() => import('./modules/comercial/MarketingCliente'));
+const MarketingClienteV2     = lazy(() => import('./modules/comercial/MarketingClienteV2'));
+const AnalisisCliente        = lazy(() => import('./modules/comercial/AnalisisCliente'));
+const AnalisisClientesGlobal = lazy(() => import('./modules/comercial/AnalisisClientesGlobal'));
+const InventarioGlobal       = lazy(() => import('./modules/comercial/InventarioGlobal'));
+const EstrategiaPrecios      = lazy(() => import('./modules/comercial/EstrategiaPrecios'));
+const ForecastCliente        = lazy(() => import('./modules/comercial/ForecastCliente'));
+const ForecastReservas       = lazy(() => import('./modules/comercial/ForecastReservas'));
+const SellInCliente          = lazy(() => import('./modules/comercial/SellInCliente'));
+const SellInClienteV2        = lazy(() => import('./modules/comercial/SellInClienteV2'));
+const SellInDicotech         = lazy(() => import('./modules/comercial/SellInDicotech'));
+const SellInPcel             = lazy(() => import('./modules/comercial/SellInPcel'));
+const TrackingPedidos        = lazy(() => import('./modules/comercial/TrackingPedidos'));
+const SellOutCliente         = lazy(() => import('./modules/comercial/SellOutCliente'));
+const SellOutClienteV2       = lazy(() => import('./modules/comercial/SellOutClienteV2'));
+const SellOutDicotech        = lazy(() => import('./modules/comercial/SellOutDicotech'));
+const SellOutPcel            = lazy(() => import('./modules/comercial/SellOutPcel'));
+const EstadoResultados       = lazy(() => import('./modules/general/EstadoResultados'));
+const VisionGeneral          = lazy(() => import('./modules/comercial/VisionGeneral'));
+const ReporteTab             = lazy(() => import('./modules/comercial/ReporteTab'));
+const ResumenClientesTab     = lazy(() => import('./modules/comercial/ResumenClientesTab'));
+const PropuestasTab          = lazy(() => import('./modules/comercial/PropuestasTab'));
+const ForecastClientesTab    = lazy(() => import('./modules/comercial/ForecastClientesTab'));
+const TelemetriaPanel        = lazy(() => import('./modules/interno/TelemetriaPanel'));
+const AxonMexico             = lazy(() => import('./modules/interno/AxonMexico'));
+const Configuracion          = lazy(() => import('./modules/configuracion/Configuracion'));
+const ActualizacionDatos     = lazy(() => import('./modules/settings/ActualizacionDatos'));
+const PendientesCalendarioV2 = lazy(() => import('./modules/interno/PendientesCalendarioV2'));
+// Auth y shell: estáticos (se necesitan antes de cualquier pantalla).
 import LoginPage from './modules/auth/LoginPage';
 import SetPasswordPage from './modules/auth/SetPasswordPage';
-import { Configuracion } from './modules/configuracion';
-import ActualizacionDatos from './modules/settings/ActualizacionDatos';
-import { AdministracionInterna, PendientesCalendarioV2 } from './modules/interno';
 import SinAcceso from './components/SinAcceso';
 import {
   puedeConfigurar,
@@ -42,27 +71,28 @@ import { FerrutekLoader } from './components';
 import { useBreakpoint, isMobile, useMobileShell } from './lib/useBreakpoint';
 import MobileNav from './components/MobileNav';
 import MobileShell from './components/MobileShell';
-import MobileHome from './components/MobileHome';
-import MobileHoy from './components/MobileHoy';
-import MobileEquipo from './components/MobileEquipo';
-import MobileYo from './components/MobileYo';
-import MobileSellIn from './components/MobileSellIn';
-import MobileSellOut from './components/MobileSellOut';
-import MobileCartera from './components/MobileCartera';
-import MobileMarketing from './components/MobileMarketing';
-import MobileHomeCliente from './components/MobileHomeCliente';
-import MobileBuscar from './components/MobileBuscar';
-import MobileEdR from './components/MobileEdR';
-import MobileVisionGeneral from './components/MobileVisionGeneral';
-import MobileAnalisisClientes from './components/MobileAnalisisClientes';
-import MobileSellInGlobal from './components/MobileSellInGlobal';
-import MobileSellOutGlobal from './components/MobileSellOutGlobal';
-import MobileInventarioGlobal from './components/MobileInventarioGlobal';
-import MobileCobranzaGlobal from './components/MobileCobranzaGlobal';
-import MobileSOP from './components/MobileSOP';
-import MobilePropuestas from './components/MobilePropuestas';
-import MobileEstrategiaPrecios from './components/MobileEstrategiaPrecios';
-import MobileTrackingPedidos from './components/MobileTrackingPedidos';
+// Pantallas mobile: lazy (sólo se descargan en iPhone/iPad, y sólo la que se abre).
+const MobileHome              = lazy(() => import('./components/MobileHome'));
+const MobileHoy               = lazy(() => import('./components/MobileHoy'));
+const MobileEquipo            = lazy(() => import('./components/MobileEquipo'));
+const MobileYo                = lazy(() => import('./components/MobileYo'));
+const MobileSellIn            = lazy(() => import('./components/MobileSellIn'));
+const MobileSellOut           = lazy(() => import('./components/MobileSellOut'));
+const MobileCartera           = lazy(() => import('./components/MobileCartera'));
+const MobileMarketing         = lazy(() => import('./components/MobileMarketing'));
+const MobileHomeCliente       = lazy(() => import('./components/MobileHomeCliente'));
+const MobileBuscar            = lazy(() => import('./components/MobileBuscar'));
+const MobileEdR               = lazy(() => import('./components/MobileEdR'));
+const MobileVisionGeneral     = lazy(() => import('./components/MobileVisionGeneral'));
+const MobileAnalisisClientes  = lazy(() => import('./components/MobileAnalisisClientes'));
+const MobileSellInGlobal      = lazy(() => import('./components/MobileSellInGlobal'));
+const MobileSellOutGlobal     = lazy(() => import('./components/MobileSellOutGlobal'));
+const MobileInventarioGlobal  = lazy(() => import('./components/MobileInventarioGlobal'));
+const MobileCobranzaGlobal    = lazy(() => import('./components/MobileCobranzaGlobal'));
+const MobileSOP               = lazy(() => import('./components/MobileSOP'));
+const MobilePropuestas        = lazy(() => import('./components/MobilePropuestas'));
+const MobileEstrategiaPrecios = lazy(() => import('./components/MobileEstrategiaPrecios'));
+const MobileTrackingPedidos   = lazy(() => import('./components/MobileTrackingPedidos'));
 
 
 function ActualizarDatosExcel({ cliente, anio, onComplete }) {
@@ -485,6 +515,7 @@ export default function App() {
             margin: '0 auto',
           }}>
           <PageTransition keyId={vistaActual === 'configuracion' ? 'configuracion' : `${clienteActivo || 'g'}-${paginaActiva}`}>
+          <Suspense fallback={<FerrutekLoader label="Cargando…" sub="Abriendo la pantalla" />}>
           {vistaActual === "configuracion" ? (
             puedeVerConfig
               ? (mobile
@@ -700,6 +731,7 @@ export default function App() {
           </>
             </>
           )}
+          </Suspense>
           </PageTransition>
         </div>
         </main>

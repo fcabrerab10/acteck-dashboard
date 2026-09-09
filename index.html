@@ -7,7 +7,15 @@
     <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
     <title>Dashboard Clientes — Acteck / Balam Rush</title>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <!--
+      SheetJS ya NO se carga aquí. Era un <script> síncrono de ~900 KB desde un
+      CDN externo que bloqueaba el primer paint de TODAS las cargas (incluido
+      el login). Los módulos que lo necesitan lo cargan bajo demanda con
+      loadSheetJS() (utils.js, GestionCuotasPanel, ActualizacionDatos) o con
+      import('xlsx-js-style') al exportar.
+    -->
+    <link rel="preconnect" href="https://hrhccvuhnedahznewgaj.supabase.co" crossorigin />
+    <link rel="dns-prefetch" href="https://hrhccvuhnedahznewgaj.supabase.co" />
   </head>
   <body>
     <div id="root"></div>

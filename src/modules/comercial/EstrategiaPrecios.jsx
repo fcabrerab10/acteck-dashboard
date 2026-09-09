@@ -6,7 +6,6 @@ import { TYPO } from '../../lib/themeTokens';
 import {
   Activity, Search, X, TrendingUp, TrendingDown, AlertTriangle, Tag, Download, ChevronDown, ChevronRight, Check, Sparkles, ArrowRight, ArrowUp,
 } from 'lucide-react';
-import * as XLSX from 'xlsx-js-style';
 import SinAcceso from '../../components/SinAcceso';
 import { FerrutekLoader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
@@ -15,6 +14,7 @@ import {
   BarChart, Bar, LineChart, Line, ComposedChart, Area, XAxis, YAxis, Tooltip,
   CartesianGrid, ResponsiveContainer, Legend,
 } from 'recharts';
+import { fetchAll as fetchAllCentral } from '../../lib/queries';
 
 const MESES_LBL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -61,53 +61,9 @@ const fmtInt = (n) => n == null || isNaN(n) ? '—' : Math.round(n).toLocaleStri
 const fmtPctDelta = (n) => n == null || isNaN(n) ? '—' : (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
 
 const PAGE = 1000;
-async function fetchAll(table, select, extra = (q) => q) {
-  // sellout_general devuelve HTTP 500 intermitente con ilike+range+order
-  // (índice no cubre bien el filtro). Usamos chunks de 500 para tablas de
-  // transacciones y de 1000 para el resto. También subimos retries a 6
-  // porque en producción se observaron rachas de 3 500s consecutivos.
-  const HEAVY_TABLES = new Set(['sellout_general', 'sellout_detalle', 'facturacion_clientes']);
-  const PAGE = HEAVY_TABLES.has(table) ? 500 : 1000;
-  const MAX_RETRIES = 6;
-  const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-
-  const acc = [];
-  // BUG-FIX: cuando select === '*' o el primer campo es '*', antes se ejecutaba
-    // .order('*') y Supabase respondía HTTP 400 → 6 retries fallaban → throw →
-    // React Query devolvía data:[] silenciosamente.
-    const orderCol = (() => {
-      if (!select || select === '*') return 'id';
-      if (/(^|,)\s*id\s*(,|$)/i.test(select)) return 'id';
-      const first = select.split(',')[0].trim();
-      return first === '*' ? 'id' : first;
-    })();
-  let from = 0;
-  while (true) {
-    let lastErr = null; let data = null;
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      let q = supabase.from(table).select(select).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
-      q = extra(q);
-      const res = await q;
-      if (!res.error) { data = res.data || []; break; }
-      lastErr = res.error;
-      if (attempt < MAX_RETRIES - 1) {
-        console.warn(`[fetchAll] ${table} chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-        await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-      }
-    }
-    if (data == null) {
-      // Falló definitivamente. Lanzamos throw para que el useEffect muestre
-      // error visible en vez de renderizar data parcial (que es exactamente
-      // lo que causaba discrepancias entre usuarios).
-      console.error(`[fetchAll] ${table} chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
-      throw new Error(`No se pudo cargar ${table} completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-    }
-    if (data.length === 0) break;
-    acc.push(...data);
-    if (data.length < PAGE) break;
-    from += PAGE;
-  }
-  return acc;
+// Delegado al motor paginado PARALELO central (lib/queries.js).
+async function fetchAll(table, select, applyFilter = (q) => q) {
+  return fetchAllCentral(table, select, applyFilter);
 }
 
 function MultiSelect({ label, options, selected, onChange, width = 140 }) {
@@ -296,7 +252,10 @@ export default function EstrategiaPrecios() {
   );
   const verPrecioBajo = listasSel.has(PRECIO_BAJO_KEY);
 
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
+    // xlsx-js-style (~850 KB) sólo se descarga al exportar, no en el bundle inicial.
+    const xlsxMod = await import('xlsx-js-style');
+    const XLSX = xlsxMod.default || xlsxMod;
     const incluyeAAA = listasVisibles.includes('Mayoreo AAA');
     const incluyeDico = listasVisibles.includes('DICOTECH');
 

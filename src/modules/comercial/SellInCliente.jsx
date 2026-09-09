@@ -15,8 +15,8 @@ import {
   LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip,
   CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
-import * as XLSX from 'xlsx-js-style';
 import { FerrutekLoader } from '../../components';
+import { fetchAll as fetchAllCentral } from '../../lib/queries';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -53,53 +53,9 @@ const fmtMoneyShort = (n) => {
 };
 
 const PAGE = 1000;
-async function fetchAll(table, select, extra = (q) => q) {
-  // sellout_general devuelve HTTP 500 intermitente con ilike+range+order
-  // (índice no cubre bien el filtro). Usamos chunks de 500 para tablas de
-  // transacciones y de 1000 para el resto. También subimos retries a 6
-  // porque en producción se observaron rachas de 3 500s consecutivos.
-  const HEAVY_TABLES = new Set(['sellout_general', 'sellout_detalle', 'facturacion_clientes']);
-  const PAGE = HEAVY_TABLES.has(table) ? 500 : 1000;
-  const MAX_RETRIES = 6;
-  const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-
-  const acc = [];
-  // BUG-FIX: cuando select === '*' o el primer campo es '*', antes se ejecutaba
-    // .order('*') y Supabase respondía HTTP 400 → 6 retries fallaban → throw →
-    // React Query devolvía data:[] silenciosamente.
-    const orderCol = (() => {
-      if (!select || select === '*') return 'id';
-      if (/(^|,)\s*id\s*(,|$)/i.test(select)) return 'id';
-      const first = select.split(',')[0].trim();
-      return first === '*' ? 'id' : first;
-    })();
-  let from = 0;
-  while (true) {
-    let lastErr = null; let data = null;
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      let q = supabase.from(table).select(select).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
-      q = extra(q);
-      const res = await q;
-      if (!res.error) { data = res.data || []; break; }
-      lastErr = res.error;
-      if (attempt < MAX_RETRIES - 1) {
-        console.warn(`[fetchAll] ${table} chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-        await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-      }
-    }
-    if (data == null) {
-      // Falló definitivamente. Lanzamos throw para que el useEffect muestre
-      // error visible en vez de renderizar data parcial (que es exactamente
-      // lo que causaba discrepancias entre usuarios).
-      console.error(`[fetchAll] ${table} chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
-      throw new Error(`No se pudo cargar ${table} completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-    }
-    if (data.length === 0) break;
-    acc.push(...data);
-    if (data.length < PAGE) break;
-    from += PAGE;
-  }
-  return acc;
+// Delegado al motor paginado PARALELO central (lib/queries.js).
+async function fetchAll(table, select, applyFilter = (q) => q) {
+  return fetchAllCentral(table, select, applyFilter);
 }
 
 function MultiSelect({ label, options, selected, onChange, width = 160 }) {
@@ -444,7 +400,10 @@ export default function SellInCliente({ clienteKey }) {
     return { bg: isDarkTable ? 'rgba(10,132,255,0.12)' : 'rgba(0,122,255,0.08)', color: theme.textMuted };
   };
 
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
+    // xlsx-js-style (~850 KB) sólo se descarga al exportar, no en el bundle inicial.
+    const xlsxMod = await import('xlsx-js-style');
+    const XLSX = xlsxMod.default || xlsxMod;
     const HEADERS = ['Marca', 'SKU', 'Descripción', 'Categoría', 'Roadmap', ...MESES, 'Promedio', 'Total'];
     const rows = filasTabla.map((r) => [
       r.marca || '', r.sku || '', r.descripcion || '', r.categoriaCap || '', r.rdmp || '',

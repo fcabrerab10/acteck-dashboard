@@ -6,59 +6,16 @@ import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
 import { CLIENTES } from './Sidebar';
+import { fetchAll as fetchAllCentral } from '../lib/queries';
 
 const CLIENTE_DOT = { digitalife: '#5856D6', dicotech: '#FF9500', pcel: '#34C759' };
 const fmtInt = (n) => (isFinite(n) ? Math.round(n).toLocaleString('es-MX') : '—');
 const fmtCompact = (n) => { if (!isFinite(n) || !n) return '$0'; const a = Math.abs(n), s = n < 0 ? '-' : ''; if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(1)}M`; if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(0)}K`; return `${s}$${Math.round(a)}`; };
 const safeQuery = async (q) => { try { const r = await q; return r.data || []; } catch { return []; } };
 
-async function fetchAll(table, select, applyFilter = q => q) {
-  // sellout_general devuelve HTTP 500 intermitente con ilike+range+order
-  // (índice no cubre bien el filtro). Usamos chunks de 500 para tablas de
-  // transacciones y de 1000 para el resto. También subimos retries a 6
-  // porque en producción se observaron rachas de 3 500s consecutivos.
-  const HEAVY_TABLES = new Set(['sellout_general', 'sellout_detalle', 'facturacion_clientes']);
-  const PAGE = HEAVY_TABLES.has(table) ? 500 : 1000;
-  const MAX_RETRIES = 6;
-  const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-
-  const acc = [];
-  // BUG-FIX: cuando select === '*' o el primer campo es '*', antes se ejecutaba
-    // .order('*') y Supabase respondía HTTP 400 → 6 retries fallaban → throw →
-    // React Query devolvía data:[] silenciosamente.
-    const orderCol = (() => {
-      if (!select || select === '*') return 'id';
-      if (/(^|,)\s*id\s*(,|$)/i.test(select)) return 'id';
-      const first = select.split(',')[0].trim();
-      return first === '*' ? 'id' : first;
-    })();
-  let from = 0;
-  while (true) {
-    let lastErr = null; let data = null;
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      let q = supabase.from(table).select(select).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
-      q = applyFilter(q);
-      const res = await q;
-      if (!res.error) { data = res.data || []; break; }
-      lastErr = res.error;
-      if (attempt < MAX_RETRIES - 1) {
-        console.warn(`[fetchAll] ${table} chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-        await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-      }
-    }
-    if (data == null) {
-      // Falló definitivamente. Lanzamos throw para que el useEffect muestre
-      // error visible en vez de renderizar data parcial (que es exactamente
-      // lo que causaba discrepancias entre usuarios).
-      console.error(`[fetchAll] ${table} chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
-      throw new Error(`No se pudo cargar ${table} completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-    }
-    if (data.length === 0) break;
-    acc.push(...data);
-    if (data.length < PAGE) break;
-    from += PAGE;
-  }
-  return acc;
+// Delegado al motor paginado PARALELO central (lib/queries.js).
+async function fetchAll(table, select, applyFilter = (q) => q) {
+  return fetchAllCentral(table, select, applyFilter);
 }
 
 export default function MobileEstrategiaPrecios({ onBack, onNavegar }) {

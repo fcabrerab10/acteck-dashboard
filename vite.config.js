@@ -18,15 +18,25 @@ export default defineConfig({
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(commitHash),
   },
   build: {
-    chunkSizeWarningLimit: 4096,
+    chunkSizeWarningLimit: 1024,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-recharts': ['recharts'],
-          'vendor-xlsx': ['xlsx', 'xlsx-js-style'],
-          'vendor-supabase': ['@supabase/supabase-js'],
-          'vendor-query': ['@tanstack/react-query', '@tanstack/react-query-persist-client', '@tanstack/react-query-devtools', 'idb-keyval'],
+        // Función en vez de objeto: la forma objeto dejaba 'vendor-react' en
+        // 0 KB (React se resolvía dentro de index.js vía jsx-runtime) y con
+        // React.lazy por pantalla eso duplicaría React en cada chunk.
+        // Aquí clasificamos por ruta real dentro de node_modules.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('@tanstack') || id.includes('idb-keyval')) return 'vendor-query';
+          if (id.includes('@supabase')) return 'vendor-supabase';
+          if (id.includes('xlsx')) return 'vendor-xlsx';
+          if (id.includes('recharts') || id.includes('/d3-') || id.includes('victory-vendor')) return 'vendor-recharts';
+          if (id.includes('lucide-react')) return 'vendor-icons';
+          if (
+            id.includes('/react/') || id.includes('/react-dom/') ||
+            id.includes('/scheduler/') || id.includes('/react-is/')
+          ) return 'vendor-react';
+          return 'vendor';
         },
       },
     },

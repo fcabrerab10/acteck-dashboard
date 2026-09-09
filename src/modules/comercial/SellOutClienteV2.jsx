@@ -17,6 +17,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import { Search, ArrowUpDown, ArrowUp, ArrowDown, Sparkles, TrendingUp, AlertTriangle, MapPin, Zap, ChevronRight } from 'lucide-react';
+import { fetchAll as fetchAllCentral } from '../../lib/queries';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -76,53 +77,9 @@ const fmt = {
   int: (n) => (n == null || !isFinite(n) ? '—' : Math.round(n).toLocaleString('es-MX')),
 };
 
+// Delegado al motor paginado PARALELO central (lib/queries.js).
 async function fetchAll(table, select, applyFilter = (q) => q) {
-  // sellout_general devuelve HTTP 500 intermitente con ilike+range+order
-  // (índice no cubre bien el filtro). Usamos chunks de 500 para tablas de
-  // transacciones y de 1000 para el resto. También subimos retries a 6
-  // porque en producción se observaron rachas de 3 500s consecutivos.
-  const HEAVY_TABLES = new Set(['sellout_general', 'sellout_detalle', 'facturacion_clientes']);
-  const PAGE = HEAVY_TABLES.has(table) ? 500 : 1000;
-  const MAX_RETRIES = 6;
-  const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-
-  const acc = [];
-  // BUG-FIX: cuando select === '*' o el primer campo es '*', antes se ejecutaba
-    // .order('*') y Supabase respondía HTTP 400 → 6 retries fallaban → throw →
-    // React Query devolvía data:[] silenciosamente.
-    const orderCol = (() => {
-      if (!select || select === '*') return 'id';
-      if (/(^|,)\s*id\s*(,|$)/i.test(select)) return 'id';
-      const first = select.split(',')[0].trim();
-      return first === '*' ? 'id' : first;
-    })();
-  let from = 0;
-  while (true) {
-    let lastErr = null; let data = null;
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      let q = supabase.from(table).select(select).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
-      q = applyFilter(q);
-      const res = await q;
-      if (!res.error) { data = res.data || []; break; }
-      lastErr = res.error;
-      if (attempt < MAX_RETRIES - 1) {
-        console.warn(`[fetchAll] ${table} chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-        await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-      }
-    }
-    if (data == null) {
-      // Falló definitivamente. Lanzamos throw para que el useEffect muestre
-      // error visible en vez de renderizar data parcial (que es exactamente
-      // lo que causaba discrepancias entre usuarios).
-      console.error(`[fetchAll] ${table} chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
-      throw new Error(`No se pudo cargar ${table} completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-    }
-    if (data.length === 0) break;
-    acc.push(...data);
-    if (data.length < PAGE) break;
-    from += PAGE;
-  }
-  return acc;
+  return fetchAllCentral(table, select, applyFilter);
 }
 
 // ═══════════════════════════════════════════════════════════════════

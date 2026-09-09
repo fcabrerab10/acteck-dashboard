@@ -819,8 +819,13 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   const parseActeck = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
+          // SheetJS ya no viene precargado en index.html — cargar bajo demanda.
+          if (!window.XLSX) {
+            const { loadSheetJS } = await import('../../lib/utils');
+            await loadSheetJS();
+          }
           const wb = window.XLSX.read(e.target.result, { cellDates: true });
           const sheetTD = wb.Sheets["TD Ventas"];
           const sheetMaster = wb.Sheets["Master"];
@@ -893,8 +898,13 @@ export default function EstrategiaProducto({ cliente, clienteKey, onUploadComple
   const parseDigitalife = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
+          // SheetJS ya no viene precargado en index.html — cargar bajo demanda.
+          if (!window.XLSX) {
+            const { loadSheetJS } = await import('../../lib/utils');
+            await loadSheetJS();
+          }
           const wb = window.XLSX.read(e.target.result, { cellDates: true });
           const sheetSellout = wb.Sheets["BD Sellout"];
           const sheetInventario = wb.Sheets["BD Inventario"];

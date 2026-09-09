@@ -16,6 +16,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import { ChevronRight, Sparkles, AlertTriangle, Clock, TrendingUp } from 'lucide-react';
+import { fetchAll as fetchAllCentral } from '../../lib/queries';
 
 const NOMBRES_MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MES_INICIAL = ['E','F','M','A','M','J','J','A','S','O','N','D'];
@@ -92,48 +93,8 @@ export default function HomeDicotech({ cliente, clienteKey }) {
       const anioAntIni = `${anio - 1}-01-01`;
 
       // Helper: paginación (Supabase limita a 1000 por default; sellout_detalle tiene 20K+ rows)
-      const fetchAll = async (table, select, applyFilter) => {
-        // v2: chunks 500 para HEAVY_TABLES, 6 retries backoff hasta 16s,
-        // throw en vez de partial silencioso (evita discrepancias entre usuarios).
-        const HEAVY_TABLES = new Set(['sellout_general', 'sellout_detalle', 'facturacion_clientes']);
-        const PAGE = HEAVY_TABLES.has(table) ? 500 : 1000;
-        const MAX_RETRIES = 6;
-        const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-        const acc = [];
-        // BUG-FIX: cuando select === '*' o el primer campo es '*', antes se ejecutaba
-          // .order('*') y Supabase respondía HTTP 400 → 6 retries fallaban → throw →
-          // React Query devolvía data:[] silenciosamente.
-          const orderCol = (() => {
-            if (!select || select === '*') return 'id';
-            if (/(^|,)\s*id\s*(,|$)/i.test(select)) return 'id';
-            const first = select.split(',')[0].trim();
-            return first === '*' ? 'id' : first;
-          })();
-        let from = 0;
-        while (true) {
-          let lastErr = null; let data = null;
-          for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-            let q = supabase.from(table).select(select).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
-            q = applyFilter(q);
-            const res = await q;
-            if (!res.error) { data = res.data || []; break; }
-            lastErr = res.error;
-            if (attempt < MAX_RETRIES - 1) {
-              console.warn(`[fetchAll] ${table} chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-              await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-            }
-          }
-          if (data == null) {
-            console.error(`[fetchAll] ${table} chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
-            throw new Error(`No se pudo cargar ${table} completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-          }
-          if (data.length === 0) break;
-          acc.push(...data);
-          if (data.length < PAGE) break;
-          from += PAGE;
-        }
-        return acc;
-      };
+      // Delegado al motor paginado PARALELO central (lib/queries.js).
+      const fetchAll = async (table, select, applyFilter) => fetchAllCentral(table, select, applyFilter);
 
       const [ecHistR, siR, cfgR, soMesR, soSucR] = await Promise.all([
         supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true }),
