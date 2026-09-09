@@ -72,7 +72,19 @@ async function handleSync(res) {
     .select('fuente, ultima_actualizacion, registros, meta')
     .order('fuente');
   if (error) return res.status(500).json({ error: error.message });
-  return res.status(200).json({ ok: true, items: data || [] });
+  // Último evento por status_key (éxito/error, filas, origen) para la sección
+  // "Cargas automáticas" de Actualización de datos. Las cargas del puente y del
+  // uploader web escriben en sync_events con el mismo status_key.
+  const eventos = {};
+  const { data: evs } = await supa
+    .from('sync_events')
+    .select('status_key, src_id, status, filas, duracion_ms, user_nombre, detalles, created_at')
+    .not('status_key', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(300);
+  for (const ev of evs || []) if (!eventos[ev.status_key]) eventos[ev.status_key] = ev;
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(200).json({ ok: true, items: data || [], eventos });
 }
 
 async function handleUpload(res) {

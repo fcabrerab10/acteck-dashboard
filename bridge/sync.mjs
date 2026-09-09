@@ -46,7 +46,9 @@ const FUENTES = {
       log(`  ventas: ${leidas} leídas → ${rows.length} válidas · años ${anios.join(',')}`);
       // Protección: no borrar un año si la vista vino vacía para ese año.
       const aniosPresentes = anios.filter((a) => rows.some((r) => r.anio === a));
-      const r = await upsertRows('erp_ventas', 'venta_id,venta_renglon', rows, { deleteAnios: aniosPresentes, dryRun });
+      // Chunks chicos y poca concurrencia: erp_ventas dispara statement timeout (57014) en
+      // Supabase con 1000 filas por request (comprobado 2026-09-09 con 63,740 filas).
+      const r = await upsertRows('erp_ventas', 'venta_id,venta_renglon', rows, { deleteAnios: aniosPresentes, dryRun, chunk: 200, concurrency: 2 });
       if (rows.length) {
         log(`  finalize: refresh_facturacion_clientes(${aniosPresentes.join(',')})`);
         const f = await finalizeErpVentas(aniosPresentes, { dryRun });
