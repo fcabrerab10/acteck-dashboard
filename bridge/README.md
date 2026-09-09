@@ -11,4 +11,5 @@ npm run test-conn                          # prueba conexiones
 node --env-file=.env sync.mjs all --dry-run
 node --env-file=.env sync.mjs all
 ./launchd/install.sh                       # 06:30 diario · 12:30 y 17:30 intradía
+node --env-file=.env embarques-xlsx.mjs "Master Embarques.xlsx"   # Master Embarques desde un .xlsx (conector de Drive)
 ```

@@ -15,7 +15,7 @@ import * as M from './lib/mappers.mjs';
 import { readView, testServer, closeAll } from './lib/mssql.mjs';
 import { upsertRows, finalizeErpVentas, logSyncEvent, ping, describirTransporte, DIRECTO } from './lib/api.mjs';
 import { leerHoja, listarHojas, describirModo } from './lib/sheets.mjs';
-import { HOJAS_HISTORICAS, HOJAS_SECUNDARIAS, transformEmbarques } from '../api/_embarques.js';
+import { HOJAS_HISTORICAS, HOJAS_SECUNDARIAS, transformEmbarques, anioDeHoja } from '../api/_embarques.js';
 import { log } from './lib/util.mjs';
 
 const args = process.argv.slice(2);
@@ -121,7 +121,7 @@ const FUENTES = {
         if (!existe(h)) continue;
         const raw = await leerHoja(h);
         if (!raw || raw.length < 2) continue;
-        const rows = transformEmbarques(raw);
+        const rows = transformEmbarques(raw, { anioDefault: anioDeHoja(h) });
         log(`  hoja "${h}": ${raw.length - 1} filas → ${rows.length} válidas`);
         detalles[h] = rows.length;
         hist = hist.concat(rows);

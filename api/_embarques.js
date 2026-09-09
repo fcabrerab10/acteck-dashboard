@@ -46,10 +46,22 @@ export function toNum(v) {
   return isNaN(n) ? null : n;
 }
 export function toInt(v) { const n = toNum(v); return n == null ? null : Math.round(n); }
-export function toISODate(v) {
+const MESES_ES = { enero:1, febrero:2, marzo:3, abril:4, mayo:5, junio:6, julio:7, agosto:8, septiembre:9, setiembre:9, octubre:10, noviembre:11, diciembre:12 };
+const pad2 = (n) => String(n).padStart(2, '0');
+/**
+ * @param v        Date | 'YYYY-MM-DD' | 'DD/MM/YYYY' | 'miércoles, 7 de enero [de 2026]' | serial
+ * @param anioDef  año a usar cuando la celda viene en español sin año (nombre de la pestaña)
+ */
+export function toISODate(v, anioDef = null) {
   if (v == null || v === '') return null;
-  if (v instanceof Date) return isNaN(v) ? null : v.toISOString().slice(0, 10);
+  if (v instanceof Date) return isNaN(v) ? null : `${v.getFullYear()}-${pad2(v.getMonth() + 1)}-${pad2(v.getDate())}`;
+  if (typeof v === 'number') { const d = new Date(Math.round((v - 25569) * 86400) * 1000); return isNaN(d) ? null : d.toISOString().slice(0, 10); }
   const s = String(v).trim();
+  const es = s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').match(/(\d{1,2})\s+de\s+([a-z]+)(?:\s+de\s+(\d{4}))?/);
+  if (es && MESES_ES[es[2]]) {
+    const y = es[3] ? parseInt(es[3], 10) : anioDef;
+    return y ? `${y}-${pad2(MESES_ES[es[2]])}-${pad2(parseInt(es[1], 10))}` : null;
+  }
   if (/[A-Za-z]/.test(s) && !/\d{1,2}[\/\-]\d{1,2}/.test(s)) {
     const d = new Date(s);
     return isNaN(d) ? null : d.toISOString().slice(0, 10);
@@ -71,12 +83,27 @@ export function classifyCedis(raw) {
   return { cedis: s, entrega_directa_cliente: s };
 }
 
-/** rawRows (arrays, header en [0]) → objetos con llaves snake_case. */
+/**
+ * Índice de la fila de encabezados: la primera (entre las 8 primeras) que
+ * contenga alguna columna clave. La pestaña "Proveedores" trae la fila 1 vacía.
+ */
+const CLAVES_HEADER = new Set(['po', 'codigo', 'articulo', 'contenedor', 'sku']);
+export function findHeaderRow(rawRows) {
+  const n = Math.min(rawRows.length, 8);
+  for (let i = 0; i < n; i++) {
+    const cells = (rawRows[i] || []).map(snake);
+    if (cells.some((c) => CLAVES_HEADER.has(c))) return i;
+  }
+  return 0;
+}
+
+/** rawRows (arrays, header detectado) → objetos con llaves snake_case. */
 export function rowsToObjects(rawRows) {
   if (!rawRows || rawRows.length < 2) return [];
-  const header = rawRows[0].map(snake);
+  const h = findHeaderRow(rawRows);
+  const header = (rawRows[h] || []).map(snake);
   const out = [];
-  for (let i = 1; i < rawRows.length; i++) {
+  for (let i = h + 1; i < rawRows.length; i++) {
     const r = rawRows[i];
     if (!r || r.every((c) => c == null || String(c).trim() === '')) continue;
     const obj = {};
@@ -96,9 +123,17 @@ export function rowsToObjects(rawRows) {
 // ═════════════════════ Hojas históricas (2026, 2025, …) → embarques_compras ═════════════════════
 export const HOJAS_HISTORICAS = ['2026', '2025', '2024', '2022 - 2023', '2022-2023', '2023', '2022'];
 
-export function transformEmbarques(rawRows) {
+/**
+ * @param opts.anioDefault  año de la pestaña (2026, 2025…) para fechas en español sin año.
+ * Diferencias reales entre pestañas del Sheet (2026-09): 2026 usa "CBM TOTAL" y
+ * "FECHA EMISIÓN" en español sin año; 2022-2023 usa "FECHA DE EMISIÓN",
+ * "REF FFW" y "ETA ALMACÉN"; en 2024 un complemento de QR sobrescribió los
+ * encabezados de las columnas A-F (PO sigue en la columna A).
+ */
+export function transformEmbarques(rawRows, { anioDefault = null } = {}) {
   if (rawRows.length < 2) return [];
-  const header = rawRows[0].map(snake);
+  const h = findHeaderRow(rawRows);
+  const header = (rawRows[h] || []).map(snake);
   const idx = (names) => {
     for (const n of Array.isArray(names) ? names : [names]) {
       const i = header.indexOf(n);
@@ -107,31 +142,35 @@ export function transformEmbarques(rawRows) {
     return -1;
   };
   const col = {
-    po: idx('po'), fecha_emision: idx('fecha_emision'), grupo: idx('grupo'),
-    cbm: idx('cbm'), f_a: idx(['f_a', 'fa']), porcentaje: idx('porcentaje'),
+    po: idx('po'), fecha_emision: idx(['fecha_emision', 'fecha_de_emision']), grupo: idx('grupo'),
+    cbm: idx(['cbm', 'cbm_total']), f_a: idx(['f_a', 'fa']), porcentaje: idx('porcentaje'),
     familia: idx('familia'), codigo: idx('codigo'), descripcion: idx('descripcion'),
     po_qty: idx('po_qty'), shp_qty: idx('shp_qty'),
     unit_price: idx('unit_price'), total_amount: idx('total_amount'),
     metodo_pago: idx('metodo_de_pago'), supplier: idx('supplier'),
     fecha_ini_prod: idx('fecha_inicio_de_produccion'), fin_prod: idx('fin_de_produccion'),
-    ref_ff: idx('ref_ff'), naviera: idx('naviera'),
+    ref_ff: idx(['ref_ff', 'ref_ffw']), naviera: idx('naviera'),
     tipo_carga: idx('tipo_de_carga'), tipo_cont: idx('tipo_de_cont'),
     costo_flete: idx('costo_flete'), fdw: idx('fdw'), contenedor: idx('contenedor'),
     etd: idx('etd'), eta_puerto: idx('eta_puerto'),
-    a_a: idx(['a_a', 'aa']), arribo_cedis: idx('arribo_a_cedis'),
+    a_a: idx(['a_a', 'aa']), arribo_cedis: idx(['arribo_a_cedis', 'eta_almacen']),
     lt: idx('lt'), cedis: idx('cedis'), estatus: idx('estatus'),
     com_trafico: idx('comentarios_trafico'), com_diseno: idx('comentarios_diseno'),
   };
+  if (col.po < 0) col.po = 0;   // PO siempre es la columna A aunque el encabezado esté sobrescrito
+  if (col.codigo < 0) return [];
+  const fecha = (v) => toISODate(v, anioDefault);
   const rows = [];
-  for (let i = 1; i < rawRows.length; i++) {
+  for (let i = h + 1; i < rawRows.length; i++) {
     const r = rawRows[i];
+    if (!r) continue;
     const po = toStr(r[col.po]);
     const codigo = toStr(r[col.codigo]);
     if (!po || !codigo) continue;
     const { cedis, entrega_directa_cliente } = classifyCedis(r[col.cedis]);
     rows.push({
       po, codigo,
-      fecha_emision:   toISODate(r[col.fecha_emision]),
+      fecha_emision:   fecha(r[col.fecha_emision]),
       grupo:           toStr(r[col.grupo]),
       cbm:             toNum(r[col.cbm]),
       fraccion_arancelaria: toStr(r[col.f_a]),
@@ -144,8 +183,8 @@ export function transformEmbarques(rawRows) {
       total_amount:    toNum(r[col.total_amount]),
       metodo_pago:     toStr(r[col.metodo_pago]),
       supplier:        toStr(r[col.supplier]),
-      fecha_inicio_produccion: toISODate(r[col.fecha_ini_prod]),
-      fin_produccion:  toISODate(r[col.fin_prod]),
+      fecha_inicio_produccion: fecha(r[col.fecha_ini_prod]),
+      fin_produccion:  fecha(r[col.fin_prod]),
       ref_ff:          toStr(r[col.ref_ff]),
       naviera:         toStr(r[col.naviera]),
       tipo_carga:      toStr(r[col.tipo_carga]),
@@ -153,10 +192,10 @@ export function transformEmbarques(rawRows) {
       costo_flete:     toNum(r[col.costo_flete]),
       fdw:             toStr(r[col.fdw]),
       contenedor:      toStr(r[col.contenedor]),
-      etd:             toISODate(r[col.etd]),
-      eta_puerto:      toISODate(r[col.eta_puerto]),
+      etd:             fecha(r[col.etd]),
+      eta_puerto:      fecha(r[col.eta_puerto]),
       agente_aduanal:  toStr(r[col.a_a]),
-      arribo_cedis:    toISODate(r[col.arribo_cedis]),
+      arribo_cedis:    fecha(r[col.arribo_cedis]),
       lt:              toStr(r[col.lt]),
       cedis, entrega_directa_cliente,
       estatus:         toStr(r[col.estatus]),
@@ -258,6 +297,9 @@ export function transformCatalogoArticulos(rawRows) {
 }
 
 /** Hojas secundarias: nombre(s) de hoja en el Google Sheet → tabla destino + transform. */
+/** Año implícito de una pestaña histórica ('2026' → 2026; '2022 - 2023' → null). */
+export const anioDeHoja = (nombre) => { const m = String(nombre).trim().match(/^(20\d{2})$/); return m ? parseInt(m[1], 10) : null; };
+
 export const HOJAS_SECUNDARIAS = [
   { sheets: ['Programación Arribos', 'Programacion Arribos'], table: 'programacion_arribos', transform: transformProgArribos },
   { sheets: ['SN'],          table: 'series_generadas',   transform: transformSN },

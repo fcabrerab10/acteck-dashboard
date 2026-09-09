@@ -18,7 +18,7 @@ const SHEET_ID   = process.env.MASTER_EMBARQUES_SHEET_ID;
 const SHEET_NAME = process.env.MASTER_EMBARQUES_SHEET_NAME || String(new Date().getFullYear());
 
 // Helpers de parseo/transformación compartidos con el puente (bridge/).
-import { parseCSV, transformEmbarques, HOJAS_HISTORICAS } from './_embarques.js';
+import { parseCSV, transformEmbarques, HOJAS_HISTORICAS, anioDeHoja } from './_embarques.js';
 
 async function upsertChunks(rows) {
   const CHUNK = 200;
@@ -74,7 +74,7 @@ async function taskSyncMasterEmbarques() {
         resultados.push({ sheet, status: 'empty', rows: 0 });
         continue;
       }
-      const rows = transformEmbarques(rawRows);
+      const rows = transformEmbarques(rawRows, { anioDefault: anioDeHoja(sheet) });
       if (rows.length === 0) {
         resultados.push({ sheet, status: 'no_valid_rows', parsed: rawRows.length - 1 });
         continue;

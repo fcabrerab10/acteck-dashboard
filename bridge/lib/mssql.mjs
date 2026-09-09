@@ -26,11 +26,11 @@ export function serverConfig(prefix) {
   };
 }
 
-/** Sanitiza un nombre de vista ([dbo].[Vw_X], dbo.Vw_X, Vw_X). */
+/** Sanitiza un nombre de vista: [dbo].[Vw_X], dbo.Vw_X, Vw_X o "sell out" (con espacios) → [dbo].[sell out]. */
 export function viewName(v) {
   const clean = String(v || '').trim();
-  if (!/^[\w\[\]\.]+$/.test(clean)) throw new Error(`Nombre de vista inválido: ${v}`);
-  return clean.split('.').map((p) => `[${p.replace(/^\[|\]$/g, '')}]`).join('.');
+  if (!/^[\w\[\] \.]+$/.test(clean)) throw new Error(`Nombre de vista inválido: ${v}`);
+  return clean.split('.').map((p) => `[${p.replace(/^\[|\]$/g, '').trim()}]`).join('.');
 }
 
 const pools = new Map();

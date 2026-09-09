@@ -18,7 +18,7 @@ Google Sheets · Master Embarques (Drive) ────────────�
 | Precios | `192.168.0.151` · `Vw_TablaM_Precios` | `precios_sku` | Replace completo (mes actual) | Actualizaciones ERP · Precios |
 | Compras (opcional) | `192.168.0.151` · `Vw_TablaH_Compras` | `compras_oc` | Replace completo | Actualizaciones ERP · POs |
 | Cuotas | `192.168.0.213` · base `RevkoBi` · `dbo.BP` | `cuotas_mensuales` | Replace por año presente | Cuotas mensuales |
-| Sell Out General | `192.168.0.160` · base `SELLOUT` · vista por confirmar | `sellout_general` | Upsert por `id`, ventana de 45 días | Sellout General (mayoristas) |
+| Sell Out General | `192.168.0.160` · base `SELLOUT` · vista `sell out` | `sellout_general` | Upsert por `id`, ventana de 45 días | Sellout General (mayoristas) |
 | Master Embarques | Google Sheets `1m2I_oTd4EYTQ1v5KQOAZGIPmt58K3jRUbHGk0ed0JoQ` | `embarques_compras`, `programacion_arribos`, `series_generadas`, `proveedores_master`, `catalogo_articulos` | Upsert | Master Embarques |
 
 Todo lo que corre el puente deja rastro en el historial de `uploads.html` (tabla `sync_events`, usuario "Puente SQL (Mac mini)") y actualiza el badge de última actualización (`sync_status`).
@@ -29,7 +29,7 @@ Todo lo que corre el puente deja rastro en el historial de `uploads.html` (tabla
 
 ## Paso 0 · Lo que necesitas tener a la mano
 
-- Por cada servidor SQL: **usuario y contraseña** (idealmente de sólo lectura, script abajo). Bases y objetos ya conocidos: ERP `192.168.0.151` → `Vw_TablaH_Ventas`, `Vw_TablaH_Inventario`, `Vw_TablaM_Precios` (falta el nombre de la base); cuotas `192.168.0.213` → base `RevkoBi`, tabla `dbo.BP`; sell out `192.168.0.160` → base `SELLOUT` (falta el nombre de la vista/tabla; `npm run test-conn` la lista).
+- Por cada servidor SQL: **usuario y contraseña** (idealmente de sólo lectura, script abajo). Bases y objetos ya conocidos: ERP `192.168.0.151` → `Vw_TablaH_Ventas`, `Vw_TablaH_Inventario`, `Vw_TablaM_Precios` (falta el nombre de la base); cuotas `192.168.0.213` → base `RevkoBi`, tabla `dbo.BP`; sell out `192.168.0.160` → base `SELLOUT`, vista `sell out`.
 - El Google Sheet de Master Embarques: `1m2I_oTd4EYTQ1v5KQOAZGIPmt58K3jRUbHGk0ed0JoQ` (ya en `.env.example`).
 - El **service role key** de Supabase (el de `.env.local` de tu laptop) y acceso a la **Mac mini** con un usuario administrador.
 
@@ -47,7 +47,7 @@ GRANT SELECT ON dbo.Vw_TablaH_Ventas     TO acteck_dashboard_ro;
 GRANT SELECT ON dbo.Vw_TablaH_Inventario TO acteck_dashboard_ro;
 GRANT SELECT ON dbo.Vw_TablaM_Precios    TO acteck_dashboard_ro;
 -- 192.168.0.213 · USE [RevkoBi];  GRANT SELECT ON dbo.BP TO acteck_dashboard_ro;
--- 192.168.0.160 · USE [SELLOUT];  GRANT SELECT ON dbo.<VistaSellOut> TO acteck_dashboard_ro;
+-- 192.168.0.160 · USE [SELLOUT];  GRANT SELECT ON dbo.[sell out] TO acteck_dashboard_ro;
 ```
 
 Además, en cada servidor: **TCP/IP habilitado** en SQL Server Configuration Manager (puerto 1433 o el que usen) y regla de firewall de Windows que permita la IP de la Mac mini a ese puerto. Autenticación en modo mixto (SQL + Windows) si el login es de SQL.
@@ -82,7 +82,10 @@ Dos opciones. La **A** es la recomendada porque la hoja no queda pública.
 2. En `.env` sólo `MASTER_EMBARQUES_SHEET_ID=<id>` (dejar `GOOGLE_SERVICE_ACCOUNT_FILE` vacío o el archivo inexistente).
 3. Con esta opción también puedes activar el cron de Vercel (`MASTER_EMBARQUES_SHEET_ID` + `CRON_SECRET` en Vercel) como respaldo si la Mac mini está apagada: hace lo mismo para `embarques_compras`.
 
-Pestañas que se leen: `2026`, `2025`, `2024`, `2022 - 2023` (histórico → `embarques_compras`), `Programación Arribos`, `SN`, `Proveedores`. Las que no existan se omiten.
+**C) Desde Claude con el conector de Drive (sin credenciales en la Mac mini)**
+Claude baja el Sheet como `.xlsx` con el conector de Google Drive y corre `bridge/embarques-xlsx.mjs "Master Embarques.xlsx"`, que aplica las mismas transformaciones y escribe en Supabase. Para que corra solo (Routine diaria) el entorno cloud de Claude Code necesita `SUPABASE_SERVICE_ROLE_KEY` como variable de entorno. Verificado el 2026-09-09 con el archivo real: 3,964 embarques (2026: 895 · 2025: 1,045 · 2024: 1,001 · 2022-2023: 1,023), 236 arribos, 951 SN, 58 proveedores, 9,492 artículos.
+
+Pestañas que se leen: `2026`, `2025`, `2024`, `2022 - 2023` (histórico → `embarques_compras`), `Programación Arribos`, `SN`, `Proveedores`. Las que no existan se omiten. Diferencias reales entre pestañas ya contempladas: 2026 usa "CBM TOTAL" y fechas de emisión en español sin año (se toma el año de la pestaña); 2022-2023 usa "FECHA DE EMISIÓN", "REF FFW" y "ETA ALMACÉN"; en 2024 un complemento de códigos QR sobrescribió los encabezados de las columnas A-F (PO sigue en la columna A); "Proveedores" tiene la fila 1 vacía.
 
 ## Paso 4 · Preparar la Mac mini como puente
 
@@ -111,15 +114,23 @@ node -v    # v22.x
 ```
 No hace falta ODBC ni drivers de Microsoft: el driver (`mssql`/tedious) es JavaScript puro.
 
-**4.4 Repo y dependencias**:
+**4.4 Repo y dependencias** — aquí es donde van los usuarios y contraseñas de las bases: en `bridge/.env` de la Mac mini (copiado de `.env.example`), nunca en el repo.
 ```bash
 mkdir -p ~/acteck && cd ~/acteck
 git clone https://github.com/fcabrerab10/acteck-dashboard.git
 cd acteck-dashboard/bridge
 npm ci
 cp .env.example .env && chmod 600 .env
-open -e .env      # service role key, usuarios/contraseñas SQL, base del ERP, vista de sell out
+open -e .env      # service role key, usuarios/contraseñas SQL, base del ERP
 ```
+Líneas a llenar en `.env`:
+```
+SUPABASE_SERVICE_ROLE_KEY=…        # el de .env.local de la laptop
+ERP_SQL_DB=…  ERP_SQL_USER=…  ERP_SQL_PASS=…            # 192.168.0.151 (falta el nombre de la base)
+CUOTAS_SQL_USER=…  CUOTAS_SQL_PASS=…                    # 192.168.0.213 · RevkoBi · dbo.BP ya puestos
+SELLOUT_SQL_USER=…  SELLOUT_SQL_PASS=…                  # 192.168.0.160 · SELLOUT · vista "sell out" ya puestos
+```
+Si los tres servidores comparten usuario, se repite el mismo en los tres bloques.
 La Mac mini sólo necesita la carpeta `bridge/` y `api/_embarques.js` del repo (se importa desde ahí); no hay que hacer `npm install` en la raíz.
 
 **4.5 Acceso remoto (para no ir a la oficina)**: activar **Compartir pantalla** y **Sesión remota (SSH)** en Configuración → General → Compartir. Para entrar desde fuera de la oficina, instalar **Tailscale** en la Mac mini y en tu laptop; no abre puertos en el router.
