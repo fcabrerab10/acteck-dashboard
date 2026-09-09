@@ -716,7 +716,7 @@ function PuenteAutomatico({ status }) {
         </table>
       </div>
       <p style={{ fontSize: 11, color: '#94a3b8', margin: '8px 4px 0' }}>
-        Se actualiza cada minuto. Ventas se reemplaza por año completo en cada corrida; embarques reemplaza la tabla con el Sheet. Log en la Mac mini: acteck-dashboard/bridge/logs/sync-&lt;fecha&gt;.log
+        Se actualiza cada minuto. Ventas trae sólo los últimos 45 días en cada corrida (carga completa: ./run.sh ventas --anios 2026); embarques reemplaza la tabla con el Sheet. Log en la Mac mini: acteck-dashboard/bridge/logs/sync-&lt;fecha&gt;.log
       </p>
     </div>
   );

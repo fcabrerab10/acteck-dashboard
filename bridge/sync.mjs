@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Puente de sincronización · acteck-dashboard
 //
-//   node --env-file=credenciales.env sync.mjs <fuentes…> [--dry-run] [--top N] [--anios 2025,2026]
+//   node --env-file=credenciales.env sync.mjs <fuentes…> [--dry-run] [--top N] [--anios 2025,2026] [--dias 45]
 //
 // Fuentes: ventas inventario precios compras cuotas sellout embarques
 //          erp  = ventas + inventario + precios (+ compras si está configurado)
@@ -26,11 +26,18 @@ const dryRun = flag('--dry-run');
 const top = parseInt(opt('--top') || '0', 10);
 const env = (k, d = '') => (process.env[k] ?? d).trim();
 
+// Ventas: dos modos.
+//   · ventana (default): sólo los últimos ERP_VENTAS_DIAS días (o --dias N) por `periodo`;
+//     se borra esa ventana en Supabase y se reinserta. Es lo que corre cada hora.
+//   · completo: --anios 2025,2026 (o ERP_VENTAS_ANIOS) reemplaza el año entero.
+//     Sirve para la carga inicial o para recargar un año viejo.
 const aniosVentas = () => {
   const raw = opt('--anios') || env('ERP_VENTAS_ANIOS');
-  const list = raw ? raw.split(',').map((a) => parseInt(a, 10)).filter(Boolean) : [new Date().getFullYear()];
+  const list = raw ? raw.split(',').map((a) => parseInt(a, 10)).filter(Boolean) : [];
   return [...new Set(list)].sort();
 };
+const diasVentas = () => parseInt(opt('--dias') || env('ERP_VENTAS_DIAS', '45'), 10) || 45;
+const isoDia = (d) => d.toISOString().slice(0, 10);
 const inList = (col, vals) => `${col} IN (${vals.join(',')})`;
 
 // ── Definición de fuentes ───────────────────────────────────────────────────
@@ -40,21 +47,25 @@ const FUENTES = {
     src_id: 'erp-updates', status_key: 'erp_sell_in', enabled: () => env('ERP_SQL_HOST'),
     run: async () => {
       const anios = aniosVentas();
+      const completo = anios.length > 0;
+      const desde = completo ? null : isoDia(new Date(Date.now() - diasVentas() * 86400000));
+      const where = completo ? inList('anio', anios) : `periodo >= '${desde}'`;
       const { rows, leidas } = await readView('ERP', env('ERP_VIEW_VENTAS', 'Vw_TablaH_Ventas'), {
-        where: inList('anio', anios), top, mapRow: M.erpVentas, onProgress: (n) => log(`  leídas ${n}…`),
+        where, top, mapRow: M.erpVentas, onProgress: (n) => log(`  leídas ${n}…`),
       });
-      log(`  ventas: ${leidas} leídas → ${rows.length} válidas · años ${anios.join(',')}`);
-      // Protección: no borrar un año si la vista vino vacía para ese año.
-      const aniosPresentes = anios.filter((a) => rows.some((r) => r.anio === a));
+      const aniosPresentes = completo ? anios.filter((a) => rows.some((r) => r.anio === a)) : [...new Set(rows.map((r) => r.anio).filter(Boolean))].sort();
+      log(`  ventas: ${leidas} leídas → ${rows.length} válidas · ${completo ? 'años ' + anios.join(',') : 'ventana desde ' + desde + ' (' + diasVentas() + ' días)'}`);
       // Chunks chicos y poca concurrencia: erp_ventas dispara statement timeout (57014) en
       // Supabase con 1000 filas por request (comprobado 2026-09-09 con 63,740 filas).
-      const r = await upsertRows('erp_ventas', 'venta_id,venta_renglon', rows, { deleteAnios: aniosPresentes, dryRun, chunk: 200, concurrency: 2 });
+      const opts = { dryRun, chunk: 200, concurrency: 2 };
+      if (completo) opts.deleteAnios = aniosPresentes; else opts.deleteWhere = `periodo=gte.${desde}`;
+      await upsertRows('erp_ventas', 'venta_id,venta_renglon', rows, opts);
       if (rows.length) {
         log(`  finalize: refresh_facturacion_clientes(${aniosPresentes.join(',')})`);
         const f = await finalizeErpVentas(aniosPresentes, { dryRun });
         if (f?.resumen) log('  resumen:', JSON.stringify(f.resumen).slice(0, 400));
       }
-      return { filas: rows.length, detalles: { anios: aniosPresentes, leidas } };
+      return { filas: rows.length, detalles: { anios: aniosPresentes, leidas, ...(desde ? { desde } : {}) } };
     },
   },
   inventario: {
@@ -202,8 +213,8 @@ async function test() {
 }
 
 (async () => {
-  const pedidas = args.filter((a) => !a.startsWith('--') && a !== opt('--top') && a !== opt('--anios'));
-  if (!pedidas.length) { console.log('uso: sync.mjs <ventas|inventario|precios|compras|cuotas|sellout|embarques|erp|all|test> [--dry-run] [--top N] [--anios 2025,2026]'); process.exit(2); }
+  const pedidas = args.filter((a) => !a.startsWith('--') && a !== opt('--top') && a !== opt('--anios') && a !== opt('--dias'));
+  if (!pedidas.length) { console.log('uso: sync.mjs <ventas|inventario|precios|compras|cuotas|sellout|embarques|erp|all|test> [--dry-run] [--top N] [--anios 2025,2026] [--dias 45]'); process.exit(2); }
   let exit = 0;
   try {
     if (pedidas.includes('test')) { exit = (await test()) ? 1 : 0; }

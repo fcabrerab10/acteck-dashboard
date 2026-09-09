@@ -148,7 +148,7 @@ npm run sync -- cuotas sellout embarques
 ```
 Validar en el dashboard: Sell In (facturación del mes vs. lo que ya tenías), Inventario, Precios, Cuotas en S&OP, Sell Out General y Embarques. En `uploads.html` cada tarjeta muestra el evento "Puente SQL (Mac mini)" en su historial.
 
-Nota sobre ventas: el replace es **por año** (`ERP_VENTAS_ANIOS`, vacío = año actual). Una vez cargado 2025 completo no hace falta repetirlo a diario; deja sólo el año en curso. En enero, poner `2025,2026` un par de semanas para cerrar diciembre.
+Nota sobre ventas: por default cada corrida es una **ventana de 45 días** (`ERP_VENTAS_DIAS`, filtro por `periodo`; se borra la ventana en Supabase y se reinserta) y luego recalcula `facturacion_clientes` del año. La carga completa de un año se pide explícitamente: `./run.sh ventas --anios 2026`. Nota anterior: el replace era **por año** (`ERP_VENTAS_ANIOS`, vacío = año actual). Una vez cargado 2025 completo no hace falta repetirlo a diario; deja sólo el año en curso. En enero, poner `2025,2026` un par de semanas para cerrar diciembre.
 
 ## Paso 6 · Programar (launchd)
 

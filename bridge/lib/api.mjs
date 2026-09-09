@@ -67,21 +67,23 @@ const vercel = (body, opts) => http(`${BASE}/api/import-central`, {
  * Sube rows a `table` por chunks. Las instrucciones de borrado (deleteAll /
  * deleteAnios) se aplican ANTES del primer chunk; los demás van en paralelo.
  */
-export async function upsertRows(table, onConflict, rows, { deleteAll = false, deleteAnios = null, chunk = DIRECTO ? 1000 : 500, concurrency = 4, dryRun = false } = {}) {
+export async function upsertRows(table, onConflict, rows, { deleteAll = false, deleteAnios = null, deleteWhere = null, chunk = DIRECTO ? 1000 : 500, concurrency = 4, dryRun = false } = {}) {
   if (!rows.length) {
-    if (deleteAll || deleteAnios?.length) log(`  ${table}: 0 filas · no se borra nada (protección contra vistas vacías)`);
+    if (deleteAll || deleteAnios?.length || deleteWhere) log(`  ${table}: 0 filas · no se borra nada (protección contra vistas vacías)`);
     return { ok: 0, chunks: 0 };
   }
   const chunks = [];
   for (let i = 0; i < rows.length; i += chunk) chunks.push(rows.slice(i, i + chunk));
-  log(`  ${table}: ${rows.length} filas en ${chunks.length} chunks${deleteAll ? ' · replace completo' : ''}${deleteAnios?.length ? ' · replace años ' + deleteAnios.join(',') : ''}`);
+  log(`  ${table}: ${rows.length} filas en ${chunks.length} chunks${deleteAll ? ' · replace completo' : ''}${deleteAnios?.length ? ' · replace años ' + deleteAnios.join(',') : ''}${deleteWhere ? ' · replace ventana ' + deleteWhere : ''}`);
   if (dryRun) { log('  dry-run: no se envía nada. Muestra:', JSON.stringify(rows[0]).slice(0, 300)); return { ok: 0, chunks: 0, dryRun: true }; }
 
   let ok = 0, next = 0;
   if (DIRECTO) {
     if (deleteAll) await sb.del(table, `${onConflict.split(',')[0].trim()}=not.is.null`);
     for (const a of deleteAnios || []) await sb.del(table, `anio=eq.${parseInt(a, 10)}`);
+    if (deleteWhere) await sb.del(table, deleteWhere);
   } else {
+    if (deleteWhere) log(`  (vía Vercel no hay replace por ventana: se hace upsert sin borrar)`);
     const first = { table, rows: chunks[0], onConflict };
     if (deleteAll) first.deleteAll = true;
     if (deleteAnios?.length) first.deleteAnios = deleteAnios;

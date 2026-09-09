@@ -262,7 +262,7 @@
         <tbody id="puente-body"><tr><td colspan="7" class="sec">Consultando sync_status…</td></tr></tbody>
       </table>
     </div>
-    <div class="foot">Se actualiza cada minuto. Ventas se reemplaza por año completo en cada corrida; embarques reemplaza la tabla con el Sheet. Log en la Mac mini: acteck-dashboard/bridge/logs/sync-&lt;fecha&gt;.log</div>
+    <div class="foot">Se actualiza cada minuto. Ventas trae sólo los últimos 45 días en cada corrida (carga completa con <code>./run.sh ventas --anios 2026</code>); embarques reemplaza la tabla con el Sheet. Log en la Mac mini: acteck-dashboard/bridge/logs/sync-&lt;fecha&gt;.log</div>
   </section>
   <div id="grid"></div>
 </main>
@@ -3555,6 +3555,9 @@ function puenteEstado(row, item, ev){
 async function renderPuente(){
   const body = document.getElementById('puente-body'); const res = document.getElementById('puente-resumen');
   if (!body) return;
+  // El wrapper de fetch que agrega Authorization se instala tras validar la sesión;
+  // si aún no está, reintenta en medio segundo en vez de pedir sin token (401 → "sin datos").
+  if (!window.__uploaderSession) { setTimeout(renderPuente, 500); return; }
   let j = null;
   try { const r = await fetch('/api/status?type=sync'); if (r.ok) j = await r.json(); } catch {}
   if (!j || !j.ok) { body.innerHTML = '<tr><td colspan="7" class="sec">No se pudo consultar /api/status</td></tr>'; res.textContent = 'sin datos'; res.style.color = 'var(--muted)'; return; }
