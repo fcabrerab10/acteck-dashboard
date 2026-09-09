@@ -39,7 +39,8 @@ export default function MobileSellOutGlobal({ onBack, onNavegar }) {
       await Promise.all(clientesActivos.map(async (c) => {
         const [so, si, skus, road] = await Promise.all([
           safeQuery(supabase.from(`v_sellout_${c}_mensual`).select('anio,mes,piezas,monto').eq('anio', anio)),
-          safeQuery(supabase.from('facturacion_clientes').select('mes,monto').eq('cliente_key', c).eq('anio', anio)),
+          // v_fact_cliente_mes: 12 filas por cliente; antes cruda sin paginar (tope 1000).
+          safeQuery(supabase.from('v_fact_cliente_mes').select('mes,monto').eq('cliente_key', c).eq('anio', anio)),
           safeQuery(supabase.from(`v_sellout_${c}_sku_mes`).select('sku,mes,piezas,monto').eq('anio', anio)),
           safeQuery(supabase.from('roadmap_sku').select('sku,descripcion')),
         ]);

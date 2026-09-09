@@ -37,7 +37,9 @@ export default function MobileSOP({ onBack, onNavegar }) {
     (async () => {
       setLoading(true);
       const [f, c] = await Promise.all([
-        safeQuery(supabase.from('facturacion_clientes').select('cliente_key,mes,monto').eq('anio', anio)),
+        // v_fact_cliente_mes (≈80 filas/año). Antes: facturacion_clientes cruda
+        // sin paginar → PostgREST cortaba en 1000 filas y el KPI quedaba corto.
+        safeQuery(supabase.from('v_fact_cliente_mes').select('cliente_key,mes,monto').eq('anio', anio)),
         safeQuery(supabase.from('cuotas_mensuales').select('cliente,mes,cuota_min,cuota_ideal,cuota_meta').eq('anio', anio)),
       ]);
       if (!alive) return;

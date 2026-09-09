@@ -1025,7 +1025,8 @@ function VistaClientePicker({ theme, isDark, onElegir, onBack }) {
       // v_ventas_mensuales_agg quedaba desactualizada en varios meses.
       const [cuotas, factRes] = await Promise.all([
         supabase.from('cuotas_mensuales').select('cliente,cuota_min,cuota_ideal').eq('anio', anio).eq('mes', mes).in('cliente', cliKeys),
-        cachedQuery(supabase.from('facturacion_clientes').select('cliente_key,monto').eq('anio', anio).eq('mes', mes).in('cliente_key', cliKeys)),
+        // v_fact_cliente_mes: 1 fila por cliente en vez de miles de filas sku.
+        cachedQuery(supabase.from('v_fact_cliente_mes').select('cliente_key,monto').eq('anio', anio).eq('mes', mes).in('cliente_key', cliKeys)),
       ]);
       const out = {};
       for (const k of cliKeys) out[k] = { cuota: 0, facturado: 0 };
@@ -2806,15 +2807,13 @@ async function fetchAll(clienteKey) {
 async function fetchSelloutMesActual(clienteKey) {
   const anio = MES_ACTUAL.anio, mes = MES_ACTUAL.mes;
   if (clienteKey === 'digitalife') {
-    const ini = `${anio}-${String(mes).padStart(2, '0')}-01`;
-    const finM = new Date(anio, mes, 0);
-    const fin = `${anio}-${String(mes).padStart(2, '0')}-${String(finM.getDate()).padStart(2, '0')}`;
-    const { data } = await supabase.from('sellout_detalle')
-      .select('cantidad,precio')
-      .eq('cliente', 'digitalife')
-      .gte('fecha', ini).lte('fecha', fin)
-      .limit(200000);
-    return (data || []).reduce((s, r) => s + (Number(r.cantidad) || 0) * (Number(r.precio) || 0), 0);
+    // Vista agregada: monto_bruto = Σ(cantidad × precio) ya calculado en Postgres.
+    // Antes: .limit(200000) sobre el detalle diario (PostgREST corta en 1000).
+    const { data } = await cachedQuery(
+      supabase.from('v_sellout_detalle_sku_mes').select('monto_bruto')
+        .eq('cliente', 'digitalife').eq('anio', anio).eq('mes', mes),
+    );
+    return (data || []).reduce((s, r) => s + (Number(r.monto_bruto) || 0), 0);
   }
   if (clienteKey === 'dicotech') {
     const { data } = await supabase.from('sellout_general')
@@ -2836,21 +2835,17 @@ async function fetchSellout(clienteKey, mm, anioMin, anioMax) {
     // Filtrar por rango de fechas de los 3 meses target (no todo desde
     // anioMin) para reducir volumen antes de paginar. Supabase corta en
     // 1000 aunque pases .limit(200000); hay que paginar sí o sí.
-    const mesesOrd = [...mm].sort((a, b) => a.anio * 100 + a.mes - (b.anio * 100 + b.mes));
-    const fIni = `${mesesOrd[0].anio}-${String(mesesOrd[0].mes).padStart(2, '0')}-01`;
-    const finM = new Date(mesesOrd[mesesOrd.length - 1].anio, mesesOrd[mesesOrd.length - 1].mes, 0);
-    const fFin = `${finM.getFullYear()}-${String(finM.getMonth() + 1).padStart(2, '0')}-${String(finM.getDate()).padStart(2, '0')}`;
+    // Vista agregada por sku+mes (v_sellout_detalle_sku_mes): devuelve
+    // directamente {sku, piezas, anio, mes}. Antes: detalle diario paginado.
+    const aniosMm = Array.from(new Set(mm.map((m) => m.anio)));
     const data = await fetchAllPagesLocal(() =>
-      supabase.from('sellout_detalle')
-        .select('no_parte,cantidad,fecha')
+      supabase.from('v_sellout_detalle_sku_mes')
+        .select('sku,piezas,anio,mes')
         .eq('cliente', 'digitalife')
-        .gte('fecha', fIni).lte('fecha', fFin));
+        .in('anio', aniosMm));
     return (data || [])
-      .filter((r) => mesesSet.has(String(r.fecha).slice(0, 7)))
-      .map((r) => {
-        const s = String(r.fecha);
-        return { sku: r.no_parte, cantidad: r.cantidad, anio: Number(s.slice(0, 4)), mes: Number(s.slice(5, 7)) };
-      });
+      .filter((r) => mesesSet.has(`${r.anio}-${String(r.mes).padStart(2, '0')}`))
+      .map((r) => ({ sku: r.sku, cantidad: r.piezas, anio: Number(r.anio), mes: Number(r.mes) }));
   }
   if (clienteKey === 'pcel') {
     // sellout_pcel trae los últimos 3 meses en columnas vta_mes_actual, vta_mes_1, vta_mes_2

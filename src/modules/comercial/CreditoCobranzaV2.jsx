@@ -62,7 +62,9 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
       const [ecRes, siRes, cfgRes] = await Promise.all([
         supabase.from('estados_cuenta').select('*').eq('cliente', clienteKey)
           .order('anio', { ascending: false }).order('semana', { ascending: false }).limit(2),
-        supabase.from('facturacion_clientes').select('mes, monto').eq('cliente_key', clienteKey).eq('anio', anio),
+        // v_fact_cliente_mes: 12 filas; antes facturacion_clientes cruda sin
+        // paginar (PostgREST corta en 1000 → suma YTD podía quedar corta).
+        supabase.from('v_fact_cliente_mes').select('mes, monto').eq('cliente_key', clienteKey).eq('anio', anio),
         supabase.from('clientes_credito_config').select('*').eq('cliente', clienteKey).maybeSingle(),
       ]);
       const ecArr = ecRes.data || [];

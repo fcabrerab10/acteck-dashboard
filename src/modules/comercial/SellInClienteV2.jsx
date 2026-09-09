@@ -149,9 +149,11 @@ export default function SellInClienteV2({ clienteKey }) {
     let cancel = false;
     setSelloutLoading(true);
     (async () => {
-      const anioIni = `${anioPrev}-01-01`;
-      const sod = await fetchAll('sellout_detalle', 'fecha,total,cantidad,no_parte',
-        (q) => q.eq('cliente', clienteKey).gte('fecha', anioIni));
+      // Vista agregada por sku+mes (v_sellout_detalle_sku_mes): ~4× menos filas
+      // que el detalle diario y sin fechas/precios. El consumidor sólo agrega
+      // por sku del año actual.
+      const sod = await fetchAll('v_sellout_detalle_sku_mes', 'sku,anio,mes,piezas,monto',
+        (q) => q.eq('cliente', clienteKey).in('anio', [anioPrev, anio]));
       if (cancel) return;
       setSelloutDet(sod);
       setSelloutLoading(false);
@@ -187,15 +189,13 @@ export default function SellInClienteV2({ clienteKey }) {
   const selloutBySku = useMemo(() => {
     const map = new Map();
     for (const r of selloutDet) {
-      if (!r.fecha) continue;
-      const d = new Date(r.fecha);
-      if (d.getFullYear() !== anio) continue;
-      const sku = String(r.no_parte || '').trim();
+      if (Number(r.anio) !== anio) continue;
+      const sku = String(r.sku || '').trim();
       if (!sku) continue;
       if (!map.has(sku)) map.set(sku, { monto: 0, piezas: 0 });
       const s = map.get(sku);
-      s.monto += Number(r.total) || 0;
-      s.piezas += Number(r.cantidad) || 0;
+      s.monto += Number(r.monto) || 0;
+      s.piezas += Number(r.piezas) || 0;
     }
     return map;
   }, [selloutDet, anio]);

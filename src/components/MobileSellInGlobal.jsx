@@ -123,7 +123,8 @@ export default function MobileSellInGlobal({ onBack, onNavegar }) {
 
   const [anios, setAnios] = useState([]);
   useEffect(() => { (async () => {
-    const d = await fetchAll('facturacion_clientes', 'anio', q => q);
+    // v_fact_anios: años distintos (≈4 filas). Antes bajaba las 54K filas enteras.
+    const d = await fetchAll('v_fact_anios', 'anio', q => q);
     setAnios(Array.from(new Set(d.map(r => Number(r.anio)))).sort());
   })(); }, []);
 

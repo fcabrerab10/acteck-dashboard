@@ -264,11 +264,13 @@ export default function PagosCliente({ cliente, clienteKey }) {
       // Se usa para el ranking de SPIFF vendedores (top 5 por mes).
       const vendedoresProm = clienteKey === "dicotech"
         ? (async () => {
-            // Paginación paralela + cache central; sellout_general es HEAVY → 500/página.
+            // Vista agregada en Postgres (v_sellout_general_vendedor_mes): ~225
+            // filas en vez de ~20K crudas. El consumidor suma por mes+vendedor,
+            // así que recibir ya agregado es idempotente.
             const { fetchAllQ } = await import('../../lib/queries');
             const all = await fetchAllQ(
-              () => supabase.from("sellout_general").select("mes,vendedor_nombre,importe").ilike("mayorista", "%dicotech%").eq("anio", anio).order("mes", { ascending: true }),
-              { pageSize: 500, label: 'sellout_general vendedores' },
+              () => supabase.from("v_sellout_general_vendedor_mes").select("mes,vendedor_nombre,importe").ilike("mayorista", "%dicotech%").eq("anio", anio).order("mes", { ascending: true }),
+              { pageSize: 1000, label: 'vendedor_mes' },
             );
             return { data: all };
           })()

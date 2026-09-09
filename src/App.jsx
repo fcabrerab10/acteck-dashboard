@@ -381,6 +381,69 @@ export default function App() {
       } catch {}
     }, [vistaActual]);
 
+  // ── Prefetch de pantallas vecinas en idle ──────────────────────────
+  // Con React.lazy cada pestaña baja su chunk al hacer clic (~100-300 ms de
+  // loader). Cuando el navegador está libre, precargamos los chunks de las
+  // pestañas del cliente activo (o de las globales más usadas) para que el
+  // siguiente clic sea instantáneo. Rollup dedupe estos import() con los de
+  // lazy(): es el mismo módulo, no se descarga dos veces. Se respeta
+  // "ahorro de datos" y se hace de uno en uno para no competir con la
+  // carga de la pantalla actual.
+  React.useEffect(() => {
+    if (!authUser) return;
+    if (typeof navigator !== 'undefined' && navigator.connection?.saveData) return;
+    const porCliente = {
+      digitalife: [
+        () => import('./modules/comercial/HomeDigitalife'), () => import('./modules/comercial/SellInClienteV2'),
+        () => import('./modules/comercial/SellOutClienteV2'), () => import('./modules/comercial/PagosCliente'),
+        () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingClienteV2'),
+        () => import('./modules/comercial/AnalisisCliente'),
+      ],
+      dicotech: [
+        () => import('./modules/comercial/HomeDicotech'), () => import('./modules/comercial/SellInDicotech'),
+        () => import('./modules/comercial/SellOutDicotech'), () => import('./modules/comercial/PagosCliente'),
+        () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingClienteV2'),
+        () => import('./modules/comercial/AnalisisCliente'),
+      ],
+      pcel: [
+        () => import('./modules/comercial/HomePcel'), () => import('./modules/comercial/SellInPcel'),
+        () => import('./modules/comercial/SellOutPcel'), () => import('./modules/comercial/PagosCliente'),
+        () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingClienteV2'),
+        () => import('./modules/comercial/AnalisisCliente'),
+      ],
+    };
+    const globales = [
+      () => import('./modules/comercial/ResumenClientesTab'), () => import('./modules/comercial/VisionGeneral'),
+      () => import('./modules/comercial/ForecastClientesTab'), () => import('./modules/comercial/PropuestasTab'),
+      () => import('./modules/comercial/EstrategiaPrecios'), () => import('./modules/comercial/InventarioGlobal'),
+      () => import('./modules/comercial/TrackingPedidos'), () => import('./modules/comercial/ForecastReservas'),
+      () => import('./modules/interno/PendientesCalendarioV2'),
+    ];
+    const moviles = [
+      () => import('./components/MobileHome'), () => import('./components/MobileHoy'),
+      () => import('./components/MobileHomeCliente'), () => import('./components/MobileSellIn'),
+      () => import('./components/MobileSellOut'), () => import('./components/MobileCartera'),
+    ];
+    const cola = mobile
+      ? moviles
+      : [...(clienteActivo ? (porCliente[clienteActivo] || []) : []), ...globales];
+
+    let cancelado = false;
+    const ric = window.requestIdleCallback || ((fn) => setTimeout(fn, 1500));
+    const cic = window.cancelIdleCallback || clearTimeout;
+    let handle = null;
+    const paso = (i) => {
+      if (cancelado || i >= cola.length) return;
+      handle = ric(() => {
+        if (cancelado) return;
+        Promise.resolve(cola[i]()).catch(() => {}).finally(() => paso(i + 1));
+      }, { timeout: 4000 });
+    };
+    // Empezar tras un respiro para no competir con la pantalla que se está abriendo.
+    const t = setTimeout(() => paso(0), 1200);
+    return () => { cancelado = true; clearTimeout(t); if (handle != null) cic(handle); };
+  }, [authUser, clienteActivo, mobile]);
+
   const [modoPresent, setModoPresent] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [clienteKey, setClienteKey] = useState(null);
