@@ -72,3 +72,20 @@ export function isCronRequest(req) {
   const h = req.headers.authorization || '';
   return h === `Bearer ${secret}`;
 }
+
+/**
+ * Verifica que la request venga del puente de sincronización (Mac mini en la
+ * oficina, ver bridge/ y docs/SYNC_SQL_BRIDGE.md). Requiere header
+ * `x-sync-secret: <SYNC_SECRET>`. El secreto debe tener ≥ 24 caracteres para
+ * que un valor vacío o de prueba nunca habilite el acceso. Retorna true/false.
+ */
+export function isSyncRequest(req) {
+  const secret = process.env.SYNC_SECRET;
+  if (!secret || secret.length < 24) return false;
+  const got = req.headers['x-sync-secret'];
+  if (typeof got !== 'string' || got.length !== secret.length) return false;
+  // Comparación en tiempo constante.
+  let diff = 0;
+  for (let i = 0; i < secret.length; i++) diff |= secret.charCodeAt(i) ^ got.charCodeAt(i);
+  return diff === 0;
+}

@@ -18,140 +18,8 @@ const SRK    = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SHEET_ID   = process.env.MASTER_EMBARQUES_SHEET_ID;
 const SHEET_NAME = process.env.MASTER_EMBARQUES_SHEET_NAME || String(new Date().getFullYear());
 
-// ═════════════════════ CSV parser ═════════════════════
-function parseCSV(text) {
-  const rows = [];
-  let row = [], cur = '', inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"' && text[i+1] === '"') { cur += '"'; i++; continue; }
-      if (c === '"') { inQuotes = false; continue; }
-      cur += c;
-    } else {
-      if (c === '"') { inQuotes = true; continue; }
-      if (c === ',') { row.push(cur); cur = ''; continue; }
-      if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; continue; }
-      if (c === '\r') continue;
-      cur += c;
-    }
-  }
-  if (cur !== '' || row.length > 0) { row.push(cur); rows.push(row); }
-  return rows;
-}
-
-// ═════════════════════ Normalización ═════════════════════
-function snake(s) {
-  return String(s || '').trim().toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-}
-function toStr(v) {
-  if (v == null) return null;
-  const s = String(v).trim();
-  return s === '' || s === '#N/A' ? null : s;
-}
-function toNum(v) {
-  if (v == null || v === '' || v === '#N/A') return null;
-  const n = Number(String(v).replace(/[$,]/g, ''));
-  return isNaN(n) ? null : n;
-}
-function toInt(v) { const n = toNum(v); return n == null ? null : Math.round(n); }
-function toISODate(v) {
-  if (v == null || v === '') return null;
-  const s = String(v).trim();
-  if (/[A-Za-z]/.test(s) && !/\d{1,2}[\/\-]\d{1,2}/.test(s)) {
-    const d = new Date(s);
-    return isNaN(d) ? null : d.toISOString().slice(0, 10);
-  }
-  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-  if (!m) {
-    const d = new Date(s);
-    return isNaN(d) ? null : d.toISOString().slice(0, 10);
-  }
-  let [, a, b, c] = m;
-  const year = c.length === 2 ? `20${c}` : c;
-  return `${year}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
-}
-function classifyCedis(raw) {
-  const s = (raw == null ? '' : String(raw)).trim();
-  if (!s) return { cedis: null, entrega_directa_cliente: null };
-  if (/^\d/.test(s)) return { cedis: s, entrega_directa_cliente: null };
-  return { cedis: s, entrega_directa_cliente: s };
-}
-
-function transformEmbarques(rawRows) {
-  if (rawRows.length < 2) return [];
-  const header = rawRows[0].map(snake);
-  const idx = (names) => {
-    for (const n of Array.isArray(names) ? names : [names]) {
-      const i = header.indexOf(n);
-      if (i >= 0) return i;
-    }
-    return -1;
-  };
-  const col = {
-    po: idx('po'), fecha_emision: idx('fecha_emision'), grupo: idx('grupo'),
-    cbm: idx('cbm'), f_a: idx(['f_a','fa']), porcentaje: idx('porcentaje'),
-    familia: idx('familia'), codigo: idx('codigo'), descripcion: idx('descripcion'),
-    po_qty: idx('po_qty'), shp_qty: idx('shp_qty'),
-    unit_price: idx('unit_price'), total_amount: idx('total_amount'),
-    metodo_pago: idx('metodo_de_pago'), supplier: idx('supplier'),
-    fecha_ini_prod: idx('fecha_inicio_de_produccion'), fin_prod: idx('fin_de_produccion'),
-    ref_ff: idx('ref_ff'), naviera: idx('naviera'),
-    tipo_carga: idx('tipo_de_carga'), tipo_cont: idx('tipo_de_cont'),
-    costo_flete: idx('costo_flete'), fdw: idx('fdw'), contenedor: idx('contenedor'),
-    etd: idx('etd'), eta_puerto: idx('eta_puerto'),
-    a_a: idx(['a_a','aa']), arribo_cedis: idx('arribo_a_cedis'),
-    lt: idx('lt'), cedis: idx('cedis'), estatus: idx('estatus'),
-    com_trafico: idx('comentarios_trafico'), com_diseno: idx('comentarios_diseno'),
-  };
-  const rows = [];
-  for (let i = 1; i < rawRows.length; i++) {
-    const r = rawRows[i];
-    const po = toStr(r[col.po]);
-    const codigo = toStr(r[col.codigo]);
-    if (!po || !codigo) continue;
-    const { cedis, entrega_directa_cliente } = classifyCedis(r[col.cedis]);
-    rows.push({
-      po, codigo,
-      fecha_emision:   toISODate(r[col.fecha_emision]),
-      grupo:           toStr(r[col.grupo]),
-      cbm:             toNum(r[col.cbm]),
-      fraccion_arancelaria: toStr(r[col.f_a]),
-      porcentaje:      toNum(r[col.porcentaje]),
-      familia:         toStr(r[col.familia]),
-      descripcion:     toStr(r[col.descripcion]),
-      po_qty:          toInt(r[col.po_qty]),
-      shp_qty:         toInt(r[col.shp_qty]),
-      unit_price:      toNum(r[col.unit_price]),
-      total_amount:    toNum(r[col.total_amount]),
-      metodo_pago:     toStr(r[col.metodo_pago]),
-      supplier:        toStr(r[col.supplier]),
-      fecha_inicio_produccion: toISODate(r[col.fecha_ini_prod]),
-      fin_produccion:  toISODate(r[col.fin_prod]),
-      ref_ff:          toStr(r[col.ref_ff]),
-      naviera:         toStr(r[col.naviera]),
-      tipo_carga:      toStr(r[col.tipo_carga]),
-      tipo_contenedor: toStr(r[col.tipo_cont]),
-      costo_flete:     toNum(r[col.costo_flete]),
-      fdw:             toStr(r[col.fdw]),
-      contenedor:      toStr(r[col.contenedor]),
-      etd:             toISODate(r[col.etd]),
-      eta_puerto:      toISODate(r[col.eta_puerto]),
-      agente_aduanal:  toStr(r[col.a_a]),
-      arribo_cedis:    toISODate(r[col.arribo_cedis]),
-      lt:              toStr(r[col.lt]),
-      cedis, entrega_directa_cliente,
-      estatus:         toStr(r[col.estatus]),
-      comentarios_trafico: toStr(r[col.com_trafico]),
-      comentarios_diseno:  toStr(r[col.com_diseno]),
-    });
-  }
-  const seen = new Map();
-  for (const r of rows) seen.set(`${r.po}||${r.codigo}`, r);
-  return [...seen.values()];
-}
+// Helpers de parseo/transformación compartidos con el puente (bridge/).
+import { parseCSV, transformEmbarques, HOJAS_HISTORICAS, anioDeHoja } from './_embarques.js';
 
 async function upsertChunks(rows) {
   const CHUNK = 200;
@@ -183,7 +51,7 @@ async function taskSyncMasterEmbarques() {
   if (!SHEET_ID) return { error: 'MASTER_EMBARQUES_SHEET_ID no configurada', status: 500 };
   // Itera todas las hojas históricas: 2026, 2025, 2024, 2022-2023.
   // Si una hoja no existe en el Google Sheet, la respuesta dará HTTP 400 y la saltamos.
-  const HOJAS = ['2026', '2025', '2024', '2022 - 2023', '2022-2023', '2023', '2022'];
+  const HOJAS = HOJAS_HISTORICAS;
   const resultados = [];
   let totalParsed = 0, totalValid = 0, totalUpserted = 0, totalFail = 0;
   const allErrors = [];
@@ -207,7 +75,7 @@ async function taskSyncMasterEmbarques() {
         resultados.push({ sheet, status: 'empty', rows: 0 });
         continue;
       }
-      const rows = transformEmbarques(rawRows);
+      const rows = transformEmbarques(rawRows, { anioDefault: anioDeHoja(sheet) });
       if (rows.length === 0) {
         resultados.push({ sheet, status: 'no_valid_rows', parsed: rawRows.length - 1 });
         continue;

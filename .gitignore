@@ -5,3 +5,16 @@ dist/
 .DS_Store
 supabase/.temp/
 sellout-tmp.xlsx
+
+# Puente SQL (Mac mini)
+bridge/credenciales.env
+bridge/.env
+bridge/google-sa.json
+bridge/logs/*
+!bridge/logs/.gitkeep
+bridge/node_modules/
+
+# Puente (bridge/): xlsx del Master Embarques bajado con el conector de Drive, logs y deps
+bridge/*.xlsx
+bridge/logs/
+bridge/node_modules/

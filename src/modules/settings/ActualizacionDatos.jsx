@@ -601,7 +601,7 @@ export default function ActualizacionDatos({ perfil }) {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: '0 0 6px' }}>Actualización de datos</h1>
           <p style={{ color: '#64748b', margin: 0, fontSize: 13 }}>
-            Agrupado por cliente. Cada tarjeta muestra última fecha de datos y frescura.
+            Arriba las cargas automáticas del puente; abajo las cargas manuales agrupadas por cliente.
           </p>
         </div>
         <a href="/uploads.html" target="_blank" rel="noopener noreferrer"
@@ -609,6 +609,8 @@ export default function ActualizacionDatos({ perfil }) {
           Uploader completo
         </a>
       </div>
+
+      <PuenteAutomatico status={status} />
 
       {GRUPOS.map(grupo => {
         const fuentesG = FUENTES.filter(f => f.grupo === grupo.id);
@@ -631,6 +633,91 @@ export default function ActualizacionDatos({ perfil }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Cargas automáticas del puente (Mac mini) ───────────────────────────────
+// Lee sync_status (última carga, registros, meta.origen) y el último sync_event
+// por status_key (éxito/error, mensaje) que devuelve /api/status?type=sync.
+const PUENTE = [
+  { key: 'erp_sell_in',     titulo: 'Ventas ERP (facturación)', fuente: 'ERP 192.168.0.151 · Vw_TablaH_Ventas',       horario: 'Cada hora 8:00–19:00 L-S · 06:30', horaria: true },
+  { key: 'erp_inventario',  titulo: 'Inventario ERP',           fuente: 'ERP 192.168.0.151 · Vw_TablaH_Inventario',   horario: 'Cada hora 8:00–19:00 L-S · 06:30', horaria: true },
+  { key: 'precios',         titulo: 'Precios ERP',              fuente: 'ERP 192.168.0.151 · Vw_TablaM_Precios',      horario: 'Cada hora 8:00–19:00 L-S · 06:30', horaria: true },
+  { key: 'cuotas_mensuales',titulo: 'Cuotas por cliente',       fuente: 'RevkoBi 192.168.0.213 · dbo.BP',             horario: '06:30 diario' },
+  { key: 'sellout_general', titulo: 'Sell out general',         fuente: 'SELLOUT 192.168.0.160 · dbo.sellout',        horario: '06:30 diario' },
+  { key: 'embarques',       titulo: 'Master Embarques',         fuente: 'Google Sheet · tarea diaria de Claude (Drive)', horario: '07:00 diario' },
+];
+
+function estadoPuente(row, item, ev) {
+  const ultima = item?.ultima_actualizacion ? new Date(item.ultima_actualizacion) : null;
+  const evFecha = ev?.created_at ? new Date(ev.created_at) : null;
+  // Si el último evento es posterior a la última carga exitosa y fue error, manda el error.
+  if (ev && ev.status === 'error' && (!ultima || evFecha >= ultima)) {
+    return { color: '#dc2626', bg: '#fef2f2', texto: 'Error', detalle: ev.detalles?.mensaje || ev.detalles?.error || 'ver log del puente' };
+  }
+  if (!ultima) return { color: '#64748b', bg: '#f1f5f9', texto: 'Sin carga', detalle: 'todavía no corre' };
+  const horas = (Date.now() - ultima.getTime()) / 3600000;
+  const now = new Date(); const dia = now.getDay(); const h = now.getHours();
+  const enHorario = dia >= 1 && dia <= 6 && h >= 9 && h < 21;
+  const limite = row.horaria && enHorario ? 3 : 27;
+  if (horas > limite) return { color: '#d97706', bg: '#fffbeb', texto: 'Atrasada', detalle: `última carga hace ${relTime(ultima)}` };
+  return { color: '#16a34a', bg: '#f0fdf4', texto: 'OK', detalle: ev?.status === 'warning' ? 'con avisos' : 'al día' };
+}
+
+function PuenteAutomatico({ status }) {
+  const items = status?.items || []; const eventos = status?.eventos || {};
+  const filas = PUENTE.map(row => {
+    const item = items.find(x => x.fuente === row.key); const ev = eventos[row.key];
+    return { row, item, ev, st: estadoPuente(row, item, ev) };
+  });
+  const errores = filas.filter(f => f.st.texto === 'Error').length;
+  const atrasadas = filas.filter(f => f.st.texto === 'Atrasada').length;
+  const resumenColor = errores ? '#dc2626' : atrasadas ? '#d97706' : '#16a34a';
+  const resumenTxt = errores ? `${errores} con error` : atrasadas ? `${atrasadas} atrasada${atrasadas > 1 ? 's' : ''}` : 'todo al día';
+  const fmt = d => d ? new Date(d).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, padding: '10px 4px 8px', borderBottom: '2px solid #0f766e', marginBottom: 12 }}>
+        <h2 style={{ margin: 0, color: '#0f766e', fontSize: 17 }}>⚙️ Cargas automáticas</h2>
+        <span style={{ color: '#64748B', fontSize: 12 }}>Puente SQL en la Mac mini · sin intervención manual</span>
+        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: resumenColor }}>{resumenTxt}</span>
+      </div>
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: '#f8fafc', color: '#475569', textAlign: 'left' }}>
+              {['Fuente', 'Origen', 'Última carga', 'Registros', 'Estado', 'Detalle', 'Horario'].map(h => (
+                <th key={h} style={{ padding: '10px 12px', fontWeight: 600, fontSize: 12, borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map(({ row, item, ev, st }) => (
+              <tr key={row.key} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap' }}>{row.titulo}</td>
+                <td style={{ padding: '10px 12px', color: '#475569' }}>
+                  <div>{row.fuente}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{item?.meta?.origen || ev?.user_nombre || '—'}</div>
+                </td>
+                <td style={{ padding: '10px 12px', color: '#0f172a', whiteSpace: 'nowrap' }}>
+                  <div>{fmt(item?.ultima_actualizacion)}</div>
+                  {item?.ultima_actualizacion && <div style={{ fontSize: 11, color: '#94a3b8' }}>hace {relTime(new Date(item.ultima_actualizacion))}{ev?.duracion_ms ? ` · ${(ev.duracion_ms / 1000).toFixed(0)}s` : ''}</div>}
+                </td>
+                <td style={{ padding: '10px 12px', color: '#0f172a', textAlign: 'right', whiteSpace: 'nowrap' }}>{item?.registros != null ? Number(item.registros).toLocaleString('es-MX') : '—'}</td>
+                <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                  <span style={{ background: st.bg, color: st.color, border: `1px solid ${st.color}33`, borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>{st.texto}</span>
+                </td>
+                <td style={{ padding: '10px 12px', color: st.texto === 'Error' ? '#b91c1c' : '#64748b', fontSize: 12, maxWidth: 360, wordBreak: 'break-word' }}>{st.detalle}</td>
+                <td style={{ padding: '10px 12px', color: '#64748b', fontSize: 12, whiteSpace: 'nowrap' }}>{row.horario}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ fontSize: 11, color: '#94a3b8', margin: '8px 4px 0' }}>
+        Se actualiza cada minuto. Ventas se reemplaza por año completo en cada corrida; embarques reemplaza la tabla con el Sheet. Log en la Mac mini: acteck-dashboard/bridge/logs/sync-&lt;fecha&gt;.log
+      </p>
     </div>
   );
 }
