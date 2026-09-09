@@ -154,18 +154,19 @@ export default function InventarioGlobal() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const PAGE = 5000;
+      // Paginación paralela + cache central (lib/queries.js). Antes:
+      // secuencial, sin order determinista y silenciaba errores (break →
+      // data parcial). inventario_acteck no tiene `id`: ordenamos por articulo.
       let acc = [];
-      let from = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from('inventario_acteck')
-          .select('articulo, no_almacen, cedis, disponible, inventario, costopromedio, costodisponible, costoinventario')
-          .range(from, from + PAGE - 1);
-        if (error || !data || data.length === 0) break;
-        acc = acc.concat(data);
-        if (data.length < PAGE) break;
-        from += PAGE;
+      try {
+        const { fetchAllQ } = await import('../../lib/queries');
+        acc = await fetchAllQ(
+          () => supabase.from('inventario_acteck').select('articulo, no_almacen, cedis, disponible, inventario, costopromedio, costodisponible, costoinventario'),
+          { pageSize: 5000, orderCol: 'articulo', label: 'inventario_acteck' },
+        );
+      } catch (e) {
+        console.error('[InventarioGlobal] inventario_acteck', e);
+        acc = [];
       }
       setFilas(acc);
       setLoading(false);

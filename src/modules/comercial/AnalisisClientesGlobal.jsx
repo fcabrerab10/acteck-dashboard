@@ -348,20 +348,14 @@ export default function AnalisisClientesGlobal() {
     (async () => {
       const mesActualAprox = new Date().getMonth() + 1;
       const PAGE = 1000;
-      const pageAll = async (table, anioVal) => {
-        let acc = [];
-        let from = 0;
-        while (true) {
-          const { data, error } = await supabase
-            .from(table).select('*').eq('anio', anioVal)
-            .range(from, from + PAGE - 1);
-          if (error || !data || data.length === 0) break;
-          acc = acc.concat(data);
-          if (data.length < PAGE) break;
-          from += PAGE;
-        }
-        return acc;
-      };
+      // Paginación paralela + cache central (lib/queries.js). Sin orderCol
+      // porque son vistas agregadas sin `id` (mismo comportamiento previo).
+      // Se conserva la semántica anterior de no lanzar: error → [].
+      const { fetchAllQ } = await import('../../lib/queries');
+      const pageAll = (table, anioVal) => fetchAllQ(
+        () => supabase.from(table).select('*').eq('anio', anioVal),
+        { pageSize: PAGE, label: table },
+      ).catch((e) => { console.error('[AnalisisClientesGlobal]', table, e); return []; });
       const [a, p, c, cp, q] = await Promise.all([
         pageAll('v_vision_factura_canal', anio),
         pageAll('v_vision_factura_canal', anio - 1),
@@ -839,16 +833,16 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
     (async () => {
       setCargando(true);
       const filtro = filtroRawParaCanonico(clienteNombre, canalCliente);
-      let acc = [];
-      let from = 0;
-      const PAGE = 1000;
-      while (true) {
+      // Paginación paralela + cache central (lib/queries.js). Antes: secuencial
+      // y silenciaba errores (break → data parcial). facturacion_clientes es
+      // HEAVY (ilike/or) → 500/página con retries; order por id determinista.
+      const { fetchAllQ } = await import('../../lib/queries');
+      const rows = await fetchAllQ(() => {
         let query = supabase
           .from('facturacion_clientes')
           .select('anio, mes, sku, monto, piezas, canal, cliente_nombre')
           .gte('anio', anio - 1)
-          .lte('anio', anio)
-          .range(from, from + PAGE - 1);
+          .lte('anio', anio);
         if (filtro.clienteExacto) {
           query = query.eq('cliente_nombre', filtro.clienteExacto);
         } else if (filtro.canal) {
@@ -858,18 +852,15 @@ function ModalCliente({ clienteNombre, canalCliente, anio, mesMax, onClose }) {
             query = query.or(or);
           }
         }
-        const { data: page, error } = await query;
-        if (error || !page || page.length === 0) break;
-        let filtered = page;
-        if (filtro.excludeIlike && filtro.excludeIlike.length) {
-          filtered = page.filter((r) => {
-            const n = String(r.cliente_nombre || '').toUpperCase();
-            return !filtro.excludeIlike.some((p) => n.includes(p));
-          });
-        }
-        acc = acc.concat(filtered);
-        if (page.length < PAGE) break;
-        from += PAGE;
+        return query;
+      }, { pageSize: 500, orderCol: 'id', label: 'facturacion_clientes analisis' })
+        .catch((e) => { console.error('[AnalisisClientesGlobal] facturacion_clientes', e); return []; });
+      let acc = rows;
+      if (filtro.excludeIlike && filtro.excludeIlike.length) {
+        acc = rows.filter((r) => {
+          const n = String(r.cliente_nombre || '').toUpperCase();
+          return !filtro.excludeIlike.some((p) => n.includes(p));
+        });
       }
       setDatos(acc);
       setCargando(false);

@@ -248,41 +248,13 @@ export default function PagosCliente({ cliente, clienteKey }) {
     (async () => {
       const anio = new Date().getFullYear();
       // Paginación para sellout_sku
+      // Delegado al motor paginado PARALELO + cache central (lib/queries.js).
       const fetchAll = async (qs) => {
-        // v2: 6 retries backoff hasta 16s + throw. sellout_sku no es HEAVY, PAGE=1000.
-        const all = []; let from = 0; const PAGE = 1000;
-        const MAX_RETRIES = 6;
-        const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-        // BUG-FIX: cuando qs === '*' o el primer campo es '*', antes se ejecutaba
-          // .order('*') y Supabase respondía HTTP 400 → 6 retries fallaban → throw →
-          // React Query devolvía data:[] silenciosamente.
-          const orderCol = (() => {
-            if (!qs || qs === '*') return 'id';
-            if (/(^|,)\s*id\s*(,|$)/i.test(qs)) return 'id';
-            const first = qs.split(',')[0].trim();
-            return first === '*' ? 'id' : first;
-          })();
-        while (true) {
-          let lastErr = null; let data = null;
-          for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-            const res = await supabase.from("sellout_sku").select(qs).eq("cliente", clienteKey).eq("anio", anio).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
-            if (!res.error) { data = res.data || []; break; }
-            lastErr = res.error;
-            if (attempt < MAX_RETRIES - 1) {
-              console.warn(`[fetchAll] sellout_sku chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-              await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-            }
-          }
-          if (data == null) {
-            console.error(`[fetchAll] sellout_sku chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
-            throw new Error(`No se pudo cargar sellout_sku completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-          }
-          if (data.length === 0) break;
-          all.push(...data);
-          if (data.length < PAGE) break;
-          from += PAGE;
-        }
-        return all;
+        const { fetchAllQ, orderColFromSelect } = await import('../../lib/queries');
+        return fetchAllQ(
+          () => supabase.from("sellout_sku").select(qs).eq("cliente", clienteKey).eq("anio", anio),
+          { pageSize: 1000, orderCol: orderColFromSelect(qs), label: 'sellout_sku' },
+        );
       };
       // Sell-In sólo lo cargamos para Dicotech (lo usa la calculadora SPIFF SI).
       const siProm = clienteKey === "dicotech"
@@ -292,34 +264,12 @@ export default function PagosCliente({ cliente, clienteKey }) {
       // Se usa para el ranking de SPIFF vendedores (top 5 por mes).
       const vendedoresProm = clienteKey === "dicotech"
         ? (async () => {
-            // v2: sellout_general es HEAVY_TABLE → PAGE=500, 6 retries + throw.
-            const all = []; let from = 0; const PAGE = 500;
-            const MAX_RETRIES = 6;
-            const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
-            while (true) {
-              let lastErr = null; let data = null;
-              for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-                const res = await supabase.from("sellout_general")
-                  .select("mes,vendedor_nombre,importe")
-                  .ilike("mayorista", "%dicotech%").eq("anio", anio)
-                  .order("mes", { ascending: true })
-                  .range(from, from + PAGE - 1);
-                if (!res.error) { data = res.data || []; break; }
-                lastErr = res.error;
-                if (attempt < MAX_RETRIES - 1) {
-                  console.warn(`[vendedoresProm] sellout_general chunk from=${from} attempt ${attempt + 1} falló (retry en ${BACKOFF[attempt]}ms):`, lastErr?.message || lastErr);
-                  await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-                }
-              }
-              if (data == null) {
-                console.error(`[vendedoresProm] sellout_general chunk from=${from} falló tras ${MAX_RETRIES} intentos. DATA INCOMPLETA — abortando para no mostrar números incorrectos.`);
-                throw new Error(`No se pudo cargar sellout_general completo (chunk ${from}). Refresca la página. Detalle: ${lastErr?.message || 'error desconocido'}`);
-              }
-              if (data.length === 0) break;
-              all.push(...data);
-              if (data.length < PAGE) break;
-              from += PAGE;
-            }
+            // Paginación paralela + cache central; sellout_general es HEAVY → 500/página.
+            const { fetchAllQ } = await import('../../lib/queries');
+            const all = await fetchAllQ(
+              () => supabase.from("sellout_general").select("mes,vendedor_nombre,importe").ilike("mayorista", "%dicotech%").eq("anio", anio).order("mes", { ascending: true }),
+              { pageSize: 500, label: 'sellout_general vendedores' },
+            );
             return { data: all };
           })()
         : Promise.resolve({ data: [] });

@@ -50,19 +50,10 @@ export default function MobileHome({ perfil, onNavegar }) {
       // migración sell_in_sku → facturacion_clientes (mayo 2026). Consumimos
       // directo la fuente canónica y agregamos por (cliente, mes) en cliente.
       // Paginamos porque facturacion_clientes tiene >50K filas.
-      const fetchFactPage = async (from) => {
-        const res = await supabase.from('facturacion_clientes')
-          .select('cliente_key,mes,monto')
-          .eq('anio', MES_ACTUAL.anio)
-          .range(from, from + 999);
-        return res.data || [];
-      };
-      const factRows = [];
-      for (let from = 0; from < 100000; from += 1000) {
-        const chunk = await fetchFactPage(from);
-        factRows.push(...chunk);
-        if (chunk.length < 1000) break;
-      }
+      // Paginación paralela + cache central (lib/queries.js). Antes: ~20
+      // requests secuenciales sin retries en móvil.
+      const { fetchAll: fetchAllCentral } = await import('../lib/queries');
+      const factRows = await fetchAllCentral('facturacion_clientes', 'cliente_key,mes,monto', (q) => q.eq('anio', MES_ACTUAL.anio));
       const vAggMap = new Map(); // key = `${cliente}|${mes}`
       for (const r of factRows) {
         const cli = r.cliente_key, m = Number(r.mes) || 0;
