@@ -110,6 +110,27 @@
   .kpi-card .sub{font-size:10px;color:rgba(255,255,255,0.5);margin-top:1px}
 
   /* Bloques colapsables */
+  /* Cargas automáticas del puente (Mac mini) */
+  .puente{background:#fff;border:1px solid var(--hairline);border-radius:12px;margin-bottom:12px;overflow:hidden}
+  .puente-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--hairline)}
+  .puente-head .dot{width:10px;height:10px;border-radius:50%;background:#0f766e;flex:none}
+  .puente-head .title{font-size:13px;font-weight:600;color:var(--ink)}
+  .puente-head .sub{font-size:10.5px;color:var(--muted)}
+  .puente-head .resumen{margin-left:auto;font-size:11px;font-weight:600}
+  .puente table{width:100%;border-collapse:collapse;font-size:12px}
+  .puente th{text-align:left;font-size:10.5px;font-weight:600;color:var(--muted);padding:8px 12px;background:rgba(0,0,0,0.02);border-bottom:1px solid var(--hairline);white-space:nowrap}
+  .puente td{padding:8px 12px;border-bottom:1px solid var(--hairline);vertical-align:top;color:var(--ink)}
+  .puente td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .puente .sec{font-size:10.5px;color:var(--muted)}
+  .puente .pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:600;border:1px solid transparent;white-space:nowrap}
+  .puente .pill.ok{background:#f0fdf4;color:#16a34a;border-color:#16a34a33}
+  .puente .pill.warn{background:#fffbeb;color:#d97706;border-color:#d9770633}
+  .puente .pill.err{background:#fef2f2;color:#dc2626;border-color:#dc262633}
+  .puente .pill.na{background:#f1f5f9;color:#64748b}
+  .puente .det{font-size:11px;color:var(--muted);max-width:360px;word-break:break-word}
+  .puente .det.err{color:#b91c1c}
+  .puente .foot{font-size:10.5px;color:var(--muted);padding:8px 14px}
+  .puente-wrap{overflow-x:auto}
   .grupo-block{background:#fff;border:1px solid var(--hairline);border-radius:12px;margin-bottom:8px;overflow:hidden}
   .grupo-header{cursor:pointer;padding:10px 14px;display:flex;align-items:center;gap:10px;user-select:none;transition:background .15s}
   .grupo-header:hover{background:rgba(0,0,0,0.02)}
@@ -227,6 +248,21 @@
       <div class="kpi-card" id="kpi-pendientes-card"><div class="label">Pendientes</div><div class="val tabular" id="kpi-pendientes">—</div></div>
       <div class="kpi-card"><div class="label">Última carga</div><div class="val tabular" id="kpi-ultima">—</div></div>
     </div>
+  </section>
+  <section class="puente" id="puente">
+    <div class="puente-head">
+      <span class="dot"></span>
+      <span class="title">⚙️ Cargas automáticas</span>
+      <span class="sub">Puente SQL en la Mac mini · sin intervención manual</span>
+      <span class="resumen" id="puente-resumen">cargando…</span>
+    </div>
+    <div class="puente-wrap">
+      <table>
+        <thead><tr><th>Fuente</th><th>Origen</th><th>Última carga</th><th>Registros</th><th>Estado</th><th>Detalle</th><th>Horario</th></tr></thead>
+        <tbody id="puente-body"><tr><td colspan="7" class="sec">Consultando sync_status…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="foot">Se actualiza cada minuto. Ventas se reemplaza por año completo en cada corrida; embarques reemplaza la tabla con el Sheet. Log en la Mac mini: acteck-dashboard/bridge/logs/sync-&lt;fecha&gt;.log</div>
   </section>
   <div id="grid"></div>
 </main>
@@ -3482,6 +3518,72 @@ async function postChunks(src, table, onConflict, rows, deleteAnios, deletePerio
   }
   appendLog(src, `TOTAL ${table}: ${total}`);
 }
+
+
+// ===== Cargas automáticas del puente (Mac mini) =====
+// Misma lógica que la sección de Ajustes → Actualización de datos (ActualizacionDatos.jsx):
+// /api/status?type=sync devuelve sync_status (última carga, registros, meta.origen) y el
+// último sync_event por status_key (éxito/error, mensaje, duración).
+const PUENTE_FUENTES = [
+  { key:'erp_sell_in',      titulo:'Ventas ERP (facturación)', fuente:'ERP 192.168.0.151 · Vw_TablaH_Ventas',        horario:'Cada hora 8:00–19:00 L-S · 06:30', horaria:true },
+  { key:'erp_inventario',   titulo:'Inventario ERP',           fuente:'ERP 192.168.0.151 · Vw_TablaH_Inventario',    horario:'Cada hora 8:00–19:00 L-S · 06:30', horaria:true },
+  { key:'precios',          titulo:'Precios ERP',              fuente:'ERP 192.168.0.151 · Vw_TablaM_Precios',       horario:'Cada hora 8:00–19:00 L-S · 06:30', horaria:true },
+  { key:'cuotas_mensuales', titulo:'Cuotas por cliente',       fuente:'RevkoBi 192.168.0.213 · dbo.BP',              horario:'06:30 diario' },
+  { key:'sellout_general',  titulo:'Sell out general',         fuente:'SELLOUT 192.168.0.160 · dbo.sellout',         horario:'06:30 diario' },
+  { key:'embarques',        titulo:'Master Embarques',         fuente:'Google Sheet · tarea diaria de Claude (Drive)', horario:'07:00 diario' },
+];
+function puenteRel(d){
+  const min = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (min < 1) return 'un momento'; if (min < 60) return min + 'm';
+  const h = Math.floor(min / 60); if (h < 24) return h + 'h';
+  return Math.floor(h / 24) + 'd';
+}
+function puenteEstado(row, item, ev){
+  const ultima = item?.ultima_actualizacion ? new Date(item.ultima_actualizacion) : null;
+  const evFecha = ev?.created_at ? new Date(ev.created_at) : null;
+  if (ev && ev.status === 'error' && (!ultima || evFecha >= ultima)) {
+    return { cls:'err', texto:'Error', detalle: (ev.detalles && (ev.detalles.mensaje || ev.detalles.error)) || 'ver log del puente' };
+  }
+  if (!ultima) return { cls:'na', texto:'Sin carga', detalle:'todavía no corre' };
+  const horas = (Date.now() - ultima.getTime()) / 3600000;
+  const now = new Date(), dia = now.getDay(), h = now.getHours();
+  const enHorario = dia >= 1 && dia <= 6 && h >= 9 && h < 21;
+  const limite = row.horaria && enHorario ? 3 : 27;
+  if (horas > limite) return { cls:'warn', texto:'Atrasada', detalle:'última carga hace ' + puenteRel(ultima) };
+  return { cls:'ok', texto:'OK', detalle: ev?.status === 'warning' ? 'con avisos' : 'al día' };
+}
+async function renderPuente(){
+  const body = document.getElementById('puente-body'); const res = document.getElementById('puente-resumen');
+  if (!body) return;
+  let j = null;
+  try { const r = await fetch('/api/status?type=sync'); if (r.ok) j = await r.json(); } catch {}
+  if (!j || !j.ok) { body.innerHTML = '<tr><td colspan="7" class="sec">No se pudo consultar /api/status</td></tr>'; res.textContent = 'sin datos'; res.style.color = 'var(--muted)'; return; }
+  const items = j.items || [], eventos = j.eventos || {};
+  const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const fmt = (d) => d ? new Date(d).toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '—';
+  let errores = 0, atrasadas = 0;
+  body.innerHTML = PUENTE_FUENTES.map(row => {
+    const item = items.find(x => x.fuente === row.key); const ev = eventos[row.key];
+    const st = puenteEstado(row, item, ev);
+    if (st.cls === 'err') errores++; if (st.cls === 'warn') atrasadas++;
+    const ult = item?.ultima_actualizacion;
+    const dur = ev?.duracion_ms ? ' · ' + Math.round(ev.duracion_ms / 1000) + 's' : '';
+    return '<tr>' +
+      '<td><strong>' + esc(row.titulo) + '</strong></td>' +
+      '<td>' + esc(row.fuente) + '<div class="sec">' + esc(item?.meta?.origen || ev?.user_nombre || '—') + '</div></td>' +
+      '<td>' + esc(fmt(ult)) + (ult ? '<div class="sec">hace ' + puenteRel(new Date(ult)) + dur + '</div>' : '') + '</td>' +
+      '<td class="num">' + (item?.registros != null ? Number(item.registros).toLocaleString('es-MX') : '—') + '</td>' +
+      '<td><span class="pill ' + st.cls + '">' + st.texto + '</span></td>' +
+      '<td class="det' + (st.cls === 'err' ? ' err' : '') + '">' + esc(st.detalle) + '</td>' +
+      '<td class="sec">' + esc(row.horario) + '</td>' +
+      '</tr>';
+  }).join('');
+  res.textContent = errores ? errores + ' con error' : atrasadas ? atrasadas + ' atrasada' + (atrasadas > 1 ? 's' : '') : 'todo al día';
+  res.style.color = errores ? '#dc2626' : atrasadas ? '#d97706' : '#16a34a';
+}
+renderPuente();
+setInterval(renderPuente, 60000);
+document.getElementById('btn-refresh-status')?.addEventListener('click', () => renderPuente());
 
 renderCards();
 refreshKPIs();
