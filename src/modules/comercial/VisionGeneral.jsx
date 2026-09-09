@@ -16,6 +16,7 @@ import {
   XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
 } from 'recharts';
 import { cachedQuery } from '../../lib/queries';
+import RentabilidadBloque from './RentabilidadBloque';
 
 // ────────── Constantes ──────────
 const MESES_LBL  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -445,7 +446,8 @@ export default function VisionGeneral() {
     setLoading(true);
     setBloqueExpandido(null);
     (async () => {
-      // Fuente: facturacion_clientes (Excel "Venta Facturación" del ERP).
+      // Fuente: facturacion_clientes = Fact Neta oficial reconstruida desde erp_ventas
+      // (refresh_facturacion_clientes). Rentabilidad: RentabilidadBloque (v_erp_medidas_mes).
       // Por ahora solo soportamos dimension='canal' — marca/categoría
       // requieren ventas_erp completo con marca/familia.
       const [a, p, p2, c, inv, invMarca, cart, q, cRes, cCal, cProx, cSem, cRet, cProv, cAgo, cLT, cYTD,
@@ -538,7 +540,7 @@ export default function VisionGeneral() {
   const dimKey = 'canal';
 
   // ── KPIs Hero (Venta YTD, Mes actual, Run-rate, # clientes activos)
-  // Sin margen — facturacion_clientes no trae costo. Pendiente fórmula.
+  // Margen/costo viven en RentabilidadBloque (v_erp_medidas_mes).
   const kpis = useMemo(() => {
     const ventaYTD   = sumYTDPor(margenAct, (r) => r.venta, mesMax);
     const piezasYTD  = sumYTDPor(margenAct, (r) => r.piezas, mesMax);
@@ -756,6 +758,9 @@ export default function VisionGeneral() {
         anio={anio}
       />
 
+      {/* Rentabilidad · medidas del director (v_erp_medidas_mes) */}
+      <RentabilidadBloque anio={anio} mesMax={mesMax} />
+
       {/* Toggle dimensión */}
       <div className="flex items-center gap-3 px-1 mt-2 flex-wrap">
         <span style={{ fontSize: 11, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.12em', fontFamily: TYPO.fontText }}>Ver mix por</span>
@@ -841,8 +846,9 @@ export default function VisionGeneral() {
         ventaPromMes={mesMax > 0 ? kpis.ventaYTD / mesMax : 0} />
 
       <p style={{ fontSize: 11, color: theme.textSubtle, padding: '0 8px', fontFamily: TYPO.fontText }}>
-        Fuente: facturacion_clientes (canal × cliente × SKU × mes), inventario_acteck
-        (almacenes comerciales). Margen y cartera pendientes de fuente.
+        Fuente: facturacion_clientes = Fact Neta oficial (Factura + Com.Ext33 + devoluciones sin nota de crédito),
+        reconstruida desde el ERP renglón a renglón; rentabilidad según las medidas del director; inventario_acteck
+        (almacenes comerciales). Cartera pendiente de fuente.
       </p>
     </div>
   );

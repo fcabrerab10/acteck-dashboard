@@ -18,6 +18,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import { ChevronRight, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Clock, TrendingUp, Sparkles } from 'lucide-react';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
+import RentabilidadBloque from './RentabilidadBloque';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -489,6 +490,9 @@ export default function SellInClienteV2({ clienteKey }) {
           sub={<><strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{fmt.money(mesActualData.monto)}</strong> vs {fmt.money(momPrevMonto)}{momPiezasDelta != null ? ` · ${momPiezasDelta >= 0 ? '+' : ''}${fmt.int(momPiezasDelta)}pz` : ''}</>}
         />
       </div>
+
+      {/* Rentabilidad del cliente · medidas del director (v_erp_medidas_cliente_mes) */}
+      <RentabilidadBloque anio={anio} mesMax={mesActual} clienteKey={clienteKey} titulo="Qué deja este cliente, del bruto a la utilidad." />
 
       {/* Fila: Timeline lineal + Composición familia */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 10 }}>

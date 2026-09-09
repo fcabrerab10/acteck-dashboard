@@ -247,13 +247,14 @@ const GRUPOS = [
 
 const SOURCES = [
   // ── Globales ──
-  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación, Inventario, Compras & Precios', desc:'Archivo único con las hojas relevantes: Vw_TablaH_Ventas (ventas renglón a renglón → erp_ventas, base de las medidas del director: Fact Bruta/Neta, Devoluciones, RMA, Bonificaciones, Contribución), Venta Facturación + Venta Piezas (sell-in), Vw_TablaH_Inventario (stock), Vw_TablaH_Compras (POs) y Vw_TablaM_Precios (listas de precios por SKU). Vw_TablaH_Ventas se lee por streaming (no pasa por SheetJS) y se reemplaza por año.', file:'Actualizaciones ERP.xlsx',
+  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación, Inventario, Compras & Precios', desc:'Archivo único con las hojas relevantes: Vw_TablaH_Ventas (ventas renglón a renglón → erp_ventas; de ahí se reconstruye el sell-in canónico facturacion_clientes con la Fact Neta oficial y las medidas del director: Fact Bruta/Neta, Devoluciones, RMA, Bonificaciones, Contribución), Vw_TablaH_Inventario (stock), Vw_TablaH_Compras (POs) y Vw_TablaM_Precios (listas de precios por SKU). Vw_TablaH_Ventas se lee por streaming (no pasa por SheetJS) y se reemplaza por año.', file:'Actualizaciones ERP.xlsx',
     // Hojas leídas por streaming (XlsxStream) ANTES de abrir el workbook con SheetJS.
     streamed: [
-      { table:'erp_ventas', onConflict:'venta_id,venta_renglon', reader:'readErpVentas', label:'Ventas ERP renglón a renglón (Vw_TablaH_Ventas → erp_ventas · replace por año)' }
+      { table:'erp_ventas', onConflict:'venta_id,venta_renglon', reader:'readErpVentas', finalize:'refresh_facturacion_clientes', label:'Ventas ERP renglón a renglón (Vw_TablaH_Ventas → erp_ventas · replace por año · reconstruye facturacion_clientes con Fact Neta oficial)' }
     ],
     combined: [
-      { table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', label:'Facturación (sell-in canónico)', replaceAnios:[2025,2026] },
+      // facturacion_clientes ya NO se carga del pivot "Venta Facturación": se reconstruye
+      // desde erp_ventas (finalize) con la definición oficial del director (Fact Neta).
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true },
       { table:'compras_oc', onConflict:'movid,articulo', parser:'comprasOC', label:'POs de Compras (Vw_TablaH_Compras)', replace:true },
       { table:'precios_sku', onConflict:'sku,lista,anio,mes', parser:'preciosERP', label:'Precios por lista (Vw_TablaM_Precios)', replace:true },
@@ -3166,6 +3167,14 @@ async function handleUpload(src){
         filasTotal += rows.length;
         setStatus(src, 'b-warn', `Subiendo ${sub.table}…`);
         await postChunksFast(src, sub.table, sub.onConflict, rows, anios);
+        if (sub.finalize) {
+          setStatus(src, 'b-warn', `Reconstruyendo facturacion_clientes…`);
+          const fr = await fetch('/api/import-central', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ table: sub.table, finalize: sub.finalize, anios }) });
+          const fj = await fr.json().catch(() => ({}));
+          if (!fr.ok) throw new Error(`finalize ${sub.finalize}: HTTP ${fr.status} ${JSON.stringify(fj).slice(0, 200)}`);
+          const res = Array.isArray(fj.resumen) ? fj.resumen.map(r => `${r.anio}: ${Number(r.filas).toLocaleString()} filas · $${Math.round(Number(r.monto)).toLocaleString()}`).join(' · ') : '';
+          appendLog(src, `  facturacion_clientes reconstruida desde erp_ventas (Fact Neta oficial) ${res}`);
+        }
       }
     }
     // Para archivos grandes, minimizar el uso de memoria del navegador.

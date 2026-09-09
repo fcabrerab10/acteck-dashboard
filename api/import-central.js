@@ -63,8 +63,31 @@ export default async function handler(req, res) {
   if (!perfil) return;
 
   try {
-    const { table, rows, deleteAnios, deletePeriodos, deleteAll } = req.body || {};
+    const { table, rows, deleteAnios, deletePeriodos, deleteAll, finalize, anios } = req.body || {};
     if (!table || !ALLOWED[table]) return res.status(400).json({ error: 'invalid table. allowed: ' + Object.keys(ALLOWED).join(', ') });
+
+    // finalize: paso posterior a la carga de erp_ventas. Reconstruye
+    // facturacion_clientes (sell-in canónico) desde erp_ventas con la definición
+    // oficial (Fact Neta) para los años cargados, y refresca la MV de sellout.
+    if (finalize === 'refresh_facturacion_clientes') {
+      if (table !== 'erp_ventas') return res.status(400).json({ error: 'finalize sólo aplica a erp_ventas' });
+      const p_anios = Array.isArray(anios) ? anios.map((a) => parseInt(a)).filter(Boolean) : null;
+      const fr = await fetch(`${SB_URL}/rest/v1/rpc/refresh_facturacion_clientes`, {
+        method: 'POST',
+        headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_anios }),
+      });
+      const txt = await fr.text();
+      if (!fr.ok) return res.status(fr.status).json({ error: 'refresh_facturacion_clientes failed', detail: txt.slice(0, 500) });
+      fetch(`${SB_URL}/rest/v1/rpc/refresh_mv_sellout_unificado`, {
+        method: 'POST',
+        headers: { apikey: SRK, Authorization: 'Bearer ' + SRK, 'Content-Type': 'application/json', Prefer: 'params=single-object' },
+        body: '{}',
+      }).catch(() => {});
+      let resumen = []; try { resumen = JSON.parse(txt); } catch { /* texto plano */ }
+      return res.status(200).json({ ok: true, table, finalize, resumen });
+    }
+
     if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'rows[] required' });
 
     // deleteAll: borra TODA la tabla antes del primer chunk. Se usa para tablas

@@ -83,6 +83,8 @@ GRANT SELECT ON public.erp_ventas TO anon;
 --   Piezas Venta Neta = Σ Unidades (sin filtro, como el DAX)
 -- DAX compara texto sin distinguir mayúsculas y BLANK() <> "Nota Credito"
 -- es verdadero → ILIKE + COALESCE reproducen eso.
+-- Nota 2026-09-09: COALESCE en monto/costo. Sin él, un grupo cuyo costo es NULL en todos
+-- sus renglones daba contribucion NULL y quedaba fuera de la suma (ene-2026 sobreestimaba 9K).
 CREATE OR REPLACE VIEW public.v_erp_medidas
 WITH (security_invoker = true) AS
 SELECT s.*,
@@ -97,13 +99,13 @@ SELECT s.*,
   (rmas - costo_rmas)                                           AS perdida_rmas
 FROM (
   SELECT anio, mes, cliente_key, cliente_nombre, canal, articulo, marca,
-    SUM(CASE WHEN movimiento_venta IN ('Factura','Factura Com.Ext33') THEN monto_venta_pesos ELSE 0 END)                                            AS fact_bruta,
-    SUM(CASE WHEN movimiento_venta = 'Devolucion Venta' AND COALESCE(instruccion,'') NOT ILIKE 'nota credito' THEN monto_venta_pesos ELSE 0 END)   AS devoluciones,
-    SUM(CASE WHEN movimiento_venta = 'Devolucion Venta' AND instruccion ILIKE 'nota credito' THEN monto_venta_pesos ELSE 0 END)                    AS rmas,
-    SUM(CASE WHEN movimiento_venta = 'Bonificacion Venta' THEN monto_venta_pesos ELSE 0 END)                                                        AS bonificaciones,
-    SUM(CASE WHEN movimiento_venta = 'Factura' THEN costo_venta_pesos ELSE 0 END)                                                                   AS costo_fact_bruta,
-    SUM(CASE WHEN movimiento_venta = 'Devolucion Venta' AND COALESCE(instruccion,'') NOT ILIKE 'nota credito' THEN costo_venta_pesos ELSE 0 END)   AS costo_devoluciones,
-    SUM(CASE WHEN movimiento_venta = 'Devolucion Venta' AND instruccion ILIKE 'nota credito' THEN costo_venta_pesos ELSE 0 END)                    AS costo_rmas,
+    SUM(CASE WHEN movimiento_venta IN ('Factura','Factura Com.Ext33') THEN COALESCE(monto_venta_pesos,0) ELSE 0 END)                                            AS fact_bruta,
+    SUM(CASE WHEN movimiento_venta = 'Devolucion Venta' AND COALESCE(instruccion,'') NOT ILIKE 'nota credito' THEN COALESCE(monto_venta_pesos,0) ELSE 0 END)   AS devoluciones,
+    SUM(CASE WHEN movimiento_venta = 'Devolucion Venta' AND instruccion ILIKE 'nota credito' THEN COALESCE(monto_venta_pesos,0) ELSE 0 END)                    AS rmas,
+    SUM(CASE WHEN movimiento_venta = 'Bonificacion Venta' THEN COALESCE(monto_venta_pesos,0) ELSE 0 END)                                                        AS bonificaciones,
+    SUM(CASE WHEN movimiento_venta = 'Factura' THEN COALESCE(costo_venta_pesos,0) ELSE 0 END)                                                                   AS costo_fact_bruta,
+    SUM(CASE WHEN movimiento_venta = 'Devolucion Venta' AND COALESCE(instruccion,'') NOT ILIKE 'nota credito' THEN COALESCE(costo_venta_pesos,0) ELSE 0 END)   AS costo_devoluciones,
+    SUM(CASE WHEN movimiento_venta = 'Devolucion Venta' AND instruccion ILIKE 'nota credito' THEN COALESCE(costo_venta_pesos,0) ELSE 0 END)                    AS costo_rmas,
     SUM(COALESCE(unidades, 0))                                                                                                                      AS piezas_venta_neta,
     SUM(CASE WHEN movimiento_venta IN ('Factura','Factura Com.Ext33') THEN COALESCE(unidades,0) ELSE 0 END)                                          AS piezas_fact_bruta,
     COUNT(*)::int                                                                                                                                   AS renglones
