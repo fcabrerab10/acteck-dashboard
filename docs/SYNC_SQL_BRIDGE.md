@@ -204,3 +204,19 @@ No hay que reinstalar los agentes salvo que cambien los plists.
 - `bridge/sync.mjs` — CLI y definición de fuentes · `bridge/lib/mappers.mjs` — mapeo SQL → Supabase (espejo de `uploads.html`) · `bridge/lib/mssql.mjs` — lectura por streaming · `bridge/lib/sheets.mjs` — Google Sheets (service account o CSV) · `bridge/lib/api.mjs` — escritura a Supabase (directo por PostgREST, o vía `/api/import-central` como respaldo).
 - `api/_embarques.js` — transformaciones del Master Embarques compartidas por `api/cron.js` y el puente.
 - `api/_auth.js` → `isSyncRequest()` · `api/import-central.js` → acepta `x-sync-secret` y registra `syncEvent`.
+
+## Checklist de puesta en marcha (2026-09-09)
+
+Lo que ya quedó en la Mac de Fernando y lo que falta para que todo corra solo:
+
+| Pieza | Estado | Qué falta |
+|---|---|---|
+| Repo en `~/acteck/acteck-dashboard` (symlink en `~/Documents/Acteck`) | listo | nada. Se movió fuera de `~/Documents` porque launchd no puede leer esa carpeta (TCC) |
+| `bridge/credenciales.env` | lleno | nada |
+| launchd `com.acteck.sync.diario` (06:30) y `com.acteck.sync.intradia` (8–19 h L-S) | instalados y probados | nada; la Mac debe quedarse encendida (paso 4.1) |
+| Ventas ERP → `erp_ventas` + rebuild `facturacion_clientes` | carga OK, rebuild se cancela por timeout | correr `supabase/migrations/20260909_bridge_statement_timeout.sql` en el SQL Editor |
+| Cuotas, inventario, precios, sell out | cargados | nada |
+| Master Embarques → tarea diaria de Claude (07:00) | creada; permisos del conector de Drive y del script ya autorizados | dar "Run now" una vez para confirmar; la app de Claude debe estar abierta |
+| Sección "Cargas automáticas" en Actualización de datos | en la rama | mergear a `main` (Vercel despliega solo) |
+
+La tarea diaria de Claude corre `bridge/embarques-drive.sh <json del conector>`, que decodifica el xlsx y llama a `embarques-xlsx.mjs`; deja rastro en `logs/sync-<fecha>.log` y en `sync_events` como el resto del puente.
