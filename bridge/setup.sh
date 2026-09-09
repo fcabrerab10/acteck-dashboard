@@ -32,5 +32,5 @@ echo
 echo "✓ Listo. Se abre credenciales.env: llena las líneas vacías y guarda."
 echo "  Después:  npm run test-conn"
 echo "            npm run dry            (lee todo sin subir nada)"
-echo "            ./launchd/install.sh   (programa 06:30 / 12:30 / 17:30)"
+echo "            ./launchd/install.sh   (programa 06:30 diario + cada hora 8-19 L-S)"
 open -e credenciales.env 2>/dev/null || true

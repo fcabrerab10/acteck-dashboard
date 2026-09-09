@@ -1,6 +1,6 @@
 # bridge/ · Puente SQL Server + Google Sheets → Supabase
 
-Corre en la Mac mini de la oficina. Lee las vistas del ERP (192.168.0.151), cuotas (192.168.0.213 · RevkoBi · dbo.BP), sell out general (192.168.0.160 · SELLOUT · vista "sell out") y el Google Sheet de Master Embarques, y escribe directo en Supabase con el service role key.
+Corre en la Mac mini de la oficina. Lee las vistas del ERP (192.168.0.151), cuotas (192.168.0.213 · RevkoBi · dbo.BP), sell out general (192.168.0.160 · SELLOUT · tabla dbo.sellout) y el Google Sheet de Master Embarques, y escribe directo en Supabase con el service role key.
 
 ## En la Mac mini, 3 pasos
 
@@ -14,7 +14,7 @@ cd ~/acteck/acteck-dashboard/bridge
 ```bash
 npm run test-conn        # prueba cada SQL, el Sheet y Supabase
 npm run dry              # lee y mapea todo sin subir nada
-./launchd/install.sh     # programa 06:30 diario · 12:30 y 17:30 intradía
+./launchd/install.sh     # programa 06:30 diario · cada hora 8:00-19:00 L-S (ventas, inventario, precios)
 ```
 
 Guía completa (usuarios SQL, Mac mini, Google, troubleshooting): **[docs/SYNC_SQL_BRIDGE.md](../docs/SYNC_SQL_BRIDGE.md)**.

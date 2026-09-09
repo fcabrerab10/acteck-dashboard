@@ -191,7 +191,7 @@ export function transformEmbarques(rawRows, { anioDefault = null } = {}) {
       tipo_contenedor: toStr(r[col.tipo_cont]),
       costo_flete:     toNum(r[col.costo_flete]),
       fdw:             toStr(r[col.fdw]),
-      contenedor:      toStr(r[col.contenedor]),
+      contenedor:      contenedorKey(r[col.contenedor], toInt(r[col.shp_qty]), toInt(r[col.po_qty]), fecha(r[col.fecha_emision]), fecha(r[col.fin_prod])),
       etd:             fecha(r[col.etd]),
       eta_puerto:      fecha(r[col.eta_puerto]),
       agente_aduanal:  toStr(r[col.a_a]),
@@ -203,11 +203,23 @@ export function transformEmbarques(rawRows, { anioDefault = null } = {}) {
       comentarios_diseno:  toStr(r[col.com_diseno]),
     });
   }
-  // Dedup con la MISMA llave que el UNIQUE de la BD (po, codigo, arribo_cedis, shp_qty).
-  // Antes se deduplicaba por (po, codigo) y se perdían shipments parciales legítimos.
+  // Dedup por (po, codigo, contenedor): misma llave que uploads.html (postChunks) y
+  // que el UNIQUE embarques_compras_po_codigo_contenedor_key de la BD. Gana la
+  // última fila del Excel, igual que el uploader web. La BD también tiene UNIQUE
+  // (po, codigo, arribo_cedis, shp_qty), que es el on_conflict de import-central.
   const seen = new Map();
-  for (const r of rows) seen.set(`${r.po}||${r.codigo}||${r.arribo_cedis ?? ''}||${r.shp_qty ?? ''}`, r);
+  for (const r of rows) seen.set(`${r.po}||${r.codigo}||${r.contenedor}`, r);
   return [...seen.values()];
+}
+
+// Placeholder determinista cuando el contenedor aún no se asigna (mismo formato
+// que uploads.html): PEND-<shp_qty|po_qty|0>-<fecha_emision|X>-<fin_produccion|X>.
+// La columna es NOT NULL y forma parte de la llave única.
+function contenedorKey(raw, shpQty, poQty, fechaEmision, finProduccion) {
+  const c = (toStr(raw) || '').trim();
+  const pend = !c || /^(PENDIENTE|NA|N\/A|-)$/i.test(c);
+  if (!pend) return c;
+  return `PEND-${shpQty || poQty || 0}-${fechaEmision || 'X'}-${finProduccion || 'X'}`;
 }
 
 // ═════════════════════ Hojas secundarias (mismo mapeo que uploads.html) ═════════════════════

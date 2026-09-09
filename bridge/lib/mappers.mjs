@@ -113,25 +113,60 @@ export function comprasOC(row) {
   };
 }
 
-// ── Vista de cuotas (tabular) → cuotas_mensuales ────────────────────────────
+// ── Cuotas (RevkoBi · dbo.BP) → cuotas_mensuales ───────────────────────────
+// BP trae una fila por cliente/SKU/mes. Por (IDCLIENTE, año, mes) se SUMAN:
+//   · CUOTAMINIMA   → cuota_min   (cuota mínima: mide a vendedores, facturación neta / cuota mínima)
+//   · IMPORTEDEVENTA → cuota_ideal (cuota vendor: mide los apoyos del cliente; el dashboard la usa como meta)
+// Verificado contra las cuotas que ya estaban en Supabase (CT 2025-09, PCEL 2025-03,
+// ARROBA y TECHS MART 2026): la suma de CUOTAMINIMA coincide al centavo.
+// La identidad del cliente es su número de 5 dígitos (CT = 00183; catálogo en
+// ERP dbo.Vw_TablaM_Clientes: Cliente, NombreCorto, Nombre, Canal, Vendor).
+// La columna `cliente` de cuotas_mensuales es la clave que usa el dashboard
+// (nombre en minúsculas con "_"); se obtiene del nombre de BP con la MISMA
+// normalización que uploads.html, salvo los casos fijados por número en CLIENTE_POR_ID.
 const NORM_CLIENTE = { 'DICOTECH': 'dicotech', 'DIGITAL LIFE': 'digitalife', 'DIGITALIFE': 'digitalife', 'PCEL': 'pcel' };
 const normalizarCliente = (nm) => {
   const up = String(nm || '').trim().toUpperCase();
   if (NORM_CLIENTE[up]) return NORM_CLIENTE[up];
   return up.toLowerCase().replace(/\s+/g, '_');
 };
-/** ctx.cols = ['cliente','anio','mes','cuota'] o ['cliente','anio','mes','cuota_min','cuota_ideal'] (nombres reales de la vista). */
-export function cuotas(row, ctx) {
-  const g = rowAccessor(row);
-  const [cCli, cAnio, cMes, cMin, cIdeal] = ctx.cols;
-  const cliente = normalizarCliente(g(cCli));
-  if (!cliente || cliente === 'total_general') return null;
-  const anio = int(g(cAnio)), mes = int(g(cMes));
-  if (!anio || !mes || mes < 1 || mes > 12) return null;
-  const cuota_min = num(g(cMin));
-  const cuota_ideal = cIdeal ? num(g(cIdeal)) : cuota_min;
-  if ((cuota_min ?? 0) <= 0 && (cuota_ideal ?? 0) <= 0) return null;
-  return { cliente, anio, mes, cuota_min: cuota_min ?? cuota_ideal, cuota_ideal: cuota_ideal ?? cuota_min };
+/** Clave del dashboard por número de cliente (manda sobre el nombre). Agregar aquí si BP renombra un cliente. */
+export const CLIENTE_POR_ID = {
+  '00183': 'ct', '00417': 'cva', '00473': 'pcel', '00708': 'dicotech', '00764': 'digitalife',
+  '00514': 'techs_mart', '00682': 'techsmart',   // son dos clientes distintos en BP
+};
+const padId = (v) => { const s = String(v ?? '').trim(); return /^\d+$/.test(s) ? s.padStart(5, '0') : s; };
+
+/**
+ * Agrega las filas de BP a una por (cliente, año, mes).
+ * ctx.cols = [idcliente, nombrecliente, fecha, cuota_minima, cuota_vendor] (nombres reales de la vista).
+ */
+export function cuotasDesdeBP(rows, ctx) {
+  const [cId, cNom, cFecha, cMin, cVendor] = ctx.cols;
+  const acc = new Map();
+  for (const row of rows) {
+    const g = rowAccessor(row);
+    const id = padId(g(cId));
+    const min = num(g(cMin)) ?? 0, vendor = cVendor ? (num(g(cVendor)) ?? 0) : 0;
+    if (!id || (min <= 0 && vendor <= 0)) continue;
+    const f = g(cFecha); const d = f instanceof Date ? f : new Date(f);
+    if (Number.isNaN(d.getTime())) continue;
+    const anio = d.getUTCFullYear(), mes = d.getUTCMonth() + 1;
+    const key = `${id}|${anio}|${mes}`;
+    const cur = acc.get(key) || { id, nombre: g(cNom), anio, mes, min: 0, vendor: 0 };
+    cur.min += Math.max(min, 0); cur.vendor += Math.max(vendor, 0); if (g(cNom)) cur.nombre = g(cNom);
+    acc.set(key, cur);
+  }
+  const out = [];
+  for (const c of acc.values()) {
+    const cliente = CLIENTE_POR_ID[c.id] || normalizarCliente(c.nombre);
+    if (!cliente || cliente === 'total_general') continue;
+    // Sólo cliente-mes con cuota mínima: en BP hay IMPORTEDEVENTA sin CUOTAMINIMA (2019-2022,
+    // canal MOSTRADOR…) que no son cuotas. Sin cuota vendor la meta cae a la mínima, como antes.
+    if (c.min <= 0) continue;
+    out.push({ cliente, anio: c.anio, mes: c.mes, cuota_min: c.min, cuota_ideal: c.vendor > 0 ? c.vendor : c.min });
+  }
+  return out;
 }
 
 // ── Vista de Sell Out General → sellout_general (upsert por id) ─────────────

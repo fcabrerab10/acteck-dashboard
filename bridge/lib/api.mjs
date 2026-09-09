@@ -44,7 +44,19 @@ const sb = {
   }),
   del: (table, filter) => http(`${SB_URL}/rest/v1/${table}?${filter}`, { method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' }) }),
   rpc: (fn, body = {}) => http(`${SB_URL}/rest/v1/rpc/${fn}`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(body) }, { retries: 1 }),
+  get: (table, query, range) => http(`${SB_URL}/rest/v1/${table}?${query}`, { headers: sbHeaders({ Range: range, 'Range-Unit': 'items' }) }),
 };
+
+/** Lee todas las filas de `table` (sólo DIRECTO), paginando de 1000 en 1000. */
+export async function selectAll(table, select, filter = '') {
+  if (!DIRECTO) throw new Error('selectAll requiere SUPABASE_SERVICE_ROLE_KEY');
+  const out = []; const page = 1000;
+  for (let from = 0; ; from += page) {
+    const rows = await sb.get(table, `select=${select}${filter ? '&' + filter : ''}`, `${from}-${from + page - 1}`);
+    out.push(...(rows || []));
+    if (!rows || rows.length < page) return out;
+  }
+}
 
 // ── Transporte VÍA VERCEL ───────────────────────────────────────────────────
 const vercel = (body, opts) => http(`${BASE}/api/import-central`, {

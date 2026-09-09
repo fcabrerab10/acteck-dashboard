@@ -15,6 +15,7 @@ import * as M from './lib/mappers.mjs';
 import { readView, testServer, closeAll } from './lib/mssql.mjs';
 import { upsertRows, finalizeErpVentas, logSyncEvent, ping, describirTransporte, DIRECTO } from './lib/api.mjs';
 import { leerHoja, listarHojas, describirModo } from './lib/sheets.mjs';
+import { upsertEmbarquesCompras } from './lib/embarques.mjs';
 import { HOJAS_HISTORICAS, HOJAS_SECUNDARIAS, transformEmbarques, anioDeHoja } from '../api/_embarques.js';
 import { log } from './lib/util.mjs';
 
@@ -85,11 +86,13 @@ const FUENTES = {
   cuotas: {
     src_id: 'cuotas-anuales', status_key: 'cuotas_mensuales', enabled: () => env('CUOTAS_SQL_HOST') && env('CUOTAS_VIEW'),
     run: async () => {
-      const cols = env('CUOTAS_COLS', 'cliente,anio,mes,cuota').split(',').map((s) => s.trim());
-      if (cols.length < 4) throw new Error('CUOTAS_COLS necesita al menos cliente,anio,mes,cuota');
-      const { rows, leidas } = await readView('CUOTAS', env('CUOTAS_VIEW'), { top, mapRow: (r) => M.cuotas(r, { cols }) });
+      const cols = env('CUOTAS_COLS', 'IDCLIENTE,NOMBRECLIENTE,FECHA,CUOTAMINIMA,IMPORTEDEVENTA').split(',').map((s) => s.trim());
+      if (cols.length < 4) throw new Error('CUOTAS_COLS debe ser: idcliente,nombrecliente,fecha,cuota_minima[,cuota_vendor]');
+      const { rows: crudas, leidas } = await readView('CUOTAS', env('CUOTAS_VIEW'), { top, mapRow: (r) => r });
+      const rows = M.cuotasDesdeBP(crudas, { cols });
       const anios = [...new Set(rows.map((r) => r.anio))].sort();
-      log(`  cuotas: ${leidas} leídas → ${rows.length} válidas · años ${anios.join(',')}`);
+      const clientes = [...new Set(rows.map((r) => r.cliente))].sort();
+      log(`  cuotas: ${leidas} leídas → ${rows.length} cliente-mes · años ${anios.join(',')} · ${clientes.length} clientes: ${clientes.join(', ')}`);
       await upsertRows('cuotas_mensuales', 'cliente,mes,anio', rows, { deleteAnios: anios, dryRun });
       return { filas: rows.length, detalles: { anios, leidas } };
     },
@@ -115,7 +118,7 @@ const FUENTES = {
       if (titulos) log(`  pestañas: ${titulos.join(' · ')}`);
       const existe = (n) => (titulos ? titulos.includes(n) : true);
       const detalles = {};
-      // 1) Hojas históricas → embarques_compras (todas juntas, dedupe por llave única)
+      // 1) Hojas históricas → embarques_compras (todas juntas, dedupe por po,codigo,contenedor)
       let hist = [];
       for (const h of HOJAS_HISTORICAS) {
         if (!existe(h)) continue;
@@ -126,11 +129,7 @@ const FUENTES = {
         detalles[h] = rows.length;
         hist = hist.concat(rows);
       }
-      const seen = new Map();
-      for (const r of hist) seen.set(`${r.po}||${r.codigo}||${r.arribo_cedis ?? ''}||${r.shp_qty ?? ''}`, r);
-      hist = [...seen.values()];
-      await upsertRows('embarques_compras', 'po,codigo,arribo_cedis,shp_qty', hist, { dryRun });
-      let total = hist.length;
+      let total = await upsertEmbarquesCompras(hist, { dryRun });
       // 2) Hojas secundarias (Programación Arribos, SN, Proveedores)
       const cacheRaw = new Map();
       for (const sec of HOJAS_SECUNDARIAS) {

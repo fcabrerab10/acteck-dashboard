@@ -7,7 +7,7 @@
 ```
 SQL 192.168.0.151 (ERP: ventas · inventario · precios) ─┐
 SQL 192.168.0.213 · RevkoBi · dbo.BP (cuotas)           ├─▶ Mac mini · bridge/sync.mjs ─▶ Supabase (PostgREST, service role key)
-SQL 192.168.0.160 · SELLOUT (sell out general)          │        (launchd 06:30 / 12:30 / 17:30)
+SQL 192.168.0.160 · SELLOUT (sell out general)          │        (launchd 06:30 + cada hora 8-19)
 Google Sheets · Master Embarques (Drive) ───────────────┘
 ```
 
@@ -17,7 +17,7 @@ Google Sheets · Master Embarques (Drive) ────────────�
 | Inventario | `192.168.0.151` · `Vw_TablaH_Inventario` | `inventario_acteck` | Replace completo | Actualizaciones ERP · Inventario |
 | Precios | `192.168.0.151` · `Vw_TablaM_Precios` | `precios_sku` | Replace completo (mes actual) | Actualizaciones ERP · Precios |
 | Compras (opcional) | `192.168.0.151` · `Vw_TablaH_Compras` | `compras_oc` | Replace completo | Actualizaciones ERP · POs |
-| Cuotas | `192.168.0.213` · base `RevkoBi` · `dbo.BP` | `cuotas_mensuales` | Replace por año presente | Cuotas mensuales |
+| Cuotas | `192.168.0.213` · base `RevkoBi` · `dbo.BP` | `cuotas_mensuales` | Replace por año presente | Suma por cliente (IDCLIENTE de 5 dígitos) y mes: CUOTAMINIMA → `cuota_min` (mide vendedores), IMPORTEDEVENTA → `cuota_ideal` (cuota vendor, meta del dashboard) |
 | Sell Out General | `192.168.0.160` · base `SELLOUT` · vista `sell out` | `sellout_general` | Upsert por `id`, ventana de 45 días | Sellout General (mayoristas) |
 | Master Embarques | Google Sheets `1m2I_oTd4EYTQ1v5KQOAZGIPmt58K3jRUbHGk0ed0JoQ` | `embarques_compras`, `programacion_arribos`, `series_generadas`, `proveedores_master`, `catalogo_articulos` | Upsert | Master Embarques |
 
@@ -160,8 +160,8 @@ Instala dos agentes para el usuario actual:
 
 | Agente | Horario | Corre |
 |---|---|---|
-| `com.acteck.sync.diario` | 06:30 | `all` (ventas + rebuild, inventario, precios, compras si aplica, cuotas, sellout, embarques) |
-| `com.acteck.sync.intradia` | 12:30 y 17:30 | inventario, precios, sellout, embarques |
+| `com.acteck.sync.diario` | 06:30 todos los días | ventas + rebuild, inventario, precios, cuotas, sellout (embarques lo carga la tarea diaria de Claude, ver abajo) |
+| `com.acteck.sync.intradia` | cada hora 8:00–19:00, lunes a sábado | ventas + rebuild, inventario, precios |
 
 Cambiar horarios: editar `bridge/launchd/*.plist` y volver a correr `install.sh`. Si la Mac mini estaba apagada a la hora programada, launchd corre la tarea al encender.
 

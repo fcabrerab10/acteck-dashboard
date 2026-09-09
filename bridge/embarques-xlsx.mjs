@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import XLSX from 'xlsx';
 import { HOJAS_HISTORICAS, HOJAS_SECUNDARIAS, transformEmbarques, anioDeHoja } from '../api/_embarques.js';
 import { upsertRows, logSyncEvent, describirTransporte } from './lib/api.mjs';
+import { upsertEmbarquesCompras } from './lib/embarques.mjs';
 import { log } from './lib/util.mjs';
 
 const file = process.argv[2];
@@ -25,10 +26,7 @@ try {
     const rows = transformEmbarques(raw, { anioDefault: anioDeHoja(h) });
     log(`  hoja "${h}": ${raw.length - 1} filas → ${rows.length} válidas`); detalles[h] = rows.length; hist = hist.concat(rows);
   }
-  const seen = new Map();
-  for (const r of hist) seen.set(`${r.po}||${r.codigo}||${r.arribo_cedis ?? ''}||${r.shp_qty ?? ''}`, r);
-  hist = [...seen.values()];
-  await upsertRows('embarques_compras', 'po,codigo,arribo_cedis,shp_qty', hist, { dryRun }); total += hist.length;
+  total += await upsertEmbarquesCompras(hist, { dryRun });
   const ON = { programacion_arribos: 'contenedor', series_generadas: 'po,sku', proveedores_master: 'codigo,articulo', catalogo_articulos: 'articulo' };
   for (const sec of HOJAS_SECUNDARIAS) {
     const nombre = sec.sheets.find((n) => wb.Sheets[n]); if (!nombre) continue;
