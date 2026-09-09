@@ -72,12 +72,25 @@ export async function readView(prefix, view, { where = '', top = 0, mapRow = (r)
   return { rows, leidas };
 }
 
-/** Prueba de conexión: SELECT @@VERSION + conteo de la vista. */
+/** Lista tablas y vistas de la base (para descubrir el nombre cuando no se conoce). */
+export async function listObjects(prefix) {
+  const pool = await getPool(prefix);
+  const r = await pool.request().query("SELECT TABLE_SCHEMA + '.' + TABLE_NAME AS n, TABLE_TYPE AS t FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_TYPE, TABLE_NAME");
+  return r.recordset.map((x) => `${x.n}${x.t === 'VIEW' ? ' (vista)' : ''}`);
+}
+
+/** Prueba de conexión: SELECT @@VERSION + conteo y columnas de la vista (o lista de objetos si no hay vista). */
 export async function testServer(prefix, view) {
   const pool = await getPool(prefix);
   const v = await pool.request().query('SELECT @@VERSION AS v');
   log(`  ${prefix}: ${String(v.recordset[0].v).split('\n')[0]}`);
-  if (view) {
+  if (!view) {
+    const objs = await listObjects(prefix);
+    log(`  ${prefix}: sin vista configurada · objetos en la base (${objs.length}):`);
+    for (const o of objs) log(`     · ${o}`);
+    return;
+  }
+  {
     const c = await pool.request().query(`SELECT COUNT(*) AS n FROM ${viewName(view)}`);
     log(`  ${prefix}: ${view} → ${c.recordset[0].n} filas`);
     const s = await pool.request().query(`SELECT TOP (1) * FROM ${viewName(view)}`);

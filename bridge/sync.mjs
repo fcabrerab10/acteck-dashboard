@@ -13,7 +13,7 @@
 // del uploader) con filas, duración y errores.
 import * as M from './lib/mappers.mjs';
 import { readView, testServer, closeAll } from './lib/mssql.mjs';
-import { upsertRows, finalizeErpVentas, logSyncEvent, ping } from './lib/api.mjs';
+import { upsertRows, finalizeErpVentas, logSyncEvent, ping, describirTransporte, DIRECTO } from './lib/api.mjs';
 import { leerHoja, listarHojas, describirModo } from './lib/sheets.mjs';
 import { HOJAS_HISTORICAS, HOJAS_SECUNDARIAS, transformEmbarques } from '../api/_embarques.js';
 import { log } from './lib/util.mjs';
@@ -156,7 +156,7 @@ const GRUPOS = { erp: ['ventas', 'inventario', 'precios', 'compras'], all: Objec
 async function correr(nombre) {
   const f = FUENTES[nombre];
   if (!f.enabled()) { log(`▸ ${nombre}: no configurado en .env — se omite`); return { nombre, skipped: true }; }
-  log(`▸ ${nombre}${dryRun ? ' (dry-run)' : ''}${top ? ` (top ${top})` : ''}`);
+  log(`▸ ${nombre}${dryRun ? ' (dry-run)' : ''}${top ? ` (top ${top})` : ''} · ${describirTransporte()}`);
   const t0 = Date.now();
   try {
     const r = await f.run();
@@ -176,6 +176,7 @@ const tablaDe = (n) => ({ ventas: 'erp_ventas', inventario: 'inventario_acteck',
 
 async function test() {
   log('▸ test de conexiones');
+  log(`  destino: ${describirTransporte()}`);
   const checks = [
     ['ERP', env('ERP_VIEW_VENTAS', 'Vw_TablaH_Ventas')], ['ERP', env('ERP_VIEW_INVENTARIO', 'Vw_TablaH_Inventario')], ['ERP', env('ERP_VIEW_PRECIOS', 'Vw_TablaM_Precios')],
     ['CUOTAS', env('CUOTAS_VIEW')], ['SELLOUT', env('SELLOUT_VIEW')],
@@ -194,8 +195,8 @@ async function test() {
       log(`  Sheet: hoja ${new Date().getFullYear()} → ${raw ? raw.length - 1 : 'no encontrada'} filas`);
     } catch (e) { fallas++; log(`  ✗ Sheet: ${e.message}`); }
   }
-  try { await ping(); log('  ✓ dashboard: SYNC_SECRET aceptado por /api/import-central'); }
-  catch (e) { fallas++; log(`  ✗ dashboard: ${e.message}`); }
+  try { await ping(); log(DIRECTO ? '  ✓ Supabase: service role key aceptado' : '  ✓ dashboard: SYNC_SECRET aceptado por /api/import-central'); }
+  catch (e) { fallas++; log(`  ✗ destino: ${e.message}`); }
   return fallas;
 }
 

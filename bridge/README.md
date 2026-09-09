@@ -1,6 +1,6 @@
 # bridge/ · Puente SQL Server + Google Sheets → Supabase
 
-Corre en la Mac mini de la oficina. Lee las vistas del ERP (192.168.0.151), cuotas (192.168.0.213), sell out general (192.168.0.160) y el Google Sheet de Master Embarques, y sube por `/api/import-central` con `SYNC_SECRET`.
+Corre en la Mac mini de la oficina. Lee las vistas del ERP (192.168.0.151), cuotas (192.168.0.213), sell out general (192.168.0.160) y el Google Sheet de Master Embarques, y escribe directo en Supabase (service role key). Sin key, cae a `/api/import-central` con `SYNC_SECRET`.
 
 Guía completa (SQL, Vercel, Google, Mac mini, launchd): **[docs/SYNC_SQL_BRIDGE.md](../docs/SYNC_SQL_BRIDGE.md)**.
 
