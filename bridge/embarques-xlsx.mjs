@@ -3,7 +3,7 @@
 // (por ejemplo, bajado con el conector de Drive de Claude) usando las MISMAS
 // transformaciones que el sync por API (api/_embarques.js).
 //
-//   node --env-file=.env embarques-xlsx.mjs "Master Embarques.xlsx" [--dry-run]
+//   node --env-file=credenciales.env embarques-xlsx.mjs "Master Embarques.xlsx" [--dry-run]
 import { readFileSync } from 'node:fs';
 import XLSX from 'xlsx';
 import { HOJAS_HISTORICAS, HOJAS_SECUNDARIAS, transformEmbarques, anioDeHoja } from '../api/_embarques.js';

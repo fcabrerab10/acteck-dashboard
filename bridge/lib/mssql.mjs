@@ -6,7 +6,7 @@ import { log } from './util.mjs';
 export function serverConfig(prefix) {
   const e = (k) => process.env[`${prefix}_SQL_${k}`];
   const host = e('HOST');
-  if (!host) throw new Error(`${prefix}_SQL_HOST no configurado en .env`);
+  if (!host) throw new Error(`${prefix}_SQL_HOST no configurado en credenciales.env`);
   return {
     server: host,
     port: parseInt(e('PORT') || '1433', 10),

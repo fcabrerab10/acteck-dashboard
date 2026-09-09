@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Puente de sincronización · acteck-dashboard
 //
-//   node --env-file=.env sync.mjs <fuentes…> [--dry-run] [--top N] [--anios 2025,2026]
+//   node --env-file=credenciales.env sync.mjs <fuentes…> [--dry-run] [--top N] [--anios 2025,2026]
 //
 // Fuentes: ventas inventario precios compras cuotas sellout embarques
 //          erp  = ventas + inventario + precios (+ compras si está configurado)
@@ -155,7 +155,7 @@ const GRUPOS = { erp: ['ventas', 'inventario', 'precios', 'compras'], all: Objec
 // ── Ejecución ───────────────────────────────────────────────────────────────
 async function correr(nombre) {
   const f = FUENTES[nombre];
-  if (!f.enabled()) { log(`▸ ${nombre}: no configurado en .env — se omite`); return { nombre, skipped: true }; }
+  if (!f.enabled()) { log(`▸ ${nombre}: no configurado en credenciales.env — se omite`); return { nombre, skipped: true }; }
   log(`▸ ${nombre}${dryRun ? ' (dry-run)' : ''}${top ? ` (top ${top})` : ''} · ${describirTransporte()}`);
   const t0 = Date.now();
   try {
@@ -183,7 +183,7 @@ async function test() {
   ];
   let fallas = 0;
   for (const [prefix, view] of checks) {
-    if (!env(`${prefix}_SQL_HOST`)) { log(`  ${prefix}: sin host en .env — omitido`); continue; }
+    if (!env(`${prefix}_SQL_HOST`)) { log(`  ${prefix}: sin host en credenciales.env — omitido`); continue; }
     try { await testServer(prefix, view || null); } catch (e) { fallas++; log(`  ✗ ${prefix}: ${e.message}`); }
   }
   if (env('MASTER_EMBARQUES_SHEET_ID')) {

@@ -1,4 +1,4 @@
-// Escritura a Supabase. Dos transportes, se elige por .env:
+// Escritura a Supabase. Dos transportes, se elige por credenciales.env:
 //   · DIRECTO (recomendado): SUPABASE_SERVICE_ROLE_KEY presente → PostgREST
 //     directo (upsert/delete/rpc), sin pasar por Vercel. Misma lógica que
 //     api/import-central.js (replace, finalize, refresh de MV, sync_events).

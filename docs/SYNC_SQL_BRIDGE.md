@@ -23,7 +23,7 @@ Google Sheets · Master Embarques (Drive) ────────────�
 
 Todo lo que corre el puente deja rastro en el historial de `uploads.html` (tabla `sync_events`, usuario "Puente SQL (Mac mini)") y actualiza el badge de última actualización (`sync_status`).
 
-**Sobre tener el service role key en la Mac mini:** ese key salta el RLS y puede escribir cualquier tabla, así que la máquina se vuelve tan sensible como tu laptop (que ya lo tiene en `.env.local`). Por eso el Paso 4 incluye `chmod 600`, firewall, FileVault/inicio automático y acceso remoto sólo por Tailscale. Si algún día prefieres que la Mac mini no tenga el key, basta borrar `SUPABASE_SERVICE_ROLE_KEY` de `.env`, poner `SYNC_SECRET` en Vercel y en `.env`, y el puente pasa solo al modo vía Vercel.
+**Sobre tener el service role key en la Mac mini:** ese key salta el RLS y puede escribir cualquier tabla, así que la máquina se vuelve tan sensible como tu laptop (que ya lo tiene en `.env.local`). Por eso el Paso 4 incluye `chmod 600`, firewall, FileVault/inicio automático y acceso remoto sólo por Tailscale. Si algún día prefieres que la Mac mini no tenga el key, basta borrar `SUPABASE_SERVICE_ROLE_KEY` de `credenciales.env`, poner `SYNC_SECRET` en Vercel y en `credenciales.env`, y el puente pasa solo al modo vía Vercel.
 
 ---
 
@@ -62,9 +62,9 @@ El puente escribe directo. En `bridge/.env`:
 SUPABASE_URL=https://hrhccvuhnedahznewgaj.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<el service role key, el mismo de .env.local de la laptop>
 ```
-Se copia a mano en la Mac mini (no por chat ni git). `chmod 600 .env`. Con esto Vercel no necesita ninguna variable nueva.
+Van en `bridge/credenciales.env` (lo crea `setup.sh`). Se copia a mano en la Mac mini, no por chat ni git. Con esto Vercel no necesita ninguna variable nueva.
 
-*Respaldo opcional (modo vía Vercel):* si quitas el key, genera `openssl rand -hex 32`, ponlo como `SYNC_SECRET` en Vercel (24+ caracteres, redeploy) y en `.env`; el puente detecta la ausencia del key y usa `/api/import-central`.
+*Respaldo opcional (modo vía Vercel):* si quitas el key, genera `openssl rand -hex 32`, ponlo como `SYNC_SECRET` en Vercel (24+ caracteres, redeploy) y en `credenciales.env`; el puente detecta la ausencia del key y usa `/api/import-central`.
 
 ## Paso 3 · Google Sheet de Master Embarques
 
@@ -75,11 +75,11 @@ Dos opciones. La **A** es la recomendada porque la hoja no queda pública.
 2. **IAM → Cuentas de servicio → Crear** (ej. `acteck-sync`). Sin roles de proyecto. Crear **clave JSON** y descargarla.
 3. Copiar el JSON a la Mac mini como `bridge/google-sa.json` (`chmod 600`). Está en `.gitignore`.
 4. En el Google Sheet: **Compartir → agregar el correo del service account** (`acteck-sync@…iam.gserviceaccount.com`) como **Lector**.
-5. En `.env`: `MASTER_EMBARQUES_SHEET_ID=<id>` y `GOOGLE_SERVICE_ACCOUNT_FILE=./google-sa.json`.
+5. En `credenciales.env`: `MASTER_EMBARQUES_SHEET_ID=<id>` y `GOOGLE_SERVICE_ACCOUNT_FILE=./google-sa.json`.
 
 **B) Enlace público (rápido)**
 1. Compartir la hoja como "Cualquier persona con el enlace · Lector".
-2. En `.env` sólo `MASTER_EMBARQUES_SHEET_ID=<id>` (dejar `GOOGLE_SERVICE_ACCOUNT_FILE` vacío o el archivo inexistente).
+2. En `credenciales.env` sólo `MASTER_EMBARQUES_SHEET_ID=<id>` (dejar `GOOGLE_SERVICE_ACCOUNT_FILE` vacío o el archivo inexistente).
 3. Con esta opción también puedes activar el cron de Vercel (`MASTER_EMBARQUES_SHEET_ID` + `CRON_SECRET` en Vercel) como respaldo si la Mac mini está apagada: hace lo mismo para `embarques_compras`.
 
 **C) Desde Claude con el conector de Drive (sin credenciales en la Mac mini)**
@@ -114,16 +114,14 @@ node -v    # v22.x
 ```
 No hace falta ODBC ni drivers de Microsoft: el driver (`mssql`/tedious) es JavaScript puro.
 
-**4.4 Repo y dependencias** — aquí es donde van los usuarios y contraseñas de las bases: en `bridge/.env` de la Mac mini (copiado de `.env.example`), nunca en el repo.
+**4.4 Repo y credenciales** — un solo comando deja todo en su lugar y abre el archivo donde van usuarios y contraseñas (`bridge/credenciales.env`, nunca se sube al repo):
 ```bash
-mkdir -p ~/acteck && cd ~/acteck
-git clone https://github.com/fcabrerab10/acteck-dashboard.git
-cd acteck-dashboard/bridge
-npm ci
-cp .env.example .env && chmod 600 .env
-open -e .env      # service role key, usuarios/contraseñas SQL, base del ERP
+git clone https://github.com/fcabrerab10/acteck-dashboard.git ~/acteck/acteck-dashboard
+cd ~/acteck/acteck-dashboard/bridge
+./setup.sh        # instala Homebrew/Node si faltan, dependencias, crea y abre credenciales.env
 ```
-Líneas a llenar en `.env`:
+(`setup.sh` cubre también el punto 4.3; si ya hay Node 22 sólo instala dependencias.)
+Líneas a llenar en `credenciales.env`:
 ```
 SUPABASE_SERVICE_ROLE_KEY=…        # el de .env.local de la laptop
 ERP_SQL_DB=…  ERP_SQL_USER=…  ERP_SQL_PASS=…            # 192.168.0.151 (falta el nombre de la base)
@@ -131,22 +129,22 @@ CUOTAS_SQL_USER=…  CUOTAS_SQL_PASS=…                    # 192.168.0.213 · R
 SELLOUT_SQL_USER=…  SELLOUT_SQL_PASS=…                  # 192.168.0.160 · SELLOUT · vista "sell out" ya puestos
 ```
 Si los tres servidores comparten usuario, se repite el mismo en los tres bloques.
-La Mac mini sólo necesita la carpeta `bridge/` y `api/_embarques.js` del repo (se importa desde ahí); no hay que hacer `npm install` en la raíz.
+La Mac mini sólo usa la carpeta `bridge/` y `api/_embarques.js` del repo; no hay que hacer `npm install` en la raíz. Para volver a abrir el archivo de credenciales: `open -e ~/acteck/acteck-dashboard/bridge/credenciales.env`.
 
 **4.5 Acceso remoto (para no ir a la oficina)**: activar **Compartir pantalla** y **Sesión remota (SSH)** en Configuración → General → Compartir. Para entrar desde fuera de la oficina, instalar **Tailscale** en la Mac mini y en tu laptop; no abre puertos en el router.
 
-**4.6 Seguridad**: firewall de macOS activado, sin abrir puertos entrantes salvo SSH/Screen Sharing; `.env` y `google-sa.json` con `chmod 600`; el usuario SQL es de sólo lectura; el puente sólo puede escribir en las tablas de la whitelist de `import-central`.
+**4.6 Seguridad**: firewall de macOS activado, sin abrir puertos entrantes salvo SSH/Screen Sharing; `credenciales.env` y `google-sa.json` con `chmod 600`; el usuario SQL es de sólo lectura; el puente sólo puede escribir en las tablas de la whitelist de `import-central`.
 
 ## Paso 5 · Probar
 
 ```bash
 cd ~/acteck/acteck-dashboard/bridge
 npm run test-conn                      # conexión a cada SQL, columnas de cada vista (o lista de tablas si falta la vista), Sheet y key de Supabase
-node --env-file=.env sync.mjs inventario --dry-run          # lee y mapea, no sube nada
-node --env-file=.env sync.mjs ventas --top 2000 --dry-run   # muestra de 2,000 renglones
-node --env-file=.env sync.mjs inventario precios            # primera carga real (ligera)
-node --env-file=.env sync.mjs ventas                        # ~176K filas: 2-4 min; reconstruye facturacion_clientes
-node --env-file=.env sync.mjs cuotas sellout embarques
+npm run sync -- inventario --dry-run          # lee y mapea, no sube nada
+npm run sync -- ventas --top 2000 --dry-run   # muestra de 2,000 renglones
+npm run sync -- inventario precios            # primera carga real (ligera)
+npm run sync -- ventas                        # ~176K filas: 2-4 min; reconstruye facturacion_clientes
+npm run sync -- cuotas sellout embarques
 ```
 Validar en el dashboard: Sell In (facturación del mes vs. lo que ya tenías), Inventario, Precios, Cuotas en S&OP, Sell Out General y Embarques. En `uploads.html` cada tarjeta muestra el evento "Puente SQL (Mac mini)" en su historial.
 
@@ -196,7 +194,7 @@ No hay que reinstalar los agentes salvo que cambien los plists.
 | `self signed certificate` | Dejar `SQL_ENCRYPT=false` y `SQL_TRUST_CERT=true` (on-prem). |
 | `falta la columna` / 0 filas válidas | La vista no trae la columna con ese nombre. `npm run test-conn` imprime las columnas reales; ajustar la vista o avisar para ajustar el mapper. |
 | `HTTP 401` de Supabase | Service role key mal copiado (debe ser el `service_role`, no el `anon`). |
-| `HTTP 401`/`403` del dashboard (modo Vercel) | `SYNC_SECRET` distinto entre Vercel y `.env`, o no se hizo redeploy. |
+| `HTTP 401`/`403` del dashboard (modo Vercel) | `SYNC_SECRET` distinto entre Vercel y `credenciales.env`, o no se hizo redeploy. |
 | `HTTP 413` (modo Vercel) | Chunk demasiado grande (límite 4 MB). Bajar `chunk` en `lib/api.mjs`. |
 | Sheet devuelve `null` | Pestaña inexistente o sin permiso: compartir al service account (A) o como enlace público (B). |
 | Agente no corre | `launchctl list | grep acteck`; revisar `logs/launchd-*.err.log`; verificar inicio de sesión automático y `pmset`. |

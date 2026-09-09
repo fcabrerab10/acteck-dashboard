@@ -7,6 +7,7 @@ supabase/.temp/
 sellout-tmp.xlsx
 
 # Puente SQL (Mac mini)
+bridge/credenciales.env
 bridge/.env
 bridge/google-sa.json
 bridge/logs/*
