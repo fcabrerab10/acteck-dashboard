@@ -74,6 +74,13 @@ Vistas clave: `v_transito_sku` (tránsito por PO, capado por `po_qty - llegado`)
 
 Almacenes comerciales (fuente única `almacenes_config`): `1, 2, 3, 6, 9, 12, 14, 15, 16, 17, 19, 25, 44, 64, 71`.
 
+### Ventas del ERP y medidas del director (2026-09-09)
+
+- `erp_ventas` = `Vw_TablaH_Ventas` renglón a renglón (PK `venta_id, venta_renglon`, ~176K filas 2025-2026, 35 columnas). Sustituye a `ventas_erp` (vieja, sin cargar desde jul-2026; no borrar aún). `cliente_key` sigue la regla de `facturacion_clientes` (digitalife/pcel/dicotech o slug del canal).
+- Se carga desde `uploads.html` (tarjeta ERP, clave `streamed`) con `public/xlsx-stream.js` + `public/fflate.min.js`: lee el zip por streaming porque SheetJS no puede abrir esa hoja (519 MB de XML). Replace por año, envío paralelo (`postChunksFast`). Lectura ≈ 25 s en navegador, 6 s en Node.
+- `v_erp_medidas` (grano anio, mes, cliente_key, cliente_nombre, canal, articulo, marca) y `v_erp_medidas_mes` traducen literal las medidas DAX del director (Fact Bruta/Neta, Devoluciones, RMA's, Bonificaciones, Venta Neta, Costos, Contribución, Utilidad Comercial, Piezas, CV últimos 3 meses, YTD). Validadas al peso contra el Excel (Fact Neta ene-2026 = 57,534,140). Los % (MC, MUC, Lost Profit) se calculan al agregar, nunca se suman.
+- Diferencia conocida: `facturacion_clientes.monto` = Fact Bruta + TODAS las devoluciones (incluye RMA's/Nota crédito) → queda ~0.5-1 % por debajo de la Fact Neta oficial. Migración `20260909_erp_ventas_medidas.sql`.
+
 ### Tablas que la app SÍ escribe (cuidado con la cache — ver Rendimiento)
 
 `pagos`, `pendientes*`, `minutas`, `inversion_marketing`, `marketing_actividades`, `fondos_*_movimientos`, `propuestas_borradores`, `spiffs`, `lineamientos_cliente`, `forecast_propuestas*`, `forecast_avisos`, `sugeridos_compra`, `solicitudes_compra*`, `oc_*`, `perfiles`, `cuotas_mensuales`, `roadmap_sku`, `sellout_sku`, `inventario_cliente`, `ventas_mensuales`, `clientes_credito_config`, `evaluaciones*`, `eventos_*`.

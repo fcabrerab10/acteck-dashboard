@@ -232,6 +232,9 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- Lector por streaming (fflate) para hojas que SheetJS no puede abrir: Vw_TablaH_Ventas → erp_ventas -->
+<script src="/fflate.min.js"></script>
+<script src="/xlsx-stream.js"></script>
 <script>
 // Grupos visuales para agrupar las tarjetas por cliente (con headers de color)
 const GRUPOS = [
@@ -244,7 +247,11 @@ const GRUPOS = [
 
 const SOURCES = [
   // ── Globales ──
-  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación, Inventario, Compras & Precios', desc:'Archivo único con las hojas relevantes: Venta Facturación + Venta Piezas (sell-in), Vw_TablaH_Inventario (stock), Vw_TablaH_Compras (POs) y Vw_TablaM_Precios (listas de precios por SKU). Nota: Vw_TablaH_Ventas ya no se carga (era 163K filas × 70 cols y era la fuente del 90% del peso del archivo).', file:'Actualizaciones ERP.xlsx',
+  { id:'erp-acteck', grupo:'globales', tipo:'mes', statusKey:'facturacion_global', title:'ERP Acteck — Facturación, Inventario, Compras & Precios', desc:'Archivo único con las hojas relevantes: Vw_TablaH_Ventas (ventas renglón a renglón → erp_ventas, base de las medidas del director: Fact Bruta/Neta, Devoluciones, RMA, Bonificaciones, Contribución), Venta Facturación + Venta Piezas (sell-in), Vw_TablaH_Inventario (stock), Vw_TablaH_Compras (POs) y Vw_TablaM_Precios (listas de precios por SKU). Vw_TablaH_Ventas se lee por streaming (no pasa por SheetJS) y se reemplaza por año.', file:'Actualizaciones ERP.xlsx',
+    // Hojas leídas por streaming (XlsxStream) ANTES de abrir el workbook con SheetJS.
+    streamed: [
+      { table:'erp_ventas', onConflict:'venta_id,venta_renglon', reader:'readErpVentas', label:'Ventas ERP renglón a renglón (Vw_TablaH_Ventas → erp_ventas · replace por año)' }
+    ],
     combined: [
       { table:'facturacion_clientes', onConflict:'cliente_nombre,sku,anio,mes', parser:'facturacionClientes', label:'Facturación (sell-in canónico)', replaceAnios:[2025,2026] },
       { table:'inventario_acteck', onConflict:'articulo,no_almacen', parser:'erpInventario', label:'Inventario', replace:true },
@@ -3145,6 +3152,22 @@ async function handleUpload(src){
   try {
     const buf = await f.arrayBuffer();
     appendLog(src, `Archivo: ${(f.size / (1024 * 1024)).toFixed(1)} MB`);
+
+    // Hojas por streaming (Vw_TablaH_Ventas → erp_ventas). Se procesan antes de
+    // SheetJS porque esa hoja no cabe en su parser; lee el zip fila por fila.
+    if (src.streamed) {
+      if (!window.XlsxStream) throw new Error('XlsxStream no cargó (fflate / xlsx-stream.js)');
+      for (const sub of src.streamed) {
+        appendLog(src, `--- ${sub.label} (${sub.table}) ---`);
+        const t0 = Date.now();
+        const { rows, anios } = await window.XlsxStream[sub.reader](new Uint8Array(buf), (n) => setStatus(src, 'b-warn', `Leyendo ${sub.table}… ${n.toLocaleString()} filas`));
+        appendLog(src, `Filas leídas: ${rows.length.toLocaleString()} · años ${anios.join(', ')} · ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+        if (!rows.length) throw new Error(`${sub.table}: la hoja no trajo filas`);
+        filasTotal += rows.length;
+        setStatus(src, 'b-warn', `Subiendo ${sub.table}…`);
+        await postChunksFast(src, sub.table, sub.onConflict, rows, anios);
+      }
+    }
     // Para archivos grandes, minimizar el uso de memoria del navegador.
     // No usar sheets:[] (rompe silenciosamente en XLSX 0.18.5 con algunos archivos).
     const readOpts = { type: 'array', cellDates: true, dense: true, cellStyles: false, cellHTML: false, cellFormula: false, bookVBA: false };
@@ -3358,6 +3381,48 @@ async function handleSync(src){
     logSyncEvent(src, { estado:'error', tipo:'sync', mensaje: e.message });
     setStatus(src,'b-err','Error');
   }
+}
+
+// Variante para tablas grandes (erp_ventas: ~180K filas). Primer chunk solo
+// (lleva deleteAnios → replace por año); el resto en paralelo (4 en vuelo,
+// 500 filas por request) con reintentos. Misma dedup por llave que postChunks.
+async function postChunksFast(src, table, onConflict, rows, deleteAnios, { chunk = 500, concurrency = 4 } = {}){
+  const keys = onConflict.split(',').map(k => k.trim());
+  const seen = new Map();
+  for (const row of rows) seen.set(keys.map(c => String(row[c] ?? '')).join('||'), row);
+  const deduped = [...seen.values()];
+  if (deduped.length < rows.length) appendLog(src, `  Dedup: ${rows.length} → ${deduped.length} filas únicas`);
+  const send = async (payload) => {
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      const r = await fetch('/api/import-central', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      if (r.ok) return;
+      lastErr = new Error(`HTTP ${r.status}: ${(await r.text()).slice(0,200)}`);
+      if (r.status < 500 && r.status !== 429) break;
+      await new Promise(ok => setTimeout(ok, 600 * attempt));
+    }
+    throw lastErr;
+  };
+  const batches = [];
+  for (let i = 0; i < deduped.length; i += chunk) batches.push(deduped.slice(i, i + chunk));
+  if (!batches.length) return;
+  const first = { table, onConflict, rows: batches[0] };
+  if (Array.isArray(deleteAnios) && deleteAnios.length > 0) {
+    first.deleteAnios = deleteAnios;
+    appendLog(src, `  Replace anios: ${deleteAnios.join(', ')} (borrando antes del primer chunk)`);
+  }
+  await send(first);
+  let done = batches[0].length, idx = 1;
+  const t0 = Date.now();
+  await Promise.all(Array.from({ length: concurrency }, async () => {
+    while (idx < batches.length) {
+      const b = batches[idx++];
+      await send({ table, onConflict, rows: b });
+      done += b.length;
+      if (done % (chunk * 20) < chunk) setStatus(src, 'b-warn', `Subiendo ${table}… ${done.toLocaleString()} / ${deduped.length.toLocaleString()}`);
+    }
+  }));
+  appendLog(src, `  ${table}: ${done.toLocaleString()} filas en ${batches.length} requests · ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 }
 
 async function postChunks(src, table, onConflict, rows, deleteAnios, deletePeriodos, deleteAll){

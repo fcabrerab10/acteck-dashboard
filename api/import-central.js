@@ -18,6 +18,9 @@ const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ALLOWED = {
   inventario_acteck:  'articulo,no_almacen',
   ventas_erp:         'venta_id,venta_renglon',
+  // Base de ventas del ERP v2 (Vw_TablaH_Ventas por streaming, columnas mínimas).
+  // Alimenta v_erp_medidas (medidas del director). Replace por año (deleteAnios).
+  erp_ventas:         'venta_id,venta_renglon',
   sellout_detalle:    'cliente,fecha,no_parte,row_hash',
   inventario_cliente: 'cliente,sku,anio,semana',
   roadmap_sku:       'sku',
