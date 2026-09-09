@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import { FerrutekLoader } from '../../components';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
+import ComparadorPeriodos from './ComparadorPeriodos';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -590,6 +591,9 @@ export default function SellInCliente({ clienteKey }) {
           />
         )}
       </div>
+
+      {/* Comparador de periodos · A vs B (presets + libre) */}
+      <ComparadorPeriodos clienteKey={CLIENTE_KEY} />
 
       {/* Chart AreaChart Apple Health + Composición familia · misma card */}
       <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: '14px 18px', fontFamily: TYPO.fontText }}>

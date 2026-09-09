@@ -1,13 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import {
   Activity, Boxes, MapPin, AlertTriangle, ArrowRightLeft, FileText,
-  Package, TrendingUp, Percent, ChevronRight, Search, Download,
+  Package, TrendingUp, Percent, ChevronRight, Search,
 } from 'lucide-react';
 import SinAcceso from '../../components/SinAcceso';
 import { FerrutekLoader } from '../../components';
+import ExportMenu from '../../components/ExportMenu';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
 
@@ -136,6 +137,7 @@ export default function InventarioGlobal() {
     return <SinAcceso motivo="No tienes acceso a Inventario." />;
   }
   const { theme } = useTheme();
+  const rootRef = useRef(null); // raíz para exportar PDF
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [soloComerciales, setSoloComerciales] = useState(true);
@@ -512,7 +514,7 @@ export default function InventarioGlobal() {
   };
 
   return (
-    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
+    <div ref={rootRef} style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
       {/* Header apple */}
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, padding: '0 4px', marginBottom: 4, flexWrap: 'wrap' }}>
         <div>
@@ -701,23 +703,8 @@ export default function InventarioGlobal() {
             )}
           </button>
 
-          {/* Botón Export */}
-          <button onClick={handleExport} disabled={exportando || filasTabla.length === 0}
-            onMouseEnter={(e) => { if (!exportando && filasTabla.length > 0) { e.currentTarget.style.background = isDark ? '#0071E3' : '#0062CC'; } }}
-            onMouseLeave={(e) => { if (!exportando) { e.currentTarget.style.background = theme.accent || '#007AFF'; } }}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, height: 30,
-              padding: '0 14px', borderRadius: 999, border: 0,
-              background: exportando || filasTabla.length === 0 ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)') : (theme.accent || '#007AFF'),
-              color: '#FFF', fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600,
-              cursor: exportando || filasTabla.length === 0 ? 'not-allowed' : 'pointer',
-              opacity: exportando || filasTabla.length === 0 ? 0.5 : 1,
-              boxShadow: '0 2px 6px rgba(0,113,227,0.18)',
-              transition: 'background 200ms cubic-bezier(.4,0,.2,1), transform 160ms cubic-bezier(.4,0,.2,1)',
-            }}>
-            <Download style={{ width: 12, height: 12 }} strokeWidth={2.4} />
-            {exportando ? 'Exportando…' : 'Exportar Excel'}
-          </button>
+          {/* Export · Excel (handleExport existente, respeta filtros) + PDF de la pantalla */}
+          <ExportMenu titulo="Inventario" subtitulo={`${fmtInt(filasTabla.length)} SKUs · ${almacenesActivos.length} almacenes`} excel={handleExport} pdf={{ ref: rootRef }} deshabilitado={exportando || filasTabla.length === 0} size="md" />
 
           <span style={{ fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums', marginLeft: 'auto' }}>
             {fmtInt(filasTabla.length)} SKUs · {almacenesActivos.length} almacenes

@@ -3,7 +3,7 @@ import {
   ChevronRight, ChevronDown, Lock, LogOut, Eye, Settings, RefreshCw,
   Home, TrendingUp, Package, Megaphone, Wallet, CreditCard,
   BarChart3, Target, ClipboardList, FileCheck, Award, Building2, Users,
-  Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator,
+  Activity, PieChart, ShoppingCart, ShoppingBag, Boxes, HandCoins, Calculator, History,
 } from 'lucide-react';
 import {
   puedeConfigurar,
@@ -19,6 +19,7 @@ import InstallPrompt from './InstallPrompt';
 // Mapping entre ids del menú y ids del schema de permisos globales
 // (ej: 'resumenClientes' en la UI → 'resumen_clientes' en permisos JSON).
 const MENU_A_PERMISO_GLOBAL = {
+  historialCambios: 'historial_cambios',
   resumenClientes:  'resumen_clientes',
   estadoResultados: 'estado_resultados',
   visionGeneral:    'vision_general',
@@ -139,6 +140,7 @@ const MENU_CONFIG = [
     items: [
       { id: 'adminInterna', label: 'Pendientes & Calendario', icon: ClipboardList },
       { id: 'telemetria',   label: 'Actividad del equipo',       icon: Activity },
+      { id: 'historialCambios', label: 'Historial de cambios', icon: History },
     ],
   },
   {

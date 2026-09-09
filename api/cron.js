@@ -5,6 +5,7 @@
 // Tareas:
 //   ?task=sync-master-embarques  → descarga Google Sheet y upserta a embarques_compras
 //   ?task=actualizar-fill-rates  → cruza OCs activas con ventas_erp
+//   ?task=generar-alertas        → bandeja "qué atender hoy" (tabla alertas)
 //
 // ENV:
 //   SUPABASE_SERVICE_ROLE_KEY
@@ -630,6 +631,322 @@ https://acteck-dashboard.vercel.app/  →  Comercial  →  Tracking Pedidos
   }
 }
 
+// ═════════════════════ TASK · Generar alertas ("qué atender hoy") ══════════════
+// Corre diario (13:00 UTC). Evalúa reglas sobre las vistas/tablas de datos y
+// mantiene la tabla `alertas`:
+//   · upsert por `clave` (hash estable tipo|cliente|sku|periodo) → no duplica
+//   · alertas activas cuyo tipo se evaluó y cuya condición ya no se cumple →
+//     resuelta_at = now(), resuelta_por = 'sistema'
+//   · alertas resueltas por 'sistema' (o por un usuario hace > 36 h sin que la
+//     condición se volviera a ver) se reabren si la condición reaparece.
+// Cada regla es una función independiente y tolerante a datos faltantes: si
+// una falla, las demás siguen y el error se reporta en `errores`.
+// ══════════════════════════════════════════════════════════════════════════════
+const SB_HEADERS = () => ({ apikey: SRK, Authorization: 'Bearer ' + SRK });
+const CLIENTES_CUOTA = ['digitalife', 'pcel', 'dicotech'];
+const NOMBRE_CLIENTE = { digitalife: 'Digitalife', pcel: 'PCEL', dicotech: 'Dicotech', mayoreo: 'Mayoreo', distribuidor: 'Distribuidor', e_commerce: 'E-commerce', mostrador: 'Mostrador', retail_propios: 'Retail propios', retail_representados: 'Retail representados', otros: 'Otros' };
+const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MESES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const fmtMXN = (n) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Number(n) || 0);
+const fmtN = (n) => new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 }).format(Number(n) || 0);
+const nombreCliente = (k) => NOMBRE_CLIENTE[k] || k;
+
+async function sbGetAll(path, pageSize = 1000) {
+  const out = [];
+  for (let from = 0; ; from += pageSize) {
+    const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+      headers: { ...SB_HEADERS(), Range: `${from}-${from + pageSize - 1}`, 'Range-Unit': 'items' },
+    });
+    if (!r.ok) throw new Error(`${path.split('?')[0]} → HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
+    const rows = await r.json();
+    if (!Array.isArray(rows)) throw new Error(`${path.split('?')[0]} → respuesta no es array`);
+    out.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+  return out;
+}
+
+function hoyCDMX() {
+  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+  const anio = d.getFullYear(), mes = d.getMonth() + 1, dia = d.getDate();
+  // iso se arma a mano: toISOString() convertiría a UTC y podría mover el día.
+  return { d, anio, mes, dia, iso: `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}` };
+}
+function mesAnterior(anio, mes, n = 1) {
+  let a = anio, m = mes;
+  for (let i = 0; i < n; i++) { if (m === 1) { m = 12; a -= 1; } else m -= 1; }
+  return { anio: a, mes: m };
+}
+function diasEnMes(anio, mes) { return new Date(anio, mes, 0).getDate(); }
+function periodoLbl(anio, mes) { return `${MESES_CORTO[mes - 1]} ${anio}`; }
+// Filtro PostgREST para varios (anio, mes)
+function filtroMeses(pares) {
+  return `or=(${pares.map(({ anio, mes }) => `and(anio.eq.${anio},mes.eq.${mes})`).join(',')})`;
+}
+
+// ─── a. stock_vs_transito ───
+// Cobertura (días) = stock comercial ÷ promedio diario de piezas facturadas en
+// los 3 meses cerrados previos (facturacion_clientes). Alerta cuando la
+// cobertura es menor a los días que faltan para la primera PO en tránsito.
+const MIN_PZ_DIA = 0.1;
+async function reglaStockVsTransito(hoy) {
+  const meses = [1, 2, 3].map((n) => mesAnterior(hoy.anio, hoy.mes, n));
+  const dias = meses.reduce((s, { anio, mes }) => s + diasEnMes(anio, mes), 0);
+  const [fact, inv, tra] = await Promise.all([
+    sbGetAll(`facturacion_clientes?select=sku,piezas&${filtroMeses(meses)}`, 5000),
+    sbGetAll('v_inventario_comercial?select=sku,disponible', 5000),
+    sbGetAll('v_transito_sku?select=sku,cantidad,eta_mas_cercana,embarques,embarques_detalle&cantidad=gt.0', 2000),
+  ]);
+  const piezas = new Map();
+  for (const f of fact) {
+    const p = Number(f.piezas) || 0;
+    if (p > 0 && f.sku) piezas.set(f.sku, (piezas.get(f.sku) || 0) + p);
+  }
+  const stock = new Map(inv.map((r) => [r.sku, Number(r.disponible) || 0]));
+  const hoyMs = Date.UTC(hoy.anio, hoy.mes - 1, hoy.dia);
+  const out = [];
+  for (const t of tra) {
+    const vendidas = piezas.get(t.sku) || 0;
+    const promDiario = vendidas / dias;
+    if (promDiario < MIN_PZ_DIA) continue;                // sólo SKUs con venta real (≥ ~9 pz en 3 meses)
+    const disp = stock.get(t.sku) || 0;
+    const cobertura = disp / promDiario;
+    const eta = t.eta_mas_cercana ? Date.UTC(...t.eta_mas_cercana.split('-').map((x, i) => (i === 1 ? Number(x) - 1 : Number(x)))) : null;
+    const diasLlegada = eta == null ? null : Math.max(0, Math.round((eta - hoyMs) / 86400000));
+    if (diasLlegada == null || cobertura >= diasLlegada || cobertura >= 15) continue;
+    const severidad = cobertura < 7 ? 'critica' : 'alta';
+    const primerPO = Array.isArray(t.embarques_detalle) ? t.embarques_detalle.slice().sort((a, b) => String(a.eta || '').localeCompare(String(b.eta || '')))[0] : null;
+    out.push({
+      tipo: 'stock_vs_transito', severidad,
+      clave: `stock_vs_transito|${t.sku}`,
+      titulo: `${t.sku}: stock para ${cobertura.toFixed(1)} días, PO llega en ${diasLlegada}`,
+      detalle: `${fmtN(disp)} pz disponibles · vende ${promDiario.toFixed(1)} pz/día · ${fmtN(t.cantidad)} pz en tránsito (${primerPO?.po || '—'}, ETA ${t.eta_mas_cercana}).`,
+      cliente_key: null, sku: t.sku,
+      valor: Number(cobertura.toFixed(1)),
+      meta: { cobertura_dias: Number(cobertura.toFixed(1)), dias_llegada: diasLlegada, stock: disp, prom_diario: Number(promDiario.toFixed(2)), transito_qty: t.cantidad, eta: t.eta_mas_cercana, po: primerPO?.po || null, estatus_po: primerPO?.estatus || null, ventana_meses: meses.map((m) => `${m.anio}-${String(m.mes).padStart(2, '0')}`) },
+    });
+  }
+  return out;
+}
+
+// ─── b. cuota_en_riesgo ───
+// A partir del día 10: facturado MTD ÷ (cuota_ideal × día/díasMes) < 0.85 → alta; < 0.60 → crítica.
+async function reglaCuotaEnRiesgo(hoy) {
+  if (hoy.dia < 10) return [];
+  const [cuotas, fact] = await Promise.all([
+    sbGetAll(`cuotas_mensuales?select=cliente,cuota_min,cuota_ideal&anio=eq.${hoy.anio}&mes=eq.${hoy.mes}&cliente=in.(${CLIENTES_CUOTA.join(',')})`),
+    sbGetAll(`v_fact_cliente_mes?select=cliente_key,monto&anio=eq.${hoy.anio}&mes=eq.${hoy.mes}&cliente_key=in.(${CLIENTES_CUOTA.join(',')})`),
+  ]);
+  const mtd = new Map(fact.map((r) => [r.cliente_key, Number(r.monto) || 0]));
+  const diasMes = diasEnMes(hoy.anio, hoy.mes);
+  const out = [];
+  for (const c of cuotas) {
+    const ideal = Number(c.cuota_ideal) || Number(c.cuota_min) || 0;
+    if (ideal <= 0) continue;
+    const esperado = ideal * (hoy.dia / diasMes);
+    const facturado = mtd.get(c.cliente) || 0;
+    const ritmo = facturado / esperado;
+    if (ritmo >= 0.85) continue;
+    const severidad = ritmo < 0.6 ? 'critica' : 'alta';
+    const proyeccion = facturado / hoy.dia * diasMes;
+    out.push({
+      tipo: 'cuota_en_riesgo', severidad,
+      clave: `cuota_en_riesgo|${c.cliente}|${hoy.anio}-${String(hoy.mes).padStart(2, '0')}`,
+      titulo: `${nombreCliente(c.cliente)} va al ${Math.round(ritmo * 100)} % del ritmo de cuota`,
+      detalle: `${fmtMXN(facturado)} facturado al día ${hoy.dia} vs ${fmtMXN(esperado)} esperado · cuota ideal ${fmtMXN(ideal)} · proyección ${fmtMXN(proyeccion)}.`,
+      cliente_key: c.cliente, sku: null,
+      valor: Number((ritmo * 100).toFixed(1)),
+      meta: { anio: hoy.anio, mes: hoy.mes, dia: hoy.dia, facturado_mtd: Math.round(facturado), esperado_mtd: Math.round(esperado), cuota_ideal: Math.round(ideal), cuota_min: Math.round(Number(c.cuota_min) || 0), proyeccion: Math.round(proyeccion), ritmo_pct: Number((ritmo * 100).toFixed(1)) },
+    });
+  }
+  return out;
+}
+
+// ─── c. devoluciones_anormales ───
+// Mes cerrado más reciente por cliente_key: (devoluciones + rmas) ÷ fact_bruta
+// > 2× su promedio (ponderado) de los 6 meses previos y > 2 %.
+async function reglaDevolucionesAnormales(hoy) {
+  const cerrado = mesAnterior(hoy.anio, hoy.mes, 1);
+  const previos = [2, 3, 4, 5, 6, 7].map((n) => mesAnterior(hoy.anio, hoy.mes, n));
+  const rows = await sbGetAll(`v_erp_medidas_cliente_mes?select=anio,mes,cliente_key,fact_bruta,devoluciones,rmas&${filtroMeses([cerrado, ...previos])}`, 5000);
+  const porCliente = new Map();
+  for (const r of rows) {
+    if (!r.cliente_key) continue;
+    const e = porCliente.get(r.cliente_key) || { actual: null, prevBruta: 0, prevDev: 0, prevMeses: 0 };
+    const bruta = Number(r.fact_bruta) || 0;
+    const dev = Math.abs(Number(r.devoluciones) || 0) + Math.abs(Number(r.rmas) || 0);
+    if (r.anio === cerrado.anio && r.mes === cerrado.mes) e.actual = { bruta, dev };
+    else { e.prevBruta += bruta; e.prevDev += dev; e.prevMeses += 1; }
+    porCliente.set(r.cliente_key, e);
+  }
+  const out = [];
+  for (const [ck, e] of porCliente) {
+    if (!e.actual || e.actual.bruta <= 0 || e.prevMeses < 3 || e.prevBruta <= 0) continue;
+    const ratio = e.actual.dev / e.actual.bruta;
+    const base = e.prevDev / e.prevBruta;
+    if (ratio <= 0.02 || ratio <= 2 * base) continue;
+    const severidad = ratio > 0.05 || ratio > 4 * base ? 'alta' : 'media';
+    out.push({
+      tipo: 'devoluciones_anormales', severidad,
+      clave: `devoluciones_anormales|${ck}|${cerrado.anio}-${String(cerrado.mes).padStart(2, '0')}`,
+      titulo: `${nombreCliente(ck)}: devoluciones + RMA al ${(ratio * 100).toFixed(1)} % en ${periodoLbl(cerrado.anio, cerrado.mes)}`,
+      detalle: `${fmtMXN(e.actual.dev)} sobre ${fmtMXN(e.actual.bruta)} de fact. bruta · promedio 6 meses previos ${(base * 100).toFixed(1)} % (${(base > 0 ? ratio / base : 0).toFixed(1)}×).`,
+      cliente_key: ck, sku: null,
+      valor: Number((ratio * 100).toFixed(2)),
+      meta: { anio: cerrado.anio, mes: cerrado.mes, fact_bruta: Math.round(e.actual.bruta), devoluciones_rmas: Math.round(e.actual.dev), ratio_pct: Number((ratio * 100).toFixed(2)), base_pct: Number((base * 100).toFixed(2)), veces: Number((base > 0 ? ratio / base : 0).toFixed(1)), meses_base: e.prevMeses },
+    });
+  }
+  return out;
+}
+
+// ─── d. rebate_por_generar ───
+// Dicotech: rebate mensual (lineamientos_cliente.rebate.frecuencia = mensual).
+// PagosCliente.generarRebateDicotech / marcarRebateDicotechNoAplica guardan en
+// `pagos` con cliente='dicotech', categoria='rebate' y concepto
+// 'Rebate MM <MesLargo> YYYY[ — override| — No aplica]'. Se revisan los 3 meses
+// cerrados previos con sell-in > 0 que no tengan registro (de cualquier estatus).
+async function reglaRebatePorGenerar(hoy) {
+  const meses = [1, 2, 3].map((n) => mesAnterior(hoy.anio, hoy.mes, n));
+  const [pagos, fact] = await Promise.all([
+    sbGetAll(`pagos?select=concepto,estatus,monto&cliente=eq.dicotech&concepto=ilike.Rebate*`),
+    sbGetAll(`v_fact_cliente_mes?select=anio,mes,monto&cliente_key=eq.dicotech&${filtroMeses(meses)}`),
+  ]);
+  const registrados = new Set();
+  for (const p of pagos) {
+    const m = String(p.concepto || '').match(/^Rebate\s+(\d{1,2})\s+\S+\s+(\d{4})/i);
+    if (m) registrados.add(`${m[2]}-${String(Number(m[1])).padStart(2, '0')}`);
+  }
+  const sellIn = new Map(fact.map((r) => [`${r.anio}-${String(r.mes).padStart(2, '0')}`, Number(r.monto) || 0]));
+  const out = [];
+  for (const { anio, mes } of meses) {
+    const key = `${anio}-${String(mes).padStart(2, '0')}`;
+    const monto = sellIn.get(key) || 0;
+    if (monto <= 0 || registrados.has(key)) continue;
+    out.push({
+      tipo: 'rebate_por_generar', severidad: 'info',
+      clave: `rebate_por_generar|dicotech|${key}`,
+      titulo: `Rebate Dicotech de ${MESES_LARGO[mes - 1]} ${anio} sin generar`,
+      detalle: `Sell-in del mes ${fmtMXN(monto)} · no hay registro 'Rebate ${String(mes).padStart(2, '0')} ${MESES_LARGO[mes - 1]} ${anio}' en Pagos (ni generado ni "No aplica").`,
+      cliente_key: 'dicotech', sku: null,
+      valor: Math.round(monto),
+      meta: { anio, mes, sell_in: Math.round(monto), concepto_esperado: `Rebate ${String(mes).padStart(2, '0')} ${MESES_LARGO[mes - 1]} ${anio}` },
+    });
+  }
+  return out;
+}
+
+// ─── e. datos_sin_actualizar ───
+async function reglaDatosSinActualizar() {
+  const FUENTES = [
+    { fuente: 'facturacion_clientes', label: 'Sell In (facturacion_clientes)', path: 'facturacion_clientes?select=uploaded_at&order=uploaded_at.desc.nullslast&limit=1', col: 'uploaded_at', maxDias: 7 },
+    { fuente: 'inventario_acteck',    label: 'Inventario (inventario_acteck)',  path: 'inventario_acteck?select=updated_at&order=updated_at.desc.nullslast&limit=1',    col: 'updated_at', maxDias: 3 },
+    { fuente: 'sellout_general',      label: 'Sell Out mayoristas (sellout_general)', path: 'sellout_general?select=updated_at&order=updated_at.desc.nullslast&limit=1', col: 'updated_at', maxDias: 7 },
+    { fuente: 'sellout_detalle',      label: 'Sell Out detalle (sellout_detalle)', path: 'sellout_detalle?select=updated_at&order=updated_at.desc.nullslast&limit=1', col: 'updated_at', maxDias: 7 },
+  ];
+  const out = [];
+  // GET simple (sin Range): con limit=1 el paginador pediría una 2ª página inválida.
+  const getOne = async (path) => {
+    const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: SB_HEADERS() });
+    if (!r.ok) throw new Error(`${path.split('?')[0]} → HTTP ${r.status}`);
+    return r.json();
+  };
+  const res = await Promise.allSettled(FUENTES.map((f) => getOne(f.path)));
+  FUENTES.forEach((f, i) => {
+    if (res[i].status !== 'fulfilled') return;
+    const ts = res[i].value?.[0]?.[f.col];
+    const dias = ts ? Math.floor((Date.now() - new Date(ts).getTime()) / 86400000) : null;
+    if (dias == null || dias <= f.maxDias) return;
+    out.push({
+      tipo: 'datos_sin_actualizar', severidad: 'media',
+      clave: `datos_sin_actualizar|${f.fuente}`,
+      titulo: `${f.label} lleva ${dias} días sin cargarse`,
+      detalle: `Última carga ${ts.slice(0, 10)} · umbral ${f.maxDias} días. Sube el archivo en uploads.html.`,
+      cliente_key: null, sku: null,
+      valor: dias,
+      meta: { fuente: f.fuente, ultima_carga: ts, umbral_dias: f.maxDias, dias },
+    });
+  });
+  return out;
+}
+
+export async function taskGenerarAlertas() {
+  const hoy = hoyCDMX();
+  const REGLAS = [
+    ['stock_vs_transito',      () => reglaStockVsTransito(hoy)],
+    ['cuota_en_riesgo',        () => reglaCuotaEnRiesgo(hoy)],
+    ['devoluciones_anormales', () => reglaDevolucionesAnormales(hoy)],
+    ['rebate_por_generar',     () => reglaRebatePorGenerar(hoy)],
+    ['datos_sin_actualizar',   () => reglaDatosSinActualizar()],
+  ];
+  const errores = [];
+  const tiposEvaluados = new Set();
+  const candidatas = [];
+  const settled = await Promise.allSettled(REGLAS.map(([, fn]) => fn()));
+  settled.forEach((r, i) => {
+    const tipo = REGLAS[i][0];
+    if (r.status === 'fulfilled') { tiposEvaluados.add(tipo); candidatas.push(...r.value); }
+    else errores.push({ tipo, error: String(r.reason?.message || r.reason).slice(0, 300) });
+  });
+
+  // Estado actual de la tabla
+  const existentes = await sbGetAll('alertas?select=id,clave,tipo,resuelta_at,resuelta_por,actualizada_at', 5000);
+  const porClave = new Map(existentes.map((a) => [a.clave, a]));
+  const ahora = new Date().toISOString();
+  const REABRIR_MS = 36 * 3600 * 1000;
+
+  const resumen = {};
+  const cnt = (tipo, k) => { resumen[tipo] = resumen[tipo] || { generadas: 0, actualizadas: 0, resueltas: 0 }; resumen[tipo][k] += 1; };
+  // Tres lotes porque PostgREST exige las mismas llaves en todas las filas de
+  // un bulk (PGRST102): nuevas llevan generada_at, actualizadas no, reaperturas
+  // además limpian resuelta_*/snooze.
+  const nuevas = [], upserts = [], reaperturas = [];
+  const clavesVigentes = new Set();
+  for (const c of candidatas) {
+    clavesVigentes.add(c.clave);
+    const base = { ...c, actualizada_at: ahora };
+    const ex = porClave.get(c.clave);
+    if (!ex) { nuevas.push({ ...base, generada_at: ahora }); cnt(c.tipo, 'generadas'); continue; }
+    if (ex.resuelta_at) {
+      const lapso = Date.now() - new Date(ex.actualizada_at || 0).getTime();
+      if (ex.resuelta_por === 'sistema' || lapso > REABRIR_MS) {
+        reaperturas.push({ ...base, generada_at: ahora, resuelta_at: null, resuelta_por: null, snooze_hasta: null });
+        cnt(c.tipo, 'generadas');
+        continue;
+      }
+    }
+    upserts.push(base); cnt(c.tipo, 'actualizadas');
+  }
+
+  const postUpsert = async (rows) => {
+    for (let i = 0; i < rows.length; i += 200) {
+      const r = await fetch(`${SB_URL}/rest/v1/alertas?on_conflict=clave`, {
+        method: 'POST',
+        headers: { ...SB_HEADERS(), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(rows.slice(i, i + 200)),
+      });
+      if (!r.ok) errores.push({ tipo: 'upsert', error: `HTTP ${r.status} ${(await r.text()).slice(0, 300)}` });
+    }
+  };
+  if (nuevas.length) await postUpsert(nuevas);
+  if (upserts.length) await postUpsert(upserts);
+  if (reaperturas.length) await postUpsert(reaperturas);
+
+  // Auto-resolver: activas de tipos evaluados cuya condición ya no se cumple
+  const aResolver = existentes.filter((a) => !a.resuelta_at && tiposEvaluados.has(a.tipo) && !clavesVigentes.has(a.clave));
+  if (aResolver.length) {
+    const r = await fetch(`${SB_URL}/rest/v1/alertas?id=in.(${aResolver.map((a) => a.id).join(',')})`, {
+      method: 'PATCH',
+      headers: { ...SB_HEADERS(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ resuelta_at: ahora, resuelta_por: 'sistema', actualizada_at: ahora }),
+    });
+    if (!r.ok) errores.push({ tipo: 'auto-resolver', error: `HTTP ${r.status} ${(await r.text()).slice(0, 300)}` });
+    else aResolver.forEach((a) => cnt(a.tipo, 'resueltas'));
+  }
+
+  const totales = Object.values(resumen).reduce((t, v) => ({ generadas: t.generadas + v.generadas, actualizadas: t.actualizadas + v.actualizadas, resueltas: t.resueltas + v.resueltas }), { generadas: 0, actualizadas: 0, resueltas: 0 });
+  return { ok: errores.length === 0, hoy: hoy.iso, candidatas: candidatas.length, totales, por_tipo: resumen, errores };
+}
+
 export default async function handler(req, res) {
   // CRON_SECRET es OBLIGATORIO. Si no está configurado, el endpoint rechaza todo.
   // Vercel Cron manda `authorization: Bearer <CRON_SECRET>` automáticamente
@@ -653,10 +970,12 @@ export default async function handler(req, res) {
       result = await taskRecordatorioTracking();
     } else if (task === 'forecast-avisos') {
       result = await taskForecastAvisos();
+    } else if (task === 'generar-alertas') {
+      result = await taskGenerarAlertas();
     } else {
       return res.status(400).json({
         error: 'task inválido',
-        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos',
+        usage: 'GET /api/cron?task=sync-master-embarques | actualizar-fill-rates | recordatorio-eval | recordatorio-tracking | forecast-avisos | generar-alertas',
       });
     }
     if (result.status && result.error) return res.status(result.status).json(result);

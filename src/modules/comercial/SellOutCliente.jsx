@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import {
-  ShoppingBag, Search, Download, ChevronDown, ChevronRight, Check, ArrowUpDown, ArrowUp, ArrowDown,
+  ShoppingBag, Search, ChevronDown, ChevronRight, Check, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
@@ -12,6 +12,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import { FerrutekLoader } from '../../components';
+import ExportMenu from '../../components/ExportMenu';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -173,6 +174,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   }
   const meta = CLIENTES_META[clienteKey] || CLIENTES_META.dicotech;
   const ACCENT = meta.accent;
+  const rootRef = useRef(null); // raíz para exportar PDF
   const hoy = new Date();
   const anioActual = hoy.getFullYear();
   const anioPrev = anioActual - 1;
@@ -646,7 +648,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   }
 
   return (
-    <div className="max-w-none mx-auto p-3 space-y-3">
+    <div ref={rootRef} className="max-w-none mx-auto p-3 space-y-3">
       {/* Header */}
       <div className="flex items-end justify-between">
         <div>
@@ -666,10 +668,8 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
             {invSemanaMax.semana ? ` · Inventario snapshot semana ${invSemanaMax.semana} ${invSemanaMax.anio}` : ''}
           </p>
         </div>
-        <button onClick={exportarExcel}
-          className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100">
-          <Download className="w-3.5 h-3.5" /> Exportar Excel
-        </button>
+        {/* Export · Excel (exportarExcel existente) + PDF de la pantalla */}
+        <ExportMenu titulo="Sell Out" subtitulo={`${meta.nombre} · ${anioActual}`} excel={exportarExcel} pdf={{ ref: rootRef }} size="md" />
       </div>
 
       {/* KPI cards */}

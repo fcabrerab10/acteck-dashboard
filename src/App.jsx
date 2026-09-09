@@ -48,6 +48,7 @@ const ResumenClientesTab     = lazy(() => import('./modules/comercial/ResumenCli
 const PropuestasTab          = lazy(() => import('./modules/comercial/PropuestasTab'));
 const ForecastClientesTab    = lazy(() => import('./modules/comercial/ForecastClientesTab'));
 const TelemetriaPanel        = lazy(() => import('./modules/interno/TelemetriaPanel'));
+const HistorialCambios       = lazy(() => import('./modules/interno/HistorialCambios'));
 const AxonMexico             = lazy(() => import('./modules/interno/AxonMexico'));
 const Configuracion          = lazy(() => import('./modules/configuracion/Configuracion'));
 const ActualizacionDatos     = lazy(() => import('./modules/settings/ActualizacionDatos'));
@@ -71,6 +72,7 @@ import { FerrutekLoader } from './components';
 import { useBreakpoint, isMobile, useMobileShell } from './lib/useBreakpoint';
 import MobileNav from './components/MobileNav';
 import MobileShell from './components/MobileShell';
+import BandejaAlertas from './components/BandejaAlertas';
 // Pantallas mobile: lazy (sólo se descargan en iPhone/iPad, y sólo la que se abre).
 const MobileHome              = lazy(() => import('./components/MobileHome'));
 const MobileHoy               = lazy(() => import('./components/MobileHoy'));
@@ -345,14 +347,14 @@ export default function App() {
 
   
     // ── Navegación persistente (se guarda la pestaña al recargar) ──
-    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','axonMexico','buscar']), []);
+    const GLOBAL_PAGES = React.useMemo(() => new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','historialCambios','axonMexico','buscar']), []);
     const [paginaActiva, setPaginaActiva] = useState(() => {
       try { return localStorage.getItem('nav_pagina') || 'home'; } catch { return 'home'; }
     });
     const [clienteActivo, setClienteActivo] = useState(() => {
       try {
         const pag = localStorage.getItem('nav_pagina') || 'home';
-        const globals = new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','axonMexico','buscar']);
+        const globals = new Set(['resumen','reporte','resumenClientes','propuestas','forecastClientes','forecastReservas','ordenesCompra','adminInterna','telemetria','historialCambios','axonMexico','buscar']);
         if (globals.has(pag)) return null;
         return localStorage.getItem('nav_cliente') || 'digitalife';
       } catch { return 'digitalife'; }
@@ -591,7 +593,12 @@ export default function App() {
         { /* Banner removed */ }
           {paginaActiva === "resumen" && (
             perfil?.es_super_admin
-              ? <ResumenCuentas />
+              ? <>
+                  <div style={{ marginBottom: 16 }}>
+                    <BandejaAlertas clienteKey={null} onNavegar={handleNavegar} />
+                  </div>
+                  <ResumenCuentas />
+                </>
               : <SinAcceso motivo="No tienes acceso al Resumen general." />
           )}
           {paginaActiva === "buscar" && mobile && (
@@ -720,6 +727,11 @@ export default function App() {
                   : <TelemetriaPanel />)
               : <SinAcceso motivo="Sólo el super admin puede ver la actividad del equipo." />
           )}
+          {paginaActiva === "historialCambios" && (
+            puedeVerPestanaGlobal(perfil, "historial_cambios")
+              ? <HistorialCambios />
+              : <SinAcceso motivo="No tienes acceso al Historial de cambios. Pídele a Fernando que te lo habilite desde Configuración." />
+          )}
           {paginaActiva === "axonMexico" && (
             puedeVerPestanaGlobal(perfil, "axon_mexico")
               ? <AxonMexico />
@@ -738,13 +750,18 @@ export default function App() {
         {paginaActiva === "home" && (
           mobile
             ? <MobileHomeCliente clienteKey={clienteActivo} onBack={() => { setClienteActivo(null); setPaginaActiva('resumenClientes'); }} onNavegar={handleNavegar} />
-            : clienteActivo === 'digitalife'
-              ? <HomeDigitalife cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
-              : clienteActivo === 'dicotech'
-                ? <HomeDicotech cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
-                : clienteActivo === 'pcel'
-                  ? <HomePcel cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
-                : <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
+            : <>
+                <div style={{ marginBottom: 16 }}>
+                  <BandejaAlertas clienteKey={clienteActivo} compacto onNavegar={handleNavegar} />
+                </div>
+                {clienteActivo === 'digitalife'
+                  ? <HomeDigitalife cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
+                  : clienteActivo === 'dicotech'
+                    ? <HomeDicotech cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
+                    : clienteActivo === 'pcel'
+                      ? <HomePcel cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
+                    : <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />}
+              </>
         )}
         {clienteActivo && paginaActiva === "sellIn"  && (
           mobile

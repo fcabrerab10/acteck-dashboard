@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import AppleLoader from '../../components/apple/AppleLoader';
 import SinAcceso from '../../components/SinAcceso';
@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import { cachedQuery } from '../../lib/queries';
 import RentabilidadBloque from './RentabilidadBloque';
+import ExportMenu from '../../components/ExportMenu';
 
 // ────────── Constantes ──────────
 const MESES_LBL  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -393,6 +394,7 @@ export default function VisionGeneral() {
   const { theme } = useTheme();
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [aniosDisponibles, setAniosDisponibles] = useState([]);
+  const rootRef = useRef(null); // raíz para exportar PDF
   const [dimension, setDimension] = useState('canal'); // 'canal' | 'marca' | 'categoria'
 
   // Datos por dimensión (carga reactiva)
@@ -712,8 +714,42 @@ export default function VisionGeneral() {
     );
   }
 
+  // Excel: mix por canal + tendencia mensual 3 años
+  const excelVision = () => ({
+    titulo: `Visión general ${anio}`,
+    archivo: `Vision general ${anio}`,
+    hojas: [
+      {
+        nombre: 'Mix por canal',
+        subtitulo: `YTD ene–${MESES_LBL[mesMax - 1]} ${anio}`,
+        columnas: [
+          { label: 'Canal', key: 'key', tipo: 'texto', ancho: 22 },
+          { label: 'Venta YTD', key: 'venta', tipo: 'moneda', ancho: 16 },
+          { label: 'Piezas', key: 'piezas', tipo: 'numero', ancho: 12 },
+          { label: 'Share', key: 'share', tipo: 'pct', ancho: 9 },
+          { label: 'Δ YoY', key: 'deltaYoY', tipo: 'pct', ancho: 9 },
+          ...Array.from({ length: mesMax }, (_, i) => ({ label: MESES_LBL[i], key: `m${i + 1}`, tipo: 'moneda', ancho: 13 })),
+        ],
+        filas: bloques.map((b) => ({ key: b.key, venta: b.venta, piezas: b.piezas, share: b.share, deltaYoY: b.deltaYoY, ...Object.fromEntries(Array.from({ length: mesMax }, (_, i) => [`m${i + 1}`, b.byMes[i + 1] || null])) })),
+        totales: { key: 'TOTAL', venta: bloques.reduce((s, b) => s + b.venta, 0), piezas: bloques.reduce((s, b) => s + b.piezas, 0), ...Object.fromEntries(Array.from({ length: mesMax }, (_, i) => [`m${i + 1}`, bloques.reduce((s, b) => s + (b.byMes[i + 1] || 0), 0)])) },
+      },
+      {
+        nombre: 'Tendencia mensual',
+        subtitulo: '3 años',
+        columnas: [
+          { label: 'Mes', key: 'mes', tipo: 'texto', ancho: 8 },
+          { label: `${anio}`, key: `${anio}`, tipo: 'moneda', ancho: 16 },
+          { label: `${anio - 1}`, key: `${anio - 1}`, tipo: 'moneda', ancho: 16 },
+          { label: `${anio - 2}`, key: `${anio - 2}`, tipo: 'moneda', ancho: 16 },
+        ],
+        filas: tendencia,
+        totales: { mes: 'TOTAL', [`${anio}`]: tendencia.reduce((s, r) => s + (r[`${anio}`] || 0), 0), [`${anio - 1}`]: tendencia.reduce((s, r) => s + (r[`${anio - 1}`] || 0), 0), [`${anio - 2}`]: tendencia.reduce((s, r) => s + (r[`${anio - 2}`] || 0), 0) },
+      },
+    ],
+  });
+
   return (
-    <div className="max-w-none mx-auto p-6 space-y-4"
+    <div ref={rootRef} className="max-w-none mx-auto p-6 space-y-4"
       style={{ background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
       {/* Header estilo apple.com */}
       <div className="flex flex-wrap items-end justify-between gap-4 px-1 mb-2">
@@ -744,6 +780,7 @@ export default function VisionGeneral() {
             {aniosDisponibles.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </label>
+        <ExportMenu titulo="Visión general" subtitulo={`YTD ene–${MESES_LBL[mesMax - 1]} ${anio}`} excel={excelVision} pdf={{ ref: rootRef }} size="md" style={{ alignSelf: 'flex-end', marginBottom: 2 }} />
       </div>
 
       {/* HERO 3-col: Facturación grande · Mes inverse · Run-rate */}

@@ -6,7 +6,7 @@
 // ─ Composición familia (barras planas ordenadas)
 // ─ Tabla SKU con Sell In + Sell Out + Roadmap chip + Heat
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useRoadmap, useFacturacion, useFacturacionAll, useCuotasMensuales } from '../../lib/queries';
 import { formatMXN } from '../../lib/utils';
@@ -19,6 +19,8 @@ import { puedeVerPestanaCliente } from '../../lib/permisos';
 import { ChevronRight, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Clock, TrendingUp, Sparkles } from 'lucide-react';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
 import RentabilidadBloque from './RentabilidadBloque';
+import ComparadorPeriodos from './ComparadorPeriodos';
+import ExportMenu from '../../components/ExportMenu';
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -65,6 +67,7 @@ export default function SellInClienteV2({ clienteKey }) {
   const { theme } = useTheme();
   const P = paletteFromTheme(theme);
   const isDark = theme.mode === 'dark';
+  const rootRef = useRef(null); // raíz para exportar PDF
 
   const anio = new Date().getFullYear();
   const anioPrev = anio - 1;
@@ -422,7 +425,7 @@ export default function SellInClienteV2({ clienteKey }) {
   }
 
   return (
-    <div style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div ref={rootRef} style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Hero */}
       <div style={{
         background: heroBg, color: '#FFF', borderRadius: 12, padding: '14px 18px',
@@ -494,6 +497,9 @@ export default function SellInClienteV2({ clienteKey }) {
       {/* Rentabilidad del cliente · medidas del director (v_erp_medidas_cliente_mes) */}
       <RentabilidadBloque anio={anio} mesMax={mesActual} clienteKey={clienteKey} titulo="Qué deja este cliente, del bruto a la utilidad." />
 
+      {/* Comparador de periodos · A vs B (presets + libre) */}
+      <ComparadorPeriodos clienteKey={clienteKey} />
+
       {/* Fila: Timeline lineal + Composición familia */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 10 }}>
         <TimelineLineal theme={theme} P={P} data={timelineMeses} sums={timelineSums} rango={rango} onChangeRango={setRango} anio={anio} anioPrev={anioPrev} mesActual={mesActual} />
@@ -513,6 +519,7 @@ export default function SellInClienteV2({ clienteKey }) {
         anio={anio}
         consolidado={consolidado} onToggleConsolidado={() => setConsolidado((v) => !v)}
         facturacion={facturacion} facturacionAll={facturacionAll}
+        pdfRef={rootRef} clienteKey={clienteKey}
       />
     </div>
   );
@@ -1070,8 +1077,33 @@ function anioColor(y, aniosSel, P) {
   return paleta[idx % paleta.length] || P.textMuted || '#8E8E93';
 }
 
-function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, aniosSel = [], aniosDisponibles = [], onToggleAnio = () => {}, anio, consolidado = false, onToggleConsolidado = () => {}, facturacion = [], facturacionAll = [] }) {
+function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleSort, familiaFilter, onClearFamilia, aniosSel = [], aniosDisponibles = [], onToggleAnio = () => {}, anio, consolidado = false, onToggleConsolidado = () => {}, facturacion = [], facturacionAll = [], pdfRef, clienteKey }) {
   const [skuAbierto, setSkuAbierto] = useState(null);
+  const clienteLabel = clienteKey ? clienteKey.charAt(0).toUpperCase() + clienteKey.slice(1) : '';
+  // Excel con las columnas visibles (años seleccionados / consolidado)
+  const excelSKU = () => {
+    const columnas = [
+      { label: 'Marca', key: 'marca', tipo: 'texto', ancho: 10 },
+      { label: 'SKU', key: 'sku', tipo: 'texto', ancho: 14 },
+      { label: 'Descripción', key: 'descripcion', tipo: 'texto', ancho: 50 },
+      { label: 'RDMP', key: 'rdmp', tipo: 'texto', ancho: 9 },
+      ...aniosSel.flatMap((y) => MESES.map((m, i) => ({ label: `${m} ${y}`, key: `m_${y}_${i}`, tipo: 'numero', ancho: 9 }))),
+      { label: 'Prom.', key: 'promedio', tipo: 'numero', ancho: 10 },
+      { label: 'Total', key: 'total', tipo: 'numero', ancho: 10 },
+    ];
+    const totales = { marca: 'TOTAL', sku: `${rows.length} SKUs`, promedio: 0, total: 0 };
+    const filas = rows.map((r) => {
+      const o = { marca: r.marca || '', sku: r.sku, descripcion: r.descripcion || '', rdmp: r.rdmp || '', promedio: Math.round(r.promedio) || null, total: r.total || null };
+      aniosSel.forEach((y) => (r.piezasPorAnio?.[y] || []).forEach((v, i) => { const k = `m_${y}_${i}`; o[k] = v || null; totales[k] = (totales[k] || 0) + (v || 0); }));
+      totales.promedio += Math.round(r.promedio) || 0; totales.total += r.total || 0;
+      return o;
+    });
+    return {
+      titulo: `Sell In ${clienteLabel}${consolidado ? ' · Todos los canales' : ''}`,
+      archivo: `Sell In ${clienteLabel} ${aniosSel.join('-')}`,
+      hojas: [{ nombre: 'Detalle por SKU', subtitulo: `${aniosSel.join(' · ')}${familiaFilter ? ` · Familia ${familiaFilter}` : ''}`, columnas, filas, totales }],
+    };
+  };
   const isDark = theme.mode === 'dark';
   // Max celda (piezas mensuales) para heat coloring
   const maxCelda = useMemo(() => {
@@ -1193,6 +1225,7 @@ function TablaSKU({ theme, P, rows, busqueda, onChangeBusqueda, orden, onToggleS
         <span style={{ marginLeft: 'auto', fontFamily: TYPO.fontDisplay, fontSize: 11, color: theme.textMuted, fontWeight: 500, letterSpacing: '-0.005em' }}>
           <strong style={{ color: theme.text, fontWeight: 600 }}>{rows.length}</strong> SKUs
         </span>
+        <ExportMenu titulo="Sell In" subtitulo={`${clienteLabel} · ${aniosSel.join(' · ')}`} excel={excelSKU} pdf={{ ref: pdfRef }} deshabilitado={!rows.length} />
       </div>
       <div style={{ overflow: 'auto', maxHeight: '65vh' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums' }}>

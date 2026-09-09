@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { usePerfil } from '../../lib/perfilContext';
 import { toast } from '../../lib/toast';
@@ -17,6 +17,7 @@ import NecesidadCard from './forecast/NecesidadCard';
 import { roadmapStyle } from '../../lib/roadmapColors';
 import { useSolicitudes } from './forecast/useSolicitudes';
 import { exportarSolicitudExcel } from './forecast/excelSOP';
+import ExportMenu from '../../components/ExportMenu';
 import { puedeEditarPestanaGlobal, puedeVerPestanaGlobal } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
 import { useTheme } from '../../lib/themeContext';
@@ -761,6 +762,7 @@ function diasHasta(iso) {
 export default function ForecastClientesTab() {
   const perfil = usePerfil();
   const { theme } = useTheme();
+  const rootRef = useRef(null); // raíz para exportar PDF
   const isDark = theme.mode === 'dark';
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#000000');
   const heroText = theme.heroCardText || '#F5F5F7';
@@ -1386,7 +1388,7 @@ export default function ForecastClientesTab() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, padding: '10px 6px' }}>
+    <div ref={rootRef} style={{ minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, padding: '10px 6px' }}>
       {/* Modal histórico de solicitudes cerradas */}
       <SolicitudesModal
         abierto={misSolicitudesAbierto}
@@ -1597,6 +1599,7 @@ export default function ForecastClientesTab() {
             theme={theme}
             isDark={isDark}
             horizonte={horizonte}
+            pdfRef={rootRef}
           />
         </div>
 
@@ -1742,7 +1745,36 @@ function SortHeader({ theme, col, label, width, align = 'left', onSort, sortCol,
 }
 
 // ────────── Tabla principal ──────────
-function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, sortDir, onSort, onAgregarSolicitud, skusEnBorrador, lineasBorrador, theme, isDark, horizonte }) {
+function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, sortDir, onSort, onAgregarSolicitud, skusEnBorrador, lineasBorrador, theme, isDark, horizonte, pdfRef }) {
+  // Excel de la tabla principal (columnas visibles). El export de solicitudes (excelSOP) es independiente.
+  const excelTabla = () => ({
+    titulo: 'S&OP · Detalle por SKU',
+    archivo: 'SOP Detalle por SKU',
+    hojas: [{
+      nombre: 'Detalle por SKU',
+      subtitulo: `Horizonte ${horizonte} meses · ${rows.length} de ${totalRows} SKUs`,
+      columnas: [
+        { label: 'SKU', key: 'sku', tipo: 'texto', ancho: 14 },
+        { label: 'Descripción', key: 'descripcion', tipo: 'texto', ancho: 48 },
+        { label: 'Roadmap', key: 'roadmapEstado', tipo: 'texto', ancho: 10 },
+        { label: 'Inv', key: 'inv', tipo: 'numero' },
+        { label: 'Tránsito', key: 'traCant', tipo: 'numero' },
+        { label: 'Arribo', key: 'traEta', tipo: 'fecha' },
+        { label: 'Dem 3m (pz/m)', key: 'demandaMesErp', tipo: 'numero', ancho: 13 },
+        { label: 'Días inv', key: 'coberturaDiasErp', tipo: 'numero' },
+        { label: 'Sugerido', key: 'sugerido', tipo: 'numero' },
+        { label: 'En export', key: 'enExport', tipo: 'texto', ancho: 10 },
+      ],
+      filas: rows.map((r) => ({
+        sku: r.sku, descripcion: r.descripcion || '', roadmapEstado: r.roadmapEstado || '',
+        inv: Math.round(r.inv || 0), traCant: r.traCant > 0 ? Math.round(r.traCant) : null, traEta: r.traEta ? r.traEta.slice(0, 10) : null,
+        demandaMesErp: Math.round(r.demandaMesErp || 0), coberturaDiasErp: r.coberturaDiasErp != null && isFinite(r.coberturaDiasErp) ? Math.round(r.coberturaDiasErp) : null,
+        sugerido: Number(r.sugerido || 0) > 0 ? Math.round(r.sugerido) : null,
+        enExport: skusEnBorrador.has(r.sku) ? 'Sí' : '',
+      })),
+      totales: { sku: 'TOTAL', descripcion: `${rows.length} SKUs`, inv: rows.reduce((s, r) => s + (r.inv || 0), 0), traCant: rows.reduce((s, r) => s + (r.traCant || 0), 0), sugerido: rows.reduce((s, r) => s + (Number(r.sugerido) > 0 ? Number(r.sugerido) : 0), 0) },
+    }],
+  });
   return (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <div style={{
@@ -1755,6 +1787,7 @@ function ForecastTable({ rows, totalRows, expandedSku, setExpandedSku, sortCol, 
         <span style={{ marginLeft: 'auto', fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
           <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{rows.length}</strong> SKUs · click para drill · <span style={{ color: theme.green }}>■</span> en export
         </span>
+        <ExportMenu titulo="S&OP" subtitulo={`Detalle por SKU · horizonte ${horizonte} meses`} excel={excelTabla} pdf={{ ref: pdfRef }} deshabilitado={!rows.length} />
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontVariantNumeric: 'tabular-nums', tableLayout: 'fixed' }}>

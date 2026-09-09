@@ -16,6 +16,7 @@ import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
 import { supabase, DB_CONFIGURED } from '../lib/supabase';
 import { CLIENTES as SIDEBAR_CLIENTES } from './Sidebar';
+import { BadgeAlertas } from './BandejaAlertas';
 import {
   puedeConfigurar,
   puedeActualizarDatos,
@@ -390,6 +391,9 @@ export default function Topbar({ clienteActivo, paginaActiva, vistaActual, onNav
               onMouseLeave={() => scheduleClose(openMenuId)}
             />
           )}
+
+          {/* Alertas críticas/altas activas · va al Resumen global */}
+          <BadgeAlertas onClick={() => onNavegar?.(null, 'resumen')} style={{ alignSelf: 'center' }} />
 
           {/* Copilot pill · hermana del pill de módulos */}
           <button

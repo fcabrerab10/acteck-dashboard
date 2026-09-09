@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -9,6 +9,7 @@ import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
 import { FerrutekLoader } from '../../components';
+import ExportMenu from '../../components/ExportMenu';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
 } from 'recharts';
@@ -314,6 +315,7 @@ export default function AnalisisClientesGlobal() {
     return <SinAcceso motivo="No tienes acceso a Análisis por Cliente." />;
   }
   const { theme } = useTheme();
+  const rootRef = useRef(null); // raíz para exportar PDF
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [aniosDisponibles, setAniosDisponibles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -528,8 +530,30 @@ export default function AnalisisClientesGlobal() {
     );
   }
 
+  // Excel del ranking de clientes (respeta canal/búsqueda/orden)
+  const excelClientes = () => ({
+    titulo: `Análisis por cliente ${anio}`,
+    archivo: `Analisis por cliente ${anio}`,
+    hojas: [{
+      nombre: 'Clientes',
+      subtitulo: `YTD ene–${MESES_LBL[mesMax - 1]} ${anio}${canalFiltro !== 'TODOS' ? ` · ${canalFiltro}` : ''} · orden ${orden === 'mes' ? 'Mes' : 'YTD'}`,
+      columnas: [
+        { label: '#', key: 'ranking', tipo: 'numero', ancho: 5 },
+        { label: 'Cliente', key: 'cliente', tipo: 'texto', ancho: 34 },
+        { label: 'Canal', key: 'canal', tipo: 'texto', ancho: 16 },
+        { label: `YTD ${anio}`, key: 'ytd', tipo: 'moneda', ancho: 16 },
+        { label: `${MESES_LBL[mesMax - 1]} ${anio}`, key: 'mes', tipo: 'moneda', ancho: 14 },
+        { label: `YTD ${anio - 1}`, key: 'ytdPrev', tipo: 'moneda', ancho: 16 },
+        { label: 'Δ YoY', key: 'deltaYoY', tipo: 'pct', ancho: 9 },
+        { label: 'Share', key: 'share', tipo: 'pct', ancho: 9 },
+      ],
+      filas: clientesRanking.map((c, i) => ({ ranking: i + 1, cliente: c.cliente, canal: c.canal, ytd: c.ytd, mes: c.mes, ytdPrev: c.ytdPrev, deltaYoY: c.deltaYoY, share: c.share })),
+      totales: { cliente: 'TOTAL', canal: `${clientesRanking.length} clientes`, ytd: clientesRanking.reduce((s, c) => s + c.ytd, 0), mes: clientesRanking.reduce((s, c) => s + c.mes, 0), ytdPrev: clientesRanking.reduce((s, c) => s + c.ytdPrev, 0) },
+    }],
+  });
+
   return (
-    <div className="max-w-none mx-auto p-6 space-y-4"
+    <div ref={rootRef} className="max-w-none mx-auto p-6 space-y-4"
       style={{ background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }}>
       {/* Header estilo Apple */}
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, padding: '0 4px', marginBottom: 4 }}>
@@ -560,6 +584,7 @@ export default function AnalisisClientesGlobal() {
             {aniosDisponibles.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </label>
+        <ExportMenu titulo="Análisis por cliente" subtitulo={`YTD ene–${MESES_LBL[mesMax - 1]} ${anio}`} excel={excelClientes} pdf={{ ref: rootRef }} size="md" style={{ alignSelf: 'flex-end', marginBottom: 2 }} />
       </div>
 
       {/* Buscador apple.com pill + filtro de canal */}

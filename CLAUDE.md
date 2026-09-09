@@ -110,6 +110,14 @@ Pendientes conocidos de rendimiento: agregar en Postgres (vistas/RPC) lo que hoy
 
 ---
 
+## Funcionalidad transversal (2026-09-10)
+
+- **Exportar:** `src/lib/exportar.js` (`exportarExcel` con xlsx-js-style bajo demanda, `exportarPDF` = ventana de impresión "como se ve", `tablaDesdeDOM`) + `src/components/ExportMenu.jsx` (pill Excel/PDF). Ya está en Sell In, Visión General, S&OP, Pagos, Inventario, Sell Out, Análisis de clientes y Cobranza. Para otra pantalla: `ref` en la raíz + `<ExportMenu titulo subtitulo excel={…} pdf={{ ref }} />`.
+- **Comparador de periodos:** `src/modules/comercial/ComparadorPeriodos.jsx` (`clienteKey` null = global). Fuentes: `v_fact_cliente_mes` / `v_facturacion_global_mensual`, medidas de `v_erp_medidas_*`, movers por SKU lazy. Montado en Sell In (V2 y global).
+- **Historial de cambios:** tabla `auditoria_cambios` + trigger `fn_auditoria()` en 36 tablas que la app escribe (migración `20260910_auditoria_cambios.sql`; no audita `sellout_sku`, `inventario_cliente`, `eventos_usuario`). Pantalla `src/modules/interno/HistorialCambios.jsx`, permiso global `historial_cambios` (super admin lo ve siempre). Retención: `purgar_auditoria(dias)`.
+- **Alertas:** tabla `alertas` + task `generar-alertas` en `api/cron.js` (diaria) + `src/lib/alertas.js` (`useAlertas`, resolver/posponer) + `src/components/BandejaAlertas.jsx` (bandeja "Qué atender hoy" y `BadgeAlertas` del Topbar). Reglas: stock vs tránsito, cuota en riesgo, devoluciones anormales, rebate por generar, datos sin actualizar.
+- **Propuesta de diseño Ferruteck 2** (kit de 6 componentes, plantilla arriba-de-página, Midnight completo, movimiento): artefacto publicado el 2026-09-10; pendiente de aprobación de Fernando antes de migrar pantallas.
+
 ## Convenciones de código
 
 - `formatMXN(n)` — Intl.NumberFormat es-MX, MXN, sin decimales · `formatFecha(str)` — 'YYYY-MM-DD' → 'DD Mes YYYY'

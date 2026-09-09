@@ -5,7 +5,7 @@
 // ─ Tabla facturas con saldo (badges de días de atraso)
 // Preserva 100% de la data que ya carga CreditoCobranza.jsx (estados_cuenta + detalle + config + sell_in_sku + cuotas + sell_out)
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
@@ -14,6 +14,7 @@ import { Sparkles, AlertTriangle, TrendingUp, Calendar, CreditCard } from 'lucid
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
+import ExportMenu from '../../components/ExportMenu';
 
 const NOMBRES_MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -39,6 +40,7 @@ const fmtFechaCorta = (iso) => {
 export default function CreditoCobranzaV2({ cliente, clienteKey }) {
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';
+  const rootRef = useRef(null); // raíz para exportar PDF
   const perfil = usePerfil();
   if (!puedeVerPestanaCliente(perfil, clienteKey, 'cartera')) {
     return <SinAcceso motivo={`No tienes acceso a Crédito y Cobranza de ${clienteKey || 'este cliente'}.`} />;
@@ -319,7 +321,7 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
   const B = (tone) => badgeStyle(tone);
 
   return (
-    <div style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10, fontVariantNumeric: 'tabular-nums' }}>
+    <div ref={rootRef} style={{ fontFamily: TYPO.fontText, color: theme.text, display: 'flex', flexDirection: 'column', gap: 10, fontVariantNumeric: 'tabular-nums' }}>
       {/* Hero */}
       <div style={{ background: heroBg, color: '#FFF', borderRadius: 12, padding: '14px 18px', display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 20, alignItems: 'center' }}>
         <div>
@@ -421,6 +423,32 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
           <span style={{ marginLeft: 'auto', fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 10.5, color: theme.textMuted }}>
             <strong style={{ color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>{filasTabla.length}</strong> {filasTabla.length === 1 ? 'factura' : 'facturas'} · {fmt$(filasTabla.reduce((s, r) => s + r.saldo, 0))}
           </span>
+          <ExportMenu
+            titulo="Crédito y Cobranza"
+            subtitulo={`${cliente?.nombre || clienteKey || ''} · facturas con saldo`}
+            deshabilitado={!filasTabla.length}
+            pdf={{ ref: rootRef }}
+            excel={() => ({
+              titulo: `Crédito y Cobranza ${cliente?.nombre || clienteKey || ''}`,
+              archivo: `Cobranza ${cliente?.nombre || clienteKey || ''}`,
+              hojas: [{
+                nombre: 'Facturas con saldo',
+                columnas: [
+                  { label: 'Folio', key: 'folio', tipo: 'texto', ancho: 14 },
+                  { label: 'Referencia', key: 'referencia', tipo: 'texto', ancho: 18 },
+                  { label: 'Emisión', key: 'emision', tipo: 'fecha' },
+                  { label: 'Vencimiento', key: 'vencimiento', tipo: 'fecha' },
+                  { label: 'Importe', key: 'importe', tipo: 'moneda' },
+                  { label: 'Saldo', key: 'saldo', tipo: 'moneda' },
+                  { label: '% pagado', key: 'pctPagado', tipo: 'pct' },
+                  { label: 'Días atraso', key: 'dAtraso', tipo: 'numero', ancho: 11 },
+                  { label: 'Vence en (días)', key: 'dParaVenc', tipo: 'numero', ancho: 14 },
+                ],
+                filas: filasTabla.map((r) => ({ folio: r.f.movimiento || '', referencia: r.f.referencia || '', emision: r.f.fecha_emision, vencimiento: r.f.vencimiento, importe: r.importe, saldo: r.saldo, pctPagado: r.pctPagado, dAtraso: r.dAtraso, dParaVenc: r.dAtraso === 0 ? r.dParaVenc : null })),
+                totales: { folio: 'TOTAL', referencia: `${filasTabla.length} facturas`, importe: filasTabla.reduce((s, r) => s + r.importe, 0), saldo: filasTabla.reduce((s, r) => s + r.saldo, 0) },
+              }],
+            })}
+          />
         </div>
         <div style={{ overflowX: 'auto', maxHeight: '55vh' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11.5 }}>

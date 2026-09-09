@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { PCEL_REAL, PAGOS_DIGITALIFE_2026 } from '../../lib/constants';
 import { formatMXN, formatFecha, loadSheetJS } from '../../lib/utils';
@@ -12,6 +12,7 @@ import LineamientosCliente from './LineamientosCliente';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { cachedQuery } from '../../lib/queries';
+import ExportMenu from '../../components/ExportMenu';
 
 const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
@@ -56,6 +57,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     return <SinAcceso motivo={`No tienes acceso a Pagos de ${clienteKey || 'este cliente'}.`} />;
   }
   const { theme } = useTheme();
+  const rootRef = useRef(null); // raíz para exportar PDF
   const isDark = theme.mode === 'dark';
   const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#000000');
   const heroText = theme.heroCardText || '#F5F5F7';
@@ -1814,7 +1816,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const rebateTotalAcum = Math.round(Object.values(rebateAllQ).reduce((s, v) => s + v, 0));
 
   return (
-    <div style={{ minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, padding: '10px 6px' }}>
+    <div ref={rootRef} style={{ minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, padding: '10px 6px' }}>
 
       {/* Toast */}
       {toast && (
@@ -2106,6 +2108,31 @@ export default function PagosCliente({ cliente, clienteKey }) {
                   >
                     📥 Exportar Excel
                   </button>
+                  <span style={{ marginLeft: 8 }}>
+                    <ExportMenu
+                      titulo="Pagos"
+                      subtitulo={`${cliente?.nombre || clienteKey || ''} · resumen por mes y categoría`}
+                      pdf={{ ref: rootRef }}
+                      excel={() => ({
+                        titulo: `Pagos ${cliente?.nombre || clienteKey || ''} · Resumen por mes y categoría`,
+                        archivo: `Pagos ${cliente?.nombre || clienteKey || ''} resumen mensual`,
+                        hojas: [{
+                          nombre: 'Resumen mensual',
+                          columnas: [
+                            { label: 'Mes', key: 'mesLabel', tipo: 'texto', ancho: 12 },
+                            { label: 'Promociones', key: 'promociones', tipo: 'moneda' },
+                            { label: 'Marketing', key: 'marketing', tipo: 'moneda' },
+                            { label: 'Pagos Fijos', key: 'pagosFijos', tipo: 'moneda' },
+                            { label: 'P. Variables', key: 'pagosVariables', tipo: 'moneda' },
+                            { label: 'Rebate', key: 'rebate', tipo: 'moneda' },
+                            { label: 'Total', key: 'total', tipo: 'moneda' },
+                          ],
+                          filas: mb.map((m) => { const [yr, mo] = m.mes.split('-'); return { mesLabel: `${MESES_CORTOS[parseInt(mo, 10) - 1]} ${yr}`, promociones: m.promociones || null, marketing: m.marketing || null, pagosFijos: m.pagosFijos || null, pagosVariables: m.pagosVariables || null, rebate: m.rebate || null, total: m.total || 0 }; }),
+                          totales: { mesLabel: 'TOTAL', promociones: mb.reduce((s, m) => s + (m.promociones || 0), 0), marketing: mb.reduce((s, m) => s + (m.marketing || 0), 0), pagosFijos: mb.reduce((s, m) => s + (m.pagosFijos || 0), 0), pagosVariables: mb.reduce((s, m) => s + (m.pagosVariables || 0), 0), rebate: mb.reduce((s, m) => s + (m.rebate || 0), 0), total: mb.reduce((s, m) => s + (m.total || 0), 0) },
+                        }],
+                      })}
+                    />
+                  </span>
                 </div>
                 {resumenMensualAbierto && (
                 <div className="overflow-x-auto">
