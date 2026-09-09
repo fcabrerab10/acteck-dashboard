@@ -461,15 +461,15 @@ export default function VisionGeneral() {
         cachedQuery(supabase.from('v_vision_camino_resumen').select('bucket_estatus,valor_mxn,piezas,pos')),
         Promise.resolve({ data: [] }), // v_vision_camino_calendario: la UI no lee ninguna columna (CarteraCard / calendario / próximas no se renderizan). Posición conservada para no desalinear el destructuring.
         Promise.resolve({ data: [] }), // v_vision_camino_proximas: la UI no lee ninguna columna (CarteraCard / calendario / próximas no se renderizan). Posición conservada para no desalinear el destructuring.
-        cachedQuery(supabase.from('v_vision_camino_semanal').select('*').limit(12)),
+        cachedQuery(supabase.from('v_vision_camino_semanal').select('semana,valor_mxn,piezas').limit(12)),
         cachedQuery(supabase.from('v_vision_camino_retrasadas').select('valor_mxn,movid,dias_retraso,dias_desde_emision')),
         cachedQuery(supabase.from('v_vision_camino_proveedores').select('proveedor,valor_mxn').limit(8)),
-        cachedQuery(supabase.from('v_vision_camino_agotados').select('*').limit(10)),
-        cachedQuery(supabase.from('v_vision_camino_leadtime').select('*').single()),
+        cachedQuery(supabase.from('v_vision_camino_agotados').select('articulo,pzs_camino,movid,eta_estimada,dias_para_llegar').limit(10)),
+        cachedQuery(supabase.from('v_vision_camino_leadtime').select('lt_total,lt_produccion,lt_transito,lt_aduana').single()),
         cachedQuery(supabase.from('v_vision_camino_compras_ytd').select('anio,valor_mxn,pos')),
         cachedQuery(supabase.from('v_vision_sellout_canal').select('canal_sellout,importe,clientes_finales,skus').eq('anio', anio)),
         cachedQuery(supabase.from('v_vision_sellout_canal').select('canal_sellout,importe,clientes_finales,skus').eq('anio', anio - 1)),
-        cachedQuery(supabase.from('v_vision_sellout_mayoristas').select('*').eq('anio', anio).order('importe', { ascending: false })),
+        cachedQuery(supabase.from('v_vision_sellout_mayoristas').select('mayorista,importe,canal_sellout,clientes_finales,skus').eq('anio', anio).order('importe', { ascending: false })),
         cachedQuery(supabase.from('v_vision_sellout_rotacion').select('sellin_lag_90d,sellout_ytd,rotacion_pct').order('rotacion_pct', { ascending: true, nullsFirst: false })),
         cachedQuery(supabase.from('v_vision_sellout_mensual').select('mes,importe').eq('anio', anio)),
         cachedQuery(supabase.from('v_vision_sellout_mensual').select('mes,importe').eq('anio', anio - 1)),
@@ -1754,7 +1754,8 @@ function LeadtimeEtapasCompact({ lt }) {
   const total = Number(lt.lt_total) || 1;
   const etapas = [
     { lbl: '1 · Producción', val: Number(lt.lt_produccion) || 0, color: theme.orange || '#FF9500' },
-    { lbl: '2 · Marítimo', val: Number(lt.lt_maritimo) || 0, color: theme.accent || '#007AFF' },
+    // v_vision_camino_leadtime expone lt_transito (eta_puerto − etd), no lt_maritimo.
+    { lbl: '2 · Marítimo', val: Number(lt.lt_transito ?? lt.lt_maritimo) || 0, color: theme.accent || '#007AFF' },
     { lbl: '3 · Aduana → CEDIS', val: Number(lt.lt_aduana) || 0, color: theme.green || '#34C759' },
   ];
   return (
@@ -1787,7 +1788,13 @@ function LeadtimeEtapasCompact({ lt }) {
 
 function ConcentracionSemanalCompact({ semanas }) {
   const { theme } = useTheme();
-  const data = (semanas || []).slice(0, 12).map((s) => ({ semana: s.semana_label || s.semana, valor: Number(s.valor_mxn) || 0, piezas: Number(s.piezas) || 0 }));
+  // v_vision_camino_semanal expone `semana` (date, lunes de la semana); no hay semana_label.
+  const fmtSem = (d) => {
+    if (!d) return '—';
+    const dt = new Date(String(d).length === 10 ? `${d}T00:00:00` : d);
+    return Number.isNaN(dt.getTime()) ? String(d) : dt.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+  };
+  const data = (semanas || []).slice(0, 12).map((s) => ({ semana: s.semana_label || fmtSem(s.semana), valor: Number(s.valor_mxn) || 0, piezas: Number(s.piezas) || 0 }));
   const max = Math.max(...data.map((d) => d.valor), 1);
   const maxSemana = data.find((d) => d.valor === max);
   return (
@@ -1862,15 +1869,29 @@ function AgotadosCompact({ agotados }) {
           </tr>
         </thead>
         <tbody>
-          {top.map((a, i) => (
-            <tr key={(a.sku || '') + i}>
-              <td style={{ padding: '3px 6px', fontSize: 10, color: theme.textSubtle, borderBottom: `1px solid ${theme.border}` }}>{i + 1}</td>
-              <td style={{ padding: '3px 6px', fontSize: 11, color: theme.text, fontFamily: '-apple-system, "SF Mono", ui-monospace, monospace', letterSpacing: 0, borderBottom: `1px solid ${theme.border}` }}>{a.sku}</td>
-              <td style={{ padding: '3px 6px', fontSize: 12, textAlign: 'right', color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.01em', borderBottom: `1px solid ${theme.border}` }}>
-                {a.eta_cedis || a.eta_puerto ? new Date(a.eta_cedis || a.eta_puerto).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '—'}
-              </td>
-            </tr>
-          ))}
+          {top.map((a, i) => {
+            // v_vision_camino_agotados expone articulo / eta_estimada (text) /
+            // dias_para_llegar / pzs_camino — no sku / eta_cedis / eta_puerto.
+            const sku = a.articulo || a.sku || '';
+            const etaRaw = a.eta_estimada || a.eta_cedis || a.eta_puerto || null;
+            const etaDate = etaRaw ? new Date(String(etaRaw).length === 10 ? `${etaRaw}T00:00:00` : etaRaw) : null;
+            const etaTxt = etaDate && !Number.isNaN(etaDate.getTime())
+              ? etaDate.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+              : (etaRaw ? String(etaRaw) : '—');
+            const dias = Number(a.dias_para_llegar);
+            return (
+              <tr key={sku + i}>
+                <td style={{ padding: '3px 6px', fontSize: 10, color: theme.textSubtle, borderBottom: `1px solid ${theme.border}` }}>{i + 1}</td>
+                <td style={{ padding: '3px 6px', fontSize: 11, color: theme.text, fontFamily: '-apple-system, "SF Mono", ui-monospace, monospace', letterSpacing: 0, borderBottom: `1px solid ${theme.border}` }}>
+                  {sku}
+                  {Number(a.pzs_camino) > 0 && <span style={{ marginLeft: 6, fontSize: 9.5, color: theme.textMuted, fontFamily: TYPO.fontText }}>{Number(a.pzs_camino).toLocaleString('es-MX')} pz</span>}
+                </td>
+                <td style={{ padding: '3px 6px', fontSize: 12, textAlign: 'right', color: theme.text, fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.01em', borderBottom: `1px solid ${theme.border}` }} title={Number.isFinite(dias) ? `${dias} días` : undefined}>
+                  {etaTxt}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

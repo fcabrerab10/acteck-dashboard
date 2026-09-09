@@ -63,7 +63,8 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   const [loading, setLoading] = useState(true);
   const [aging, setAging] = useState(null);
   const [sellInSku, setSellInSku] = useState([]);
-  const [sellOutDetalle, setSellOutDetalle] = useState([]);
+  const [sellOutDetalle, setSellOutDetalle] = useState([]); // detalle diario, SÓLO últimos 90 días (días de inventario)
+  const [soMesVista, setSoMesVista] = useState([]);         // v_sellout_detalle_sku_mes, 2 años (por mes y por marca)
   const [productos, setProductos] = useState([]);
   const [cortesHist, setCortesHist] = useState([]);         // estados_cuenta históricos para cobranza
   const [rango, setRango] = useState(() => new Set([getCurrentQ(mesActual)]));
@@ -95,18 +96,24 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
       // Delegado al motor paginado PARALELO central (lib/queries.js).
       const fetchAll = async (table, select, applyFilter) => fetchAllCentral(table, select, applyFilter);
 
-      const [ecHistR, siR, prR, soRaw] = await Promise.all([
+      // Sell-out: la vista mensual (≈5.8K filas / 2 años) cubre "por mes" y
+      // "por marca"; el detalle diario sólo se baja para los últimos 90 días
+      // (≈3K filas) porque "días de inventario" necesita ventana diaria.
+      // Antes: 2 años de detalle crudo (≈23K filas) para todo.
+      const hace90Ini = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+      const [ecHistR, siR, prR, soRaw, soMes] = await Promise.all([
         cachedQuery(supabase.from('estados_cuenta').select('id,anio,semana,fecha_corte,saldo_actual,saldo_vencido,dso').eq('cliente', clienteKey).order('fecha_corte', { ascending: true })),
         cachedQuery(supabase.from('facturacion_clientes').select('sku, mes, monto, piezas').eq('cliente_key', clienteKey).eq('anio', anio)),
         cachedQuery(supabase.from('productos_cliente').select('sku, marca, precio_venta').eq('cliente', clienteKey)),
-        // Sell out con paginación (Digitalife tiene ~20K rows)
-        fetchAll('sellout_detalle', 'fecha, total, cantidad, no_parte, marca', (q) => q.eq('cliente', clienteKey).gte('fecha', anioAntIni)),
+        fetchAll('sellout_detalle', 'fecha, cantidad', (q) => q.eq('cliente', clienteKey).gte('fecha', hace90Ini)),
+        fetchAll('v_sellout_detalle_sku_mes', 'sku,marca,anio,mes,piezas,monto', (q) => q.eq('cliente', clienteKey).in('anio', [anio - 1, anio])),
       ]);
       if (cancel) return;
       setCortesHist(ecHistR.data || []);
       setSellInSku(siR.data || []);
       setProductos(prR.data || []);
       setSellOutDetalle(soRaw || []);
+      setSoMesVista(soMes || []);
       const ecActualId = (ecHistR.data || []).slice(-1)[0]?.id;
 
       // Aging (mismo cálculo que antes, buckets sólo vencidos)
@@ -248,17 +255,16 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
   // Sell Out por mes desde sellout_detalle (calculado una vez, reusado en todo el módulo)
   const sellOutByMes = useMemo(() => {
     const cur = new Map(), prev = new Map();
-    sellOutDetalle.forEach(r => {
-      if (!r.fecha) return;
-      const d = new Date(r.fecha);
-      const y = d.getFullYear();
-      const m = d.getMonth() + 1;
-      const monto = Number(r.total) || 0;
+    // v_sellout_detalle_sku_mes: monto = Σ total (mismo campo que antes)
+    soMesVista.forEach(r => {
+      const y = Number(r.anio);
+      const m = Number(r.mes);
+      const monto = Number(r.monto) || 0;
       if (y === anio) cur.set(m, (cur.get(m) || 0) + monto);
       else if (y === anio - 1) prev.set(m, (prev.get(m) || 0) + monto);
     });
     return { cur, prev };
-  }, [sellOutDetalle, anio]);
+  }, [soMesVista, anio]);
   const sellOutByMesRaw = sellOutByMes.cur;
 
   // ═════ KPIs ═════
@@ -394,15 +400,13 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
       siByMarca[marca] = (siByMarca[marca] || 0) + (Number(r.monto) || 0);
     });
 
-    // Sell Out agregado por marca (sellout_detalle: derivar mes+anio de fecha)
+    // Sell Out agregado por marca (v_sellout_detalle_sku_mes ya viene por anio/mes/marca)
     const soByMarca = {};
-    sellOutDetalle.forEach(r => {
-      if (!r.fecha) return;
-      const d = new Date(r.fecha);
-      if (d.getFullYear() !== anio) return;
-      if (!meses.includes(d.getMonth() + 1)) return;
+    soMesVista.forEach(r => {
+      if (Number(r.anio) !== anio) return;
+      if (!meses.includes(Number(r.mes))) return;
       const marca = normMarca(r.marca);
-      soByMarca[marca] = (soByMarca[marca] || 0) + (Number(r.total) || 0);
+      soByMarca[marca] = (soByMarca[marca] || 0) + (Number(r.monto) || 0);
     });
 
     const marcas = new Set([...Object.keys(siByMarca), ...Object.keys(soByMarca)]);
@@ -413,7 +417,7 @@ export default function HomeDigitalife({ cliente, clienteKey }) {
       arr.push({ marca: m, si, so, ratio: si > 0 ? (so / si * 100) : null });
     });
     return arr.sort((a, b) => (b.si + b.so) - (a.si + a.so)).slice(0, 6);
-  }, [sellInSku, sellOutDetalle, productos, marcaRango, anio]);
+  }, [sellInSku, soMesVista, productos, marcaRango, anio]);
 
   // ═════ Copilot recos ═════
   const copilotRecos = useMemo(() => {
