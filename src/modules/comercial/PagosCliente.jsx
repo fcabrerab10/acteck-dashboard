@@ -1,52 +1,32 @@
+// PagosCliente · Ferruteck 2 (2026-09-10)
+// Toda la lógica de datos, cálculos y escrituras a Supabase vive aquí; el render
+// se arma con el kit (Hero · KpiCard · Segmented · TablaCompacta · Panel · Pill · Boton)
+// y sub-vistas en ./pagos/*.jsx.
 import React, { useState, useEffect, useRef } from "react";
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { PCEL_REAL, PAGOS_DIGITALIFE_2026 } from '../../lib/constants';
 import { formatMXN, formatFecha, loadSheetJS } from '../../lib/utils';
-import { CardHeader } from '../../components';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaCliente, puedeVerPestanaCliente } from '../../lib/permisos';
 import SinAcceso from '../../components/SinAcceso';
-import { Wallet, CalendarDays, BarChart3, ClipboardList } from 'lucide-react';
+import { Download, History, Plus } from 'lucide-react';
 import { NuevaPromocionButton, ListaPromociones } from './PagosPromociones';
 import LineamientosCliente from './LineamientosCliente';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { cachedQuery } from '../../lib/queries';
 import ExportMenu from '../../components/ExportMenu';
-
-const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
-
-const CATEGORIA_META = {
-  promociones: { label: "Promociones", color: "#f59e0b" },
-  marketing: { label: "Marketing", color: "#8b5cf6" },
-  pagosFijos: { label: "Pagos Fijos", color: "#3b82f6" },
-  pagosVariables: { label: "Pagos Variables", color: "#10b981" },
-  rebate: { label: "Rebate", color: "#ef4444" },
-  spiff: { label: "SPIFF", color: "#9333ea" },
-  // Solo aplica a Dicotech por ahora (interno, no visible para el cliente).
-  fondoMkt: { label: "Fondo MKT", color: "#7C3AED", soloPara: ["dicotech"] },
-};
-
-const ESTATUS_OPT = [
-  { value: "pendiente",  label: "💡 Pendiente",  color: "#f59e0b" },
-  { value: "en_proceso", label: "⏳ En Proceso", color: "#3b82f6" },
-  { value: "pagado",     label: "✓ Pagado",      color: "#10b981" },
-  { value: "vencido",    label: "⚠ Vencido",     color: "#ef4444" },
-  { value: "no_aplica",  label: "➖ No aplica",  color: "#9ca3af" },
-  { value: "cancelado",  label: "✕ Cancelado",   color: "#94a3b8" },
-];
-
-// Helper: ¿el mes de la fecha es posterior al mes actual? (no se cuenta como pendiente todavía)
-function esMesFuturo(fechaStr) {
-  if (!fechaStr) return false;
-  const s = String(fechaStr).slice(0, 10);
-  const [y, m] = s.split("-").map((n) => parseInt(n, 10));
-  if (!y || !m) return false;
-  const hoy = new Date();
-  const hy = hoy.getFullYear();
-  const hm = hoy.getMonth() + 1; // 1-12
-  return y > hy || (y === hy && m > hm);
-}
+import { Hero, KpiCard, Pill, Segmented, Panel, Boton, SkeletonPantalla, toast } from '../../components/kit';
+import { CATEGORIA_META, MESES_CORTOS, MESES_LARGOS, esMesFuturo, Nota } from './pagos/pagosUI';
+import TablaPendientes from './pagos/TablaPendientes';
+import FormNuevoPago from './pagos/FormNuevoPago';
+import PagosFijos, { MESES_ARR } from './pagos/PagosFijos';
+import HistorialPagados from './pagos/HistorialPagados';
+import ResumenMensual, { ExportModal } from './pagos/ResumenMensual';
+import BitacoraModal from './pagos/BitacoraModal';
+import { RebateDigitalife, RebateDicotech, RebatePcel } from './pagos/RebatePanels';
+import { SpiffDigitalife, SpiffDicotech, SpiffPcel } from './pagos/SpiffPanels';
+import { FondosDicotech, FondosPcel, FondoPcelModal } from './pagos/FondosPanels';
 
 export default function PagosCliente({ cliente, clienteKey }) {
   const c = cliente;
@@ -59,10 +39,6 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const { theme } = useTheme();
   const rootRef = useRef(null); // raíz para exportar PDF
   const isDark = theme.mode === 'dark';
-  const heroBg = theme.heroCardBg || (isDark ? '#0F0F0F' : '#000000');
-  const heroText = theme.heroCardText || '#F5F5F7';
-  const heroMuted = 'rgba(255,255,255,0.72)';
-  const heroSubtle = 'rgba(255,255,255,0.55)';
   // Permiso granular por (clienteKey, 'pagos').
   const canEdit = puedeEditarPestanaCliente(perfil, clienteKey, 'pagos');
 
@@ -78,8 +54,6 @@ export default function PagosCliente({ cliente, clienteKey }) {
     try { localStorage.setItem("pagos_mostrar_futuros", String(mostrarFuturos)); } catch {}
   }, [mostrarFuturos]);
   const [expandedMonth, setExpandedMonth] = useState(null);
-  // Colapsable del Resumen General por Mes (default colapsado para no saturar)
-  const [resumenMensualAbierto, setResumenMensualAbierto] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportMeses, setExportMeses] = useState([]); // ["YYYY-MM", ...] multi-select
   const [historialPago, setHistorialPago] = useState(null); // { pago, entries }
@@ -88,7 +62,6 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue]     = useState("");
   const [saving, setSaving]           = useState(false);
-  const [toast, setToast]             = useState(null);
   const [showAdd, setShowAdd]         = useState(false);
   const [expandedFijos, setExpandedFijos] = useState({});  // { conceptoKey: true }
   const [showAddFijo, setShowAddFijo] = useState(false);
@@ -102,36 +75,6 @@ export default function PagosCliente({ cliente, clienteKey }) {
     // (lo paga Acteck directo, sin tocar fondos).
     monto_fondo_mkt_cliente: "", monto_fondo_interno: "",
   });
-
-  // Tipos de actividad de Marketing (selectables cuando categoria='marketing')
-  const TIPOS_ACTIVIDAD_MKT = [
-    { value: "stand", label: "Stand / Punto de venta" },
-    { value: "anuncios", label: "Anuncios pagados" },
-    { value: "evento", label: "Evento / Convención" },
-    { value: "redes_sociales", label: "Redes sociales" },
-    { value: "dem", label: "DEM (email mkt)" },
-    { value: "capacitacion", label: "Capacitación / Entrenamiento" },
-    { value: "material_pop", label: "Material POP / Display" },
-    { value: "promocion", label: "Promoción al consumidor" },
-    { value: "otro", label: "Otro" },
-  ];
-
-  const MESES_ARR = [
-    { key: "01", short: "Ene", full: "Enero" },
-    { key: "02", short: "Feb", full: "Febrero" },
-    { key: "03", short: "Mar", full: "Marzo" },
-    { key: "04", short: "Abr", full: "Abril" },
-    { key: "05", short: "May", full: "Mayo" },
-    { key: "06", short: "Jun", full: "Junio" },
-    { key: "07", short: "Jul", full: "Julio" },
-    { key: "08", short: "Ago", full: "Agosto" },
-    { key: "09", short: "Sep", full: "Septiembre" },
-    { key: "10", short: "Oct", full: "Octubre" },
-    { key: "11", short: "Nov", full: "Noviembre" },
-    { key: "12", short: "Dic", full: "Diciembre" },
-  ];
-
-  
 
   // ── Rebate Calculator (solo Digitalife) ──
   const [rebateData, setRebateData] = useState({ monitores: 0, sillas: 0, accesorios: 0 });
@@ -446,7 +389,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     }
     const { error } = await supabase.from("lineamientos_cliente")
       .upsert({ cliente: "dicotech", tipo: "spiff", config: configNueva }, { onConflict: "cliente,tipo" });
-    if (error) { alert("Error guardando SPIFF config: " + error.message); return; }
+    if (error) { toast.error("Error guardando SPIFF config: " + error.message); return; }
     setLineamientos(prev => ({ ...prev, spiff: configNueva }));
   }, [lineamientos]);
 
@@ -461,7 +404,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (patch.min_alcance != null) configNueva.min_alcance = Number(patch.min_alcance);
     const { error } = await supabase.from("lineamientos_cliente")
       .upsert({ cliente: "digitalife", tipo: "spiff", config: configNueva }, { onConflict: "cliente,tipo" });
-    if (error) { alert("Error guardando SPIFF Digitalife: " + error.message); return; }
+    if (error) { toast.error("Error guardando SPIFF Digitalife: " + error.message); return; }
     setLineamientos(prev => ({ ...prev, spiff: configNueva }));
   }, [lineamientos]);
 
@@ -491,7 +434,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
       const input = window.prompt(`SPIFF ${tipo} ${mesLabel} — pago manual (no llegó a la cuota mínima).\n\nIngresa el monto en MXN a pagar:`, "0");
       if (input == null) return;
       monto = Number(input.replace(/[^0-9.-]/g, "")) || 0;
-      if (monto <= 0) { alert("Monto inválido."); return; }
+      if (monto <= 0) { toast.error("Monto inválido."); return; }
     }
     const row = {
       cliente: clienteKey, categoria: "spiff", folio: null,
@@ -502,7 +445,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
       notas: `${detalle}${forzado ? " · Pago manual forzado" : ""}`,
     };
     const { data, error } = await supabase.from("pagos").insert(row).select().single();
-    if (error) { alert("Error creando pago: " + (error.message || JSON.stringify(error))); return; }
+    if (error) { toast.error("Error creando pago: " + (error.message || JSON.stringify(error))); return; }
     setSpiffPagos(p => ({ ...p, [`${anio}-${String(calc.mes).padStart(2, "0")}-${tipo}`]: data }));
     flash(`✓ SPIFF ${tipo} ${mesLabel} generado`);
   };
@@ -597,7 +540,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
       });
     }
     const { data, error } = await supabase.from("fondos_mkt_movimientos").insert(movsToInsert).select();
-    if (error) { alert("Error: " + error.message); return; }
+    if (error) { toast.error("Error: " + error.message); return; }
     setDicoFondoMovs(prev => [...prev, ...data].sort((a,b) => a.mes - b.mes));
     flash(`✓ Pago aplicado al mes ${mes}: ${formatMXN(montoTotal)}`);
   };
@@ -606,7 +549,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     if (!canEdit) return;
     if (!window.confirm("¿Eliminar este movimiento del fondo?")) return;
     const { error } = await supabase.from("fondos_mkt_movimientos").delete().eq("id", movId);
-    if (error) { alert("Error: " + error.message); return; }
+    if (error) { toast.error("Error: " + error.message); return; }
     setDicoFondoMovs(prev => prev.filter(m => m.id !== movId));
     flash("✓ Movimiento revertido");
   };
@@ -668,7 +611,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const pctAplicado = pctOverride != null ? Number(pctOverride) : Number(m.tier?.pct || 0);
     const tierAplicado = pctOverride != null ? tiers.find(t => Number(t.pct) === Number(pctOverride)) : m.tier;
     const monto = Math.round(m.sellIn * pctAplicado);
-    if (monto <= 0) { alert("Monto inválido."); return; }
+    if (monto <= 0) { toast.error("Monto inválido."); return; }
     const esManual = pctOverride != null && pctOverride !== Number(m.tier?.pct || 0);
     const row = {
       cliente: clienteKey,
@@ -682,7 +625,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
       notas: `${(pctAplicado*100).toFixed(2)}% × ${formatMXN(m.sellIn)} · alcance ${(m.alcance*100).toFixed(0)}% · ${tierAplicado?.label || "manual"}${esManual ? ` · tier auto: ${m.tier?.label || "sin tier"}` : ""}`,
     };
     const { data, error } = await supabase.from("pagos").insert(row).select().single();
-    if (error) { alert("Error: " + error.message); return; }
+    if (error) { toast.error("Error: " + error.message); return; }
     setRegistros(prev => [...prev, data]);
     flash(`✓ Rebate ${m.label} generado: ${formatMXN(monto)}`);
   };
@@ -702,7 +645,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
       notas: "Marcado como No aplica manualmente",
     };
     const { data, error } = await supabase.from("pagos").insert(row).select().single();
-    if (error) { alert("Error: " + error.message); return; }
+    if (error) { toast.error("Error: " + error.message); return; }
     setRegistros(prev => [...prev, data]);
     flash(`✓ Rebate ${m.label} marcado No aplica`);
   };
@@ -724,7 +667,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
       notas: "Marcado como No aplica manualmente",
     };
     const { data, error } = await supabase.from("pagos").insert(row).select().single();
-    if (error) { alert("Error: " + (error.message || JSON.stringify(error))); return; }
+    if (error) { toast.error("Error: " + (error.message || JSON.stringify(error))); return; }
     setSpiffPagos(p => ({ ...p, [`${anio}-${String(mes).padStart(2, "0")}-${tipo}`]: data }));
     flash(`✓ SPIFF ${tipo} ${mesLabel} marcado como No aplica`);
   };
@@ -743,7 +686,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const montoForzado = calc.soActual * (Number(lineamientos?.spiff?.flat_pct) || 0.0016);
     const montoFinal = forzado ? montoForzado : calc.comision;
     if (!(montoFinal > 0)) {
-      alert('El monto calculado es cero, no se puede generar el pago.');
+      toast.error('El monto calculado es cero, no se puede generar el pago.');
       return;
     }
     if (forzado) {
@@ -762,7 +705,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const { data, error } = await supabase.from("pagos").insert(row).select().single();
     if (error) {
       console.error("crearSpiffPago error:", error, "row:", row);
-      alert("Error creando pago: " + (error.message || JSON.stringify(error)));
+      toast.error("Error creando pago: " + (error.message || JSON.stringify(error)));
       return;
     }
     setSpiffPagos(p => ({ ...p, [`${anio}-${String(calc.mes).padStart(2, "0")}`]: data }));
@@ -787,7 +730,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const { data, error } = await supabase.from("pagos").insert(row).select().single();
     if (error) {
       console.error("marcarSpiffNoAplica error:", error, "row:", row);
-      alert("Error: " + (error.message || JSON.stringify(error)));
+      toast.error("Error: " + (error.message || JSON.stringify(error)));
       return;
     }
     setSpiffPagos(p => ({ ...p, [`${anio}-${String(mes).padStart(2, "0")}`]: data }));
@@ -797,7 +740,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
   const revertirSpiff = async (pagoId) => {
     if (!window.confirm("¿Eliminar este registro de SPIFF?")) return;
     const { error } = await supabase.from("pagos").delete().eq("id", pagoId);
-    if (error) { alert("Error: " + error.message); return; }
+    if (error) { toast.error("Error: " + error.message); return; }
     setSpiffPagos(p => {
       const copy = { ...p };
       Object.keys(copy).forEach(k => { if (copy[k] && copy[k].id === pagoId) delete copy[k]; });
@@ -1221,10 +1164,11 @@ export default function PagosCliente({ cliente, clienteKey }) {
     setLoading(false);
   };
 
-  // ── Toast ──
+  // ── Toast (kit) · conserva la firma flash(msg, type) de los handlers ──
   const flash = (msg, type = "ok") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 2500);
+    const limpio = String(msg).replace(/^[✓⚠✗]\s*/, "").replace(/\s*[✓✗]$/, "").trim();
+    if (type === "err" || /^⚠/.test(String(msg))) toast.error(limpio);
+    else toast.ok(limpio);
   };
 
   // ── Inline edit helpers ──
@@ -1271,7 +1215,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
 
     // Validar que el split no exceda el monto total
     if (clienteKey === "dicotech" && (montoFC + montoFI) > montoTotal + 0.01) {
-      alert(`El split de fondos ($${(montoFC+montoFI).toFixed(2)}) supera el monto total del pago ($${montoTotal.toFixed(2)}).`);
+      toast.error(`El split de fondos ($${(montoFC+montoFI).toFixed(2)}) supera el monto total del pago ($${montoTotal.toFixed(2)}).`);
       return;
     }
 
@@ -1292,7 +1236,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const { data, error } = await supabase.from("pagos").insert(record).select().single();
     if (error) {
       console.error("handleAdd error:", error, "record:", record);
-      alert("Error al agregar: " + (error.message || JSON.stringify(error)));
+      toast.error("Error al agregar: " + (error.message || JSON.stringify(error)));
       return;
     }
     setRegistros(prev => [...prev, data]);
@@ -1331,7 +1275,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
         const { data: movsData, error: emErr } = await supabase
           .from("fondos_mkt_movimientos").insert(movs).select();
         if (emErr) {
-          alert("Pago creado, pero falló registrar aplicación al fondo: " + emErr.message);
+          toast.error("Pago creado, pero falló registrar aplicación al fondo: " + emErr.message);
         } else {
           setDicoFondoMovs(prev => [...prev, ...movsData].sort((a,b) => a.mes - b.mes));
         }
@@ -1498,7 +1442,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     const { data, error } = await supabase.from("pagos_audit")
       .select("*").eq("pago_id", row.id)
       .order("changed_at", { ascending: false });
-    if (error) { alert("Error: " + error.message); return; }
+    if (error) { toast.error("Error: " + error.message); return; }
     setHistorialPago({ pago: row, entries: data || [] });
   };
 
@@ -1622,9 +1566,9 @@ export default function PagosCliente({ cliente, clienteKey }) {
   };
 
   const exportarMeses = async () => {
-    if (exportMeses.length === 0) return alert("Selecciona al menos un mes");
+    if (exportMeses.length === 0) return toast.error("Selecciona al menos un mes");
     const XLSX = await loadSheetJS();
-    if (!XLSX) return alert("Error cargando librería Excel");
+    if (!XLSX) return toast.error("Error cargando librería Excel");
 
     const mesesOrden = [...exportMeses].sort(); // YYYY-MM ordena bien alfabéticamente
     const ordenCat = ["promociones","marketing","pagosFijos","pagosVariables","rebate","spiff"];
@@ -1681,7 +1625,7 @@ export default function PagosCliente({ cliente, clienteKey }) {
     }
 
     if (totalPagos === 0) {
-      return alert("No hay pagos por pagar en los meses seleccionados.");
+      return toast.error("No hay pagos por pagar en los meses seleccionados.");
     }
 
     // Gran total al final
@@ -1709,3066 +1653,372 @@ export default function PagosCliente({ cliente, clienteKey }) {
     setExportMeses([]);
   };
 
-  // ── Inline cell renderer ──
-  const renderCell = (row, field, type = "text") => {
-    const isEditing = editingCell?.id === row.id && editingCell?.field === field;
-    const inputCls = "w-full border border-blue-400 rounded px-2 py-1 text-sm outline-none bg-blue-50 focus:ring-1 focus:ring-blue-400";
 
-    if (isEditing) {
-      if (type === "sel-estatus") {
-        return (
-          <select autoFocus value={editValue} className={inputCls}
-            onChange={e => setEditValue(e.target.value)} onBlur={saveEdit}
-            onKeyDown={e => { if (e.key==="Enter") saveEdit(); if (e.key==="Escape") cancelEdit(); }}>
-            {ESTATUS_OPT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        );
-      }
-      if (type === "sel-cat") {
-        return (
-          <select autoFocus value={editValue} className={inputCls}
-            onChange={e => setEditValue(e.target.value)} onBlur={saveEdit}
-            onKeyDown={e => { if (e.key==="Enter") saveEdit(); if (e.key==="Escape") cancelEdit(); }}>
-            {Object.entries(CATEGORIA_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
-        );
-      }
-      return (
-        <input autoFocus type={type} value={editValue} className={inputCls}
-          onChange={e => setEditValue(e.target.value)} onBlur={saveEdit}
-          onKeyDown={e => { if (e.key==="Enter") saveEdit(); if (e.key==="Escape") cancelEdit(); }} />
-      );
-    }
+  // ── Bitácora global (últimos cambios de todos los pagos del cliente) ──
+  const verBitacoraGlobal = async () => {
+    const ids = registros.map((r) => r.id).filter(Boolean);
+    if (ids.length === 0) { setHistorialPago({ pago: null, entries: [] }); return; }
+    const { data, error } = await supabase.from("pagos_audit")
+      .select("*").in("pago_id", ids)
+      .order("changed_at", { ascending: false }).limit(200);
+    if (error) { toast.error("Error: " + error.message); return; }
+    const conceptoDe = (id) => registros.find((r) => r.id === id)?.concepto || String(id);
+    setHistorialPago({ pago: null, entries: data || [], conceptoDe });
+  };
 
-    const handleClick = () => {
-      if (field === "monto") startEdit(row.id, field, row.monto ?? "");
-      else startEdit(row.id, field, row[field] ?? "");
+  // ── Registrar pago de Rebate trimestral (Digitalife) ──
+  const registrarRebateQ = async (totalReb) => {
+    if (!canEdit) return;
+    const anio = new Date().getFullYear();
+    const fechaQ = rebateQ === 4 ? (anio + 1) + Q_FECHA_PAGO[4] : anio + Q_FECHA_PAGO[rebateQ];
+    const record = {
+      concepto: "Rebate Q" + rebateQ + " " + anio,
+      categoria: "rebate",
+      monto: totalReb,
+      estatus: "pendiente",
+      fecha_compromiso: fechaQ,
+      responsable: "Acteck",
+      notas: "Monitores: $" + Math.round(rebateData.monitores).toLocaleString("es-MX") + " (2%), Sillas: $" + Math.round(rebateData.sillas).toLocaleString("es-MX") + " (2%), Accesorios: $" + Math.round(rebateData.accesorios).toLocaleString("es-MX") + " (3%)",
+      cliente: clienteKey
     };
+    const { data, error } = await supabase.from("pagos").insert(record).select().single();
+    if (!error && data) {
+      setRegistros(prev => [...prev, data]);
+      flash("Pago de Rebate Q" + rebateQ + " registrado", "ok");
+    } else {
+      flash("Error al registrar rebate", "err");
+    }
+  };
 
-    if (field === "estatus") {
-      const s = ESTATUS_OPT.find(o => o.value === (row.estatus || "pendiente")) || ESTATUS_OPT[0];
-      return (
-        <div className={DB_CONFIGURED ? "cursor-pointer" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${s.bg} ${s.text}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`}></span>{s.label}
-          </span>
-        </div>
-      );
-    }
-    if (field === "categoria") {
-      const m = CATEGORIA_META[row.categoria] || CATEGORIA_META.promociones;
-      // Etiqueta auxiliar para marketing con fuente o tipo_actividad
-      const esMkt = row.categoria === "marketing";
-      const fuenteTag = esMkt && row.fuente === "empresa" ? { label: "Empresa", color: "#059669", bg: "#D1FAE5" }
-                     : esMkt && row.fuente === "fondo_mkt" ? { label: "Fondo MKT", color: "#7C3AED", bg: "#F3E8FF" }
-                     : esMkt && row.fuente === "vendor" ? { label: "Vendor", color: "#475569", bg: "#F1F5F9" }
-                     : null;
-      const tipoActividadLabel = esMkt && row.tipo_actividad
-        ? (TIPOS_ACTIVIDAD_MKT.find(t => t.value === row.tipo_actividad)?.label || row.tipo_actividad)
-        : null;
-      return (
-        <div className={DB_CONFIGURED ? "cursor-pointer" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
-          <div className="flex flex-col gap-0.5">
-            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full text-white font-semibold whitespace-nowrap w-fit"
-                  style={{ backgroundColor: m.color }}>{m.icono} {m.label}</span>
-            {(fuenteTag || tipoActividadLabel) && (
-              <div className="flex gap-1 flex-wrap">
-                {fuenteTag && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
-                        style={{ color: fuenteTag.color, backgroundColor: fuenteTag.bg }}>{fuenteTag.label}</span>
-                )}
-                {tipoActividadLabel && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded font-medium text-gray-600 bg-gray-100">{tipoActividadLabel}</span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-    if (field === "monto") {
-      return (
-        <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
-          {(row.monto || 0) > 0
-            ? <span className="font-bold text-gray-800">{formatMXN(row.monto)}</span>
-            : <span className="text-gray-400 text-xs italic">Por definir</span>}
-        </div>
-      );
-    }
-    if (field === "fecha_compromiso" || field === "fecha_pago_real") {
-      return (
-        <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors whitespace-nowrap" : "whitespace-nowrap"} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
-          {row[field] ? <span className="text-gray-600">{formatFecha(row[field])}</span> : <span className="text-gray-300">—</span>}
-        </div>
-      );
-    }
-    return (
-      <div className={DB_CONFIGURED ? "cursor-pointer hover:bg-blue-50 rounded px-1 transition-colors" : ""} onClick={handleClick} title={DB_CONFIGURED ? "Click para editar" : ""}>
-        {row[field] ? <span className="text-gray-700">{row[field]}</span> : <span className="text-gray-300">—</span>}
-      </div>
-    );
+  // ── Crear un mes faltante de un pago fijo existente ──
+  const crearMesFijo = async (conceptoKey, mKey, records) => {
+    if (!canEdit) return;
+    const anioAct = new Date().getFullYear();
+    const record = {
+      folio: "",
+      concepto: conceptoKey,
+      categoria: "pagosFijos",
+      cliente: clienteKey,
+      monto: records[0]?.monto || 0,
+      estatus: "pendiente",
+      fecha_compromiso: `${anioAct}-${mKey}-01`,
+      fecha_pago_real: null,
+      responsable: records[0]?.responsable || null,
+      notas: null,
+      mes_fijo: Number(mKey),
+      anio_fijo: anioAct,
+    };
+    const { data, error } = await supabase.from("pagos").insert(record).select().single();
+    if (error) { flash("Error: " + error.message, "err"); return; }
+    setRegistros(prev => [...prev, data]);
+    flash(`${conceptoKey} · mes ${mKey} creado ✓`);
   };
 
   // ────────────────────────── RENDER ──────────────────────────────────────────
-  const catActivaMeta = catActiva !== 'todas' ? CATEGORIA_META[catActiva] : null;
-  const nombreMesActual = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][new Date().getMonth()];
-  const anioActual = new Date().getFullYear();
+  const [vista, setVista] = useState("pendientes"); // pendientes · pagados · rebate · spiff · fondos
+  const hoy = new Date();
+  const anioActual = hoy.getFullYear();
+  const mesActualNum = hoy.getMonth() + 1;
+  const nombreMesActual = MESES_LARGOS[hoy.getMonth()];
+  const hoyISO = hoy.toISOString().slice(0, 10);
   const rebateTotalAcum = Math.round(Object.values(rebateAllQ).reduce((s, v) => s + v, 0));
+  const tieneFondos = clienteKey === "dicotech" || clienteKey === "pcel";
+  const edit = { editingCell, editValue, setEditValue, saveEdit, cancelEdit, startEdit };
+  const mb = monthlyBreakdown();
+
+  // Pendientes reales (no pagados / cancelados / futuros)
+  const pendientesActivos = registros.filter(visibleEnTodas);
+  const nPendientes = pendientesActivos.length;
+  const vencidos = registros.filter(r => r.estatus === "vencido" || (["pendiente", "en_proceso"].includes(r.estatus) && r.fecha_compromiso && String(r.fecha_compromiso).slice(0, 10) < hoyISO));
+  const en7 = (() => { const d = new Date(hoy); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10); })();
+  const vencenSemana = pendientesActivos.filter(r => r.fecha_compromiso && String(r.fecha_compromiso).slice(0, 10) >= hoyISO && String(r.fecha_compromiso).slice(0, 10) <= en7);
+  const proximoVenc = pendientesActivos.map(r => r.fecha_compromiso && String(r.fecha_compromiso).slice(0, 10)).filter(f => f && f >= hoyISO).sort()[0] || null;
+  const pagadosAnio = registros.filter(r => r.estatus === "pagado" && String(r.fecha_pago_real || r.fecha_compromiso || "").slice(0, 4) === String(anioActual));
+  const pagadoYTD = pagadosAnio.reduce((s, r) => s + (r.monto || 0), 0);
+  const enProceso = registros.filter(r => r.estatus === "en_proceso").reduce((s, r) => s + (r.monto || 0), 0);
+
+  // Rebate / SPIFF del mes por cliente (para KPIs y narrativa)
+  const qActual = mesActualNum <= 3 ? 1 : mesActualNum <= 6 ? 2 : mesActualNum <= 9 ? 3 : 4;
+  const mesPrev = mesActualNum === 1 ? 12 : mesActualNum - 1;
+  let rebateKpi = null, spiffKpi = null, rebatePendienteMes = null;
+  if (clienteKey === "digitalife") {
+    const sug = Math.round(rebateAllQ[qActual] || 0);
+    rebateKpi = { titulo: `Rebate Q${qActual}`, big: formatMXN(sug), badge: rebateSynced[qActual] ? { l: "Registrado", tone: "green" } : sug > 0 ? { l: "Sugerido", tone: "blue" } : null, sub: `Monitores y sillas ${(REBATE_PCT.monitores * 100).toFixed(0)}% · accesorios ${(REBATE_PCT.accesorios * 100).toFixed(0)}% · acumulado ${formatMXN(rebateTotalAcum)}` };
+    const c = spiffCalc?.find(x => x.mes === mesActualNum);
+    if (c) spiffKpi = { titulo: `SPIFF ${MESES_CORTOS[mesActualNum - 1]}`, big: formatMXN(c.comision), badge: c.pagoExistente ? { l: c.pagoExistente.estatus === "pagado" ? "Pagado" : "Generado", tone: "green" } : c.aplica ? { l: "Cumple", tone: "green" } : c.soActual > 0 ? { l: "No cumple", tone: "red" } : null, sub: `SO ${formatMXN(c.soActual)} · alcance ${c.cuotaSOMin > 0 ? (c.alcance * 100).toFixed(0) : "—"}% · YTD ${formatMXN(spiffTotalYTD)}`, progress: c.cuotaSOMin > 0 ? c.alcance * 100 : null };
+  } else if (clienteKey === "dicotech") {
+    const m = dicoRebateCalc?.find(x => x.mes === mesActualNum);
+    if (m) rebateKpi = { titulo: `Rebate ${MESES_CORTOS[mesActualNum - 1]}`, big: formatMXN(m.rebateAuto), badge: m.tier ? { l: `${(Number(m.tier.pct) * 100).toFixed(2)}%`, tone: m.cumple ? "green" : "orange" } : null, sub: `Alcance ${m.cuota > 0 ? (m.alcance * 100).toFixed(0) : "—"}% de ${formatMXN(m.cuota)} · YTD ${formatMXN(dicoRebateTotalYTD)}`, progress: m.cuota > 0 ? m.alcance * 100 : null };
+    const prev = dicoRebateCalc?.find(x => x.mes === mesPrev);
+    if (prev && prev.sellIn > 0 && !prev.pagoExistente && prev.rebateAuto > 0) rebatePendienteMes = prev.label;
+    const c = spiffDicotechCalc?.find(x => x.mes === mesActualNum);
+    if (c) spiffKpi = { titulo: `SPIFF ${MESES_CORTOS[mesActualNum - 1]}`, big: formatMXN(c.comisionSI), badge: c.pagoSI ? { l: c.pagoSI.estatus === "pagado" ? "Pagado" : "Generado", tone: "green" } : null, sub: `Compradora ${(spiffDicoCompradoraPct * 100).toFixed(3)}% · ${c.ganadores.length} vendedores califican · YTD ${formatMXN(spiffDicotechTotalYTD.si)}` };
+  } else if (clienteKey === "pcel" && pcelCalc) {
+    const q = pcelCalc.quarterly[qActual - 1];
+    if (q) rebateKpi = { titulo: `Rebate Q${qActual}`, big: formatMXN(q.rebateAmount), badge: q.rebatePct > 0 ? { l: `${(q.rebatePct * 100).toFixed(2)}%`, tone: "green" } : { l: q.rebateLabel, tone: "orange" }, sub: `Alcance ${q.cuota > 0 ? (q.alcance * 100).toFixed(0) : "—"}% de ${formatMXN(q.cuota)} · fondo MKT ${formatMXN(q.fondoAmount)}`, progress: q.cuota > 0 ? q.alcance * 100 : null };
+    const r = pcelCalc.monthly[mesActualNum - 1];
+    if (r) spiffKpi = { titulo: `SPIFF ${MESES_CORTOS[mesActualNum - 1]}`, big: formatMXN(r.spiff), badge: { l: `${(SPIFF_PCT * 100).toFixed(2)}%`, tone: "purple" }, sub: `Sell In ${formatMXN(r.sellIn)} · alcance ${r.cuota > 0 ? (r.alcance * 100).toFixed(0) : "—"}% · total ${formatMXN(pcelCalc.totalSpiff)}`, progress: r.cuota > 0 ? r.alcance * 100 : null };
+  }
+
+  // Fondos por cliente
+  let fondoCli = null, fondoInt = null;
+  if (clienteKey === "dicotech" && dicoFondoTablaMensual) {
+    const genCli = dicoFondoTablaMensual.filas.reduce((s, f) => s + f.genCli, 0);
+    const apliCli = dicoFondoTablaMensual.filas.reduce((s, f) => s + f.apliCli, 0);
+    const ultInt = [...dicoFondoMovs].filter(x => x.tipo_fondo === "interno").sort((a, b) => b.mes - a.mes)[0];
+    fondoCli = { titulo: "Fondo MKT cliente", saldo: dicoFondoTablaMensual.saldoCliActual, usado: genCli > 0 ? (apliCli / genCli) * 100 : null, sub: `${formatMXN(apliCli)} aplicado de ${formatMXN(genCli)} generado` };
+    fondoInt = { titulo: "Fondo interno", saldo: dicoFondoTablaMensual.saldoIntActual, sub: ultInt ? `Último mov.: ${ultInt.tipo_movimiento} ${formatMXN(Number(ultInt.monto))} · ${MESES_CORTOS[ultInt.mes - 1]}` : "Sin movimientos" };
+  } else if (clienteKey === "pcel") {
+    const ultDir = [...fondoResumen.ledger.directo].slice(-1)[0];
+    fondoCli = { titulo: "Fondo MKT PCEL", saldo: fondoResumen.saldoMkt, usado: fondoResumen.entradasMkt > 0 ? (fondoResumen.gastosMkt / fondoResumen.entradasMkt) * 100 : null, sub: `+${formatMXN(fondoResumen.aporteMktAnio)} · −${formatMXN(fondoResumen.gastoMktAnio)} este año` };
+    fondoInt = { titulo: "Fondo Directo", saldo: fondoResumen.saldoDirecto, sub: ultDir ? `Último mov.: ${ultDir.tipo_mov} ${formatMXN(Number(ultDir.monto))} · ${formatFecha(ultDir.fecha)}` : "Sin movimientos" };
+  }
+  const fondoSinComprobar = registros.filter(r => r.estatus === "en_proceso" && (r.fuente === "fondo_mkt" || r.categoria === "fondoMkt")).reduce((s, r) => s + (r.monto || 0), 0);
+
+  // Frase narrativa por reglas
+  const fraseHero = vencidos.length > 0
+    ? `${vencidos.length} pago${vencidos.length !== 1 ? "s" : ""} vencido${vencidos.length !== 1 ? "s" : ""} por ${formatMXN(vencidos.reduce((s, r) => s + (r.monto || 0), 0))}.`
+    : vencenSemana.length > 0
+      ? `${vencenSemana.length} pago${vencenSemana.length !== 1 ? "s" : ""} vence${vencenSemana.length !== 1 ? "n" : ""} esta semana.`
+      : rebatePendienteMes
+        ? `Rebate de ${rebatePendienteMes} pendiente de generar.`
+        : nPendientes > 0
+          ? `${nPendientes} concepto${nPendientes !== 1 ? "s" : ""} por liberar este mes.`
+          : "Todo al corriente.";
+  const subHero = [
+    `${formatMXN(totalPorPagar)} por liberar`,
+    rebateKpi ? `${rebateKpi.titulo.toLowerCase()} sugerido ${rebateKpi.big}${rebateKpi.progress != null ? ` (${rebateKpi.progress.toFixed(0)}% de alcance)` : ""}` : null,
+    fondoSinComprobar > 0 ? `${formatMXN(fondoSinComprobar)} de fondo sin comprobar` : enProceso > 0 ? `${formatMXN(enProceso)} en proceso` : null,
+  ].filter(Boolean).join(" · ") + ".";
+
+  const heroStats = [
+    { k: "Por pagar", v: formatMXN(totalPorPagar), sub: `${registros.filter(r => ["pendiente", "en_proceso"].includes(r.estatus)).length} conceptos${proximoVenc ? ` · próx. ${formatFecha(proximoVenc)}` : ""}`, color: vencidos.length > 0 ? theme.red : theme.orange },
+    { k: `Pagado ${anioActual}`, v: formatMXN(pagadoYTD), sub: `${pagadosAnio.length} pagos`, color: theme.green },
+    fondoCli
+      ? { k: fondoCli.titulo, v: formatMXN(fondoCli.saldo), sub: fondoSinComprobar > 0 ? `${formatMXN(fondoSinComprobar)} sin comprobar` : fondoCli.sub, color: fondoSinComprobar > 0 || fondoCli.saldo < 0 ? theme.orange : undefined }
+      : { k: "Rebate acum.", v: formatMXN(rebateTotalAcum), sub: `${Object.values(rebateSynced).filter(Boolean).length} de 4 Qs registrados` },
+  ];
+
+  const kpis = [
+    rebateKpi && { eyebrow: "Rebate del mes", ...rebateKpi, progressColor: theme.red, onClick: () => irA("rebate") },
+    spiffKpi && { eyebrow: "SPIFF del mes", ...spiffKpi, progressColor: theme.purple, onClick: () => irA("spiff") },
+    fondoCli && { eyebrow: fondoCli.titulo, big: formatMXN(fondoCli.saldo), bigColor: fondoCli.saldo < 0 ? theme.red : undefined, sub: fondoCli.usado != null ? `${fondoCli.usado.toFixed(0)}% usado · ${fondoCli.sub}` : fondoCli.sub, progress: fondoCli.usado, progressColor: theme.orange, onClick: () => irA("fondos") },
+    fondoInt && { eyebrow: fondoInt.titulo, big: formatMXN(fondoInt.saldo), bigColor: fondoInt.saldo < 0 ? theme.red : undefined, sub: fondoInt.sub, onClick: () => irA("fondos") },
+  ].filter(Boolean);
+
+  function irA(v) {
+    setVista(v);
+    setTimeout(() => document.getElementById("pagos-detalle")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }
+
+  const segOpts = [
+    { id: "pendientes", label: "Pendientes", badge: nPendientes },
+    { id: "pagados", label: "Pagados", badge: registros.filter(r => r.estatus === "pagado").length || undefined },
+    { id: "rebate", label: "Rebate" },
+    { id: "spiff", label: "SPIFF" },
+    ...(tieneFondos ? [{ id: "fondos", label: "Fondos" }] : []),
+  ];
+  const catsFiltro = Object.entries(CATEGORIA_META)
+    .filter(([key]) => !(clienteKey === "pcel" && key === "pagosFijos"))
+    .filter(([, meta]) => !meta.soloPara || meta.soloPara.includes(clienteKey));
+
+  const abrirExport = () => {
+    const prev = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+    const def = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+    setExportMeses(mb.some(m => m.mes === def) ? [def] : []);
+    setExportModalOpen(true);
+  };
+
+  const lineamientosTipos = vista === "rebate" ? ["rebate"] : vista === "spiff" ? ["spiff"] : vista === "fondos" ? ["fondo_mkt"] : null;
 
   return (
     <div ref={rootRef} style={{ minHeight: '100vh', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, padding: '10px 6px' }}>
+      {loading ? <SkeletonPantalla /> : (
+        <div data-stagger style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-      {/* Toast */}
-      {toast && (
-        <div style={{
-          position: 'fixed', top: 16, right: 16, zIndex: 50,
-          padding: '10px 16px', borderRadius: 12,
-          background: toast.type === 'err' ? theme.red : theme.green,
-          color: '#fff', fontFamily: TYPO.fontText, fontSize: 13, fontWeight: 600,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-        }}>
-          {toast.msg}
-        </div>
-      )}
-
-      {/* Hero editorial · narrativa + 4 stats */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 20,
-        background: heroBg, color: heroText, borderRadius: 14, padding: '16px 20px',
-        alignItems: 'center', position: 'relative', overflow: 'hidden',
-        border: isDark ? `1px solid rgba(255,255,255,0.06)` : 'none',
-        marginBottom: 12,
-      }}>
-        {isDark && (
-          <div style={{
-            position: 'absolute', top: '-30%', right: '-10%', width: '50%', height: '100%',
-            background: `radial-gradient(circle, ${theme.accent}1F 0%, transparent 70%)`, pointerEvents: 'none',
-          }} />
-        )}
-        <div style={{ position: 'relative' }}>
-          <p style={{
-            fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em',
-            color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText, margin: 0,
-          }}>
-            {c.nombre} · {nombreMesActual} {anioActual}{catActivaMeta ? ` · Vista ${catActivaMeta.label}` : ''}
-          </p>
-          <h2 style={{
-            fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em',
-            color: heroText, margin: '4px 0 6px', lineHeight: 1.15,
-          }}>
-            Pagos y Compromisos.
-          </h2>
-          <p style={{
-            color: heroMuted, fontSize: 12, lineHeight: 1.55, margin: 0, maxWidth: 540,
-            fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums',
-          }}>
-            <strong style={{ color: '#34D158', fontWeight: 500 }}>{formatMXN(totalPagado || 0)} pagado</strong> · <strong style={{ color: '#FFB84D', fontWeight: 500 }}>{formatMXN(totalPorPagar || 0)} por pagar</strong> · total {formatMXN(totalAnio || 0)} en <strong style={{ color: heroText, fontWeight: 500 }}>{registros.length} conceptos</strong>.
-            {(clienteKey === 'digitalife' || clienteKey === 'dicotech') && rebateTotalAcum > 0 && (
-              <> Rebate acumulado <strong style={{ color: heroText, fontWeight: 500 }}>{formatMXN(rebateTotalAcum)}</strong>.</>
-            )}
-            {saving && <span style={{ color: theme.accentDark || theme.accent, marginLeft: 8 }}>● Guardando…</span>}
-          </p>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', position: 'relative' }}>
-          <div>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText }}>Pagado</div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: '#34D158', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, marginTop: 2 }}>{totalPagado > 0 ? formatMXN(totalPagado) : '$0'}</div>
-            <div style={{ fontSize: 10, color: heroSubtle, marginTop: 1 }}>{registros.filter(r => r.estatus === 'pagado').length} conceptos</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText }}>Por pagar</div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: '#FFB84D', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, marginTop: 2 }}>{totalPorPagar > 0 ? formatMXN(totalPorPagar) : '$0'}</div>
-            <div style={{ fontSize: 10, color: heroSubtle, marginTop: 1 }}>{registros.filter(r => ['pendiente','en_proceso'].includes(r.estatus)).length} conceptos</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText }}>Total {anioActual}</div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: heroText, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, marginTop: 2 }}>{totalAnio > 0 ? formatMXN(totalAnio) : '$0'}</div>
-            <div style={{ fontSize: 10, color: heroSubtle, marginTop: 1 }}>{registros.length} registros</div>
-          </div>
-          {(clienteKey === 'digitalife' || clienteKey === 'dicotech') && (
-            <div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText }}>Rebate acum.</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: '#FF6961', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, marginTop: 2 }}>{rebateTotalAcum > 0 ? formatMXN(rebateTotalAcum) : '$0'}</div>
-              <div style={{ fontSize: 10, color: heroSubtle, marginTop: 1 }}>{Object.values(rebateSynced).filter(Boolean).length} de 4 Qs</div>
+          {/* 1 · Hero narrativo */}
+          <Hero
+            eyebrow={`Pagos · ${c.nombre} · ${nombreMesActual} ${anioActual}`}
+            titulo={fraseHero}
+            sub={subHero}
+            stats={heroStats}
+          >
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Pill tone={DB_CONFIGURED ? 'green' : 'orange'} size="xs" dot>{DB_CONFIGURED ? 'Sincronizado' : 'Solo lectura'}</Pill>
+              {!canEdit && <Pill tone="gray" size="xs">Modo lectura</Pill>}
+              {saving && <Pill tone="blue" size="xs" dot>Guardando…</Pill>}
+              {c.cartera?.ultimaActualizacion && <Pill tone="inverse" size="xs" style={{ background: 'transparent', color: theme.mode === 'dark' ? 'rgba(29,29,31,0.66)' : 'rgba(245,245,247,0.66)' }}>Actualizado {formatFecha(c.cartera.ultimaActualizacion)}{c.cartera?.tipoCambio ? ` · TC $${c.cartera.tipoCambio.toFixed(2)}` : ''}</Pill>}
             </div>
-          )}
-          {clienteKey === 'pcel' && (
-            <div style={{ cursor: 'pointer' }} onClick={() => setMostrarFondo(v => !v)} title="Click para ver ledger del fondo">
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: heroSubtle, fontWeight: 500, fontFamily: TYPO.fontText }}>Saldo Fondo MKT</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: '#BF5AF2', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, marginTop: 2 }}>{formatMXN(fondoResumen.saldoMkt)}</div>
-              <div style={{ fontSize: 10, color: heroSubtle, marginTop: 1 }}>+{formatMXN(fondoResumen.aporteMktAnio)} · −{formatMXN(fondoResumen.gastoMktAnio)}</div>
-            </div>
-          )}
-        </div>
-      </div>
+          </Hero>
 
-      {/* Sub-header meta: marca + actualización + sync */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '0 4px', marginBottom: 12, fontSize: 11.5, color: theme.textMuted,
-      }}>
-        <div>
-          <span style={{ color: c.color, fontWeight: 600 }}>{c.marca}</span>
-          {' · '}Promociones · Marketing{clienteKey !== 'pcel' && ' · Pagos Fijos'} · Variables
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>Actualizado: {formatFecha(c.cartera?.ultimaActualizacion || '2026-04-07')}{c.cartera?.horaActualizacion ? ` · ${c.cartera.horaActualizacion} hrs` : ''}</span>
-          {c.cartera?.tipoCambio && <span>· TC ${c.cartera.tipoCambio.toFixed(2)}</span>}
-          <span style={{
-            padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700,
-            background: DB_CONFIGURED ? `${theme.green}22` : `${theme.orange}22`,
-            color: DB_CONFIGURED ? theme.green : theme.orange,
-          }}>
-            {DB_CONFIGURED ? '✓ Sincronizado' : '⚠ Solo lectura'}
-          </span>
-        </div>
-      </div>
-
-      {/* Banner de configuración pendiente */}
-      {!DB_CONFIGURED && (
-        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 mb-6 flex items-start gap-3">
-          <span className="text-2xl">⚙️</span>
-          <div>
-            <p className="font-semibold text-orange-800 mb-1">Configuración requerida para guardar cambios</p>
-            <p className="text-sm text-orange-700 mb-2">
-              Para que todos los cambios se guarden y sean visibles para el equipo, configura las variables en Vercel y la tabla en Supabase.
-            </p>
-            <code className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded block w-fit">
-              VITE_SUPABASE_URL · VITE_SUPABASE_ANON_KEY
-            </code>
-          </div>
-        </div>
-      )}
-
-      {/* Loading */}
-      {loading && (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mr-3"></div>
-          <span className="text-gray-500">Cargando datos...</span>
-        </div>
-      )}
-
-      {!loading && (
-        <>
-          {/* Desglose por categoría — chips debajo del hero */}
-          {totalAnio > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 4px', marginBottom: 12 }}>
-              {Object.entries(CATEGORIA_META)
-                .filter(([k, meta]) => !meta.soloPara || meta.soloPara.includes(clienteKey))
-                .map(([k, meta]) => ({ k, meta, total: registros.filter(r => r.categoria === k).reduce((s, r) => s + (r.monto || 0), 0) }))
-                .filter(x => x.total > 0)
-                .sort((a, b) => b.total - a.total)
-                .map(({ k, meta, total }) => (
-                  <span key={k} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '3px 9px', borderRadius: 999,
-                    background: meta.color + '22', color: meta.color,
-                    fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.005em',
-                    fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: meta.color }} />
-                    <strong style={{ fontWeight: 600 }}>{meta.label}</strong> {formatMXN(total)}
-                  </span>
-                ))}
+          {/* 2 · KPIs del mes */}
+          {kpis.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+              {kpis.map((k, i) => <KpiCard key={i} {...k} />)}
             </div>
           )}
 
-          {/* Calendario mensual de pagos 2026 */}
-          <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                <CalendarDays className="w-4 h-4 text-gray-600" />
-                Calendario de Pagos 2026
-              </h3>
-              <span className="text-xs text-gray-400">Agrupado por fecha de pago real (o compromiso si está pendiente)</span>
-            </div>
-            {(() => {
-              const regs = registros.filter(r => r.cliente === clienteKey);
-              // Agrupar por mes: fecha_pago_real si existe, si no fecha_compromiso
-              const porMes = {};
-              for (let m = 1; m <= 12; m++) {
-                porMes[m] = { total: 0, pagado: 0, pendiente: 0, porCat: {}, nPend: 0, nPag: 0, vencidos: 0 };
-              }
-              const hoy = new Date();
-              regs.forEach(r => {
-                const fechaStr = r.fecha_pago_real || r.fecha_compromiso;
-                if (!fechaStr) return;
-                const parts = String(fechaStr).slice(0, 10).split("-").map(n => parseInt(n, 10));
-                if (parts.length !== 3 || parts[0] !== 2026) return;
-                const m = parts[1];
-                if (m < 1 || m > 12) return;
-                const monto = Number(r.monto) || 0;
-                const isPagado = !!r.fecha_pago_real || r.estatus === "pagado";
-                porMes[m].total += monto;
-                if (isPagado) { porMes[m].pagado += monto; porMes[m].nPag++; }
-                else {
-                  porMes[m].pendiente += monto;
-                  porMes[m].nPend++;
-                  // Vencido: fecha de compromiso pasada y no pagado
-                  if (r.fecha_compromiso) {
-                    const pp = String(r.fecha_compromiso).slice(0, 10).split("-").map(n => parseInt(n, 10));
-                    if (pp.length === 3) {
-                      const fc = new Date(pp[0], pp[1] - 1, pp[2]);
-                      if (fc < hoy) porMes[m].vencidos++;
-                    }
-                  }
-                }
-                const cat = r.categoria || "otros";
-                porMes[m].porCat[cat] = (porMes[m].porCat[cat] || 0) + monto;
-              });
-              return React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 } },
-                [1,2,3,4,5,6,7,8,9,10,11,12].map(m => {
-                  const data = porMes[m];
-                  const hasData = data.total > 0;
-                  const pct = data.total > 0 ? (data.pagado / data.total * 100) : 0;
-                  const MESES_FULL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-                  return React.createElement("div", {
-                    key: m,
-                    style: {
-                      background: data.vencidos > 0 ? "#FEF2F2" : "#FAFBFC",
-                      border: data.vencidos > 0 ? "2px solid #FCA5A5" : "1px solid #E2E8F0",
-                      borderRadius: 10, padding: "12px 14px",
-                      display: "flex", flexDirection: "column", gap: 8,
-                      opacity: hasData ? 1 : 0.5,
-                    }
-                  },
-                    // Header mes
-                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-                      React.createElement("span", { style: { fontWeight: 700, color: "#1E293B", fontSize: 14 } }, MESES_FULL[m - 1]),
-                      data.vencidos > 0 && React.createElement("span", { style: { fontSize: 10, background: "#FEE2E2", color: "#991B1B", padding: "2px 8px", borderRadius: 10, fontWeight: 700 } },
-                        "⚠ " + data.vencidos + " venc" + (data.vencidos === 1 ? "ido" : "idos")
-                      )
-                    ),
-                    // Totales
-                    hasData ? React.createElement(React.Fragment, null,
-                      React.createElement("div", null,
-                        React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", textTransform: "uppercase", fontWeight: 600 } }, "Compromiso"),
-                        React.createElement("div", { style: { fontSize: 16, fontWeight: 700, color: "#1E293B" } }, formatMXN(data.total))
-                      ),
-                      // Progreso
-                      React.createElement("div", null,
-                        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 } },
-                          React.createElement("span", { style: { color: "#10B981", fontWeight: 600 } }, "Pagado " + formatMXN(data.pagado)),
-                          React.createElement("span", { style: { color: "#475569", fontWeight: 600 } }, pct.toFixed(0) + "%")
-                        ),
-                        React.createElement("div", { style: { height: 6, background: "#E2E8F0", borderRadius: 3, overflow: "hidden" } },
-                          React.createElement("div", { style: { height: "100%", width: Math.min(pct, 100) + "%", background: pct >= 100 ? "#10B981" : pct >= 50 ? "#3B82F6" : "#F59E0B", borderRadius: 3, transition: "width .5s" } })
-                        )
-                      ),
-                      // Desglose por categoría
-                      Object.keys(data.porCat).length > 0 && React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4 } },
-                        Object.entries(data.porCat).map(([cat, monto]) => {
-                          const meta = CATEGORIA_META[cat] || { label: cat, color: "#64748B" };
-                          return React.createElement("span", {
-                            key: cat,
-                            title: meta.label + ": " + formatMXN(monto),
-                            style: { fontSize: 10, padding: "1px 6px", borderRadius: 6, background: meta.color + "22", color: meta.color, fontWeight: 600 }
-                          }, meta.label + " " + formatMXN(monto));
-                        })
-                      ),
-                      // Contadores
-                      React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", display: "flex", gap: 10, paddingTop: 4, borderTop: "1px dashed #E2E8F0" } },
-                        React.createElement("span", null, "✓ " + data.nPag + " pagados"),
-                        React.createElement("span", null, "○ " + data.nPend + " pendientes")
-                      )
-                    ) : React.createElement("div", { style: { fontSize: 11, color: "#CBD5E1", fontStyle: "italic" } }, "Sin pagos")
-                  );
-                })
-              );
-            })()}
-          </div>
-
-          {/* Monthly summary table */}
-          {(() => {
-            const mb = monthlyBreakdown();
-            if (mb.length === 0) return null;
-            return (
-              <div className="bg-white rounded-2xl shadow-sm p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <button
-                    onClick={() => setResumenMensualAbierto(v => !v)}
-                    className="flex items-center gap-2 text-left flex-1 hover:opacity-80 transition-opacity"
-                    title={resumenMensualAbierto ? "Colapsar" : "Expandir"}
-                  >
-                    <CardHeader titulo="Resumen General por Mes y Categoría" icon={CalendarDays} />
-                    <span className="text-gray-400 text-sm ml-1">{resumenMensualAbierto ? "▾" : "▸"}</span>
-                    <span className="text-xs text-gray-400 ml-2">({mb.length} meses)</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      // preselecciona el mes anterior como default útil
-                      const hoy = new Date();
-                      const prev = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-                      const def = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
-                      setExportMeses(mb.some(m => m.mes === def) ? [def] : []);
-                      setExportModalOpen(true);
-                    }}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5"
-                    title="Exporta a Excel los pagos por pagar de uno o varios meses"
-                  >
-                    📥 Exportar Excel
-                  </button>
-                  <span style={{ marginLeft: 8 }}>
-                    <ExportMenu
-                      titulo="Pagos"
-                      subtitulo={`${cliente?.nombre || clienteKey || ''} · resumen por mes y categoría`}
-                      pdf={{ ref: rootRef }}
-                      excel={() => ({
-                        titulo: `Pagos ${cliente?.nombre || clienteKey || ''} · Resumen por mes y categoría`,
-                        archivo: `Pagos ${cliente?.nombre || clienteKey || ''} resumen mensual`,
-                        hojas: [{
-                          nombre: 'Resumen mensual',
-                          columnas: [
-                            { label: 'Mes', key: 'mesLabel', tipo: 'texto', ancho: 12 },
-                            { label: 'Promociones', key: 'promociones', tipo: 'moneda' },
-                            { label: 'Marketing', key: 'marketing', tipo: 'moneda' },
-                            { label: 'Pagos Fijos', key: 'pagosFijos', tipo: 'moneda' },
-                            { label: 'P. Variables', key: 'pagosVariables', tipo: 'moneda' },
-                            { label: 'Rebate', key: 'rebate', tipo: 'moneda' },
-                            { label: 'Total', key: 'total', tipo: 'moneda' },
-                          ],
-                          filas: mb.map((m) => { const [yr, mo] = m.mes.split('-'); return { mesLabel: `${MESES_CORTOS[parseInt(mo, 10) - 1]} ${yr}`, promociones: m.promociones || null, marketing: m.marketing || null, pagosFijos: m.pagosFijos || null, pagosVariables: m.pagosVariables || null, rebate: m.rebate || null, total: m.total || 0 }; }),
-                          totales: { mesLabel: 'TOTAL', promociones: mb.reduce((s, m) => s + (m.promociones || 0), 0), marketing: mb.reduce((s, m) => s + (m.marketing || 0), 0), pagosFijos: mb.reduce((s, m) => s + (m.pagosFijos || 0), 0), pagosVariables: mb.reduce((s, m) => s + (m.pagosVariables || 0), 0), rebate: mb.reduce((s, m) => s + (m.rebate || 0), 0), total: mb.reduce((s, m) => s + (m.total || 0), 0) },
-                        }],
-                      })}
-                    />
-                  </span>
-                </div>
-                {resumenMensualAbierto && (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100">
-                        <th className="text-left text-xs text-gray-400 uppercase pb-3 pr-4">Mes</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.promociones.color }}>Promociones</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.marketing.color }}>Marketing</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.pagosFijos.color }}>Pagos Fijos</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.pagosVariables.color }}>P. Variables</th>
-                        <th className="text-right text-xs pb-3 pr-4" style={{ color: CATEGORIA_META.rebate.color }}>Rebate</th>
-                        <th className="text-right text-xs text-gray-700 uppercase font-bold pb-3">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mb.map(m => {
-                        const [yr, mo] = m.mes.split("-");
-                        return (<React.Fragment key={m.mes}>
-                          <tr className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setExpandedMonth(expandedMonth === m.mes ? null : m.mes)}>
-                            <td className="py-2.5 pr-4 font-semibold text-gray-700">{MESES_CORTOS[parseInt(mo, 10) - 1]} {yr}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.promociones    > 0 ? formatMXN(m.promociones)    : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.marketing      > 0 ? formatMXN(m.marketing)      : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosFijos    > 0 ? formatMXN(m.pagosFijos)    : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.pagosVariables> 0 ? formatMXN(m.pagosVariables): <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 pr-4 text-right text-gray-600">{m.rebate         > 0 ? formatMXN(m.rebate)         : <span className="text-gray-300">—</span>}</td>
-                            <td className="py-2.5 text-right font-bold text-gray-800">{formatMXN(m.total)}</td>
-                          </tr>
-                          {expandedMonth === m.mes && (
-                            <tr>
-                              <td colSpan="8" className="p-0">
-                                <div className="bg-blue-50 px-6 py-3">
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="text-gray-500">
-                                        <th className="text-left pb-1 font-medium">Concepto</th>
-                                        <th className="text-left pb-1 font-medium">Categor\u00eda</th>
-                                        <th className="text-right pb-1 font-medium">Monto</th>
-                                        <th className="text-left pb-1 font-medium">Estatus</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {m.records.map((r, ri) => (
-                                        <tr key={ri} className="border-t border-blue-100">
-                                          <td className="py-1 text-gray-700">{r.concepto}</td>
-                                          <td className="py-1 text-gray-600">{CATEGORIA_META[r.categoria]?.label || r.categoria}</td>
-                                          <td className="py-1 text-right text-gray-700">{formatMXN(r.monto || 0)}</td>
-                                          <td className="py-1"><span className={`px-2 py-0.5 rounded-full text-xs ${r.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{r.estatus}</span></td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>);
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t-2 border-gray-200">
-                        <td className="pt-3 font-bold text-gray-700 text-sm">TOTAL ANUAL</td>
-                        {["promociones","marketing","pagosFijos","pagosVariables","rebate"].map(cat => (
-                          <td key={cat} className="pt-3 pr-4 text-right font-bold text-gray-700">
-                            {formatMXN(registros.filter(r => r.categoria === cat).reduce((s, r) => s + (r.monto || 0), 0))}
-                          </td>
-                        ))}
-                        <td className="pt-3 text-right font-bold text-blue-700">{formatMXN(totalAnio)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-                )}
-                {!resumenMensualAbierto && (
-                  <div className="text-xs text-gray-500 italic py-2">
-                    Click en el título para ver el desglose mensual · Total anual: <strong className="text-blue-700">{formatMXN(totalAnio)}</strong>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Modal para exportar Excel — selección múltiple de meses */}
-          {exportModalOpen && (() => {
-            const mbList = monthlyBreakdown();
-            const porPagarMes = (mesKey) => registros.filter(r =>
-              r.fecha_compromiso && String(r.fecha_compromiso).slice(0, 7) === mesKey
-              && ["pendiente","en_proceso","vencido"].includes(r.estatus)
-            );
-            const toggleMes = (k) => setExportMeses(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]);
-            const selectedSum = exportMeses.reduce((s, k) => s + porPagarMes(k).reduce((a, r) => a + (Number(r.monto) || 0), 0), 0);
-            const selectedCount = exportMeses.reduce((s, k) => s + porPagarMes(k).length, 0);
-            // Todos los meses con al menos 1 pago por pagar
-            const mesesConPendientes = mbList.filter(m => porPagarMes(m.mes).length > 0);
-            return (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                    <h3 className="font-bold text-gray-800">Exportar pagos por pagar</h3>
-                    <button onClick={() => setExportModalOpen(false)} className="p-1 rounded hover:bg-gray-100 text-gray-500 text-lg">✕</button>
-                  </div>
-                  <div className="p-5 space-y-4 overflow-y-auto">
-                    <p className="text-xs text-gray-500">
-                      Selecciona uno o varios meses. El Excel incluirá los pagos <strong>pendientes / en proceso / vencidos</strong> de
-                      todos los meses elegidos, agrupados en una sola hoja con subtotales.
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-gray-600 uppercase">Meses</label>
-                      <div className="flex gap-2">
-                        <button type="button"
-                                onClick={() => setExportMeses(mesesConPendientes.map(m => m.mes))}
-                                className="text-[11px] text-blue-600 hover:underline">
-                          Seleccionar todos
-                        </button>
-                        <button type="button"
-                                onClick={() => setExportMeses([])}
-                                className="text-[11px] text-gray-500 hover:underline">
-                          Limpiar
-                        </button>
-                      </div>
-                    </div>
-                    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-64 overflow-y-auto">
-                      {mbList.length === 0 && (
-                        <div className="px-3 py-6 text-center text-xs text-gray-400 italic">
-                          No hay meses con registros de pago
-                        </div>
-                      )}
-                      {mbList.map(m => {
-                        const [a, mm] = m.mes.split("-");
-                        const cnt = porPagarMes(m.mes).length;
-                        const checked = exportMeses.includes(m.mes);
-                        const disabled = cnt === 0;
-                        return (
-                          <label key={m.mes}
-                                 className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${disabled ? "opacity-50 cursor-not-allowed" : checked ? "bg-emerald-50" : "hover:bg-gray-50"}`}
-                                 title={disabled ? "Sin pagos por pagar en este mes" : ""}>
-                            <div className="flex items-center gap-2">
-                              <input type="checkbox"
-                                     checked={checked}
-                                     disabled={disabled}
-                                     onChange={() => !disabled && toggleMes(m.mes)}
-                                     className="rounded" />
-                              <span className="text-sm text-gray-700">
-                                {MESES_LARGOS_ARR[Number(mm) - 1]} {a}
-                              </span>
-                            </div>
-                            <span className={`text-xs ${cnt > 0 ? "text-gray-500" : "text-gray-300"}`}>
-                              {cnt} pago{cnt !== 1 ? "s" : ""}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                    {exportMeses.length > 0 && (
-                      <div className="rounded-lg p-3 text-sm bg-emerald-50 text-emerald-800">
-                        {selectedCount > 0
-                          ? <>Se exportarán <strong>{selectedCount} pagos</strong> de <strong>{exportMeses.length} mes{exportMeses.length !== 1 ? "es" : ""}</strong> por un total de <strong>{formatMXN(selectedSum)}</strong>.</>
-                          : <>Los meses seleccionados no tienen pagos por pagar.</>
-                        }
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-100 bg-gray-50">
-                    <button onClick={() => setExportModalOpen(false)}
-                            className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold border border-gray-300">
-                      Cancelar
-                    </button>
-                    <button
-                      onClick={exportarMeses}
-                      disabled={exportMeses.length === 0 || selectedCount === 0}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-semibold"
-                    >
-                      📥 Descargar Excel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* ═══════════════ REGULAR TABLE (non-fijos) ═══════════════ */}
-          {showRegularTable && (
-            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-
-              {/* Nav pill de categorías + acciones */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-                <div style={{
-                  display: 'inline-flex', gap: 2, padding: 4,
-                  background: theme.surface, border: `1px solid ${theme.border}`,
-                  borderRadius: 999, flexWrap: 'wrap',
-                }}>
-                  <button onClick={() => setCatActiva('todas')}
-                    style={{
-                      padding: '6px 12px', borderRadius: 999, border: 'none',
-                      background: catActiva === 'todas' ? theme.text : 'transparent',
-                      color: catActiva === 'todas' ? theme.bg : theme.textMuted,
-                      fontFamily: TYPO.fontText, fontSize: 12, fontWeight: catActiva === 'todas' ? 600 : 500,
-                      cursor: 'pointer', letterSpacing: '-0.005em',
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                    }}>
-                    Todas
-                    <span style={{
-                      fontFamily: TYPO.fontDisplay, fontSize: 10, padding: '0 6px', borderRadius: 4, fontWeight: 700,
-                      background: catActiva === 'todas' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.05)',
-                      color: catActiva === 'todas' ? theme.bg : theme.textMuted,
-                    }}>{registros.length}</span>
-                  </button>
-                  {Object.entries(CATEGORIA_META)
-                    .filter(([key, meta]) => !(clienteKey === 'pcel' && key === 'pagosFijos'))
-                    .filter(([key, meta]) => !meta.soloPara || meta.soloPara.includes(clienteKey))
-                    .map(([key, meta]) => {
-                      const on = catActiva === key;
-                      const count = registros.filter(r => r.categoria === key).length;
-                      return (
-                        <button key={key} onClick={() => setCatActiva(on ? 'todas' : key)}
-                          style={{
-                            padding: '6px 12px', borderRadius: 999, border: 'none',
-                            background: on ? meta.color : 'transparent',
-                            color: on ? '#fff' : theme.textMuted,
-                            fontFamily: TYPO.fontText, fontSize: 12, fontWeight: on ? 600 : 500,
-                            cursor: 'pointer', letterSpacing: '-0.005em',
-                            display: 'inline-flex', alignItems: 'center', gap: 6,
-                          }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: on ? '#fff' : meta.color }} />
-                          {meta.label}
-                          <span style={{
-                            fontFamily: TYPO.fontDisplay, fontSize: 10, padding: '0 6px', borderRadius: 4, fontWeight: 700,
-                            background: on ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.05)',
-                            color: on ? '#fff' : theme.textMuted,
-                          }}>{count}</span>
-                        </button>
-                      );
-                    })}
-                </div>
-                <span style={{ marginLeft: 'auto', fontSize: 11, color: theme.textMuted, fontFamily: TYPO.fontText }}>
-                  {filtered.length} registro{filtered.length !== 1 ? 's' : ''}
-                </span>
-                {DB_CONFIGURED && canEdit && catActiva === 'promociones' && (
-                  <NuevaPromocionButton clienteKey={clienteKey} onCreated={() => setPromosVer(v => v + 1)} />
-                )}
-                {DB_CONFIGURED && canEdit && catActiva !== 'promociones' && (
-                  <button onClick={() => setShowAdd(!showAdd)}
-                    style={{
-                      height: 30, padding: '0 14px', borderRadius: 999,
-                      background: theme.accent, color: '#fff', border: 'none',
-                      fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 600,
-                      cursor: 'pointer', letterSpacing: '-0.005em',
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                    }}>
-                    ＋ Agregar
-                  </button>
-                )}
-                {!canEdit && (
-                  <span style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>🔒 Modo lectura</span>
-                )}
-              </div>
-
-              {/* Lista de promociones cuando estás en la categoría */}
-              {catActiva === "promociones" && (
-                <div className="mb-5">
-                  <ListaPromociones clienteKey={clienteKey} refreshKey={promosVer} />
-                </div>
-              )}
-
-              {/* Add form */}
-              {showAdd && DB_CONFIGURED && (
-                <div className="mb-5 p-4 bg-blue-50 rounded-xl border border-blue-200">
-                  <p className="text-sm font-semibold text-blue-800 mb-3">Nuevo registro</p>
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {[
-                      { label: "Categoría *", key: "categoria", type: "select-cat" },
-                      { label: "Concepto *",  key: "concepto",  type: "text" },
-                      { label: "Monto (MXN)", key: "monto",     type: "number" },
-                      { label: "Fuente de pago", key: "fuente", type: "select-fuente" },
-                      ...(newRow.categoria === "marketing" ? [{ label: "Tipo de actividad", key: "tipo_actividad", type: "select-tipo-act" }] : []),
-                      { label: "Estatus",     key: "estatus",   type: "select-est" },
-                      { label: "F. Compromiso", key: "fecha_compromiso", type: "date" },
-                      { label: "F. Pago Real",  key: "fecha_pago_real",  type: "date" },
-                      { label: "Responsable",   key: "responsable",      type: "text" },
-                      { label: "Folio (del cliente)", key: "folio", type: "text" },
-                      { label: "Notas",         key: "notas",            type: "text" },
-                    ].map(({ label, key, type }) => (
-                      <div key={key}>
-                        <label className="text-xs text-gray-500 block mb-1">{label}</label>
-                        {type === "select-cat" ? (
-                          <select value={newRow.categoria} onChange={e => setNewRow(p => ({ ...p, categoria: e.target.value }))}
-                            className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
-                            {Object.entries(CATEGORIA_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                          </select>
-                        ) : type === "select-est" ? (
-                          <select value={newRow.estatus} onChange={e => setNewRow(p => ({ ...p, estatus: e.target.value }))}
-                            className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
-                            {ESTATUS_OPT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                          </select>
-                        ) : type === "select-fuente" ? (
-                          <select value={newRow.fuente} onChange={e => setNewRow(p => ({ ...p, fuente: e.target.value }))}
-                            className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
-                            <option value="">— Sin asignar —</option>
-                            {/* Fondo MKT solo aplica para PCEL (Digitalife no tiene fondo) */}
-                            {clienteKey === "pcel" && <option value="fondo_mkt">Fondo MKT</option>}
-                            <option value="vendor">Vendor (convenio cliente)</option>
-                            <option value="empresa">Empresa (Revko)</option>
-                          </select>
-                        ) : type === "select-tipo-act" ? (
-                          <select value={newRow.tipo_actividad || ""} onChange={e => setNewRow(p => ({ ...p, tipo_actividad: e.target.value }))}
-                            className="w-full border rounded-lg px-2 py-1.5 text-sm bg-white">
-                            <option value="">— Sin tipo —</option>
-                            {TIPOS_ACTIVIDAD_MKT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                          </select>
-                        ) : (
-                          <input type={type} value={newRow[key] || ""} placeholder={key === "monto" ? "0" : key === "folio" ? "Folio del cliente" : ""}
-                            onChange={e => setNewRow(p => ({ ...p, [key]: e.target.value }))}
-                            className="w-full border rounded-lg px-2 py-1.5 text-sm" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Split de fondos — solo Dicotech */}
-                  {clienteKey === "dicotech" && (
-                    <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-purple-800 uppercase tracking-wide">💰 ¿De qué fondo sale el pago?</span>
-                        <span className="text-[10px] text-purple-600">Opcional — déjalo en blanco si no toca fondos</span>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                          <label className="text-[10px] text-emerald-700 font-semibold uppercase">Desde Fondo MKT Cliente</label>
-                          <input
-                            type="number" step="0.01"
-                            value={newRow.monto_fondo_mkt_cliente}
-                            onChange={e => setNewRow(p => ({ ...p, monto_fondo_mkt_cliente: e.target.value }))}
-                            placeholder="0.00"
-                            className="w-full border border-emerald-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
-                          <span className="text-[10px] text-emerald-600">Saldo actual: {formatMXN(dicoFondoTablaMensual?.saldoCliActual || 0)}</span>
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-purple-700 font-semibold uppercase">Desde Fondo Interno</label>
-                          <input
-                            type="number" step="0.01"
-                            value={newRow.monto_fondo_interno}
-                            onChange={e => setNewRow(p => ({ ...p, monto_fondo_interno: e.target.value }))}
-                            placeholder="0.00"
-                            className="w-full border border-purple-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
-                          <span className="text-[10px] text-purple-600">Saldo actual: {formatMXN(dicoFondoTablaMensual?.saldoIntActual || 0)}</span>
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-gray-600 font-semibold uppercase">Resto (Acteck directo)</label>
-                          <div className="px-2 py-1.5 border border-gray-200 rounded-lg bg-gray-50 text-sm">
-                            {(() => {
-                              const t = parseFloat(newRow.monto) || 0;
-                              const fc = parseFloat(newRow.monto_fondo_mkt_cliente) || 0;
-                              const fi = parseFloat(newRow.monto_fondo_interno) || 0;
-                              const resto = t - fc - fi;
-                              const exc = resto < 0;
-                              return <span className={exc ? "text-red-600 font-bold" : "text-gray-700"}>{formatMXN(Math.max(0, resto))}{exc && " (split excede monto)"}</span>;
-                            })()}
-                          </div>
-                          <span className="text-[10px] text-gray-500">Lo que paga la empresa sin tocar fondos</span>
-                        </div>
-                      </div>
-                      <div className="mt-2 flex gap-2 flex-wrap text-[10px]">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const t = parseFloat(newRow.monto) || 0;
-                            const saldoCli = dicoFondoTablaMensual?.saldoCliActual || 0;
-                            const tomaCli = Math.min(t, Math.max(0, saldoCli));
-                            const tomaInt = Math.max(0, t - tomaCli);
-                            setNewRow(p => ({ ...p, monto_fondo_mkt_cliente: tomaCli.toFixed(2), monto_fondo_interno: tomaInt.toFixed(2) }));
-                          }}
-                          className="px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700">
-                          Auto split (cliente → interno)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNewRow(p => ({ ...p, monto_fondo_mkt_cliente: (parseFloat(p.monto) || 0).toFixed(2), monto_fondo_interno: "" }))}
-                          className="px-2 py-1 rounded bg-emerald-500 text-white hover:bg-emerald-600">
-                          Todo del cliente
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNewRow(p => ({ ...p, monto_fondo_mkt_cliente: "", monto_fondo_interno: (parseFloat(p.monto) || 0).toFixed(2) }))}
-                          className="px-2 py-1 rounded bg-purple-500 text-white hover:bg-purple-600">
-                          Todo del interno
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNewRow(p => ({ ...p, monto_fondo_mkt_cliente: "", monto_fondo_interno: "" }))}
-                          className="px-2 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">
-                          Limpiar split
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex gap-2 mt-4">
-                    <button onClick={handleAdd} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors">
-                      Guardar registro
-                    </button>
-                    <button onClick={() => setShowAdd(false)} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ═══════════ PAGOS FIJOS VIEW ═══════════ */}
-              {catActiva === "pagosFijos" && (
-                <div>
-                  {DB_CONFIGURED && (
-                    <div className="mb-5">
-                      {!showAddFijo ? (
-                        <button onClick={() => setShowAddFijo(true)}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors">
-                          + Nuevo Pago Fijo
-                        </button>
-                      ) : (
-                        <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200">
-                          <p className="text-sm font-semibold text-indigo-800 mb-3">Agregar Pago Fijo</p>
-                          <div className="mb-3">
-                            <label className="text-xs text-gray-500 block mb-1">¿A qué concepto?</label>
-                            <select value={newFijo.existente} onChange={e => {
-                              const v = e.target.value;
-                              setNewFijo(p => ({...p, existente: v, concepto: v === "__nuevo__" ? "" : v}));
-                            }} className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white">
-                              <option value="">— Selecciona —</option>
-                              <option value="__nuevo__">+ Crear nuevo concepto</option>
-                              {Object.keys(fijoGroups).map(k => <option key={k} value={k}>{k}</option>)}
-                            </select>
-                          </div>
-                          {(newFijo.existente === "__nuevo__") && (
-                            <div className="grid grid-cols-3 gap-3 mb-3">
-                              <div>
-                                <label className="text-xs text-gray-500 block mb-1">Concepto *</label>
-                                <input type="text" value={newFijo.concepto} onChange={e => setNewFijo(p => ({...p, concepto: e.target.value}))}
-                                  placeholder="Ej: Renta oficina" className="w-full border rounded-lg px-3 py-1.5 text-sm" />
-                              </div>
-                              <div>
-                                <label className="text-xs text-gray-500 block mb-1">Monto mensual (MXN)</label>
-                                <input type="number" value={newFijo.monto} onChange={e => setNewFijo(p => ({...p, monto: e.target.value}))}
-                                  placeholder="0" className="w-full border rounded-lg px-3 py-1.5 text-sm" />
-                              </div>
-                              <div>
-                                <label className="text-xs text-gray-500 block mb-1">Responsable</label>
-                                <input type="text" value={newFijo.responsable} onChange={e => setNewFijo(p => ({...p, responsable: e.target.value}))}
-                                  placeholder="Responsable" className="w-full border rounded-lg px-3 py-1.5 text-sm" />
-                              </div>
-                            </div>
-                          )}
-                          {newFijo.existente && (
-                            <div className="mb-3">
-                              <label className="text-xs text-gray-500 block mb-2">Selecciona los meses</label>
-                              <div className="flex flex-wrap gap-2">
-                                <button type="button" onClick={() => {
-                                  const allKeys = MESES_ARR.map(m => m.key);
-                                  setNewFijo(p => ({...p, meses: p.meses.length === 12 ? [] : allKeys}));
-                                }} className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${newFijo.meses.length === 12 ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300 hover:border-indigo-400"}`}>
-                                  Todos
-                                </button>
-                                {MESES_ARR.map(m => {
-                                  const sel = newFijo.meses.includes(m.key);
-                                  const existingGroup = newFijo.existente !== "__nuevo__" && fijoGroups[newFijo.existente];
-                                  const alreadyExists = existingGroup ? existingGroup.some(r => (r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : null)) === m.key) : false;
-                                  return (
-                                    <button key={m.key} type="button" disabled={alreadyExists}
-                                      onClick={() => setNewFijo(p => ({...p, meses: sel ? p.meses.filter(x => x !== m.key) : [...p.meses, m.key]}))}
-                                      className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${alreadyExists ? "bg-gray-100 text-gray-300 border-gray-200 cursor-not-allowed" : sel ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300 hover:border-indigo-400"}`}>
-                                      {m.short}{alreadyExists ? " ✓" : ""}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                          <div className="flex gap-2 mt-3">
-                            <button onClick={handleAddFijo} disabled={!newFijo.existente || (newFijo.existente === "__nuevo__" && !newFijo.concepto.trim()) || newFijo.meses.length === 0}
-                              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${(!newFijo.existente || (newFijo.existente === "__nuevo__" && !newFijo.concepto.trim()) || newFijo.meses.length === 0) ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-indigo-600 text-white hover:bg-indigo-700"}`}>
-                              Crear {newFijo.meses.length > 0 ? `${newFijo.meses.length} mes(es)` : "Pago Fijo"}
-                            </button>
-                            <button onClick={() => { setShowAddFijo(false); setNewFijo({ concepto: "", monto: "", responsable: "", meses: [], existente: "" }); }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">Cancelar</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {Object.keys(fijoGroups).length === 0 ? (
-                    <div className="text-center py-10 text-gray-400">
-                      <p className="mb-2"><ClipboardList className="w-8 h-8 text-gray-400 mx-auto" /></p>
-                      <p className="text-sm">No hay pagos fijos registrados</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {Object.entries(fijoGroups).map(([conceptoKey, records]) => {
-                        const isExp = expandedFijos[conceptoKey];
-                        const totalAnual = records.reduce((s, r) => s + (r.monto || 0), 0);
-                        const pagadosN  = records.filter(r => r.estatus === "pagado").length;
-                        const porPagar  = records.filter(r => r.estatus === "pendiente" && !esMesFuturo(r.fecha_compromiso)).length;
-                        const futurosN  = records.filter(r => r.estatus === "pendiente" && esMesFuturo(r.fecha_compromiso)).length;
-                        const vencidosN = records.filter(r => r.estatus === "vencido").length;
-                        const inactivosN = records.filter(r => r.estatus === "no_aplica" || r.estatus === "cancelado").length;
-                        const montoMes = records[0] ? (records[0].monto || 0) : 0;
-                        // Ordenar por mes_fijo (independiente de fecha_compromiso);
-                        // fallback a fecha_compromiso para registros legacy sin mes_fijo.
-                        const mesKeyDeFijo = (r) => r.mes_fijo
-                          ? String(r.mes_fijo).padStart(2, "0")
-                          : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "99");
-                        const sorted = [...records].sort((a, b) => mesKeyDeFijo(a).localeCompare(mesKeyDeFijo(b)));
-
-                        // Clasificar filas
-                        const filasActivas   = sorted.filter(r =>
-                          (r.estatus === "pendiente" && !esMesFuturo(r.fecha_compromiso))
-                          || r.estatus === "en_proceso"
-                          || r.estatus === "vencido"
-                        );
-                        const filasPagados   = sorted.filter(r => r.estatus === "pagado");
-                        const filasFuturos   = sorted.filter(r => r.estatus === "pendiente" && esMesFuturo(r.fecha_compromiso));
-                        const filasInactivos = sorted.filter(r => r.estatus === "no_aplica" || r.estatus === "cancelado");
-                        const keyP  = `${conceptoKey}::pagados`;
-                        const keyF  = `${conceptoKey}::futuros`;
-                        const keyI  = `${conceptoKey}::inactivos`;
-                        return (
-                          <div key={conceptoKey} className="border border-gray-200 rounded-xl overflow-hidden">
-                            <div className="flex items-center justify-between px-5 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
-                              onClick={() => toggleFijo(conceptoKey)}>
-                              <div className="flex items-center gap-3">
-                                <span className="text-lg">{isExp ? "▾" : "▸"}</span>
-                                <div>
-                                  <p className="font-semibold text-gray-800">{conceptoKey}</p>
-                                  <p className="text-xs text-gray-500">
-                                    {formatMXN(montoMes)}/mes · {records.length} meses ·{" "}
-                                    <span className="text-emerald-600 font-semibold">{pagadosN} pagados</span>
-                                    {porPagar > 0 && <>{" · "}<span className="text-amber-600 font-semibold">{porPagar} por pagar</span></>}
-                                    {vencidosN > 0 && <>{" · "}<span className="text-red-600 font-semibold">{vencidosN} vencidos</span></>}
-                                    {futurosN > 0 && <>{" · "}<span className="text-gray-400">{futurosN} futuros</span></>}
-                                    {inactivosN > 0 && <>{" · "}<span className="text-gray-400">{inactivosN} no aplica</span></>}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <p className="font-bold text-gray-800">{formatMXN(totalAnual)}</p>
-                                <p className="text-xs text-gray-400">Total anual</p>
-                              </div>
-                            </div>
-                            {isExp && (
-                              <div className="px-4 py-3 bg-white">
-                                <table className="w-full text-sm">
-                                  <thead>
-                                    <tr className="border-b border-gray-100">
-                                      <th className="text-left text-xs text-gray-400 uppercase pb-2 pr-3">Mes</th>
-                                      <th className="text-right text-xs text-gray-400 uppercase pb-2 pr-3">Monto</th>
-                                      <th className="text-center text-xs text-gray-400 uppercase pb-2 pr-3">Estatus</th>
-                                      <th className="text-left text-xs text-gray-400 uppercase pb-2 pr-3">F. Compromiso</th>
-                                      <th className="text-left text-xs text-gray-400 uppercase pb-2 pr-3">F. Pago Real</th>
-                                      <th className="text-left text-xs text-gray-400 uppercase pb-2 pr-3">Folio</th>
-                                      {canEdit && <th className="text-center text-xs text-gray-400 uppercase pb-2 w-10" title="Marca/desmarca como pagado con la fecha de hoy">Pagado</th>}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {/* Meses faltantes del año en curso (placeholder con botón + Crear) */}
-                                    {(() => {
-                                      if (!canEdit) return null;
-                                      const anioAct = new Date().getFullYear();
-                                      const mesKeysExistentes = new Set(sorted.map(r => r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : null)).filter(Boolean));
-                                      const faltantes = MESES_ARR.filter(m => !mesKeysExistentes.has(m.key));
-                                      if (faltantes.length === 0) return null;
-                                      const baseMontoExist = records[0]?.monto || 0;
-                                      const baseRespExist = records[0]?.responsable || null;
-                                      const crearMes = async (mKey) => {
-                                        const record = {
-                                          folio: "",
-                                          concepto: conceptoKey,
-                                          categoria: "pagosFijos",
-                                          cliente: clienteKey,
-                                          monto: baseMontoExist,
-                                          estatus: "pendiente",
-                                          fecha_compromiso: `${anioAct}-${mKey}-01`,
-                                          fecha_pago_real: null,
-                                          responsable: baseRespExist,
-                                          notas: null,
-                                          mes_fijo: Number(mKey),
-                                          anio_fijo: anioAct,
-                                        };
-                                        const { data, error } = await supabase.from("pagos").insert(record).select().single();
-                                        if (error) { flash("Error: " + error.message, "err"); return; }
-                                        setRegistros(prev => [...prev, data]);
-                                      };
-                                      return faltantes.map(m => (
-                                        <tr key={`faltante-${m.key}`} className="border-b border-gray-50 bg-gray-50/50">
-                                          <td className="py-1.5 pr-3 text-gray-400 italic">{m.full}</td>
-                                          <td className="py-1.5 pr-3 text-right text-gray-300 italic">{formatMXN(baseMontoExist)}</td>
-                                          <td className="py-1.5 pr-3 text-center">
-                                            <span className="text-[10px] text-gray-400 italic">sin registrar</span>
-                                          </td>
-                                          <td className="py-1.5 pr-3 text-gray-300 italic">—</td>
-                                          <td className="py-1.5 pr-3 text-gray-300 italic">—</td>
-                                          <td className="py-1.5">
-                                            <button onClick={() => crearMes(m.key)}
-                                                    className="text-[11px] px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold">
-                                              + Crear
-                                            </button>
-                                          </td>
-                                          {canEdit && <td></td>}
-                                        </tr>
-                                      ));
-                                    })()}
-
-                                    {/* Activas: lo que sí requiere atención */}
-                                    {filasActivas.length === 0 ? (
-                                      <tr>
-                                        <td colSpan={canEdit ? 7 : 6} className="py-4 text-center text-xs text-emerald-600 italic bg-emerald-50/40">
-                                          ✓ No hay pagos pendientes en este concepto
-                                        </td>
-                                      </tr>
-                                    ) : (
-                                      filasActivas.map((r) => {
-                                        const mk = r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??");
-                                        const mi = MESES_ARR.find(m => m.key === mk);
-                                        return (
-                                          <tr key={r.id} className="border-b border-gray-50 hover:bg-amber-50/40">
-                                            <td className="py-2 pr-3 font-medium">{mi ? mi.full : mk}</td>
-                                            <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
-                                            <td className="py-2 pr-3 text-center">{renderCell(r, "estatus", "sel-estatus")}</td>
-                                            <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
-                                            <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
-                                            <td className="py-2">{renderCell(r, "folio")}</td>
-                                            {canEdit && (
-                                              <td className="py-2 text-center">
-                                                <input type="checkbox"
-                                                  checked={r.estatus === "pagado"}
-                                                  onChange={() => togglePagado(r)}
-                                                  className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                                                  title="Marcar como pagado con la fecha de hoy" />
-                                              </td>
-                                            )}
-                                          </tr>
-                                        );
-                                      })
-                                    )}
-
-                                    {/* ═══ PAGADOS (carpeta desplegable) ═══ */}
-                                    {filasPagados.length > 0 && (
-                                      <>
-                                        <tr className="bg-emerald-50/40 hover:bg-emerald-50/70 cursor-pointer"
-                                            onClick={() => toggleFijo(keyP)}>
-                                          <td colSpan={canEdit ? 7 : 6} className="py-2 px-2 text-xs font-semibold text-emerald-700">
-                                            {expandedFijos[keyP] ? "▾" : "▸"} ✓ {filasPagados.length} pago{filasPagados.length !== 1 ? "s" : ""} completado{filasPagados.length !== 1 ? "s" : ""}
-                                            <span className="ml-2 text-emerald-600 font-normal">
-                                              ({formatMXN(filasPagados.reduce((s, r) => s + (r.monto || 0), 0))})
-                                            </span>
-                                          </td>
-                                        </tr>
-                                        {expandedFijos[keyP] && filasPagados.map((r) => {
-                                          const mk = r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??");
-                                          const mi = MESES_ARR.find(m => m.key === mk);
-                                          return (
-                                            <tr key={r.id} className="border-b border-gray-50 bg-emerald-50/20 text-gray-500">
-                                              <td className="py-2 pr-3 pl-6 font-medium">{mi ? mi.full : mk}</td>
-                                              <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
-                                              <td className="py-2 pr-3 text-center">{renderCell(r, "estatus", "sel-estatus")}</td>
-                                              <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
-                                              <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
-                                              <td className="py-2">{renderCell(r, "folio")}</td>
-                                              {canEdit && (
-                                                <td className="py-2 text-center">
-                                                  <input type="checkbox" checked
-                                                    onChange={() => togglePagado(r)}
-                                                    className="w-4 h-4 rounded border-gray-300 text-emerald-600 cursor-pointer"
-                                                    title={`Pagado el ${r.fecha_pago_real || "—"}. Click para desmarcar.`} />
-                                                </td>
-                                              )}
-                                            </tr>
-                                          );
-                                        })}
-                                      </>
-                                    )}
-
-                                    {/* ═══ FUTUROS (carpeta desplegable) ═══ */}
-                                    {filasFuturos.length > 0 && (
-                                      <>
-                                        <tr className="bg-gray-50 hover:bg-gray-100 cursor-pointer"
-                                            onClick={() => toggleFijo(keyF)}>
-                                          <td colSpan={canEdit ? 7 : 6} className="py-2 px-2 text-xs font-semibold text-gray-600">
-                                            {expandedFijos[keyF] ? "▾" : "▸"} ⏭ {filasFuturos.length} mes{filasFuturos.length !== 1 ? "es" : ""} futuro{filasFuturos.length !== 1 ? "s" : ""} (programados)
-                                          </td>
-                                        </tr>
-                                        {expandedFijos[keyF] && filasFuturos.map((r) => {
-                                          const mk = r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??");
-                                          const mi = MESES_ARR.find(m => m.key === mk);
-                                          return (
-                                            <tr key={r.id} className="border-b border-gray-50 bg-gray-50/40 text-gray-400">
-                                              <td className="py-2 pr-3 pl-6 font-medium">{mi ? mi.full : mk}</td>
-                                              <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
-                                              <td className="py-2 pr-3 text-center">
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-500 font-medium">Programado</span>
-                                              </td>
-                                              <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
-                                              <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
-                                              <td className="py-2">{renderCell(r, "folio")}</td>
-                                              {canEdit && <td></td>}
-                                            </tr>
-                                          );
-                                        })}
-                                      </>
-                                    )}
-
-                                    {/* ═══ NO APLICA / CANCELADOS (carpeta desplegable) ═══ */}
-                                    {filasInactivos.length > 0 && (
-                                      <>
-                                        <tr className="bg-gray-50 hover:bg-gray-100 cursor-pointer"
-                                            onClick={() => toggleFijo(keyI)}>
-                                          <td colSpan={canEdit ? 7 : 6} className="py-2 px-2 text-xs font-semibold text-gray-500">
-                                            {expandedFijos[keyI] ? "▾" : "▸"} ➖ {filasInactivos.length} no aplica{filasInactivos.length !== 1 ? "n" : ""} / cancelado{filasInactivos.length !== 1 ? "s" : ""}
-                                          </td>
-                                        </tr>
-                                        {expandedFijos[keyI] && filasInactivos.map((r) => {
-                                          const mk = r.mes_fijo ? String(r.mes_fijo).padStart(2,"0") : (r.fecha_compromiso ? r.fecha_compromiso.slice(5, 7) : "??");
-                                          const mi = MESES_ARR.find(m => m.key === mk);
-                                          return (
-                                            <tr key={r.id} className="border-b border-gray-50 bg-gray-50/40 text-gray-400">
-                                              <td className="py-2 pr-3 pl-6 font-medium line-through">{mi ? mi.full : mk}</td>
-                                              <td className="py-2 pr-3 text-right">{renderCell(r, "monto", "number")}</td>
-                                              <td className="py-2 pr-3 text-center">{renderCell(r, "estatus", "sel-estatus")}</td>
-                                              <td className="py-2 pr-3">{renderCell(r, "fecha_compromiso", "date")}</td>
-                                              <td className="py-2 pr-3">{renderCell(r, "fecha_pago_real", "date")}</td>
-                                              <td className="py-2">{renderCell(r, "folio")}</td>
-                                              {canEdit && <td></td>}
-                                            </tr>
-                                          );
-                                        })}
-                                      </>
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Table */}
-              {catActiva !== "pagosFijos" && (<div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 min-w-36">Concepto {DB_CONFIGURED && <span className="text-blue-300 normal-case font-normal">(click p/editar)</span>}</th>
-                      <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Categoría</th>
-                      <th className="text-right text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Monto</th>
-                      <th className="text-center text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Estatus</th>
-                      <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">F. Compromiso</th>
-                      <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">F. Pago Real</th>
-                      <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Responsable</th>
-                      <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3 pr-3 whitespace-nowrap">Folio</th>
-                      <th className="text-left text-xs text-gray-400 uppercase tracking-wide pb-3">Notas</th>
-                      {canEdit && <th className="text-center text-xs text-gray-400 uppercase tracking-wide pb-3 w-10" title="Marca/desmarca como pagado con la fecha de hoy">Pagado</th>}
-                      {DB_CONFIGURED && <th className="pb-3 w-8"></th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((row, i) => {
-                      const esMktConsolidado = row.categoria === "marketing";
-                      const expanded = expandedPagoId === row.id;
-                      const acts = actividadesPorPago[row.id] || [];
-                      return (
-                      <React.Fragment key={row.id}>
-                      <tr className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${i % 2 === 1 ? "bg-gray-50/30" : ""}`}>
-                        <td className="py-2.5 pr-3 min-w-36">
-                          {esMktConsolidado && (
-                            <button
-                              onClick={() => togglePagoExpand(row.id)}
-                              className="inline-flex items-center justify-center w-5 h-5 mr-1.5 rounded hover:bg-blue-100 text-gray-400 hover:text-blue-600 align-middle"
-                              title={expanded ? "Ocultar actividades" : "Ver actividades"}
-                            >
-                              <span className="text-xs">{expanded ? "▼" : "▶"}</span>
-                            </button>
-                          )}
-                          {renderCell(row, "concepto")}
-                        </td>
-                        <td className="py-2.5 pr-3">{renderCell(row, "categoria", "sel-cat")}</td>
-                        <td className="py-2.5 pr-3 text-right">{renderCell(row, "monto", "number")}</td>
-                        <td className="py-2.5 pr-3 text-center">{renderCell(row, "estatus", "sel-estatus")}</td>
-                        <td className="py-2.5 pr-3">{renderCell(row, "fecha_compromiso", "date")}</td>
-                        <td className="py-2.5 pr-3">{renderCell(row, "fecha_pago_real", "date")}</td>
-                        <td className="py-2.5 pr-3">{renderCell(row, "responsable")}</td>
-                        <td className="py-2.5 pr-3">
-                          <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap">
-                            {renderCell(row, "folio")}
-                          </span>
-                        </td>
-                        <td className="py-2.5">{renderCell(row, "notas")}</td>
-                        {canEdit && (
-                          <td className="py-2.5 text-center">
-                            <input
-                              type="checkbox"
-                              checked={row.estatus === "pagado"}
-                              onChange={() => togglePagado(row)}
-                              className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                              title={row.estatus === "pagado"
-                                ? `Pagado el ${row.fecha_pago_real || "—"}. Click para desmarcar.`
-                                : "Marcar como pagado con la fecha de hoy"}
-                            />
-                          </td>
-                        )}
-                        {DB_CONFIGURED && (
-                          <td className="py-2.5 pl-1">
-                            <div className="flex items-center gap-0.5">
-                              <button onClick={() => verHistorial(row)}
-                                className="text-gray-300 hover:text-indigo-600 transition-colors text-xs p-1" title="Ver bitácora de cambios">📜</button>
-                              {canEdit && (
-                                <button onClick={() => handleDuplicate(row)}
-                                  className="text-gray-300 hover:text-blue-600 transition-colors text-xs p-1" title="Duplicar al siguiente mes">⎘</button>
-                              )}
-                              <button onClick={() => handleDelete(row.id)}
-                                className="text-gray-300 hover:text-red-500 transition-colors text-sm p-1" title="Eliminar registro">🗑</button>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-
-                      {/* Fila expandida con desglose de actividades de marketing */}
-                      {esMktConsolidado && expanded && (
-                        <tr className="bg-blue-50/40 border-b border-gray-100">
-                          <td colSpan={11} className="py-3 px-6">
-                            <div className="text-xs font-semibold text-gray-700 mb-2">
-                              📋 Actividades incluidas en este pago ({acts.length})
-                              {acts.length === 0 && <span className="text-gray-400 font-normal ml-2">— sin actividades</span>}
-                            </div>
-                            {acts.length > 0 && (
-                              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                                <table className="w-full text-xs">
-                                  <thead className="bg-gray-50 text-gray-500 uppercase">
-                                    <tr>
-                                      <th className="text-left px-3 py-1.5">Actividad</th>
-                                      <th className="text-left px-3 py-1.5">Tipo</th>
-                                      <th className="text-left px-3 py-1.5">Fecha</th>
-                                      <th className="text-left px-3 py-1.5">Responsable</th>
-                                      <th className="text-right px-3 py-1.5">Inversión</th>
-                                      {canEdit && <th className="text-center px-2 py-1.5 w-10"></th>}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {acts.map(a => (
-                                      <tr key={a.id} className="border-t border-gray-100">
-                                        <td className="px-3 py-2">{a.nombre || "—"}</td>
-                                        <td className="px-3 py-2 text-gray-600">{a.tipo || "—"}</td>
-                                        <td className="px-3 py-2 text-gray-600">{a.fecha || "—"}</td>
-                                        <td className="px-3 py-2 text-gray-600">{a.responsable || "—"}</td>
-                                        <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMXN(a.inversion || 0)}</td>
-                                        {canEdit && (
-                                          <td className="px-2 py-2 text-center">
-                                            <button
-                                              onClick={() => excluirActividadDePago(row.id, a.id)}
-                                              className="text-gray-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50"
-                                              title="Excluir esta actividad del pago (volverá a Marketing)"
-                                            >
-                                              ⊘
-                                            </button>
-                                          </td>
-                                        )}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                  <tfoot className="bg-gray-50">
-                                    <tr>
-                                      <td colSpan={4} className="px-3 py-1.5 text-right font-semibold text-gray-600">Total:</td>
-                                      <td className="px-3 py-1.5 text-right tabular-nums font-bold">
-                                        {formatMXN(acts.reduce((a, x) => a + (Number(x.inversion) || 0), 0))}
-                                      </td>
-                                      {canEdit && <td></td>}
-                                    </tr>
-                                  </tfoot>
-                                </table>
-                              </div>
-                            )}
-                            <div className="text-[11px] text-gray-500 mt-2 italic">
-                              Excluir una actividad la deja como "pendiente" en Marketing y resta su inversión del pago.
-                              Si excluyes la última, el pago se elimina y el botón "Cerrar mes" reaparece.
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                      </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                {filtered.length === 0 && (
-                  <div className="text-center py-8 text-gray-400">
-                    <p className="text-3xl mb-2">📭</p>
-                    <p className="text-sm">No hay registros{catActiva !== "todas" ? " en esta categoría" : ""}</p>
-                  </div>
-                )}
-              </div>)}
-              <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-                <p className="text-xs text-gray-400">
-                  {DB_CONFIGURED ? "✅ Cambios guardados y sincronizados para todo el equipo." : "⚠️ Modo lectura — configura Supabase para habilitar la edición."}
-                  {" "}💡 <strong className="text-gray-600">Pendiente</strong> · <strong className="text-gray-600">En Proceso</strong> · <strong className="text-gray-600">Pagado</strong> · <strong className="text-gray-600">Vencido</strong>
-                </p>
-              </div>
-            </div>
+          {!DB_CONFIGURED && (
+            <Panel titulo="Configuración requerida para guardar cambios" meta="VITE_SUPABASE_URL · VITE_SUPABASE_ANON_KEY">
+              <Nota>Para que los cambios se guarden y sean visibles para el equipo, configura las variables en Vercel y la tabla en Supabase.</Nota>
+            </Panel>
           )}
 
-          {/* Historial de pagos completados (colapsable, agrupado por mes) */}
-          <HistorialPagadosPorMes
-            pagados={pagadosDeCategoria}
-            catActiva={catActiva}
-            CATEGORIA_META={CATEGORIA_META}
-            canEdit={canEdit}
-            onTogglePagado={togglePagado}
-          />
-
-          {/* Lineamientos editables (Fondo MKT, Rebate, SPIFF) */}
-          {(catActiva === "rebate" || catActiva === "spiff" || catActiva === "marketing" || catActiva === "todas") && (
-            <div className="mb-6">
-              <LineamientosCliente
-                clienteKey={clienteKey}
-                tipos={
-                  catActiva === "rebate" ? ["rebate"]
-                  : catActiva === "spiff" ? ["spiff"]
-                  : catActiva === "marketing" ? ["fondo_mkt"]
-                  : ["fondo_mkt", "rebate", "spiff"]
-                }
+          {/* 3 · Barra de vistas + acciones */}
+          <div id="pagos-detalle" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', scrollMarginTop: 12 }}>
+            <Segmented value={vista} onChange={setVista} options={segOpts} />
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <ExportMenu
+                titulo="Pagos"
+                subtitulo={`${cliente?.nombre || clienteKey || ''} · resumen por mes y categoría`}
+                pdf={{ ref: rootRef }}
+                excel={() => ({
+                  titulo: `Pagos ${cliente?.nombre || clienteKey || ''} · Resumen por mes y categoría`,
+                  archivo: `Pagos ${cliente?.nombre || clienteKey || ''} resumen mensual`,
+                  hojas: [{
+                    nombre: 'Resumen mensual',
+                    columnas: [
+                      { label: 'Mes', key: 'mesLabel', tipo: 'texto', ancho: 12 },
+                      { label: 'Promociones', key: 'promociones', tipo: 'moneda' },
+                      { label: 'Marketing', key: 'marketing', tipo: 'moneda' },
+                      { label: 'Pagos Fijos', key: 'pagosFijos', tipo: 'moneda' },
+                      { label: 'P. Variables', key: 'pagosVariables', tipo: 'moneda' },
+                      { label: 'Rebate', key: 'rebate', tipo: 'moneda' },
+                      { label: 'Total', key: 'total', tipo: 'moneda' },
+                    ],
+                    filas: mb.map((m) => { const [yr, mo] = m.mes.split('-'); return { mesLabel: `${MESES_CORTOS[parseInt(mo, 10) - 1]} ${yr}`, promociones: m.promociones || null, marketing: m.marketing || null, pagosFijos: m.pagosFijos || null, pagosVariables: m.pagosVariables || null, rebate: m.rebate || null, total: m.total || 0 }; }),
+                    totales: { mesLabel: 'TOTAL', promociones: mb.reduce((s, m) => s + (m.promociones || 0), 0), marketing: mb.reduce((s, m) => s + (m.marketing || 0), 0), pagosFijos: mb.reduce((s, m) => s + (m.pagosFijos || 0), 0), pagosVariables: mb.reduce((s, m) => s + (m.pagosVariables || 0), 0), rebate: mb.reduce((s, m) => s + (m.rebate || 0), 0), total: mb.reduce((s, m) => s + (m.total || 0), 0) },
+                  }],
+                })}
               />
-            </div>
-          )}
+              <Boton onClick={abrirExport} icon={Download} title="Excel de pagos por pagar de uno o varios meses">Por pagar</Boton>
+              {DB_CONFIGURED && <Boton onClick={verBitacoraGlobal} icon={History}>Bitácora</Boton>}
+              {DB_CONFIGURED && canEdit && (vista === 'pendientes' && catActiva === 'promociones'
+                ? <NuevaPromocionButton clienteKey={clienteKey} onCreated={() => setPromosVer(v => v + 1)} />
+                : <Boton primario onClick={() => { setVista('pendientes'); setShowAdd(v => !v); }} icon={Plus}>Pago</Boton>)}
+            </span>
+          </div>
 
-          {/* Calculadora de Rebate Trimestral */}
-          {clienteKey === "digitalife" && catActiva === "rebate" && (
-            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-5 h-5 text-gray-700" />
-                  <h3 className="text-lg font-bold text-gray-800">Calculadora Rebate Q{rebateQ} {new Date().getFullYear()}</h3>
-                </div>
-                <div className="flex gap-1">
-                  {[1,2,3,4].map(q => (
-                    <button key={q} onClick={() => setRebateQ(q)}
-                      className={"px-3 py-1 rounded-full text-xs font-bold transition-all " + (rebateQ === q ? "bg-red-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}>
-                      Q{q}
-                    </button>
-                  ))}
-                </div>
+          {/* 4 · Contenido de la vista */}
+          {vista === 'pendientes' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                <Pill tone={catActiva === 'todas' ? 'inverse' : 'gray'} onClick={() => setCatActiva('todas')}>Todas · {nPendientes}</Pill>
+                {catsFiltro.map(([key, meta]) => {
+                  const on = catActiva === key;
+                  const count = key === 'pagosFijos' ? fijoRecords.length : registros.filter(r => r.categoria === key && esActivo(r)).length;
+                  return <Pill key={key} tone={on ? meta.tone : 'gray'} dot={on} onClick={() => setCatActiva(on ? 'todas' : key)} style={on ? { outline: `1px solid ${meta.color}66` } : undefined}>{meta.label} · {count}</Pill>;
+                })}
+                <span style={{ marginLeft: 'auto', fontSize: 10.5, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{filtered.length} registro{filtered.length !== 1 ? 's' : ''}</span>
               </div>
-              {rebateLoading ? (
-                <div className="text-center py-6 text-gray-400">Cargando datos de Sell In...</div>
+
+              {showAdd && DB_CONFIGURED && (
+                <FormNuevoPago clienteKey={clienteKey} newRow={newRow} setNewRow={setNewRow} onSave={handleAdd} onCancel={() => setShowAdd(false)} dicoFondoTablaMensual={dicoFondoTablaMensual} />
+              )}
+
+              {catActiva === 'promociones' && <ListaPromociones clienteKey={clienteKey} refreshKey={promosVer} />}
+
+              {catActiva === 'pagosFijos' ? (
+                <PagosFijos fijoGroups={fijoGroups} canEdit={canEdit} dbOk={DB_CONFIGURED} edit={edit}
+                  expandedFijos={expandedFijos} toggleFijo={toggleFijo} togglePagado={togglePagado} crearMesFijo={crearMesFijo} handleDeleteFijo={handleDeleteFijo}
+                  showAddFijo={showAddFijo} setShowAddFijo={setShowAddFijo} newFijo={newFijo} setNewFijo={setNewFijo} handleAddFijo={handleAddFijo} />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b-2 border-gray-200">
-                        <th className="text-left py-2 px-3 font-bold text-gray-700">Categoria</th>
-                        <th className="text-right py-2 px-3 font-bold text-gray-700">Sell In</th>
-                        <th className="text-right py-2 px-3 font-bold text-gray-700">Rebate (%)</th>
-                        <th className="text-right py-2 px-3 font-bold text-red-600">Rebate ($)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        { label: "Monitores", key: "monitores" },
-                        { label: "Sillas", key: "sillas" },
-                        { label: "Accesorios", key: "accesorios" }
-                      ].map(row => {
-                        const si = rebateData[row.key] || 0;
-                        const pct = REBATE_PCT[row.key];
-                        const reb = Math.round(si * pct);
-                        return (
-                          <tr key={row.key} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="py-2 px-3 font-semibold text-gray-700">{row.label}</td>
-                            <td className="py-2 px-3 text-right text-gray-600">{si > 0 ? "$" + si.toLocaleString("es-MX") : "—"}</td>
-                            <td className="py-2 px-3 text-right text-gray-500">{(pct * 100).toFixed(0)}%</td>
-                            <td className="py-2 px-3 text-right font-bold" style={{ color: reb > 0 ? "#ef4444" : "#9ca3af" }}>{reb > 0 ? "$" + reb.toLocaleString("es-MX") : "—"}</td>
-                          </tr>
-                        );
-                      })}
-                      <tr className="border-t-2 border-gray-300 bg-gray-50">
-                        <td className="py-2 px-3 font-bold text-gray-800">Total</td>
-                        <td className="py-2 px-3 text-right font-bold text-gray-800">{"$" + (rebateData.monitores + rebateData.sillas + rebateData.accesorios).toLocaleString("es-MX")}</td>
-                        <td className="py-2 px-3"></td>
-                        <td className="py-2 px-3 text-right font-bold text-red-600">{"$" + Math.round(rebateData.monitores * REBATE_PCT.monitores + rebateData.sillas * REBATE_PCT.sillas + rebateData.accesorios * REBATE_PCT.accesorios).toLocaleString("es-MX")}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div className="flex items-center justify-between mt-4">
-                    <p className="text-xs text-gray-400">* Rebate basado en Sell In del trimestre. Se paga al cierre de Q{rebateQ}. Monitores y Sillas: 2%, Accesorios (todo lo demas): 3%.</p>
-                    {(() => {
-                      const totalReb = Math.round(rebateData.monitores * REBATE_PCT.monitores + rebateData.sillas * REBATE_PCT.sillas + rebateData.accesorios * REBATE_PCT.accesorios);
-                      if (totalReb <= 0) return null;
-                      if (rebateSynced[rebateQ]) return (
-                        <div className="flex items-center gap-2 ml-2">
-                          <span className="text-xs text-green-600 font-semibold">✓ Pago Q{rebateQ} registrado</span>
-                          {canEdit && (
-                            <>
-                              <button onClick={actualizarRebatePago}
-                                className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg"
-                                title="Recalcular con Sell In actualizado y actualizar el monto del pago registrado">
-                                🔄 Actualizar
-                              </button>
-                              <button onClick={borrarRebatePago}
-                                className="px-3 py-1 bg-white hover:bg-red-50 text-red-600 border border-red-300 text-xs font-semibold rounded-lg"
-                                title="Eliminar el pago registrado (podrás registrarlo de nuevo después)">
-                                🗑️ Borrar
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      );
-                      return <button onClick={async () => {
-                        const anio = new Date().getFullYear();
-                        const fechaQ = rebateQ === 4 ? (anio + 1) + Q_FECHA_PAGO[4] : anio + Q_FECHA_PAGO[rebateQ];
-                        const record = {
-                          concepto: "Rebate Q" + rebateQ + " " + anio,
-                          categoria: "rebate",
-                          monto: totalReb,
-                          estatus: "pendiente",
-                          fecha_compromiso: fechaQ,
-                          responsable: "Acteck",
-                          notas: "Monitores: $" + Math.round(rebateData.monitores).toLocaleString("es-MX") + " (2%), Sillas: $" + Math.round(rebateData.sillas).toLocaleString("es-MX") + " (2%), Accesorios: $" + Math.round(rebateData.accesorios).toLocaleString("es-MX") + " (3%)",
-                          cliente: clienteKey
-                        };
-                        const { data, error } = await supabase.from("pagos").insert(record).select().single();
-                        if (!error && data) {
-                          setRegistros(prev => [...prev, data]);
-                          flash("Pago de Rebate Q" + rebateQ + " registrado", "ok");
-                        } else {
-                          flash("Error al registrar rebate", "err");
-                        }
-                      }} className="px-4 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg hover:bg-red-600 transition-colors ml-2">
-                        Registrar Pago Q{rebateQ}
-                      </button>;
-                    })()}
-                  </div>
-                </div>
+                <Panel titulo={catActiva === 'todas' ? 'Pagos pendientes' : `${CATEGORIA_META[catActiva]?.label} · pendientes`} meta={`${filtered.length} concepto${filtered.length !== 1 ? 's' : ''} · ${formatMXN(filtered.reduce((s, r) => s + (r.monto || 0), 0))}`} padding="0">
+                  <TablaPendientes filas={filtered} canEdit={canEdit} dbOk={DB_CONFIGURED} edit={edit} catActiva={catActiva}
+                    togglePagado={togglePagado} verHistorial={verHistorial} handleDuplicate={handleDuplicate} handleDelete={handleDelete}
+                    expandedPagoId={expandedPagoId} togglePagoExpand={togglePagoExpand} actividadesPorPago={actividadesPorPago} excluirActividadDePago={excluirActividadDePago} />
+                </Panel>
+              )}
+
+              {showFijosSection && catActiva === 'todas' && Object.keys(fijoGroups).length > 0 && (
+                <Panel plegable abiertoInicial={false} titulo="Pagos fijos" meta={`${Object.keys(fijoGroups).length} conceptos · ${fijoRecords.filter(esActivo).length} meses por pagar`} padding="8px 10px">
+                  <PagosFijos fijoGroups={fijoGroups} canEdit={canEdit} dbOk={DB_CONFIGURED} edit={edit}
+                    expandedFijos={expandedFijos} toggleFijo={toggleFijo} togglePagado={togglePagado} crearMesFijo={crearMesFijo} handleDeleteFijo={handleDeleteFijo}
+                    showAddFijo={showAddFijo} setShowAddFijo={setShowAddFijo} newFijo={newFijo} setNewFijo={setNewFijo} handleAddFijo={handleAddFijo} />
+                </Panel>
               )}
             </div>
           )}
 
-          {/* ═══ SPIFF Digitalife · rediseño Ferruteck ═══ */}
-          {clienteKey === "digitalife" && catActiva === "spiff" && spiffCalc && (() => {
-            const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-            const anio = new Date().getFullYear();
-            const hoy = new Date();
-            const mesActualIdx = hoy.getMonth() + 1;
-            // Estilos base (mismos tokens que Dicotech)
-            const cardBase = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' };
-            const heroBlack = { background: '#000', color: '#F5F5F7', padding: '20px 24px' };
-            const eyebrow = { fontFamily: TYPO.fontText, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' };
-            const title = { fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.022em', fontSize: 22, margin: 0 };
-            const subCard = { padding: '18px 22px' };
-            const sectionH = { fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 };
-            const sectionSub = { fontSize: 11, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText };
-            const thStyle = { fontFamily: TYPO.fontText, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, textAlign: 'left' };
-            const tdStyle = { fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, padding: '10px 12px', borderBottom: `1px solid ${theme.border}` };
-            const monoNum = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
-            const pillBase = (accent) => ({
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '5px 11px', borderRadius: 999, fontFamily: TYPO.fontText,
-              fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.005em',
-              background: `${accent}15`, color: accent, border: `1px solid ${accent}30`,
-            });
-            const btnPrimary = {
-              background: '#000', color: '#fff', border: 0, borderRadius: 999,
-              padding: '7px 14px', fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
-              cursor: 'pointer', letterSpacing: '-0.005em',
-            };
-            const btnGhost = {
-              background: 'transparent', color: theme.textMuted, border: `1px solid ${theme.border}`,
-              borderRadius: 999, padding: '7px 14px', fontFamily: TYPO.fontText,
-              fontSize: 11, fontWeight: 500, cursor: 'pointer', letterSpacing: '-0.005em',
-            };
-            // Tiers ordenados de mayor a menor umbral
-            const tiersOrdenados = [...SPIFF_TIERS].sort((a, b) => b.umbral - a.umbral);
-            return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, fontFamily: TYPO.fontText }}>
-
-              {/* Hero card negro */}
-              {(() => {
-                // Helper reutilizable: render de un input glass editable con label
-                const glassInput = ({ label, valuePct, decimals, onSave, width = 96 }) => (
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={eyebrow}>{label}</div>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, justifyContent: 'flex-end', marginTop: 6 }}>
-                      <input type="number" step={decimals >= 3 ? "0.001" : "0.01"} min="0" max="500"
-                        key={valuePct}
-                        defaultValue={valuePct.toFixed(decimals)}
-                        readOnly={!spiffDigiTiersUnlocked}
-                        onBlur={(e) => {
-                          if (!spiffDigiTiersUnlocked) return;
-                          const raw = Number(e.target.value);
-                          if (isFinite(raw) && raw >= 0 && Math.abs(raw - valuePct) > 1e-9) onSave(raw);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') e.currentTarget.blur();
-                          if (e.key === 'Escape') { setSpiffDigiTiersUnlocked(false); e.currentTarget.blur(); }
-                        }}
-                        style={{
-                          width, textAlign: 'right',
-                          background: spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.10)' : 'rgba(255,255,255,0.06)',
-                          border: `1px solid ${spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.5)' : 'rgba(255,255,255,0.12)'}`,
-                          borderRadius: 10, color: '#F5F5F7', padding: '8px 12px',
-                          fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600,
-                          letterSpacing: '-0.02em', outline: 'none',
-                          opacity: spiffDigiTiersUnlocked ? 1 : 0.85,
-                          cursor: spiffDigiTiersUnlocked ? 'text' : 'not-allowed',
-                          transition: 'all 160ms', ...monoNum,
-                        }} />
-                      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, color: '#F5F5F7' }}>%</span>
-                    </div>
-                  </div>
-                );
-                return (
-              <div style={cardBase}>
-                <div style={heroBlack}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
-                    <div style={{ minWidth: 280, flex: 1 }}>
-                      <div style={eyebrow}>SPIFF · Digitalife {anio}</div>
-                      <h3 style={{ ...title, color: '#F5F5F7', marginTop: 6 }}>Por sell-out del mes.</h3>
-                      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: '10px 0 0', maxWidth: 620, lineHeight: 1.5 }}>
-                        Cuota SO mensual = cuota SI × <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{(SPIFF_CUOTA_SO_FACTOR * 100).toFixed(0)}%</strong>.
-                        {' '}Comisión = SO × <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{(SPIFF_FLAT_PCT * 100).toFixed(3)}%</strong>
-                        {' '}sólo si alcance ≥ <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{(SPIFF_MIN_ALCANCE * 100).toFixed(0)}%</strong>.
-                      </p>
-                    </div>
-                    <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.14)', paddingLeft: 24 }}>
-                      <div style={eyebrow}>Comisión YTD</div>
-                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.024em', color: '#F5F5F7', marginTop: 4, ...monoNum }}>
-                        {formatMXN(spiffTotalYTD)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Panel de palancas editables */}
-                  <div style={{ display: 'flex', gap: 12, marginTop: 22, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                    <button
-                      onClick={() => {
-                        if (spiffDigiTiersUnlocked) { setSpiffDigiTiersUnlocked(false); return; }
-                        if (!confirm('¿Desbloquear edición de las palancas SPIFF?\n\nAfecta todos los cálculos de comisión Digitalife.')) return;
-                        setSpiffDigiTiersUnlocked(true);
-                      }}
-                      title={spiffDigiTiersUnlocked ? 'Bloquear' : 'Desbloquear para editar'}
-                      style={{
-                        background: spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.16)' : 'rgba(255,255,255,0.06)',
-                        border: `1px solid ${spiffDigiTiersUnlocked ? 'rgba(255,159,10,0.4)' : 'rgba(255,255,255,0.14)'}`,
-                        color: spiffDigiTiersUnlocked ? '#FF9F0A' : 'rgba(255,255,255,0.7)',
-                        borderRadius: 10, width: 38, height: 38, cursor: 'pointer',
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 17, padding: 0, transition: 'all 160ms',
-                      }}>
-                      {spiffDigiTiersUnlocked ? '🔓' : '🔒'}
-                    </button>
-                    {glassInput({
-                      label: `Cuota SO / Cuota SI ${spiffDigiTiersUnlocked ? '· editando' : ''}`,
-                      valuePct: SPIFF_CUOTA_SO_FACTOR * 100, decimals: 0,
-                      width: 90,
-                      onSave: (raw) => guardarSpiffDigiConfig({ cuota_so_factor: raw / 100 }),
-                    })}
-                    {glassInput({
-                      label: `Umbral mínimo alcance SO ${spiffDigiTiersUnlocked ? '· editando' : ''}`,
-                      valuePct: SPIFF_MIN_ALCANCE * 100, decimals: 0,
-                      width: 90,
-                      onSave: (raw) => guardarSpiffDigiConfig({ min_alcance: raw / 100 }),
-                    })}
-                    {glassInput({
-                      label: `% Comisión sobre SO ${spiffDigiTiersUnlocked ? '· editando' : ''}`,
-                      valuePct: SPIFF_FLAT_PCT * 100, decimals: 3,
-                      width: 108,
-                      onSave: (raw) => guardarSpiffDigiConfig({ flat_pct: raw / 100 }),
-                    })}
-                  </div>
-                </div>
-              </div>
-              );
-              })()}
-
-              {/* Tabla mensual */}
-              <div style={cardBase}>
-                <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-                    <div>
-                      <h4 style={sectionH}>SPIFF mensual</h4>
-                      <p style={sectionSub}>Cuota SO = SI × {(SPIFF_CUOTA_SO_FACTOR * 100).toFixed(0)}% · comisión {(SPIFF_FLAT_PCT * 100).toFixed(3)}% si alcance ≥ {(SPIFF_MIN_ALCANCE * 100).toFixed(0)}%.</p>
-                    </div>
-                    <span style={pillBase(theme.accent || '#007AFF')}>Mensual</span>
-                  </div>
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                    <thead>
-                      <tr>
-                        <th style={thStyle}>Mes</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Cuota SI</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Cuota SO</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Sell-Out real</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Alcance</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Comisión</th>
-                        <th style={{ ...thStyle, textAlign: 'right', paddingRight: 22 }}>Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {spiffCalc.map((c) => {
-                        const p = c.pagoExistente;
-                        const isNoAplica = p && p.estatus === "cancelado";
-                        const isGenerado = p && p.estatus !== "cancelado";
-                        const isFuturo = c.mes > mesActualIdx;
-                        const rowMuted = isNoAplica || isFuturo;
-                        const tieneSO = c.soActual > 0;
-                        let alcanceColor = theme.textMuted;
-                        if (c.alcance >= 1.10) alcanceColor = '#34C759';
-                        else if (c.alcance >= SPIFF_MIN_ALCANCE) alcanceColor = theme.accent || '#007AFF';
-                        else if (tieneSO) alcanceColor = '#FF3B30';
-                        return (
-                          <tr key={c.mes}>
-                            <td style={{ ...tdStyle, opacity: rowMuted ? 0.45 : 1, fontWeight: c.mes === mesActualIdx ? 600 : 500 }}>
-                              {MESES_F[c.mes - 1]}
-                              {c.mes === mesActualIdx && <span style={{ ...pillBase(theme.accent || '#007AFF'), marginLeft: 8, fontSize: 9, padding: '2px 8px' }}>Mes actual</span>}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', color: theme.textMuted, opacity: rowMuted ? 0.45 : 1, ...monoNum, fontSize: 11 }}>
-                              {c.cuotaSI > 0 ? formatMXN(c.cuotaSI) : '—'}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', color: theme.text, opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 500 }}>
-                              {c.cuotaSOMin > 0 ? formatMXN(c.cuotaSOMin) : '—'}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 500 }}>
-                              {tieneSO ? formatMXN(c.soActual) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 700, color: alcanceColor }}>
-                              {tieneSO && c.cuotaSOMin > 0 ? `${(c.alcance * 100).toFixed(0)}%` : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 700, color: isNoAplica ? theme.textMuted : theme.text }}>
-                              {c.comision > 0 ? formatMXN(c.comision)
-                                : tieneSO && !c.aplica ? <span style={{ fontSize: 10, fontWeight: 500, color: '#FF3B30' }}>no cumple</span>
-                                : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', paddingRight: 22 }}>
-                              {isNoAplica ? (
-                                <button onClick={() => revertirSpiff(p.id)} style={btnGhost}>↺ Revertir</button>
-                              ) : isGenerado ? (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                  <span style={pillBase(p.estatus === "pagado" ? '#34C759' : '#FF9500')}>
-                                    {p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}
-                                  </span>
-                                  <button onClick={() => revertirSpiff(p.id)} title="Eliminar pago"
-                                    style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 13, padding: '4px 6px' }}>🗑</button>
-                                </span>
-                              ) : c.comision > 0 ? (
-                                <span style={{ display: 'inline-flex', gap: 6 }}>
-                                  <button onClick={() => crearSpiffPago(c)} style={btnPrimary}>Generar</button>
-                                  <button onClick={() => marcarSpiffNoAplica(c.mes)} style={btnGhost}>No aplica</button>
-                                </span>
-                              ) : tieneSO ? (
-                                <span style={{ display: 'inline-flex', gap: 6 }}>
-                                  <button onClick={() => crearSpiffPago(c, true)}
-                                    title={`Pagar manualmente aunque no cumpla el umbral · monto ${formatMXN(c.soActual * SPIFF_FLAT_PCT)}`}
-                                    style={{
-                                      background: '#FF9500', color: '#fff', border: 0, borderRadius: 999,
-                                      padding: '7px 14px', fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
-                                      cursor: 'pointer', letterSpacing: '-0.005em',
-                                    }}>💸 Pagar manual</button>
-                                  <button onClick={() => marcarSpiffNoAplica(c.mes)} style={btnGhost}>No aplica</button>
-                                </span>
-                              ) : (
-                                <span style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted }}>Sin datos</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ padding: '12px 22px', borderTop: `1px solid ${theme.border}`, fontSize: 11, color: theme.textMuted, background: theme.bg }}>
-                  💡 <strong style={{ color: theme.text, fontWeight: 600 }}>Fecha de pago automática:</strong> día 15 del mes siguiente · <strong style={{ color: theme.text, fontWeight: 600 }}>Responsable:</strong> PM Digitalife
-                </div>
-              </div>
-
-            </div>
-          );
-          })()}
-
-          {/* ═══ SPIFF Dicotech v2 · rediseño Ferruteck ═══ */}
-          {clienteKey === "dicotech" && catActiva === "spiff" && spiffDicotechCalc && (() => {
-            const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-            const anio = new Date().getFullYear();
-            const hoy = new Date();
-            const mesActualIdx = hoy.getMonth() + 1;
-            // Estilos base
-            const cardBase = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' };
-            const heroBlack = { background: '#000', color: '#F5F5F7', padding: '20px 24px' };
-            const eyebrow = { fontFamily: TYPO.fontText, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' };
-            const title = { fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.022em', fontSize: 22, margin: 0 };
-            const subCard = { padding: '18px 22px' };
-            const sectionH = { fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 };
-            const sectionSub = { fontSize: 11, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText };
-            const thStyle = { fontFamily: TYPO.fontText, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, textAlign: 'left' };
-            const tdStyle = { fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, padding: '10px 12px', borderBottom: `1px solid ${theme.border}` };
-            const monoNum = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
-            const pillBase = (accent) => ({
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '5px 11px', borderRadius: 999, fontFamily: TYPO.fontText,
-              fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.005em',
-              background: `${accent}15`, color: accent, border: `1px solid ${accent}30`,
-            });
-            const inputBase = {
-              background: theme.bg, border: `1px solid ${theme.border}`,
-              borderRadius: 10, padding: '8px 10px', fontSize: 12,
-              fontFamily: TYPO.fontText, color: theme.text, outline: 'none',
-              width: '100%', transition: 'border 160ms',
-            };
-            const btnPrimary = {
-              background: '#000', color: '#fff', border: 0, borderRadius: 999,
-              padding: '7px 14px', fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
-              cursor: 'pointer', letterSpacing: '-0.005em',
-            };
-            const btnGhost = {
-              background: 'transparent', color: theme.textMuted, border: `1px solid ${theme.border}`,
-              borderRadius: 999, padding: '7px 14px', fontFamily: TYPO.fontText,
-              fontSize: 11, fontWeight: 500, cursor: 'pointer', letterSpacing: '-0.005em',
-            };
-            return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, fontFamily: TYPO.fontText }}>
-
-              {/* Hero card negro estilo Ferruteck */}
-              <div style={cardBase}>
-                <div style={heroBlack}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
-                    <div style={{ minWidth: 280 }}>
-                      <div style={eyebrow}>SPIFF · Dicotech {anio}</div>
-                      <h3 style={{ ...title, color: '#F5F5F7', marginTop: 6 }}>Compradora y vendedores.</h3>
-                      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: '10px 0 0', maxWidth: 520, lineHeight: 1.5 }}>
-                        Compradora: <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{(spiffDicoCompradoraPct * 100).toFixed(3)}%</strong> × sell-in Revko del mes. Vendedores: top 5 por sell-out con cuota mínima y premios editables por mes.
-                      </p>
-                    </div>
-                    <div style={{ display: 'flex', gap: 28, alignItems: 'flex-end' }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={eyebrow}>% Compradora {spiffPctUnlocked && <span style={{ color: '#FF9F0A', marginLeft: 4 }}>· editando</span>}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
-                          <button
-                            onClick={() => {
-                              if (spiffPctUnlocked) {
-                                setSpiffPctUnlocked(false);
-                              } else {
-                                if (!confirm('¿Desbloquear edición del % Compradora?\n\nEste valor afecta todos los cálculos de comisión SPIFF.')) return;
-                                setSpiffPctUnlocked(true);
-                                setTimeout(() => spiffPctInputRef.current?.focus(), 50);
-                              }
-                            }}
-                            title={spiffPctUnlocked ? 'Bloquear · click para prevenir cambios' : 'Desbloquear · click para editar'}
-                            style={{
-                              background: spiffPctUnlocked ? 'rgba(255,159,10,0.16)' : 'rgba(255,255,255,0.06)',
-                              border: `1px solid ${spiffPctUnlocked ? 'rgba(255,159,10,0.4)' : 'rgba(255,255,255,0.14)'}`,
-                              color: spiffPctUnlocked ? '#FF9F0A' : 'rgba(255,255,255,0.7)',
-                              borderRadius: 10, width: 34, height: 34,
-                              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 15, padding: 0, transition: 'all 160ms',
-                            }}>
-                            {spiffPctUnlocked ? '🔓' : '🔒'}
-                          </button>
-                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                            <input ref={spiffPctInputRef} type="number" step="0.001" min="0" max="10"
-                              key={spiffDicoCompradoraPct}
-                              defaultValue={(spiffDicoCompradoraPct * 100).toFixed(3)}
-                              readOnly={!spiffPctUnlocked}
-                              onBlur={(e) => {
-                                if (!spiffPctUnlocked) return;
-                                const pct = Number(e.target.value) / 100;
-                                if (pct !== spiffDicoCompradoraPct && pct >= 0 && pct <= 0.1) {
-                                  guardarSpiffDicoConfig({ compradora_pct: pct });
-                                }
-                                setSpiffPctUnlocked(false);
-                              }}
-                              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setSpiffPctUnlocked(false); e.currentTarget.blur(); } }}
-                              style={{
-                                width: 108, textAlign: 'right',
-                                background: spiffPctUnlocked ? 'rgba(255,159,10,0.10)' : 'rgba(255,255,255,0.06)',
-                                border: `1px solid ${spiffPctUnlocked ? 'rgba(255,159,10,0.5)' : 'rgba(255,255,255,0.12)'}`,
-                                borderRadius: 10, color: '#F5F5F7', padding: '8px 12px',
-                                fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600,
-                                letterSpacing: '-0.02em', outline: 'none',
-                                opacity: spiffPctUnlocked ? 1 : 0.85, cursor: spiffPctUnlocked ? 'text' : 'not-allowed',
-                                transition: 'all 160ms', ...monoNum,
-                              }} />
-                            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, color: '#F5F5F7' }}>%</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.14)', paddingLeft: 24 }}>
-                        <div style={eyebrow}>Comisión YTD</div>
-                        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.024em', color: '#F5F5F7', marginTop: 4, ...monoNum }}>
-                          {formatMXN(spiffDicotechTotalYTD.si)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* SPIFF Compradora */}
-              <div style={cardBase}>
-                <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-                    <div>
-                      <h4 style={sectionH}>SPIFF Compradora</h4>
-                      <p style={sectionSub}>Sell-in Revko × {(spiffDicoCompradoraPct*100).toFixed(3)}% · Beatriz Reyes</p>
-                    </div>
-                    <span style={pillBase(theme.accent || '#007AFF')}>Mensual</span>
-                  </div>
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                    <thead>
-                      <tr>
-                        <th style={thStyle}>Mes</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Sell-In real</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Comisión</th>
-                        <th style={{ ...thStyle, textAlign: 'right', paddingRight: 22 }}>Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {spiffDicotechCalc.map((c, idx) => {
-                        const p = c.pagoSI;
-                        const isNoAplica = p && p.estatus === "cancelado";
-                        const isGenerado = p && p.estatus !== "cancelado";
-                        const isFuturo = c.mes > mesActualIdx;
-                        const rowMuted = isNoAplica || isFuturo;
-                        return (
-                          <tr key={`si-${c.mes}`}>
-                            <td style={{ ...tdStyle, opacity: rowMuted ? 0.45 : 1, fontWeight: c.mes === mesActualIdx ? 600 : 500 }}>
-                              {MESES_F[c.mes - 1]}
-                              {c.mes === mesActualIdx && <span style={{ ...pillBase(theme.accent || '#007AFF'), marginLeft: 8, fontSize: 9, padding: '2px 8px' }}>Mes actual</span>}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', color: theme.text, opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 500 }}>
-                              {c.siActual > 0 ? formatMXN(c.siActual) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowMuted ? 0.45 : 1, ...monoNum, fontWeight: 600, color: isNoAplica ? theme.textMuted : theme.text }}>
-                              {c.comisionSI > 0 ? formatMXN(c.comisionSI) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', paddingRight: 22 }}>
-                              {isNoAplica ? (
-                                <button onClick={() => revertirSpiff(p.id)} style={btnGhost}>↺ Revertir</button>
-                              ) : isGenerado ? (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                  <span style={pillBase(p.estatus === "pagado" ? '#34C759' : '#FF9500')}>
-                                    {p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}
-                                  </span>
-                                  <button onClick={() => revertirSpiff(p.id)} title="Eliminar pago"
-                                    style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 13, padding: '4px 6px' }}>🗑</button>
-                                </span>
-                              ) : c.comisionSI > 0 ? (
-                                <span style={{ display: 'inline-flex', gap: 6 }}>
-                                  <button onClick={() => crearSpiffDicotechPago(c, "SI", false)} style={btnPrimary}>Generar</button>
-                                  <button onClick={() => marcarSpiffDicotechNoAplica(c.mes, "SI")} style={btnGhost}>No aplica</button>
-                                </span>
-                              ) : (
-                                <span style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted }}>Sin datos</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* SPIFF Vendedores */}
-              <div style={cardBase}>
-                <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-                    <div>
-                      <h4 style={sectionH}>SPIFF Vendedores Dicotech</h4>
-                      <p style={sectionSub}>Top 5 del sell-out del mes que superen la cuota mínima · premios de texto libre editables por mes.</p>
-                    </div>
-                    <span style={pillBase('#34C759')}>Ranking mensual</span>
-                  </div>
-                </div>
-                <div style={{ padding: '14px 22px 22px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {spiffDicotechCalc.map((c) => {
-                    const mesKey = `${anio}-${String(c.mes).padStart(2,"0")}`;
-                    const esMesActual = c.mes === mesActualIdx;
-                    const esFuturo = c.mes > mesActualIdx;
-                    const sinData = c.vendedoresMes.length === 0;
-                    return (
-                      <details key={`vend-${c.mes}`}
-                        style={{
-                          background: esMesActual ? `${theme.accent || '#007AFF'}0A` : theme.bg,
-                          border: `1px solid ${esMesActual ? (theme.accent || '#007AFF') + '40' : theme.border}`,
-                          borderRadius: 12,
-                          overflow: 'hidden',
-                          opacity: esFuturo ? 0.55 : 1,
-                        }}
-                        open={esMesActual}>
-                        <summary style={{
-                          padding: '12px 16px', cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          gap: 12, flexWrap: 'wrap', listStyle: 'none', userSelect: 'none',
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text }}>
-                              {MESES_F[c.mes - 1]} {anio}
-                            </span>
-                            {esMesActual && <span style={pillBase(theme.accent || '#007AFF')}>Mes actual</span>}
-                            {esFuturo && <span style={pillBase(theme.textMuted)}>Pendiente</span>}
-                            {sinData && !esFuturo && <span style={pillBase('#FF9500')}>Sin data Revko</span>}
-                          </div>
-                          <div style={{ fontSize: 11, color: theme.textMuted, display: 'flex', gap: 10, alignItems: 'center', ...monoNum }}>
-                            {c.vendedoresMes.length > 0 && (
-                              <span>{c.vendedoresMes.length} vendedores · <strong style={{ color: theme.text, fontWeight: 600 }}>{c.ganadores.length}</strong> califican</span>
-                            )}
-                            {c.cuotaMin > 0 && <span>· cuota mín <strong style={{ color: theme.text, fontWeight: 600 }}>{formatMXN(c.cuotaMin)}</strong></span>}
-                          </div>
-                        </summary>
-                        <div style={{ padding: '4px 16px 18px', borderTop: `1px solid ${theme.border}` }}>
-                          {/* Config del mes */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr', gap: 10, marginTop: 14 }}>
-                            <div>
-                              <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 6 }}>Cuota mín $</div>
-                              <input type="number" min="0" step="1000"
-                                defaultValue={c.cuotaMin || ""}
-                                placeholder="0"
-                                onBlur={(e) => {
-                                  const v = Number(e.target.value) || 0;
-                                  if (v !== c.cuotaMin) guardarSpiffDicoConfig({ mesKey, cuota_min: v });
-                                }}
-                                onFocus={(e) => { e.currentTarget.style.borderColor = theme.accent || '#007AFF'; }}
-                                onBlurCapture={(e) => { e.currentTarget.style.borderColor = theme.border; }}
-                                style={{ ...inputBase, ...monoNum }} />
-                            </div>
-                            {[0,1,2,3,4].map(i => (
-                              <div key={i}>
-                                <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, marginBottom: 6 }}>Premio #{i+1}</div>
-                                <input type="text"
-                                  defaultValue={c.premios[i] || ""}
-                                  placeholder="Ej. Tarjeta $500"
-                                  onBlur={(e) => {
-                                    const nuevos = [...c.premios];
-                                    nuevos[i] = e.target.value.trim();
-                                    if (nuevos[i] !== (c.premios[i] || "")) {
-                                      guardarSpiffDicoConfig({ mesKey, premios: nuevos });
-                                    }
-                                  }}
-                                  onFocus={(e) => { e.currentTarget.style.borderColor = theme.accent || '#007AFF'; }}
-                                  onBlurCapture={(e) => { e.currentTarget.style.borderColor = theme.border; }}
-                                  style={inputBase} />
-                              </div>
-                            ))}
-                          </div>
-                          {/* Ranking */}
-                          <div style={{ marginTop: 16 }}>
-                            {c.ganadores.length > 0 ? (
-                              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                                <thead>
-                                  <tr>
-                                    <th style={{ ...thStyle, width: 48, textAlign: 'center' }}>#</th>
-                                    <th style={thStyle}>Vendedor</th>
-                                    <th style={{ ...thStyle, textAlign: 'right' }}>Sell-Out</th>
-                                    <th style={{ ...thStyle, width: '40%' }}>Premio</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {c.ganadores.map((g) => {
-                                    const medalBg = g.posicion === 1 ? '#FFD60A' : g.posicion === 2 ? '#AEAEB2' : g.posicion === 3 ? '#FF9500' : theme.border;
-                                    const medalColor = g.posicion <= 3 ? '#000' : theme.textMuted;
-                                    return (
-                                      <tr key={g.posicion}>
-                                        <td style={{ ...tdStyle, textAlign: 'center' }}>
-                                          <span style={{
-                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                            width: 24, height: 24, borderRadius: 999,
-                                            background: medalBg, color: medalColor,
-                                            fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 700,
-                                          }}>{g.posicion}</span>
-                                        </td>
-                                        <td style={{ ...tdStyle, fontWeight: 500 }}>{g.nombre}</td>
-                                        <td style={{ ...tdStyle, textAlign: 'right', ...monoNum, fontWeight: 600 }}>{formatMXN(g.monto)}</td>
-                                        <td style={{ ...tdStyle, color: g.premio ? theme.text : (theme.textSubtle || theme.textMuted), fontStyle: g.premio ? 'normal' : 'italic' }}>
-                                          {g.premio || '— sin definir —'}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            ) : sinData ? (
-                              <div style={{ padding: '20px 16px', textAlign: 'center', fontSize: 11.5, color: theme.textMuted, background: theme.bg, borderRadius: 10, border: `1px dashed ${theme.border}` }}>
-                                Sin datos de Revko para este mes. Sube el archivo semanal en <code style={{ background: theme.border, padding: '2px 6px', borderRadius: 4 }}>/uploads.html</code>.
-                              </div>
-                            ) : (
-                              <div style={{ padding: '20px 16px', textAlign: 'center', fontSize: 11.5, color: '#FF9500', background: '#FF95000A', borderRadius: 10, border: '1px solid #FF950033' }}>
-                                Hay {c.vendedoresMes.length} vendedores pero ninguno supera la cuota mínima de {formatMXN(c.cuotaMin)}. Baja la cuota o revisa la data.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </details>
-                    );
-                  })}
-                </div>
-                <div style={{ padding: '12px 22px', borderTop: `1px solid ${theme.border}`, fontSize: 11, color: theme.textMuted, background: theme.bg }}>
-                  💡 <strong style={{ color: theme.text, fontWeight: 600 }}>Premios de texto libre:</strong> pueden ser tarjetas de regalo, productos, dinero, etc. Se guardan por mes en Supabase con historial auditable. Los pagos se registran fuera del sistema.
-                </div>
-              </div>
-
-            </div>
-          );
-          })()}
-
-          {/* ═══ Fondo MKT Trimestral Interno Dicotech · rediseño Ferruteck ═══ */}
-          {clienteKey === "dicotech" && catActiva === "fondoMkt" && dicoFondoTablaMensual && (() => {
-            const MESES_F = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-            const anio = new Date().getFullYear();
-            const mesActual = new Date().getMonth() + 1;
-            const cardBase = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' };
-            const heroBlack = { background: '#000', color: '#F5F5F7', padding: '20px 24px' };
-            const eyebrow = { fontFamily: TYPO.fontText, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' };
-            const title = { fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.022em', fontSize: 22, margin: 0, color: '#F5F5F7' };
-            const subCard = { padding: '18px 22px' };
-            const sectionH = { fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 };
-            const sectionSub = { fontSize: 11, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText };
-            const thStyle = { fontFamily: TYPO.fontText, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, textAlign: 'left' };
-            const tdStyle = { fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, padding: '10px 12px', borderBottom: `1px solid ${theme.border}` };
-            const monoNum = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
-            const pillBase = (accent) => ({
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '5px 11px', borderRadius: 999, fontFamily: TYPO.fontText,
-              fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.005em',
-              background: `${accent}15`, color: accent, border: `1px solid ${accent}30`,
-            });
-            const COL_CLI = '#34C759';
-            const COL_INT = '#AF52DE';
-            const COL_NEG = '#FF3B30';
-            const fmtSaldo = (n) => {
-              const s = formatMXN(n);
-              return n < 0 ? <span style={{ color: COL_NEG }}>{s}</span> : s;
-            };
-            return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, fontFamily: TYPO.fontText }}>
-
-              {/* Hero card negro */}
-              <div style={cardBase}>
-                <div style={heroBlack}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
-                    <div style={{ minWidth: 280 }}>
-                      <div style={eyebrow}>Fondos MKT · Dicotech {anio}</div>
-                      <h3 style={{ ...title, marginTop: 6 }}>Cliente e interno.</h3>
-                      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: '10px 0 0', maxWidth: 560, lineHeight: 1.5 }}>
-                        <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>Fondo Interno</strong> = 1% × sell-in mes (siempre). <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>Fondo MKT Cliente</strong> = tier % según alcance Q acumulado. El plan MKT mensual se descuenta del fondo cliente primero, del interno si no alcanza.
-                      </p>
-                      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', margin: '10px 0 0' }}>
-                        Plan MKT contratado: <strong style={{ color: 'rgba(255,255,255,0.75)', fontWeight: 500, ...monoNum }}>{formatMXN(dicoFondoTablaMensual.planMonto)}/mes</strong>
-                      </p>
-                    </div>
-                    <div style={{ display: 'flex', gap: 28, alignItems: 'flex-end' }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={eyebrow}>Fondo Cliente</div>
-                        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.024em', color: dicoFondoTablaMensual.saldoCliActual < 0 ? COL_NEG : '#F5F5F7', marginTop: 4, ...monoNum }}>
-                          {formatMXN(dicoFondoTablaMensual.saldoCliActual)}
-                        </div>
-                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>visible al cliente</div>
-                      </div>
-                      <div style={{ textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.14)', paddingLeft: 24 }}>
-                        <div style={eyebrow}>Fondo Interno</div>
-                        <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.024em', color: dicoFondoTablaMensual.saldoIntActual < 0 ? COL_NEG : '#F5F5F7', marginTop: 4, ...monoNum }}>
-                          {formatMXN(dicoFondoTablaMensual.saldoIntActual)}
-                        </div>
-                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>interno · Acteck</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tabla mensual */}
-              <div style={cardBase}>
-                <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-                    <div>
-                      <h4 style={sectionH}>Detalle mensual de fondos</h4>
-                      <p style={sectionSub}>Saldos iniciales, generaciones y aplicaciones por mes.</p>
-                    </div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <span style={pillBase(COL_CLI)}>Cliente</span>
-                      <span style={pillBase(COL_INT)}>Interno</span>
-                    </div>
-                  </div>
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                    <thead>
-                      <tr>
-                        <th rowSpan={2} style={{ ...thStyle, verticalAlign: 'bottom' }}>Mes</th>
-                        <th colSpan={4} style={{ ...thStyle, textAlign: 'center', color: COL_CLI, borderBottom: `1px solid ${COL_CLI}30` }}>Fondo MKT Cliente</th>
-                        <th colSpan={4} style={{ ...thStyle, textAlign: 'center', color: COL_INT, borderBottom: `1px solid ${COL_INT}30`, borderLeft: `1px solid ${theme.border}` }}>Fondo Interno</th>
-                        <th rowSpan={2} style={{ ...thStyle, textAlign: 'center', verticalAlign: 'bottom', borderLeft: `1px solid ${theme.border}` }}>Aplicaciones</th>
-                      </tr>
-                      <tr>
-                        <th style={{ ...thStyle, textAlign: 'right', color: COL_CLI }}>Saldo inicio</th>
-                        <th style={{ ...thStyle, textAlign: 'right', color: COL_CLI }}>Generación</th>
-                        <th style={{ ...thStyle, textAlign: 'right', color: COL_CLI }}>Aplicación</th>
-                        <th style={{ ...thStyle, textAlign: 'right', color: COL_CLI }}>Saldo final</th>
-                        <th style={{ ...thStyle, textAlign: 'right', color: COL_INT, borderLeft: `1px solid ${theme.border}` }}>Saldo inicio</th>
-                        <th style={{ ...thStyle, textAlign: 'right', color: COL_INT }}>Generación</th>
-                        <th style={{ ...thStyle, textAlign: 'right', color: COL_INT }}>Aplicación</th>
-                        <th style={{ ...thStyle, textAlign: 'right', color: COL_INT }}>Saldo final</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dicoFondoTablaMensual.filas.map(f => {
-                        const esFuturo = f.mes > mesActual;
-                        const esMesActual = f.mes === mesActual;
-                        const rowOp = esFuturo ? 0.4 : 1;
-                        return (
-                          <tr key={f.mes}>
-                            <td style={{ ...tdStyle, opacity: rowOp, fontWeight: esMesActual ? 600 : 500 }}>
-                              {MESES_F[f.mes-1]}
-                              {esMesActual && <span style={{ ...pillBase(theme.accent || '#007AFF'), marginLeft: 8, fontSize: 9, padding: '2px 8px' }}>Mes actual</span>}
-                            </td>
-                            {/* Fondo MKT Cliente */}
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, color: theme.textMuted, ...monoNum }}>{fmtSaldo(f.saldoCliInicio)}</td>
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, color: f.genCli > 0 ? COL_CLI : theme.textSubtle || theme.textMuted, fontWeight: 600, ...monoNum }}>{f.genCli > 0 ? formatMXN(f.genCli) : '—'}</td>
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, color: f.apliCli > 0 ? COL_NEG : theme.textSubtle || theme.textMuted, ...monoNum }}>{f.apliCli > 0 ? '-' + formatMXN(f.apliCli) : '—'}</td>
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, fontWeight: 700, ...monoNum, color: f.saldoCliFinal < 0 ? COL_NEG : theme.text }}>{fmtSaldo(f.saldoCliFinal)}</td>
-                            {/* Fondo Interno */}
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, color: theme.textMuted, borderLeft: `1px solid ${theme.border}`, ...monoNum }}>{fmtSaldo(f.saldoIntInicio)}</td>
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, color: f.genInt > 0 ? COL_INT : theme.textSubtle || theme.textMuted, fontWeight: 600, ...monoNum }}>{f.genInt > 0 ? formatMXN(f.genInt) : '—'}</td>
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, color: f.apliInt > 0 ? COL_NEG : theme.textSubtle || theme.textMuted, ...monoNum }}>{f.apliInt > 0 ? '-' + formatMXN(f.apliInt) : '—'}</td>
-                            <td style={{ ...tdStyle, textAlign: 'right', opacity: rowOp, fontWeight: 700, ...monoNum, color: f.saldoIntFinal < 0 ? COL_NEG : theme.text }}>{fmtSaldo(f.saldoIntFinal)}</td>
-                            {/* Aplicaciones */}
-                            <td style={{ ...tdStyle, textAlign: 'center', borderLeft: `1px solid ${theme.border}` }}>
-                              {esFuturo ? (
-                                <span style={{ fontSize: 10, color: theme.textSubtle || theme.textMuted }}>Futuro</span>
-                              ) : f.aplicaciones.length > 0 ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                                  {f.aplicaciones.map(a => {
-                                    const c = a.tipo_fondo === 'interno' ? COL_INT : COL_CLI;
-                                    return (
-                                      <div key={a.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                        <span style={{ ...pillBase(c), fontSize: 10, padding: '3px 9px', ...monoNum }}>
-                                          {a.tipo_fondo === 'interno' ? 'Int' : 'Cli'}: {formatMXN(Number(a.monto))}
-                                        </span>
-                                        <button onClick={() => revertirMovimientoFondo(a.id)}
-                                                title="Revertir aplicación (no borra el pago, solo el movimiento del fondo)"
-                                                style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 12, padding: '2px 4px' }}>🗑</button>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <span style={{ fontSize: 10, color: theme.textSubtle || theme.textMuted }}>—</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ padding: '12px 22px', borderTop: `1px solid ${theme.border}`, fontSize: 11, color: theme.textMuted, background: theme.bg, lineHeight: 1.55 }}>
-                  <div style={{ marginBottom: 4 }}>
-                    <strong style={{ color: theme.text, fontWeight: 600 }}>Esta tabla solo muestra los saldos.</strong> Para registrar un pago que descuente de los fondos, usa <strong style={{ color: theme.text, fontWeight: 600 }}>“+ Nuevo registro”</strong> arriba y el selector <em>“¿De qué fondo sale el pago?”</em> al final del formulario:
-                  </div>
-                  <ul style={{ margin: '4px 0 6px 18px', padding: 0 }}>
-                    <li><span style={{ color: COL_CLI, fontWeight: 600 }}>Auto split</span> — toma del fondo cliente primero, completa con interno.</li>
-                    <li><span style={{ color: COL_CLI, fontWeight: 600 }}>Todo del cliente</span> / <span style={{ color: COL_INT, fontWeight: 600 }}>Todo del interno</span> — atajos.</li>
-                    <li>O escribir un monto específico en cada fondo (split a tu medida).</li>
-                  </ul>
-                  <div>Los movimientos quedan vinculados al pago vía <code style={{ background: theme.border, padding: '1px 6px', borderRadius: 4, fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontSize: 10.5 }}>pago_id</code> — si borras el pago, las aplicaciones se revierten automáticamente.</div>
-                </div>
-              </div>
-            </div>
-          );
-          })()}
-
-          {/* ═══ Rebate MENSUAL Dicotech · rediseño Ferruteck ═══ */}
-          {clienteKey === "dicotech" && catActiva === "rebate" && dicoRebateCalc && (() => {
-            const anio = new Date().getFullYear();
-            const cardBase = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' };
-            const heroBlack = { background: '#000', color: '#F5F5F7', padding: '20px 24px' };
-            const eyebrow = { fontFamily: TYPO.fontText, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' };
-            const title = { fontFamily: TYPO.fontDisplay, fontWeight: 600, letterSpacing: '-0.022em', fontSize: 22, margin: 0, color: '#F5F5F7' };
-            const subCard = { padding: '18px 22px' };
-            const sectionH = { fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: theme.text, margin: 0 };
-            const sectionSub = { fontSize: 11, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText };
-            const thStyle = { fontFamily: TYPO.fontText, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.textMuted, padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, textAlign: 'left' };
-            const tdStyle = { fontFamily: TYPO.fontText, fontSize: 12, color: theme.text, padding: '10px 12px', borderBottom: `1px solid ${theme.border}` };
-            const monoNum = { fontFamily: '"SF Mono", ui-monospace, Menlo, monospace', fontVariantNumeric: 'tabular-nums' };
-            const pillBase = (accent) => ({
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '5px 11px', borderRadius: 999, fontFamily: TYPO.fontText,
-              fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.005em',
-              background: `${accent}15`, color: accent, border: `1px solid ${accent}30`,
-            });
-            const btnPrimary = {
-              background: '#000', color: '#fff', border: 0, borderRadius: 999,
-              padding: '7px 14px', fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
-              cursor: 'pointer', letterSpacing: '-0.005em',
-            };
-            const btnGhost = {
-              background: 'transparent', color: theme.textMuted, border: `1px solid ${theme.border}`,
-              borderRadius: 999, padding: '7px 14px', fontFamily: TYPO.fontText,
-              fontSize: 11, fontWeight: 500, cursor: 'pointer', letterSpacing: '-0.005em',
-            };
-            const btnWarn = {
-              background: '#FF9500', color: '#fff', border: 0, borderRadius: 999,
-              padding: '7px 14px', fontFamily: TYPO.fontText, fontSize: 11, fontWeight: 600,
-              cursor: 'pointer', letterSpacing: '-0.005em',
-            };
-            const COL_REBATE = '#FF3B30';
-            // Paleta por posición del tier (ordenados desc por min_alcance)
-            // 0=más alto → verde, 1=azul, 2=violeta, 3=rojo, resto=ámbar
-            const COLS_TIER = ['#34C759', '#007AFF', '#AF52DE', '#FFCC00', '#FF9500'];
-            const nombreOficial = lineamientos?.rebate?.nombre_oficial || "Fondo para Generación Sell Out";
-            const primerTierPct = ((lineamientos?.rebate?.tiers?.[0]?.pct || 0.02) * 100).toFixed(2);
-            const alcanceMinPago = ((lineamientos?.rebate?.alcance_minimo_pago || 0.90) * 100).toFixed(0);
-            return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, fontFamily: TYPO.fontText }}>
-
-              {/* Hero card negro */}
-              <div style={cardBase}>
-                <div style={heroBlack}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
-                    <div style={{ minWidth: 280 }}>
-                      <div style={eyebrow}>Rebate · Dicotech {anio}</div>
-                      <h3 style={{ ...title, marginTop: 6 }}>Rebate mensual por alcance.</h3>
-                      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: '10px 0 0', maxWidth: 560, lineHeight: 1.5 }}>
-                        {nombreOficial} · mensual · desde <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{primerTierPct}%</strong> sobre Sell-In del mes si alcance ≥ <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{alcanceMinPago}%</strong>.
-                      </p>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={eyebrow}>Acumulado YTD</div>
-                      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 28, fontWeight: 600, letterSpacing: '-0.024em', color: '#F5F5F7', marginTop: 4, ...monoNum }}>
-                        {formatMXN(dicoRebateTotalYTD)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tiers info */}
-              <div style={cardBase}>
-                <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-                    <div>
-                      <h4 style={sectionH}>Tiers vigentes</h4>
-                      <p style={sectionSub}>Umbral de alcance sobre la cuota mensual para aplicar el % de rebate.</p>
-                    </div>
-                  </div>
-                </div>
-                <div style={{ padding: '14px 22px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {(lineamientos?.rebate?.tiers || []).slice().sort((a,b) => Number(b.min_alcance) - Number(a.min_alcance)).map((t, i) => {
-                    const col = COLS_TIER[i] || COL_REBATE;
-                    return (
-                      <span key={i} style={pillBase(col)}>
-                        <strong style={{ fontWeight: 700 }}>{t.label}</strong>
-                        <span style={{ opacity: 0.65 }}>·</span>
-                        <span style={monoNum}>{(Number(t.pct) * 100).toFixed(2)}%</span>
-                      </span>
-                    );
-                  })}
-                  <span style={pillBase(theme.textMuted)}>
-                    &lt; {alcanceMinPago}% → sin rebate auto
-                  </span>
-                </div>
-              </div>
-
-              {/* Tabla mensual */}
-              <div style={cardBase}>
-                <div style={{ ...subCard, borderBottom: `1px solid ${theme.border}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-                    <div>
-                      <h4 style={sectionH}>Rebate por mes</h4>
-                      <p style={sectionSub}>Alcance, tier y generación de pago por mes.</p>
-                    </div>
-                    <span style={pillBase(COL_REBATE)}>Mensual</span>
-                  </div>
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                    <thead>
-                      <tr>
-                        <th style={thStyle}>Mes</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Cuota</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Sell-In</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Alcance</th>
-                        <th style={{ ...thStyle, textAlign: 'center' }}>Tier</th>
-                        <th style={{ ...thStyle, textAlign: 'right' }}>Rebate</th>
-                        <th style={{ ...thStyle, textAlign: 'right', paddingRight: 22 }}>Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dicoRebateCalc.map(m => {
-                        const p = m.pagoExistente;
-                        const isNoAplica = p && p.estatus === "cancelado";
-                        const isGenerado = p && p.estatus !== "cancelado";
-                        const alcancePct = (m.alcance * 100).toFixed(0);
-                        let alcanceColor = theme.textMuted;
-                        if (m.alcance >= 1.50) alcanceColor = '#34C759';
-                        else if (m.alcance >= 1.30) alcanceColor = '#30B455';
-                        else if (m.alcance >= 1.15) alcanceColor = theme.accent || '#007AFF';
-                        else if (m.alcance >= 0.90) alcanceColor = COL_REBATE;
-                        else if (m.sellIn > 0) alcanceColor = '#FF9500';
-                        // Tiers ordenados desc para el selector
-                        const tiersOrd = (lineamientos?.rebate?.tiers || []).slice().sort((a, b) => Number(b.min_alcance) - Number(a.min_alcance));
-                        // % efectivo = override elegido en la fila, o el tier auto (0 si no cumple)
-                        const pctAuto = Number(m.tier?.pct || 0);
-                        const pctSel = pctPorMes[m.mes] != null ? Number(pctPorMes[m.mes]) : pctAuto;
-                        const tierSel = tiersOrd.find(t => Number(t.pct) === pctSel) || null;
-                        const montoSel = Math.round(m.sellIn * pctSel);
-                        const esOverride = pctSel !== pctAuto;
-                        return (
-                          <tr key={m.mes} style={{ opacity: isNoAplica ? 0.5 : 1 }}>
-                            <td style={{ ...tdStyle, fontWeight: 600 }}>{m.label}</td>
-                            <td style={{ ...tdStyle, textAlign: 'right', color: theme.textMuted, ...monoNum }}>{formatMXN(m.cuota)}</td>
-                            <td style={{ ...tdStyle, textAlign: 'right', ...monoNum, fontWeight: 500 }}>
-                              {m.sellIn > 0 ? formatMXN(m.sellIn) : <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: alcanceColor, ...monoNum }}>
-                              {m.sellIn > 0 ? alcancePct + "%" : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'center' }}>
-                              {m.sellIn > 0 && !isGenerado && !isNoAplica ? (() => {
-                                const idxSel = tiersOrd.findIndex(t => Number(t.pct) === pctSel);
-                                const colSel = idxSel >= 0 ? (COLS_TIER[idxSel] || COL_REBATE) : theme.textMuted;
-                                return (
-                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                    <select
-                                      value={pctSel}
-                                      onChange={(e) => setPctPorMes(prev => ({ ...prev, [m.mes]: Number(e.target.value) }))}
-                                      disabled={!canEdit}
-                                      style={{
-                                        fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, fontWeight: 700,
-                                        padding: '3px 6px', borderRadius: 6,
-                                        border: `1px solid ${colSel}40`,
-                                        background: `${colSel}15`,
-                                        color: colSel,
-                                        cursor: canEdit ? 'pointer' : 'not-allowed',
-                                        outline: 'none', minWidth: 56, textAlign: 'center',
-                                        fontVariantNumeric: 'tabular-nums',
-                                      }}
-                                      title={esOverride ? `Override — sugerido: ${(pctAuto*100).toFixed(2)}% (${m.tier?.label || 'sin tier'})` : `Sugerido según alcance · ${m.tier?.label || ''}`}
-                                    >
-                                      {tiersOrd.map((t, i) => (
-                                        <option key={i} value={Number(t.pct)}>
-                                          {(Number(t.pct) * 100).toFixed(2)}%
-                                        </option>
-                                      ))}
-                                    </select>
-                                    {esOverride && (
-                                      <button
-                                        onClick={() => setPctPorMes(prev => { const n = { ...prev }; delete n[m.mes]; return n; })}
-                                        title="Restaurar sugerido"
-                                        style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 11, padding: 0, lineHeight: 1 }}
-                                      >↺</button>
-                                    )}
-                                  </div>
-                                );
-                              })() : m.tier ? (() => {
-                                const idxAuto = tiersOrd.findIndex(t => Number(t.pct) === Number(m.tier.pct));
-                                const colAuto = idxAuto >= 0 ? (COLS_TIER[idxAuto] || COL_REBATE) : COL_REBATE;
-                                return (
-                                  <span style={{ ...pillBase(colAuto), padding: '3px 8px', fontSize: 10, fontFamily: 'SF Mono, ui-monospace, monospace', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                                    {(Number(m.tier.pct) * 100).toFixed(2)}%
-                                  </span>
-                                );
-                              })() : (
-                                <span style={{ color: theme.textSubtle || theme.textMuted }}>—</span>
-                              )}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: isNoAplica ? theme.textMuted : (montoSel > 0 ? COL_REBATE : theme.text), ...monoNum }}>
-                              {isNoAplica ? <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span> : montoSel > 0 ? formatMXN(montoSel) : <span style={{ color: theme.textSubtle || theme.textMuted, fontWeight: 400 }}>—</span>}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', paddingRight: 22 }}>
-                              {isNoAplica ? (
-                                <button onClick={() => revertirSpiff(p.id)} style={btnGhost}>↺ Revertir</button>
-                              ) : isGenerado ? (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                  <span style={pillBase(p.estatus === "pagado" ? '#34C759' : '#FF9500')}>
-                                    {p.estatus === "pagado" ? "✓ Pagado" : "⏳ Pendiente"}
-                                  </span>
-                                  <button onClick={() => revertirSpiff(p.id)} title="Eliminar pago"
-                                          style={{ background: 'transparent', border: 0, cursor: 'pointer', color: theme.textMuted, fontSize: 13, padding: '4px 6px' }}>🗑</button>
-                                </span>
-                              ) : m.sellIn > 0 && montoSel > 0 ? (
-                                <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                                  <button
-                                    onClick={() => generarRebateDicotech(m, pctSel)}
-                                    style={m.cumple || esOverride ? btnPrimary : btnWarn}
-                                    title={!m.cumple ? `Pagar aunque no llegue a ${alcanceMinPago}%` : ''}
-                                  >
-                                    Generar
-                                  </button>
-                                  <button onClick={() => marcarRebateDicotechNoAplica(m)} style={btnGhost}>No aplica</button>
-                                </span>
-                              ) : m.sellIn > 0 ? (
-                                <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                                  <button onClick={() => marcarRebateDicotechNoAplica(m)} style={btnGhost}>No aplica</button>
-                                </span>
-                              ) : (
-                                <span style={{ fontSize: 11, color: theme.textSubtle || theme.textMuted }}>Sin datos</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ padding: '12px 22px', borderTop: `1px solid ${theme.border}`, fontSize: 11, color: theme.textMuted, background: theme.bg, lineHeight: 1.55 }}>
-                  <strong style={{ color: theme.text, fontWeight: 600 }}>Fecha de pago automática:</strong> día 15 del mes siguiente (ej. rebate de Enero → 15 Febrero). El % aplicado depende del tier que alcance el mes.
-                </div>
-              </div>
-
-            </div>
-          );
-          })()}
-
-          {/* {/* ═══ Calculadora REBATE Trimestral PCEL ═══ */}
-          {clienteKey === "pcel" && catActiva === "rebate" && pcelCalc && (
-            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-gray-700" />
-                  <h3 className="text-lg font-bold text-gray-800">Calculadora Rebate Trimestral {new Date().getFullYear()}</h3>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b-2 border-gray-200">
-                      <th className="text-left py-2 px-3 font-bold text-gray-700">Trimestre</th>
-                      <th className="text-right py-2 px-3 font-bold text-gray-700">Sell In</th>
-                      <th className="text-right py-2 px-3 font-bold text-gray-700">Cuota</th>
-                      <th className="text-right py-2 px-3 font-bold text-gray-700">Alcance</th>
-                      <th className="text-right py-2 px-3 font-bold text-blue-600">Rebate</th>
-                      <th className="text-right py-2 px-3 font-bold text-emerald-600">Fondo MKT</th>
-                      <th className="text-center py-2 px-3 font-bold text-gray-600">Pagar</th>
-                      <th className="text-center py-2 px-3 font-bold text-gray-600">Registro</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pcelCalc.quarterly.map((q, i) => {
-                      const isRebApproved = pcelOverrideRebate[q.q] === "approved";
-                      const isFondoApproved = pcelOverrideFondo[q.q] === "approved";
-                      const meetsQuota = q.alcance >= 0.9;
-                      // Cada concepto se aprueba por separado: si se alcanza
-                      // cuota → auto; si no → solo si el override correspondiente.
-                      const payRebate = q.sellIn > 0 && (meetsQuota || isRebApproved);
-                      const payFondo  = q.sellIn > 0 && (meetsQuota || isFondoApproved);
-                      const shouldPay = payRebate || payFondo;
-                      const rebateAmt = payRebate ? q.sellIn * q.rebatePct : 0;
-                      const fondoAmt  = payFondo ? q.fondoAmount : 0;
-                      const pagoReg = pcelPagosReg.find(p => p.categoria === "rebate" && p.folio && p.folio.includes("Q" + q.q));
-                      return (<React.Fragment key={i}>
-                        <tr className={"border-b border-gray-100 " + (q.sellIn > 0 ? "hover:bg-gray-50" : "text-gray-300")}>
-                          <td className="py-2 px-3 font-semibold text-gray-700">{q.label}</td>
-                          <td className="py-2 px-3 text-right text-gray-600">{q.sellIn > 0 ? "$" + Math.round(q.sellIn).toLocaleString("es-MX") : "—"}</td>
-                          <td className="py-2 px-3 text-right text-gray-500">{q.cuota > 0 ? "$" + Math.round(q.cuota).toLocaleString("es-MX") : "—"}</td>
-                          <td className="py-2 px-3 text-right">{q.sellIn > 0 ? <span className={"font-semibold " + (q.alcance >= 1.2 ? "text-green-600" : q.alcance >= 0.9 ? "text-blue-600" : "text-red-500")}>{(q.alcance * 100).toFixed(1)}%</span> : <span>—</span>}</td>
-                          <td className="py-2 px-3 text-right"><span className={"font-bold " + (payRebate ? (isRebApproved && !meetsQuota ? "text-orange-600" : "text-blue-600") : "text-gray-300")}>{payRebate ? "$" + Math.round(rebateAmt).toLocaleString("es-MX") + (!meetsQuota && isRebApproved ? " *" : "") : q.sellIn > 0 ? "$0" : "—"}</span></td>
-                          <td className="py-2 px-3 text-right"><span className={"font-bold " + (payFondo ? (isFondoApproved && !meetsQuota ? "text-orange-600" : "text-emerald-600") : "text-gray-300")}>{payFondo ? "$" + Math.round(fondoAmt).toLocaleString("es-MX") + (!meetsQuota && isFondoApproved ? " *" : "") : q.sellIn > 0 ? "$0" : "—"}</span></td>
-                          <td className="py-1 px-2 text-center">
-                            {q.sellIn > 0 && meetsQuota ? (
-                              <span className="text-xs text-green-500 font-semibold" title="Auto-aprobado por cuota cumplida">✅ Cuota</span>
-                            ) : q.sellIn > 0 && !meetsQuota ? (
-                              <div className="flex flex-col items-center gap-1">
-                                <button onClick={() => setPcelOverrideRebate(prev => ({...prev, [q.q]: prev[q.q] === "approved" ? "" : "approved"}))}
-                                  className={"px-2 py-0.5 rounded text-[10px] font-bold transition-all whitespace-nowrap " + (isRebApproved ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-blue-100 hover:text-blue-600")}
-                                  title="Aprobar/desaprobar pago de Rebate aunque no llegue a cuota">
-                                  {isRebApproved ? "✓ Rebate" : "💵 Rebate"}
-                                </button>
-                                <button onClick={() => setPcelOverrideFondo(prev => ({...prev, [q.q]: prev[q.q] === "approved" ? "" : "approved"}))}
-                                  className={"px-2 py-0.5 rounded text-[10px] font-bold transition-all whitespace-nowrap " + (isFondoApproved ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-emerald-100 hover:text-emerald-600")}
-                                  title="Aprobar/desaprobar pago de Fondo MKT aunque no llegue a cuota">
-                                  {isFondoApproved ? "✓ Fondo MKT" : "🎯 Fondo MKT"}
-                                </button>
-                              </div>
-                            ) : null}
-                          </td>
-                          <td className="py-1 px-2 text-center">{shouldPay && !pagoReg ? (
-                            <button onClick={() => setShowPagoForm(showPagoForm === "rebate-Q"+q.q ? null : "rebate-Q"+q.q)} className="px-2 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">+ Registrar</button>
-                          ) : pagoReg ? (
-                            <span className={"text-xs font-semibold px-2 py-0.5 rounded-full " + (pagoReg.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700")}>{pagoReg.estatus === "pagado" ? "Pagado" : "Pendiente"}</span>
-                          ) : null}</td>
-                        </tr>
-                        {showPagoForm === "rebate-Q"+q.q && (
-                          <tr><td colSpan="8" className="p-3 bg-blue-50 border-b">
-                            <div className="flex items-center gap-3 flex-wrap">
-                              <label className="text-xs text-gray-600">Compromiso: <input type="date" className="ml-1 px-2 py-1 border rounded text-xs" value={pagoFormData.fecha_compromiso} onChange={e => setPagoFormData(p => ({...p, fecha_compromiso: e.target.value}))} /></label>
-                              <label className="text-xs text-gray-600">Responsable: <input type="text" className="ml-1 px-2 py-1 border rounded text-xs w-32" value={pagoFormData.responsable} onChange={e => setPagoFormData(p => ({...p, responsable: e.target.value}))} /></label>
-                              <label className="text-xs text-gray-600">Notas: <input type="text" className="ml-1 px-2 py-1 border rounded text-xs w-40" value={pagoFormData.notas} onChange={e => setPagoFormData(p => ({...p, notas: e.target.value}))} /></label>
-                              <button onClick={() => guardarPagoPcel("rebate", "Q"+q.q, rebateAmt)} className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">Guardar</button>
-                              <button onClick={() => setShowPagoForm(null)} className="px-3 py-1 rounded-lg text-xs text-gray-500 hover:text-gray-700">Cancelar</button>
-                            </div>
-                          </td></tr>
-                        )}
-                      </React.Fragment>);
-                    })}
-                    <tr className="border-t-2 border-gray-300 bg-gray-50">
-                      <td className="py-2 px-3 font-bold text-gray-800">Total</td>
-                      <td className="py-2 px-3 text-right font-bold text-gray-800">{"$" + Math.round(pcelCalc.totalSellIn).toLocaleString("es-MX")}</td>
-                      <td className="py-2 px-3"></td><td className="py-2 px-3"></td>
-                      <td className="py-2 px-3 text-right font-bold text-blue-600">{"$" + Math.round(pcelCalc.quarterly.reduce((s,q) => { const ok = q.alcance >= 0.9 || pcelOverrideRebate[q.q] === "approved"; return s + (q.sellIn > 0 && ok ? q.sellIn * q.rebatePct : 0); }, 0)).toLocaleString("es-MX")}</td>
-                      <td className="py-2 px-3 text-right font-bold text-emerald-600">{"$" + Math.round(pcelCalc.quarterly.reduce((s,q) => { const ok = q.alcance >= 0.9 || pcelOverrideFondo[q.q] === "approved"; return s + (q.sellIn > 0 && ok ? q.fondoAmount : 0); }, 0)).toLocaleString("es-MX")}</td>
-                      <td></td><td></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-xs text-gray-400 mt-3">* Tiers: {pcelRebateTiers.map(t => t.label + "=" + (t.pct*100) + "%").join(", ")}</p>
-            </div>
+          {vista === 'pagados' && (
+            <HistorialPagados pagados={registros.filter(r => r.estatus === 'pagado')} catActiva="todas" canEdit={canEdit} onTogglePagado={togglePagado} />
           )}
-          {/* ═══ Calculadora SPIFF Mensual PCEL ═══ */}
-          {clienteKey === "pcel" && catActiva === "spiff" && pcelCalc && (
-            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-5 h-5 text-gray-700" />
-                  <h3 className="text-lg font-bold text-gray-800">Calculadora SPIFF Mensual {new Date().getFullYear()}</h3>
-                </div>
-                <span className="px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700">{(SPIFF_PCT * 100).toFixed(2)}% sobre Sell In</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b-2 border-gray-200">
-                      <th className="text-left py-2 px-3 font-bold text-gray-700">Mes</th>
-                      <th className="text-right py-2 px-3 font-bold text-gray-700">Sell In</th>
-                      <th className="text-right py-2 px-3 font-bold text-gray-700">Cuota</th>
-                      <th className="text-right py-2 px-3 font-bold text-gray-700">Alcance</th>
-                      <th className="text-right py-2 px-3 font-bold text-purple-600">SPIFF</th>
-                      <th className="text-center py-2 px-3 font-bold text-gray-600">Pagar</th>
-                      <th className="text-center py-2 px-3 font-bold text-gray-600">Registro</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pcelCalc.monthly.map((r, i) => {
-                      const mName = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][r.mes - 1];
-                      const isApproved = pcelOverrideSpiff[r.mes] === "approved";
-                      const meetsQuota = r.alcance >= 0.9;
-                      const shouldPay = r.sellIn > 0 && (meetsQuota || isApproved);
-                      const spiffAmt = shouldPay ? r.sellIn * SPIFF_PCT : 0;
-                      const pagoReg = pcelPagosReg.find(p => p.categoria === "spiff" && p.folio && p.folio.includes("M" + r.mes + "-"));
-                      return (<React.Fragment key={i}>
-                        <tr className={"border-b border-gray-100 " + (r.sellIn > 0 ? "hover:bg-gray-50" : "text-gray-300")}>
-                          <td className="py-2 px-3 font-semibold text-gray-700">{mName}</td>
-                          <td className="py-2 px-3 text-right text-gray-600">{r.sellIn > 0 ? "$" + Math.round(r.sellIn).toLocaleString("es-MX") : "—"}</td>
-                          <td className="py-2 px-3 text-right text-gray-500">{r.cuota > 0 ? "$" + Math.round(r.cuota).toLocaleString("es-MX") : "—"}</td>
-                          <td className="py-2 px-3 text-right">{r.sellIn > 0 ? <span className={"font-semibold " + (r.alcance >= 1.2 ? "text-green-600" : r.alcance >= 0.9 ? "text-blue-600" : "text-red-500")}>{(r.alcance * 100).toFixed(1)}%</span> : <span>—</span>}</td>
-                          <td className="py-2 px-3 text-right"><span className={"font-bold " + (shouldPay ? (isApproved && !meetsQuota ? "text-orange-600" : "text-purple-600") : "text-gray-300")}>{shouldPay ? "$" + Math.round(spiffAmt).toLocaleString("es-MX") + (!meetsQuota && isApproved ? " *" : "") : r.sellIn > 0 ? "$0" : "—"}</span></td>
-                          <td className="py-1 px-2 text-center">{r.sellIn > 0 && !meetsQuota ? (
-                            <button onClick={() => setPcelOverrideSpiff(prev => ({...prev, [r.mes]: prev[r.mes] === "approved" ? "" : "approved"}))} className={"px-3 py-1 rounded-full text-xs font-bold transition-all " + (isApproved ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-orange-100 hover:text-orange-600")}>{isApproved ? "Aprobado" : "Pagar"}</button>
-                          ) : r.sellIn > 0 && meetsQuota ? (
-                            <span className="text-xs text-green-500 font-semibold">✅</span>
-                          ) : null}</td>
-                          <td className="py-1 px-2 text-center">{shouldPay && !pagoReg ? (
-                            <button onClick={() => setShowPagoForm(showPagoForm === "spiff-M"+r.mes ? null : "spiff-M"+r.mes)} className="px-2 py-1 rounded-lg text-xs font-bold bg-purple-50 text-purple-600 hover:bg-purple-100 transition-all">+ Registrar</button>
-                          ) : pagoReg ? (
-                            <span className={"text-xs font-semibold px-2 py-0.5 rounded-full " + (pagoReg.estatus === "pagado" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700")}>{pagoReg.estatus === "pagado" ? "Pagado" : "Pendiente"}</span>
-                          ) : null}</td>
-                        </tr>
-                        {showPagoForm === "spiff-M"+r.mes && (
-                          <tr><td colSpan="7" className="p-3 bg-purple-50 border-b">
-                            <div className="flex items-center gap-3 flex-wrap">
-                              <label className="text-xs text-gray-600">Compromiso: <input type="date" className="ml-1 px-2 py-1 border rounded text-xs" value={pagoFormData.fecha_compromiso} onChange={e => setPagoFormData(p => ({...p, fecha_compromiso: e.target.value}))} /></label>
-                              <label className="text-xs text-gray-600">Responsable: <input type="text" className="ml-1 px-2 py-1 border rounded text-xs w-32" value={pagoFormData.responsable} onChange={e => setPagoFormData(p => ({...p, responsable: e.target.value}))} /></label>
-                              <label className="text-xs text-gray-600">Notas: <input type="text" className="ml-1 px-2 py-1 border rounded text-xs w-40" value={pagoFormData.notas} onChange={e => setPagoFormData(p => ({...p, notas: e.target.value}))} /></label>
-                              <button onClick={() => guardarPagoPcel("spiff", "M"+r.mes, spiffAmt)} className="px-3 py-1 rounded-lg text-xs font-bold bg-purple-600 text-white hover:bg-purple-700">Guardar</button>
-                              <button onClick={() => setShowPagoForm(null)} className="px-3 py-1 rounded-lg text-xs text-gray-500 hover:text-gray-700">Cancelar</button>
-                            </div>
-                          </td></tr>
-                        )}
-                      </React.Fragment>);
-                    })}
-                    <tr className="border-t-2 border-gray-300 bg-gray-50">
-                      <td className="py-2 px-3 font-bold text-gray-800">Total</td>
-                      <td className="py-2 px-3 text-right font-bold text-gray-800">{"$" + Math.round(pcelCalc.totalSellIn).toLocaleString("es-MX")}</td>
-                      <td className="py-2 px-3"></td><td className="py-2 px-3"></td>
-                      <td className="py-2 px-3 text-right font-bold text-purple-600">{"$" + Math.round(pcelCalc.monthly.reduce((s,r) => { const ok = r.alcance >= 0.9 || pcelOverrideSpiff[r.mes] === "approved"; return s + (r.sellIn > 0 && ok ? r.sellIn * SPIFF_PCT : 0); }, 0)).toLocaleString("es-MX")}</td>
-                      <td></td><td></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-xs text-gray-400 mt-3">* SPIFF: {(SPIFF_PCT * 100).toFixed(2)}% mensual sobre Sell In</p>
+
+          {vista === 'rebate' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {clienteKey === 'digitalife' && (
+                <RebateDigitalife rebateQ={rebateQ} setRebateQ={setRebateQ} rebateLoading={rebateLoading} rebateData={rebateData} REBATE_PCT={REBATE_PCT} rebateSynced={rebateSynced}
+                  canEdit={canEdit} actualizarRebatePago={actualizarRebatePago} borrarRebatePago={borrarRebatePago} registrarRebateQ={registrarRebateQ} anio={anioActual} />
+              )}
+              {clienteKey === 'dicotech' && dicoRebateCalc && (
+                <RebateDicotech dicoRebateCalc={dicoRebateCalc} dicoRebateTotalYTD={dicoRebateTotalYTD} lineamientos={lineamientos} pctPorMes={pctPorMes} setPctPorMes={setPctPorMes}
+                  canEdit={canEdit} generarRebateDicotech={generarRebateDicotech} marcarRebateDicotechNoAplica={marcarRebateDicotechNoAplica} revertirSpiff={revertirSpiff} anio={anioActual} />
+              )}
+              {clienteKey === 'pcel' && pcelCalc && (
+                <RebatePcel pcelCalc={pcelCalc} pcelRebateTiers={pcelRebateTiers} pcelOverrideRebate={pcelOverrideRebate} setPcelOverrideRebate={setPcelOverrideRebate}
+                  pcelOverrideFondo={pcelOverrideFondo} setPcelOverrideFondo={setPcelOverrideFondo} pcelPagosReg={pcelPagosReg} showPagoForm={showPagoForm} setShowPagoForm={setShowPagoForm}
+                  pagoFormData={pagoFormData} setPagoFormData={setPagoFormData} guardarPagoPcel={guardarPagoPcel} canEdit={canEdit} anio={anioActual} />
+              )}
+              <Panel titulo="Rebate · registros" meta={`${registros.filter(r => r.categoria === 'rebate' && esActivo(r)).length} pendientes`} padding="0">
+                <TablaPendientes filas={registros.filter(r => r.categoria === 'rebate' && esActivo(r))} canEdit={canEdit} dbOk={DB_CONFIGURED} edit={edit} catActiva="rebate"
+                  togglePagado={togglePagado} verHistorial={verHistorial} handleDuplicate={handleDuplicate} handleDelete={handleDelete}
+                  expandedPagoId={expandedPagoId} togglePagoExpand={togglePagoExpand} actividadesPorPago={actividadesPorPago} excluirActividadDePago={excluirActividadDePago} />
+              </Panel>
             </div>
           )}
 
-          {/* ═══ Fondo PCEL: ledger (toggle desde KPI cards) ═══ */}
-          {clienteKey === "pcel" && mostrarFondo && (
-            <div className="space-y-4 mb-6">
-              <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-violet-600" />
-                  <p className="text-sm text-violet-900"><strong>Fondos PCEL</strong> — total aportado {formatMXN(fondoResumen.entradasMkt + fondoResumen.entradasDirecto)} · total gastado {formatMXN(fondoResumen.gastosMkt + fondoResumen.gastosDirecto)}</p>
-                </div>
-                <button onClick={() => setMostrarFondo(false)} className="text-xs text-violet-600 hover:text-violet-800 font-semibold">Cerrar ▲</button>
-              </div>
-
-              {/* Ledger por tipo de fondo */}
-              {["mkt", "directo"].map(tipo => {
-                const filas = [...fondoResumen.ledger[tipo]].reverse(); // newest first
-                const titulo = tipo === "mkt" ? "Fondo de Marketing" : "Fondo Directo (Generación Sell Out)";
-                const color = tipo === "mkt" ? "violet" : "blue";
-                return (
-                  <div key={tipo} className="bg-white rounded-2xl shadow-sm overflow-hidden">
-                    <div className="flex items-center justify-between p-5 border-b border-gray-100">
-                      <div>
-                        <h3 className={`text-lg font-bold text-${color}-600`}>{titulo}</h3>
-                        <p className="text-xs text-gray-400 mt-0.5">{filas.length} movimientos · Saldo actual {formatMXN(tipo === "mkt" ? fondoResumen.saldoMkt : fondoResumen.saldoDirecto)}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => { setFondoForm(f => ({ ...f, tipo_fondo: tipo, tipo_mov: "aporte", fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: "", folio: "", notas: "" })); setShowFondoForm(true); }}
-                          className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
-                          title="Agregar dinero al fondo (incluso si no se cumplió cuota)"
-                        >
-                          💰 Aportar
-                        </button>
-                        <button
-                          onClick={() => { setFondoForm(f => ({ ...f, tipo_fondo: tipo, tipo_mov: "gasto", fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: "", folio: "", notas: "" })); setShowFondoForm(true); }}
-                          className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-rose-500 hover:bg-rose-600 text-white"
-                          title="Registrar gasto / salida del fondo"
-                        >
-                          💸 Gasto
-                        </button>
-                      </div>
-                    </div>
-                    {filas.length === 0 ? (
-                      <p className="text-sm text-gray-400 italic text-center py-8">Sin movimientos.</p>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-gray-50 border-b border-gray-100">
-                            <tr>
-                              <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Fecha</th>
-                              <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Tipo</th>
-                              <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Concepto</th>
-                              <th className="text-center py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Q</th>
-                              <th className="text-right py-2 px-3 text-xs font-semibold text-emerald-600 uppercase">Entrada</th>
-                              <th className="text-right py-2 px-3 text-xs font-semibold text-rose-600 uppercase">Salida</th>
-                              <th className="text-right py-2 px-3 text-xs font-semibold text-gray-600 uppercase">Saldo</th>
-                              <th className="text-center py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Folio</th>
-                              <th className="w-10"></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filas.map(m => (
-                              <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50">
-                                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">{new Date(m.fecha + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "2-digit" })}</td>
-                                <td className="py-2 px-3">
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
-                                    m.tipo_mov === "inicial" ? "bg-gray-100 text-gray-600" :
-                                    m.tipo_mov === "aporte" ? "bg-emerald-100 text-emerald-700" :
-                                    "bg-rose-100 text-rose-700"
-                                  }`}>{m.tipo_mov}</span>
-                                </td>
-                                <td className="py-2 px-3 text-gray-800">{m.concepto}{m.notas && <span className="block text-xs text-gray-400">{m.notas}</span>}</td>
-                                <td className="py-2 px-3 text-center text-gray-500 text-xs">{m.trimestre ? `Q${m.trimestre} ${m.anio}` : "—"}</td>
-                                <td className="py-2 px-3 text-right text-emerald-600 font-semibold">{m.tipo_mov !== "gasto" ? formatMXN(Number(m.monto)) : "—"}</td>
-                                <td className="py-2 px-3 text-right text-rose-600 font-semibold">{m.tipo_mov === "gasto" ? formatMXN(Number(m.monto)) : "—"}</td>
-                                <td className="py-2 px-3 text-right text-gray-800 font-bold">{formatMXN(m.saldo_running)}</td>
-                                <td className="py-2 px-3 text-center text-gray-400 text-xs">{m.folio || "—"}</td>
-                                <td className="py-2 px-3 text-center">
-                                  {m.tipo_mov !== "inicial" && canEdit && (
-                                    <button onClick={() => eliminarMovimientoFondo(m.id)} className="text-gray-300 hover:text-rose-500 text-xs" title="Eliminar movimiento">✕</button>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* Modal: nuevo movimiento (UX diferenciada según aporte/gasto) */}
-              {showFondoForm && (() => {
-                const esAporte = fondoForm.tipo_mov === "aporte";
-                const tituloModal = esAporte ? "💰 Agregar aporte al fondo" : "💸 Registrar gasto del fondo";
-                const subtituloModal = esAporte
-                  ? "Suma dinero al fondo. Útil para aportes manuales cuando no se cumplió cuota pero decides aportar de todas formas."
-                  : "Registra una salida del fondo (evento, promoción, material, etc.)";
-                const conceptoPlaceholder = esAporte
-                  ? "Ej. Aporte discrecional Q2, Generación extra de marketing"
-                  : "Ej. Hot Sale, Promociones Mar 26, Rebate Q1";
-                const colorBtn = esAporte ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-500 hover:bg-rose-600";
-                const colorBg = esAporte ? "bg-emerald-50" : "bg-rose-50";
-                return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-                  <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-                    <div className={`flex items-center justify-between px-5 py-4 border-b border-gray-100 ${colorBg}`}>
-                      <div>
-                        <h3 className="font-bold text-gray-800">{tituloModal}</h3>
-                        <p className="text-xs text-gray-500 mt-0.5">{subtituloModal}</p>
-                      </div>
-                      <button onClick={() => setShowFondoForm(false)} className="p-1 rounded hover:bg-white/50 text-gray-500 text-lg">✕</button>
-                    </div>
-                    <div className="p-5 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <label className="block">
-                          <span className="text-xs text-gray-500 font-semibold">Fondo</span>
-                          <select value={fondoForm.tipo_fondo} onChange={e => setFondoForm(f => ({ ...f, tipo_fondo: e.target.value }))} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm">
-                            <option value="mkt">Fondo MKT</option>
-                            <option value="directo">Fondo Directo</option>
-                          </select>
-                        </label>
-                        <label className="block">
-                          <span className="text-xs text-gray-500 font-semibold">Tipo de movimiento</span>
-                          <select value={fondoForm.tipo_mov} onChange={e => setFondoForm(f => ({ ...f, tipo_mov: e.target.value }))} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm">
-                            <option value="aporte">💰 Aporte (entrada)</option>
-                            <option value="gasto">💸 Gasto (salida)</option>
-                          </select>
-                        </label>
-                      </div>
-                      <label className="block">
-                        <span className="text-xs text-gray-500 font-semibold">Fecha</span>
-                        <input type="date" value={fondoForm.fecha} onChange={e => setFondoForm(f => ({ ...f, fecha: e.target.value }))} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
-                      </label>
-                      <label className="block">
-                        <span className="text-xs text-gray-500 font-semibold">Concepto *</span>
-                        <input type="text" value={fondoForm.concepto} onChange={e => setFondoForm(f => ({ ...f, concepto: e.target.value }))} placeholder={conceptoPlaceholder} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
-                      </label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <label className="block">
-                          <span className="text-xs text-gray-500 font-semibold">Monto *</span>
-                          <input type="number" value={fondoForm.monto} onChange={e => setFondoForm(f => ({ ...f, monto: e.target.value }))} placeholder="0.00" className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
-                        </label>
-                        <label className="block">
-                          <span className="text-xs text-gray-500 font-semibold">Folio</span>
-                          <input type="text" value={fondoForm.folio} onChange={e => setFondoForm(f => ({ ...f, folio: e.target.value }))} placeholder="—" className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
-                        </label>
-                      </div>
-                      <label className="block">
-                        <span className="text-xs text-gray-500 font-semibold">Notas / motivo</span>
-                        <input type="text" value={fondoForm.notas} onChange={e => setFondoForm(f => ({ ...f, notas: e.target.value }))} placeholder={esAporte ? "Ej. Aporte autorizado por dirección" : ""} className="mt-1 w-full px-3 py-2 border rounded-lg text-sm" />
-                      </label>
-                    </div>
-                    <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100">
-                      <button onClick={() => setShowFondoForm(false)} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100">Cancelar</button>
-                      <button onClick={crearMovimientoFondo} className={`px-4 py-2 rounded-lg text-sm font-semibold text-white ${colorBtn}`}>
-                        {esAporte ? "💰 Guardar aporte" : "💸 Guardar gasto"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                );
-              })()}
+          {vista === 'spiff' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {clienteKey === 'digitalife' && spiffCalc && (
+                <SpiffDigitalife spiffCalc={spiffCalc} spiffTotalYTD={spiffTotalYTD} SPIFF_CUOTA_SO_FACTOR={SPIFF_CUOTA_SO_FACTOR} SPIFF_FLAT_PCT={SPIFF_FLAT_PCT} SPIFF_MIN_ALCANCE={SPIFF_MIN_ALCANCE}
+                  spiffDigiTiersUnlocked={spiffDigiTiersUnlocked} setSpiffDigiTiersUnlocked={setSpiffDigiTiersUnlocked} guardarSpiffDigiConfig={guardarSpiffDigiConfig}
+                  canEdit={canEdit} crearSpiffPago={crearSpiffPago} marcarSpiffNoAplica={marcarSpiffNoAplica} revertirSpiff={revertirSpiff} anio={anioActual} />
+              )}
+              {clienteKey === 'dicotech' && spiffDicotechCalc && (
+                <SpiffDicotech spiffDicotechCalc={spiffDicotechCalc} spiffDicotechTotalYTD={spiffDicotechTotalYTD} spiffDicoCompradoraPct={spiffDicoCompradoraPct}
+                  spiffPctUnlocked={spiffPctUnlocked} setSpiffPctUnlocked={setSpiffPctUnlocked} spiffPctInputRef={spiffPctInputRef} guardarSpiffDicoConfig={guardarSpiffDicoConfig}
+                  canEdit={canEdit} crearSpiffDicotechPago={crearSpiffDicotechPago} marcarSpiffDicotechNoAplica={marcarSpiffDicotechNoAplica} revertirSpiff={revertirSpiff} anio={anioActual} />
+              )}
+              {clienteKey === 'pcel' && pcelCalc && (
+                <SpiffPcel pcelCalc={pcelCalc} SPIFF_PCT={SPIFF_PCT} pcelOverrideSpiff={pcelOverrideSpiff} setPcelOverrideSpiff={setPcelOverrideSpiff} pcelPagosReg={pcelPagosReg}
+                  showPagoForm={showPagoForm} setShowPagoForm={setShowPagoForm} pagoFormData={pagoFormData} setPagoFormData={setPagoFormData} guardarPagoPcel={guardarPagoPcel} canEdit={canEdit} anio={anioActual} />
+              )}
+              {(spiffLoading && !spiffCalc && !spiffDicotechCalc) && <Nota>Cargando datos de SPIFF…</Nota>}
+              <Panel titulo="SPIFF · registros" meta={`${registros.filter(r => r.categoria === 'spiff' && esActivo(r)).length} pendientes`} padding="0">
+                <TablaPendientes filas={registros.filter(r => r.categoria === 'spiff' && esActivo(r))} canEdit={canEdit} dbOk={DB_CONFIGURED} edit={edit} catActiva="spiff"
+                  togglePagado={togglePagado} verHistorial={verHistorial} handleDuplicate={handleDuplicate} handleDelete={handleDelete}
+                  expandedPagoId={expandedPagoId} togglePagoExpand={togglePagoExpand} actividadesPorPago={actividadesPorPago} excluirActividadDePago={excluirActividadDePago} />
+              </Panel>
             </div>
           )}
 
-        </>
-      )}
-
-      {/* Modal: bitácora de cambios de un pago */}
-      {historialPago && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <div>
-                <h3 className="font-bold text-gray-800">Bitácora de cambios</h3>
-                <p className="text-xs text-gray-500 mt-0.5">{historialPago.pago.concepto}</p>
-              </div>
-              <button onClick={() => setHistorialPago(null)} className="p-1 rounded hover:bg-gray-100 text-gray-500 text-lg">✕</button>
-            </div>
-            <div className="overflow-y-auto p-5">
-              {historialPago.entries.length === 0 ? (
-                <p className="text-sm text-gray-400 italic text-center py-6">Sin cambios registrados (este pago fue creado antes del audit, o no ha sido editado).</p>
-              ) : (
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="text-left py-2 px-2 text-gray-500 font-semibold uppercase">Fecha</th>
-                      <th className="text-left py-2 px-2 text-gray-500 font-semibold uppercase">Usuario</th>
-                      <th className="text-left py-2 px-2 text-gray-500 font-semibold uppercase">Campo</th>
-                      <th className="text-left py-2 px-2 text-gray-500 font-semibold uppercase">De</th>
-                      <th className="text-left py-2 px-2 text-gray-500 font-semibold uppercase">A</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historialPago.entries.map((e) => (
-                      <tr key={e.id} className="border-t border-gray-100">
-                        <td className="py-1.5 px-2 text-gray-500 whitespace-nowrap">
-                          {new Date(e.changed_at).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-                        </td>
-                        <td className="py-1.5 px-2 text-gray-700">{e.user_name || e.user_email || "—"}</td>
-                        <td className="py-1.5 px-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                            e.accion === "insert" ? "bg-emerald-100 text-emerald-700"
-                            : e.accion === "delete" ? "bg-red-100 text-red-700"
-                            : "bg-blue-100 text-blue-700"
-                          }`}>
-                            {e.accion === "update" ? e.field_name : e.accion}
-                          </span>
-                        </td>
-                        <td className="py-1.5 px-2 text-gray-600">{e.accion === "update" ? (e.old_value || "∅") : ""}</td>
-                        <td className="py-1.5 px-2 text-gray-800 font-medium">{e.accion === "update" ? (e.new_value || "∅") : ""}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {vista === 'fondos' && tieneFondos && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {clienteKey === 'dicotech' && dicoFondoTablaMensual && (
+                <FondosDicotech dicoFondoTablaMensual={dicoFondoTablaMensual} revertirMovimientoFondo={revertirMovimientoFondo} canEdit={canEdit} anio={anioActual} />
+              )}
+              {clienteKey === 'pcel' && (
+                <FondosPcel fondoResumen={fondoResumen} fondoLoading={fondoLoading} canEdit={canEdit} setFondoForm={setFondoForm} setShowFondoForm={setShowFondoForm} eliminarMovimientoFondo={eliminarMovimientoFondo} />
               )}
             </div>
-            <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 text-right">
-              <button onClick={() => setHistorialPago(null)} className="px-4 py-1.5 bg-white hover:bg-gray-100 text-gray-700 rounded-lg text-xs font-semibold border border-gray-300">Cerrar</button>
-            </div>
-          </div>
+          )}
+
+          {/* Lineamientos editables de la vista (fondo MKT / rebate / SPIFF) */}
+          {lineamientosTipos && <LineamientosCliente clienteKey={clienteKey} tipos={lineamientosTipos} />}
+
+          {/* 5 · Resumen por mes (calendario + tabla), plegado por default */}
+          <ResumenMensual registros={registros} clienteKey={clienteKey} anio={anioActual} mb={mb} totalAnio={totalAnio}
+            expandedMonth={expandedMonth} setExpandedMonth={setExpandedMonth} onAbrirExport={abrirExport} />
         </div>
       )}
 
-    </div>
-  );
-}
-
-// ─── ESTRATEGIA DE PRODUCTO ─── CONSTANTS ───────────────────────────────────────────────────────────────
-const ROADMAP_CODES = {
-  RMI:   { label: "RunRate",           color: "bg-green-100",  text: "text-green-700" },
-  NVS:   { label: "Nuevo",             color: "bg-blue-100",   text: "text-blue-700" },
-  "2025": { label: "Lanzamiento 2025", color: "bg-purple-100", text: "text-purple-700" },
-  "2026": { label: "Lanzamiento 2026", color: "bg-orange-100", text: "text-orange-700" },
-  EXMAY: { label: "Mayoreo",           color: "bg-amber-100",  text: "text-amber-700" },
-  RML:   { label: "Liquidación",       color: "bg-red-100",    text: "text-red-700" },
-  PEM:   { label: "Marketplace",       color: "bg-teal-100",   text: "text-teal-700" },
-  DECME: { label: "DECME",             color: "bg-gray-100",   text: "text-gray-700" },
-};
-
-const MONTHS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-const MONTH_KEYS_2025 = ["ene_2025", "feb_2025", "mar_2025", "abr_2025", "may_2025", "jun_2025", "jul_2025", "ago_2025", "sep_2025", "oct_2025", "nov_2025", "dic_2025"];
-const MONTH_KEYS_2026 = ["ene_2026", "feb_2026", "mar_2026", "abr_2026", "may_2026", "jun_2026", "jul_2026", "ago_2026", "sep_2026", "oct_2026", "nov_2026", "dic_2026"];
-const MONTH_VAL_2025 = ["ene_2025_val", "feb_2025_val", "mar_2025_val", "abr_2025_val", "may_2025_val", "jun_2025_val", "jul_2025_val", "ago_2025_val", "sep_2025_val", "oct_2025_val", "nov_2025_val", "dic_2025_val"];
-const MONTH_VAL_2026 = ["ene_2026_val", "feb_2026_val", "mar_2026_val", "abr_2026_val", "may_2026_val", "jun_2026_val", "jul_2026_val", "ago_2026_val", "sep_2026_val", "oct_2026_val", "nov_2026_val", "dic_2026_val"];
-
-// ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────
-function summonthlyValues(producto, monthKeys) {
-  return monthKeys.reduce((sum, key) => sum + (producto[key] || 0), 0);
-}
-
-function filterProductos(productos, yearFilter, marcaFilter, categoriaFilter, roadmapFilter, searchTerm) {
-  return productos.filter(p => {
-    if (marcaFilter !== "todas" && (!p.marca || !p.marca.toUpperCase().includes(marcaFilter.toUpperCase()))) {
-      return false;
-    }
-    if (categoriaFilter !== "todas" && p.categoria !== categoriaFilter) {
-      return false;
-    }
-    if (roadmapFilter !== "todos" && p.roadmap !== roadmapFilter) {
-      return false;
-    }
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      return (
-        (p.sku && p.sku.toLowerCase().includes(term)) ||
-        (p.descripcion && p.descripcion.toLowerCase().includes(term))
-      );
-    }
-    return true;
-  });
-}
-
-// ——— ESTRATEGIA DE PRODUCTO (Excel Upload + Data Display) ———
-
-
-// ═══════════════════════════════════════════════════════════════════════
-// HistorialPagadosPorMes — menú desplegable con pagos ya completados,
-// agrupados por mes (YYYY-MM desc). Aparece en todas las sub-pestañas
-// (promociones, marketing, pagos fijos, pagos variables, rebate, spiff, todas)
-// filtrando según la categoría activa.
-// ═══════════════════════════════════════════════════════════════════════
-function HistorialPagadosPorMes({ pagados, catActiva, CATEGORIA_META, onTogglePagado, canEdit }) {
-  const [abierto, setAbierto] = React.useState(false);
-  const [mesesExpandidos, setMesesExpandidos] = React.useState({});
-  const [rango, setRango] = React.useState("6m"); // '3m' | '6m' | 'anio' | 'todo'
-
-  // Filtrar por rango antes de cualquier otro procesamiento
-  const pagadosFiltrados = React.useMemo(() => {
-    if (!pagados || pagados.length === 0) return [];
-    if (rango === "todo") return pagados;
-    const hoy = new Date();
-    let desde;
-    if (rango === "3m") { desde = new Date(hoy); desde.setMonth(hoy.getMonth() - 3); }
-    else if (rango === "6m") { desde = new Date(hoy); desde.setMonth(hoy.getMonth() - 6); }
-    else if (rango === "anio") { desde = new Date(hoy.getFullYear(), 0, 1); }
-    const desdeISO = desde.toISOString().slice(0, 10);
-    return pagados.filter(r => {
-      const f = r.fecha_pago_real || r.fecha_compromiso;
-      return f && String(f).slice(0, 10) >= desdeISO;
-    });
-  }, [pagados, rango]);
-
-  if (!pagados || pagados.length === 0) {
-    return (
-      <div className="bg-white rounded-2xl shadow-sm p-4 mb-6">
-        <div className="flex items-center gap-2 text-gray-400">
-          <span>✓</span>
-          <h3 className="text-sm font-semibold">Pagos completados</h3>
-          <span className="text-xs italic">— aún no hay pagos completados{catActiva !== "todas" ? " en esta categoría" : ""}</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Agrupar por YYYY-MM (por fecha_pago_real si existe, si no fecha_compromiso)
-  const MESES_LARGOS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-  const getFechaMes = (r) => {
-    const f = r.fecha_pago_real || r.fecha_compromiso;
-    return f ? String(f).slice(0, 7) : "sin-fecha";
-  };
-  const grupos = {};
-  pagadosFiltrados.forEach((r) => {
-    const k = getFechaMes(r);
-    if (!grupos[k]) grupos[k] = [];
-    grupos[k].push(r);
-  });
-  const mesesOrdenados = Object.keys(grupos).sort((a, b) => b.localeCompare(a)); // desc
-  const totalPagados = pagadosFiltrados.reduce((s, r) => s + (Number(r.monto) || 0), 0);
-
-  return (
-    <div className="bg-white rounded-2xl shadow-sm mb-6 overflow-hidden">
-      <button
-        onClick={() => setAbierto(!abierto)}
-        className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{abierto ? "▾" : "▸"}</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          <h3 className="text-sm font-semibold text-gray-700">Pagos completados</h3>
-          <span className="text-xs text-gray-400">
-            ({pagadosFiltrados.length} pago{pagadosFiltrados.length !== 1 ? "s" : ""} · {mesesOrdenados.length} mes{mesesOrdenados.length !== 1 ? "es" : ""})
-          </span>
-        </div>
-        <div className="text-right">
-          <p className="text-sm font-bold text-emerald-600">{formatMXN(totalPagados)}</p>
-          <p className="text-[10px] text-gray-400 uppercase tracking-wider">Total pagado</p>
-        </div>
-      </button>
-
-      {abierto && (
-        <div className="border-t border-gray-100 divide-y divide-gray-100">
-          <div className="px-5 py-2 bg-gray-50 flex items-center gap-2 text-xs">
-            <span className="text-gray-500">Mostrar:</span>
-            {[
-              { k: "3m", label: "Últimos 3 meses" },
-              { k: "6m", label: "Últimos 6 meses" },
-              { k: "anio", label: "Este año" },
-              { k: "todo", label: "Todo" },
-            ].map(o => (
-              <button
-                key={o.k}
-                onClick={() => setRango(o.k)}
-                className={`px-2.5 py-0.5 rounded-full font-semibold transition-colors ${
-                  rango === o.k ? "bg-emerald-600 text-white" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
-                }`}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-          {mesesOrdenados.map((mesKey) => {
-            const items = grupos[mesKey];
-            const totalMes = items.reduce((s, r) => s + (Number(r.monto) || 0), 0);
-            const [anio, mm] = mesKey.split("-");
-            const nombreMes = mm && !isNaN(Number(mm))
-              ? `${MESES_LARGOS[Number(mm) - 1]} ${anio}`
-              : "Sin fecha";
-            const expandido = !!mesesExpandidos[mesKey];
-            return (
-              <div key={mesKey}>
-                <button
-                  onClick={() => setMesesExpandidos((p) => ({ ...p, [mesKey]: !expandido }))}
-                  className="w-full flex items-center justify-between px-5 py-2.5 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-400">{expandido ? "▾" : "▸"}</span>
-                    <span className="text-sm font-medium text-gray-700">{nombreMes}</span>
-                    <span className="text-xs text-gray-400">
-                      · {items.length} pago{items.length !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  <span className="text-sm font-semibold text-gray-700">{formatMXN(totalMes)}</span>
-                </button>
-                {expandido && (
-                  <div className="px-5 pb-3 bg-gray-50/40">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="text-gray-400 uppercase tracking-wider">
-                          <th className="text-left py-1.5 pr-3 font-semibold">Concepto</th>
-                          <th className="text-left py-1.5 pr-3 font-semibold">Categoría</th>
-                          <th className="text-right py-1.5 pr-3 font-semibold">Monto</th>
-                          <th className="text-left py-1.5 pr-3 font-semibold">F. Pago</th>
-                          <th className="text-left py-1.5 pr-3 font-semibold">Folio</th>
-                          <th className="text-left py-1.5 pr-3 font-semibold">Responsable</th>
-                          {canEdit && onTogglePagado && <th className="text-center py-1.5 font-semibold" title="Click para desmarcar">Pagado</th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((r) => {
-                          const meta = CATEGORIA_META[r.categoria];
-                          return (
-                            <tr key={r.id} className="border-t border-gray-100">
-                              <td className="py-1.5 pr-3 text-gray-700">{r.concepto}</td>
-                              <td className="py-1.5 pr-3">
-                                {meta ? (
-                                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold text-white"
-                                        style={{ backgroundColor: meta.color }}>
-                                    {meta.label}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 text-[10px]">{r.categoria}</span>
-                                )}
-                              </td>
-                              <td className="py-1.5 pr-3 text-right font-semibold text-emerald-600">{formatMXN(r.monto)}</td>
-                              <td className="py-1.5 pr-3 text-gray-600">{r.fecha_pago_real ? formatFecha(r.fecha_pago_real) : <span className="italic text-gray-400">—</span>}</td>
-                              <td className="py-1.5 pr-3 font-mono text-[11px] text-gray-500">{r.folio || "—"}</td>
-                              <td className="py-1.5 pr-3 text-gray-500">{r.responsable || "—"}</td>
-                              {canEdit && onTogglePagado && (
-                                <td className="py-1.5 text-center">
-                                  <input type="checkbox" checked
-                                    onChange={() => onTogglePagado(r)}
-                                    className="w-4 h-4 rounded border-gray-300 text-emerald-600 cursor-pointer"
-                                    title="Click para desmarcar y volver a pendiente" />
-                                </td>
-                              )}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+      {/* Modales */}
+      {exportModalOpen && (
+        <ExportModal mbList={mb} registros={registros} exportMeses={exportMeses} setExportMeses={setExportMeses} onClose={() => setExportModalOpen(false)} onExportar={exportarMeses} />
+      )}
+      {historialPago && <BitacoraModal historial={historialPago} onClose={() => setHistorialPago(null)} />}
+      {clienteKey === 'pcel' && showFondoForm && (
+        <FondoPcelModal fondoForm={fondoForm} setFondoForm={setFondoForm} onClose={() => setShowFondoForm(false)} onSave={crearMovimientoFondo} />
       )}
     </div>
   );

@@ -25,7 +25,6 @@ const CreditoCobranzaV2      = lazy(() => import('./modules/comercial/CreditoCob
 const PagosCliente           = lazy(() => import('./modules/comercial/PagosCliente'));
 const EstrategiaProducto     = lazy(() => import('./modules/comercial/EstrategiaProducto'));
 const MarketingCliente       = lazy(() => import('./modules/comercial/MarketingCliente'));
-const MarketingClienteV2     = lazy(() => import('./modules/comercial/MarketingClienteV2'));
 const AnalisisCliente        = lazy(() => import('./modules/comercial/AnalisisCliente'));
 const AnalisisClientesGlobal = lazy(() => import('./modules/comercial/AnalisisClientesGlobal'));
 const InventarioGlobal       = lazy(() => import('./modules/comercial/InventarioGlobal'));
@@ -399,19 +398,19 @@ export default function App() {
       digitalife: [
         () => import('./modules/comercial/HomeDigitalife'), () => import('./modules/comercial/SellInClienteV2'),
         () => import('./modules/comercial/SellOutClienteV2'), () => import('./modules/comercial/PagosCliente'),
-        () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingClienteV2'),
+        () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingCliente'),
         () => import('./modules/comercial/AnalisisCliente'),
       ],
       dicotech: [
         () => import('./modules/comercial/HomeDicotech'), () => import('./modules/comercial/SellInDicotech'),
         () => import('./modules/comercial/SellOutDicotech'), () => import('./modules/comercial/PagosCliente'),
-        () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingClienteV2'),
+        () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingCliente'),
         () => import('./modules/comercial/AnalisisCliente'),
       ],
       pcel: [
         () => import('./modules/comercial/HomePcel'), () => import('./modules/comercial/SellInPcel'),
         () => import('./modules/comercial/SellOutPcel'), () => import('./modules/comercial/PagosCliente'),
-        () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingClienteV2'),
+        () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingCliente'),
         () => import('./modules/comercial/AnalisisCliente'),
       ],
     };
@@ -799,7 +798,9 @@ export default function App() {
           mobile
             ? <MobileMarketing clienteKey={clienteActivo} onBack={() => setPaginaActiva('home')} onNavegar={handleNavegar} />
             : React.createElement(
-                (clienteActivo === 'digitalife' || clienteActivo === 'dicotech' || clienteActivo === 'pcel') ? MarketingClienteV2 : MarketingCliente,
+                // Ferruteck 2 (2026-09-10): MarketingCliente rediseñado con el kit es la única versión;
+                // MarketingClienteV2 queda como respaldo hasta que Fernando valide en producción.
+                MarketingCliente,
                 { cliente: clienteActivo, clienteKey: clienteActivo }
               )
         )}

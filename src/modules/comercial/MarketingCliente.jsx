@@ -1,88 +1,29 @@
-import React from "react";
+// MarketingCliente · Ferruteck 2 (kit)
+// ─ Hero narrativo (mes / actividades activas / próxima) + 3 stats
+// ─ 4 KPI: Sell-out en promo (v_vision_sellout_promos, global) · Costo por actividad · Apertura mailing · Próxima
+// ─ Barra: año · Mes/Anual · meses como pills · Cerrar mes · Exportar · + Actividad · filtros tipo/marca
+// ─ Calendario compacto (mes / 12 mini-meses) + lista de actividades con acciones al hover
+// ─ Completadas y archivadas en panel plegable · formulario modal (marketing/ActividadForm)
+// Conserva: CRUD, realtime, cerrar mes (pago consolidado), permisos canEdit, filtros tipo/marca/mes/día.
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Lock, X } from 'lucide-react';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
-import { Megaphone, CalendarDays } from 'lucide-react';
+import { cachedQuery } from '../../lib/queries';
+import { useTheme } from '../../lib/themeContext';
+import { TYPO } from '../../lib/themeTokens';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaCliente, puedeVerPestanaCliente } from '../../lib/permisos';
+import { clientes as CLIENTES } from '../../lib/constants';
 import SinAcceso from '../../components/SinAcceso';
-import { FerrutekLoader } from '../../components';
-
-// ═══════════ CONFIG DE TIPOS DE ACTIVIDAD ═══════════════════════
-// Cada tipo tiene color, icono y lista de métricas específicas
-const TIPOS = {
-  mailing:    { label: "Mailing",    color: "#10B981", bg: "#ECFDF5", icon: "📧", metricas: [
-    { key: "envios", label: "Envíos" },
-    { key: "aperturas", label: "Aperturas" },
-    { key: "clics", label: "Clics" },
-  ]},
-  reel:       { label: "Reel",       color: "#A855F7", bg: "#F5F3FF", icon: "🎬", redSocial: true, metricas: [
-    { key: "visualizaciones", label: "Visualizaciones" },
-    { key: "interaccion", label: "Interacción" },
-    { key: "cuentas_alcanzadas", label: "Cuentas alcanzadas" },
-    { key: "retencion", label: "Retención (%)" },
-    { key: "me_gusta", label: "Me gusta" },
-  ]},
-  banner:     { label: "Banner",     color: "#3B82F6", bg: "#EFF6FF", icon: "🖼️", metricas: [
-    { key: "usuarios_activos", label: "Usuarios activos" },
-    { key: "sesiones", label: "Sesiones" },
-    { key: "vistas", label: "Vistas" },
-  ]},
-  meta_ads:   { label: "Meta Ads",   color: "#EAB308", bg: "#FEFCE8", icon: "📱", metricas: [
-    { key: "importe_gastado", label: "Importe gastado ($)", money: true },
-    { key: "alcance", label: "Alcance" },
-    { key: "impresiones", label: "Impresiones" },
-    { key: "clics_enlace", label: "Clics en enlace" },
-    { key: "compras", label: "Compras" },
-    { key: "valor_conversion", label: "Valor conversión ($)", money: true },
-  ]},
-  google_ads: { label: "Google Ads", color: "#F97316", bg: "#FFF7ED", icon: "🔍", metricas: [
-    { key: "calidad", label: "Calidad (1-10)" },
-    { key: "clics", label: "Clics" },
-    { key: "impresiones", label: "Impresiones" },
-    { key: "conversiones", label: "Conversiones" },
-    { key: "valor_conversion", label: "Valor conversión ($)", money: true },
-    { key: "costo", label: "Costo ($)", money: true },
-    { key: "nivel_optimizacion", label: "Nivel optimización (%)" },
-  ]},
-  evento:     { label: "Evento",     color: "#EC4899", bg: "#FCE7F3", icon: "🎪", evento: true, metricas: [
-    { key: "asistentes", label: "Asistentes" },
-    { key: "contactos", label: "Contactos capturados" },
-    { key: "ventas", label: "Ventas ($)", money: true },
-  ]},
-};
-
-const MARCAS = {
-  acteck:     { label: "Acteck",     color: "#3B82F6" },
-  balam_rush: { label: "Balam Rush", color: "#8B5CF6" },
-};
-
-const REDES_SOCIALES = {
-  tiktok:    { label: "TikTok",    color: "#000000", icon: "🎵" },
-  facebook:  { label: "Facebook",  color: "#1877F2", icon: "📘" },
-  instagram: { label: "Instagram", color: "#E4405F", icon: "📷" },
-  youtube:   { label: "YouTube",   color: "#FF0000", icon: "▶️" },
-};
-
-const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-const MESES_CORTOS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
-const DIAS_SEMANA = ["L","M","X","J","V","S","D"];
-
-const emptyForm = () => ({
-  tipo: "mailing",
-  marca: "acteck",
-  fecha: new Date().toISOString().slice(0, 10),
-  nombre: "",
-  mensaje: "",
-  red_social: "",
-  inversion: 0,
-  metricas: {},
-  evento_sucursal: "",
-  evento_pop: "",
-  notas: "",
-  responsable: "",
-});
-
-const fmtMXN = (v) => "$" + Number(v || 0).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-const fmtNum = (v) => Number(v || 0).toLocaleString("es-MX");
+import ExportMenu from '../../components/ExportMenu';
+import { Hero, KpiCard, Pill, Segmented, Panel, Boton, SkeletonPantalla, toast } from '../../components/kit';
+import {
+  TIPOS, MARCAS, REDES_SOCIALES, MESES, MESES_CORTOS, tipoMeta, parseFecha, mesAnioDe, fechaCorta, isoHoy, diasEntre,
+  fmtMXN, fmtNum, money, esCerrada, emptyForm,
+} from './marketing/config';
+import { CalendarioMes, CalendarioAnual } from './marketing/Calendario';
+import ActividadFila from './marketing/ActividadFila';
+import ActividadForm from './marketing/ActividadForm';
 
 export default function MarketingCliente({ cliente, clienteKey }) {
   const perfil = usePerfil();
@@ -92,105 +33,132 @@ export default function MarketingCliente({ cliente, clienteKey }) {
   }
   // Permiso granular por (clienteKey, 'marketing').
   const canEdit = puedeEditarPestanaCliente(perfil, ckPerm, 'marketing');
-  const [actividades, setActividades] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [anio, setAnio] = React.useState(2026);
-  const [mesSel, setMesSel] = React.useState(new Date().getMonth() + 1);
-  const [filterTipo, setFilterTipo] = React.useState("todos");
-  const [filterMarca, setFilterMarca] = React.useState("todas");
-  const [showCalendar, setShowCalendar] = React.useState(true);
-  const [calVista, setCalVista] = React.useState("mes");  // 'mes' o 'anual'
-  const [diaSeleccionado, setDiaSeleccionado] = React.useState(null);
-  const [showForm, setShowForm] = React.useState(false);
-  const [editId, setEditId] = React.useState(null);
-  const [form, setForm] = React.useState(emptyForm());
-  const [saving, setSaving] = React.useState(false);
-  const [mostrarArchivadas, setMostrarArchivadas] = React.useState(false);
-
+  const { theme } = useTheme();
+  const rootRef = useRef(null);
   const ck = clienteKey || cliente;
+  const clienteLabel = CLIENTES?.[ck]?.nombre || cliente || ck;
+  const hoy = isoHoy();
+  const anioActual = Number(hoy.slice(0, 4)), mesActual = Number(hoy.slice(5, 7));
 
-  // ─── Carga de datos ───────────────────────────────────────────
-  React.useEffect(() => {
+  const [actividades, setActividades] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [anio, setAnio] = useState(anioActual);
+  const [mesSel, setMesSel] = useState(mesActual);
+  const [filterTipo, setFilterTipo] = useState('todos');
+  const [filterMarca, setFilterMarca] = useState('todas');
+  const [calVista, setCalVista] = useState('mes'); // 'mes' | 'anual'
+  const [diaSeleccionado, setDiaSeleccionado] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [form, setForm] = useState(emptyForm());
+  const [saving, setSaving] = useState(false);
+  const [promo, setPromo] = useState({ loading: true, row: null });
+
+  // ─── Carga de datos + realtime ───────────────────────────────
+  useEffect(() => {
     if (!DB_CONFIGURED) { setLoading(false); return; }
     setLoading(true);
-    supabase.from("marketing_actividades").select("*").eq("cliente", ck).eq("anio", anio).then(({ data }) => {
+    supabase.from('marketing_actividades').select('*').eq('cliente', ck).eq('anio', anio).then(({ data }) => {
       setActividades(data || []);
       setLoading(false);
     });
-    // Realtime subscription
-    const chan = supabase.channel("mkt-" + ck + "-" + anio)
-      .on("postgres_changes", { event: "*", schema: "public", table: "marketing_actividades" }, (payload) => {
-        if (payload.eventType === "INSERT") setActividades(p => [...p, payload.new]);
-        else if (payload.eventType === "UPDATE") setActividades(p => p.map(a => a.id === payload.new.id ? payload.new : a));
-        else if (payload.eventType === "DELETE") setActividades(p => p.filter(a => a.id !== payload.old.id));
+    const mio = (r) => r && r.cliente === ck && Number(r.anio) === anio;
+    const chan = supabase.channel('mkt-' + ck + '-' + anio)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketing_actividades' }, (payload) => {
+        if (payload.eventType === 'INSERT') { if (mio(payload.new)) setActividades((p) => p.some((a) => a.id === payload.new.id) ? p : [...p, payload.new]); }
+        else if (payload.eventType === 'UPDATE') setActividades((p) => p.map((a) => (a.id === payload.new.id ? payload.new : a)));
+        else if (payload.eventType === 'DELETE') setActividades((p) => p.filter((a) => a.id !== payload.old.id));
       }).subscribe();
     return () => { supabase.removeChannel(chan); };
   }, [ck, anio]);
 
-  // Parse YYYY-MM-DD sin timezone shift
-  const parseFecha = (f) => {
-    if (!f) return null;
-    const p = String(f).slice(0, 10).split("-").map(n => parseInt(n, 10));
-    if (p.length !== 3 || !p[0]) return null;
-    return { y: p[0], m: p[1], d: p[2] };
-  };
+  // KPI promo · vista global (campaña del mes en curso, sin cliente). Lectura cacheada.
+  useEffect(() => {
+    if (!DB_CONFIGURED) { setPromo({ loading: false, row: null }); return; }
+    let cancel = false;
+    cachedQuery(supabase.from('v_vision_sellout_promos').select('campania,skus_campania,sellout_en_promo,sellout_fuera_promo,sellout_promo_mes_prev').limit(1))
+      .then(({ data }) => { if (!cancel) setPromo({ loading: false, row: data?.[0] || null }); })
+      .catch(() => { if (!cancel) setPromo({ loading: false, row: null }); });
+    return () => { cancel = true; };
+  }, []);
 
-  // ─── Filtros aplicados ────────────────────────────────────────
-  const { activasFiltradas, completadasFiltradas } = React.useMemo(() => {
-    const applyFilters = (arr) => arr.filter(a => {
-      const pf = parseFecha(a.fecha);
-      const aMes = pf ? pf.m : Number(a.mes) || 0;
-      const aAnio = pf ? pf.y : Number(a.anio) || 0;
-      if (aAnio !== anio) return false;
-      if (aMes !== mesSel) return false;
-      if (filterTipo !== "todos" && a.tipo !== filterTipo) return false;
-      if (filterMarca !== "todas" && a.marca !== filterMarca) return false;
-      if (diaSeleccionado && pf) {
-        if (pf.d !== diaSeleccionado) return false;
-      }
-      return true;
-    }).sort((a, b) => {
-      const pa = parseFecha(a.fecha), pb = parseFecha(b.fecha);
-      const dA = pa ? pa.d : 0; const dB = pb ? pb.d : 0;
-      return dA - dB;
-    });
-    const activas = applyFilters(actividades.filter(a => a.estatus !== "completado" && a.estatus !== "archivado"));
-    const completadas = applyFilters(actividades.filter(a => a.estatus === "completado" || a.estatus === "archivado"));
-    return { activasFiltradas: activas, completadasFiltradas: completadas };
-  }, [actividades, anio, mesSel, filterTipo, filterMarca, diaSeleccionado]);
+  // ─── Derivados ───────────────────────────────────────────────
+  const actividadesAnio = useMemo(() => actividades.filter((a) => mesAnioDe(a).y === anio), [actividades, anio]);
+  const actividadesDelMes = useMemo(() => actividadesAnio.filter((a) => mesAnioDe(a).m === mesSel), [actividadesAnio, mesSel]);
 
-  // ─── Actividades del mes (para el calendario) ────────────────
-  const actividadesDelMes = React.useMemo(() => {
-    return actividades.filter(a => {
-      const pf = parseFecha(a.fecha);
-      const m = pf ? pf.m : Number(a.mes) || 0;
-      const y = pf ? pf.y : Number(a.anio) || 0;
-      return y === anio && m === mesSel;
+  const pasaFiltros = (a) => (filterTipo === 'todos' || a.tipo === filterTipo) && (filterMarca === 'todas' || a.marca === filterMarca);
+  const ordenFecha = (a, b) => { const A = mesAnioDe(a), B = mesAnioDe(b); return (A.m - B.m) || (A.d - B.d); };
+
+  const { activasFiltradas, completadasFiltradas } = useMemo(() => {
+    const base = calVista === 'anual' ? actividadesAnio : actividadesDelMes;
+    const arr = base.filter((a) => pasaFiltros(a) && (!diaSeleccionado || calVista === 'anual' || parseFecha(a.fecha)?.d === diaSeleccionado)).sort(ordenFecha);
+    return { activasFiltradas: arr.filter((a) => !esCerrada(a)), completadasFiltradas: arr.filter(esCerrada) };
+  }, [actividadesAnio, actividadesDelMes, calVista, filterTipo, filterMarca, diaSeleccionado]);
+
+  // Conteo por mes (pills + calendario anual) respetando tipo/marca
+  const porMes = useMemo(() => {
+    const out = {}; for (let m = 1; m <= 12; m++) out[m] = { total: 0, inv: 0, porTipo: {} };
+    actividadesAnio.forEach((a) => {
+      const { m } = mesAnioDe(a); if (m < 1 || m > 12 || !pasaFiltros(a)) return;
+      out[m].total++; out[m].inv += Number(a.inversion) || 0; out[m].porTipo[a.tipo] = (out[m].porTipo[a.tipo] || 0) + 1;
     });
-  }, [actividades, anio, mesSel]);
+    return out;
+  }, [actividadesAnio, filterTipo, filterMarca]);
+
+  const totales = useMemo(() => {
+    const t = { actividades: actividadesDelMes.length, inversion: 0, sinPago: 0, inversionSinPago: 0, conPago: 0, activas: 0 };
+    actividadesDelMes.forEach((a) => {
+      const inv = Number(a.inversion) || 0; t.inversion += inv;
+      if (a.pago_id) t.conPago++; else { t.sinPago++; t.inversionSinPago += inv; }
+      if (!esCerrada(a)) t.activas++;
+    });
+    return t;
+  }, [actividadesDelMes]);
+
+  const anual = useMemo(() => {
+    const t = { total: actividadesAnio.length, inversion: 0, ytd: 0, activas: 0, enPago: 0, mailEnvios: 0, mailAperturas: 0, mailings: 0 };
+    actividadesAnio.forEach((a) => {
+      const inv = Number(a.inversion) || 0; t.inversion += inv;
+      const f = a.fecha ? String(a.fecha).slice(0, 10) : null;
+      if (anio < anioActual || (f ? f <= hoy : mesAnioDe(a).m <= mesActual)) t.ytd += inv;
+      if (!esCerrada(a)) t.activas++;
+      if (a.pago_id) t.enPago++;
+      if (a.tipo === 'mailing') { const m = a.metricas || {}; if (Number(m.envios) > 0) { t.mailings++; t.mailEnvios += Number(m.envios); t.mailAperturas += Number(m.aperturas) || 0; } }
+    });
+    t.costoPorActividad = t.total ? t.inversion / t.total : null;
+    t.apertura = t.mailEnvios ? (t.mailAperturas / t.mailEnvios) * 100 : null;
+    return t;
+  }, [actividadesAnio, anio, anioActual, mesActual, hoy]);
+
+  const proxima = useMemo(() => {
+    const cand = actividadesAnio.filter((a) => !esCerrada(a) && a.fecha && String(a.fecha).slice(0, 10) >= hoy).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+    if (!cand.length) return null;
+    return { a: cand[0], dias: diasEntre(hoy, String(cand[0].fecha).slice(0, 10)) };
+  }, [actividadesAnio, hoy]);
 
   // ─── CRUD ────────────────────────────────────────────────────
   const openNew = () => {
     if (!canEdit) return;
-    setForm({ ...emptyForm(), fecha: new Date(anio, mesSel - 1, Math.min(new Date().getDate(), 28)).toISOString().slice(0, 10) });
+    const d = anio === anioActual && mesSel === mesActual ? Number(hoy.slice(8, 10)) : Math.min(Number(hoy.slice(8, 10)), 28);
+    setForm({ ...emptyForm(), fecha: `${anio}-${String(mesSel).padStart(2, '0')}-${String(diaSeleccionado || d).padStart(2, '0')}` });
     setEditId(null);
     setShowForm(true);
   };
   const openEdit = (a) => {
     if (!canEdit) return;
     setForm({
-      tipo: a.tipo || "mailing",
-      marca: a.marca || "acteck",
-      fecha: a.fecha || (a.anio && a.mes ? `${a.anio}-${String(a.mes).padStart(2, "0")}-01` : ""),
-      nombre: a.nombre || "",
-      mensaje: a.mensaje || "",
-      red_social: a.red_social || "",
+      tipo: a.tipo || 'mailing',
+      marca: a.marca || 'acteck',
+      fecha: a.fecha || (a.anio && a.mes ? `${a.anio}-${String(a.mes).padStart(2, '0')}-01` : ''),
+      nombre: a.nombre || '',
+      mensaje: a.mensaje || '',
+      red_social: a.red_social || '',
       inversion: Number(a.inversion) || 0,
       metricas: a.metricas || {},
-      evento_sucursal: a.evento_sucursal || "",
-      evento_pop: a.evento_pop || "",
-      notas: a.notas || "",
-      responsable: a.responsable || "",
+      evento_sucursal: a.evento_sucursal || '',
+      evento_pop: a.evento_pop || '',
+      notas: a.notas || '',
+      responsable: a.responsable || '',
     });
     setEditId(a.id);
     setShowForm(true);
@@ -198,12 +166,12 @@ export default function MarketingCliente({ cliente, clienteKey }) {
   const closeForm = () => { setShowForm(false); setEditId(null); setForm(emptyForm()); };
   const save = async () => {
     if (!canEdit) return;
-    if (!form.nombre.trim()) { alert("Falta el nombre de la actividad"); return; }
+    if (!form.nombre.trim()) { toast.error('Falta el nombre de la actividad'); return; }
     setSaving(true);
     // Parse YYYY-MM-DD SIN conversión de timezone (new Date() lo interpreta como UTC)
     let fAnio = anio, fMes = mesSel;
     if (form.fecha) {
-      const parts = form.fecha.split("-").map(n => parseInt(n, 10));
+      const parts = form.fecha.split('-').map((n) => parseInt(n, 10));
       if (parts.length === 3 && parts[0] && parts[1]) { fAnio = parts[0]; fMes = parts[1]; }
     }
     const payload = {
@@ -211,7 +179,7 @@ export default function MarketingCliente({ cliente, clienteKey }) {
       tipo: form.tipo,
       marca: form.marca,
       nombre: form.nombre.trim(),
-      mensaje: form.mensaje || "",
+      mensaje: form.mensaje || '',
       red_social: form.red_social || null,
       fecha: form.fecha || null,
       anio: fAnio,
@@ -222,583 +190,273 @@ export default function MarketingCliente({ cliente, clienteKey }) {
       evento_pop: form.evento_pop || null,
       notas: form.notas || null,
       responsable: form.responsable || null,
-      estatus: "activo",
+      estatus: 'activo',
       // Valores por defecto para columnas legacy NOT NULL
-      subtipo: form.fecha || "",
-      temporalidad: form.fecha || "",
-      producto: "",
+      subtipo: form.fecha || '',
+      temporalidad: form.fecha || '',
+      producto: '',
     };
-    let err = null;
-    let saved = null;
+    let err = null, saved = null;
     if (editId) {
-      const { data, error } = await supabase.from("marketing_actividades").update(payload).eq("id", editId).select().single();
+      const { data, error } = await supabase.from('marketing_actividades').update(payload).eq('id', editId).select().single();
       err = error; saved = data;
     } else {
-      const { data, error } = await supabase.from("marketing_actividades").insert(payload).select().single();
+      const { data, error } = await supabase.from('marketing_actividades').insert(payload).select().single();
       err = error; saved = data;
     }
     setSaving(false);
-    if (err) { alert("Error guardando: " + err.message); return; }
+    if (err) { toast.error('Error guardando: ' + err.message); return; }
     // Actualizar estado local de inmediato (no depender solo de realtime)
     if (saved) {
-      if (editId) {
-        setActividades(p => p.map(a => a.id === editId ? saved : a));
-      } else {
-        setActividades(p => [...p.filter(a => a.id !== saved.id), saved]);
-      }
+      if (editId) setActividades((p) => p.map((a) => (a.id === editId ? saved : a)));
+      else setActividades((p) => [...p.filter((a) => a.id !== saved.id), saved]);
     }
+    toast.ok(editId ? 'Actividad actualizada' : 'Actividad creada');
     closeForm();
   };
   const deleteAct = async (id) => {
     if (!canEdit) return;
-    if (!window.confirm("¿Eliminar esta actividad?")) return;
-    // Optimistic: remove from local state immediately
-    setActividades(p => p.filter(a => a.id !== id));
-    const { error } = await supabase.from("marketing_actividades").delete().eq("id", id);
+    if (!window.confirm('¿Eliminar esta actividad?')) return;
+    setActividades((p) => p.filter((a) => a.id !== id)); // optimista
+    const { error } = await supabase.from('marketing_actividades').delete().eq('id', id);
     if (error) {
-      alert("Error al eliminar: " + error.message);
-      // Revert: reload from DB
-      const { data } = await supabase.from("marketing_actividades").select("*").eq("cliente", ck).eq("anio", anio);
+      toast.error('Error al eliminar: ' + error.message);
+      const { data } = await supabase.from('marketing_actividades').select('*').eq('cliente', ck).eq('anio', anio);
       setActividades(data || []);
-    }
+    } else toast.ok('Actividad eliminada');
   };
-  const toggleCompletada = async (a) => {
+  const cambiarEstatus = async (a, nuevoEstatus, okMsg) => {
     if (!canEdit) return;
-    const nuevoEstatus = (a.estatus === "completado" || a.estatus === "archivado") ? "activo" : "completado";
-    // Optimistic
-    setActividades(p => p.map(x => x.id === a.id ? { ...x, estatus: nuevoEstatus } : x));
-    const { error } = await supabase.from("marketing_actividades").update({ estatus: nuevoEstatus }).eq("id", a.id);
-    if (error) {
-      alert("Error al cambiar estatus: " + error.message);
-      setActividades(p => p.map(x => x.id === a.id ? a : x));
-    }
+    setActividades((p) => p.map((x) => (x.id === a.id ? { ...x, estatus: nuevoEstatus } : x))); // optimista
+    const { error } = await supabase.from('marketing_actividades').update({ estatus: nuevoEstatus }).eq('id', a.id);
+    if (error) { toast.error('Error al cambiar estatus: ' + error.message); setActividades((p) => p.map((x) => (x.id === a.id ? a : x))); }
+    else toast.ok(okMsg);
   };
-
-  // ─── Totales ────────────────────────────────────────────────
-  const totales = React.useMemo(() => {
-    const t = { actividades: actividadesDelMes.length, inversion: 0, porTipo: {}, sinPago: 0, inversionSinPago: 0, conPago: 0 };
-    actividadesDelMes.forEach(a => {
-      const inv = Number(a.inversion) || 0;
-      t.inversion += inv;
-      if (!t.porTipo[a.tipo]) t.porTipo[a.tipo] = 0;
-      t.porTipo[a.tipo]++;
-      if (a.pago_id) { t.conPago++; }
-      else { t.sinPago++; t.inversionSinPago += inv; }
-    });
-    return t;
-  }, [actividadesDelMes]);
+  const toggleCompletada = (a) => (esCerrada(a) ? cambiarEstatus(a, 'activo', 'Actividad reactivada') : cambiarEstatus(a, 'completado', 'Actividad completada'));
+  const archivar = (a) => { if (a.estatus !== 'archivado') cambiarEstatus(a, 'archivado', 'Actividad archivada'); };
 
   // ─── Cerrar mes: consolida actividades sin pago en un solo pago ──
   const cerrarMes = async () => {
     if (!canEdit) return;
-    const actsACerrar = actividadesDelMes.filter(a => !a.pago_id);
-    if (actsACerrar.length === 0) {
-      alert("No hay actividades pendientes de cerrar en este mes.");
-      return;
-    }
+    const actsACerrar = actividadesDelMes.filter((a) => !a.pago_id);
+    if (actsACerrar.length === 0) { toast.info('No hay actividades pendientes de cerrar en este mes.'); return; }
     const totalInv = actsACerrar.reduce((s, a) => s + (Number(a.inversion) || 0), 0);
     const mesLabel = MESES[mesSel - 1];
-    const confirmMsg = `Cerrar ${mesLabel} ${anio}:\n\n• ${actsACerrar.length} actividad(es) se consolidar\u00e1n en un solo pago\n• Total: ${fmtMXN(totalInv)}\n\n\u00bfContinuar?`;
+    const confirmMsg = `Cerrar ${mesLabel} ${anio}:\n\n• ${actsACerrar.length} actividad(es) se consolidarán en un solo pago\n• Total: ${fmtMXN(totalInv)}\n\n¿Continuar?`;
     if (!window.confirm(confirmMsg)) return;
-
     // Fecha compromiso = día 15 del MES SIGUIENTE (el folio lo pone Fernando manualmente cuando se paga)
     const nextMes = mesSel === 12 ? 1 : mesSel + 1;
     const nextAnio = mesSel === 12 ? anio + 1 : anio;
-    const fechaCompromiso = `${nextAnio}-${String(nextMes).padStart(2, "0")}-15`;
     const pagoPayload = {
       cliente: ck,
-      categoria: "marketing",
-      folio: null,  // Fernando lo agrega manualmente al efectuar el pago
+      categoria: 'marketing',
+      folio: null,
       concepto: `Marketing ${mesLabel} ${anio} — ${actsACerrar.length} actividad(es)`,
       monto: totalInv,
-      estatus: "pendiente",
-      fecha_compromiso: fechaCompromiso,
-      responsable: "Fernando Cabrera",
-      notas: actsACerrar.map(a => `• ${a.nombre} (${TIPOS[a.tipo]?.label || a.tipo}): ${fmtMXN(a.inversion || 0)}`).join("\n"),
+      estatus: 'pendiente',
+      fecha_compromiso: `${nextAnio}-${String(nextMes).padStart(2, '0')}-15`,
+      responsable: 'Fernando Cabrera',
+      notas: actsACerrar.map((a) => `• ${a.nombre} (${tipoMeta(a.tipo).label}): ${fmtMXN(a.inversion || 0)}`).join('\n'),
     };
-    const { data: pagoData, error: pagoError } = await supabase.from("pagos").insert(pagoPayload).select().single();
-    if (pagoError) {
-      alert("Error creando el pago: " + pagoError.message);
-      return;
-    }
-    // Ligar todas las actividades al pago
-    const ids = actsACerrar.map(a => a.id);
-    const { error: updError } = await supabase.from("marketing_actividades").update({ pago_id: pagoData.id }).in("id", ids);
-    if (updError) {
-      alert("Pago creado pero no se pudieron ligar las actividades: " + updError.message);
-      return;
-    }
-    // Actualizar estado local
-    setActividades(p => p.map(a => ids.includes(a.id) ? { ...a, pago_id: pagoData.id } : a));
-    alert(`\u2713 Mes cerrado. Pago ${fmtMXN(totalInv)} creado para ${mesLabel} ${anio}.`);
+    const { data: pagoData, error: pagoError } = await supabase.from('pagos').insert(pagoPayload).select().single();
+    if (pagoError) { toast.error('Error creando el pago: ' + pagoError.message); return; }
+    const ids = actsACerrar.map((a) => a.id);
+    const { error: updError } = await supabase.from('marketing_actividades').update({ pago_id: pagoData.id }).in('id', ids);
+    if (updError) { toast.error('Pago creado pero no se pudieron ligar las actividades: ' + updError.message); return; }
+    setActividades((p) => p.map((a) => (ids.includes(a.id) ? { ...a, pago_id: pagoData.id } : a)));
+    toast.ok(`Mes cerrado · pago ${fmtMXN(totalInv)} creado para ${mesLabel} ${anio}`);
   };
 
-  // ─── Construcción del calendario ────────────────────────────
-  const calendario = React.useMemo(() => {
-    const firstDay = new Date(anio, mesSel - 1, 1);
-    const lastDay = new Date(anio, mesSel, 0).getDate();
-    // Offset lunes = 0 .. domingo = 6
-    const startOffset = (firstDay.getDay() + 6) % 7;
-    const days = [];
-    for (let i = 0; i < startOffset; i++) days.push(null);
-    for (let d = 1; d <= lastDay; d++) {
-      const acts = actividadesDelMes.filter(a => {
-        const pf = parseFecha(a.fecha);
-        return pf && pf.d === d;
-      });
-      days.push({ day: d, actividades: acts });
-    }
-    return days;
-  }, [anio, mesSel, actividadesDelMes]);
+  // ─── Exportar ────────────────────────────────────────────────
+  const excelActividades = () => {
+    const columnas = [
+      { label: 'Fecha', key: 'fecha', tipo: 'fecha', ancho: 12 },
+      { label: 'Tipo', key: 'tipo', tipo: 'texto', ancho: 12 },
+      { label: 'Marca', key: 'marca', tipo: 'texto', ancho: 12 },
+      { label: 'Actividad', key: 'nombre', tipo: 'texto', ancho: 36 },
+      { label: 'Mensaje', key: 'mensaje', tipo: 'texto', ancho: 30 },
+      { label: 'Red social', key: 'red_social', tipo: 'texto', ancho: 11 },
+      { label: 'Inversión', key: 'inversion', tipo: 'moneda', ancho: 13 },
+      { label: 'Estatus', key: 'estatus', tipo: 'texto', ancho: 11 },
+      { label: 'En pago', key: 'en_pago', tipo: 'texto', ancho: 8 },
+      { label: 'Responsable', key: 'responsable', tipo: 'texto', ancho: 16 },
+      { label: 'Sucursal', key: 'evento_sucursal', tipo: 'texto', ancho: 14 },
+      { label: 'POP', key: 'evento_pop', tipo: 'texto', ancho: 14 },
+      { label: 'Métricas', key: 'metricas', tipo: 'texto', ancho: 48 },
+      { label: 'Notas', key: 'notas', tipo: 'texto', ancho: 30 },
+    ];
+    const filas = [...actividadesAnio].sort(ordenFecha).map((a) => ({
+      fecha: a.fecha || '', tipo: tipoMeta(a.tipo).label, marca: MARCAS[a.marca]?.label || a.marca || '', nombre: a.nombre || '', mensaje: a.mensaje || '',
+      red_social: REDES_SOCIALES[a.red_social]?.label || '', inversion: Number(a.inversion) || 0, estatus: a.estatus || '', en_pago: a.pago_id ? 'Sí' : '',
+      responsable: a.responsable || '', evento_sucursal: a.evento_sucursal || '', evento_pop: a.evento_pop || '',
+      metricas: tipoMeta(a.tipo).metricas.filter((m) => a.metricas?.[m.key] != null && a.metricas[m.key] !== '').map((m) => `${m.label}: ${m.money ? fmtMXN(a.metricas[m.key]) : fmtNum(a.metricas[m.key])}`).join(' · '),
+      notas: a.notas || '',
+    }));
+    return { archivo: `Marketing ${clienteLabel} ${anio}`, hojas: [{ nombre: `Actividades ${anio}`, columnas, filas, totales: { nombre: `${filas.length} actividades`, inversion: anual.inversion } }] };
+  };
 
   // ─── Render ──────────────────────────────────────────────────
-  if (loading) return <FerrutekLoader label="Cargando marketing…" sub="Ferruteck está trayendo campañas, inversión y actividades" minHeight={480} />;
+  if (loading) return <SkeletonPantalla />;
 
-  const tipoMeta = (tipo) => TIPOS[tipo] || { label: tipo || "?", color: "#94A3B8", bg: "#F1F5F9", icon: "📌", metricas: [] };
+  const mesLabel = MESES[mesSel - 1];
+  const dTxt = (d) => (d === 0 ? 'hoy' : d === 1 ? 'mañana' : `en ${d} días`);
+  const proximaEnMes = proxima && mesAnioDe(proxima.a).m === mesSel;
+  const heroTitulo = totales.activas === 0
+    ? `${mesLabel} sin actividad planeada.`
+    : proximaEnMes && proxima.dias >= 0 ? `${proxima.a.nombre || "Actividad"} ${dTxt(proxima.dias)}.` : `${totales.activas} ${totales.activas === 1 ? 'actividad activa' : 'actividades activas'} en ${mesLabel.toLowerCase()}.`;
+  const heroSub = `${anual.total} ${anual.total === 1 ? 'actividad' : 'actividades'} en ${anio} · ${fmtMXN(anual.inversion)} de inversión${anual.enPago ? ` · ${anual.enPago} en pago` : ''}${totales.sinPago && totales.inversionSinPago ? ` · ${fmtMXN(totales.inversionSinPago)} sin cerrar en ${mesLabel.toLowerCase()}` : ''}.`;
 
-  return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", color: "#1e293b" }}>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-            <Megaphone style={{ width: 24, height: 24, color: "#374151" }} />
-            Marketing — {cliente || ck}
-          </h2>
-          <div style={{ fontSize: 13, color: "#64748B", marginTop: 2 }}>
-            {totales.actividades} actividades en {MESES[mesSel - 1]} · Inversión: {fmtMXN(totales.inversion)}
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <select value={anio} onChange={e => setAnio(Number(e.target.value))} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}>
-            <option value={2025}>2025</option>
-            <option value={2026}>2026</option>
-          </select>
-          <select value={mesSel} onChange={e => { setMesSel(Number(e.target.value)); setDiaSeleccionado(null); }} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}>
-            {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-          </select>
-          {canEdit && totales.sinPago > 0 && totales.inversionSinPago > 0 && (
-            <button
-              onClick={cerrarMes}
-              title={`Genera un pago consolidado de ${fmtMXN(totales.inversionSinPago)} por ${totales.sinPago} actividad(es)`}
-              style={{ padding: "8px 14px", background: "#10B981", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}
-            >
-              🔒 Cerrar mes ({fmtMXN(totales.inversionSinPago)})
-            </button>
-          )}
-          {canEdit && <button onClick={openNew} style={{ padding: "8px 14px", background: "#3B82F6", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>+ Nueva actividad</button>}
-        </div>
-      </div>
+  const p = promo.row;
+  const promoOn = p && Number(p.skus_campania) > 0;
+  const enPromo = Number(p?.sellout_en_promo) || 0, fueraPromo = Number(p?.sellout_fuera_promo) || 0;
+  const sharePromo = enPromo + fueraPromo ? (enPromo / (enPromo + fueraPromo)) * 100 : 0;
+  const tmProx = proxima ? tipoMeta(proxima.a.tipo) : null;
 
-      {/* Filtros: tipo + marca */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 11, color: "#64748B", fontWeight: 600, marginRight: 4 }}>TIPO:</span>
-          <button onClick={() => setFilterTipo("todos")} style={{ padding: "4px 10px", borderRadius: 14, fontSize: 11, border: filterTipo === "todos" ? "2px solid #1E293B" : "1px solid #E2E8F0", background: filterTipo === "todos" ? "#1E293B" : "#fff", color: filterTipo === "todos" ? "#fff" : "#475569", cursor: "pointer", fontWeight: 600 }}>Todos</button>
-          {Object.entries(TIPOS).map(([key, t]) => (
-            <button key={key} onClick={() => setFilterTipo(key)} style={{
-              padding: "4px 10px", borderRadius: 14, fontSize: 11,
-              border: filterTipo === key ? "2px solid " + t.color : "1px solid #E2E8F0",
-              background: filterTipo === key ? t.color : "#fff",
-              color: filterTipo === key ? "#fff" : "#475569", cursor: "pointer", fontWeight: 600,
-            }}>{t.icon} {t.label}</button>
-          ))}
-        </div>
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 11, color: "#64748B", fontWeight: 600, marginLeft: 12, marginRight: 4 }}>MARCA:</span>
-          <button onClick={() => setFilterMarca("todas")} style={{ padding: "4px 10px", borderRadius: 14, fontSize: 11, border: filterMarca === "todas" ? "2px solid #1E293B" : "1px solid #E2E8F0", background: filterMarca === "todas" ? "#1E293B" : "#fff", color: filterMarca === "todas" ? "#fff" : "#475569", cursor: "pointer", fontWeight: 600 }}>Todas</button>
-          {Object.entries(MARCAS).map(([key, m]) => (
-            <button key={key} onClick={() => setFilterMarca(key)} style={{
-              padding: "4px 10px", borderRadius: 14, fontSize: 11,
-              border: filterMarca === key ? "2px solid " + m.color : "1px solid #E2E8F0",
-              background: filterMarca === key ? m.color : "#fff",
-              color: filterMarca === key ? "#fff" : "#475569", cursor: "pointer", fontWeight: 600,
-            }}>{m.label}</button>
-          ))}
-        </div>
-        <button onClick={() => setShowCalendar(s => !s)} style={{ marginLeft: "auto", padding: "4px 10px", borderRadius: 8, fontSize: 11, border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#475569", cursor: "pointer" }}>
-          {showCalendar ? "Ocultar calendario" : "Mostrar calendario"}
-        </button>
-      </div>
-
-      {/* Calendario */}
-      {showCalendar && (
-        <div style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: 14, marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: 14, color: "#1E293B", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
-              <CalendarDays style={{ width: 16, height: 16 }} />
-              {calVista === "mes" ? MESES[mesSel - 1] + " " + anio : anio}
-            </h3>
-            <div style={{ display: "flex", gap: 4 }}>
-              <button onClick={() => setCalVista("mes")} style={{ padding: "4px 12px", fontSize: 11, borderRadius: 8, border: calVista === "mes" ? "2px solid #3B82F6" : "1px solid #E2E8F0", background: calVista === "mes" ? "#EFF6FF" : "#fff", color: calVista === "mes" ? "#3B82F6" : "#64748B", cursor: "pointer", fontWeight: 600 }}>Mes</button>
-              <button onClick={() => setCalVista("anual")} style={{ padding: "4px 12px", fontSize: 11, borderRadius: 8, border: calVista === "anual" ? "2px solid #3B82F6" : "1px solid #E2E8F0", background: calVista === "anual" ? "#EFF6FF" : "#fff", color: calVista === "anual" ? "#3B82F6" : "#64748B", cursor: "pointer", fontWeight: 600 }}>Anual</button>
-              {diaSeleccionado && (
-                <button onClick={() => setDiaSeleccionado(null)} style={{ padding: "4px 10px", borderRadius: 8, fontSize: 11, border: "1px solid #E2E8F0", background: "#F1F5F9", cursor: "pointer" }}>
-                  Limpiar día ({diaSeleccionado})
-                </button>
-              )}
-            </div>
-          </div>
-          {calVista === "mes" ? (
-            <>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, fontSize: 10, color: "#94A3B8", marginBottom: 4 }}>
-                {DIAS_SEMANA.map((d, i) => <div key={i} style={{ textAlign: "center", fontWeight: 600, padding: 4 }}>{d}</div>)}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
-                {calendario.map((cell, i) => {
-                  if (!cell) return <div key={i} style={{ minHeight: 60 }}/>;
-                  const isSelected = cell.day === diaSeleccionado;
-                  return (
-                    <div key={i} onClick={() => setDiaSeleccionado(cell.day === diaSeleccionado ? null : cell.day)}
-                      style={{
-                        minHeight: 60, background: isSelected ? "#EFF6FF" : "#F8FAFC",
-                        border: isSelected ? "2px solid #3B82F6" : "1px solid #E2E8F0",
-                        borderRadius: 6, padding: 4, cursor: "pointer",
-                        display: "flex", flexDirection: "column", gap: 3
-                      }}>
-                      <div style={{ fontSize: 11, color: "#475569", fontWeight: 600 }}>{cell.day}</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                        {cell.actividades.slice(0, 4).map(a => {
-                          const tm = tipoMeta(a.tipo);
-                          return <div key={a.id} title={tm.label + ": " + (a.nombre || "")} style={{ width: 8, height: 8, borderRadius: 4, background: tm.color }} />;
-                        })}
-                        {cell.actividades.length > 4 && <span style={{ fontSize: 9, color: "#64748B" }}>+{cell.actividades.length - 4}</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          ) : (
-            <CalendarioAnual
-              anio={anio}
-              actividades={actividades}
-              filterTipo={filterTipo}
-              filterMarca={filterMarca}
-              mesSel={mesSel}
-              onSelectMes={(m) => { setMesSel(m); setCalVista("mes"); setDiaSeleccionado(null); }}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Grid de tarjetas activas */}
-      {activasFiltradas.length === 0 && completadasFiltradas.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#94A3B8", background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0" }}>
-          No hay actividades para estos filtros.{canEdit && <button onClick={openNew} style={{ marginLeft: 8, color: "#3B82F6", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Crear la primera</button>}
-        </div>
-      ) : (
-        <>
-          {activasFiltradas.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 20, color: "#94A3B8", background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", fontSize: 13, fontStyle: "italic", marginBottom: 14 }}>
-              ✓ Sin actividades pendientes este mes. Revisa las completadas abajo.
-            </div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
-              {activasFiltradas.map(a => <ActividadCard key={a.id} a={a} onEdit={openEdit} onDelete={deleteAct} onToggle={toggleCompletada} />)}
-            </div>
-          )}
-
-          {/* Repositorio de actividades completadas (colapsable) */}
-          {completadasFiltradas.length > 0 && (
-            <div style={{ marginTop: 20, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: 14 }}>
-              <button
-                onClick={() => setMostrarArchivadas(s => !s)}
-                style={{
-                  width: "100%", background: "none", border: "none", cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: "#475569", padding: "4px 0"
-                }}
-              >
-                <span style={{ fontSize: 11, display: "inline-block", transform: mostrarArchivadas ? "rotate(90deg)" : "rotate(0)", transition: "transform .2s" }}>▶</span>
-                📁 Actividades completadas
-                <span style={{ background: "#F1F5F9", color: "#64748B", fontSize: 11, padding: "1px 8px", borderRadius: 10, fontWeight: 500 }}>{completadasFiltradas.length}</span>
-              </button>
-              {mostrarArchivadas && (
-                <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
-                  {completadasFiltradas.map(a => <ActividadCard key={a.id} a={a} onEdit={openEdit} onDelete={deleteAct} onToggle={toggleCompletada} />)}
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Modal formulario */}
-      {showForm && <ActividadForm form={form} setForm={setForm} editId={editId} saving={saving} onSave={save} onClose={closeForm} />}
-    </div>
-  );
-}
-
-// ═══════════ TARJETA DE ACTIVIDAD ═══════════════════════
-function ActividadCard({ a, onEdit, onDelete, onToggle }) {
-  const tm = (TIPOS[a.tipo] || { color: "#94A3B8", bg: "#F1F5F9", icon: "📌", label: a.tipo || "?", metricas: [] });
-  const marca = MARCAS[a.marca] || null;
-  const rs = a.red_social ? REDES_SOCIALES[a.red_social] : null;
-  const metricas = a.metricas || {};
-  const fechaTxt = a.fecha ? new Date(a.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short" }) : "";
-  const isCompleted = a.estatus === "completado" || a.estatus === "archivado";
+  const barLabel = { fontFamily: TYPO.fontDisplay, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: theme.textMuted, fontWeight: 600, marginRight: 2 };
 
   return (
-    <div style={{
-      background: "#fff",
-      borderRadius: 12,
-      border: "1px solid #E2E8F0",
-      borderTop: "4px solid " + tm.color,
-      overflow: "hidden",
-      display: "flex",
-      flexDirection: "column",
-      opacity: isCompleted ? 0.75 : 1,
-    }}>
-      {/* Header */}
-      <div style={{ padding: "12px 14px 8px", background: tm.bg, borderBottom: "1px solid " + tm.color + "33" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 20 }}>{tm.icon}</span>
-            <div>
-              <div style={{ fontSize: 11, color: tm.color, fontWeight: 700, textTransform: "uppercase" }}>{tm.label}{rs ? " · " + rs.icon + " " + rs.label : ""}</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1E293B", marginTop: 1 }}>{a.nombre || "Sin nombre"}</div>
+    <div ref={rootRef} data-stagger style={{ display: 'flex', flexDirection: 'column', gap: 10, fontFamily: TYPO.fontText, color: theme.text }}>
+      {/* 1 · Hero */}
+      <Hero
+        eyebrow={`Marketing · ${clienteLabel} · ${anio}`}
+        titulo={heroTitulo}
+        sub={heroSub}
+        stats={[
+          { k: 'Invertido YTD', v: money(anual.ytd), sub: `${anio}` },
+          { k: 'Actividades', v: `${anual.total} · ${anual.activas}`, sub: 'total · activas' },
+          { k: 'Inversión del mes', v: money(totales.inversion), sub: `${totales.actividades} en ${MESES_CORTOS[mesSel - 1]}` },
+        ]}
+      />
+
+      {/* 2 · KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 8 }}>
+        <KpiCard
+          eyebrow="Sell-out en promo" badge={{ l: 'Global', tone: 'gray' }}
+          big={promo.loading ? '…' : promoOn ? money(enPromo) : '—'}
+          bigSmall={promo.loading ? '' : promoOn ? `vs ${money(fueraPromo)} fuera` : 'sin campaña activa'}
+          sub={promo.loading ? 'Cargando…' : promoOn ? `${p.campania || 'Campaña'} · ${fmtNum(p.skus_campania)} SKUs · mes actual` : `Fuera de promo ${money(fueraPromo)} · mes actual`}
+          progress={promoOn ? sharePromo : undefined} progressColor={theme.accent}
+        />
+        <KpiCard
+          eyebrow="Costo por actividad" badge={{ l: `${anio}`, tone: 'gray' }}
+          big={anual.costoPorActividad != null ? money(anual.costoPorActividad) : '—'}
+          bigSmall={anual.total ? `${anual.total} act.` : ''}
+          sub={anual.total ? `${fmtMXN(anual.inversion)} ÷ ${anual.total} ${anual.total === 1 ? 'actividad' : 'actividades'}` : 'Sin actividades en el año'}
+        />
+        <KpiCard
+          eyebrow="Mailing · apertura" badge={{ l: 'Promedio', tone: 'green' }}
+          big={anual.apertura != null ? `${anual.apertura.toFixed(1)}%` : '—'}
+          bigSmall={anual.mailings ? `${anual.mailings} ${anual.mailings === 1 ? 'mailing' : 'mailings'}` : ''}
+          sub={anual.mailings ? `${fmtNum(anual.mailAperturas)} aperturas de ${fmtNum(anual.mailEnvios)} envíos` : 'Sin envíos capturados'}
+          progress={anual.apertura != null ? anual.apertura : undefined} progressColor={theme.green}
+        />
+        <KpiCard
+          eyebrow="Próxima actividad" badge={tmProx ? { l: tmProx.label, tone: tmProx.tone } : undefined}
+          big={proxima ? fechaCorta(proxima.a.fecha) : '—'}
+          bigSmall={proxima ? proxima.a.nombre : 'nada programado'}
+          sub={proxima ? `${dTxt(proxima.dias)}${MARCAS[proxima.a.marca] ? ` · ${MARCAS[proxima.a.marca].label}` : ''}${proxima.a.responsable ? ` · ${proxima.a.responsable}` : ''}` : `Sin actividades futuras en ${anio}`}
+          onClick={proxima ? () => { const { m } = mesAnioDe(proxima.a); setMesSel(m); setCalVista('mes'); setDiaSeleccionado(null); } : undefined}
+        />
+      </div>
+
+      {/* 3 · Barra de control */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Segmented value={anio} onChange={(y) => { setAnio(Number(y)); setDiaSeleccionado(null); }} options={[anioActual - 1, anioActual].map((y) => ({ id: y, label: String(y) }))} />
+          <Segmented value={calVista} onChange={(v) => { setCalVista(v); setDiaSeleccionado(null); }} options={[{ id: 'mes', label: 'Mes' }, { id: 'anual', label: 'Anual', badge: anual.total || undefined }]} />
+          {calVista === 'mes' && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+              {MESES_CORTOS.map((m, i) => {
+                const n = porMes[i + 1]?.total || 0, sel = mesSel === i + 1;
+                return (
+                  <Pill key={m} tone={sel ? 'inverse' : 'gray'} onClick={() => { setMesSel(i + 1); setDiaSeleccionado(null); }} style={{ cursor: 'pointer', opacity: !sel && !n && i + 1 !== mesActual ? 0.6 : 1 }}>
+                    {m}{n > 0 && <span style={{ fontSize: 9, opacity: 0.7 }}>{n}</span>}
+                  </Pill>
+                );
+              })}
             </div>
-          </div>
-          {marca && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: marca.color + "22", color: marca.color, fontWeight: 700, whiteSpace: "nowrap" }}>{marca.label}</span>}
-        </div>
-        <div style={{ fontSize: 11, color: "#64748B", marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {fechaTxt && <span>📆 {fechaTxt}</span>}
-          {Number(a.inversion) > 0 && <span style={{ fontWeight: 600, color: "#10B981" }}>💰 {fmtMXN(a.inversion)}</span>}
-          {a.responsable && <span>👤 {a.responsable}</span>}
-          {a.pago_id && <span style={{ background: "#D1FAE5", color: "#065F46", padding: "1px 8px", borderRadius: 8, fontWeight: 600 }}>🔒 En pago</span>}
-        </div>
-        {a.mensaje && <div style={{ fontSize: 12, color: "#475569", marginTop: 6, fontStyle: "italic" }}>"{a.mensaje}"</div>}
-      </div>
-
-      {/* Métricas */}
-      <div style={{ padding: "10px 14px", flex: 1 }}>
-        {tm.metricas.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: 8 }}>
-            {tm.metricas.map(m => {
-              const v = metricas[m.key];
-              const display = v != null && v !== "" ? (m.money ? fmtMXN(v) : fmtNum(v)) : "—";
-              return (
-                <div key={m.key} style={{ background: "#F8FAFC", borderRadius: 6, padding: "6px 8px" }}>
-                  <div style={{ fontSize: 9, color: "#94A3B8", textTransform: "uppercase", fontWeight: 600 }}>{m.label}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: v != null && v !== "" ? "#1E293B" : "#CBD5E1", marginTop: 1 }}>{display}</div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {/* Evento extras */}
-        {a.tipo === "evento" && (a.evento_sucursal || a.evento_pop) && (
-          <div style={{ marginTop: 8, padding: "6px 8px", background: "#FCE7F3", borderRadius: 6, fontSize: 11, color: "#831843" }}>
-            {a.evento_sucursal && <div>🏢 Sucursal: <strong>{a.evento_sucursal}</strong></div>}
-            {a.evento_pop && <div>🎁 POP: {a.evento_pop}</div>}
-          </div>
-        )}
-      </div>
-
-      {/* Footer actions */}
-      <div style={{ padding: "8px 14px", borderTop: "1px solid #E2E8F0", background: "#FAFBFC", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-        <button onClick={() => onToggle(a)} style={{ padding: "4px 10px", background: isCompleted ? "#FEF3C7" : "#D1FAE5", border: "1px solid " + (isCompleted ? "#FDE68A" : "#A7F3D0"), borderRadius: 6, fontSize: 11, cursor: "pointer", color: isCompleted ? "#92400E" : "#065F46", fontWeight: 600 }}>
-          {isCompleted ? "↺ Reactivar" : "✓ Completar"}
-        </button>
-        <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => onEdit(a)} style={{ padding: "4px 10px", background: "#fff", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 11, cursor: "pointer", color: "#475569" }}>✏️ Editar</button>
-          <button onClick={() => onDelete(a.id)} style={{ padding: "4px 10px", background: "#fff", border: "1px solid #FCA5A5", borderRadius: 6, fontSize: 11, cursor: "pointer", color: "#991B1B" }}>🗑</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════ FORMULARIO (Modal) ═══════════════════════
-function ActividadForm({ form, setForm, editId, saving, onSave, onClose }) {
-  const tipoMeta = TIPOS[form.tipo] || TIPOS.mailing;
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const setMet = (k, v) => setForm(f => ({ ...f, metricas: { ...f.metricas, [k]: v === "" ? null : (isNaN(v) ? v : Number(v)) } }));
-
-  return (
-    <div style={{
-      position: "fixed", inset: 0, background: "rgba(15,23,42,0.6)",
-      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20
-    }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: "#fff", borderRadius: 12, maxWidth: 640, width: "100%", maxHeight: "90vh",
-        overflowY: "auto", display: "flex", flexDirection: "column"
-      }}>
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{editId ? "Editar actividad" : "Nueva actividad"}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#64748B" }}>×</button>
-        </div>
-        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
-          {/* Tipo + Marca */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Field label="Tipo de actividad">
-              <select value={form.tipo} onChange={e => set("tipo", e.target.value)} style={inputStyle}>
-                {Object.entries(TIPOS).map(([k, t]) => <option key={k} value={k}>{t.icon} {t.label}</option>)}
-              </select>
-            </Field>
-            <Field label="Marca">
-              <select value={form.marca} onChange={e => set("marca", e.target.value)} style={inputStyle}>
-                {Object.entries(MARCAS).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
-              </select>
-            </Field>
-          </div>
-
-          {/* Fecha + Red social (si reel) */}
-          <div style={{ display: "grid", gridTemplateColumns: tipoMeta.redSocial ? "1fr 1fr" : "1fr", gap: 10 }}>
-            <Field label="Fecha">
-              <input type="date" value={form.fecha} onChange={e => set("fecha", e.target.value)} style={inputStyle} />
-            </Field>
-            {tipoMeta.redSocial && (
-              <Field label="Red social">
-                <select value={form.red_social} onChange={e => set("red_social", e.target.value)} style={inputStyle}>
-                  <option value="">Selecciona...</option>
-                  {Object.entries(REDES_SOCIALES).map(([k, r]) => <option key={k} value={k}>{r.icon} {r.label}</option>)}
-                </select>
-              </Field>
+          )}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {canEdit && totales.sinPago > 0 && totales.inversionSinPago > 0 && (
+              <Boton icon={Lock} onClick={cerrarMes} title={`Genera un pago consolidado de ${fmtMXN(totales.inversionSinPago)} por ${totales.sinPago} actividad(es) de ${mesLabel}`}>
+                Cerrar mes · {money(totales.inversionSinPago)}
+              </Boton>
             )}
+            <ExportMenu titulo="Marketing" subtitulo={`${clienteLabel} · ${anio}`} excel={excelActividades} pdf={{ ref: rootRef }} deshabilitado={!actividadesAnio.length} />
+            {canEdit && <Boton primario icon={Plus} onClick={openNew}>Actividad</Boton>}
           </div>
-
-          <Field label="Nombre / título">
-            <input type="text" value={form.nombre} onChange={e => set("nombre", e.target.value)} placeholder="Ej: Black Friday Sillas Gamer" style={inputStyle} />
-          </Field>
-
-          <Field label="Temática / mensaje (opcional)">
-            <input type="text" value={form.mensaje} onChange={e => set("mensaje", e.target.value)} placeholder="Qué promueve esta actividad" style={inputStyle} />
-          </Field>
-
-          <Field label="Inversión ($)">
-            <input type="number" value={form.inversion} onChange={e => set("inversion", e.target.value)} style={inputStyle} />
-          </Field>
-
-          {/* Métricas específicas del tipo */}
-          <div style={{ background: tipoMeta.bg, padding: 12, borderRadius: 8, border: "1px solid " + tipoMeta.color + "55" }}>
-            <div style={{ fontSize: 11, color: tipoMeta.color, fontWeight: 700, marginBottom: 8, textTransform: "uppercase" }}>
-              Métricas {tipoMeta.icon} {tipoMeta.label}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              {tipoMeta.metricas.map(m => (
-                <Field key={m.key} label={m.label}>
-                  <input type="number" value={form.metricas?.[m.key] ?? ""} onChange={e => setMet(m.key, e.target.value)} style={inputStyle} />
-                </Field>
-              ))}
-            </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={barLabel}>Tipo</span>
+            <Pill tone={filterTipo === 'todos' ? 'inverse' : 'gray'} onClick={() => setFilterTipo('todos')} style={{ cursor: 'pointer' }}>Todos</Pill>
+            {Object.entries(TIPOS).map(([k, t]) => (
+              <Pill key={k} tone={filterTipo === k ? t.tone : 'gray'} onClick={() => setFilterTipo(filterTipo === k ? 'todos' : k)} style={{ cursor: 'pointer', opacity: filterTipo === 'todos' || filterTipo === k ? 1 : 0.55 }}>
+                <t.Icon size={10} strokeWidth={2} />{t.label}
+              </Pill>
+            ))}
           </div>
-
-          {/* Eventos */}
-          {tipoMeta.evento && (
-            <div style={{ background: "#FCE7F3", padding: 12, borderRadius: 8, border: "1px solid #F9A8D4" }}>
-              <div style={{ fontSize: 11, color: "#831843", fontWeight: 700, marginBottom: 8, textTransform: "uppercase" }}>🎪 Detalle del evento</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <Field label="Sucursal">
-                  <input type="text" value={form.evento_sucursal} onChange={e => set("evento_sucursal", e.target.value)} placeholder="Dónde se realizó" style={inputStyle} />
-                </Field>
-                <Field label="POP / material">
-                  <input type="text" value={form.evento_pop} onChange={e => set("evento_pop", e.target.value)} placeholder="Ej: Lona, displays, muestras" style={inputStyle} />
-                </Field>
-              </div>
-            </div>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={barLabel}>Marca</span>
+            <Pill tone={filterMarca === 'todas' ? 'inverse' : 'gray'} onClick={() => setFilterMarca('todas')} style={{ cursor: 'pointer' }}>Todas</Pill>
+            {Object.entries(MARCAS).map(([k, m]) => (
+              <Pill key={k} tone={filterMarca === k ? m.tone : 'gray'} onClick={() => setFilterMarca(filterMarca === k ? 'todas' : k)} style={{ cursor: 'pointer', opacity: filterMarca === 'todas' || filterMarca === k ? 1 : 0.55 }}>{m.label}</Pill>
+            ))}
+          </div>
+          {diaSeleccionado && calVista === 'mes' && (
+            <Pill tone="blue" onClick={() => setDiaSeleccionado(null)} style={{ cursor: 'pointer', marginLeft: 'auto' }}>Día {diaSeleccionado} <X size={10} strokeWidth={2.5} /></Pill>
           )}
-
-          <Field label="Responsable (opcional)">
-            <input type="text" value={form.responsable} onChange={e => set("responsable", e.target.value)} style={inputStyle} />
-          </Field>
-
-          <Field label="Notas (opcional)">
-            <textarea value={form.notas} onChange={e => set("notas", e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }} />
-          </Field>
-        </div>
-
-        <div style={{ padding: "12px 20px", borderTop: "1px solid #E2E8F0", display: "flex", gap: 8, justifyContent: "flex-end", background: "#FAFBFC" }}>
-          <button onClick={onClose} disabled={saving} style={{ padding: "8px 14px", background: "#fff", border: "1px solid #CBD5E1", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
-          <button onClick={onSave} disabled={saving} style={{ padding: "8px 18px", background: "#3B82F6", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
-            {saving ? "Guardando..." : (editId ? "Guardar cambios" : "Crear actividad")}
-          </button>
         </div>
       </div>
-    </div>
-  );
-}
 
-function Field({ label, children }) {
-  return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <span style={{ fontSize: 11, color: "#64748B", fontWeight: 600 }}>{label}</span>
-      {children}
-    </label>
-  );
-}
+      {/* 4 · Calendario + Actividades */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.4fr)', gap: 10, alignItems: 'start' }}>
+        <Panel
+          titulo={calVista === 'mes' ? `${mesLabel} ${anio}` : `${anio}`}
+          meta={calVista === 'mes' ? `${porMes[mesSel]?.total || 0} act. · ${money(porMes[mesSel]?.inv || 0)}` : `${anual.total} act. · ${money(anual.inversion)}`}
+          padding="8px 10px 10px">
+          {calVista === 'mes'
+            ? <CalendarioMes anio={anio} mes={mesSel} actividades={actividadesDelMes.filter(pasaFiltros)} diaSeleccionado={diaSeleccionado} onSelectDia={setDiaSeleccionado} hoy={hoy} />
+            : <CalendarioAnual anio={anio} porMes={porMes} mesSel={mesSel} onSelectMes={(m) => { setMesSel(m); setCalVista('mes'); setDiaSeleccionado(null); }} />}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, paddingTop: 8, borderTop: `1px solid ${theme.border}` }}>
+            {Object.entries(TIPOS).map(([k, t]) => (
+              <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9.5, color: theme.textMuted, fontFamily: TYPO.fontDisplay, fontWeight: 500 }}>
+                <span style={{ width: 5, height: 5, borderRadius: 999, background: t.color, display: 'inline-block' }} />{t.label}
+              </span>
+            ))}
+          </div>
+        </Panel>
 
-const inputStyle = { padding: "7px 10px", border: "1px solid #CBD5E1", borderRadius: 6, fontSize: 13, width: "100%", boxSizing: "border-box" };
-
-// ═══════════ CALENDARIO ANUAL ═══════════════════════
-function CalendarioAnual({ anio, actividades, filterTipo, filterMarca, mesSel, onSelectMes }) {
-  // Agrupar actividades por mes y tipo
-  const porMes = React.useMemo(() => {
-    const out = {};
-    for (let m = 1; m <= 12; m++) out[m] = { total: 0, porTipo: {}, inv: 0 };
-    const parse = (f) => { if (!f) return null; const p = String(f).slice(0,10).split("-").map(n => parseInt(n,10)); return p.length === 3 && p[0] ? { y: p[0], m: p[1] } : null; };
-    actividades.forEach(a => {
-      const pf = parse(a.fecha);
-      const m = pf ? pf.m : Number(a.mes) || 0;
-      const y = pf ? pf.y : Number(a.anio) || 0;
-      if (y !== anio) return;
-      if (m < 1 || m > 12) return;
-      if (filterTipo !== "todos" && a.tipo !== filterTipo) return;
-      if (filterMarca !== "todas" && a.marca !== filterMarca) return;
-      out[m].total++;
-      out[m].porTipo[a.tipo] = (out[m].porTipo[a.tipo] || 0) + 1;
-      out[m].inv += Number(a.inversion) || 0;
-    });
-    return out;
-  }, [actividades, anio, filterTipo, filterMarca]);
-
-  const totalAnual = Object.values(porMes).reduce((s, m) => s + m.total, 0);
-  const invAnual = Object.values(porMes).reduce((s, m) => s + m.inv, 0);
-
-  return (
-    <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-        {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => {
-          const data = porMes[m];
-          const isSelected = m === mesSel;
-          return (
-            <div key={m}
-              onClick={() => onSelectMes(m)}
-              style={{
-                background: isSelected ? "#EFF6FF" : "#F8FAFC",
-                border: isSelected ? "2px solid #3B82F6" : "1px solid #E2E8F0",
-                borderRadius: 8, padding: "10px 12px", cursor: "pointer",
-                display: "flex", flexDirection: "column", gap: 6, minHeight: 100
-              }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#1E293B" }}>{MESES_CORTOS[m-1]}</div>
-                <div style={{ fontSize: 11, color: "#64748B" }}>{data.total} {data.total === 1 ? "act" : "acts"}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+          <Panel
+            titulo="Actividades"
+            meta={`${activasFiltradas.length} ${activasFiltradas.length === 1 ? 'activa' : 'activas'}${calVista === 'mes' ? ` · ${mesLabel}${diaSeleccionado ? ` ${diaSeleccionado}` : ''}` : ` · ${anio}`} · ${money(activasFiltradas.reduce((s, a) => s + (Number(a.inversion) || 0), 0))}`}
+            padding="4px 8px">
+            {activasFiltradas.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '22px 12px', color: theme.textMuted, fontSize: 12 }}>
+                {completadasFiltradas.length ? 'Sin actividades pendientes con estos filtros. Revisa las completadas abajo.' : 'No hay actividades para estos filtros.'}
+                {canEdit && <span onClick={openNew} style={{ marginLeft: 8, color: theme.accent, cursor: 'pointer', fontWeight: 500 }}>Crear una</span>}
               </div>
-              {data.total > 0 && (
-                <>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-                    {Object.entries(data.porTipo).map(([t, c]) => {
-                      const tm = TIPOS[t] || { color: "#94A3B8", label: t };
-                      return (
-                        <div key={t} title={tm.label + ": " + c} style={{
-                          fontSize: 9, padding: "1px 6px", borderRadius: 8,
-                          background: tm.color + "22", color: tm.color, fontWeight: 600
-                        }}>{c}</div>
-                      );
-                    })}
-                  </div>
-                  {data.inv > 0 && <div style={{ fontSize: 10, color: "#10B981", fontWeight: 600 }}>{fmtMXN(data.inv)}</div>}
-                </>
-              )}
-              {data.total === 0 && <div style={{ fontSize: 10, color: "#CBD5E1", fontStyle: "italic" }}>Sin actividad</div>}
-            </div>
-          );
-        })}
+            ) : activasFiltradas.map((a, i) => (
+              <ActividadFila key={a.id} a={a} hoy={hoy} canEdit={canEdit} onEdit={openEdit} onToggle={toggleCompletada} onArchivar={archivar} onDelete={deleteAct} ultima={i === activasFiltradas.length - 1} />
+            ))}
+          </Panel>
+
+          {completadasFiltradas.length > 0 && (
+            <Panel
+              titulo="Completadas y archivadas"
+              meta={`${completadasFiltradas.length} · ${money(completadasFiltradas.reduce((s, a) => s + (Number(a.inversion) || 0), 0))}`}
+              plegable abiertoInicial={false} padding="4px 8px">
+              {completadasFiltradas.map((a, i) => (
+                <ActividadFila key={a.id} a={a} hoy={hoy} canEdit={canEdit} onEdit={openEdit} onToggle={toggleCompletada} onArchivar={archivar} onDelete={deleteAct} ultima={i === completadasFiltradas.length - 1} />
+              ))}
+            </Panel>
+          )}
+        </div>
       </div>
-      <div style={{ marginTop: 12, padding: "8px 12px", background: "#F8FAFC", borderRadius: 8, display: "flex", justifyContent: "space-between", fontSize: 12, color: "#475569" }}>
-        <span><strong>Total anual:</strong> {totalAnual} actividades</span>
-        <span><strong>Inversión:</strong> {fmtMXN(invAnual)}</span>
-      </div>
+
+      {/* 5 · Formulario */}
+      {showForm && <ActividadForm form={form} setForm={setForm} editId={editId} saving={saving} onSave={save} onClose={closeForm} />}
     </div>
   );
 }
