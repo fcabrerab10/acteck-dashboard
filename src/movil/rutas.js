@@ -12,6 +12,14 @@ const SellInCliente = lazy(() => import('./pestanas/SellInCliente'));
 const FichaProducto = lazy(() => import('./FichaProducto'));
 const Historial     = lazy(() => import('./pestanas/Historial'));
 const Fuentes       = lazy(() => import('./pestanas/Fuentes'));
+const VisionGeneral    = lazy(() => import('./pestanas/VisionGeneral'));
+const AnalisisClientes = lazy(() => import('./pestanas/AnalisisClientes'));
+const SellOutCliente   = lazy(() => import('./pestanas/SellOutCliente'));
+const MarketingCliente = lazy(() => import('./pestanas/MarketingCliente'));
+const CobranzaCliente  = lazy(() => import('./pestanas/CobranzaCliente'));
+const ForecastCliente  = lazy(() => import('./pestanas/ForecastCliente'));
+const SOP              = lazy(() => import('./pestanas/SOP'));
+const Propuestas       = lazy(() => import('./pestanas/Propuestas'));
 
 /** Pestañas raíz del shell (cada una con pila push/pop propia). Ninguna aparece como nodo salvo `inicio`. */
 export const TABS_RAIZ = ['inicio', 'clientes', 'alertas', 'buscar'];
@@ -29,12 +37,21 @@ const GLOBALES = {
   estrategiaPrecios: ficha,                           // Estrategia de precios → Ficha de producto (precio por lista)
   historialCambios:  () => ({ tipo: 'push', key: 'historial', el: h(Historial) }),
   actualizacion:     () => ({ tipo: 'push', key: 'fuentes', el: h(Fuentes) }), // Importador (sólo lectura)
+  visionGeneral:     () => ({ tipo: 'push', key: 'vision', el: h(VisionGeneral) }),
+  analisisClientes:  () => ({ tipo: 'push', key: 'analisis', el: h(AnalisisClientes) }),
+  forecastClientes:  () => ({ tipo: 'push', key: 'sop', el: h(SOP) }),
+  propuestas:        () => ({ tipo: 'push', key: 'propuestas', el: h(Propuestas) }),
+  forecastReservas:  () => ({ tipo: 'push', key: 'forecast', el: h(ForecastCliente) }),
 };
 
 // Pestañas de cliente propio (nodo.clienteKey = digitalife | pcel | dicotech).
 const CLIENTE = {
   home:   (ck) => ({ tipo: 'push', key: `cliente-${ck}`, el: h(FichaCliente, { clienteKey: ck }) }),
   sellIn: (ck) => ({ tipo: 'push', key: `sellin-${ck}`, el: h(SellInCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
+  estrategia: (ck) => ({ tipo: 'push', key: `sellout-${ck}`, el: h(SellOutCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
+  sellOut:    (ck) => ({ tipo: 'push', key: `sellout-${ck}`, el: h(SellOutCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
+  marketing:  (ck) => ({ tipo: 'push', key: `marketing-${ck}`, el: h(MarketingCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
+  cartera:    (ck) => ({ tipo: 'push', key: `cartera-${ck}`, el: h(CobranzaCliente, { clienteKey: ck, nombre: CLIENTES_NAV[ck]?.label }) }),
 };
 
 export function destino({ pagina, clienteKey, label } = {}) {

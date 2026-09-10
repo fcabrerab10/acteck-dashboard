@@ -1,4 +1,11 @@
 // Exportador a Excel S&OP Ferru — una solicitud individual.
+//
+//   exportarSolicitudExcel(solicitud, lineas)  → descarga el .xlsx (escritorio) y devuelve el nombre
+//   solicitudExcelBlob(solicitud, lineas)      → { blob, filename } para compartir desde el celular
+//                                                (navigator.share · src/lib/compartirArchivo.js)
+//   construirWorkbookSolicitud(XLSX, solicitud, lineas) → { wb, filename } (mismo libro en ambos casos)
+//
+// xlsx-js-style se carga bajo demanda con `await import(...)` (CLAUDE.md · Rendimiento).
 // Nombre del archivo: "S&OP Ferru <Mes> <Año>.xlsx" (mes/año = momento del export).
 //
 // Columnas (en orden, fijas):
@@ -43,13 +50,12 @@ function parseFecha(iso) {
   return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
 }
 
-export async function exportarSolicitudExcel(solicitud, lineas) {
-  // Cargar SheetJS con estilos (community fork compatible con la API de xlsx).
-  // El bundle ESM exporta como default, así que tomamos esa propiedad
-  // (con fallback al módulo entero por si la API cambia).
-  const mod = await import('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/+esm');
-  const XLSX = mod.default || mod;
+async function cargarXLSX() {
+  const mod = await import('xlsx-js-style');
+  return mod.default || mod;
+}
 
+export function construirWorkbookSolicitud(XLSX, solicitud, lineas) {
   // Construir filas: una por línea, o N por línea si tiene envíos
   const filas = [];
   (lineas || [])
@@ -187,6 +193,21 @@ export async function exportarSolicitudExcel(solicitud, lineas) {
   // Nombre del archivo
   const hoy = new Date();
   const filename = `S&OP Ferru ${MESES[hoy.getMonth()]} ${hoy.getFullYear()}.xlsx`;
+  return { wb, filename };
+}
+
+export async function exportarSolicitudExcel(solicitud, lineas) {
+  const XLSX = await cargarXLSX();
+  const { wb, filename } = construirWorkbookSolicitud(XLSX, solicitud, lineas);
   XLSX.writeFile(wb, filename);
   return filename;
+}
+
+/** Mismo libro que exportarSolicitudExcel pero como Blob (para compartir por WhatsApp/correo desde el celular). */
+export async function solicitudExcelBlob(solicitud, lineas) {
+  const XLSX = await cargarXLSX();
+  const { wb, filename } = construirWorkbookSolicitud(XLSX, solicitud, lineas);
+  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  return { blob, filename };
 }

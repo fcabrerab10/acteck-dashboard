@@ -61,6 +61,150 @@ export function textoDisponibilidad(items, { fecha = new Date(), marca = 'Acteck
   return lineas.join('\n');
 }
 
+/** '2026-09-08' → '8 sep 2026' (sin Date: sin corrimiento de zona horaria). */
+export function fechaCortaAnio(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  if (!m) return '—';
+  return `${Number(m[3])} ${MESES[Number(m[2]) - 1]} ${m[1]}`;
+}
+
+/** 'Factura A10374679' → 'A10374679' (el ERP antepone el tipo de movimiento al folio). */
+export function folioCorto(movimiento) {
+  return String(movimiento || '').replace(/^(factura|nota|remisi[oó]n|nc|nd)\s+/i, '').trim() || '—';
+}
+
+/**
+ * Estado de cuenta para el cliente (tono formal, Crédito y Cobranza móvil).
+ *
+ * facturas: [{ folio | movimiento, fecha (emisión, ISO), importe | saldo, dias (atraso; 0 o negativo = vigente), vencimiento? }]
+ * opts: { cliente, fechaCorte (ISO), saldoTotal, totalVencido, soloVencidas = true, marca = 'Acteck' }
+ *
+ *   *Acteck · Estado de cuenta · Digitalife*
+ *   Corte al 8 sep 2026
+ *
+ *   Facturas vencidas:
+ *   • A10374679 · 12 jul · $48,200.00 · 58 días
+ *
+ *   Total vencido: $70,100.00
+ *   Saldo total: $412,300.00
+ *
+ * Con soloVencidas = false lista todas las facturas con saldo: las vigentes llevan "vence 17 sep" en vez de días.
+ * Nunca lleva línea de crédito, DSO ni comentarios internos.
+ */
+export function textoEstadoCuenta(facturas, { cliente = '', fechaCorte, saldoTotal, totalVencido, soloVencidas = true, marca = 'Acteck' } = {}) {
+  const todas = (facturas || []).map((f) => ({
+    folio: folioCorto(f.folio || f.movimiento),
+    fecha: f.fecha || f.fecha_emision || null,
+    saldo: esNum(f.saldo) ? Number(f.saldo) : esNum(f.saldo_actual) ? Number(f.saldo_actual) : esNum(f.importe) ? Number(f.importe) : 0,
+    dias: esNum(f.dias) ? Number(f.dias) : 0,
+    vencimiento: f.vencimiento || null,
+  })).filter((f) => f.saldo > 0);
+  const vencidas = todas.filter((f) => f.dias > 0);
+  const lista = (soloVencidas ? vencidas : todas).slice().sort((a, b) => (b.dias - a.dias) || String(a.fecha || '').localeCompare(String(b.fecha || '')));
+  const tv = esNum(totalVencido) ? Number(totalVencido) : vencidas.reduce((s, f) => s + f.saldo, 0);
+  const st = esNum(saldoTotal) ? Number(saldoTotal) : todas.reduce((s, f) => s + f.saldo, 0);
+
+  const lineas = [`*${marca} · Estado de cuenta${cliente ? ` · ${cliente}` : ''}*`, `Corte al ${fechaCorte ? fechaCortaAnio(fechaCorte) : fechaHora(new Date()).split(' · ')[0]}`, ''];
+  if (!lista.length) {
+    lineas.push(soloVencidas ? 'Sin facturas vencidas a la fecha de corte.' : 'Sin facturas con saldo a la fecha de corte.');
+  } else {
+    lineas.push(soloVencidas ? 'Facturas vencidas:' : 'Facturas con saldo:');
+    lista.forEach((f) => {
+      const cola = f.dias > 0 ? `${piezas(f.dias)} día${f.dias === 1 ? '' : 's'}` : f.vencimiento ? `vence ${fechaCorta(f.vencimiento)}` : 'vigente';
+      lineas.push(`• ${f.folio} · ${fechaCorta(f.fecha)} · ${precio(f.saldo)} · ${cola}`);
+    });
+  }
+  lineas.push('', `Total vencido: ${precio(tv)}`, `Saldo total: ${precio(st)}`);
+  return lineas.join('\n');
+}
+
+// ─── Cierre de mes · Análisis por cliente · Avance de cliente (V3 móvil) ───
+const MESES_LARGO = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const MESES_TITULO = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+/** 39_086_166 → '$39.1 mdp' (millones de pesos, 1 decimal; negativo con signo). */
+export function mdp(n) {
+  if (!esNum(n)) return '—';
+  const v = Number(n) / 1e6;
+  return `${v < 0 ? '-' : ''}$${Math.abs(v).toFixed(1)} mdp`;
+}
+
+/** 809_000 → '$809K' · 1_600_000 → '$1.6M' · 950 → '$950' (mismo criterio que format.moneyCompact). */
+export function compacto(n) {
+  if (!esNum(n)) return '—';
+  const v = Number(n), a = Math.abs(v), s = v < 0 ? '-' : '';
+  if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(1).replace(/\.0$/, '')}B`;
+  if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(1).replace(/\.0$/, '')}M`;
+  if (a >= 1e3) return `${s}$${Math.round(a / 1e3)}K`;
+  return `${s}$${Math.round(a)}`;
+}
+
+const pctEntero = (n) => (esNum(n) ? `${Math.round(Number(n))}%` : '—');
+const yoyTxt = (n) => (esNum(n) ? ` (${Number(n) >= 0 ? '+' : ''}${Math.round(Number(n))}% vs ` : null);
+
+/**
+ * Cierre del mes para dirección (formato exacto acordado con Fernando; mdp = millones con 1 decimal).
+ * { mes (1-12), ventas, presupuesto, utilidadBruta, pctMc (0-100), uai, cobranza, stock, diasInventario, comentario }
+ */
+export function textoCierre({ mes, ventas, presupuesto, utilidadBruta, pctMc, uai, cobranza = '', stock, diasInventario, comentario = '' } = {}) {
+  const alcance = esNum(ventas) && esNum(presupuesto) && Number(presupuesto) > 0 ? pctEntero((Number(ventas) / Number(presupuesto)) * 100) : '—';
+  const lineas = [
+    `Reportando el cierre de ${MESES_LARGO[(Number(mes) || 1) - 1]}.`,
+    '',
+    `Ventas Netas: ${mdp(ventas)}`,
+    `Presupuesto: ${mdp(presupuesto)}`,
+    `Alcance: ${alcance}`,
+    '',
+    `Utilidad bruta: ${mdp(utilidadBruta)}${esNum(pctMc) ? ` (${Number(pctMc).toFixed(1)}%)` : ''}`,
+    `Pronóstico UAI: ${mdp(uai)}`,
+    '',
+    `Cobranza: ${String(cobranza || '').trim()}`,
+    '',
+    `Stock: ${esNum(stock) ? `$${Math.round(Number(stock) / 1e6)} mdp` : '—'}`,
+    `Días de inventario: ${esNum(diasInventario) ? `${Math.round(Number(diasInventario))} días` : '—'}`,
+  ];
+  const c = String(comentario || '').trim();
+  if (c) lineas.push('', c);
+  return lineas.join('\n');
+}
+
+/** Líneas "• SKU · nombre corto · N pz" (máximo `max`). top: [{ sku, descripcion, piezas }] */
+function lineasTop(top, max = 5) {
+  return (top || []).slice(0, max).map((t) => { const n = nombreCorto(t.descripcion); return `• ${t.sku}${n ? ` · ${n}` : ''} · ${piezas(t.piezas)} pz`; });
+}
+
+/**
+ * Ficha limpia de un cliente (Análisis por cliente): sin alertas, márgenes ni cartera; el YoY sólo si es positivo.
+ * { cliente, mes, anio, mtd, ytd, yoyYtd, top: [{ sku, descripcion, piezas }], marca }
+ */
+export function textoFichaCliente({ cliente, mes, anio, mtd, ytd, yoyYtd, top = [], marca = 'Acteck' } = {}) {
+  const yoy = esNum(yoyYtd) && Number(yoyYtd) > 0 ? `${yoyTxt(yoyYtd)}${anio - 1})` : '';
+  const lineas = [
+    `*${marca} · ${cliente} · ${MESES_TITULO[(Number(mes) || 1) - 1]} ${anio}*`,
+    `Facturación del mes: ${mdp(mtd)}`,
+    `Acumulado ${anio}: ${mdp(ytd)}${yoy}`,
+  ];
+  const t = lineasTop(top);
+  if (t.length) lineas.push('Top productos del año:', ...t);
+  return lineas.join('\n');
+}
+
+/**
+ * Avance del mes para el cliente propio (Sell In). Sin pagos, sin márgenes.
+ * { cliente, mes, anio, mtd, cuota, ytd, top: [{ sku, descripcion, piezas }], marca }
+ */
+export function textoAvance({ cliente, mes, anio, mtd, cuota, ytd, top = [], marca = 'Acteck' } = {}) {
+  const lineas = [
+    `*${marca} · Avance ${cliente} · ${MESES_TITULO[(Number(mes) || 1) - 1]} ${anio}*`,
+    `Facturado del mes: ${compacto(mtd)}`,
+  ];
+  if (esNum(cuota) && Number(cuota) > 0) lineas.push(`Cuota: ${compacto(cuota)} · avance ${pctEntero((Number(mtd) / Number(cuota)) * 100)}`);
+  lineas.push(`Acumulado ${anio}: ${compacto(ytd)}`);
+  const t = lineasTop(top);
+  if (t.length) lineas.push('Top productos del mes:', ...t);
+  return lineas.join('\n');
+}
+
 export async function copiar(texto) {
   try {
     if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(texto); return true; }

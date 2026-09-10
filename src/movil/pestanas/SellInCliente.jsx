@@ -1,69 +1,281 @@
-// Sell In del cliente (push) · top 20 SKUs del mes desde facturacion_clientes: dos líneas (SKU + descripción),
-// HeatCell con las piezas (relativo al máximo) y pill YoY del monto. Tocar un SKU abre la Ficha de producto.
+// Sell In del cliente (push) · consulta rápida: hero MTD vs cuota ideal/mínima (barra), YTD, YoY y frase;
+// selector de mes (año en curso y anterior); lista de SKUs del mes con piezas, monto y YoY + buscador;
+// tocar un SKU abre HeatmapSku (clientes finales × últimos 6 meses; si el cliente factura con un solo
+// nombre en el ERP queda una fila "Piezas") y desde ahí "Ver disponibilidad" → Ficha de producto;
+// composición por categoría (roadmap_sku) y "Compartir avance" (texto limpio, sin pagos ni márgenes).
+// Fuentes: facturacion_clientes (3 años, por cliente_key) · cuotas_mensuales · roadmap_sku / catalogo_articulos.
 import React, { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronDown, Share2, Copy } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { fetchAll, cachedQuery } from '../../lib/queries';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
+import { textoAvance, compartir, copiar } from '../../lib/whatsapp';
 import { useNav } from '../nav';
-import { TituloGrande, ListaAgrupada, Cabecera, Skeleton, Segmented, HeatCell, Pill, Vacio } from '../piezas';
-import { useSellInSkus } from '../datos';
-import { money, moneyCompact, deltaPct, tonoDelta, MESES, N } from '../util';
+import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Skeleton, HeatCell, Pill, Vacio, CampoBusqueda, HojaM, BotonGrande, toast } from '../piezas';
+import HeatmapSku from '../piezas/HeatmapSku';
+import { PROPIOS } from '../datos';
+import { money, moneyCompact, int, deltaPct, tonoDelta, tonoCuota, MESES, MONO, N } from '../util';
 import FichaProducto from '../FichaProducto';
 
+const STALE = 5 * 60 * 1000;
+const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
 const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+/** Últimos `n` meses terminando en (anio, mes): [{ anio, mes, label }]. */
+export function ultimosMeses(anio, mes, n = 6) {
+  return Array.from({ length: n }, (_, i) => { let m = mes - (n - 1) + i, a = anio; while (m <= 0) { m += 12; a -= 1; } return { anio: a, mes: m, label: `${MESES[m - 1]}${m === 1 || i === 0 ? ` ${String(a).slice(2)}` : ''}` }; });
+}
+
+/** sku → { descripcion, marca, categoria, familia } · roadmap_sku con respaldo catalogo_articulos (cachedQuery por lotes). */
+export async function catalogoSkus(skus) {
+  const m = new Map();
+  const lista = [...new Set(skus.filter(Boolean))];
+  for (let i = 0; i < lista.length; i += 200) {
+    const ch = lista.slice(i, i + 200);
+    const { data } = await cachedQuery(supabase.from('roadmap_sku').select('sku,descripcion,marca,categoria,familia').in('sku', ch));
+    (data || []).forEach((r) => { if (!m.has(r.sku)) m.set(r.sku, { descripcion: r.descripcion || '', marca: r.marca || '', categoria: r.categoria || '', familia: r.familia || '' }); });
+    const faltan = ch.filter((s) => !m.has(s));
+    if (faltan.length) {
+      const { data: cat } = await cachedQuery(supabase.from('catalogo_articulos').select('articulo,descripcion').in('articulo', faltan));
+      (cat || []).forEach((r) => m.set(r.articulo, { descripcion: r.descripcion || '', marca: '', categoria: '', familia: '' }));
+    }
+  }
+  return m;
+}
+
+// ── Datos: facturación del cliente 3 años (para YoY del año anterior) + cuotas + catálogo
+function useSellInCliente(ck, anio) {
+  return useQuery({
+    queryKey: ['movil', 'sellin-cliente', ck, anio], staleTime: STALE, enabled: !!ck,
+    queryFn: async () => {
+      const anios = [anio - 2, anio - 1, anio];
+      const [rows, cuotas] = await Promise.all([
+        fetchAll('facturacion_clientes', 'cliente_nombre,sku,anio,mes,piezas,monto', (q) => q.eq('cliente_key', ck).in('anio', anios)),
+        fetchAll('cuotas_mensuales', 'cliente,mes,anio,cuota_ideal,cuota_min', (q) => q.eq('cliente', ck).in('anio', [anio - 1, anio])),
+      ]);
+      const cat = await catalogoSkus(rows.map((r) => r.sku));
+      return { rows, cuotas, cat };
+    },
+  });
+}
+
+/** Botón "Sep 2026 ▾" + hoja con los meses del año en curso y del anterior. */
+export function SelectorMes({ valor, onChange, anioActual, mesActual, disponibles }) {
+  const { theme } = useTheme();
+  const [abierto, setAbierto] = useState(false);
+  const anios = [anioActual, anioActual - 1];
+  return (
+    <>
+      <button type="button" onClick={() => setAbierto(true)}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 32, padding: '0 10px 0 12px', borderRadius: 9, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em', cursor: 'pointer', flexShrink: 0 }}>
+        {MESES[valor.mes - 1]} {valor.anio}<ChevronDown size={14} style={{ color: theme.textMuted }} />
+      </button>
+      <HojaM abierto={abierto} onClose={() => setAbierto(false)} titulo="Mes" sub="Año en curso y anterior" alto="70vh">
+        {anios.map((a) => (
+          <ListaAgrupada key={a} titulo={String(a)} style={{ marginBottom: 14 }}>
+            {MESES.map((lbl, i) => {
+              const m = i + 1;
+              if (a === anioActual && m > mesActual) return null;
+              const on = valor.anio === a && valor.mes === m;
+              const hay = disponibles ? disponibles.has(`${a}-${m}`) : true;
+              return <Fila key={m} titulo={`${lbl} ${a}`} sub={a === anioActual && m === mesActual ? 'Mes en curso' : hay ? undefined : 'Sin facturación'} chevron={false} alto={44}
+                trailing={on ? <Pill tone="blue">Elegido</Pill> : undefined} onClick={() => { onChange({ anio: a, mes: m }); setAbierto(false); }} style={{ opacity: hay ? 1 : 0.5 }} />;
+            })}
+          </ListaAgrupada>
+        ))}
+      </HojaM>
+    </>
+  );
+}
+
+/** Agrupa SKUs por categoría del roadmap (sin distinguir mayúsculas) → [{ label, valor, skus }] ordenado por valor. */
+export function agruparCategorias(skus, medida) {
+  const cat = new Map();
+  skus.forEach((s) => { const raw = String(s.categoria || '').trim() || 'Sin categoría'; const k = raw.toLowerCase(); const o = cat.get(k) || (cat.set(k, { label: raw, valor: 0, skus: 0 }), cat.get(k)); o.valor += N(medida(s)); o.skus++; });
+  return [...cat.values()].sort((x, y) => y.valor - x.valor);
+}
+
+/** Lista "Composición por categoría" (monto y % del total) · reutilizada por Sell Out. */
+export function ComposicionCategorias({ filas, total, titulo = 'Composición por categoría', unidad = 'monto', pie }) {
+  const { theme } = useTheme();
+  if (!filas.length) return null;
+  const max = Math.max(0, ...filas.map((f) => f.valor));
+  return (
+    <ListaAgrupada titulo={titulo} meta={`${filas.length}`} style={{ marginTop: 18 }} pie={pie}>
+      {filas.map((f) => (
+        <div key={f.label} style={{ padding: '9px 12px', fontFamily: TYPO.fontText }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: theme.text }}>{f.label}<span style={{ fontSize: 11.5, color: theme.textMuted, marginLeft: 6 }}>{f.skus} SKU</span></span>
+            <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: theme.text }}>{total > 0 ? `${Math.round((f.valor / total) * 100)}%` : '—'}<span style={{ fontWeight: 500, color: theme.textMuted, marginLeft: 6, fontSize: 12, fontFamily: TYPO.fontText }}>{unidad === 'monto' ? moneyCompact(f.valor) : `${int(f.valor)} pz`}</span></span>
+          </div>
+          <div style={{ marginTop: 6, height: 4, background: `${theme.text}0F`, borderRadius: 999, overflow: 'hidden' }}>
+            <div style={{ height: 4, width: `${max > 0 ? (f.valor / max) * 100 : 0}%`, background: theme.accent, borderRadius: 999 }} />
+          </div>
+        </div>
+      ))}
+    </ListaAgrupada>
+  );
+}
 
 export default function SellInCliente({ clienteKey, nombre }) {
   const { theme } = useTheme();
   const nav = useNav();
   const hoy = useMemo(() => new Date(), []);
-  const anio = hoy.getFullYear(), mesActual = hoy.getMonth() + 1;
-  const { data, isLoading, error } = useSellInSkus(clienteKey, anio, mesActual);
-  const [orden, setOrden] = useState('monto');
+  const anioActual = hoy.getFullYear(), mesActual = hoy.getMonth() + 1;
+  const [sel, setSel] = useState({ anio: anioActual, mes: mesActual });
+  const [q, setQ] = useState('');
+  const [verTodo, setVerTodo] = useState(false);
+  const [skuHeat, setSkuHeat] = useState(null);
+  const [compartiendo, setCompartiendo] = useState(false);
+  const { data, isLoading, error } = useSellInCliente(clienteKey, anioActual);
+  const propio = PROPIOS.includes(clienteKey);
 
   const r = useMemo(() => {
     if (!data) return null;
-    const hayActual = data.rows.some((x) => N(x.anio) === anio && N(x.mes) === mesActual && N(x.monto) > 0);
-    const mes = hayActual ? mesActual : (mesActual === 1 ? 12 : mesActual - 1);
-    const a = hayActual || mesActual !== 1 ? anio : anio - 1;
+    const { anio: a, mes: m } = sel;
+    const enCurso = a === anioActual && m === mesActual;
+    const rows = data.rows;
+    const de = (aa, mm) => rows.filter((x) => N(x.anio) === aa && N(x.mes) === mm);
+    const mtd = sum(de(a, m), (x) => x.monto), piezas = sum(de(a, m), (x) => x.piezas);
+    const prev = sum(de(a - 1, m), (x) => x.monto);
+    const factor = enCurso ? Math.min(1, Math.max(1, hoy.getDate()) / new Date(a, m, 0).getDate()) : 1;
+    const yoy = delta(mtd, prev * factor);
+    const ytd = sum(rows.filter((x) => N(x.anio) === a && N(x.mes) <= m), (x) => x.monto);
+    const ytdPrev = sum(rows.filter((x) => N(x.anio) === a - 1 && N(x.mes) <= m), (x) => x.monto);
+    const cu = data.cuotas.find((c) => N(c.anio) === a && N(c.mes) === m);
+    const cuotaIdeal = N(cu?.cuota_ideal), cuotaMin = N(cu?.cuota_min);
+    const pct = cuotaIdeal > 0 ? (mtd / cuotaIdeal) * 100 : null, pctMin = cuotaMin > 0 ? (mtd / cuotaMin) * 100 : null;
+    const cuotaYtd = sum(data.cuotas.filter((c) => N(c.anio) === a && N(c.mes) <= m), (c) => c.cuota_ideal);
+    // SKUs del mes
     const by = new Map();
-    data.rows.forEach((x) => {
-      if (N(x.mes) !== mes || !x.sku) return;
-      const o = by.get(x.sku) || (by.set(x.sku, { sku: x.sku, monto: 0, piezas: 0, prev: 0 }), by.get(x.sku));
-      if (N(x.anio) === a) { o.monto += N(x.monto); o.piezas += N(x.piezas); } else if (N(x.anio) === a - 1) o.prev += N(x.monto);
-    });
-    const filas = [...by.values()].filter((o) => o.monto > 0 || o.piezas > 0).map((o) => ({ ...o, yoy: delta(o.monto, o.prev), ...(data.desc.get(o.sku) || {}) }));
-    filas.sort((x, y) => (orden === 'piezas' ? y.piezas - x.piezas : y.monto - x.monto));
-    const top = filas.slice(0, 20);
-    const total = filas.reduce((s, o) => s + o.monto, 0), totalTop = top.reduce((s, o) => s + o.monto, 0);
-    return { mes, anio: a, top, total, totalTop, n: filas.length, maxPz: Math.max(0, ...top.map((o) => o.piezas)), maxMonto: Math.max(0, ...top.map((o) => o.monto)) };
-  }, [data, anio, mesActual, orden]);
+    de(a, m).forEach((x) => { if (!x.sku) return; const o = by.get(x.sku) || (by.set(x.sku, { sku: x.sku, monto: 0, piezas: 0, prev: 0 }), by.get(x.sku)); o.monto += N(x.monto); o.piezas += N(x.piezas); });
+    de(a - 1, m).forEach((x) => { const o = by.get(x.sku); if (o) o.prev += N(x.monto); });
+    const skus = [...by.values()].filter((o) => o.monto > 0 || o.piezas > 0).map((o) => ({ ...o, yoy: delta(o.monto, o.prev), ...(data.cat.get(o.sku) || {}) })).sort((x, y) => y.monto - x.monto);
+    // Composición por categoría
+    const categorias = agruparCategorias(skus, (x) => x.monto);
+    const disponibles = new Set(rows.filter((x) => N(x.monto) > 0).map((x) => `${x.anio}-${N(x.mes)}`));
+    const mesL = MESES[m - 1].toLowerCase();
+    const frase = !mtd ? `Aún sin facturación en ${mesL} ${a}`
+      : pct == null ? `${MESES[m - 1]} ${a}: ${moneyCompact(mtd)}${yoy != null ? `, ${deltaPct(yoy)} vs ${a - 1}` : ''}`
+      : pct >= 100 ? `${MESES[m - 1]} cerró ${(pct - 100).toFixed(0)}% arriba de la cuota ideal`
+      : pctMin != null && pctMin >= 100 ? `Cuota mínima cubierta · ${Math.round(pct)}% de la ideal`
+      : enCurso ? `Va al ${Math.round(pct)}% de la cuota ideal de ${mesL}` : `${MESES[m - 1]} quedó al ${Math.round(pct)}% de la cuota ideal`;
+    return { a, m, enCurso, mtd, piezas, prev, yoy, ytd, ytdPrev, yoyYtd: delta(ytd, ytdPrev), cuotaIdeal, cuotaMin, pct, pctMin, cuotaYtd, skus, categorias, disponibles, frase, total: sum(skus, (s) => s.monto) };
+  }, [data, sel, anioActual, mesActual, hoy]);
 
-  const abrirSku = (sku) => { nav.agregarSku(sku); nav.push(<FichaProducto />, 'ficha'); };
+  const filtrados = useMemo(() => {
+    if (!r) return [];
+    const nq = norm(q.trim()); if (!nq) return r.skus;
+    const terms = nq.split(/\s+/);
+    return r.skus.filter((s) => { const t = norm(`${s.sku} ${s.descripcion} ${s.marca} ${s.categoria}`); return terms.every((w) => t.includes(w)); });
+  }, [r, q]);
+  const visibles = verTodo || q ? filtrados : filtrados.slice(0, 25);
+  const maxPz = Math.max(0, ...visibles.map((o) => o.piezas));
 
+  // Heatmap: clientes finales (cliente_nombre dentro del cliente_key) × últimos 6 meses del SKU
+  const heat = useMemo(() => {
+    if (!skuHeat || !data) return null;
+    const cols = ultimosMeses(sel.anio, sel.mes, 6);
+    const key = (x) => `${x.anio}-${N(x.mes)}`;
+    const idx = new Map(cols.map((c, i) => [`${c.anio}-${c.mes}`, i]));
+    const filas = new Map();
+    data.rows.forEach((x) => { if (x.sku !== skuHeat) return; const i = idx.get(key(x)); if (i == null) return; const lbl = x.cliente_nombre || 'Sin nombre'; const f = filas.get(lbl) || (filas.set(lbl, { label: lbl, valores: cols.map(() => 0) }), filas.get(lbl)); f.valores[i] += N(x.piezas); });
+    let lista = [...filas.values()].sort((p, s) => sum(s.valores, (v) => v) - sum(p.valores, (v) => v));
+    if (lista.length === 1) lista = [{ ...lista[0], label: 'Piezas', sub: lista[0].label }];
+    return { cols: cols.map((c) => c.label), filas: lista, info: data.cat.get(skuHeat) || {} };
+  }, [skuHeat, data, sel]);
+
+  const textoCompartir = useMemo(() => (r ? textoAvance({ cliente: nombre, mes: r.m, anio: r.a, mtd: r.mtd, cuota: r.cuotaIdeal, ytd: r.ytd, top: r.skus.slice(0, 5) }) : ''), [r, nombre]);
+  const onCompartir = async () => { const res = await compartir(textoCompartir, { titulo: `Avance ${nombre}` }); if (res === 'share') toast.ok('Compartido'); };
+  const onCopiar = async () => { if (await copiar(textoCompartir)) toast.ok('Texto copiado'); else toast.error('No se pudo copiar'); };
+  const abrirFicha = (sku) => { nav.agregarSku(sku); setSkuHeat(null); nav.push(<FichaProducto />, 'ficha'); };
+
+  const sub = r ? `${nombre} · ${money(r.total)} en ${r.skus.length} SKUs${r.piezas ? ` · ${int(r.piezas)} pz` : ''}` : nombre;
   return (
     <>
       <Cabecera onVolver={nav.pop} etiqueta={nombre} />
-      <TituloGrande titulo="Sell In" sub={r ? `${nombre} · ${MESES[r.mes - 1]} ${r.anio} · ${money(r.total)} en ${r.n} SKUs` : nombre}
-        derecha={<Segmented value={orden} onChange={setOrden} options={[{ id: 'monto', label: '$' }, { id: 'piezas', label: 'Pz' }]} />} />
-      {error && <Vacio titulo="No se pudo cargar el sell in" sub={error.message} />}
-      {(isLoading || !r) && !error && <div style={{ padding: '0 16px' }}><Skeleton h={420} r={12} /></div>}
+      <TituloGrande titulo="Sell In" sub={sub} derecha={<SelectorMes valor={sel} onChange={(v) => { setSel(v); setVerTodo(false); }} anioActual={anioActual} mesActual={mesActual} disponibles={r?.disponibles} />} />
+      {error && <Vacio titulo="No se pudo cargar el sell in" sub={error.message} color={theme.red} />}
+      {(isLoading || !r) && !error && <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}><Skeleton h={150} r={12} /><Skeleton h={84} r={12} /><Skeleton h={320} r={12} /></div>}
       {r && (
-        <ListaAgrupada titulo={`Top ${r.top.length} SKUs`} meta={r.total > 0 ? `${Math.round((r.totalTop / r.total) * 100)}% del mes` : undefined} pie="Celda = piezas del mes (intensidad relativa al SKU líder) · pill = monto vs mismo mes del año anterior. Toca un SKU para ver disponibilidad y precio.">
-          {r.top.length === 0 && <Vacio icon={null} titulo="Sin facturación este mes" sub="Todavía no hay renglones cargados para este cliente." />}
-          {r.top.map((o, i) => (
-            <button key={o.sku} type="button" onClick={() => abrirSku(o.sku)}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, padding: '8px 12px', border: 0, background: 'transparent', color: theme.text, fontFamily: TYPO.fontText, textAlign: 'left', cursor: 'pointer', boxSizing: 'border-box' }}>
-              <span style={{ width: 20, fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.textSubtle || theme.textMuted, fontVariantNumeric: 'tabular-nums', flexShrink: 0, textAlign: 'right' }}>{i + 1}</span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.sku}<span style={{ fontWeight: 500, color: theme.textMuted, marginLeft: 8, fontFamily: TYPO.fontText, fontSize: 13 }}>{money(o.monto)}</span></span>
-                <span style={{ display: 'block', fontSize: 12, color: theme.textMuted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.descripcion || 'Sin descripción'}{o.marca ? ` · ${o.marca}` : ''}</span>
-              </span>
-              <HeatCell v={o.piezas} max={r.maxPz} />
-              <Pill tone={tonoDelta(o.yoy)} size="xs" style={{ minWidth: 48, justifyContent: 'center' }}>{o.yoy != null ? deltaPct(o.yoy) : 'nuevo'}</Pill>
-            </button>
-          ))}
-        </ListaAgrupada>
+        <>
+          <HeroM eyebrow={`${propio ? 'Sell In' : 'Facturación'} · ${MESES[r.m - 1]} ${r.a}${r.enCurso ? ' · en curso' : ''}`} frase={r.frase}
+            sub={r.cuotaIdeal > 0 ? `${money(r.mtd)} de ${moneyCompact(r.cuotaIdeal)} ideal${r.cuotaMin > 0 ? ` · mínima ${moneyCompact(r.cuotaMin)}` : ''}` : `${money(r.mtd)} · sin cuota cargada`}
+            stats={[
+              { k: r.enCurso ? 'MTD' : 'Mes', v: moneyCompact(r.mtd), sub: r.pct != null ? `${Math.round(r.pct)}% ideal` : undefined },
+              { k: `YTD ${r.a}`, v: moneyCompact(r.ytd), sub: r.cuotaYtd > 0 ? `${Math.round((r.ytd / r.cuotaYtd) * 100)}% cuota` : r.yoyYtd != null ? `${deltaPct(r.yoyYtd)} YoY` : undefined },
+              { k: `vs ${r.a - 1}`, v: r.yoy != null ? deltaPct(r.yoy) : '—', sub: r.enCurso ? 'a mismo día' : `${moneyCompact(r.prev)} ${r.a - 1}`, color: r.yoy == null ? undefined : r.yoy >= 0 ? theme.green : theme.red },
+            ]}>
+            {r.cuotaIdeal > 0 && <BarraCuota mtd={r.mtd} ideal={r.cuotaIdeal} min={r.cuotaMin} theme={theme} />}
+          </HeroM>
+
+          <KpiGrid style={{ marginTop: 12 }}>
+            <KpiM eyebrow="Cuota ideal" big={r.cuotaIdeal > 0 ? moneyCompact(r.cuotaIdeal) : '—'} sub={r.cuotaIdeal > 0 ? `faltan ${moneyCompact(Math.max(0, r.cuotaIdeal - r.mtd))}` : 'sin cuota cargada'} progress={r.pct} pill={r.pct != null ? { tone: tonoCuota(r.pct), label: `${Math.round(r.pct)}%` } : undefined} />
+            <KpiM eyebrow="Cuota mínima" big={r.cuotaMin > 0 ? moneyCompact(r.cuotaMin) : '—'} sub={r.cuotaMin > 0 ? (r.mtd >= r.cuotaMin ? 'cubierta' : `faltan ${moneyCompact(r.cuotaMin - r.mtd)}`) : 'sin mínima cargada'} progress={r.pctMin} pill={r.pctMin != null ? { tone: tonoCuota(r.pctMin), label: `${Math.round(r.pctMin)}%` } : undefined} />
+          </KpiGrid>
+
+          <div style={{ padding: '18px 16px 8px' }}><CampoBusqueda value={q} onChange={setQ} placeholder="Buscar SKU o producto del mes" /></div>
+          <ListaAgrupada titulo={`SKUs · ${MESES[r.m - 1]}`} meta={q ? `${filtrados.length} de ${r.skus.length}` : `${r.skus.length}`} pie="Celda = piezas del mes (intensidad relativa al SKU líder) · pill = monto vs mismo mes del año anterior. Toca un SKU para ver sus clientes finales por mes.">
+            {visibles.length === 0 && <Vacio icon={null} titulo={q ? 'Sin coincidencias' : 'Sin facturación este mes'} sub={q ? undefined : 'Todavía no hay renglones cargados para este mes.'} />}
+            {visibles.map((o, i) => (
+              <button key={o.sku} type="button" onClick={() => setSkuHeat(o.sku)}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, padding: '8px 12px', border: 0, background: 'transparent', color: theme.text, fontFamily: TYPO.fontText, textAlign: 'left', cursor: 'pointer', boxSizing: 'border-box' }}>
+                <span style={{ width: 20, fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600, color: theme.textSubtle || theme.textMuted, fontVariantNumeric: 'tabular-nums', flexShrink: 0, textAlign: 'right' }}>{i + 1}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.sku}<span style={{ fontWeight: 500, color: theme.textMuted, marginLeft: 8, fontFamily: TYPO.fontText, fontSize: 13 }}>{money(o.monto)}</span></span>
+                  <span style={{ display: 'block', fontSize: 12, color: theme.textMuted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.descripcion || 'Sin descripción'}{o.categoria ? ` · ${o.categoria}` : ''}</span>
+                </span>
+                <HeatCell v={o.piezas} max={maxPz} />
+                <Pill tone={tonoDelta(o.yoy)} size="xs" style={{ minWidth: 48, justifyContent: 'center' }}>{o.yoy != null ? deltaPct(o.yoy) : 'nuevo'}</Pill>
+              </button>
+            ))}
+            {!verTodo && !q && filtrados.length > 25 && (
+              <button type="button" onClick={() => setVerTodo(true)} style={{ width: '100%', height: 44, border: 0, background: 'transparent', color: theme.accent, fontFamily: TYPO.fontText, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>Ver los {filtrados.length} SKUs</button>
+            )}
+          </ListaAgrupada>
+
+          <ComposicionCategorias filas={r.categorias} total={r.total} pie="Categoría del roadmap · % del monto facturado en el mes." />
+
+          <div style={{ padding: '18px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <BotonGrande primario icon={Share2} disabled={!r.mtd} onClick={() => setCompartiendo(true)}>Compartir avance</BotonGrande>
+          </div>
+        </>
       )}
-      {r && r.top.length > 0 && <div style={{ padding: '10px 28px 0', fontSize: 11.5, color: theme.textSubtle || theme.textMuted }}>Top 20 = {moneyCompact(r.totalTop)} de {moneyCompact(r.total)}.</div>}
+
+      <HojaM abierto={!!skuHeat} onClose={() => setSkuHeat(null)} titulo="Clientes finales × mes" sub={`${nombre} · últimos 6 meses a ${MESES[sel.mes - 1]} ${sel.anio}`} alto="80vh">
+        {heat && <HeatmapSku sku={skuHeat} nombre={heat.info.descripcion} marca={heat.info.marca} columnas={heat.cols} filas={heat.filas} onDisponibilidad={() => abrirFicha(skuHeat)}
+          pie={heat.filas.length === 1 && heat.filas[0].sub ? `${nombre} factura como "${heat.filas[0].sub}" en el ERP: se muestran las piezas por mes.` : 'Piezas facturadas por cliente final (nombre en el ERP) · intensidad relativa al máximo de cada fila.'} />}
+      </HojaM>
+
+      <HojaM abierto={compartiendo} onClose={() => setCompartiendo(false)} titulo="Compartir avance" sub={`${nombre} · ${MESES[sel.mes - 1]} ${sel.anio} · sin pagos ni márgenes`} alto="70vh">
+        <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <pre style={{ margin: 0, padding: '12px 14px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, fontFamily: MONO, fontSize: 12, lineHeight: 1.5, color: theme.text, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{textoCompartir}</pre>
+          <BotonGrande primario icon={Share2} onClick={onCompartir}>Compartir por WhatsApp</BotonGrande>
+          <BotonGrande icon={Copy} onClick={onCopiar}>Copiar texto</BotonGrande>
+        </div>
+      </HojaM>
     </>
+  );
+}
+
+/** Barra de avance dentro del Hero: relleno = MTD / ideal, marca = cuota mínima. */
+function BarraCuota({ mtd, ideal, min, theme }) {
+  const pct = Math.min(100, (mtd / ideal) * 100);
+  const posMin = min > 0 && min < ideal ? (min / ideal) * 100 : null;
+  const inverso = theme.mode === 'dark' ? 'rgba(29,29,31,0.16)' : 'rgba(245,245,247,0.18)';
+  const relleno = pct >= 100 ? theme.green : posMin != null && mtd >= min ? (theme.textOnInverse || theme.textOnDark) : theme.orange;
+  return (
+    <div style={{ marginTop: 12, position: 'relative' }}>
+      <div style={{ height: 6, background: inverso, borderRadius: 999, overflow: 'hidden' }}>
+        <div style={{ height: 6, width: `${pct}%`, background: relleno, borderRadius: 999 }} />
+      </div>
+      {posMin != null && <span aria-hidden style={{ position: 'absolute', top: -3, left: `${posMin}%`, width: 2, height: 12, background: theme.textOnInverse || theme.textOnDark, opacity: 0.8, borderRadius: 1 }} />}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 10.5, color: theme.mode === 'dark' ? 'rgba(29,29,31,0.62)' : 'rgba(245,245,247,0.62)', fontVariantNumeric: 'tabular-nums' }}>
+        <span>{posMin != null ? `mínima ${moneyCompact(min)}` : ''}</span><span>ideal {moneyCompact(ideal)}</span>
+      </div>
+    </div>
   );
 }

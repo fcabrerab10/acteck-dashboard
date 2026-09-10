@@ -13,35 +13,9 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
 import { fetchAllQ , cachedQuery } from '../../lib/queries';
 
-// ═══ Constantes ═══
-const CLIENTES = [
-  { key: 'digitalife', label: 'Digitalife', iniciales: 'D', marca: 'Acteck · Balam Rush' },
-  { key: 'pcel',       label: 'PCEL',       iniciales: 'P', marca: 'Acteck' },
-  { key: 'dicotech',   label: 'Dicotech',   iniciales: 'Di', marca: 'Acteck · Balam Rush' },
-];
-
-const FAMILIA_DIGITALIFE_HOJA = {
-  'Monitor':        'Monitores',
-  'Sillas y Mesas': 'Sillas',
-};
-const familiaHoja = (familia) => FAMILIA_DIGITALIFE_HOJA[familia] || 'Todo lo demás';
-
-// Meses cerrados anteriores al actual (los últimos 3).
-// Siempre incluye el mes anterior inmediato, aunque le falten 1-3 días de
-// sellout. Fernando: 'un día no nos afecta tanto'.
-// Ej.: cualquier día de sep → Jun/Jul/Ago.
-function mesesCerrados() {
-  const hoy = new Date();
-  const arr = [];
-  for (let i = 1; i <= 3; i++) {
-    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
-    arr.push({ anio: d.getFullYear(), mes: d.getMonth() + 1 });
-  }
-  return arr;
-}
-const MES_ACTUAL = { anio: new Date().getFullYear(), mes: new Date().getMonth() + 1 };
-const MES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-const MES_FULL  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+import { CLIENTES, familiaHoja, mesesCerrados, MES_ACTUAL, MES_LABEL, MES_FULL, nuevaPropuestaId, LISTA_COLORS, LISTA_SHORT } from './propuestas/constantes';
+import { exportarPropuestaExcel } from './propuestas/excelPropuesta';
+import { fetchSellout, fetchSelloutMesActual, fetchSpiffsActivos } from './propuestas/datos';
 
 // ═══ Paleta derivada del tema ═══
 function paletteFromTheme(theme) {
@@ -175,9 +149,6 @@ function removeReciente(id) {
   const all = loadRecientesLocal().filter((r) => r.id !== id);
   saveRecientesLocal(all);
   deleteRecienteRemote(id); // fire-and-forget
-}
-function nuevaPropuestaId() {
-  return `prp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
 // Agrupa recientes por mes-año de creación (basado en tstamp). Devuelve
@@ -1658,28 +1629,6 @@ function MiPropuestaCard({ theme, isDark, P, cliente, cliCol, propuestaLista, to
 // SortableTh — header ordenable
 // ════════════════════════════════════════════════════════════════════
 // ────── PrecioPicker: chip Apple con popover de listas + input personalizado ──────
-const LISTA_COLORS = {
-  'API PROVISIONAL': '#007AFF',
-  'DECME PROVISIONAL': '#AF52DE',
-  'DICOTECH': '#8B5CF6',
-  'Mayoreo A': '#EF4444',
-  'Mayoreo AA': '#F59E0B',
-  'Mayoreo AAA': '#EC4899',
-  'MAYOREO B1': '#14B8A6',
-  'Mayoreo PMM': '#0EA5E9',
-  'PCEL PROVISIONAL': '#F97316',
-};
-const LISTA_SHORT = {
-  'API PROVISIONAL': 'API',
-  'DECME PROVISIONAL': 'DECME',
-  'DICOTECH': 'DICO',
-  'Mayoreo A': 'MA',
-  'Mayoreo AA': 'MAA',
-  'Mayoreo AAA': 'MAAA',
-  'MAYOREO B1': 'MB1',
-  'Mayoreo PMM': 'PMM',
-  'PCEL PROVISIONAL': 'PCEL',
-};
 function listaColor(name) { return LISTA_COLORS[name] || '#6E6E73'; }
 function listaShort(name) { return LISTA_SHORT[name] || (name || '').slice(0, 4).toUpperCase(); }
 
@@ -1908,208 +1857,12 @@ function VistaRevisar({ theme, isDark, cliente, contexto, skus, propuesta, nombr
 
   const exportar = async () => {
     if (propuestaLista.length === 0) { alert('La propuesta está vacía.'); return; }
-    let XLSX;
     try {
-      const mod = await import('xlsx-js-style');
-      XLSX = mod.default || mod;
-    } catch {
-      XLSX = window.XLSX;
-      if (!XLSX) { alert('SheetJS no disponible. Recarga la página.'); return; }
+      await exportarPropuestaExcel({ cliente, propuestaLista, nombre });
+    } catch (e) {
+      alert('No se pudo exportar: ' + (e?.message || e));
+      return;
     }
-
-    // ─── Estilos: header negro con letra blanca en negritas ───
-    const HEADER_STYLE = {
-      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11, name: 'Calibri' },
-      fill: { fgColor: { rgb: '000000' }, patternType: 'solid' },
-      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
-      border: {
-        top:    { style: 'thin', color: { rgb: '000000' } },
-        bottom: { style: 'thin', color: { rgb: '000000' } },
-        left:   { style: 'thin', color: { rgb: '000000' } },
-        right:  { style: 'thin', color: { rgb: '000000' } },
-      },
-    };
-    const CELL_BORDER = {
-      top:    { style: 'thin', color: { rgb: 'D9D9D9' } },
-      bottom: { style: 'thin', color: { rgb: 'D9D9D9' } },
-      left:   { style: 'thin', color: { rgb: 'D9D9D9' } },
-      right:  { style: 'thin', color: { rgb: 'D9D9D9' } },
-    };
-    const CELL_STYLE = {
-      font: { sz: 10.5, name: 'Calibri' },
-      alignment: { vertical: 'center' },
-      border: CELL_BORDER,
-    };
-    const NUM_STYLE = {
-      ...CELL_STYLE,
-      alignment: { horizontal: 'right', vertical: 'center' },
-      numFmt: '#,##0',
-    };
-    const MONEY_STYLE = {
-      ...CELL_STYLE,
-      alignment: { horizontal: 'right', vertical: 'center' },
-      numFmt: '"$"#,##0.00',
-    };
-    const TOTAL_LABEL_STYLE = {
-      font: { bold: true, sz: 11, name: 'Calibri' },
-      alignment: { horizontal: 'right', vertical: 'center' },
-      fill: { fgColor: { rgb: 'F2F2F2' }, patternType: 'solid' },
-      border: CELL_BORDER,
-    };
-    const TOTAL_NUM_STYLE = { ...NUM_STYLE, font: { bold: true, sz: 11, name: 'Calibri' }, fill: { fgColor: { rgb: 'F2F2F2' }, patternType: 'solid' } };
-    const TOTAL_MONEY_STYLE = { ...MONEY_STYLE, font: { bold: true, sz: 11, name: 'Calibri' }, fill: { fgColor: { rgb: 'F2F2F2' }, patternType: 'solid' } };
-
-    // ─── Helper: construir una hoja con estilo ───
-    // rows es array de { sku, descripcion|desc, marca, familia, piezas, precio }
-    const buildSheet = (rowsData, { incluirFamilia = true } = {}) => {
-      const headers = incluirFamilia
-        ? ['SKU', 'Descripción', 'Marca', 'Familia', 'Piezas', 'Precio unitario', 'Total línea']
-        : ['SKU', 'Descripción', 'Marca', 'Piezas', 'Precio unitario', 'Total línea'];
-
-      const dataRows = rowsData.map((r) => {
-        const pz = Number(r.piezas) || 0;
-        const px = Number(r.precio) || 0;
-        return incluirFamilia
-          ? [r.sku, r.descripcion || r.desc || '', r.marca || '', r.familia || '', pz, px, pz * px]
-          : [r.sku, r.descripcion || r.desc || '', r.marca || '', pz, px, pz * px];
-      });
-
-      const sumPz = rowsData.reduce((s, r) => s + (Number(r.piezas) || 0), 0);
-      const sumTotal = rowsData.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0);
-      const totalRow = incluirFamilia
-        ? ['', '', '', 'TOTAL', sumPz, '', sumTotal]
-        : ['', '', 'TOTAL', sumPz, '', sumTotal];
-
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows, totalRow]);
-
-      // Anchos
-      ws['!cols'] = incluirFamilia
-        ? [{ wch: 14 }, { wch: 60 }, { wch: 14 }, { wch: 20 }, { wch: 10 }, { wch: 16 }, { wch: 16 }]
-        : [{ wch: 14 }, { wch: 60 }, { wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 16 }];
-      ws['!rows'] = [{ hpt: 24 }]; // header más alto
-
-      const colCount = headers.length;
-      const totalRowIdx = dataRows.length + 1; // 0 = header, 1..n = data, n+1 = total
-
-      // Aplicar estilos celda por celda
-      for (let c = 0; c < colCount; c++) {
-        // Header
-        const hAddr = XLSX.utils.encode_cell({ r: 0, c });
-        if (ws[hAddr]) ws[hAddr].s = HEADER_STYLE;
-
-        // Data rows
-        for (let r = 1; r <= dataRows.length; r++) {
-          const addr = XLSX.utils.encode_cell({ r, c });
-          if (!ws[addr]) continue;
-          const piezasCol = incluirFamilia ? 4 : 3;
-          const precioCol = incluirFamilia ? 5 : 4;
-          const totalCol  = incluirFamilia ? 6 : 5;
-          if (c === piezasCol) ws[addr].s = NUM_STYLE;
-          else if (c === precioCol || c === totalCol) ws[addr].s = MONEY_STYLE;
-          else ws[addr].s = CELL_STYLE;
-        }
-
-        // Total row
-        const tAddr = XLSX.utils.encode_cell({ r: totalRowIdx, c });
-        if (!ws[tAddr]) {
-          ws[tAddr] = { t: 's', v: '' };
-        }
-        const piezasCol = incluirFamilia ? 4 : 3;
-        const totalCol  = incluirFamilia ? 6 : 5;
-        if (c === piezasCol) ws[tAddr].s = TOTAL_NUM_STYLE;
-        else if (c === totalCol) ws[tAddr].s = TOTAL_MONEY_STYLE;
-        else ws[tAddr].s = TOTAL_LABEL_STYLE;
-      }
-
-      // Autofiltro y freeze header
-      ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: dataRows.length, c: colCount - 1 } }) };
-      ws['!freeze'] = { xSplit: 0, ySplit: 1 };
-
-      // Expandir el range para incluir la fila de totales
-      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRowIdx, c: colCount - 1 } });
-
-      return ws;
-    };
-
-    // ─── Hoja Resumen ───
-    const now = new Date();
-    const mesLbl = MES_FULL[now.getMonth()];
-    const anio = now.getFullYear();
-    const nombreLimpio = (nombre || 'Cierre').trim();
-    const fechaLbl = `${String(now.getDate()).padStart(2, '0')} ${MES_FULL[now.getMonth()]} ${anio}`;
-
-    // Segmentación única de la tabla resumen:
-    //   Resumen general · Monitores · Sillas · Todas las categorías (Unificadas)
-    // Para clientes ≠ Digitalife, Monitores y Sillas quedan vacíos y solo se
-    // muestra la fila de resumen general.
-    const monitoresList = cliente.key === 'digitalife'
-      ? propuestaLista.filter((r) => familiaHoja(r.familia) === 'Monitores')
-      : [];
-    const sillasList = cliente.key === 'digitalife'
-      ? propuestaLista.filter((r) => familiaHoja(r.familia) === 'Sillas')
-      : [];
-    const otrasList = cliente.key === 'digitalife'
-      ? propuestaLista.filter((r) => familiaHoja(r.familia) === 'Todo lo demás')
-      : propuestaLista;
-    const agregar = (list) => ({
-      skus: list.length,
-      piezas: list.reduce((s, r) => s + (Number(r.piezas) || 0), 0),
-      total: list.reduce((s, r) => s + (Number(r.piezas) || 0) * (Number(r.precio) || 0), 0),
-    });
-    const aggGeneral = { skus: propuestaLista.length, piezas, total };
-    const aggMonitores = agregar(monitoresList);
-    const aggSillas = agregar(sillasList);
-    const aggOtras = agregar(otrasList);
-
-    const filasResumen = [['Resumen general', aggGeneral.skus, aggGeneral.piezas, aggGeneral.total]];
-    if (cliente.key === 'digitalife') {
-      filasResumen.push(
-        ['Monitores', aggMonitores.skus, aggMonitores.piezas, aggMonitores.total],
-        ['Sillas', aggSillas.skus, aggSillas.piezas, aggSillas.total],
-        ['Todas las categorías (Unificadas)', aggOtras.skus, aggOtras.piezas, aggOtras.total],
-      );
-    }
-
-    const resumenAoa = [
-      ['Concepto', 'SKUs', 'Piezas', 'Total'],
-      ...filasResumen,
-    ];
-    const wsResumen = XLSX.utils.aoa_to_sheet(resumenAoa);
-    wsResumen['!cols'] = [{ wch: 34 }, { wch: 12 }, { wch: 14 }, { wch: 18 }];
-    wsResumen['!rows'] = [{ hpt: 24 }];
-
-    // Estilos: header negro + celdas
-    for (let c = 0; c < 4; c++) {
-      const h = XLSX.utils.encode_cell({ r: 0, c });
-      if (wsResumen[h]) wsResumen[h].s = HEADER_STYLE;
-      for (let r = 1; r <= filasResumen.length; r++) {
-        const a = XLSX.utils.encode_cell({ r, c });
-        if (!wsResumen[a]) continue;
-        if (c === 0) wsResumen[a].s = CELL_STYLE;
-        else if (c === 3) wsResumen[a].s = MONEY_STYLE;
-        else wsResumen[a].s = NUM_STYLE;
-      }
-    }
-
-    // ─── Construir el workbook ───
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
-
-    if (cliente.key === 'digitalife') {
-      // 3 hojas: Monitores, Sillas, Otras familias
-      const monitores  = propuestaLista.filter((r) => familiaHoja(r.familia) === 'Monitores');
-      const sillas     = propuestaLista.filter((r) => familiaHoja(r.familia) === 'Sillas');
-      const otras      = propuestaLista.filter((r) => familiaHoja(r.familia) === 'Todo lo demás');
-      if (monitores.length > 0) XLSX.utils.book_append_sheet(wb, buildSheet(monitores, { incluirFamilia: false }), 'Monitores');
-      if (sillas.length > 0)    XLSX.utils.book_append_sheet(wb, buildSheet(sillas,    { incluirFamilia: false }), 'Sillas');
-      if (otras.length > 0)     XLSX.utils.book_append_sheet(wb, buildSheet(otras,     { incluirFamilia: true }),  'Otras familias');
-    } else {
-      // Otros clientes: una sola hoja "Propuesta"
-      XLSX.utils.book_append_sheet(wb, buildSheet(propuestaLista, { incluirFamilia: true }), 'Propuesta');
-    }
-
-    const fname = `Propuesta ${cliente.label} ${nombreLimpio} ${mesLbl} ${anio}.xlsx`;
-    XLSX.writeFile(wb, fname);
     setSavedMsg('✓ Excel descargado');
     setTimeout(() => setSavedMsg(null), 1800);
   };
@@ -2613,109 +2366,6 @@ async function fetchAll(clienteKey) {
       diag: { totalSkus: rows.length, skusConPrecios, spiffsActivos: spiffsCount },
     },
   };
-}
-
-async function fetchSelloutMesActual(clienteKey) {
-  const anio = MES_ACTUAL.anio, mes = MES_ACTUAL.mes;
-  if (clienteKey === 'digitalife') {
-    // Vista agregada: monto_bruto = Σ(cantidad × precio) ya calculado en Postgres.
-    // Antes: .limit(200000) sobre el detalle diario (PostgREST corta en 1000).
-    const { data } = await cachedQuery(
-      supabase.from('v_sellout_detalle_sku_mes').select('monto_bruto')
-        .eq('cliente', 'digitalife').eq('anio', anio).eq('mes', mes),
-    );
-    return (data || []).reduce((s, r) => s + (Number(r.monto_bruto) || 0), 0);
-  }
-  if (clienteKey === 'dicotech') {
-    const { data } = await supabase.from('sellout_general')
-      .select('importe')
-      .eq('mayorista', 'DICOTECH')
-      .eq('anio', anio).eq('mes', mes)
-      .limit(200000);
-    return (data || []).reduce((s, r) => s + (Number(r.importe) || 0), 0);
-  }
-  return 0;
-}
-
-// Devuelve { sku, cantidad, anio, mes } — desglose por mes para poder mostrar Jul/Jun/May
-// individualmente en la tabla de propuesta.
-async function fetchSellout(clienteKey, mm, anioMin, anioMax) {
-  const mesesSet = new Set(mm.map((m) => `${m.anio}-${String(m.mes).padStart(2, '0')}`));
-
-  if (clienteKey === 'digitalife') {
-    // Filtrar por rango de fechas de los 3 meses target (no todo desde
-    // anioMin) para reducir volumen antes de paginar. Supabase corta en
-    // 1000 aunque pases .limit(200000); hay que paginar sí o sí.
-    // Vista agregada por sku+mes (v_sellout_detalle_sku_mes): devuelve
-    // directamente {sku, piezas, anio, mes}. Antes: detalle diario paginado.
-    const aniosMm = Array.from(new Set(mm.map((m) => m.anio)));
-    const data = await fetchAllPagesLocal(() =>
-      supabase.from('v_sellout_detalle_sku_mes')
-        .select('sku,piezas,anio,mes')
-        .eq('cliente', 'digitalife')
-        .in('anio', aniosMm));
-    return (data || [])
-      .filter((r) => mesesSet.has(`${r.anio}-${String(r.mes).padStart(2, '0')}`))
-      .map((r) => ({ sku: r.sku, cantidad: r.piezas, anio: Number(r.anio), mes: Number(r.mes) }));
-  }
-  if (clienteKey === 'pcel') {
-    // sellout_pcel trae los últimos 3 meses en columnas vta_mes_actual, vta_mes_1, vta_mes_2
-    // relativo a la SEMANA. `_actual` = mes cursando, `_1` = mes anterior, `_2` = 2 atrás.
-    // vta_mes_3 en el archivo siempre viene null, por eso no lo usamos.
-    // Además: el SKU del roadmap (AC-XXXX) vive en la columna `modelo`,
-    // NO en `sku` (que trae el código interno de PCEL como "345094").
-    const { data } = await supabase.from('sellout_pcel')
-      .select('modelo,anio,semana,vta_mes_actual,vta_mes_1,vta_mes_2')
-      .gte('anio', anioMax - 1).not('modelo', 'is', null).limit(50000);
-    const byKey = new Map();
-    for (const r of data || []) {
-      if (!r.modelo) continue;
-      const key = (Number(r.anio) || 0) * 100 + (Number(r.semana) || 0);
-      const prev = byKey.get(r.modelo);
-      if (!prev || prev.key < key) byKey.set(r.modelo, { key, r });
-    }
-    const out = [];
-    for (const { r } of byKey.values()) {
-      // mm[0] = mes anterior a hoy, mm[1] = 2 atrás, mm[2] = 3 atrás
-      // Mapeo: vta_mes_1 = mm[0], vta_mes_2 = mm[1], vta_mes_actual = mes en curso (no lo usamos aquí)
-      const cols = [Number(r.vta_mes_1) || 0, Number(r.vta_mes_2) || 0, 0];
-      mm.forEach((m, i) => {
-        if (cols[i] > 0) out.push({ sku: r.modelo, cantidad: cols[i], anio: m.anio, mes: m.mes });
-      });
-    }
-    return out;
-  }
-  if (clienteKey === 'dicotech') {
-    const { data } = await supabase.from('sellout_general')
-      .select('sku,cantidad,anio,mes')
-      .eq('mayorista', 'DICOTECH')
-      .gte('anio', anioMin).limit(200000);
-    return (data || [])
-      .filter((r) => mesesSet.has(`${r.anio}-${String(r.mes).padStart(2, '0')}`))
-      .map((r) => ({ sku: r.sku, cantidad: r.cantidad, anio: Number(r.anio), mes: Number(r.mes) }));
-  }
-  return [];
-}
-
-// ═══ Fetch de SPIFFs activos hoy ═══
-async function fetchSpiffsActivos() {
-  const hoy = new Date().toISOString().slice(0, 10);
-  const { data, error } = await supabase.from('spiffs')
-    .select('sku,monto,vigencia_inicio,vigencia_fin,descripcion,fuente')
-    .lte('vigencia_inicio', hoy).gte('vigencia_fin', hoy);
-  if (error) return { list: [], byKey: new Map(), meta: null };
-  const byKey = new Map();
-  for (const r of data || []) byKey.set(r.sku, r);
-  const meta = data && data.length > 0
-    ? {
-        total: data.length,
-        potencial: data.reduce((s, r) => s + Number(r.monto || 0), 0), // suma monto/pz — no potencial real
-        vigencia_inicio: data[0].vigencia_inicio,
-        vigencia_fin: data[0].vigencia_fin,
-        fuente: data[0].fuente,
-      }
-    : null;
-  return { list: data || [], byKey, meta };
 }
 
 // ════════════════════════════════════════════════════════════════════

@@ -9,6 +9,9 @@ import { TituloGrande, HeroM, KpiM, KpiGrid, ListaAgrupada, Fila, Cabecera, Skel
 import { useClientesMes, useSelloutMensual, PROPIOS, nombreCliente, colorCliente } from '../datos';
 import { money, moneyCompact, deltaPct, tonoCuota, MESES, N } from '../util';
 import SellInCliente from './SellInCliente';
+import SellOutCliente from './SellOutCliente';
+import MarketingCliente from './MarketingCliente';
+import CobranzaCliente from './CobranzaCliente';
 
 const sum = (arr, f) => arr.reduce((s, x) => s + N(f(x)), 0);
 const delta = (a, b) => (b ? ((a - b) / Math.abs(b)) * 100 : null);
@@ -52,14 +55,14 @@ export default function FichaCliente({ clienteKey, tipo, label }) {
   const proximamente = (que) => nav.abrirProximamente(`${nombre} · ${que}`);
   const pestanas = propio
     ? [
-      { id: 'sellIn', label: 'Sell In', icon: ShoppingCart, sub: 'Top 20 SKUs del mes', onClick: () => nav.push(<SellInCliente clienteKey={clienteKey} nombre={nombre} />, `sellin-${clienteKey}`) },
-      { id: 'sellOut', label: 'Sell Out', icon: ShoppingBag, sub: 'Próximamente', onClick: () => proximamente('Sell Out') },
-      { id: 'marketing', label: 'Marketing', icon: Megaphone, sub: 'Próximamente', onClick: () => proximamente('Marketing') },
+      { id: 'sellIn', label: 'Sell In', icon: ShoppingCart, sub: 'Avance de cuota · SKUs del mes · compartir avance', onClick: () => nav.push(<SellInCliente clienteKey={clienteKey} nombre={nombre} />, `sellin-${clienteKey}`) },
+      { id: 'sellOut', label: 'Sell Out', icon: ShoppingBag, sub: 'Sell-out del mes · inventario del cliente', onClick: () => nav.push(<SellOutCliente clienteKey={clienteKey} nombre={nombre} />, `sellout-${clienteKey}`) },
+      { id: 'marketing', label: 'Marketing', icon: Megaphone, sub: 'Actividades del mes · captura', onClick: () => nav.push(<MarketingCliente clienteKey={clienteKey} nombre={nombre} />, `marketing-${clienteKey}`) },
       { id: 'pagos', label: 'Pagos', icon: Wallet, sub: 'Próximamente', onClick: () => proximamente('Pagos') },
-      { id: 'cartera', label: 'Cobranza', icon: CreditCard, sub: 'Próximamente', onClick: () => proximamente('Crédito y Cobranza') },
+      { id: 'cartera', label: 'Cobranza', icon: CreditCard, sub: 'Saldo · vencido · estado de cuenta', onClick: () => nav.push(<CobranzaCliente clienteKey={clienteKey} nombre={nombre} />, `cartera-${clienteKey}`) },
     ]
     : [
-      { id: 'sellIn', label: 'Sell In', icon: ShoppingCart, sub: esCanal ? 'Top 20 SKUs del canal' : 'Top 20 SKUs del mes', onClick: esCanal ? () => proximamente('Sell In por canal') : () => nav.push(<SellInCliente clienteKey={clienteKey} nombre={nombre} />, `sellin-${clienteKey}`) },
+      { id: 'sellIn', label: 'Sell In', icon: ShoppingCart, sub: esCanal ? 'SKUs del canal por mes' : 'SKUs por mes · YoY', onClick: esCanal ? () => proximamente('Sell In por canal') : () => nav.push(<SellInCliente clienteKey={clienteKey} nombre={nombre} />, `sellin-${clienteKey}`) },
       { id: 'home', label: 'Resumen completo', icon: Home, sub: 'Próximamente', onClick: () => proximamente('Resumen') },
     ];
 
@@ -86,7 +89,7 @@ export default function FichaCliente({ clienteKey, tipo, label }) {
           </KpiGrid>
         </>
       )}
-      <ListaAgrupada titulo="Pestañas" style={{ marginTop: 18 }} pie={propio ? 'Sell Out, Marketing, Pagos y Cobranza llegan en una próxima versión; por ahora se editan desde la computadora.' : undefined}>
+      <ListaAgrupada titulo="Pestañas" style={{ marginTop: 18 }} pie={propio ? 'Sell In y Sell Out son de consulta; lo que todavía se edita desde la computadora se marca como Próximamente.' : undefined}>
         {pestanas.map((p) => <Fila key={p.id} icon={p.icon} color={color} titulo={p.label} sub={p.sub} onClick={p.onClick} />)}
       </ListaAgrupada>
     </>
