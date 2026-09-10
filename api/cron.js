@@ -817,6 +817,50 @@ async function reglaOcSinActualizar() {
   return out;
 }
 
+// ─── g. reserva_3dias / reserva_dia (Forecast › Reservas) ───
+// Líneas de propuestas marcadas como Compradas con fecha de arribo estimada
+// (forecast_propuesta_lineas.comprado_at + fecha_arribo_estimada). Sustituyen a
+// forecast_avisos: una alerta 3 días antes del arribo (media) y otra el día del
+// arribo (alta), área forecast. Cada tipo se evalúa por separado para que la de
+// "3 días" se resuelva sola cuando llega el día; caduca_at = arribo + 3 d.
+// Sólo el cron escribe en `alertas` (la app no tiene INSERT), por eso viven aquí.
+async function reglaReservasArribo(hoy, tipo) {
+  const lineas = await sbGetAll('forecast_propuesta_lineas?select=id,sku,descripcion,reservo,piezas_a_reservar_arribo,fecha_arribo_estimada,necesidad_dgl,necesidad_pce,necesidad_dct,estado,propuesta_id,forecast_propuestas(nombre,estatus)&comprado_at=not.is.null&fecha_arribo_estimada=not.is.null&estado=neq.arribado', 1000);
+  const hoyMs = Date.UTC(hoy.anio, hoy.mes - 1, hoy.dia);
+  const out = [];
+  for (const l of lineas) {
+    const f = String(l.fecha_arribo_estimada).slice(0, 10);
+    const [a, m, d] = f.split('-').map(Number);
+    if (!a || !m || !d) continue;
+    const arriboMs = Date.UTC(a, m - 1, d);
+    const dias = Math.round((arriboMs - hoyMs) / 86400000);   // > 0 faltan días · 0 hoy · < 0 ya pasó
+    const es3d = dias >= 1 && dias <= 3;
+    const esDia = dias <= 0 && dias >= -3;
+    if ((tipo === 'reserva_3dias' && !es3d) || (tipo === 'reserva_dia' && !esDia)) continue;
+    const piezas = Number(l.piezas_a_reservar_arribo ?? l.reservo) || 0;
+    const nec = { digitalife: Number(l.necesidad_dgl) || 0, pcel: Number(l.necesidad_pce) || 0, dicotech: Number(l.necesidad_dct) || 0 };
+    const conNec = Object.entries(nec).filter(([, v]) => v > 0).sort((x, y) => y[1] - x[1]);
+    const clienteKey = conNec.length === 1 ? conNec[0][0] : null;   // un solo cliente → alerta del cliente; varios → global
+    const paraQuien = conNec.length ? conNec.map(([k]) => nombreCliente(k)).join(' · ') : 'clientes propios';
+    const fArr = `${d} ${MESES_CORTO[m - 1]}`;
+    out.push({
+      tipo, severidad: tipo === 'reserva_dia' ? 'alta' : 'media',
+      clave: `${tipo}|${l.id}`,
+      titulo: tipo === 'reserva_dia'
+        ? `${l.sku}: hoy llega el arribo · reservar ${fmtN(piezas)} pz`
+        : `${l.sku}: arribo en ${dias} día${dias === 1 ? '' : 's'} (${fArr}) · reservar ${fmtN(piezas)} pz`,
+      detalle: `${l.descripcion || l.sku} · ${paraQuien} · propuesta "${l.forecast_propuestas?.nombre || '—'}". Aparta las piezas en Acteck al llegar el embarque.`,
+      cliente_key: clienteKey, sku: l.sku,
+      area: 'forecast',
+      accion: { tipo: 'navegar', clienteKey: null, pagina: 'forecastReservas', label: 'Ver reservas' },
+      caduca_at: new Date(arriboMs + 3 * 86400000).toISOString(),
+      valor: piezas,
+      meta: { linea_id: l.id, propuesta_id: l.propuesta_id, propuesta: l.forecast_propuestas?.nombre || null, fecha_arribo: f, dias, piezas, necesidad: nec, estado_linea: l.estado },
+    });
+  }
+  return out;
+}
+
 export { taskResumenProgramado, enviarCriticasNuevas };
 export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
   const hoy = hoyCDMX();
@@ -827,6 +871,8 @@ export async function taskGenerarAlertas({ notificarCriticas = false } = {}) {
     ['rebate_por_generar',     () => reglaRebatePorGenerar(hoy)],
     ['datos_sin_actualizar',   () => reglaDatosSinActualizar()],
     ['oc_sin_actualizar',      () => reglaOcSinActualizar()],
+    ['reserva_3dias',          () => reglaReservasArribo(hoy, 'reserva_3dias')],
+    ['reserva_dia',            () => reglaReservasArribo(hoy, 'reserva_dia')],
   ];
   const errores = [];
   const tiposEvaluados = new Set();

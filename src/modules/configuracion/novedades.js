@@ -3,6 +3,15 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.11.0', fecha: '2026-09-10', titulo: 'Forecast',
+    items: [
+      'Reservas en kit V3: buscador y filtros con conteo, método 3 meses · 6 meses · ponderado, drill del SKU con arribos, stock del cliente y reservas anteriores, propuesta de reserva como hoja lateral con "Compartir".',
+      'Avisos de arribo (3 días antes y el día) ahora llegan por la central de notificaciones.',
+      'Forecast CRM: captura de forecast por cliente y SKU a 6 meses con justificación, sugerido del motor, autoguardado y exportación en la plantilla exacta del CRM.',
+      'PCEL ahora toma su sell-out del reporte semanal (antes salía en cero).',
+    ],
+  },
+  {
     version: '3.10.0', fecha: '2026-09-10', titulo: 'Estrategia de Precios',
     items: [
       'Kit V3, buscador por palabras y filtros con conteo; Mayoreo AAA primero y las demás listas a la derecha.',

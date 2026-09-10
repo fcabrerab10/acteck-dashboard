@@ -45,7 +45,12 @@ export const SILUETAS = {
   sopReuniones: [fila(1, 30), hero(3), kpis(4), fila(1, 18), grid('repeat(3, minmax(0,1fr))', [panel(3, { alto: 84 }), panel(3, { alto: 84 }), panel(3, { alto: 84 })]), panel(1, { alto: 44 })],
   // Drill del SKU en S&OP: cabecera de pills · KPI strip · simulador · gráfica 12 m + cobertura proyectada · tabla clientes
   sopDrill: [fila(6, 22), kpis(6), fila(1, 70), grid('minmax(0,1.4fr) minmax(0,1fr)', [chart(170), panel(6, { alto: 190 })]), tabla(6, 10)],
-  forecastReservas: [hero(4), fila(2, 34), grid('minmax(0,1fr) 320px', [[fila(3, 80), tabla(16, 10)], panel(10, { alto: 480 })])],
+  // Forecast › Reservas V3: hero 4 stats + fila de segmented · 4 KPIs · panel buscador+filtros · tabla a todo el ancho (la reserva vive en la hoja lateral)
+  forecastReservas: [hero(4), kpis(4), panel(3, { alto: 130 }), tabla(18, 13)],
+  // Drill del SKU en Reservas: cabecera de pills · heatmap 3 clientes × 12 meses + reservas anteriores · arribos por PO + stock/cobertura
+  forecastDrill: [fila(6, 22), grid('minmax(0,1.35fr) minmax(0,1fr)', [[tabla(4, 14, { alto: 150 }), tabla(4, 7, { alto: 130 })], [tabla(4, 4, { alto: 130 }), tabla(3, 4, { alto: 110 })]])],
+  // Forecast CRM (captura): 4 KPIs · panel de cliente/mes/tipo · tabla con 6 meses editables · "Lotes exportados" plegable
+  forecastCaptura: [kpis(4), panel(1, { alto: 60 }), tabla(16, 13), panel(1, { alto: 44 })],
   // Estrategia de Precios V3: hero 3 stats · 4 KPIs · panel buscador+filtros (3 filas de pills) · tabla SKU × listas · panel Precio bajo plegable
   estrategiaPrecios: [hero(3), kpis(4), panel(3, { alto: 112 }), tabla(18, 9), panel(1, { alto: 44 })],
   // Drill del SKU en Precios: cabecera de pills · 4 KPIs · izquierda (listas, evolución por lista, evolución año, elasticidad) · derecha (compartir, simulador, clientes, precio bajo, competencia, plegables)

@@ -1,1465 +1,310 @@
-// ForecastReservas.jsx — Reservas por cliente
+// ForecastReservas.jsx — Forecast (Clientes propios) · V3 kit.
 //
-// Objetivo: ver cuántas piezas necesita cada cliente (Digitalife/PCEL/Dicotech)
-// para el mes objetivo, cotejar contra próximos arribos de Acteck y armar una
-// propuesta de reservas que se guarda en Supabase (workflow: Borrador → Generada → Cerrada).
-//
-// Fuentes:
-//   sellout_sku          → velocity SO últimos 6m por (cliente, sku)
-//   cuotas_mensuales     → cuota del mes objetivo (para banda info)
-//   facturacion_clientes → sell-in MTD para cuota restante
-//   embarques_compras    → arribos próximos 3 meses (agrupado por mes)
-//   roadmap_sku          → descripción, marca, familia, roadmap
-//   forecast_propuestas + forecast_propuesta_lineas → persistencia
-
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { supabase, DB_CONFIGURED } from '../../lib/supabase';
+// Dos vistas (Segmented en el hero):
+//   · Reservas    → recomienda piezas por SKU y cliente con la velocidad de sell-out (método elegible:
+//                   3 meses · 6 meses · Ponderado; ver reservas/calculo.js), coteja contra arribos
+//                   (embarques_compras) y arma una propuesta de reserva (forecast_propuestas + líneas)
+//                   en la hoja lateral "Mi reserva" (pill flotante). Landing con propuestas generadas.
+//   · Forecast CRM → captura mensual por cliente y SKU (6 meses) y exportación en la plantilla del CRM
+//                   (reservas/Captura.jsx · forecast_crm).
+// Avisos de arribo (3 días antes / el día): alertas area 'forecast' generadas por api/cron.js (generar-alertas).
+// Piezas en src/modules/comercial/reservas/.
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ShoppingCart } from 'lucide-react';
+import { DB_CONFIGURED } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { Cargando } from '../../components/kit';
 import { usePerfil } from '../../lib/perfilContext';
-import { Search, ChevronDown, Zap, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
-import { fetchAllQ } from '../../lib/queries';
+import { EASE, DUR } from '../../lib/motion';
+import { elevation, bordeFlotante } from '../../lib/elevation';
+import { Hero, KpiCard, Panel, Pill, Segmented, Boton, Cargando, toast } from '../../components/kit';
+import Buscador from './sellin/Buscador';
+import Filtros from './sellin/Filtros';
+import { fmtFechaCorta } from './inventario/constantes';
+import { CLIENTES, ESTADOS_FILA, MESES, fmtInt, tokens, N } from './reservas/textos';
+import { METODOS, METODO_DEFAULT, metodoInfo, construirFilas, proxMeses, FILTROS_VACIOS, pasaTodos, nActivos, facetas, mesSiguiente } from './reservas/calculo';
+import { useBaseReservas, usePropuestaActiva, useLanding, invalidarPropuesta, invalidarLanding, invalidarDrill, crearPropuesta, upsertLineaDB, eliminarLineaDB, actualizarPropuestaDB, actualizarLineasDB, actualizarLineaDB, vaciarLineasDB, eliminarPropuestaDB } from './reservas/datos';
+import TablaReservas from './reservas/TablaReservas';
+import DrillSku from './reservas/DrillSku';
+import HojaReserva from './reservas/HojaReserva';
+import Landing from './reservas/Landing';
+import Captura from './reservas/Captura';
 
-const NOMBRES_MES = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-const CLIENTES = [
-  { key: 'digitalife', label: 'Digitalife', short: 'DGL', txt: '#6B6B70', txtDark: '#A1A1A6' },
-  { key: 'pcel',       label: 'PCEL',       short: 'PCE', txt: '#6B6B70', txtDark: '#A1A1A6' },
-  { key: 'dicotech',   label: 'Dicotech',   short: 'DCT', txt: '#6B6B70', txtDark: '#A1A1A6' },
-];
-const LIME = '#CDE64A';
-
-// Paginación estándar. Requiere `.order()` en la query para que PostgREST
-// devuelva chunks estables — sin order puede repetir/skipar filas o loopar.
-// Delegado al motor paginado PARALELO + cache central (lib/queries.js).
-async function fetchAll(qFactory, orderCol = 'id', pageSize = 1000) {
-  return fetchAllQ(qFactory, { pageSize, orderCol, label: "forecast" });
-}
-
-function fmtInt(n) { return (Math.round(Number(n) || 0)).toLocaleString('es-MX'); }
-function fmtNum(n) { const v = Math.round(Number(n) || 0); return v === 0 ? '—' : v.toLocaleString('es-MX'); }
-function toISO(d) { return d.toISOString().slice(0, 10); }
+const LS_METODO = 'forecastReservas.metodo';
+const leerMetodo = () => { try { const v = localStorage.getItem(LS_METODO); return METODOS.some((m) => m.id === v) ? v : METODO_DEFAULT; } catch { return METODO_DEFAULT; } };
 
 export default function ForecastReservas() {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
   const perfil = usePerfil();
   const yoId = perfil?.user_id || null;
-
   const hoy = useMemo(() => new Date(), []);
-  const anioObj = hoy.getFullYear();
-  const mesObj = hoy.getMonth() + 1;
+  const anioObj = hoy.getFullYear(), mesObj = hoy.getMonth() + 1;
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  // ── Preferencias de pantalla ──
+  const [metodo, setMetodo] = useState(leerMetodo);
+  useEffect(() => { try { localStorage.setItem(LS_METODO, metodo); } catch { /* noop */ } }, [metodo]);
+  const [vista, setVista] = useState('reservas');      // 'reservas' | 'crm'
+  const [subvista, setSubvista] = useState('armador'); // 'armador' | 'landing'
+  const [clienteCrm, setClienteCrm] = useState('digitalife');
+  const [mesInicio, setMesInicio] = useState(() => mesSiguiente(hoy));
 
-  // Datos base
-  const [roadmap, setRoadmap] = useState([]); // sku, descripcion, marca, familia, rdmp
-  const [sellout, setSellout] = useState([]); // sellout_sku 6m
-  const [cuotas, setCuotas] = useState([]);
-  const [facturacion, setFacturacion] = useState([]);
-  const [arribos, setArribos] = useState([]); // embarques_compras próximos 3m
-  const [inventario, setInventario] = useState([]); // inventario_acteck
+  // ── Datos ──
+  const base = useBaseReservas(hoy);
+  const prop = usePropuestaActiva(yoId);
+  const landing = useLanding();
+  const propuesta = prop.data?.propuesta || null;
+  const [lineasLocal, setLineasLocal] = useState(null); // overlay optimista sobre prop.data.lineas
+  useEffect(() => { setLineasLocal(null); }, [prop.data]);
+  const lineas = lineasLocal || prop.data?.lineas || {};
+  const setLineas = (fn) => setLineasLocal((prev) => fn(prev || prop.data?.lineas || {}));
 
-  // Propuesta activa (borrador único por usuario)
-  const [propuesta, setPropuesta] = useState(null); // { id, nombre, estatus, ... }
-  const [lineas, setLineas] = useState({});         // { sku: { reservo, confirmado, estado, id } }
-
-  // UI state
+  // ── Filtros / búsqueda / orden / drill ──
   const [busqueda, setBusqueda] = useState('');
-  const [filtroCliente, setFiltroCliente] = useState('todos');   // 'todos' | 'digitalife' | 'pcel' | 'dicotech'
-  const [filtroMarca, setFiltroMarca] = useState('todas');       // 'todas' | 'acteck' | 'balam rush'
-  const [filtroStock, setFiltroStock] = useState('todos');       // 'todos' | 'sin_arribo' | 'con_arribo'
-  const [saving, setSaving] = useState(false);
+  const [f, setF] = useState(FILTROS_VACIOS);
+  useEffect(() => { setF((p) => ({ ...p, tokens: tokens(busqueda) })); }, [busqueda]);
+  const [orden, setOrden] = useState(null);
   const [expandedSku, setExpandedSku] = useState(null);
-  const [drillYear, setDrillYear] = useState(anioObj);
-  const [vista, setVista] = useState('armador'); // 'armador' | 'landing'
-  const [propuestasCerradas, setPropuestasCerradas] = useState([]);
-  const [propuestaAbierta, setPropuestaAbierta] = useState(null); // propuesta seleccionada del landing
-  const [avisos, setAvisos] = useState([]);
+  const [hoja, setHoja] = useState(false);
+  const [propuestaAbierta, setPropuestaAbierta] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const bandArr = 'transparent';
-  const groupSep = isDark ? '#232326' : '#E5E5E9';
+  const meses = useMemo(() => proxMeses(hoy, 3, MESES), [hoy]);
+  const filasBase = useMemo(() => {
+    if (!base.data) return [];
+    const { roadmap, sellout, arribos, inventarioPorSku, stockClientes } = base.data;
+    return construirFilas({ roadmap, series: sellout.series, metodo, hoy, arribos, inventarioPorSku, lineas, stockClientes, meses });
+  }, [base.data, metodo, hoy, lineas, meses]);
+  const filasPorSku = useMemo(() => new Map(filasBase.map((r) => [r.sku, r])), [filasBase]);
+  const roadmapSet = useMemo(() => new Set(filasBase.map((r) => r.sku)), [filasBase]);
 
-  // ─── Fetch inicial ──────────────────────────────────────────
-  useEffect(() => {
-    if (!DB_CONFIGURED) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true); setError(null);
-      try {
-        // Ventana: últimos 3 años (para poder cambiar de año en el drill)
-        const anioMin = anioObj - 2;
-
-        // Ventana próximos 3 meses para arribos
-        const trecs = new Date(hoy); trecs.setMonth(trecs.getMonth() + 3);
-
-        // Fetch en paralelo, cada uno con manejo propio (no aborta todo si uno falla)
-        const [rmRes, soRows, ctRes, faRows, embRows, invRows, propRes] = await Promise.all([
-          supabase.from('roadmap_sku').select('sku, descripcion, marca, familia, rdmp, sort_order').order('sort_order', { ascending: true, nullsFirst: false }),
-          fetchAll(() => supabase.from('sellout_sku')
-            .select('cliente, anio, mes, sku, piezas')
-            .gte('anio', anioMin)).catch(e => { console.error('sellout_sku:', e); return []; }),
-          supabase.from('cuotas_mensuales')
-            .select('cliente, anio, mes, cuota_min, cuota_ideal')
-            .eq('anio', anioObj).eq('mes', mesObj),
-          fetchAll(() => supabase.from('facturacion_clientes')
-            .select('cliente_key, sku, piezas, anio, mes')
-            .eq('anio', anioObj).eq('mes', mesObj)).catch(e => { console.error('facturacion_clientes:', e); return []; }),
-          // arribo_almacen está vacío en toda la tabla — usamos fallback:
-          // arribo_cedis (3.5k filas) o eta_puerto (4.1k filas)
-          fetchAll(() => supabase.from('embarques_compras')
-            .select('codigo, arribo_almacen, arribo_cedis, eta_puerto, po_qty, shp_qty, contenedor'))
-            .catch(e => { console.error('embarques_compras:', e); return []; }),
-          // inventario_acteck NO tiene columna 'id' — orderamos por 'articulo'
-          fetchAll(() => supabase.from('inventario_acteck').select('articulo, inventario'), 'articulo')
-            .catch(e => { console.error('inventario_acteck:', e); return []; }),
-          // Propuesta activa: 2 queries separadas para no depender de FK-embed de PostgREST
-          yoId
-            ? supabase.from('forecast_propuestas')
-                .select('*')
-                .eq('creado_por', yoId).eq('estatus', 'borrador')
-                .order('created_at', { ascending: false }).limit(1).maybeSingle()
-                .then(r => r).catch(e => { console.error('forecast_propuestas:', e); return { data: null }; })
-            : Promise.resolve({ data: null }),
-        ]);
-
-        if (cancelled) return;
-
-        if (rmRes.error) throw new Error('roadmap_sku: ' + rmRes.error.message);
-        if (ctRes.error) console.warn('cuotas_mensuales:', ctRes.error.message);
-
-        setRoadmap(rmRes.data || []);
-        setSellout(soRows || []);
-        setCuotas(ctRes.data || []);
-        setFacturacion(faRows || []);
-        setArribos(embRows || []);
-        setInventario(invRows || []);
-
-        // Propuesta activa: si existe, cargar sus líneas en query separada
-        if (propRes.data) {
-          setPropuesta(propRes.data);
-          const { data: linRows, error: linErr } = await supabase
-            .from('forecast_propuesta_lineas').select('*').eq('propuesta_id', propRes.data.id);
-          if (linErr) console.warn('forecast_propuesta_lineas:', linErr.message);
-          const lin = {};
-          for (const l of (linRows || [])) lin[l.sku] = l;
-          setLineas(lin);
-        } else {
-          setPropuesta(null);
-          setLineas({});
-        }
-      } catch (e) {
-        if (!cancelled) setError(e.message || String(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [yoId, anioObj, mesObj]);
-
-  // ─── Cálculos ──────────────────────────────────────────────
-  // Velocity SO por (cliente, sku) = promedio piezas últimos 6 meses completos
-  const velocity = useMemo(() => {
-    // ventana móvil de últimos 6 meses (para no incluir meses viejos si sellout trae varios años)
-    const seis = new Date(hoy); seis.setMonth(seis.getMonth() - 6);
-    const yMin = seis.getFullYear(), mMin = seis.getMonth() + 1;
-    const enVentana = (a, m) => (a > yMin) || (a === yMin && m >= mMin);
-    const map = new Map();
-    for (const r of sellout) {
-      const cli = r.cliente, sku = r.sku;
-      if (!cli || !sku) continue;
-      const a = Number(r.anio), m = Number(r.mes);
-      if (!enVentana(a, m)) continue;
-      const k = `${cli}|${sku}`;
-      const key = `${a}-${m}`;
-      const cur = map.get(k) || { total: 0, meses: new Set() };
-      cur.total += Number(r.piezas) || 0;
-      cur.meses.add(key);
-      map.set(k, cur);
-    }
-    const out = {};
-    for (const [k, v] of map) {
-      const n = Math.max(v.meses.size, 1);
-      out[k] = v.total / n;
+  const fac = useMemo(() => facetas(filasBase, f, lineas), [filasBase, f, lineas]);
+  const filasFiltradas = useMemo(() => {
+    const out = filasBase.filter((r) => pasaTodos(r, f, null, lineas));
+    if (orden?.col) {
+      const d = orden.dir === 'asc' ? 1 : -1;
+      out.sort((a, b) => (N(a[orden.col]) - N(b[orden.col])) * d || (a.sort_order ?? 1e9) - (b.sort_order ?? 1e9));
     }
     return out;
-  }, [sellout, hoy]);
+  }, [filasBase, f, lineas, orden]);
+  const onSort = (col) => setOrden((o) => (o?.col === col ? (o.dir === 'desc' ? { col, dir: 'asc' } : null) : { col, dir: 'desc' }));
+  const toggleGrupo = (g, id) => setF((p) => { const s = new Set(p[g]); s.has(id) ? s.delete(id) : s.add(id); return { ...p, [g]: s }; });
+  const limpiar = () => { setF((p) => ({ ...FILTROS_VACIOS(), tokens: p.tokens, soloMovimiento: p.soloMovimiento })); };
 
-  // Matriz drill: sku → { cliente: { mes: piezas } } por año
-  const soPorSkuAnio = useMemo(() => {
-    // sku → año → cliente → mes → piezas
-    const map = new Map();
-    for (const r of sellout) {
-      if (!r.sku || !r.cliente) continue;
-      const a = Number(r.anio), m = Number(r.mes);
-      if (!a || !m) continue;
-      let bySku = map.get(r.sku); if (!bySku) { bySku = new Map(); map.set(r.sku, bySku); }
-      let byAnio = bySku.get(a);   if (!byAnio) { byAnio = new Map(); bySku.set(a, byAnio); }
-      let byCli = byAnio.get(r.cliente); if (!byCli) { byCli = {}; byAnio.set(r.cliente, byCli); }
-      byCli[m] = (byCli[m] || 0) + (Number(r.piezas) || 0);
-    }
-    return map;
-  }, [sellout]);
-
-  // Años disponibles en sellout (para tabs del drill)
-  const aniosDisponibles = useMemo(() => {
-    const s = new Set();
-    for (const r of sellout) if (r.anio) s.add(Number(r.anio));
-    return Array.from(s).sort((a, b) => b - a);
-  }, [sellout]);
-
-  // Inventario Acteck: total por SKU (suma de todos los almacenes)
-  const inventarioPorSku = useMemo(() => {
-    const map = new Map();
-    for (const r of inventario) {
-      if (!r.articulo) continue;
-      map.set(r.articulo, (map.get(r.articulo) || 0) + (Number(r.inventario) || 0));
-    }
-    return map;
-  }, [inventario]);
-
-  // Arribos: agrupar por (sku, año-mes). Fallback de fecha:
-  //   arribo_almacen → arribo_cedis → eta_puerto
-  const arribosPorSku = useMemo(() => {
-    const map = new Map();
-    for (const e of arribos) {
-      if (!e.codigo) continue;
-      const fecha = e.arribo_almacen || e.arribo_cedis || e.eta_puerto;
-      if (!fecha) continue;
-      const d = new Date(fecha);
-      if (isNaN(d)) continue;
-      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
-      const qty = Number(e.shp_qty) || Number(e.po_qty) || 0;
-      const cur = map.get(e.codigo) || {};
-      cur[key] = (cur[key] || 0) + qty;
-      map.set(e.codigo, cur);
-    }
-    return map;
-  }, [arribos]);
-
-  // Próximos 3 meses (labels y keys) desde hoy
-  const proxMeses = useMemo(() => {
-    const arr = [];
-    for (let i = 0; i < 3; i++) {
-      const d = new Date(hoy); d.setDate(1); d.setMonth(d.getMonth() + i);
-      arr.push({ key: `${d.getFullYear()}-${d.getMonth() + 1}`, label: NOMBRES_MES[d.getMonth() + 1] });
-    }
-    return arr;
-  }, [hoy]);
-
-  // Filas: para cada SKU en roadmap con velocity > 0 en algún cliente
-  const filasBase = useMemo(() => {
-    const rows = [];
-    const skusVistos = new Set();
-    for (const rm of roadmap) {
-      if (!rm.sku || skusVistos.has(rm.sku)) continue;
-      skusVistos.add(rm.sku);
-
-      const vDgl = Math.round(velocity[`digitalife|${rm.sku}`] || 0);
-      const vPce = Math.round(velocity[`pcel|${rm.sku}`] || 0);
-      const vDct = Math.round(velocity[`dicotech|${rm.sku}`] || 0);
-      const totalNec = vDgl + vPce + vDct;
-      if (totalNec === 0 && !lineas[rm.sku]) continue;
-
-      const arr = arribosPorSku.get(rm.sku) || {};
-      const arrPorMes = {};
-      for (const m of proxMeses) arrPorMes[m.key] = arr[m.key] || 0;
-
-      rows.push({
-        sku: rm.sku,
-        descripcion: rm.descripcion || rm.sku,
-        marca: rm.marca || '',
-        familia: rm.familia || '',
-        roadmap: (rm.rdmp || '').toUpperCase(),
-        sort_order: rm.sort_order,
-        inventario: inventarioPorSku.get(rm.sku) || 0,
-        necesidad_dgl: vDgl,
-        necesidad_pce: vPce,
-        necesidad_dct: vDct,
-        recomendado: totalNec,
-        arribosPorMes: arrPorMes,
-      });
-    }
-    // Orden por defecto del roadmap (sort_order)
-    return rows;
-  }, [roadmap, velocity, arribosPorSku, proxMeses, lineas, inventarioPorSku]);
-
-  const filasFiltradas = useMemo(() => {
-    const q = busqueda.trim().toLowerCase();
-    return filasBase.filter(r => {
-      // Filtro cliente: solo SKUs que ese cliente compra (necesidad > 0)
-      if (filtroCliente !== 'todos') {
-        const key = 'necesidad_' + (filtroCliente === 'digitalife' ? 'dgl' : filtroCliente === 'pcel' ? 'pce' : 'dct');
-        if ((r[key] || 0) === 0) return false;
-      }
-      // Filtro marca
-      if (filtroMarca !== 'todas' && (r.marca || '').toLowerCase() !== filtroMarca) return false;
-      // Filtro stock/arribos
-      const totalArribos = Object.values(r.arribosPorMes || {}).reduce((a, b) => a + (Number(b) || 0), 0);
-      if (filtroStock === 'con_arribo' && totalArribos === 0) return false;
-      if (filtroStock === 'sin_arribo' && totalArribos > 0) return false;
-      // Búsqueda
-      if (!q) return true;
-      return (r.sku + ' ' + r.descripcion + ' ' + r.marca + ' ' + r.familia).toLowerCase().includes(q);
-    });
-  }, [filasBase, busqueda, filtroCliente, filtroMarca, filtroStock]);
-
-  // Marcas únicas del roadmap para el dropdown
-  const marcasDisponibles = useMemo(() => {
-    const s = new Set();
-    for (const r of roadmap) if (r.marca) s.add(r.marca.toLowerCase());
-    return Array.from(s).sort();
-  }, [roadmap]);
-
-  // KPIs hero
+  // ── KPIs ──
   const kpis = useMemo(() => {
     const totalRecom = filasBase.reduce((a, r) => a + r.recomendado, 0);
-    const totalReservo = Object.values(lineas).reduce((a, l) => a + (Number(l.reservo) || 0), 0);
-    const skusConBrecha = filasBase.length;
-    const skusEnPropuesta = Object.keys(lineas).length;
-    const proxArribo = arribos
-      .map(e => e.arribo_almacen || e.arribo_cedis || e.eta_puerto)
-      .filter(Boolean)
-      .sort()[0] || null;
-    return { totalRecom, totalReservo, skusConBrecha, skusEnPropuesta, proxArribo };
-  }, [filasBase, lineas, arribos]);
+    const totalReservo = Object.values(lineas).reduce((a, l) => a + N(l.reservo), 0);
+    const conBrecha = filasBase.filter((r) => r.estado === 'con_brecha').length;
+    const conArribo30 = filasBase.filter((r) => r.arribo30);
+    const pz30 = conArribo30.reduce((a, r) => a + r.pz30, 0);
+    return { totalRecom, totalReservo, conBrecha, enPropuesta: Object.keys(lineas).length, conArribo30: conArribo30.length, pz30, proxArribo: base.data?.arribos.proxGlobal || null, futuros: base.data?.arribos.futuros || 0 };
+  }, [filasBase, lineas, base.data]);
 
-  // Cobertura por cliente + top SKUs sin cubrir (para tarjeta Mi Propuesta)
-  const propuestaStats = useMemo(() => {
-    // Cobertura por cliente: sumar necesidad y reservado (prorrateo por SKU)
-    const cobertura = {
-      digitalife: { recom: 0, reservo: 0 },
-      pcel:        { recom: 0, reservo: 0 },
-      dicotech:    { recom: 0, reservo: 0 },
-    };
-    for (const f of filasBase) {
-      cobertura.digitalife.recom += f.necesidad_dgl;
-      cobertura.pcel.recom        += f.necesidad_pce;
-      cobertura.dicotech.recom    += f.necesidad_dct;
-      const l = lineas[f.sku];
-      if (!l || !l.reservo || f.recomendado === 0) continue;
-      const ratio = Number(l.reservo) / f.recomendado;
-      cobertura.digitalife.reservo += f.necesidad_dgl * ratio;
-      cobertura.pcel.reservo        += f.necesidad_pce * ratio;
-      cobertura.dicotech.reservo    += f.necesidad_dct * ratio;
+  const stats = useMemo(() => {
+    const cobertura = Object.fromEntries(CLIENTES.map((c) => [c.key, { recom: 0, reservo: 0 }]));
+    for (const r of filasBase) {
+      for (const c of CLIENTES) cobertura[c.key].recom += r.necesidad[c.key];
+      const l = lineas[r.sku];
+      if (!l || !N(l.reservo) || r.recomendado === 0) continue;
+      const ratio = N(l.reservo) / r.recomendado;
+      for (const c of CLIENTES) cobertura[c.key].reservo += r.necesidad[c.key] * ratio;
     }
-    // SKUs en la propuesta (reservo > 0), ordenados por reservo descendente
-    const enPropuesta = filasBase
-      .map(f => {
-        const reservo = Number(lineas[f.sku]?.reservo) || 0;
-        return { ...f, reservo, gap: f.recomendado - reservo };
-      })
-      .filter(f => f.reservo > 0)
+    const enPropuesta = Object.values(lineas).filter((l) => N(l.reservo) > 0)
+      .map((l) => { const r = filasPorSku.get(l.sku); return { sku: l.sku, descripcion: r?.descripcion || l.descripcion || l.sku, reservo: N(l.reservo), recomendado: r?.recomendado ?? N(l.recomendado) }; })
       .sort((a, b) => b.reservo - a.reservo);
     return { cobertura, enPropuesta };
-  }, [filasBase, lineas]);
+  }, [filasBase, lineas, filasPorSku]);
 
-  // ─── Persistencia ──────────────────────────────────────────
-  // Asegurar propuesta activa (crea borrador si no existe)
+  // ── Persistencia de la propuesta ──
+  const nombreDefault = `Preventa & Reservas · ${MESES[mesObj - 1]} ${anioObj}`;
   const asegurarPropuesta = useCallback(async () => {
     if (propuesta) return propuesta;
-    const nombre = `Preventa & Reservas · ${NOMBRES_MES[mesObj]} ${anioObj}`;
-    const { data, error } = await supabase.from('forecast_propuestas')
-      .insert({ nombre, estatus: 'borrador', meta_anio: anioObj, meta_mes: mesObj, creado_por: yoId })
-      .select().single();
-    if (error) { alert('No se pudo crear propuesta: ' + error.message); throw error; }
-    setPropuesta(data);
-    return data;
-  }, [propuesta, mesObj, anioObj, yoId]);
+    const p = await crearPropuesta({ nombre: nombreDefault, anio: anioObj, mes: mesObj, yoId });
+    await invalidarPropuesta();
+    return p;
+  }, [propuesta, nombreDefault, anioObj, mesObj, yoId]);
 
-  // Guarda/actualiza una línea (reservo o confirmado)
   const upsertLinea = useCallback(async (fila, patch) => {
-    const p = await asegurarPropuesta();
-    const existing = lineas[fila.sku];
-    const payload = {
-      propuesta_id: p.id,
-      sku: fila.sku,
-      descripcion: fila.descripcion,
-      marca: fila.marca,
-      familia: fila.familia,
-      roadmap: fila.roadmap,
-      necesidad_dgl: fila.necesidad_dgl,
-      necesidad_pce: fila.necesidad_pce,
-      necesidad_dct: fila.necesidad_dct,
-      recomendado: fila.recomendado,
-      arribos_snapshot: fila.arribosPorMes,
-      estado: existing?.estado || 'draft',
-      reservo: existing?.reservo || 0,
-      confirmado: existing?.confirmado ?? null,
-      ...patch,
-    };
-    // Optimistic update
-    setLineas(prev => ({ ...prev, [fila.sku]: { ...(prev[fila.sku] || {}), ...payload } }));
-
-    const { data, error } = await supabase.from('forecast_propuesta_lineas')
-      .upsert(payload, { onConflict: 'propuesta_id,sku' }).select().single();
-    if (error) {
-      alert('No se pudo guardar: ' + error.message);
-      return;
-    }
-    setLineas(prev => ({ ...prev, [fila.sku]: data }));
-  }, [lineas, asegurarPropuesta]);
+    try {
+      const p = await asegurarPropuesta();
+      const existing = lineas[fila.sku];
+      const payload = {
+        propuesta_id: p.id, sku: fila.sku, descripcion: fila.descripcion, marca: fila.marca, familia: fila.familia, roadmap: fila.roadmap,
+        necesidad_dgl: fila.necesidad_dgl, necesidad_pce: fila.necesidad_pce, necesidad_dct: fila.necesidad_dct, recomendado: fila.recomendado,
+        arribos_snapshot: fila.arribosPorMes, estado: existing?.estado || 'draft', reservo: existing?.reservo || 0, confirmado: existing?.confirmado ?? null, ...patch,
+      };
+      setLineas((prev) => ({ ...prev, [fila.sku]: { ...(prev[fila.sku] || {}), ...payload } }));
+      const data = await upsertLineaDB(payload);
+      setLineas((prev) => ({ ...prev, [fila.sku]: data }));
+      invalidarDrill(fila.sku);
+    } catch (e) { toast.error(`No se pudo guardar: ${e.message || e}`); invalidarPropuesta(); }
+  }, [lineas, asegurarPropuesta]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const eliminarLinea = useCallback(async (sku) => {
     const l = lineas[sku];
-    if (!l?.id) { setLineas(prev => { const c = { ...prev }; delete c[sku]; return c; }); return; }
-    setLineas(prev => { const c = { ...prev }; delete c[sku]; return c; });
-    await supabase.from('forecast_propuesta_lineas').delete().eq('id', l.id);
-  }, [lineas]);
+    setLineas((prev) => { const c = { ...prev }; delete c[sku]; return c; });
+    if (l?.id) { try { await eliminarLineaDB(l.id); invalidarDrill(sku); } catch (e) { toast.error(`No se pudo quitar: ${e.message || e}`); invalidarPropuesta(); } }
+  }, [lineas]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cargarAvisos = useCallback(async () => {
-    const hoyISO = toISO(hoy);
-    const { data } = await supabase.from('forecast_avisos')
-      .select('*, forecast_propuesta_lineas(sku, descripcion, marca)')
-      .lte('fecha_disparo', hoyISO)
-      .order('fecha_disparo', { ascending: false });
-    setAvisos(data || []);
-  }, [hoy]);
-
-  const cargarLanding = useCallback(async () => {
-    const { data, error } = await supabase.from('forecast_propuestas')
-      .select('*, forecast_propuesta_lineas(id, sku, descripcion, marca, reservo, confirmado, estado, necesidad_dgl, necesidad_pce, necesidad_dct, recomendado, crm_subido_at, comprado_at, fecha_arribo_estimada, piezas_a_reservar_arribo)')
-      .neq('estatus', 'borrador')
-      .order('generado_at', { ascending: false, nullsFirst: false });
-    if (!error && data) setPropuestasCerradas(data);
-  }, []);
+  const onReservo = (fila, v) => {
+    const l = lineas[fila.sku];
+    if (v === 0) { if (l) eliminarLinea(fila.sku); return; }
+    upsertLinea(fila, { reservo: v, estado: propuesta?.estatus === 'generada' ? 'pend_confirmar' : (l?.estado || 'draft') });
+  };
 
   const generarPropuesta = useCallback(async () => {
-    if (!propuesta) { alert('No hay líneas en la propuesta.'); return; }
-    if (Object.keys(lineas).length === 0) { alert('Agrega al menos un SKU antes de generar la propuesta.'); return; }
+    if (!propuesta || Object.keys(lineas).length === 0) { toast.info('Agrega al menos un SKU antes de generar la propuesta.'); return; }
     setSaving(true);
-    const { error } = await supabase.from('forecast_propuestas')
-      .update({ estatus: 'generada', generado_at: new Date().toISOString() })
-      .eq('id', propuesta.id);
-    if (error) { setSaving(false); alert('Error: ' + error.message); return; }
-    // Marcar todas las líneas draft como pend_confirmar
-    await supabase.from('forecast_propuesta_lineas')
-      .update({ estado: 'pend_confirmar' })
-      .eq('propuesta_id', propuesta.id).eq('estado', 'draft');
-    // Refrescar landing y limpiar propuesta activa (crea nuevo borrador al vuelo)
-    await cargarLanding();
-    setPropuesta(null);
-    setLineas({});
-    setSaving(false);
-    setVista('landing');
-  }, [propuesta, lineas, cargarLanding]);
-
-  // Cargar landing y avisos al montar
-  useEffect(() => { cargarLanding(); cargarAvisos(); }, [cargarLanding, cargarAvisos]);
+    try {
+      await actualizarPropuestaDB(propuesta.id, { estatus: 'generada', generado_at: new Date().toISOString() });
+      await actualizarLineasDB(propuesta.id, { estado: 'draft' }, { estado: 'pend_confirmar' });
+      await Promise.all([invalidarLanding(), invalidarPropuesta()]);
+      setHoja(false); setSubvista('landing');
+      toast.ok('Propuesta generada');
+    } catch (e) { toast.error(`Error: ${e.message || e}`); }
+    finally { setSaving(false); }
+  }, [propuesta, lineas]);
 
   const vaciarPropuesta = useCallback(async () => {
     if (!propuesta) return;
-    if (!confirm('¿Vaciar todas las líneas de la propuesta actual?')) return;
-    await supabase.from('forecast_propuesta_lineas').delete().eq('propuesta_id', propuesta.id);
-    setLineas({});
-  }, [propuesta]);
+    if (!confirm('¿Vaciar todas las líneas de la reserva actual?')) return;
+    setLineas(() => ({}));
+    try { await vaciarLineasDB(propuesta.id); await invalidarPropuesta(); toast.ok('Reserva vaciada'); } catch (e) { toast.error(`Error: ${e.message || e}`); invalidarPropuesta(); }
+  }, [propuesta]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Render ───────────────────────────────────────────────
-  if (!DB_CONFIGURED) return <div style={{ padding: 40, color: theme.textMuted }}>DB no configurada.</div>;
-  if (loading) return <div style={{ padding: 40 }}><Cargando pantalla="forecastReservas" label="Cargando forecast…" /></div>;
-  if (error) return (
-    <div style={{ padding: 20, maxWidth: 720, margin: '40px auto', background: '#FBECEA', border: '1px solid #C0392B', borderRadius: 12, color: '#C0392B' }}>
-      <b style={{ fontFamily: TYPO.fontDisplay, fontSize: 14 }}>Error cargando forecast</b>
-      <pre style={{ fontSize: 11, marginTop: 8, whiteSpace: 'pre-wrap' }}>{error}</pre>
-      <button onClick={() => location.reload()} style={{ marginTop: 8, padding: '6px 14px', borderRadius: 999, background: '#C0392B', color: '#FFF', border: 0, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600 }}>Reintentar</button>
-    </div>
-  );
-
-  const step = propuesta?.estatus === 'generada' ? 3 : (Object.keys(lineas).length > 0 ? 2 : 1);
-
-  return (
-    <div style={{ padding: '20px 20px 60px', maxWidth: 1520, margin: '0 auto' }}>
-
-      {/* Hero editorial · estilo S&OP */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 24,
-        background: '#0A0A0A', color: '#F5F5F7',
-        borderRadius: 14, padding: '18px 22px', marginBottom: 12,
-        alignItems: 'center',
-      }}>
-        <div>
-          <p style={{
-            fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em',
-            color: 'rgba(255,255,255,0.55)', fontWeight: 500, fontFamily: TYPO.fontText, margin: 0,
-          }}>
-            Dirección Comercial · Forecast · {NOMBRES_MES[mesObj]} {anioObj}
-          </p>
-          <h2 style={{
-            fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em',
-            color: '#F5F5F7', margin: '4px 0 6px', lineHeight: 1.15,
-          }}>
-            Reservas de arribos por cliente.
-          </h2>
-          <p style={{
-            color: 'rgba(255,255,255,0.72)', fontSize: 12, lineHeight: 1.55, margin: 0, maxWidth: 600,
-            fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums',
-          }}>
-            <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{filasBase.length} SKUs</strong>.
-            {kpis.skusConBrecha > 0 && <> <strong style={{ color: '#FF6961', fontWeight: 500 }}>{kpis.skusConBrecha} con brecha</strong>,</>}
-            {kpis.skusEnPropuesta > 0 && <> <strong style={{ color: '#F5F5F7', fontWeight: 500 }}>{kpis.skusEnPropuesta} en propuesta</strong>,</>}
-            {' '}Arma tu propuesta seleccionando SKUs con la cantidad que reservarás en Acteck.
-          </p>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
-          <HeroStat label="SKUs c/ brecha" value={fmtInt(kpis.skusConBrecha)} sub={`${fmtInt(kpis.totalRecom)} pz recom.`} color="#FF6961" />
-          <HeroStat label="Propuesta activa" value={`${fmtInt(kpis.totalReservo)} pz`} sub={`${kpis.skusEnPropuesta} SKUs`} color="#F5F5F7" />
-          <HeroStat label="Próx. arribo" value={kpis.proxArribo ? new Date(kpis.proxArribo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '—'} sub={`${arribos.length} embarques 3m`} color="#34D158" />
-          <HeroStat label="Método" value="Velocity 6m" sub="promedio sell-out" color="#F5F5F7" />
-        </div>
-      </div>
-
-      {/* Switcher vista */}
-      <div style={{ display: 'inline-flex', gap: 2, padding: 3, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 999, marginBottom: 12 }}>
-        {[
-          { k: 'armador', l: 'Armador' },
-          { k: 'landing',  l: `Propuestas (${propuestasCerradas.length})` },
-        ].map(t => (
-          <button key={t.k} onClick={() => setVista(t.k)}
-            style={{
-              padding: '6px 14px', borderRadius: 999, border: 0,
-              background: vista === t.k ? '#0A0A0A' : 'transparent',
-              color: vista === t.k ? '#FFF' : theme.textMuted,
-              fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            }}>{t.l}</button>
-        ))}
-      </div>
-
-      {vista === 'landing' && (
-        <ForecastLanding
-          propuestas={propuestasCerradas}
-          propuestaAbierta={propuestaAbierta}
-          setPropuestaAbierta={setPropuestaAbierta}
-          avisos={avisos}
-          onAvisoVisto={async (aviso) => {
-            const vistoBy = Array.isArray(aviso.visto_por) ? aviso.visto_por : [];
-            if (vistoBy.includes(yoId)) return;
-            const next = [...vistoBy, yoId];
-            await supabase.from('forecast_avisos').update({ visto_por: next }).eq('id', aviso.id);
-            await cargarAvisos();
-          }}
-          theme={theme}
-          isDark={isDark}
-          onNueva={() => setVista('armador')}
-          onReabrir={async (p) => {
-            const { error } = await supabase.from('forecast_propuestas')
-              .update({ estatus: 'borrador' }).eq('id', p.id);
-            if (error) { alert('Error: ' + error.message); return; }
-            await cargarLanding();
-            setPropuesta(p);
-            const lin = {};
-            for (const l of (p.forecast_propuesta_lineas || [])) lin[l.sku] = l;
-            setLineas(lin);
-            setVista('armador');
-          }}
-          onEliminar={async (p) => {
-            if (!confirm(`¿Eliminar "${p.nombre}"?`)) return;
-            await supabase.from('forecast_propuestas').delete().eq('id', p.id);
-            if (propuestaAbierta?.id === p.id) setPropuestaAbierta(null);
-            await cargarLanding();
-          }}
-          yoId={yoId}
-          onActualizarLinea={async (linea, patch) => {
-            const { error } = await supabase.from('forecast_propuesta_lineas')
-              .update(patch).eq('id', linea.id);
-            if (error) { alert('Error: ' + error.message); return; }
-
-            // Si acaba de marcar comprado + tiene fecha_arribo → generar avisos
-            const nuevoComprado = patch.comprado_at && !linea.comprado_at;
-            const fechaArribo = patch.fecha_arribo_estimada || linea.fecha_arribo_estimada;
-            const piezas = patch.piezas_a_reservar_arribo ?? linea.piezas_a_reservar_arribo ?? linea.reservo;
-            if (nuevoComprado && fechaArribo) {
-              const d = new Date(fechaArribo);
-              const tresDiasAntes = new Date(d); tresDiasAntes.setDate(d.getDate() - 3);
-              const avisos = [
-                { linea_id: linea.id, propuesta_id: linea.propuesta_id || propuestaAbierta?.id, tipo: '3dias', fecha_disparo: toISO(tresDiasAntes), fecha_arribo: toISO(d), piezas_a_reservar: piezas },
-                { linea_id: linea.id, propuesta_id: linea.propuesta_id || propuestaAbierta?.id, tipo: 'dia',   fecha_disparo: toISO(d), fecha_arribo: toISO(d), piezas_a_reservar: piezas },
-              ];
-              await supabase.from('forecast_avisos').upsert(avisos, { onConflict: 'linea_id,tipo' });
-              await cargarAvisos();
-            }
-            // Si cambió la fecha de arribo de una línea ya comprada → actualizar avisos existentes
-            if (!nuevoComprado && patch.fecha_arribo_estimada && linea.comprado_at) {
-              const d = new Date(patch.fecha_arribo_estimada);
-              const tresDiasAntes = new Date(d); tresDiasAntes.setDate(d.getDate() - 3);
-              await supabase.from('forecast_avisos').update({ fecha_disparo: toISO(tresDiasAntes), fecha_arribo: toISO(d), piezas_a_reservar: piezas }).eq('linea_id', linea.id).eq('tipo', '3dias');
-              await supabase.from('forecast_avisos').update({ fecha_disparo: toISO(d),           fecha_arribo: toISO(d), piezas_a_reservar: piezas }).eq('linea_id', linea.id).eq('tipo', 'dia');
-              await cargarAvisos();
-            }
-
-            await cargarLanding();
-            setPropuestaAbierta(prev => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                forecast_propuesta_lineas: (prev.forecast_propuesta_lineas || []).map(l =>
-                  l.id === linea.id ? { ...l, ...patch } : l
-                ),
-              };
-            });
-          }}
-        />
-      )}
-
-      {/* Layout main + sidebar */}
-      {vista === 'armador' && (
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 16, alignItems: 'start' }}>
-
-        <div style={{ minWidth: 0 }}>
-
-          {/* Card unificada: Header negro con buscador + tabla */}
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' }}>
-            {/* Header negro con búsqueda + filtros */}
-            <div style={{ background: '#0A0A0A', color: '#FFF', padding: '12px 16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
-                <div>
-                  <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', margin: 0, color: '#FFF' }}>Detalle por SKU</h3>
-                  <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>
-                    <b style={{ color: '#FFF', fontWeight: 600 }}>{filasFiltradas.length}</b> de {filasBase.length} SKUs · click en fila para drill · <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: '#5EABFF', verticalAlign: 'middle', marginRight: 4 }} />en propuesta
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 240, maxWidth: 300, padding: '6px 12px', background: 'rgba(255,255,255,0.08)', borderRadius: 999, color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>
-                  <Search size={12} />
-                  <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
-                    placeholder="Buscar SKU · descripción"
-                    style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', color: '#FFF', fontFamily: TYPO.fontText, fontSize: 11.5, minWidth: 0 }} />
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                <DarkSelect label="Cliente" value={filtroCliente} onChange={setFiltroCliente}
-                  options={[
-                    { v: 'todos', l: 'Todos los clientes' },
-                    { v: 'digitalife', l: 'Digitalife' },
-                    { v: 'pcel', l: 'PCEL' },
-                    { v: 'dicotech', l: 'Dicotech' },
-                  ]} />
-                <DarkSelect label="Marca" value={filtroMarca} onChange={setFiltroMarca}
-                  options={[{ v: 'todas', l: 'Todas las marcas' }, ...marcasDisponibles.map(m => ({ v: m, l: m.replace(/\b\w/g, c => c.toUpperCase()) }))]} />
-                <DarkSelect label="Arribos" value={filtroStock} onChange={setFiltroStock}
-                  options={[
-                    { v: 'todos', l: 'Todos' },
-                    { v: 'con_arribo', l: 'Con arribo próximo' },
-                    { v: 'sin_arribo', l: 'Sin arribo próximo' },
-                  ]} />
-              </div>
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11.5, tableLayout: 'fixed' }}>
-                <thead>
-                  <tr>
-                    <Th theme={theme} c w={20}></Th>
-                    <Th theme={theme} l w={92}>SKU</Th>
-                    <Th theme={theme} l>Descripción</Th>
-                    <Th theme={theme} c w={54}>Roadmap</Th>
-                    <Th theme={theme} bl={groupSep} w={54}>Digitalife</Th>
-                    <Th theme={theme} w={48}>PCEL</Th>
-                    <Th theme={theme} w={54}>Dicotech</Th>
-                    {proxMeses.map((m, i) => <Th key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined} w={52}>{m.label}</Th>)}
-                    <Th theme={theme} bl={groupSep} w={48}>Inv</Th>
-                    <Th theme={theme} w={50} color={theme.accent}>Recom</Th>
-                    <Th theme={theme} w={72}>Reservo</Th>
-                    <Th theme={theme} w={82}>Estado</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filasFiltradas.map(f => {
-                    const l = lineas[f.sku];
-                    const enPropuesta = !!l;
-                    const expanded = expandedSku === f.sku;
-                    const toggle = () => setExpandedSku(prev => prev === f.sku ? null : f.sku);
-                    return (
-                      <React.Fragment key={f.sku}>
-                      <tr onClick={(e) => {
-                          // No expandir si clickeaste en input/botón
-                          const tag = (e.target.tagName || '').toUpperCase();
-                          if (tag === 'INPUT' || tag === 'BUTTON') return;
-                          toggle();
-                        }}
-                        style={{
-                          borderTop: `1px solid ${theme.divider || theme.hairline || theme.border}`,
-                          background: expanded ? 'rgba(0,122,255,0.05)' : (enPropuesta ? 'rgba(0,122,255,0.03)' : 'transparent'),
-                          transition: 'background 160ms ease', cursor: 'pointer',
-                        }}>
-                        <Td theme={theme} c>
-                          <span style={{
-                            display: 'inline-block', width: 12, color: expanded ? theme.accent : (theme.textFaint || theme.textMuted),
-                            fontSize: 11, transform: expanded ? 'rotate(90deg)' : 'none',
-                            transition: 'transform 200ms ease, color 160ms ease',
-                          }}>▸</span>
-                        </Td>
-                        <Td theme={theme} l><span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600 }}>{f.sku}</span></Td>
-                        <Td theme={theme} l>
-                          <div title={`${f.descripcion}${f.marca ? ' · ' + f.marca : ''}${f.familia ? ' · ' + f.familia : ''}`}
-                            style={{ fontFamily: TYPO.fontText, fontWeight: 400, fontSize: 11.5, color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 260 }}>
-                            {f.descripcion || '—'}
-                          </div>
-                        </Td>
-                        <Td theme={theme} c><RoadmapChip r={f.roadmap} /></Td>
-                        <Td theme={theme} bl={groupSep}><NumCell n={f.necesidad_dgl} /></Td>
-                        <Td theme={theme}><NumCell n={f.necesidad_pce} /></Td>
-                        <Td theme={theme}><NumCell n={f.necesidad_dct} /></Td>
-                        {proxMeses.map((m, i) => (
-                          <Td key={m.key} theme={theme} bl={i === 0 ? groupSep : undefined}><NumCell n={f.arribosPorMes[m.key]} strong={f.arribosPorMes[m.key] > 0} /></Td>
-                        ))}
-                        <Td theme={theme} bl={groupSep}><NumCell n={f.inventario} strong={f.inventario > 0} /></Td>
-                        <Td theme={theme}><span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, color: theme.accent, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(f.recomendado)}</span></Td>
-                        <Td theme={theme}>
-                          <ReservoInput
-                            value={Number(l?.reservo) || 0}
-                            recom={f.recomendado}
-                            confirmado={l?.estado === 'confirmado' || l?.estado === 'parcial'}
-                            accent={theme.accent}
-                            onChange={(v) => {
-                              if (v === 0 && l?.id) return eliminarLinea(f.sku);
-                              if (v > 0) upsertLinea(f, { reservo: v, estado: propuesta?.estatus === 'generada' ? 'pend_confirmar' : 'draft' });
-                            }}
-                          />
-                        </Td>
-                        <Td theme={theme}><EstadoPill estado={l?.estado || 'draft'} confirmado={l?.confirmado} reservo={l?.reservo} recom={f.recomendado} accent={theme.accent} /></Td>
-                      </tr>
-                      {expanded && (
-                        <tr>
-                          <td colSpan={13} style={{ padding: 0, background: theme.bg, borderTop: `1px solid ${theme.divider || theme.border}`, borderBottom: `2px solid ${theme.border}` }}>
-                            <HeatmapDrill
-                              sku={f.sku}
-                              matriz={soPorSkuAnio.get(f.sku)}
-                              aniosDisponibles={aniosDisponibles}
-                              drillYear={drillYear}
-                              setDrillYear={setDrillYear}
-                              theme={theme}
-                              isDark={isDark}
-                              onClose={() => setExpandedSku(null)}
-                            />
-                          </td>
-                        </tr>
-                      )}
-                      </React.Fragment>
-                    );
-                  })}
-                  {filasFiltradas.length === 0 && (
-                    <tr><td colSpan={13} style={{ padding: 40, textAlign: 'center', color: theme.textMuted }}>No hay SKUs que mostrar con los filtros actuales.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {/* Sidebar sticky con altura del viewport */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 20, maxHeight: 'calc(100vh - 40px)' }}>
-          <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 40px)' }}>
-            {/* Header negro */}
-            <div style={{ background: '#0A0A0A', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>Forecast · Reservas</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, color: '#FFF' }}>
-                  Mi Propuesta
-                  {Object.keys(lineas).length > 0 && (
-                    <span style={{ background: '#CDE64A', color: '#050505', fontSize: 10, padding: '1px 7px', borderRadius: 999, fontWeight: 700 }}>{Object.keys(lineas).length}</span>
-                  )}
-                </div>
-              </div>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#8EE6AC', fontFamily: TYPO.fontDisplay, fontWeight: 600 }}>
-                <span style={{ width: 6, height: 6, borderRadius: 999, background: '#8EE6AC' }} />Autoguardado
-              </span>
-            </div>
-            <MiPropuestaContent
-              theme={theme} isDark={isDark}
-              kpis={kpis}
-              stats={propuestaStats}
-              lineas={lineas}
-              propuesta={propuesta}
-              saving={saving}
-              onGenerar={generarPropuesta}
-              onVaciar={vaciarPropuesta}
-              nombre={propuesta?.nombre || `Preventa & Reservas · ${NOMBRES_MES[mesObj]} ${anioObj}`}
-              onRenombrar={async (v) => {
-                const p = await asegurarPropuesta();
-                setPropuesta(prev => ({ ...prev, nombre: v }));
-                await supabase.from('forecast_propuestas').update({ nombre: v }).eq('id', p.id);
-              }}
-              onVerSku={(sku) => {
-                setBusqueda(sku);
-                setExpandedSku(sku);
-              }}
-              onEliminarSku={(sku) => eliminarLinea(sku)}
-            />
-          </div>
-        </aside>
-
-      </div>
-      )}
-
-    </div>
-  );
-}
-
-// ─── Sub-componentes ────────────────────────────────────────
-function StepChip({ theme, n, lb, sub, active, done }) {
-  const bg = active ? '#0A0A0A' : 'transparent';
-  const color = active ? '#FFF' : theme.textMuted;
-  const nBg = done ? '#0F8F4F' : (active ? '#CDE64A' : '#F0F0F2');
-  const nColor = done ? '#FFF' : (active ? '#050505' : theme.textMuted);
-  return (
-    <div style={{ flex: 1, padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 8, background: bg, color, fontFamily: TYPO.fontDisplay, fontSize: 11.5 }}>
-      <span style={{ width: 20, height: 20, borderRadius: 999, background: nBg, color: nColor, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 700 }}>{done ? '✓' : n}</span>
-      <span style={{ fontWeight: 600 }}>{lb}</span>
-      {sub && <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 500, color: active ? 'rgba(255,255,255,0.55)' : theme.textMuted }}>{sub}</span>}
-    </div>
-  );
-}
-
-function Th({ theme, children, l, c, w, bg, color, bl }) {
-  const align = l ? 'left' : (c ? 'center' : 'right');
-  return (
-    <th style={{
-      fontFamily: TYPO.fontDisplay, fontSize: 9, fontWeight: 600,
-      letterSpacing: '0.08em', textTransform: 'uppercase', color: color || theme.textMuted,
-      textAlign: align,
-      paddingTop: 6, paddingBottom: 6,
-      paddingLeft: l ? 10 : (c ? 6 : 4),
-      paddingRight: (l || c) ? 4 : 10,
-      borderBottom: `1px solid ${theme.border}`, background: bg || theme.surface,
-      whiteSpace: 'nowrap', width: w,
-      borderLeft: bl ? `1px solid ${bl}` : undefined,
-      position: 'sticky', top: 0, zIndex: 2,
-    }}>{children}</th>
-  );
-}
-function Td({ theme, children, l, c, bg, bl }) {
-  const align = l ? 'left' : (c ? 'center' : 'right');
-  return <td style={{
-    paddingTop: 3, paddingBottom: 3,
-    paddingLeft: l ? 10 : (c ? 6 : 4),
-    paddingRight: (l || c) ? 4 : 10,
-    textAlign: align,
-    verticalAlign: 'middle', background: bg,
-    borderLeft: bl ? `1px solid ${bl}` : undefined,
-    fontSize: 11.5, color: theme.text, fontFamily: TYPO.fontText,
-    whiteSpace: 'nowrap',
-  }}>{children}</td>;
-}
-
-function HeroStat({ label, value, sub, color }) {
-  return (
-    <div>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>{label}</div>
-      <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color, marginTop: 2 }}>{value}</div>
-      <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.55)', marginTop: 1 }}>{sub}</div>
-    </div>
-  );
-}
-function NumCell({ n, strong }) {
-  const v = Number(n) || 0;
-  return <span style={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: strong ? 600 : 500, color: v === 0 ? '#A1A1A6' : 'inherit' }}>{fmtNum(v)}</span>;
-}
-function RoadmapChip({ r }) {
-  const R = (r || '').toUpperCase();
-  // paleta S&OP (RMI/RML amarillo · EOL gris)
-  // paleta clara y bien diferenciable
-  const map = {
-    RMI: { bg: '#F2C744', color: '#5D4300' },              // amarillo
-    RML: { bg: 'rgba(52,199,89,0.18)', color: '#0F8F4F' }, // verde
-    RMD: { bg: 'rgba(0,122,255,0.14)', color: '#0057D9' }, // azul
-    RMN: { bg: 'rgba(175,82,222,0.15)', color: '#7128B8' },// morado
-    EOL: { bg: '#F2F2F4', color: '#6E6E73' },              // gris
-  };
-  const s = map[R] || { bg: '#F5F5F7', color: '#A1A1A6' };
-  return <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: TYPO.fontDisplay, fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 5, letterSpacing: '0.04em', minWidth: 36, background: s.bg, color: s.color }}>{R || '—'}</span>;
-}
-function ReservoInput({ value, recom, confirmado, onChange, accent = '#007AFF' }) {
-  const [local, setLocal] = useState(String(value ?? 0));
-  useEffect(() => { setLocal(String(value ?? 0)); }, [value]);
-  const numLocal = Number(local) || 0;
-  return (
-    <input value={local}
-      placeholder="0"
-      onChange={e => setLocal(e.target.value.replace(/[^\d]/g, ''))}
-      onFocus={e => e.currentTarget.select()}
-      onBlur={() => { const n = Number(local) || 0; if (n !== value) onChange(n); }}
-      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-      style={{
-        width: 62, padding: '3px 8px', borderRadius: 5, textAlign: 'right',
-        border: `1px solid ${confirmado ? '#34C759' : (numLocal > 0 ? accent : 'transparent')}`,
-        background: confirmado ? 'rgba(52,199,89,0.10)' : (numLocal > 0 ? 'rgba(0,122,255,0.06)' : 'transparent'),
-        color: confirmado ? '#34C759' : (numLocal > 0 ? accent : '#A1A1A6'),
-        fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, fontWeight: 600, outline: 'none',
-      }} />
-  );
-}
-
-// ─── Landing de Propuestas ────────────────────────────
-function ForecastLanding({ propuestas, propuestaAbierta, setPropuestaAbierta, avisos = [], onAvisoVisto, yoId, theme, isDark, onNueva, onReabrir, onEliminar, onActualizarLinea }) {
-  const estatusStyle = (est) => ({
-    generada: { bg: 'rgba(0,122,255,0.10)', color: theme.accent, label: 'Generada' },
-    cerrada:  { bg: 'rgba(52,199,89,0.12)', color: '#34C759', label: 'Cerrada' },
-  }[est] || { bg: 'transparent', color: theme.textMuted, label: est });
-
-  const [colsN, setColsN] = useState(3); // aproximación de columnas por breakpoint
-  useEffect(() => {
-    const on = () => {
-      const w = window.innerWidth;
-      setColsN(w >= 1400 ? 4 : w >= 1100 ? 3 : w >= 780 ? 2 : 1);
-    };
-    on(); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on);
+  const onActualizarLinea = useCallback(async (linea, patch) => {
+    try {
+      await actualizarLineaDB(linea.id, patch);
+      await invalidarLanding();
+      invalidarDrill(linea.sku);
+      setPropuestaAbierta((prev) => (!prev ? prev : { ...prev, forecast_propuesta_lineas: (prev.forecast_propuesta_lineas || []).map((l) => (l.id === linea.id ? { ...l, ...patch } : l)) }));
+    } catch (e) { toast.error(`Error: ${e.message || e}`); }
   }, []);
 
+  // ── Render ──
+  if (!DB_CONFIGURED) return <div style={{ padding: 40, color: theme.textMuted }}>DB no configurada.</div>;
+  if (base.isLoading || (yoId && prop.isLoading && !prop.data)) return <div style={{ padding: 20 }}><Cargando pantalla="forecastReservas" /></div>;
+  if (base.error) return (
+    <div style={{ padding: 20, maxWidth: 720, margin: '40px auto' }}>
+      <Panel titulo="Error cargando forecast" acciones={<Boton onClick={() => base.refetch()}>Reintentar</Boton>}>
+        <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap', color: theme.red, margin: 0 }}>{String(base.error.message || base.error)}</pre>
+      </Panel>
+    </div>
+  );
+
+  const m = metodoInfo(metodo);
+  const grupos = [
+    { id: 'cliente', label: 'Cliente', sel: f.cliente, opciones: CLIENTES.map((c) => ({ id: c.key, label: c.label, n: fac.cliente.get(c.key)?.n || 0, tone: f.cliente.has(c.key) ? c.tone : undefined })) },
+    { id: 'marca', label: 'Marca', sel: f.marca, opciones: fac.marca.slice(0, 8) },
+    { id: 'familia', label: 'Familia', sel: f.familia, opciones: fac.familia.slice(0, 10) },
+    { id: 'roadmap', label: 'Roadmap', sel: f.roadmap, opciones: fac.roadmap },
+    { id: 'estado', label: 'Estado', sel: f.estado, opciones: ESTADOS_FILA.map((e) => ({ id: e.id, label: e.label, n: fac.estado.get(e.id)?.n || 0, tone: f.estado.has(e.id) ? e.tone : undefined })) },
+  ];
+  const toggles = [
+    { id: 'arribo30', label: 'Con arribo en 30 días', on: f.arribo30, n: fac.arribo30 },
+    { id: 'movimiento', label: 'Sólo con movimiento', on: f.soloMovimiento, n: fac.movimiento },
+  ];
+  const onToggleFlag = (id) => setF((p) => (id === 'arribo30' ? { ...p, arribo30: !p.arribo30 } : { ...p, soloMovimiento: !p.soloMovimiento }));
+  const labelPill = `Reserva · ${fmtInt(kpis.totalReservo)} pz`;
+  const propuestas = landing.data || [];
+  const pct = kpis.totalRecom > 0 ? Math.round((kpis.totalReservo / kpis.totalRecom) * 100) : 0;
+
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' }}>
-      <div style={{ background: '#0A0A0A', color: '#FFF', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>Landing · Propuestas de Forecast</div>
-          <h3 style={{ fontFamily: TYPO.fontDisplay, fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', margin: '2px 0 0', color: '#FFF' }}>{propuestas.length} propuesta{propuestas.length === 1 ? '' : 's'} generada{propuestas.length === 1 ? '' : 's'}</h3>
+    <div style={{ padding: '20px 20px 80px', maxWidth: 1560, margin: '0 auto', fontFamily: TYPO.fontText }} data-stagger>
+      <Hero eyebrow={`Dirección Comercial · Forecast · ${MESES[mesObj - 1]} ${anioObj}`}
+        titulo={vista === 'crm' ? 'Forecast mensual para el CRM.' : 'Reservas de arribos por cliente.'}
+        sub={vista === 'crm'
+          ? `Captura piezas por cliente y SKU para 6 meses y exporta la plantilla exacta del CRM. El apoyo (sell-out, stock, cobertura) usa el método ${m.label.toLowerCase()}.`
+          : <>{filasBase.length} SKUs del roadmap · <b style={{ color: theme.textOnInverse }}>{kpis.conBrecha} con brecha</b>{kpis.enPropuesta ? <> · <b style={{ color: theme.textOnInverse }}>{kpis.enPropuesta} en la reserva</b></> : null}. Recomendación = sell-out {m.desc.toLowerCase()}; escribe las piezas a reservar en la columna Reservo.</>}
+        stats={[
+          { k: 'SKUs c/ brecha', v: fmtInt(kpis.conBrecha), sub: `${fmtInt(kpis.totalRecom)} pz recomendadas`, color: kpis.conBrecha ? theme.orangeSoft || theme.orange : undefined },
+          { k: 'Reserva activa', v: `${fmtInt(kpis.totalReservo)} pz`, sub: `${kpis.enPropuesta} SKUs · ${pct}%` },
+          { k: 'Próx. arribo', v: kpis.proxArribo ? fmtFechaCorta(kpis.proxArribo) : '—', sub: `${fmtInt(kpis.futuros)} embarques por llegar`, color: theme.green },
+          { k: 'Método', v: m.corto, sub: m.desc },
+        ]}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+          <Segmented value={vista} onChange={setVista} options={[{ id: 'reservas', label: 'Reservas', badge: kpis.enPropuesta || undefined }, { id: 'crm', label: 'Forecast CRM' }]} />
+          <Segmented value={metodo} onChange={setMetodo} options={METODOS.map((x) => ({ id: x.id, label: x.label, title: x.desc }))} />
+          {vista === 'reservas' && <Segmented value={subvista} onChange={setSubvista} options={[{ id: 'armador', label: 'Armador' }, { id: 'landing', label: 'Propuestas', badge: propuestas.length || undefined }]} />}
         </div>
-        <button onClick={onNueva}
+      </Hero>
+
+      {vista === 'reservas' && subvista === 'armador' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginTop: 12 }}>
+          <KpiCard eyebrow="Recomendado" big={fmtInt(kpis.totalRecom)} bigSmall="pz" sub={`${m.desc} · 3 clientes`} />
+          <KpiCard eyebrow="Reservado" big={fmtInt(kpis.totalReservo)} bigSmall={`/ ${fmtInt(kpis.totalRecom)} pz`} sub={`${pct}% de la necesidad · ${kpis.enPropuesta} SKUs`} progress={pct} onClick={() => setHoja(true)} />
+          <KpiCard eyebrow="Arribos en 30 días" big={fmtInt(kpis.conArribo30)} bigSmall="SKUs" sub={`${fmtInt(kpis.pz30)} pz por llegar`} onClick={() => setF((p) => ({ ...p, arribo30: !p.arribo30 }))} badge={f.arribo30 ? { tone: 'blue', l: 'filtro activo' } : undefined} />
+          <KpiCard eyebrow="Propuestas generadas" big={fmtInt(propuestas.length)} sub={propuestas[0] ? `última: ${propuestas[0].nombre}` : 'ninguna todavía'} onClick={() => setSubvista('landing')} />
+        </div>
+      )}
+
+      {vista === 'reservas' && subvista === 'landing' && (
+        <div style={{ marginTop: 12 }}>
+          <Landing propuestas={propuestas} propuestaAbierta={propuestaAbierta} setPropuestaAbierta={setPropuestaAbierta} yoId={yoId}
+            onNueva={() => setSubvista('armador')}
+            onReabrir={async (p) => {
+              try {
+                if (propuesta && propuesta.id !== p.id && Object.keys(lineas).length) { toast.info('Ya tienes una reserva en borrador: genérala o vacíala antes de reabrir otra.'); return; }
+                await actualizarPropuestaDB(p.id, { estatus: 'borrador' });
+                await Promise.all([invalidarLanding(), invalidarPropuesta()]);
+                setSubvista('armador'); toast.ok('Propuesta reabierta como borrador');
+              } catch (e) { toast.error(`Error: ${e.message || e}`); }
+            }}
+            onEliminar={async (p) => {
+              if (!confirm(`¿Eliminar "${p.nombre}"?`)) return;
+              try { await eliminarPropuestaDB(p.id); if (propuestaAbierta?.id === p.id) setPropuestaAbierta(null); await invalidarLanding(); toast.ok('Propuesta eliminada'); } catch (e) { toast.error(`Error: ${e.message || e}`); }
+            }}
+            onActualizarLinea={onActualizarLinea} />
+        </div>
+      )}
+
+      {(vista === 'crm' || subvista === 'armador') && (
+        <Panel style={{ marginTop: 12 }} padding="8px 12px 10px"
+          titulo={vista === 'crm' ? 'Buscar y filtrar SKUs' : 'Detalle por SKU'}
+          meta={`${vista === 'crm' ? filasFiltradas.length : filasFiltradas.length} de ${filasBase.length} SKUs${vista === 'crm' ? '' : ' · click en la fila para el drill'}`}
+          acciones={<Buscador value={busqueda} onChange={setBusqueda} resultados={busqueda ? filasFiltradas.length : null} width={320} placeholder="Buscar: mouse inalámbrico, AC-93, balam…" />}>
+          <Filtros grupos={grupos} toggles={toggles} onToggle={toggleGrupo} onToggleFlag={onToggleFlag} onLimpiar={limpiar} activos={nActivos(f)} />
+        </Panel>
+      )}
+
+      {vista === 'reservas' && subvista === 'armador' && (
+        <div style={{ marginTop: 12 }}>
+          <TablaReservas filas={filasFiltradas} lineas={lineas} meses={meses} expandedSku={expandedSku}
+            onToggle={(sku) => setExpandedSku((p) => (p === sku ? null : sku))} onReservo={onReservo} orden={orden} onSort={onSort}
+            renderExpandido={(r) => <DrillSku fila={r} matriz={base.data.sellout.matriz.get(r.sku)} anios={base.data.sellout.anios} metodo={metodo} onClose={() => setExpandedSku(null)} />} />
+        </div>
+      )}
+
+      {vista === 'crm' && (
+        <div style={{ marginTop: 12 }}>
+          <Captura filas={filasFiltradas} soloMovimiento={f.soloMovimiento} clienteKey={clienteCrm} setClienteKey={setClienteCrm}
+            mesInicio={mesInicio} setMesInicio={setMesInicio} metodo={metodo} yoId={yoId} roadmapSet={roadmapSet} />
+        </div>
+      )}
+
+      {vista === 'reservas' && (
+        <button type="button" onClick={() => setHoja(true)} title="Abrir Mi reserva"
           style={{
-            padding: '8px 16px', borderRadius: 999,
-            background: '#FFF', color: '#0A0A0A', border: 0, cursor: 'pointer',
-            fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600,
-            boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
-            transition: 'transform 120ms ease, box-shadow 160ms ease',
+            position: 'fixed', right: 22, bottom: 22, zIndex: 60, display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 16px 0 14px', borderRadius: 999,
+            background: theme.surfaceInverse, color: theme.textOnInverse, border: bordeFlotante(theme), boxShadow: elevation(theme, 'flotante'),
+            fontFamily: TYPO.fontDisplay, fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.01em', cursor: 'pointer', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums',
+            transition: `transform ${DUR.tap}ms ${EASE}`,
           }}
-          onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.20)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.15)'; e.currentTarget.style.transform = 'none'; }}>
-          + Nueva propuesta
+          onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.96)'; }}
+          onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}>
+          <ShoppingCart size={14} strokeWidth={2} />
+          {labelPill}
+          {kpis.enPropuesta > 0 && <Pill tone="green" size="xs" style={{ marginLeft: 2 }}>{kpis.enPropuesta}</Pill>}
         </button>
-      </div>
-
-      {/* Panel de avisos disparados */}
-      {avisos.length > 0 && (
-        <div style={{ padding: 16, borderBottom: `1px solid ${theme.hairline || theme.border}` }}>
-          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: '#FF9500', marginBottom: 8 }}>🔔 Avisos de arribo · {avisos.length}</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {avisos.slice(0, 5).map(a => {
-              const vistoBy = Array.isArray(a.visto_por) ? a.visto_por : [];
-              const noVisto = !vistoBy.includes(yoId);
-              const lin = a.forecast_propuesta_lineas || {};
-              const fArribo = new Date(a.fecha_arribo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
-              const es3d = a.tipo === '3dias';
-              return (
-                <div key={a.id} onClick={() => onAvisoVisto && onAvisoVisto(a)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '9px 12px', borderRadius: 10,
-                    background: noVisto ? 'rgba(255,149,0,0.08)' : 'transparent',
-                    border: `1px solid ${noVisto ? 'rgba(255,149,0,0.25)' : theme.hairline || theme.border}`,
-                    cursor: 'pointer', fontSize: 12,
-                  }}>
-                  <span style={{ display: 'inline-flex', padding: '3px 8px', borderRadius: 999, background: es3d ? 'rgba(0,122,255,0.10)' : 'rgba(255,59,48,0.10)', color: es3d ? theme.accent : '#FF3B30', fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                    {es3d ? '3 días antes' : 'HOY'}
-                  </span>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text }}>
-                      {lin.descripcion || lin.sku}
-                    </div>
-                    <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 1 }}>
-                      <b style={{ color: theme.text }}>{lin.sku}</b> · arribo {fArribo} · reservar <b style={{ color: theme.accent }}>{fmtInt(a.piezas_a_reservar)} pz</b>
-                    </div>
-                  </div>
-                  {noVisto && <span style={{ width: 8, height: 8, borderRadius: 999, background: '#FF9500', flexShrink: 0 }} title="No visto" />}
-                </div>
-              );
-            })}
-            {avisos.length > 5 && (
-              <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', paddingTop: 4 }}>+{avisos.length - 5} avisos más</div>
-            )}
-          </div>
-        </div>
       )}
-      {propuestas.length === 0 ? (
-        <div style={{ padding: 40, textAlign: 'center', color: theme.textMuted, fontSize: 12.5 }}>
-          Aún no tienes propuestas generadas. Arma una en el <b style={{ color: theme.text }}>Armador</b>.
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${colsN}, minmax(0, 1fr))`, gap: 12, padding: 16 }}>
-          {propuestas.map((p, idx) => {
-            const lineas = p.forecast_propuesta_lineas || [];
-            const nSkus = lineas.length;
-            const totalPz = lineas.reduce((a, l) => a + (Number(l.reservo) || 0), 0);
-            const dgl = lineas.reduce((a, l) => a + (Number(l.reservo) || 0) * ((Number(l.necesidad_dgl) || 0) / Math.max(1, Number(l.recomendado) || 0)), 0);
-            const pce = lineas.reduce((a, l) => a + (Number(l.reservo) || 0) * ((Number(l.necesidad_pce) || 0) / Math.max(1, Number(l.recomendado) || 0)), 0);
-            const dct = lineas.reduce((a, l) => a + (Number(l.reservo) || 0) * ((Number(l.necesidad_dct) || 0) / Math.max(1, Number(l.recomendado) || 0)), 0);
-            const st = estatusStyle(p.estatus);
-            const fecha = p.generado_at ? new Date(p.generado_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
-            const abierta = propuestaAbierta?.id === p.id;
 
-            // Insertar panel expandido después del último item de la fila que contiene la card abierta
-            const esUltimoDeFila = ((idx + 1) % colsN === 0) || (idx === propuestas.length - 1);
-            const abrirEnEstaFila = abierta || (propuestaAbierta && propuestas.slice(Math.floor(idx / colsN) * colsN, Math.floor(idx / colsN) * colsN + colsN).some(x => x.id === propuestaAbierta.id));
-            const showPanelAqui = abrirEnEstaFila && esUltimoDeFila;
-
-            const card = (
-              <div key={p.id} onClick={() => setPropuestaAbierta(abierta ? null : p)}
-                style={{
-                  background: theme.surface,
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 12, padding: 14, cursor: 'pointer',
-                  transition: 'box-shadow 220ms ease, transform 220ms ease',
-                  boxShadow: abierta
-                    ? (isDark
-                        ? '0 8px 24px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.35)'
-                        : '0 12px 28px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.05)')
-                    : 'none',
-                  transform: abierta ? 'translateY(-1px)' : 'none',
-                }}
-                onMouseEnter={e => { if (!abierta) e.currentTarget.style.boxShadow = isDark ? '0 4px 12px rgba(0,0,0,0.35)' : '0 4px 12px rgba(0,0,0,0.06)'; }}
-                onMouseLeave={e => { if (!abierta) e.currentTarget.style.boxShadow = 'none'; }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</div>
-                    <div style={{ fontSize: 10.5, color: theme.textMuted, marginTop: 2 }}>{fecha} · {nSkus} SKU{nSkus === 1 ? '' : 's'}</div>
-                  </div>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{st.label}</span>
-                </div>
-                <div style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: theme.accent, fontVariantNumeric: 'tabular-nums', marginBottom: 8 }}>{fmtInt(totalPz)} <span style={{ fontSize: 11, color: theme.textMuted, fontWeight: 500 }}>pz</span></div>
-                <div style={{ display: 'flex', gap: 10, fontSize: 10.5, color: theme.textMuted, marginBottom: 12 }}>
-                  <span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 999, background: '#AF52DE', marginRight: 4, verticalAlign: 'middle' }} />DGL {fmtInt(dgl)}</span>
-                  <span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 999, background: '#34C759', marginRight: 4, verticalAlign: 'middle' }} />PCE {fmtInt(pce)}</span>
-                  <span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 999, background: '#FF9500', marginRight: 4, verticalAlign: 'middle' }} />DCT {fmtInt(dct)}</span>
-                </div>
-                <div style={{ display: 'flex', gap: 6, paddingTop: 10, borderTop: `1px solid ${theme.divider || theme.border}` }} onClick={e => e.stopPropagation()}>
-                  <button onClick={() => setPropuestaAbierta(abierta ? null : p)}
-                    style={{
-                      flex: 1, padding: '6px 10px', borderRadius: 999,
-                      background: abierta ? '#0A0A0A' : 'transparent',
-                      color: abierta ? '#FFF' : theme.text,
-                      border: `1px solid ${abierta ? '#0A0A0A' : theme.border}`,
-                      cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600,
-                    }}>
-                    {abierta ? 'Cerrar detalle' : 'Ver detalle'}
-                  </button>
-                  <button onClick={() => onReabrir(p)} style={{ flex: 1, padding: '6px 10px', borderRadius: 999, background: 'transparent', color: theme.accent, border: `1px solid ${theme.accent}`, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600 }}>Reabrir</button>
-                  <button onClick={() => onEliminar(p)} title="Eliminar" style={{ padding: '6px 10px', borderRadius: 999, background: 'transparent', color: theme.textFaint || theme.textMuted, border: `1px solid ${theme.border}`, cursor: 'pointer', fontSize: 12, lineHeight: 1 }}>×</button>
-                </div>
-              </div>
-            );
-
-            return (
-              <React.Fragment key={p.id}>
-                {card}
-                {showPanelAqui && propuestaAbierta && (
-                  <div style={{ gridColumn: `1 / -1` }}>
-                    <PropuestaDetallePanel propuesta={propuestaAbierta} yoId={yoId} theme={theme} isDark={isDark} onActualizarLinea={onActualizarLinea} onClose={() => setPropuestaAbierta(null)} />
-                  </div>
-                )}
-              </React.Fragment>
-            );
-          })}
-        </div>
-      )}
+      <HojaReserva abierto={hoja} onClose={() => setHoja(false)} theme={theme} propuesta={propuesta} lineas={lineas} filasPorSku={filasPorSku}
+        kpis={kpis} stats={stats} nombre={propuesta?.nombre || nombreDefault} saving={saving}
+        onRenombrar={async (v) => { try { const p = await asegurarPropuesta(); await actualizarPropuestaDB(p.id, { nombre: v }); invalidarPropuesta(); } catch (e) { toast.error(`Error: ${e.message || e}`); } }}
+        onGenerar={generarPropuesta} onVaciar={vaciarPropuesta}
+        onVerSku={(sku) => { setHoja(false); setBusqueda(sku); setExpandedSku(sku); setVista('reservas'); setSubvista('armador'); }}
+        onEliminarSku={eliminarLinea} />
     </div>
   );
-}
-
-// ─── Panel de detalle (inline) · seguimiento en 2 pasos ────
-function PropuestaDetallePanel({ propuesta, yoId, theme, isDark, onActualizarLinea, onClose }) {
-  const lineas = propuesta.forecast_propuesta_lineas || [];
-  const totalReservo = lineas.reduce((a, l) => a + (Number(l.reservo) || 0), 0);
-  const nCrm = lineas.filter(l => l.crm_subido_at).length;
-  const nComp = lineas.filter(l => l.comprado_at).length;
-
-  return (
-    <div style={{ marginTop: 8, background: theme.bg, borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div>
-          <div style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 700 }}>Seguimiento por SKU</div>
-          <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, marginTop: 2 }}>
-            <span style={{ color: nCrm === lineas.length ? '#34C759' : theme.text }}>{nCrm}/{lineas.length} CRM</span>
-            {' · '}
-            <span style={{ color: nComp === lineas.length ? '#34C759' : theme.text }}>{nComp}/{lineas.length} Compradas</span>
-            {' · '}
-            <span style={{ color: theme.textMuted, fontWeight: 500 }}>{fmtInt(totalReservo)} pz totales</span>
-          </div>
-        </div>
-        <button onClick={onClose} style={{ padding: '6px 12px', borderRadius: 999, background: 'transparent', color: theme.textMuted, border: `1px solid ${theme.border}`, cursor: 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 11, fontWeight: 600 }}>Cerrar</button>
-      </div>
-
-      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11.5 }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>SKU</th>
-              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Descripción</th>
-              <th style={{ textAlign: 'right', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Reservo</th>
-              <th style={{ textAlign: 'center', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>1 · CRM</th>
-              <th style={{ textAlign: 'center', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>2 · Comprado</th>
-              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Arribo estimado</th>
-              <th style={{ textAlign: 'right', padding: '8px 12px', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, fontWeight: 600, borderBottom: `1px solid ${theme.border}` }}>Pz a reservar</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lineas.map(l => <LineaSeguimientoRow key={l.id} linea={l} yoId={yoId} theme={theme} isDark={isDark} onActualizar={onActualizarLinea} />)}
-          </tbody>
-        </table>
-      </div>
-      <div style={{ marginTop: 10, fontSize: 10.5, color: theme.textMuted, lineHeight: 1.5 }}>
-        Al marcar <b style={{ color: theme.text }}>Comprado</b> con fecha de arribo se crean 2 avisos automáticos: uno 3 días antes y otro el día del arribo. Fernando y Karolina reciben notificación cuando lleguen.
-      </div>
-    </div>
-  );
-}
-
-function LineaSeguimientoRow({ linea, yoId, theme, isDark, onActualizar }) {
-  const reservo = Number(linea.reservo) || 0;
-  const [pzLocal, setPzLocal] = useState(linea.piezas_a_reservar_arribo == null ? String(reservo) : String(linea.piezas_a_reservar_arribo));
-  const [fecha, setFecha] = useState(linea.fecha_arribo_estimada || '');
-  useEffect(() => { setFecha(linea.fecha_arribo_estimada || ''); }, [linea.fecha_arribo_estimada]);
-  useEffect(() => { setPzLocal(linea.piezas_a_reservar_arribo == null ? String(reservo) : String(linea.piezas_a_reservar_arribo)); }, [linea.piezas_a_reservar_arribo, reservo]);
-
-  const crmDone = !!linea.crm_subido_at;
-  const compDone = !!linea.comprado_at;
-
-  const toggleCrm = () => {
-    onActualizar(linea, crmDone
-      ? { crm_subido_at: null, crm_subido_por: null }
-      : { crm_subido_at: new Date().toISOString(), crm_subido_por: yoId, estado: 'subido_crm' }
-    );
-  };
-  const toggleComp = () => {
-    if (compDone) {
-      onActualizar(linea, { comprado_at: null, comprado_por: null });
-    } else {
-      if (!fecha) { alert('Captura primero la fecha de arribo estimada.'); return; }
-      onActualizar(linea, {
-        comprado_at: new Date().toISOString(),
-        comprado_por: yoId,
-        fecha_arribo_estimada: fecha,
-        piezas_a_reservar_arribo: Number(pzLocal) || reservo,
-        estado: 'comprado',
-      });
-    }
-  };
-
-  const chk = (done, onClick, label) => (
-    <button onClick={onClick} title={label}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        padding: '3px 10px', borderRadius: 999, border: 0, cursor: 'pointer',
-        background: done ? 'rgba(52,199,89,0.14)' : 'transparent',
-        color: done ? '#0F8F4F' : theme.textMuted,
-        boxShadow: done ? 'none' : `inset 0 0 0 1px ${theme.border}`,
-        fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600,
-      }}>
-      <span style={{
-        width: 12, height: 12, borderRadius: 3,
-        background: done ? '#34C759' : 'transparent',
-        boxShadow: done ? 'none' : `inset 0 0 0 1.5px ${theme.textFaint || theme.textMuted}`,
-        color: '#FFF', fontSize: 9, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
-      }}>{done ? '✓' : ''}</span>
-      {done ? 'Hecho' : label}
-    </button>
-  );
-
-  const tdBase = { padding: '7px 12px', borderBottom: `1px solid ${theme.divider || theme.border}` };
-
-  return (
-    <tr>
-      <td style={{ ...tdBase, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.accent, fontWeight: 600 }}>{linea.sku}</td>
-      <td style={{ ...tdBase, color: theme.text, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={linea.descripcion}>{linea.descripcion || '—'}</td>
-      <td style={{ ...tdBase, textAlign: 'right', fontFamily: 'SF Mono, ui-monospace, monospace', fontWeight: 700, color: theme.text }}>{fmtInt(reservo)}</td>
-      <td style={{ ...tdBase, textAlign: 'center' }}>{chk(crmDone, toggleCrm, 'Subir')}</td>
-      <td style={{ ...tdBase, textAlign: 'center' }}>{chk(compDone, toggleComp, 'Comprar')}</td>
-      <td style={{ ...tdBase }}>
-        <input type="date" value={fecha}
-          onChange={e => setFecha(e.target.value)}
-          onBlur={() => { if (fecha !== (linea.fecha_arribo_estimada || '')) onActualizar(linea, { fecha_arribo_estimada: fecha || null }); }}
-          style={{ padding: '3px 6px', borderRadius: 6, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: TYPO.fontText, fontSize: 11, outline: 'none' }} />
-      </td>
-      <td style={{ ...tdBase, textAlign: 'right' }}>
-        <input value={pzLocal}
-          onChange={e => setPzLocal(e.target.value.replace(/[^\d]/g, ''))}
-          onFocus={e => e.currentTarget.select()}
-          onBlur={() => { const n = Number(pzLocal); if (!isNaN(n) && n !== (linea.piezas_a_reservar_arribo ?? reservo)) onActualizar(linea, { piezas_a_reservar_arribo: n }); }}
-          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          style={{ width: 66, padding: '3px 8px', borderRadius: 6, textAlign: 'right', border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, fontWeight: 600, outline: 'none' }} />
-      </td>
-    </tr>
-  );
-}
-
-// ─── Tarjeta Mi Propuesta (híbrido A+B) ───────────────
-function MiPropuestaContent({ theme, isDark, kpis, stats, lineas, propuesta, saving, onGenerar, onVaciar, nombre, onRenombrar, onVerSku, onEliminarSku }) {
-  const CLIS = [
-    { key: 'digitalife', label: 'Digitalife', dot: '#AF52DE' },
-    { key: 'pcel',       label: 'PCEL',       dot: '#34C759' },
-    { key: 'dicotech',   label: 'Dicotech',   dot: '#FF9500' },
-  ];
-  const totalRecom = kpis.totalRecom || 0;
-  const totalReservo = kpis.totalReservo || 0;
-  const pctCubierto = totalRecom > 0 ? Math.round((totalReservo / totalRecom) * 100) : 0;
-  const faltantes = Math.max(0, totalRecom - totalReservo);
-  const numLineas = Object.keys(lineas).length;
-  const generada = propuesta?.estatus === 'generada';
-
-  const colorPct = (p) => p >= 95 ? '#34C759' : p >= 70 ? '#FF9500' : '#FF3B30';
-
-  // Editor de nombre (input controlado local)
-  const [nombreLocal, setNombreLocal] = useState(nombre);
-  useEffect(() => setNombreLocal(nombre), [nombre]);
-
-  return (
-    <>
-      {/* Contenido scrolleable */}
-      <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
-      {/* Nombre editable */}
-      <div style={{ padding: '12px 16px 12px', borderBottom: `1px solid ${theme.hairline || theme.border}` }}>
-        <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.10em', fontWeight: 700, color: theme.textFaint || theme.textMuted, marginBottom: 4 }}>Nombre</div>
-        <input value={nombreLocal}
-          onChange={e => setNombreLocal(e.target.value)}
-          onBlur={() => { if (nombreLocal !== nombre) onRenombrar(nombreLocal); }}
-          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          style={{ width: '100%', padding: '7px 10px', border: `1px solid ${theme.border}`, background: theme.bg, borderRadius: 8, fontSize: 12, fontFamily: TYPO.fontText, color: theme.text, outline: 'none' }} />
-      </div>
-
-      {/* Hero KPI · piezas total */}
-      <div style={{ padding: '14px 16px 12px', background: `linear-gradient(180deg, rgba(0,122,255,0.05) 0%, transparent 100%)`, borderBottom: `1px solid ${theme.hairline || theme.border}` }}>
-        <div style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 700 }}>Piezas reservadas</div>
-        <div style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: theme.accent, lineHeight: 1, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
-          {fmtInt(totalReservo)} <span style={{ fontSize: 12, color: theme.textMuted, fontWeight: 500 }}>/ {fmtInt(totalRecom)} pz</span>
-        </div>
-        <div style={{ fontSize: 11.5, color: theme.textMuted, marginTop: 5 }}>
-          <b style={{ color: theme.text, fontWeight: 600 }}>{pctCubierto}% de la necesidad</b>
-          {faltantes > 0 && <> · <b style={{ color: '#FF9500', fontWeight: 600 }}>{fmtInt(faltantes)} pz</b> por reservar</>}
-        </div>
-      </div>
-
-      {/* Cobertura por cliente */}
-      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme.hairline || theme.border}` }}>
-        <div style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 700, marginBottom: 8 }}>Cobertura por cliente</div>
-        {CLIS.map(cli => {
-          const c = stats.cobertura[cli.key];
-          const pct = c.recom > 0 ? Math.round((c.reservo / c.recom) * 100) : 0;
-          const col = colorPct(pct);
-          return (
-            <div key={cli.key} style={{ marginBottom: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, fontSize: 11.5 }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 500, color: theme.text }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 999, background: cli.dot }} />
-                  {cli.label}
-                </span>
-                <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-                  <b style={{ color: col, fontWeight: 700 }}>{pct}%</b> · {fmtInt(c.reservo)} / {fmtInt(c.recom)}
-                </span>
-              </div>
-              <div style={{ height: 5, borderRadius: 999, background: theme.divider || '#F2F2F4', overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: 999, background: col, width: `${Math.min(100, pct)}%`, transition: 'width 300ms ease' }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* SKUs en la propuesta · lista con scroll interno */}
-      {stats.enPropuesta.length > 0 && (
-        <div style={{ padding: '12px 16px 4px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-            <span style={{ fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 700 }}>SKUs en la propuesta</span>
-            <span style={{ color: theme.accent, fontWeight: 600, fontSize: 10.5 }}>{stats.enPropuesta.length} SKUs · {fmtInt(totalReservo)} pz</span>
-          </div>
-          <div style={{ maxHeight: 220, overflowY: 'auto', margin: '0 -6px', padding: '0 6px' }}>
-            {stats.enPropuesta.map(s => (
-              <div key={s.sku}
-                style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6, padding: '7px 4px', borderBottom: `1px solid ${theme.divider || theme.border}`, fontSize: 11.5, alignItems: 'center' }}>
-                <div onClick={() => onVerSku(s.sku)} style={{ minWidth: 0, cursor: 'pointer' }}>
-                  <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, color: theme.accent, fontWeight: 600, display: 'block' }}>{s.sku}</span>
-                  <div title={s.descripcion} style={{ fontSize: 11, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180, marginTop: 1 }}>{s.descripcion}</div>
-                </div>
-                <span style={{ fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11.5, fontWeight: 700, color: theme.text, whiteSpace: 'nowrap' }}>{fmtInt(s.reservo)}<span style={{ fontSize: 9.5, color: theme.textFaint || theme.textMuted, fontWeight: 500, marginLeft: 2, fontFamily: TYPO.fontDisplay }}>pz</span></span>
-                <button onClick={(e) => { e.stopPropagation(); onEliminarSku && onEliminarSku(s.sku); }}
-                  title="Quitar de la propuesta"
-                  style={{ width: 22, height: 22, borderRadius: 999, border: 0, background: 'transparent', color: theme.textFaint || theme.textMuted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,59,48,0.10)'; e.currentTarget.style.color = '#FF3B30'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = theme.textFaint || theme.textMuted; }}>
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      </div>{/* fin contenido scrolleable */}
-
-      {/* Acciones · pie fijo */}
-      <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, borderTop: `1px solid ${theme.hairline || theme.border}`, background: theme.surface, flexShrink: 0 }}>
-        <button disabled={saving || numLineas === 0 || generada} onClick={onGenerar}
-          style={{
-            width: '100%', padding: '10px 16px', borderRadius: 999,
-            background: generada ? theme.border : '#0A0A0A',
-            color: '#FFF', border: 0, cursor: (saving || numLineas === 0) ? 'not-allowed' : 'pointer',
-            fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600,
-            opacity: (saving || numLineas === 0) ? 0.55 : 1,
-          }}>
-          {generada ? '✓ Propuesta generada' : 'Generar propuesta →'}
-        </button>
-        <button onClick={onVaciar} disabled={numLineas === 0}
-          style={{ width: '100%', padding: '10px 16px', borderRadius: 999, background: 'transparent', color: theme.textMuted, border: `1px solid ${theme.border}`, cursor: numLineas === 0 ? 'not-allowed' : 'pointer', fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, opacity: numLineas === 0 ? 0.5 : 1 }}>
-          Vaciar propuesta
-        </button>
-      </div>
-    </>
-  );
-}
-
-function DarkSelect({ label, value, onChange, options }) {
-  return (
-    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 999, padding: '5px 4px 5px 12px', border: '1px solid rgba(255,255,255,0.10)' }}>
-      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', fontWeight: 600 }}>{label}</span>
-      <select value={value} onChange={e => onChange(e.target.value)}
-        style={{
-          appearance: 'none', border: 0, background: 'transparent', color: '#FFF',
-          fontFamily: TYPO.fontDisplay, fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
-          padding: '2px 22px 2px 4px', outline: 'none',
-          backgroundImage: 'linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.55) 50%), linear-gradient(135deg, rgba(255,255,255,0.55) 50%, transparent 50%)',
-          backgroundPosition: 'calc(100% - 12px) 50%, calc(100% - 8px) 50%',
-          backgroundSize: '4px 4px, 4px 4px',
-          backgroundRepeat: 'no-repeat',
-        }}>
-        {options.map(o => <option key={o.v} value={o.v} style={{ background: '#0A0A0A', color: '#FFF' }}>{o.l}</option>)}
-      </select>
-    </label>
-  );
-}
-// ─── Heatmap Drill · Ultra-compacta ─────────────────────
-// Pill de 26×18 con 5 niveles de intensidad iOS blue.
-// Cabe en ~120px de alto. Filas = clientes, columnas = 12 meses.
-function HeatmapDrill({ sku, matriz, aniosDisponibles, drillYear, setDrillYear, theme, isDark, onClose }) {
-  const yearData = matriz?.get(drillYear) || null;
-  const CLIS = [
-    { key: 'digitalife', label: 'Digitalife', dot: '#AF52DE' },
-    { key: 'pcel',       label: 'PCEL',       dot: '#34C759' },
-    { key: 'dicotech',   label: 'Dicotech',   dot: '#FF9500' },
-  ];
-
-  // Máximo del SKU en el año para escalar intensidad
-  let maxCell = 0;
-  if (yearData) {
-    for (const cli of CLIS) {
-      const byMes = yearData.get(cli.key) || {};
-      for (let m = 1; m <= 12; m++) {
-        const v = byMes[m] || 0;
-        if (v > maxCell) maxCell = v;
-      }
-    }
-  }
-
-  const totalesMes = Array.from({ length: 12 }, () => 0);
-
-  // Estilo tipo Sell Out Dicotech: pill azul suave solo destaca los TOP.
-  // Los demás valores se muestran como texto plano (sin fondo).
-  const pillStyle = (val) => {
-    if (!val) return { bg: 'transparent', color: '#C7C7CC', border: 'transparent' };
-    const ratio = maxCell > 0 ? val / maxCell : 0;
-    // Top del año (≥60% del máximo del SKU) → pill azul iOS suave
-    if (ratio >= 0.60) return { bg: 'rgba(0,122,255,0.12)', color: '#0057D9', border: 'transparent' };
-    // El resto → texto plano
-    return { bg: 'transparent', color: theme.text, border: 'transparent' };
-  };
-
-  const cellTh = { fontFamily: TYPO.fontDisplay, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 600, padding: '2px 0', textAlign: 'center' };
-
-  return (
-    <div style={{ padding: '10px 16px 12px', background: isDark ? theme.bg : '#FAFAFC' }}>
-      {/* Toolbar compacto */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
-        <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 9.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: theme.textFaint || theme.textMuted, fontWeight: 600 }}>
-          Sell-out piezas · intensidad relativa al máximo del SKU
-        </span>
-        <div style={{ display: 'inline-flex', alignItems: 'center' }}>
-          <div style={{ display: 'inline-flex', gap: 2, padding: 2, background: theme.divider || '#F2F2F4', borderRadius: 999 }}>
-            {(aniosDisponibles.length ? aniosDisponibles : [drillYear]).map(a => (
-              <button key={a} onClick={() => setDrillYear(a)}
-                style={{
-                  padding: '3px 10px', borderRadius: 999, border: 0,
-                  background: a === drillYear ? theme.surface : 'transparent',
-                  color: a === drillYear ? theme.text : theme.textMuted,
-                  fontFamily: TYPO.fontDisplay, fontSize: 10.5, fontWeight: 600, cursor: 'pointer',
-                  boxShadow: a === drillYear ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                }}>{a}</button>
-            ))}
-          </div>
-          <button onClick={onClose} title="Cerrar"
-            style={{ marginLeft: 4, padding: '3px 8px', borderRadius: 999, border: 0, background: 'transparent', color: theme.textMuted, cursor: 'pointer', fontSize: 14, fontWeight: 400, lineHeight: 1 }}>×</button>
-        </div>
-      </div>
-
-      {/* Tabla ultra-compacta */}
-      <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '2px 1px', fontSize: 10.5 }}>
-        <thead>
-          <tr>
-            <th style={{ ...cellTh, textAlign: 'left', paddingLeft: 6, width: 82 }}>Cliente</th>
-            {NOMBRES_MES.slice(1).map(m => (
-              <th key={m} style={cellTh}>{m}</th>
-            ))}
-            <th style={{ ...cellTh, textAlign: 'right', paddingRight: 6, borderLeft: `1px solid ${theme.hairline || theme.border}`, width: 52 }}>Tot</th>
-          </tr>
-        </thead>
-        <tbody>
-          {CLIS.map(cli => {
-            const byMes = (yearData && yearData.get(cli.key)) || {};
-            let total = 0;
-            const cells = [];
-            for (let m = 1; m <= 12; m++) {
-              const v = byMes[m] || 0;
-              total += v;
-              totalesMes[m - 1] += v;
-              cells.push({ m, v });
-            }
-            return (
-              <tr key={cli.key}>
-                <td style={{ padding: '2px 6px', fontFamily: TYPO.fontDisplay, fontWeight: 500, fontSize: 10.5, color: theme.text, whiteSpace: 'nowrap' }}>
-                  <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 999, background: cli.dot, marginRight: 5, verticalAlign: 'middle' }} />
-                  {cli.label}
-                </td>
-                {cells.map(({ m, v }) => {
-                  const s = pillStyle(v);
-                  return (
-                    <td key={m} style={{ padding: 0, textAlign: 'center' }}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 26, height: 18, padding: '0 5px', borderRadius: 999,
-                        background: s.bg, color: s.color,
-                        fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10, fontWeight: 600,
-                        fontVariantNumeric: 'tabular-nums',
-                      }}>{v > 0 ? fmtInt(v) : '—'}</span>
-                    </td>
-                  );
-                })}
-                <td style={{ padding: '2px 6px 2px 2px', textAlign: 'right', borderLeft: `1px solid ${theme.hairline || theme.border}`, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, fontWeight: 700, color: theme.text }}>{fmtInt(total)}</td>
-              </tr>
-            );
-          })}
-          {/* Fila Total mes */}
-          <tr>
-            <td style={{ padding: '5px 6px 2px', fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.textMuted, borderTop: `1px solid ${theme.hairline || theme.border}` }}>Tot mes</td>
-            {totalesMes.map((t, i) => (
-              <td key={i} style={{ padding: '5px 0 2px', textAlign: 'center', borderTop: `1px solid ${theme.hairline || theme.border}`, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 10.5, fontWeight: 700, color: t > 0 ? theme.text : '#C7C7CC' }}>{t > 0 ? fmtInt(t) : '—'}</td>
-            ))}
-            <td style={{ padding: '5px 6px 2px 2px', textAlign: 'right', borderTop: `1px solid ${theme.hairline || theme.border}`, borderLeft: `1px solid ${theme.hairline || theme.border}`, fontFamily: 'SF Mono, ui-monospace, monospace', fontSize: 11, fontWeight: 700, color: theme.accent }}>{fmtInt(totalesMes.reduce((a, b) => a + b, 0))}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      {/* Legend compacta */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, fontSize: 9.5, color: theme.textMuted }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ display: 'inline-block', minWidth: 22, height: 14, borderRadius: 999, background: 'rgba(0,122,255,0.12)' }} />
-          Meses top (≥60% del máximo)
-        </span>
-        {!yearData && (
-          <span style={{ marginLeft: 'auto', color: theme.textFaint || theme.textMuted, fontStyle: 'italic' }}>Sin datos de sell-out para {drillYear}</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function EstadoPill({ estado, confirmado, reservo, recom, accent = '#007AFF' }) {
-  const styles = {
-    draft:         { bg: 'transparent', color: '#A1A1A6', label: '—' },
-    pend_confirmar:{ bg: 'rgba(0,122,255,0.10)', color: accent, label: 'Pendiente' },
-    confirmado:    { bg: 'rgba(52,199,89,0.12)', color: '#34C759', label: 'Confirmado' },
-    parcial:       { bg: 'rgba(255,149,0,0.12)', color: '#FF9500', label: `Parcial` },
-    no_aplica:     { bg: 'rgba(255,59,48,0.12)', color: '#FF3B30', label: 'N/A' },
-  };
-  const s = styles[estado] || styles.draft;
-  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: s.bg, color: s.color, whiteSpace: 'nowrap' }}>{s.label}</span>;
 }
