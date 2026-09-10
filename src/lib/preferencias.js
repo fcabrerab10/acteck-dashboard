@@ -17,8 +17,14 @@ export const MODOS_MENU = [
   { id: 'iphone',  label: 'iPhone',  desc: 'Barra inferior flotante con hojas.' },
 ];
 
+// Menú de la app móvil (src/movil): cajón lateral desde la izquierda o barra inferior por grupos.
+export const MODOS_MENU_MOVIL = [
+  { id: 'cajon', label: 'Cajón', desc: '☰ abre un cajón lateral con el árbol completo.' },
+  { id: 'barra', label: 'Barra', desc: 'Barra inferior: Inicio · General · Comercial · Clientes · Interno.' },
+];
+
 export const PREFS_DEFAULT = {
-  menu: { modo: 'sidebar', favoritos: ['inicio'], densidad: 'comoda', inicio: 'inicio' },
+  menu: { modo: 'sidebar', modoMovil: 'cajon', favoritos: ['inicio'], densidad: 'comoda', inicio: 'inicio' },
 };
 
 const LS_KEY = 'prefs_ui_v1';

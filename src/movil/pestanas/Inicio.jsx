@@ -34,8 +34,7 @@ export default function Inicio() {
     if (ex?.sku) { nav.agregarSku(ex.sku); nav.push(<FichaProducto />, 'ficha'); return; }
     if (ck) { abrirCliente(ck); return; }
     if (pagina === 'inventarioGlobal') { nav.push(<FichaProducto />, 'ficha'); return; }
-    if (pagina === 'actualizacion') { nav.irATab('mas'); return; }
-    nav.abrirProximamente(pagina === 'sellIn' ? 'Sell In global' : pagina);
+    nav.navegar({ pagina, label: pagina === 'sellIn' ? 'Sell In global' : undefined }); // rutas.js: Fuentes, Historial o "Próximamente"
   });
 
   // ── Hoy: pagos (vencidos/hoy) · arribos de hoy · marketing de hoy · pendientes · minutas y eventos ──
@@ -47,7 +46,7 @@ export default function Inicio() {
     (data?.marketing || []).filter((m) => m.fecha === hoyIso).forEach((m) => items.push({ key: `m${m.id}`, icon: Megaphone, color: theme.purple, titulo: m.nombre, sub: [nombreCliente(m.cliente), m.tipo].filter(Boolean).join(' · '), onClick: () => abrirCliente(m.cliente) }));
     (extra?.pendientes || []).forEach((p) => items.push({ key: `t${p.id}`, icon: ClipboardList, color: theme.green, titulo: p.titulo, sub: `${nombreCliente(p.cliente)}${p.responsable ? ` · ${p.responsable}` : ''}${p.fecha_entrega < hoyIso ? ' · atrasado' : ''}`, onClick: () => abrirCliente(p.cliente) }));
     (extra?.minutas || []).forEach((m) => items.push({ key: `n${m.id}`, icon: CalendarDays, color: theme.indigo, titulo: m.titulo || 'Minuta', sub: `${nombreCliente(m.cliente)} · reunión de hoy`, onClick: () => abrirCliente(m.cliente) }));
-    (data?.eventosEquipo || []).filter((e) => e.fecha_ini <= hoyIso && (!e.fecha_fin || e.fecha_fin >= hoyIso)).forEach((e) => items.push({ key: `e${e.id}`, icon: CalendarDays, color: theme.indigo, titulo: e.titulo, sub: e.tipo || 'Evento del equipo', onClick: () => nav.abrirProximamente('Pendientes & Calendario') }));
+    (data?.eventosEquipo || []).filter((e) => e.fecha_ini <= hoyIso && (!e.fecha_fin || e.fecha_fin >= hoyIso)).forEach((e) => items.push({ key: `e${e.id}`, icon: CalendarDays, color: theme.indigo, titulo: e.titulo, sub: e.tipo || 'Evento del equipo', onClick: () => nav.navegar({ pagina: 'adminInterna' }) }));
     (data?.eventosCliente || []).filter((e) => e.fecha === hoyIso).forEach((e) => items.push({ key: `c${e.id}`, icon: Users, color: theme.teal, titulo: e.descripcion || 'Evento con cliente', sub: [nombreCliente(e.cliente), e.lugar].filter(Boolean).join(' · '), onClick: () => abrirCliente(e.cliente) }));
     return items;
   }, [r, extra, data, hoyIso, theme]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -89,7 +88,7 @@ export default function Inicio() {
 
       <KpiGrid style={{ marginTop: 12 }}>
         <KpiM eyebrow={`Fact Neta YTD ${anio}`} big={fmtM(r.otro.fact_neta)} sub={r.yoyOtro != null ? `${deltaPct(r.yoyOtro)} vs ${anio - 1}` : undefined} progress={r.pctOtro} pill={r.pctOtro != null ? { tone: tonoCuota(r.pctOtro), label: `${Math.round(r.pctOtro)}%` } : undefined} />
-        <KpiM eyebrow="Cartera vencida" big={fmtM(r.cartera.vencido)} bigColor={r.cartera.vencido > 0 ? theme.red : undefined} sub={r.cartera.saldo > 0 ? `${pct(r.cartera.pctVencido, 0)} de ${fmtM(r.cartera.saldo)}` : 'sin saldo'} onClick={() => nav.abrirProximamente('Cobranza')} />
+        <KpiM eyebrow="Cartera vencida" big={fmtM(r.cartera.vencido)} bigColor={r.cartera.vencido > 0 ? theme.red : undefined} sub={r.cartera.saldo > 0 ? `${pct(r.cartera.pctVencido, 0)} de ${fmtM(r.cartera.saldo)}` : 'sin saldo'} onClick={() => nav.navegar({ pagina: 'cobranzaGlobal' })} />
         <KpiM eyebrow="Inventario comercial" big={fmtM(r.inv.valor)} sub={r.inv.cobertura != null ? `${r.inv.cobertura} d de cobertura` : `${r.inv.skus} SKUs con stock`} pill={r.inv.skusRiesgo > 0 ? { tone: 'red', label: `${r.inv.skusRiesgo} en riesgo` } : undefined} onClick={() => nav.push(<FichaProducto />, 'ficha')} />
         <KpiM eyebrow={`Sell-out ${soMes ? MESES[soMes - 1] : 'últ. mes'}`} big={soTotal > 0 ? fmtM(soTotal) : '—'} sub={soUltimo.length ? `${soUltimo.length} clientes · último mes cerrado` : 'sin sell-out cargado'} />
       </KpiGrid>

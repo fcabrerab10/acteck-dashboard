@@ -69,8 +69,7 @@ export default function Alertas() {
     ejecutarAccion(a, (ck, pagina, ex) => {
       if (ex?.sku || pagina === 'inventarioGlobal') { if (ex?.sku) nav.agregarSku(ex.sku); nav.push(<FichaProducto />, 'ficha'); return; }
       if (ck) { nav.push(<FichaCliente clienteKey={ck} />, `cliente-${ck}`); return; }
-      if (pagina === 'actualizacion') { nav.irATab('mas'); return; }
-      nav.abrirProximamente(pagina);
+      nav.navegar({ pagina }); // rutas.js: Fuentes, Historial o "Próximamente"
     });
   };
   const leerPila = (p) => { const ids = p.alertas.filter((a) => esNueva(a, lecturas)).map((a) => a.id); if (ids.length) marcarLeidas(ids).catch(() => {}); };

@@ -3,11 +3,11 @@
 // Grupos: Mi cuenta · Apariencia · Menú · Notificaciones · Atajos · Acerca de.
 // Nombre y cargo se guardan en perfiles (nombre / puesto) vía RPC set_perfil_propio (la fila propia).
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Trash2, User, Briefcase, Mail, KeyRound, Sun, Moon, Palette, Monitor, Rows3, Rows4, Sparkles, LayoutGrid, Star, ArrowUp, ArrowDown, X, Bell, Keyboard, Info, LogOut, Shield, ChevronRight } from 'lucide-react';
+import { Camera, Trash2, User, Briefcase, Mail, KeyRound, Sun, Moon, Palette, Monitor, Rows3, Rows4, Sparkles, LayoutGrid, Star, ArrowUp, ArrowDown, X, Bell, Keyboard, Info, LogOut, Shield, ChevronRight, Smartphone } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
-import { usePreferencias, setPreferencia, getPath, MODOS_MENU } from '../../lib/preferencias';
+import { usePreferencias, setPreferencia, getPath, MODOS_MENU, MODOS_MENU_MOVIL } from '../../lib/preferencias';
 import { puedeConfigurar } from '../../lib/permisos';
 import { versionLabel, APP_VERSION } from '../../lib/version';
 import { AvatarImg, usePerfilVivo, aplicarPerfilLocal, quitarAvatar } from '../../lib/avatar';
@@ -114,6 +114,9 @@ export default function PreferenciasHoja({ abierto, onClose, perfil: perfilProp,
         <Grupo theme={theme}>
           <Fila theme={theme} primera icon={LayoutGrid} label="Modo" sub={MODOS_MENU.find((m) => m.id === menu.modo)?.desc}>
             <Segmented value={menu.modo} onChange={(v) => setPreferencia('menu.modo', v)} options={MODOS_MENU.map((m) => ({ id: m.id, label: m.id === 'sidebar' ? 'iPad' : m.label, title: m.desc }))} />
+          </Fila>
+          <Fila theme={theme} icon={Smartphone} label="En el celular" sub={MODOS_MENU_MOVIL.find((m) => m.id === (menu.modoMovil || 'cajon'))?.desc}>
+            <Segmented value={menu.modoMovil || 'cajon'} onChange={(v) => setPreferencia('menu.modoMovil', v)} options={MODOS_MENU_MOVIL.map((m) => ({ id: m.id, label: m.label, title: m.desc }))} />
           </Fila>
           <Fila theme={theme} icon={Star} label="Favoritos" sub={favs.length ? `${favs.length} fijado${favs.length === 1 ? '' : 's'} · aparecen primero en el menú` : 'Marca la ★ en cualquier pantalla del menú'} />
           {favs.map((n, i) => (

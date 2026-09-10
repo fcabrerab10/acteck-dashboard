@@ -1,38 +1,42 @@
-// App móvil V3 · shell con cinco pestañas (Inicio · Clientes · Alertas · Buscar · Más), pila de
-// navegación propia por pestaña (push/pop 340 ms EASE, volver deslizando desde el borde), hoja
-// global desde abajo (HojaM), deslizar para actualizar (React Query + invalidateDataCache) y la
-// canasta de la Ficha de producto. No depende de `paginaActiva` de App.jsx.
+// App móvil V3 · shell con el MISMO árbol y orden que el menú web (construirArbol) y dos modos elegibles por el
+// usuario (perfiles.preferencias → menu.modoMovil, cambio instantáneo):
+//   · "cajon" (default): barra superior "☰ Menú · lupa · campana · avatar"; ☰ o deslizar desde el borde izquierdo
+//     abre un cajón lateral que replica el sidebar iPad (perfil, FAVORITOS, grupos, clientes con punto). Sin barra inferior.
+//   · "barra": barra inferior flotante Inicio · General · Comercial · Clientes · Interno · avatar; cada grupo abre una
+//     hoja desde abajo con sus pestañas (HojaGrupo). Lupa y campana en la barra superior.
+// Cuatro pestañas raíz con pila propia (inicio · clientes · alertas · buscar; push/pop 340 ms EASE, volver deslizando),
+// hoja global desde abajo (HojaM), deslizar para actualizar y la canasta de la Ficha de producto.
+// Nodo → pantalla: SOLO en src/movil/rutas.js (nav.navegar(nodo)).
 //
 //   <MovilApp perfil={perfil} onCerrarSesion={handleLogout} />   (App monta <ToastHost/> aparte)
-//
-// Las pestañas son React.lazy: sólo se descarga la que se abre.
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutGrid, Users, Bell, Search, Grid2x2 } from 'lucide-react';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
-import { EASE, DUR, reduceMotion } from '../lib/motion';
-import { elevation, bordeFlotante } from '../lib/elevation';
+import { DUR, reduceMotion } from '../lib/motion';
 import { queryClient } from '../lib/queryClient';
 import { invalidateDataCache } from '../lib/queries';
+import { usePreferencias } from '../lib/preferencias';
+import { construirArbol, buscarNodo, idNodo } from '../components/nav/arbol';
 import useContadorNotificaciones from '../components/notificaciones/useContadorNotificaciones';
-import { NavContext, Pantalla, ALTO_BARRA } from './nav';
+import { NavContext, Pantalla } from './nav';
 import { HojaM, Skeleton, Proximamente } from './piezas';
 import { leerLS, guardarLS } from './util';
+import { destino, TABS_RAIZ } from './rutas';
+import BarraSuperior from './menu/BarraSuperior';
+import BarraGrupos from './menu/BarraGrupos';
+import Cajon, { anchoCajon } from './menu/Cajon';
+import HojaGrupo from './menu/HojaGrupo';
 
 const Inicio   = lazy(() => import('./pestanas/Inicio'));
 const Clientes = lazy(() => import('./pestanas/Clientes'));
 const Alertas  = lazy(() => import('./pestanas/Alertas'));
 const Buscar   = lazy(() => import('./pestanas/Buscar'));
-const Mas      = lazy(() => import('./pestanas/Mas'));
+const PreferenciasHoja = lazy(() => import('../components/perfil/PreferenciasHoja'));
 
-const TABS = [
-  { id: 'inicio',   label: 'Inicio',   icon: LayoutGrid, Comp: Inicio },
-  { id: 'clientes', label: 'Clientes', icon: Users,      Comp: Clientes },
-  { id: 'alertas',  label: 'Alertas',  icon: Bell,       Comp: Alertas },
-  { id: 'buscar',   label: 'Buscar',   icon: Search,     Comp: Buscar },
-  { id: 'mas',      label: 'Más',      icon: Grid2x2,    Comp: Mas },
-];
+const RAIZ = { inicio: Inicio, clientes: Clientes, alertas: Alertas, buscar: Buscar };
+const TAB_A_NODO = { inicio: 'inicio', clientes: 'resumenClientes' };
 const LS_CANASTA = 'movil_canasta_v1';
+const BORDE = 24; // px desde el borde izquierdo que abren el cajón
 
 function Cargando() {
   return (
@@ -50,15 +54,24 @@ let seq = 0;
 
 export default function MovilApp({ perfil, onCerrarSesion }) {
   const { theme } = useTheme();
+  const { menu } = usePreferencias();
+  const modo = menu.modoMovil === 'barra' ? 'barra' : 'cajon';
+  const arbol = useMemo(() => { try { return construirArbol(perfil); } catch { return []; } }, [perfil]);
+
   const [tab, setTab] = useState('inicio');
   const [visitadas, setVisitadas] = useState(() => new Set(['inicio']));
-  const [pilas, setPilas] = useState(() => Object.fromEntries(TABS.map((t) => [t.id, []]))); // tab → [{ key, el, fase }]
-  const [hoja, setHoja] = useState(null);       // { titulo, sub, alto, contenido, acciones }
+  const [pilas, setPilas] = useState(() => Object.fromEntries(TABS_RAIZ.map((t) => [t, []]))); // tab → [{ key, el, fase }]
+  const [activoId, setActivoId] = useState('inicio');   // nodo del árbol resaltado en los menús
+  const [hoja, setHoja] = useState(null);               // { titulo, sub, alto, contenido, acciones, grupo? }
   const [hojaAbierta, setHojaAbierta] = useState(false);
+  const [perfilAbierto, setPerfilAbierto] = useState(false);
+  const [cajonAbierto, setCajonAbierto] = useState(false);
+  const [arrastreCajon, setArrastreCajon] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [canasta, setCanasta] = useState(() => leerLS(LS_CANASTA, []).filter((s) => typeof s === 'string').slice(0, 12));
   const contador = useContadorNotificaciones();
   const timers = useRef([]);
+  const raiz = useRef(null);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   useEffect(() => { guardarLS(LS_CANASTA, canasta); }, [canasta]);
 
@@ -89,20 +102,46 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
   const popTodo = useCallback((t = tab) => setPilas((p) => ({ ...p, [t]: [] })), [tab]);
 
   const tabRef = useRef(tab); tabRef.current = tab;
+  const tabPrev = useRef('inicio');
   const irATab = useCallback((id) => {
+    if (!RAIZ[id]) return;
     setVisitadas((v) => (v.has(id) ? v : new Set(v).add(id)));
     if (tabRef.current === id) {
       // Tocar la pestaña activa = volver a su raíz y subir al inicio (como iOS).
       popTodo(id);
       document.querySelector(`[data-tab="${id}"] [data-pantalla="raiz"] > div`)?.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    } else if (TAB_A_NODO[tabRef.current]) tabPrev.current = tabRef.current; // desde alertas/buscar no se pisa la anterior
+    if (TAB_A_NODO[id]) setActivoId(TAB_A_NODO[id]);
     setTab(id);
   }, [popTodo]);
+  // Lupa / campana: tocarlas con su pestaña al frente vuelve a la pestaña anterior.
+  const alternarTab = useCallback((id) => { if (tabRef.current === id) irATab(tabPrev.current || 'inicio'); else irATab(id); }, [irATab]);
 
   // ── Hoja ──
   const abrirHoja = useCallback((opts) => { setHoja(opts); setHojaAbierta(true); }, []);
   const cerrarHoja = useCallback(() => { setHojaAbierta(false); luego(() => setHoja(null), DUR.page); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const abrirProximamente = useCallback((que) => abrirHoja({ titulo: que || 'Próximamente', alto: '46vh', contenido: <Proximamente que={que} /> }), [abrirHoja]);
+
+  // ── Nodo del árbol → pantalla (src/movil/rutas.js) ──
+  const navegar = useCallback((nodo) => {
+    if (!nodo || nodo.disabled) return;
+    const id = nodo.id || idNodo(nodo.clienteKey || null, nodo.pagina);
+    const label = nodo.label || buscarNodo(arbol, id)?.label;
+    const d = destino({ pagina: nodo.pagina, clienteKey: nodo.clienteKey || null, label });
+    if (d.tipo === 'tab') { irATab(d.tab); return; }
+    if (d.tipo === 'push') { setActivoId(id); push(d.el, d.key); return; }
+    abrirProximamente(d.label);
+  }, [arbol, irATab, push, abrirProximamente]);
+
+  const abrirGrupo = useCallback((id) => {
+    const g = arbol.find((x) => x.id === id);
+    abrirHoja({ titulo: id === 'clientesPropios' ? 'Clientes' : g?.label || 'Menú', grupo: id, contenido: <HojaGrupo entrada={id} /> });
+  }, [arbol, abrirHoja]);
+  const onEntradaBarra = useCallback((id) => {
+    if (id === 'inicio') { irATab('inicio'); return; }
+    if (id === 'perfil') { setPerfilAbierto(true); return; }
+    abrirGrupo(id);
+  }, [irATab, abrirGrupo]);
 
   // ── Refresco ──
   const refrescar = useCallback(async () => {
@@ -116,32 +155,70 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
   const quitarSku = useCallback((sku) => setCanasta((c) => c.filter((x) => x !== sku)), []);
   const limpiarCanasta = useCallback(() => setCanasta([]), []);
 
-  const ctx = useMemo(() => ({
-    perfil, onCerrarSesion, tab, irATab, push, pop, abrirHoja, cerrarHoja, abrirProximamente, refrescar, refreshKey,
-    canasta, agregarSku, quitarSku, limpiarCanasta,
-  }), [perfil, onCerrarSesion, tab, irATab, push, pop, abrirHoja, cerrarHoja, abrirProximamente, refrescar, refreshKey, canasta, agregarSku, quitarSku, limpiarCanasta]);
+  // ── Cajón: abrir deslizando desde el borde izquierdo (sólo en la raíz de la pestaña; sobre una pantalla
+  //    empujada ese gesto es "volver", lo maneja <Pantalla/>) ──
+  const pilasRef = useRef(pilas); pilasRef.current = pilas;
+  const modoRef = useRef(modo); modoRef.current = modo;
+  const cajonRef = useRef(cajonAbierto); cajonRef.current = cajonAbierto;
+  useEffect(() => {
+    const el = raiz.current; if (!el) return undefined;
+    let st = null; let dx = 0;
+    const onStart = (e) => {
+      const t = e.touches[0];
+      if (modoRef.current !== 'cajon' || cajonRef.current || t.clientX > BORDE || pilasRef.current[tabRef.current]?.length) { st = null; return; }
+      st = { x: t.clientX, y: t.clientY, t0: Date.now(), ok: null }; dx = 0;
+    };
+    const onMove = (e) => {
+      if (!st) return;
+      const t = e.touches[0]; const ddx = t.clientX - st.x, ddy = t.clientY - st.y;
+      if (st.ok == null) { if (Math.abs(ddx) < 8 && Math.abs(ddy) < 8) return; st.ok = ddx > 0 && Math.abs(ddx) > Math.abs(ddy) * 1.2; }
+      if (!st.ok) return;
+      if (e.cancelable) e.preventDefault();
+      dx = Math.max(0, Math.min(anchoCajon(), ddx)); setArrastreCajon(dx);
+    };
+    const onEnd = () => {
+      if (!st) return;
+      const ok = st.ok; const rapido = Date.now() - st.t0 < 300 && dx > 30; st = null;
+      if (ok && (dx > anchoCajon() / 3 || rapido)) setCajonAbierto(true);
+      setArrastreCajon(null);
+    };
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd);
+    el.addEventListener('touchcancel', onEnd);
+    return () => { el.removeEventListener('touchstart', onStart); el.removeEventListener('touchmove', onMove); el.removeEventListener('touchend', onEnd); el.removeEventListener('touchcancel', onEnd); };
+  }, []);
 
-  const dark = theme.mode === 'dark';
-  const badge = contador.pilas;
+  // Al cambiar de modo se cierra lo que sea propio del otro (cajón / hoja de grupo).
+  useEffect(() => { setCajonAbierto(false); if (hoja?.grupo) cerrarHoja(); }, [modo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ctx = useMemo(() => ({
+    perfil, onCerrarSesion, arbol, modo, tab, activoId, irATab, push, pop, navegar, abrirHoja, cerrarHoja, abrirProximamente, abrirPerfil: () => setPerfilAbierto(true),
+    refrescar, refreshKey, canasta, agregarSku, quitarSku, limpiarCanasta,
+  }), [perfil, onCerrarSesion, arbol, modo, tab, activoId, irATab, push, pop, navegar, abrirHoja, cerrarHoja, abrirProximamente, refrescar, refreshKey, canasta, agregarSku, quitarSku, limpiarCanasta]);
+
+  const sinBarra = modo === 'cajon';
+  const activoBarra = perfilAbierto ? 'perfil' : hojaAbierta && hoja?.grupo ? hoja.grupo : tab === 'inicio' ? 'inicio' : tab === 'clientes' ? 'clientesPropios' : null;
 
   return (
     <NavContext.Provider value={ctx}>
       <style>{`@keyframes movilGiro{to{transform:rotate(360deg)}} [data-movil] button{-webkit-tap-highlight-color:transparent} [data-movil]{-webkit-text-size-adjust:100%}`}</style>
-      <div data-movil style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText }}>
-        {TABS.map(({ id, Comp }) => {
+      <div ref={raiz} data-movil data-modo={modo} style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText }}>
+        {TABS_RAIZ.map((id) => {
           if (!visitadas.has(id)) return null;
+          const Comp = RAIZ[id];
           const pila = pilas[id];
           const activa = id === tab;
           const topIdx = pila.length - 1;
           return (
             <div key={id} data-tab={id} style={{ position: 'absolute', inset: 0, display: activa ? 'block' : 'none' }}>
-              <Pantalla id="raiz" cubierta={pila.some((e) => e.fase !== 'saliendo')} onRefrescar={refrescar}>
+              <Pantalla id="raiz" cubierta={pila.some((e) => e.fase !== 'saliendo')} onRefrescar={refrescar} sinBarraInferior={sinBarra}>
                 <Suspense fallback={<Cargando />}>
                   <Comp key={refreshKey} />
                 </Suspense>
               </Pantalla>
               {pila.map((e, i) => (
-                <Pantalla key={e.key} id={e.key} fase={e.fase} puedeVolver onPop={pop} onRefrescar={refrescar}
+                <Pantalla key={e.key} id={e.key} fase={e.fase} puedeVolver onPop={pop} onRefrescar={refrescar} sinBarraInferior={sinBarra}
                   cubierta={i < topIdx && pila.slice(i + 1).some((x) => x.fase !== 'saliendo')}>
                   <Suspense fallback={<Cargando />}>{e.el}</Suspense>
                 </Pantalla>
@@ -150,48 +227,23 @@ export default function MovilApp({ perfil, onCerrarSesion }) {
           );
         })}
 
-        <BarraTabs tab={tab} onTab={irATab} badge={badge} badgeCritica={contador.criticaNueva} theme={theme} dark={dark} />
+        <BarraSuperior modo={modo} tab={tab} badge={contador.pilas} badgeCritica={contador.criticaNueva} perfil={perfil}
+          onMenu={() => setCajonAbierto(true)} onBuscar={() => alternarTab('buscar')} onAlertas={() => alternarTab('alertas')} onAvatar={() => setPerfilAbierto(true)} />
+
+        {modo === 'barra' && <BarraGrupos arbol={arbol} activo={activoBarra} onEntrada={onEntradaBarra} perfil={perfil} />}
+        {modo === 'cajon' && <Cajon abierto={cajonAbierto} arrastre={arrastreCajon} onClose={() => setCajonAbierto(false)} onAbrirPerfil={() => setPerfilAbierto(true)} />}
 
         <HojaM abierto={hojaAbierta && !!hoja} onClose={cerrarHoja} titulo={hoja?.titulo} sub={hoja?.sub} alto={hoja?.alto || '78vh'} acciones={hoja?.acciones}>
           {hoja?.contenido}
         </HojaM>
+
+        {perfilAbierto && (
+          <Suspense fallback={null}>
+            <PreferenciasHoja abierto={perfilAbierto} onClose={() => setPerfilAbierto(false)} perfil={perfil} onCerrarSesion={onCerrarSesion}
+              onNavegar={(ck, pagina) => navegar({ clienteKey: ck, pagina })} />
+          </Suspense>
+        )}
       </div>
     </NavContext.Provider>
-  );
-}
-
-function BarraTabs({ tab, onTab, badge, badgeCritica, theme, dark }) {
-  const marfil = theme.key === 'marfil';
-  return (
-    <nav aria-label="Pestañas" style={{
-      position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(12px + env(safe-area-inset-bottom))', zIndex: 60,
-      width: 'min(calc(100% - 24px), 440px)', height: ALTO_BARRA, padding: '0 6px', borderRadius: 999, boxSizing: 'border-box',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2,
-      background: dark ? 'rgba(28,28,30,0.82)' : marfil ? 'rgba(255,251,244,0.86)' : 'rgba(255,255,255,0.84)',
-      backdropFilter: 'saturate(180%) blur(24px)', WebkitBackdropFilter: 'saturate(180%) blur(24px)',
-      border: bordeFlotante(theme), boxShadow: elevation(theme, 'flotante'), fontFamily: TYPO.fontText,
-    }}>
-      {TABS.map(({ id, label, icon: Icon }) => {
-        const on = tab === id;
-        return (
-          <button key={id} type="button" onClick={() => onTab(id)} aria-current={on ? 'page' : undefined} aria-label={label}
-            style={{
-              position: 'relative', flex: 1, height: 44, minWidth: 0, padding: '0 4px', border: 0, borderRadius: 999, cursor: 'pointer',
-              display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
-              background: on ? (theme.surfaceInverse || theme.surfaceDark) : 'transparent', color: on ? (theme.textOnInverse || theme.textOnDark) : theme.textMuted,
-              transition: `background ${DUR.state}ms ${EASE}, color ${DUR.state}ms ${EASE}`,
-            }}>
-            <Icon size={20} strokeWidth={on ? 2.2 : 1.9} />
-            <span style={{ fontSize: 10, fontWeight: on ? 600 : 500, letterSpacing: '0.01em', fontFamily: TYPO.fontDisplay, whiteSpace: 'nowrap' }}>{label}</span>
-            {id === 'alertas' && badge > 0 && (
-              <span aria-label={`${badge} con novedades`} style={{
-                position: 'absolute', top: 4, left: 'calc(50% + 6px)', minWidth: 16, height: 16, padding: '0 4px', borderRadius: 999, boxSizing: 'border-box',
-                background: badgeCritica ? theme.red : theme.accent, color: theme.textOnDark || '#FFF', fontFamily: TYPO.fontDisplay, fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center', fontVariantNumeric: 'tabular-nums',
-              }}>{badge > 9 ? '9+' : badge}</span>
-            )}
-          </button>
-        );
-      })}
-    </nav>
   );
 }

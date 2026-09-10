@@ -2,7 +2,8 @@
 //
 // <Pantalla/> es el contenedor con scroll de cada pantalla: transición push/pop (340 ms EASE),
 // gesto de volver deslizando desde el borde izquierdo (touch) y deslizar para actualizar
-// (touch, con el scroll arriba del todo). El padding inferior deja sitio a la barra de pestañas.
+// (touch, con el scroll arriba del todo). El padding superior deja sitio a la barra superior (☰ · lupa · campana)
+// y el inferior a la barra de grupos (sólo en modo "barra"; en modo "cajón" no hay barra inferior).
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useTheme } from '../lib/themeContext';
@@ -12,11 +13,14 @@ export const NavContext = createContext(null);
 export const useNav = () => useContext(NavContext);
 
 export const ALTO_BARRA = 56;
+export const ALTO_BARRA_SUP = 48;
 export const PADDING_INFERIOR = `calc(${ALTO_BARRA + 34}px + env(safe-area-inset-bottom))`;
+export const PADDING_INFERIOR_SIN_BARRA = `calc(28px + env(safe-area-inset-bottom))`;
+export const PADDING_SUPERIOR = `calc(env(safe-area-inset-top) + ${ALTO_BARRA_SUP + 6}px)`;
 
 const UMBRAL_REFRESCO = 72;
 
-export function Pantalla({ fase = 'activa', cubierta = false, puedeVolver = false, onPop, onRefrescar, children, style, id }) {
+export function Pantalla({ fase = 'activa', cubierta = false, puedeVolver = false, onPop, onRefrescar, sinBarraInferior = false, children, style, id }) {
   const { theme } = useTheme();
   const ref = useRef(null);
   const scroll = useRef(null);
@@ -104,7 +108,7 @@ export function Pantalla({ fase = 'activa', cubierta = false, puedeVolver = fals
       pointerEvents: cubierta ? 'none' : 'auto', ...style,
     }}>
       {onRefrescar && (
-        <div aria-hidden style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top) + 8px)', left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 2, opacity: pull > 8 ? Math.min(1, pull / UMBRAL_REFRESCO) : 0, transform: `translateY(${Math.max(0, pull - 28)}px)`, transition: pull === 0 ? `opacity ${DUR.state}ms ${EASE}, transform ${DUR.content}ms ${EASE}` : 'none' }}>
+        <div aria-hidden style={{ position: 'absolute', top: `calc(${PADDING_SUPERIOR} + 2px)`, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 2, opacity: pull > 8 ? Math.min(1, pull / UMBRAL_REFRESCO) : 0, transform: `translateY(${Math.max(0, pull - 28)}px)`, transition: pull === 0 ? `opacity ${DUR.state}ms ${EASE}, transform ${DUR.content}ms ${EASE}` : 'none' }}>
           <span style={{ width: 30, height: 30, borderRadius: 999, background: theme.surface, border: `1px solid ${theme.border}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: pull >= UMBRAL_REFRESCO || refrescando ? theme.accent : theme.textMuted }}>
             <RefreshCw size={15} strokeWidth={2.2} style={{ transform: refrescando ? undefined : `rotate(${pull * 3}deg)`, animation: refrescando ? 'movilGiro 0.9s linear infinite' : 'none' }} />
           </span>
@@ -112,7 +116,7 @@ export function Pantalla({ fase = 'activa', cubierta = false, puedeVolver = fals
       )}
       <div ref={scroll} style={{
         position: 'absolute', inset: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain',
-        paddingTop: `calc(env(safe-area-inset-top) + 8px)`, paddingBottom: PADDING_INFERIOR, boxSizing: 'border-box',
+        paddingTop: PADDING_SUPERIOR, paddingBottom: sinBarraInferior ? PADDING_INFERIOR_SIN_BARRA : PADDING_INFERIOR, boxSizing: 'border-box',
         transform: pull > 0 ? `translateY(${pull}px)` : 'none', transition: pull === 0 ? `transform ${DUR.content}ms ${EASE}` : 'none',
       }}>
         {children}

@@ -15,7 +15,6 @@ import FichaProducto from '../FichaProducto';
 
 const LS_RECIENTES = 'movil_buscar_recientes_v1';
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-const PESTANAS_MOVIL = { inicio: 'inicio', inventarioGlobal: 'ficha', estrategiaPrecios: 'ficha' };
 
 export default function Buscar() {
   const { theme } = useTheme();
@@ -54,14 +53,7 @@ export default function Buscar() {
     recordar({ tipo: 'pestana', id: n.id, label: n.label, sub: n.clienteKey ? CLIENTES_NAV[n.clienteKey]?.label : n.grupoLabel, extra: n.pagina, ck: n.clienteKey || null });
     irAPestana(n.pagina, n.clienteKey, n.label);
   };
-  const irAPestana = (pagina, ck, label) => {
-    if (ck) { nav.push(<FichaCliente clienteKey={ck} />, `cliente-${ck}`); return; }
-    const destino = PESTANAS_MOVIL[pagina];
-    if (destino === 'inicio') { nav.irATab('inicio'); return; }
-    if (destino === 'ficha') { nav.push(<FichaProducto />, 'ficha'); return; }
-    if (pagina === 'configuracion' || pagina === 'actualizacion' || pagina === 'historialCambios') { nav.irATab('mas'); return; }
-    nav.abrirProximamente(label);
-  };
+  const irAPestana = (pagina, ck, label) => nav.navegar({ pagina, clienteKey: ck || null, label }); // mapa único en rutas.js
   const abrirReciente = (r) => {
     if (r.tipo === 'sku') return abrirSku(r.id, r.sub);
     if (r.tipo === 'cliente') return abrirCliente({ key: r.id, label: r.label, sub: r.sub, tipo: r.extra });
