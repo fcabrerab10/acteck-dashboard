@@ -266,7 +266,7 @@ function Breadcrumb({ clienteActivo, paginaActiva, vistaActual }) {
     return (
       <div className="mb-4 flex items-center gap-2 text-sm">
         <SettingsIcon className="w-4 h-4 text-gray-500" />
-        <span className="font-semibold text-gray-800">Configuración</span>
+        <span className="font-semibold text-gray-800">Administración</span>
       </div>
     );
   }
@@ -575,7 +575,7 @@ export default function App() {
               ? (mobile
                   ? <MobileYo perfil={perfil} onCerrarSesion={handleLogout} onOpenConfig={() => { /* placeholder: quedará en la misma vista si necesita ir al detalle */ }} />
                   : <Configuracion session={{user: authUser, perfil}} />)
-              : <SinAcceso motivo="Solo el Super Admin puede ver Configuración." />
+              : <SinAcceso motivo="Solo el Super Admin puede ver Administración." />
           ) : (
             <>
             {/* Banner modo presentaci³n */}
@@ -714,7 +714,7 @@ export default function App() {
               ? (mobile
                   ? <MobileHoy perfil={perfil} onNavegar={handleNavegar} />
                   : <PendientesCalendarioV2 />)
-              : <SinAcceso motivo="No tienes acceso a esta pestaña. Pídele a Fernando que te habilite 'Pendientes & Calendario' desde Configuración." />
+              : <SinAcceso motivo="No tienes acceso a esta pestaña. Pídele a Fernando que te habilite 'Pendientes & Calendario' desde Administración." />
           )}
           {paginaActiva === "telemetria" && (
             perfil?.es_super_admin
@@ -726,7 +726,7 @@ export default function App() {
           {paginaActiva === "historialCambios" && (
             puedeVerPestanaGlobal(perfil, "historial_cambios")
               ? <HistorialCambios />
-              : <SinAcceso motivo="No tienes acceso al Historial de cambios. Pídele a Fernando que te lo habilite desde Configuración." />
+              : <SinAcceso motivo="No tienes acceso al Historial de cambios. Pídele a Fernando que te lo habilite desde Administración." />
           )}
           {paginaActiva === "axonMexico" && (
             puedeVerPestanaGlobal(perfil, "axon_mexico")

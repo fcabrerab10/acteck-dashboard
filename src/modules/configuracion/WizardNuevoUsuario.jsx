@@ -192,7 +192,7 @@ export default function WizardNuevoUsuario({ onCancel, onCreated }) {
     }}>
       {/* Hero negro */}
       <div style={{ background: '#000', padding: '36px 32px 44px', color: '#FFF' }}>
-        <div style={EYEBROW}>Configuración · Nuevo colaborador</div>
+        <div style={EYEBROW}>Administración · Nuevo colaborador</div>
         <h2 style={H2}>{stepActual.titulo}</h2>
         {/* Stepper dinámico según tipo */}
         <div style={{ display: 'flex', gap: 8, marginTop: 24, flexWrap: 'wrap' }}>
