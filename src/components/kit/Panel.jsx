@@ -1,16 +1,21 @@
 // Panel · contenedor de sección (radio 12, hairline) con título, meta y acciones; plegable opcional.
+// `elevable`: al pasar el cursor toma la sombra ELEV.hover (para paneles clicables o destacados).
 import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
+import { elevation } from '../../lib/elevation';
 
-export default function Panel({ titulo, meta, acciones, children, plegable = false, abiertoInicial = true, padding = '10px 12px', style, id }) {
+export default function Panel({ titulo, meta, acciones, children, plegable = false, abiertoInicial = true, elevable = false, padding = '10px 12px', style, id }) {
   const { theme } = useTheme();
   const [abierto, setAbierto] = useState(abiertoInicial);
+  const [hover, setHover] = useState(false);
   const open = plegable ? abierto : true;
   return (
-    <div id={id} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, fontFamily: TYPO.fontText, ...style }}>
+    <div id={id} onMouseEnter={elevable ? () => setHover(true) : undefined} onMouseLeave={elevable ? () => setHover(false) : undefined}
+      style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, fontFamily: TYPO.fontText,
+        boxShadow: elevation(theme, elevable && hover ? 'hover' : 'reposo'), transition: `box-shadow ${DUR.state}ms ${EASE}`, ...style }}>
       {(titulo || acciones) && (
         <div onClick={plegable ? () => setAbierto((v) => !v) : undefined}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', cursor: plegable ? 'pointer' : 'default', borderBottom: open && children ? `1px solid ${theme.border}` : 'none' }}>

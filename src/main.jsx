@@ -4,7 +4,23 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import './index.css'
 import App from './App.jsx'
-import { queryClient, createIDBPersister, APP_VERSION } from './lib/queryClient'
+import { registerSW } from 'virtual:pwa-register'
+import { queryClient, createIDBPersister } from './lib/queryClient'
+import { BUILD_ID } from './lib/version'
+import { toast } from './components/kit/Toast'
+
+// Aviso de versión nueva (V3). El SW se registra en modo 'prompt' (vite.config.js):
+// cuando Vercel publica un build nuevo, onNeedRefresh muestra un toast persistente
+// y "Recargar" activa el SW nuevo y recarga. Sin esto el usuario seguiría con el
+// bundle viejo hasta cerrar todas las pestañas.
+const updateSW = registerSW({
+  onNeedRefresh() {
+    toast.info('Hay una versión nueva del dashboard', { accion: 'Recargar', onAccion: () => updateSW(true), ms: 0 })
+  },
+  onOfflineReady() {
+    toast.ok('El dashboard ya funciona sin conexión')
+  },
+})
 
 // ErrorBoundary temporal para diagnosticar crashes en producción
 class ErrorBoundary extends Component {
@@ -48,7 +64,7 @@ createRoot(document.getElementById('root')).render(
         persistOptions={{
           persister,
           maxAge: 7 * 24 * 60 * 60 * 1000, // 1 semana
-          buster: APP_VERSION,              // invalida cache al cambiar commit
+          buster: BUILD_ID,                 // invalida cache al cambiar versión/commit
           dehydrateOptions: {
             // No persistir queries que están fallando
             shouldDehydrateQuery: (q) => q.state.status === 'success',

@@ -3,10 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { formatMXN } from '../../lib/utils';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import {
-  ShoppingCart, Search, Download, ChevronDown, ChevronRight, Check, ArrowUpDown, ArrowUp, ArrowDown,
-  Calendar, TrendingUp, Target, Activity,
-} from 'lucide-react';
+import { Search, Download, ChevronDown, ChevronRight, Check, ArrowUpDown, ArrowUp, ArrowDown, Calendar, TrendingUp, Target, Activity } from 'lucide-react';
 import SellInDrillDown, { DrillDownBoundary } from './SellInDrillDown';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
@@ -15,7 +12,7 @@ import {
   LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip,
   CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
-import { FerrutekLoader } from '../../components';
+import { Cargando } from '../../components/kit';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
 import ComparadorPeriodos from './ComparadorPeriodos';
 
@@ -451,7 +448,7 @@ export default function SellInCliente({ clienteKey }) {
   };
 
   if (loading) {
-    return <FerrutekLoader label={`Cargando Sell In de ${meta.nombre}…`} sub="Ferruteck está trayendo facturación, inventario y roadmap" minHeight={480} />;
+    return <Cargando label={`Cargando Sell In de ${meta.nombre}…`} sub="Trayendo facturación, inventario y roadmap" minHeight={480} />;
   }
 
   const pctMTD = mesActualData.cuota?.ideal ? mesActualData.monto / mesActualData.cuota.ideal * 100 : null;

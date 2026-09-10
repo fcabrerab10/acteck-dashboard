@@ -1,4 +1,4 @@
-// Tokens de movimiento · Ferruteck 2 (2026-09-10).
+// Tokens de movimiento · V3 (2026-09-10).
 // Una sola curva (la de iOS) y cinco duraciones según lo que se mueve.
 export const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
 export const DUR = {

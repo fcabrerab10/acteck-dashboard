@@ -8,7 +8,7 @@ import {
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaGlobal } from '../../lib/permisos';
-import { FerrutekLoader } from '../../components';
+import { Cargando } from '../../components/kit';
 import ExportMenu from '../../components/ExportMenu';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
@@ -518,7 +518,7 @@ export default function AnalisisClientesGlobal() {
   , [clientesAct]);
 
   if (loading) {
-    return <FerrutekLoader label="Cargando análisis por cliente…" sub="Ferruteck está trayendo canales, cobertura y sell-in" minHeight={480} />;
+    return <Cargando label="Cargando análisis por cliente…" sub="Trayendo canales, cobertura y sell-in" minHeight={480} />;
   }
   if (canalAct.length === 0) {
     return (

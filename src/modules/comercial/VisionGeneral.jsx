@@ -7,13 +7,13 @@ import { puedeVerPestanaGlobal } from '../../lib/permisos';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import {
-  Activity, TrendingUp, TrendingDown, ChevronRight, ChevronDown,
+  Activity, TrendingUp,
   Wallet, Package, Receipt, Target, ShoppingBag, Ship, X,
 } from 'lucide-react';
 import {
-  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  BarChart, Bar, Cell,
   AreaChart, Area,
-  XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
+  XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
 } from 'recharts';
 import { cachedQuery } from '../../lib/queries';
 import RentabilidadBloque from './RentabilidadBloque';
@@ -25,7 +25,7 @@ import Segmented from '../../components/kit/Segmented';
 const MESES_LBL  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MESES_FULL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-// ────────── Tonos (kit Ferruteck 2) ──────────
+// ────────── Tonos (kit V3) ──────────
 // Los fondos/textos de tile salen de toneColors(theme, tone) (Pill.jsx); el trazo "strong" del token
 // semántico del tema. Nada de hex fijos fuera de este bloque: todo se deriva del tema activo.
 const TONE_STRONG = { blue: 'accent', green: 'green', orange: 'orange', red: 'red', yellow: 'yellow', purple: 'purple', pink: 'pink', teal: 'teal', gray: 'textMuted' };
@@ -47,24 +47,6 @@ function tonoColores(theme, tone = 'gray') {
   const [bg, text] = toneColors(theme, tone);
   return { bg, text, strong };
 }
-
-// Tono por nombre de dimensión (canal/marca/categoría)
-const CANAL_COLOR = {
-  'DISTRIBUIDOR':         'blue',
-  'MAYOREO':              'purple',
-  'MOSTRADOR':            'green',
-  'E-COMMERCE':           'orange',
-  'MERCADO LIBRE':        'orange',
-  'AMAZON':               'orange',
-  'SITIO WEB':            'orange',
-  'CYBERPURTA':           'orange',
-  'RETAIL REPRESENTADOS': 'red',
-  'RETAIL PROPIOS':       'pink',
-  'SANBORN':              'pink',
-  'WALMART':              'pink',
-};
-const colorBloque = (theme, k) => tonoColores(theme, CANAL_COLOR[String(k || '').toUpperCase()] || 'gray');
-
 // ────────── IconBadge (patrón AirPods · 40x40 rounded, bg tinted, icon en color solido) ──────────
 function IconBadge({ icon: Icon, color, size = 40 }) {
   if (!Icon) return null;
@@ -1034,109 +1016,6 @@ function HeroCard({ kpis, anio, mesMaxLabel }) {
   );
 }
 
-// ────────── Bento KPI ──────────
-function BentoKpi({ palette, icon: Icon, label, valor, subtitulo, delta, deltaLabel, inverse = false }) {
-  const { theme } = useTheme();
-  const invBg = theme.surfaceInverse;
-  const invText = theme.textOnInverse;
-  const invMuted = theme.mode === 'dark' ? 'rgba(29,29,31,0.65)' : 'rgba(245,245,247,0.7)';
-  const cardBg = inverse ? invBg : theme.surface;
-  const txtCol = inverse ? invText : theme.text;
-  const lblCol = inverse ? invMuted : theme.textMuted;
-  const border = inverse ? 'none' : `1px solid ${theme.border}`;
-  return (
-    <div style={{
-      background: cardBg, color: txtCol, borderRadius: 12, padding: 20, border,
-      display: 'flex', flexDirection: 'column',
-    }}>
-      <IconBadge icon={Icon} color={palette.strong} size={40} />
-      <p style={{ fontSize: 12, margin: '14px 0 4px', color: lblCol, fontWeight: 500, fontFamily: TYPO.fontText }}>{label}</p>
-      <p style={{ fontSize: 32, fontWeight: 600, margin: '4px 0 0', color: txtCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1.05, letterSpacing: '-0.03em', fontFamily: TYPO.fontDisplay }}>
-        {valor}
-      </p>
-      <div style={{ fontSize: 12, color: lblCol, marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
-        {delta != null && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginRight: 8, fontWeight: 500,
-            color: delta >= 0 ? theme.green : theme.red }}>
-            {delta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-            {fmtPctDelta(delta)} {deltaLabel}
-          </span>
-        )}
-        {subtitulo}
-      </div>
-    </div>
-  );
-}
-
-// ────────── Bloque Bento (canal/marca/categoría) ──────────
-function BloqueBento({ item, expandido, onClick, puedeExpandir, inverse = false }) {
-  const { theme } = useTheme();
-  const palette = colorBloque(theme, item.key);
-  const max = Math.max(...item.spark, 0) || 1;
-  const min = Math.min(...item.spark, 0);
-  const range = max - min || 1;
-  const isDark = theme.mode === 'dark';
-  const invBg = theme.surfaceInverse;
-  const invText = theme.textOnInverse;
-  const invMuted = isDark ? 'rgba(29,29,31,0.65)' : 'rgba(245,245,247,0.7)';
-  const cardBg = inverse ? invBg : theme.surface;
-  const txtCol = inverse ? invText : theme.text;
-  const lblCol = inverse ? invMuted : theme.textMuted;
-  return (
-    <button onClick={onClick}
-      disabled={!puedeExpandir}
-      style={{
-        textAlign: 'left', display: 'block',
-        background: cardBg, color: txtCol,
-        border: inverse ? 'none' : ('1px solid ' + (expandido ? palette.strong : theme.border)),
-        borderRadius: 12, padding: 20, cursor: puedeExpandir ? 'pointer' : 'default',
-        transition: 'border 0.15s, box-shadow 0.15s',
-        boxShadow: expandido && !inverse ? `0 0 0 3px ${isDark ? theme.border : palette.bg}` : 'none',
-        fontFamily: TYPO.fontText,
-      }}>
-      <div className="flex items-center justify-between mb-1">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <IconBadge icon={TrendingUp} color={palette.strong} size={28} />
-          <p style={{ fontSize: 12, margin: 0, color: theme.text, fontWeight: 500, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.key}</p>
-        </div>
-        <Pill tone="gray" style={{ flexShrink: 0, ...(inverse ? { background: 'rgba(255,255,255,0.12)', color: 'inherit' } : null) }}>{item.share.toFixed(1)}%</Pill>
-      </div>
-      <p style={{ fontSize: 22, fontWeight: 600, margin: '6px 0 2px', color: theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
-        {fmtCompact(item.venta)}
-      </p>
-      <div style={{ display: 'flex', gap: 10, fontSize: 11, fontVariantNumeric: 'tabular-nums', flexWrap: 'wrap' }}>
-        {item.deltaYoY != null && (
-          <span style={{ color: item.deltaYoY >= 0 ? theme.green : theme.red, fontWeight: 500 }}>
-            {fmtPctDelta(item.deltaYoY)} YoY
-          </span>
-        )}
-        {item.pctMargen != null && (
-          <span style={{ color: palette.strong }}>
-            margen {item.pctMargen.toFixed(1)}%
-          </span>
-        )}
-      </div>
-      {/* Mini sparkline */}
-      {item.spark.length > 0 && (
-        <svg viewBox="0 0 120 28" style={{ width: '100%', height: 28, marginTop: 8 }} preserveAspectRatio="none">
-          <polyline fill="none" stroke={palette.strong} strokeWidth="1.5"
-            points={item.spark.map((v, i) => {
-              const x = item.spark.length > 1 ? (i / (item.spark.length - 1)) * 120 : 60;
-              const y = 28 - (((v - min) / range) * 24);
-              return `${x},${y}`;
-            }).join(' ')} />
-        </svg>
-      )}
-      {puedeExpandir && (
-        <div className="flex items-center gap-1 mt-1" style={{ fontSize: 10, color: theme.textSubtle }}>
-          {expandido ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-          {expandido ? 'ocultar clientes' : 'ver clientes'}
-        </div>
-      )}
-    </button>
-  );
-}
-
 // ────────── Drill-down: detalle del canal con chart y clientes ──────────
 function ClientesPanel({ canal, clientes, mensualAct, mensualPrev, anio, mesMax, onClose }) {
   const { theme } = useTheme();
@@ -1260,113 +1139,6 @@ function ClientesPanel({ canal, clientes, mensualAct, mensualPrev, anio, mesMax,
           </table>
         </>
       )}
-    </div>
-  );
-}
-
-// ────────── Mini KPI tile (drill-down del canal) ──────────
-function MiniKpi({ palette, label, valor, sub }) {
-  return (
-    <div style={{ background: palette.bg, borderRadius: 8, padding: '8px 12px' }}>
-      <p style={{ fontSize: 10, margin: 0, color: palette.strong, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</p>
-      <p style={{ fontSize: 18, fontWeight: 500, margin: '2px 0 0', color: palette.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
-        {valor}
-      </p>
-      {sub && <p style={{ fontSize: 10, color: palette.strong, margin: '2px 0 0', fontVariantNumeric: 'tabular-nums' }}>{sub}</p>}
-    </div>
-  );
-}
-
-// ────────── Tile "Próximamente" ──────────
-function ProximamenteKpi({ icon: Icon, label, nota, inverse = false }) {
-  const { theme } = useTheme();
-  const isDark = theme.mode === 'dark';
-  const invBg = theme.surfaceInverse;
-  const invText = theme.textOnInverse;
-  const invMuted = isDark ? 'rgba(29,29,31,0.65)' : 'rgba(245,245,247,0.7)';
-  const cardBg = inverse ? invBg : theme.surface;
-  const txtCol = inverse ? invText : theme.text;
-  const lblCol = inverse ? invMuted : theme.textMuted;
-  return (
-    <div style={{
-      background: cardBg, color: txtCol,
-      borderRadius: 12, padding: 20,
-      border: inverse ? 'none' : `1px solid ${theme.border}`,
-      display: 'flex', flexDirection: 'column',
-      fontFamily: TYPO.fontText,
-    }}>
-      <IconBadge icon={Icon} color={inverse ? (theme.accentCyan || theme.teal) : theme.teal} size={40} />
-      <p style={{ fontSize: 12, margin: '14px 0 4px', color: lblCol, fontWeight: 500 }}>{label}</p>
-      <p style={{ fontSize: 24, fontWeight: 500, margin: '4px 0 0', color: lblCol, fontFamily: TYPO.fontDisplay, letterSpacing: '-0.02em' }}>Próximamente</p>
-      {nota && <p style={{ fontSize: 11, color: lblCol, margin: '6px 0 0', fontStyle: 'italic', opacity: 0.8 }}>{nota}</p>}
-    </div>
-  );
-}
-
-// ────────── Cartera con aging (legacy — no se usa por ahora) ──────────
-function CarteraCard({ cartera, resumen }) {
-  const { theme } = useTheme();
-  if (cartera.length === 0) return null;
-  const thL = thLeft(theme), thR = thRight(theme), tdL = tdLeft(theme), tdR = tdRight(theme);
-  return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: 16, fontFamily: TYPO.fontText }}>
-      <div className="flex items-baseline justify-between mb-3">
-        <p style={{ fontSize: 14, fontWeight: 500, color: theme.text, margin: 0, fontFamily: TYPO.fontDisplay }}>Cartera por cobrar</p>
-        <p style={{ fontSize: 11, color: theme.textSubtle, margin: 0, fontVariantNumeric: 'tabular-nums' }}>
-          Total {fmtMoney(resumen.total)} · Vencido {fmtCompact(resumen.vencido)}
-          {resumen.pctVencido != null && ` (${resumen.pctVencido.toFixed(1)}%)`}
-        </p>
-      </div>
-      <div className="grid grid-cols-4 gap-2 mb-4">
-        <AgingTile palette={tonoColores(theme, 'green')}  label="0–30 días"  valor={resumen.aging0_30}  total={resumen.total} />
-        <AgingTile palette={tonoColores(theme, 'yellow')} label="31–60 días" valor={resumen.aging31_60} total={resumen.total} />
-        <AgingTile palette={tonoColores(theme, 'orange')} label="61–90 días" valor={resumen.aging61_90} total={resumen.total} />
-        <AgingTile palette={tonoColores(theme, 'red')}    label="+90 días"   valor={resumen.agingMas90} total={resumen.total} />
-      </div>
-      <table className="w-full" style={{ fontSize: 12 }}>
-        <thead>
-          <tr style={{ background: theme.bgAlt, borderBottom: `1px solid ${theme.border}` }}>
-            <th style={thL}>Cliente</th>
-            <th style={thR}>Saldo total</th>
-            <th style={thR}>Vencido</th>
-            <th style={thR}>% vencido</th>
-            <th style={thR}>DSO</th>
-            <th style={thR}>Corte</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cartera.sort((a, b) => Number(b.saldo_actual || 0) - Number(a.saldo_actual || 0)).map((c) => {
-            const pctVenc = c.saldo_actual > 0 ? (Number(c.saldo_vencido) / Number(c.saldo_actual)) * 100 : 0;
-            return (
-              <tr key={c.cliente} style={{ borderBottom: `1px solid ${theme.border}` }}>
-                <td style={{ ...tdL, textTransform: 'capitalize' }}>{c.cliente}</td>
-                <td style={{ ...tdR, fontWeight: 500 }}>{fmtCompact(c.saldo_actual)}</td>
-                <td style={tdR}>{fmtCompact(c.saldo_vencido)}</td>
-                <td style={{ ...tdR, color: pctVenc >= 20 ? theme.red : pctVenc >= 10 ? theme.orange : theme.green, fontWeight: 500 }}>
-                  {pctVenc.toFixed(1)}%
-                </td>
-                <td style={tdR}>{c.dso != null ? Math.round(Number(c.dso)) + 'd' : '—'}</td>
-                <td style={{ ...tdR, color: theme.textSubtle }}>{c.fecha_corte || '—'}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function AgingTile({ palette, label, valor, total }) {
-  const pct = total > 0 ? (valor / total) * 100 : 0;
-  return (
-    <div style={{ background: palette.bg, borderRadius: 10, padding: '10px 12px' }}>
-      <p style={{ fontSize: 10, color: palette.strong, margin: 0, letterSpacing: '0.03em', textTransform: 'uppercase' }}>{label}</p>
-      <p style={{ fontSize: 18, fontWeight: 500, margin: '4px 0 2px', color: palette.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
-        {fmtCompact(valor)}
-      </p>
-      <p style={{ fontSize: 11, color: palette.strong, margin: 0, fontVariantNumeric: 'tabular-nums' }}>
-        {pct.toFixed(1)}%
-      </p>
     </div>
   );
 }
@@ -1965,252 +1737,6 @@ function RetrasadasBanner({ retrasadas }) {
           ))}
           {restante > 0 && ` · y ${restante} más`}
         </p>
-      </div>
-    </div>
-  );
-}
-
-function CaminoHero({ valor, piezas, pos, inventarioStock, leadtime, comprasYTD, anio }) {
-  const { theme } = useTheme();
-  // Unificado en los 3 temas: surface + strip lateral color paleta.
-  const cardBgFor = () => theme.surface;
-  const cardTitleFor = () => theme.text;
-  const cardLabelFor = () => theme.textMuted;
-  const cardBorder = `1px solid ${theme.border}`;
-
-  const ratioStock = inventarioStock > 0 ? Math.round((valor / inventarioStock) * 100) : null;
-  const ytdAct = comprasYTD.find((r) => r.anio === anio);
-  const ytdPrev = comprasYTD.find((r) => r.anio === anio - 1);
-  const valorYTD = Number(ytdAct?.valor_mxn) || 0;
-  const valorYTDPrev = Number(ytdPrev?.valor_mxn) || 0;
-  const deltaYoY = valorYTDPrev > 0 ? ((valorYTD - valorYTDPrev) / valorYTDPrev) * 100 : null;
-
-  const blue = tonoColores(theme, 'blue'), orange = tonoColores(theme, 'orange'), purple = tonoColores(theme, 'purple');
-  return (
-    <div className="grid gap-2.5 mb-3.5" style={{ gridTemplateColumns: '1.6fr 1fr 1fr' }}>
-      <div style={{ background: cardBgFor(blue), borderRadius: 12, padding: '14px 18px', border: cardBorder, borderLeft: `4px solid ${blue.strong}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-          <IconBadge icon={Ship} color={blue.strong} size={36} />
-          <p style={{ fontSize: 11, margin: 0, color: cardLabelFor(blue), letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: TYPO.fontText }}>Valor en tránsito</p>
-        </div>
-        <p style={{ fontSize: 34, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(blue), fontVariantNumeric: 'tabular-nums', lineHeight: 1, letterSpacing: '-0.03em', fontFamily: TYPO.fontDisplay }}>
-          {fmtCompact(valor)}
-        </p>
-        <p style={{ fontSize: 11, color: cardLabelFor(blue), margin: 0 }}>
-          {fmtInt(piezas)} piezas · {pos} órdenes{ratioStock != null ? ` · ${ratioStock}% del stock actual` : ''}
-        </p>
-      </div>
-      <div style={{ background: cardBgFor(orange), borderRadius: 12, padding: '14px 18px', border: cardBorder, borderLeft: `3px solid ${orange.strong}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-          <IconBadge icon={Package} color={orange.strong} size={32} />
-          <p style={{ fontSize: 11, margin: 0, color: cardLabelFor(orange), letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>Lead time promedio</p>
-        </div>
-        <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(orange), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
-          {leadtime?.lt_total != null ? `${leadtime.lt_total} días` : '—'}
-        </p>
-        <p style={{ fontSize: 11, color: cardLabelFor(orange), margin: 0 }}>
-          Emisión → arribo CEDIS
-        </p>
-      </div>
-      <div style={{ background: cardBgFor(purple), borderRadius: 12, padding: '14px 18px', border: cardBorder, borderLeft: `3px solid ${purple.strong}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-          <IconBadge icon={ShoppingBag} color={purple.strong} size={32} />
-          <p style={{ fontSize: 11, margin: 0, color: cardLabelFor(purple), letterSpacing: '0.03em', fontFamily: TYPO.fontText }}>Compras YTD {anio}</p>
-        </div>
-        <p style={{ fontSize: 24, fontWeight: 600, margin: '4px 0 2px', color: cardTitleFor(purple), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, letterSpacing: '-0.02em', fontFamily: TYPO.fontDisplay }}>
-          {fmtCompact(valorYTD)}
-        </p>
-        <p style={{ fontSize: 11, margin: 0 }}>
-          {deltaYoY != null && (
-            <span style={{ color: deltaYoY >= 0 ? theme.green : theme.red, fontWeight: 500 }}>
-              {fmtPctDelta(deltaYoY)} vs {anio - 1}
-            </span>
-          )}
-          {ytdAct && <span style={{ color: purple.text }}> · {fmtInt(ytdAct.pos)} PO · {fmtInt(ytdAct.skus)} SKUs</span>}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function LeadtimeEtapas({ lt }) {
-  const { theme } = useTheme();
-  const total = lt.lt_total || 1;
-  const etapas = [
-    { label: '1. Producción',       dias: lt.lt_produccion, color: theme.orange },
-    { label: '2. Tránsito marítimo', dias: lt.lt_transito,   color: theme.accent },
-    { label: '3. Aduana → CEDIS',    dias: lt.lt_aduana,     color: theme.green },
-  ];
-  return (
-    <>
-      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, margin: '0 0 6px' }}>Lead time desglosado por etapa</p>
-      <div className="grid gap-1.5 mb-4" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-        {etapas.map((e) => {
-          const pct = Math.round((e.dias / total) * 100);
-          return (
-            <div key={e.label} style={{ background: theme.bgAlt, borderRadius: 8, padding: '8px 12px' }}>
-              <div className="flex items-center justify-between">
-                <p style={{ fontSize: 10, margin: 0, color: theme.textMuted, textTransform: 'uppercase' }}>{e.label}</p>
-                <span style={{ fontSize: 10, color: theme.textSubtle }}>~{pct}%</span>
-              </div>
-              <p style={{ fontSize: 18, fontWeight: 500, margin: '2px 0 0', color: theme.text, fontVariantNumeric: 'tabular-nums' }}>
-                {e.dias} días
-              </p>
-              <div style={{ height: 4, background: theme.border, borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
-                <div style={{ width: pct + '%', height: '100%', background: e.color }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-function ConcentracionSemanal({ semanas }) {
-  const { theme } = useTheme();
-  const data = semanas.map((r) => ({
-    semana: new Date(r.semana).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
-    valor: (Number(r.valor_mxn) || 0) / 1e6,
-    pos: Number(r.pos) || 0,
-    piezas: Number(r.piezas) || 0,
-    skus: Number(r.skus) || 0,
-  }));
-  const max = Math.max(...data.map((d) => d.valor), 0);
-  const colors = data.map((d) => d.valor === max && max > 0 ? theme.orange : theme.accent);
-  const picoLabel = max > 0 ? data.find((d) => d.valor === max) : null;
-  return (
-    <>
-      <div className="flex items-baseline justify-between mb-1.5">
-        <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, margin: 0 }}>Concentración semanal de llegadas</p>
-        {picoLabel && (
-          <p style={{ fontSize: 10, color: theme.textSubtle, margin: 0, fontStyle: 'italic' }}>
-            Pico: semana del {picoLabel.semana} · ${picoLabel.valor.toFixed(2)}M / {fmtInt(picoLabel.piezas)} pzs
-          </p>
-        )}
-      </div>
-      <div style={{ width: '100%', height: 200, marginBottom: 18 }}>
-        <ResponsiveContainer>
-          <BarChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke={theme.border} vertical={false} />
-            <XAxis dataKey="semana" tick={{ fontSize: 9, fill: theme.textMuted }} axisLine={{ stroke: theme.border }} tickLine={false} />
-            <YAxis tickFormatter={(v) => '$' + v + 'M'} tick={{ fontSize: 10, fill: theme.textMuted }} axisLine={false} tickLine={false} />
-            <Tooltip
-              formatter={(v, name, p) => {
-                if (name !== 'valor') return null;
-                const d = p.payload;
-                return ['$' + v.toFixed(2) + 'M MXN', `${d.pos} PO · ${fmtInt(d.skus)} SKUs · ${fmtInt(d.piezas)} pzs`];
-              }}
-              contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text }}
-            />
-            <Bar dataKey="valor" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-              {data.map((_, i) => <Cell key={i} fill={colors[i]} />)}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </>
-  );
-}
-
-function TopProveedores({ proveedores, totalCamino }) {
-  const { theme } = useTheme();
-  const top5 = proveedores.slice(0, 5);
-  const restante = proveedores.slice(5);
-  const restanteVal = restante.reduce((s, p) => s + (Number(p.valor_mxn) || 0), 0);
-  const restantePos = restante.reduce((s, p) => s + (Number(p.pos) || 0), 0);
-  const topPct = totalCamino > 0 ? (top5.slice(0, 3).reduce((s, p) => s + (Number(p.valor_mxn) || 0), 0) / totalCamino) * 100 : 0;
-  const topProvPct = totalCamino > 0 && top5[0] ? (Number(top5[0].valor_mxn) / totalCamino) * 100 : 0;
-
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-1.5">
-        <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, margin: 0 }}>Top proveedores en tránsito</p>
-        <p style={{ fontSize: 10, color: theme.textSubtle, margin: 0, fontStyle: 'italic' }}>Top 3 = {topPct.toFixed(0)}%</p>
-      </div>
-      <table className="w-full" style={{ fontSize: 11, borderCollapse: 'collapse', color: theme.text }}>
-        <tbody style={{ fontVariantNumeric: 'tabular-nums' }}>
-          {top5.map((p, i) => {
-            const pct = totalCamino > 0 ? (Number(p.valor_mxn) / totalCamino) * 100 : 0;
-            const isTop = i === 0;
-            const barColor = isTop ? theme.red : theme.accent;
-            return (
-              <tr key={p.proveedor} style={{ borderBottom: `0.5px solid ${theme.border}` }}>
-                <td style={{ padding: '6px 8px', color: theme.text, fontWeight: isTop ? 500 : 400, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.proveedor}>
-                  {p.proveedor}
-                </td>
-                <td style={{ padding: '6px 8px', textAlign: 'right', color: theme.textMuted }}>{p.pos} PO</td>
-                <td style={{ padding: '6px 8px', textAlign: 'right', width: '45%' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, width: '100%' }}>
-                    <span style={{ flex: 1, height: 6, background: theme.border, borderRadius: 3, overflow: 'hidden' }}>
-                      <span style={{ display: 'block', width: Math.min(pct, 100) + '%', height: '100%', background: barColor }} />
-                    </span>
-                    <span style={{ whiteSpace: 'nowrap', fontWeight: isTop ? 500 : 400 }}>
-                      {fmtCompact(p.valor_mxn)} · {pct.toFixed(1)}%
-                    </span>
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-          {restante.length > 0 && (
-            <tr>
-              <td style={{ padding: '6px 8px', color: theme.text }}>Otros ({restante.length})</td>
-              <td style={{ padding: '6px 8px', textAlign: 'right', color: theme.textMuted }}>{restantePos} PO</td>
-              <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, width: '100%' }}>
-                  <span style={{ flex: 1, height: 6, background: theme.border, borderRadius: 3, overflow: 'hidden' }}>
-                    <span style={{ display: 'block', width: Math.min(totalCamino > 0 ? (restanteVal / totalCamino) * 100 : 0, 100) + '%', height: '100%', background: theme.textSubtle }} />
-                  </span>
-                  <span style={{ whiteSpace: 'nowrap' }}>{fmtCompact(restanteVal)} · {totalCamino > 0 ? ((restanteVal / totalCamino) * 100).toFixed(1) : 0}%</span>
-                </span>
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      {topProvPct >= 30 && (
-        <p style={{ fontSize: 10, color: theme.red, margin: '6px 0 0', fontStyle: 'italic' }}>
-          <i className="ti ti-alert-circle" style={{ fontSize: 11, verticalAlign: -1 }} aria-hidden="true" />{' '}
-          Riesgo: {topProvPct.toFixed(1)}% concentrado en 1 proveedor
-        </p>
-      )}
-    </div>
-  );
-}
-
-function AgotadosConOrden({ agotados }) {
-  const { theme } = useTheme();
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-1.5">
-        <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: theme.textMuted, margin: 0 }}>SKUs agotados con orden</p>
-        <p style={{ fontSize: 10, color: theme.textSubtle, margin: 0, fontStyle: 'italic' }}>{agotados.length} agotados</p>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        {agotados.map((a) => {
-          const sinOrden = a.dias_para_llegar === -1 || a.pzs_camino === 0;
-          const vencido = a.dias_para_llegar === 0;
-          const palette = tonoColores(theme, sinOrden ? 'red' : vencido ? 'orange' : 'green');
-          const etaLabel = sinOrden ? 'Sin orden'
-                          : vencido ? 'Vencido'
-                          : `Llega en ${a.dias_para_llegar} día${a.dias_para_llegar === 1 ? '' : 's'}`;
-          return (
-            <div key={a.articulo} style={{
-              background: palette.bg, borderLeft: `3px solid ${palette.strong}`, borderRadius: 6, padding: '8px 12px',
-            }}>
-              <div className="flex justify-between items-center" style={{ fontSize: 11 }}>
-                <span style={{ fontWeight: 500, color: palette.text }}>{a.articulo}</span>
-                <span style={{ color: palette.strong, fontWeight: 500 }}>{etaLabel}</span>
-              </div>
-              <p style={{ fontSize: 10, color: palette.strong, margin: '1px 0 0', fontVariantNumeric: 'tabular-nums' }}>
-                {sinOrden ? 'Agotado · acción: emitir PO'
-                          : `${fmtInt(a.pzs_camino)} piezas en camino${a.movid ? ` (${a.movid})` : ''}`}
-                {a.eta_estimada && !sinOrden && ` · ETA ${new Date(a.eta_estimada).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`}
-              </p>
-            </div>
-          );
-        })}
       </div>
     </div>
   );
@@ -2860,9 +2386,3 @@ function SellOutBloque({
     </section>
   );
 }
-
-// ────────── Estilos comunes (derivados del tema) ──────────
-const thLeft  = (t) => ({ padding: '8px 12px', textAlign: 'left', fontWeight: 500, color: t.textMuted, fontSize: 11, whiteSpace: 'nowrap' });
-const thRight = (t) => ({ padding: '8px 8px', textAlign: 'right', fontWeight: 500, color: t.textMuted, fontSize: 11, whiteSpace: 'nowrap' });
-const tdLeft  = (t) => ({ padding: '8px 12px', color: t.text, fontSize: 12 });
-const tdRight = (t) => ({ padding: '8px 8px', textAlign: 'right', color: t.text, fontSize: 12, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' });

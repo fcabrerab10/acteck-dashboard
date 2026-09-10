@@ -704,36 +704,38 @@ async function reglaRebatePorGenerar(hoy) {
 }
 
 // ─── e. datos_sin_actualizar ───
+// Lee v_fuentes_frescura (migración 20260911): una sola consulta con
+// ultima_carga / periodo_max / filas / umbral_dias / estado / dias por fuente.
+// Sólo se alertan fuentes que se cargan por uploads.html; las tablas que
+// captura la propia app (sellout_sku, inventario_cliente, cuotas_mensuales,
+// roadmap_sku) no aplican al mensaje "sube el archivo".
+const FUENTES_UPLOAD = [
+  'facturacion_clientes', 'erp_ventas', 'inventario_acteck', 'sellout_general', 'sellout_detalle',
+  'sellout_pcel', 'precios_sku', 'compras_oc', 'embarques_compras', 'estados_cuenta', 'guias_erp',
+  'programacion_arribos',
+];
 async function reglaDatosSinActualizar() {
-  const FUENTES = [
-    { fuente: 'facturacion_clientes', label: 'Sell In (facturacion_clientes)', path: 'facturacion_clientes?select=uploaded_at&order=uploaded_at.desc.nullslast&limit=1', col: 'uploaded_at', maxDias: 7 },
-    { fuente: 'inventario_acteck',    label: 'Inventario (inventario_acteck)',  path: 'inventario_acteck?select=updated_at&order=updated_at.desc.nullslast&limit=1',    col: 'updated_at', maxDias: 3 },
-    { fuente: 'sellout_general',      label: 'Sell Out mayoristas (sellout_general)', path: 'sellout_general?select=updated_at&order=updated_at.desc.nullslast&limit=1', col: 'updated_at', maxDias: 7 },
-    { fuente: 'sellout_detalle',      label: 'Sell Out detalle (sellout_detalle)', path: 'sellout_detalle?select=updated_at&order=updated_at.desc.nullslast&limit=1', col: 'updated_at', maxDias: 7 },
-  ];
+  const filas = await sbGetAll(
+    `v_fuentes_frescura?select=fuente,etiqueta,ultima_carga,periodo_max,filas,umbral_dias,estado,dias`
+    + `&estado=eq.atrasada&fuente=in.(${FUENTES_UPLOAD.join(',')})`,
+  );
   const out = [];
-  // GET simple (sin Range): con limit=1 el paginador pediría una 2ª página inválida.
-  const getOne = async (path) => {
-    const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: SB_HEADERS() });
-    if (!r.ok) throw new Error(`${path.split('?')[0]} → HTTP ${r.status}`);
-    return r.json();
-  };
-  const res = await Promise.allSettled(FUENTES.map((f) => getOne(f.path)));
-  FUENTES.forEach((f, i) => {
-    if (res[i].status !== 'fulfilled') return;
-    const ts = res[i].value?.[0]?.[f.col];
-    const dias = ts ? Math.floor((Date.now() - new Date(ts).getTime()) / 86400000) : null;
-    if (dias == null || dias <= f.maxDias) return;
+  for (const f of filas) {
+    const dias = Number(f.dias);
+    if (!f.ultima_carga || !Number.isFinite(dias)) continue;
+    const ts = String(f.ultima_carga);
     out.push({
       tipo: 'datos_sin_actualizar', severidad: 'media',
       clave: `datos_sin_actualizar|${f.fuente}`,
-      titulo: `${f.label} lleva ${dias} días sin cargarse`,
-      detalle: `Última carga ${ts.slice(0, 10)} · umbral ${f.maxDias} días. Sube el archivo en uploads.html.`,
+      titulo: `${f.etiqueta} (${f.fuente}) lleva ${dias} días sin cargarse`,
+      detalle: `Última carga ${ts.slice(0, 10)} · umbral ${f.umbral_dias} días`
+        + (f.periodo_max ? ` · último periodo con datos ${f.periodo_max}` : '')
+        + '. Sube el archivo en uploads.html.',
       cliente_key: null, sku: null,
       valor: dias,
-      meta: { fuente: f.fuente, ultima_carga: ts, umbral_dias: f.maxDias, dias },
+      meta: { fuente: f.fuente, ultima_carga: ts, umbral_dias: f.umbral_dias, dias, periodo_max: f.periodo_max || null, filas: f.filas ?? null },
     });
-  });
+  }
   return out;
 }
 

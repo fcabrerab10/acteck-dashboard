@@ -11,6 +11,7 @@ import { useTheme } from '../../lib/themeContext';
 import { THEMES } from '../../lib/themeTokens';
 import WizardNuevoUsuario from './WizardNuevoUsuario';
 import { toast } from '../../lib/toast';
+import { versionLabel } from '../../lib/version';
 // GestionCuotasPanel: removido de Configuración. Las cuotas se gestionan
 // exclusivamente desde /uploads.html → tarjeta "Cuotas mensuales por cliente".
 
@@ -361,7 +362,7 @@ export default function Configuracion({ session }) {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Configuración</h2>
-          <p className="text-sm text-gray-400">Gestión de usuarios y permisos granulares</p>
+          <p className="text-sm text-gray-400">Gestión de usuarios y permisos granulares · <span title="Versión del dashboard" style={{ fontFamily: '"SF Mono", ui-monospace, monospace', fontSize: 11 }}>{versionLabel()}</span></p>
         </div>
         <button
           onClick={() => setShowWizard(true)}

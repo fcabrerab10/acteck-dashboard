@@ -16,6 +16,7 @@ import {
 import { useTheme } from '../lib/themeContext';
 import { TYPO, THEMES } from '../lib/themeTokens';
 import { puedeConfigurar } from '../lib/permisos';
+import { versionLabel } from '../lib/version';
 
 const ROL_LABELS = {
   super_admin: 'Super Admin',
@@ -25,7 +26,7 @@ const ROL_LABELS = {
   viewer:      'Viewer',
 };
 
-const APP_VERSION = 'v2.5.0';
+// Versión real del build (package.json + commit) · src/lib/version.js
 
 // Preview de tema visual (mini swatch bi-color)
 const THEME_PREVIEW = {
@@ -211,7 +212,7 @@ export default function MobileYo({ perfil, onCerrarSesion, onOpenConfig }) {
 
       {/* Footer */}
       <div style={{ textAlign: 'center', padding: '24px 0 40px', color: theme.textSubtle, fontSize: 11, fontFamily: TYPO.fontText }}>
-        Acteck Dashboard {APP_VERSION}<br />
+        Acteck Dashboard {versionLabel()}<br />
         © {new Date().getFullYear()} Acteck · Balam Rush
       </div>
 

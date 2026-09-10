@@ -54,6 +54,8 @@ Los 3 temas comparten estructura de tokens (`bg`, `surface`, `text`, `accent`…
 | `subnav` | `rgba(251,251,253,0.85)` + `backdrop-filter: blur(20px)` | Sub-nav sticky |
 | `shadow` | `none` | El Claro NO usa sombras. Separa con color de superficie. |
 
+> **Elevación V3 (`src/lib/elevation.js`, también desde `components/kit`):** tres niveles estilo macOS — `reposo` = `none` (hairline), `hover` = dos capas suaves (`0 1px 2px .06` + `0 8px 24px .08`; en Midnight `.4`/`.5`), `flotante` = menús, popovers, modales y toasts (`0 2px 6px .08` + `0 16px 48px .16`; en Midnight más densa + `bordeFlotante(theme)` → `borderStrong`). Usar `elevation(theme, nivel)`; no escribir `boxShadow` a mano.
+
 **Regla estructural del Claro:** las secciones alternan blanco↔negro a lo largo de la página. La página se lee como una landing de producto.
 
 ### 2.2 · 🌙 Midnight _(presentaciones · noche · foco)_

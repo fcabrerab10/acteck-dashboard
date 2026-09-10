@@ -85,7 +85,7 @@ export function parseNumeroMX(texto) {
 }
 
 /**
- * Exporta a Excel con el look Ferruteck: fila título negra fusionada, header negro con
+ * Exporta a Excel con el look V3: fila título negra fusionada, header negro con
  * texto blanco, formatos por tipo, anchos, freeze panes y fila de totales opcional.
  *
  * @param {Object} opts

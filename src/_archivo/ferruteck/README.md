@@ -1,0 +1,5 @@
+# Ferruteck (asistente/copilot) — código retirado en V3 (2026-09-09), se retoma más adelante. Nada de `src/` importa esta carpeta.
+- `Topbar.ferruteck.jsx` ← `src/components/Topbar.jsx`: pastilla Ferruteck, `CopilotOverlay`, `FerrutekGhost` + outfits (`detectarOutfit`), `FerrutekStars`, CTA del buscador, notificación "Copilot Operaciones" y keyframes `ferrutek*`.
+- `FerrutekLoader.jsx` ← `src/components/FerrutekLoader.jsx` (loader fantasmita; sustituido por `src/components/kit/Cargando.jsx`) · `MobileShell.ferruteck.jsx` ← `FerrutekMini` + botón y sheet Ferruteck del bottom nav · `MobileHome.ferruteck.jsx` ← `FerruteckCard`.
+- `SellIn{ClienteV2,Pcel,Dicotech}.ferruteck.jsx` y `SellOut{ClienteV2,Pcel,Dicotech}.ferruteck.jsx` ← `src/modules/comercial/…`: `FerruteckStrip` (+ `FerruMini`/`FerruReco`/`FerruStars`) y el `useMemo copilotRecos` de cada pantalla.
+- `PropuestasTab.ferruteck.jsx` ← componente `Copilot` (sidebar de paquetes + chat) y `aplicarPaquete` · `EstrategiaPrecios.ferruteck.jsx` ← `CopilotPricing` + `recomendaciones` · `TrackingPedidos.ferruteck.jsx` ← `CopilotOps` + `recomendaciones`.

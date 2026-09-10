@@ -1,4 +1,4 @@
-// Inventario global · constantes y formateadores compartidos (Ferruteck 2).
+// Inventario global · constantes y formateadores compartidos (V3).
 
 // Mapping oficial (archivo "Almacenes 2026.xlsx")
 export const NOMBRES_ALMACEN = {

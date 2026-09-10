@@ -1,4 +1,4 @@
-// ExportMenu — botón pill "Exportar" (Excel / PDF) estilo Ferruteck.
+// ExportMenu — botón pill "Exportar" (Excel / PDF) estilo V3.
 //
 // Uso:
 //   <ExportMenu
@@ -15,6 +15,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Download, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
+import { elevation } from '../lib/elevation';
 import { exportarExcel, exportarPDF, tablaDesdeDOM } from '../lib/exportar';
 
 const EASE = 'cubic-bezier(0.32,0.72,0,1)';
@@ -168,7 +169,7 @@ export default function ExportMenu({
             background: isDark ? (theme.surface || '#1C1C1E') : (theme.surface || '#FFFFFF'),
             border: `1px solid ${theme.borderStrong || theme.border}`,
             borderRadius: 12,
-            boxShadow: isDark ? '0 8px 24px rgba(0,0,0,0.45)' : '0 8px 24px rgba(0,0,0,0.10)',
+            boxShadow: elevation(theme, 'flotante'),
             transformOrigin: align === 'left' ? 'top left' : 'top right',
             opacity: visible ? 1 : 0,
             transform: visible ? 'scale(1) translateY(0)' : 'scale(0.96) translateY(-4px)',
@@ -196,7 +197,7 @@ export default function ExportMenu({
           maxWidth: 280, padding: '6px 10px', borderRadius: 999,
           background: theme.red || '#FF3B30', color: '#FFFFFF',
           fontFamily: TYPO.fontText, fontSize: 12, fontWeight: 500, lineHeight: 1.3,
-          boxShadow: '0 4px 14px rgba(0,0,0,0.18)', whiteSpace: 'normal',
+          boxShadow: elevation(theme, 'flotante'), whiteSpace: 'normal',
         }}>
           {error}
         </div>

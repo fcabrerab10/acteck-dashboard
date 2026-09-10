@@ -22,7 +22,7 @@ import { puedeEditarPestanaGlobal, puedeVerPestanaGlobal } from '../../lib/permi
 import SinAcceso from '../../components/SinAcceso';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { FerrutekLoader } from '../../components';
+import { Cargando } from '../../components/kit';
 import { fetchAllQ } from '../../lib/queries';
 
 /**
@@ -1332,7 +1332,7 @@ export default function ForecastClientesTab() {
   }
 
   if (data.loading) {
-    return <FerrutekLoader label="Cargando S&OP…" sub="Ferruteck está trayendo forecast, cuotas y sell-in de los 3 clientes" minHeight={480} />;
+    return <Cargando label="Cargando S&OP…" sub="Trayendo forecast, cuotas y sell-in de los 3 clientes" minHeight={480} />;
   }
 
   const borradorActivo = sol.borradores.find((b) => b.id === borradorActivoId) || null;

@@ -1,4 +1,4 @@
-// PagosCliente · Ferruteck 2 (2026-09-10)
+// PagosCliente · V3 (2026-09-10)
 // Toda la lógica de datos, cálculos y escrituras a Supabase vive aquí; el render
 // se arma con el kit (Hero · KpiCard · Segmented · TablaCompacta · Panel · Pill · Boton)
 // y sub-vistas en ./pagos/*.jsx.

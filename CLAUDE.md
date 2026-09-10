@@ -124,6 +124,16 @@ Pendientes conocidos de rendimiento: agregar en Postgres (vistas/RPC) lo que hoy
 - **Alertas:** tabla `alertas` + task `generar-alertas` en `api/cron.js` (diaria) + `src/lib/alertas.js` (`useAlertas`, resolver/posponer) + `src/components/BandejaAlertas.jsx` (bandeja "Qué atender hoy" y `BadgeAlertas` del Topbar). Reglas: stock vs tránsito, cuota en riesgo, devoluciones anormales, rebate por generar, datos sin actualizar.
 - **Ferruteck 2 (aprobado 2026-09-10: hero negro en todas, radios 12).** Kit en `src/components/kit/` (Hero/HeroStat, KpiCard, Pill/DeltaPill, Segmented, TablaCompacta, HeatCell, Panel, Boton, Skeleton, toast/ToastHost) + `src/lib/motion.js` (EASE iOS, DUR tap 140 / state 220 / content 260 / page 340 / exit 160). `PageTransition` ya hace salida + entrada; hijos de `<div data-stagger>` entran con desfase 60 ms. Plantilla obligatoria por pantalla: Hero narrativo → 3-4 KpiCard → detalle → secundario en Panel plegable. **Pantallas migradas:** Pagos (`PagosCliente.jsx` + `pagos/`), Marketing (`MarketingCliente.jsx` + `marketing/`; `MarketingClienteV2.jsx` queda como respaldo sin uso), Inventario global (+ `inventario/`), Crédito y Cobranza V2, Visión General (tokens y radios, misma estructura Bento). Pendientes: Estado de Resultados, Configuración, móviles y el resto según `node scripts/auditar-colores.mjs` (reporte en `docs/AUDITORIA_COLORES.md`). Regla: pantalla nueva o migrada se arma sólo con el kit; nada de Tailwind de color ni hex fuera de constantes de paleta; `alert()` de éxito → `toast.ok()`.
 
+## V3 (2026-09-11) · estado
+
+- **Ferruteck retirado** de la interfaz (copilot, tira de recomendaciones, loader). Código en `src/_archivo/ferruteck/` (no se compila). Loader único: `Cargando` del kit (silueta/skeleton, elegido por Fernando).
+- **Sombras**: `src/lib/elevation.js` (`ELEV` reposo/hover/flotante, `elevation(theme, nivel)`); nada de `boxShadow` ad-hoc.
+- **Versión**: `package.json` es la fuente (`VITE_APP_VERSION`); aviso de nueva versión por toast (SW en modo prompt). Ver Flujo de trabajo.
+- **Home único**: `HomeClienteV3.jsx` + `home/` (config por cliente). Los 4 Home anteriores en `src/_archivo/home-v2/`.
+- **Frescura de datos**: vista `v_fuentes_frescura` + `src/lib/frescura.js` + `src/components/FrescuraPill.jsx` (`<FrescuraPill pantalla="sellIn" clienteKey inverso />` dentro del Hero). Pendiente: colocarla en cada pantalla.
+- **Limpieza**: ver `docs/LIMPIEZA_V3.md` (huérfanos borrados, `src/lib/format.js` como fuente única de formato; migrar helpers duplicados al tocar cada pantalla). `ventas_erp` sigue en uso por Estrategia de Producto (PCEL) y fill-rates: no borrar.
+- **Decisiones de Fernando**: cargas = Silueta (A); menús A (barra apple.com), B (sidebar iPad) y C (iPhone) seleccionables por usuario; Inicio con enfoque de dirección general; pendientes: central de notificaciones (3 propuestas) y centro de configuración/perfil; app móvil desde cero después del menú.
+
 ## Convenciones de código
 
 - `formatMXN(n)` — Intl.NumberFormat es-MX, MXN, sin decimales · `formatFecha(str)` — 'YYYY-MM-DD' → 'DD Mes YYYY'
@@ -153,5 +163,7 @@ npm run dev          # localhost:5173
 npx vite build       # medir bundle
 git push             # Vercel despliega desde main
 ```
+
+**Versionado (desde V3, 2026-09-09).** La versión vive en `package.json` (`"version"`) y se **edita a mano** — `npm version` no se usa (crea tags/commits que no queremos). `vite.config.js` la inyecta como `import.meta.env.VITE_APP_VERSION` junto con `VITE_COMMIT` (hash corto); `src/lib/version.js` expone `versionLabel()` → "v3.0.0 · a1b2c3d", visible en el menú de usuario del Topbar, en Configuración y en Mobile › Yo. Regla: **cada deploy con cambios visibles sube la versión** — patch (3.0.x) ajustes y fixes · minor (3.x.0) pantallas nuevas · major (x.0.0) rediseños. El service worker está en modo `prompt`: al publicarse un build nuevo, `src/main.jsx` muestra el toast "Hay una versión nueva del dashboard · Recargar" (persistente hasta que el usuario recarga o lo cierra). El mismo `version+commit` sirve de buster del cache persistido de React Query.
 
 **Dos máquinas (laptop + Mac mini) con la misma cuenta:** las sesiones y la memoria de Claude Code son locales por máquina; este archivo sí viaja con git. Trabajar cada máquina en su propia rama/worktree, hacer `git pull --rebase` antes de pushear y **no pushear a `main` desde las dos a la vez**. `.env.local` se crea a mano en cada máquina (no compartir por chat ni git).

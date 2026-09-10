@@ -1,10 +1,11 @@
 // KPI card · eyebrow + badge · título · cifra grande (+ small) · sub · progreso opcional.
-// Extraída de SellInClienteV2. Hover eleva 1px; onClick opcional.
+// Extraída de SellInClienteV2. Hover eleva 1px con sombra ELEV.hover; onClick opcional.
 import React, { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
+import { elevation } from '../../lib/elevation';
 import Pill from './Pill';
 
 export default function KpiCard({ eyebrow, badge, titulo, big, bigSmall, bigColor, sub, progress, progressColor, progressSecondary, onClick, style }) {
@@ -19,7 +20,7 @@ export default function KpiCard({ eyebrow, badge, titulo, big, bigSmall, bigColo
         cursor: onClick ? 'pointer' : 'default', position: 'relative', minWidth: 0, fontFamily: TYPO.fontText,
         transition: `transform ${DUR.state}ms ${EASE}, box-shadow ${DUR.state}ms ${EASE}`,
         transform: hover && onClick ? 'translateY(-1px)' : 'none',
-        boxShadow: hover && onClick ? '0 4px 12px rgba(0,0,0,0.06)' : 'none', ...style,
+        boxShadow: elevation(theme, hover && onClick ? 'hover' : 'reposo'), ...style,
       }}>
       {onClick && <ChevronRight size={13} style={{ position: 'absolute', top: 10, right: 12, color: theme.textSubtle || theme.textMuted }} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginBottom: 2, paddingRight: onClick ? 14 : 0 }}>

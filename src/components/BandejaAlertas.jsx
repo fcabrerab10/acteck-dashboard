@@ -1,5 +1,5 @@
 // BandejaAlertas — card "Qué atender hoy" (bandeja de alertas del cron
-// generar-alertas). Estilo Ferruteck: hairlines, SF, dots de severidad.
+// generar-alertas). Estilo V3: hairlines, SF, dots de severidad.
 //
 //   <BandejaAlertas clienteKey={null} onNavegar={handleNavegar} />          // global
 //   <BandejaAlertas clienteKey="digitalife" compacto onNavegar={...} />     // home cliente
@@ -16,6 +16,7 @@ import React, { useMemo, useState } from 'react';
 import { Check, Clock, ChevronDown, ChevronUp, AlertTriangle, ArrowUpRight } from 'lucide-react';
 import { useTheme } from '../lib/themeContext';
 import { TYPO } from '../lib/themeTokens';
+import { elevation } from '../lib/elevation';
 import { supabase } from '../lib/supabase';
 import {
   useAlertas, resolverAlerta, posponerAlerta, destinoAlerta, contarPorSeveridad, SEV_LABEL,
@@ -73,7 +74,7 @@ export default function BandejaAlertas({ clienteKey = null, compacto = false, on
   const pad = compacto ? '14px 16px' : '18px 22px';
   const card = {
     background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 18,
-    boxShadow: theme.shadow, fontFamily: TYPO.fontText, color: theme.text, overflow: 'hidden',
+    boxShadow: elevation(theme, 'reposo'), fontFamily: TYPO.fontText, color: theme.text, overflow: 'hidden',
   };
   const btnIcon = (color) => ({
     width: 26, height: 26, borderRadius: 8, border: `1px solid ${theme.border}`, background: 'transparent',

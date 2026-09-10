@@ -16,10 +16,7 @@ import {
 // Cada pantalla es su propio chunk. Antes todas viajaban en index.js
 // (2.2 MB / 527 KB gz) aunque el usuario usara 2 o 3. El shell (Topbar,
 // MobileShell, Login, loaders) sigue estático porque se necesita siempre.
-const HomeCliente            = lazy(() => import('./modules/comercial/HomeCliente'));
-const HomeDigitalife         = lazy(() => import('./modules/comercial/HomeDigitalife'));
-const HomeDicotech           = lazy(() => import('./modules/comercial/HomeDicotech'));
-const HomePcel               = lazy(() => import('./modules/comercial/HomePcel'));
+const HomeClienteV3          = lazy(() => import('./modules/comercial/HomeClienteV3')); // V3: un solo Resumen por cliente (config en home/config.js)
 const CreditoCobranza        = lazy(() => import('./modules/comercial/CreditoCobranza'));
 const CreditoCobranzaV2      = lazy(() => import('./modules/comercial/CreditoCobranzaV2'));
 const PagosCliente           = lazy(() => import('./modules/comercial/PagosCliente'));
@@ -67,7 +64,7 @@ import {
 import { PerfilContext } from './lib/perfilContext';
 import { ThemeProvider } from './lib/themeContext';
 import { PageTransition } from './components/apple/AppleLoader';
-import { FerrutekLoader } from './components';
+import { Cargando } from './components/kit';
 import { useBreakpoint, isMobile, useMobileShell } from './lib/useBreakpoint';
 import MobileNav from './components/MobileNav';
 import MobileShell from './components/MobileShell';
@@ -396,19 +393,19 @@ export default function App() {
     if (typeof navigator !== 'undefined' && navigator.connection?.saveData) return;
     const porCliente = {
       digitalife: [
-        () => import('./modules/comercial/HomeDigitalife'), () => import('./modules/comercial/SellInClienteV2'),
+        () => import('./modules/comercial/HomeClienteV3'), () => import('./modules/comercial/SellInClienteV2'),
         () => import('./modules/comercial/SellOutClienteV2'), () => import('./modules/comercial/PagosCliente'),
         () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingCliente'),
         () => import('./modules/comercial/AnalisisCliente'),
       ],
       dicotech: [
-        () => import('./modules/comercial/HomeDicotech'), () => import('./modules/comercial/SellInDicotech'),
+        () => import('./modules/comercial/HomeClienteV3'), () => import('./modules/comercial/SellInDicotech'),
         () => import('./modules/comercial/SellOutDicotech'), () => import('./modules/comercial/PagosCliente'),
         () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingCliente'),
         () => import('./modules/comercial/AnalisisCliente'),
       ],
       pcel: [
-        () => import('./modules/comercial/HomePcel'), () => import('./modules/comercial/SellInPcel'),
+        () => import('./modules/comercial/HomeClienteV3'), () => import('./modules/comercial/SellInPcel'),
         () => import('./modules/comercial/SellOutPcel'), () => import('./modules/comercial/PagosCliente'),
         () => import('./modules/comercial/CreditoCobranzaV2'), () => import('./modules/comercial/MarketingCliente'),
         () => import('./modules/comercial/AnalisisCliente'),
@@ -530,7 +527,7 @@ export default function App() {
     && (window.location.hash || '').startsWith('#/set-password');
   if (isSetPasswordRoute) return <SetPasswordPage />;
 
-  if (authLoading) return <FerrutekLoader fullscreen label="Cargando…" sub="Ferruteck está iniciando el dashboard" />;
+  if (authLoading) return <Cargando fullscreen label="Cargando…" sub="Iniciando el dashboard" />;
   if (!authUser || !perfil) return <LoginPage onLogin={handleLogin} />;
 
 
@@ -580,7 +577,7 @@ export default function App() {
             margin: '0 auto',
           }}>
           <PageTransition keyId={vistaActual === 'configuracion' ? 'configuracion' : `${clienteActivo || 'g'}-${paginaActiva}`}>
-          <Suspense fallback={<FerrutekLoader label="Cargando…" sub="Abriendo la pantalla" />}>
+          <Suspense fallback={<Cargando />}>
           {vistaActual === "configuracion" ? (
             puedeVerConfig
               ? (mobile
@@ -754,13 +751,7 @@ export default function App() {
                 <div style={{ marginBottom: 16 }}>
                   <BandejaAlertas clienteKey={clienteActivo} compacto onNavegar={handleNavegar} />
                 </div>
-                {clienteActivo === 'digitalife'
-                  ? <HomeDigitalife cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
-                  : clienteActivo === 'dicotech'
-                    ? <HomeDicotech cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
-                    : clienteActivo === 'pcel'
-                      ? <HomePcel cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />
-                    : <HomeCliente cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} />}
+                <HomeClienteV3 cliente={c} clienteKey={clienteActivo} onUploadComplete={() => setVentasVer(v => v+1)} onNavegar={handleNavegar} />
               </>
         )}
         {clienteActivo && paginaActiva === "sellIn"  && (
@@ -798,7 +789,7 @@ export default function App() {
           mobile
             ? <MobileMarketing clienteKey={clienteActivo} onBack={() => setPaginaActiva('home')} onNavegar={handleNavegar} />
             : React.createElement(
-                // Ferruteck 2 (2026-09-10): MarketingCliente rediseñado con el kit es la única versión;
+                // V3 (2026-09-10): MarketingCliente rediseñado con el kit es la única versión;
                 // MarketingClienteV2 queda como respaldo hasta que Fernando valide en producción.
                 MarketingCliente,
                 { cliente: clienteActivo, clienteKey: clienteActivo }

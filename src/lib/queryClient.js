@@ -31,4 +31,5 @@ export function createIDBPersister() {
   };
 }
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || 'dev';
+// Compat: el identificador de build vive en src/lib/version.js
+export { BUILD_ID as APP_VERSION } from './version';

@@ -16,7 +16,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { supabase, DB_CONFIGURED } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { FerrutekLoader } from '../../components';
+import { Cargando } from '../../components/kit';
 import { usePerfil } from '../../lib/perfilContext';
 import { Search, ChevronDown, Zap, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { fetchAllQ } from '../../lib/queries';
@@ -456,7 +456,7 @@ export default function ForecastReservas() {
 
   // ─── Render ───────────────────────────────────────────────
   if (!DB_CONFIGURED) return <div style={{ padding: 40, color: theme.textMuted }}>DB no configurada.</div>;
-  if (loading) return <div style={{ padding: 40 }}><FerrutekLoader label="Cargando forecast…" /></div>;
+  if (loading) return <div style={{ padding: 40 }}><Cargando label="Cargando forecast…" /></div>;
   if (error) return (
     <div style={{ padding: 20, maxWidth: 720, margin: '40px auto', background: '#FBECEA', border: '1px solid #C0392B', borderRadius: 12, color: '#C0392B' }}>
       <b style={{ fontFamily: TYPO.fontDisplay, fontSize: 14 }}>Error cargando forecast</b>

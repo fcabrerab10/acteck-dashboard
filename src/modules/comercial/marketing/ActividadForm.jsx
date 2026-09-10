@@ -5,7 +5,7 @@ import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
-import { Boton, Pill, Segmented, EASE, DUR } from '../../../components/kit';
+import { Boton, Pill, Segmented, EASE, DUR, elevation, bordeFlotante } from '../../../components/kit';
 import { TIPOS, MARCAS, REDES_SOCIALES } from './config';
 
 function Field({ label, children }) {
@@ -39,9 +39,9 @@ export default function ActividadForm({ form, setForm, editId, saving, onSave, o
       <style>{`@keyframes mktFormIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}`}</style>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true"
         style={{
-          background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, maxWidth: 640, width: '100%', maxHeight: '90vh',
+          background: theme.surface, border: bordeFlotante(theme), borderRadius: 14, maxWidth: 640, width: '100%', maxHeight: '90vh',
           overflow: 'hidden', display: 'flex', flexDirection: 'column', fontFamily: TYPO.fontText, color: theme.text,
-          boxShadow: dark ? '0 24px 60px rgba(0,0,0,0.6)' : '0 24px 60px rgba(0,0,0,0.18)', animation: `mktFormIn ${DUR.content}ms ${EASE} both`,
+          boxShadow: elevation(theme, 'flotante'), animation: `mktFormIn ${DUR.content}ms ${EASE} both`,
         }}>
         <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>

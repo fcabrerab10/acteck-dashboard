@@ -1,3 +1,4 @@
+// Retirado de src/components/FerrutekLoader.jsx (V3, 2026-09-09). Sustituido por src/components/kit/Cargando.jsx.
 // FerrutekLoader · loader oficial del dashboard
 // ─ Full-screen: fantasmita bobbing + shadow + 3 dots pulsando + label
 // ─ Inline: mini ghost + 3 dots (para dentro de cards o botones)

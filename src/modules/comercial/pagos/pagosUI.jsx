@@ -1,10 +1,10 @@
-// Piezas compartidas de la pantalla Pagos (Ferruteck 2) · constantes,
+// Piezas compartidas de la pantalla Pagos (V3) · constantes,
 // pills de categoría/estatus, inputs con tema, modal y menú de fila.
 import React, { useEffect, useRef, useState } from 'react';
 import { MoreHorizontal, X } from 'lucide-react';
 import { useTheme } from '../../../lib/themeContext';
 import { TYPO } from '../../../lib/themeTokens';
-import { Pill, Boton, EASE, DUR } from '../../../components/kit';
+import { Pill, Boton, EASE, DUR, elevation, bordeFlotante } from '../../../components/kit';
 
 export const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 export const MESES_LARGOS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -122,7 +122,7 @@ export function Modal({ titulo, sub, onClose, children, footer, width = 520 }) {
   }, [onClose]);
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: width, maxHeight: '88vh', display: 'flex', flexDirection: 'column', background: theme.surface, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', fontFamily: TYPO.fontText }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: width, maxHeight: '88vh', display: 'flex', flexDirection: 'column', background: theme.surface, color: theme.text, border: bordeFlotante(theme), borderRadius: 12, boxShadow: elevation(theme, 'flotante'), fontFamily: TYPO.fontText }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '12px 14px', borderBottom: `1px solid ${theme.border}` }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.01em' }}>{titulo}</div>
@@ -157,7 +157,7 @@ export function MenuFila({ items, title = 'Más acciones' }) {
         <MoreHorizontal size={14} />
       </button>
       {open && (
-        <div style={{ position: 'absolute', right: 0, top: 26, zIndex: 20, minWidth: 190, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.16)', padding: 4 }}>
+        <div style={{ position: 'absolute', right: 0, top: 26, zIndex: 20, minWidth: 190, background: theme.surface, border: bordeFlotante(theme), borderRadius: 10, boxShadow: elevation(theme, 'flotante'), padding: 4 }}>
           {visibles.map((it, i) => (
             <button key={i} disabled={it.disabled} onClick={() => { setOpen(false); it.onClick?.(); }}
               style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', borderRadius: 7, border: 0, background: 'transparent', cursor: it.disabled ? 'not-allowed' : 'pointer', color: it.peligro ? theme.red : theme.text, fontFamily: TYPO.fontText, fontSize: 12, opacity: it.disabled ? 0.45 : 1, whiteSpace: 'nowrap' }}

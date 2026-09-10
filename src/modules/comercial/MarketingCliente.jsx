@@ -1,4 +1,4 @@
-// MarketingCliente · Ferruteck 2 (kit)
+// MarketingCliente · V3 (kit)
 // ─ Hero narrativo (mes / actividades activas / próxima) + 3 stats
 // ─ 4 KPI: Sell-out en promo (v_vision_sellout_promos, global) · Costo por actividad · Apertura mailing · Próxima
 // ─ Barra: año · Mes/Anual · meses como pills · Cerrar mes · Exportar · + Actividad · filtros tipo/marca

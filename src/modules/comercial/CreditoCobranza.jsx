@@ -6,7 +6,7 @@ import { usePerfil } from '../../lib/perfilContext';
 import { puedeEditarPestanaCliente } from '../../lib/permisos';
 import { BarChart3, CalendarDays, TrendingUp, CreditCard, AlertTriangle, Pencil, Check, X as XIcon } from 'lucide-react';
 import { fetchSelloutSku } from '../../lib/pcelAdapter';
-import { FerrutekLoader } from '../../components';
+import { Cargando } from '../../components/kit';
 
 const NOMBRES_MES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -380,7 +380,7 @@ export default function CreditoCobranza({ cliente, clienteKey }) {
 
   // ═══ Early returns — ahora SÍ, después de todos los hooks ═══
   if (!DB_CONFIGURED) return <div className="p-6 text-gray-400 text-sm">Supabase no configurado.</div>;
-  if (loading)        return <FerrutekLoader label="Cargando estado de cuenta…" sub={`Ferruteck está trayendo cartera y facturas de ${clienteKey}`} minHeight={480} />;
+  if (loading)        return <Cargando label="Cargando estado de cuenta…" sub={`Trayendo cartera y facturas de ${clienteKey}`} minHeight={480} />;
   if (!estado) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">

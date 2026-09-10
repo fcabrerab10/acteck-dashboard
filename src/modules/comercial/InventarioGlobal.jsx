@@ -1,4 +1,4 @@
-// Inventario global · Ferruteck 2. Hero narrativo → 4 KpiCard → tabla SKU × almacén
+// Inventario global · V3. Hero narrativo → 4 KpiCard → tabla SKU × almacén
 // (TablaCompacta + HeatCell, drill por SKU) → secundario plegable (CEDIS / estatus / tipos).
 // Datos: inventario/useInventarioDatos.js · constantes y formatos: inventario/constantes.js.
 import React, { useMemo, useRef, useState } from 'react';

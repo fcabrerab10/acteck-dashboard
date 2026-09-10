@@ -94,7 +94,7 @@ export function AppleLoaderFullscreen({ label = 'Cargando…' }) {
 }
 
 // ─── PageTransition — salida 160 ms (opacity, −4px) → entrada 340 ms (opacity, +8px → 0).
-// Los hijos directos con data-stagger entran con desfase de 60 ms (Ferruteck 2).
+// Los hijos directos con data-stagger entran con desfase de 60 ms (V3).
 export function PageTransition({ children, keyId }) {
   const [shown, setShown] = React.useState({ keyId, children });
   const [leaving, setLeaving] = React.useState(false);

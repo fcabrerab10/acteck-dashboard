@@ -2,20 +2,24 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 
-// Version stamp = short git hash. Se usa como buster del cache persistido
-// de React Query — al cambiar el commit, invalidamos el cache viejo.
-let commitHash = 'dev'
+// Versión semántica (package.json, se edita a mano — ver CLAUDE.md → Flujo de trabajo)
+// + hash corto del commit. La app los muestra en el menú de usuario y los usa como
+// buster del cache persistido de React Query (src/lib/version.js).
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
+let commitHash = ''
 try {
   commitHash = execSync('git rev-parse --short HEAD').toString().trim()
 } catch (_) {
   // en producción (Vercel) puede no haber git — usar env de Vercel
-  commitHash = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || 'prod'
+  commitHash = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || ''
 }
 
 export default defineConfig({
   define: {
-    'import.meta.env.VITE_APP_VERSION': JSON.stringify(commitHash),
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(pkg.version),
+    'import.meta.env.VITE_COMMIT': JSON.stringify(commitHash),
   },
   build: {
     chunkSizeWarningLimit: 1024,
@@ -44,8 +48,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // 'prompt': el SW nuevo queda en waiting y src/main.jsx avisa con un toast
+      // ("Hay una versión nueva · Recargar"); updateSW(true) manda SKIP_WAITING y recarga.
+      registerType: 'prompt',
+      injectRegister: null,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Acteck Dashboard',
@@ -86,12 +92,11 @@ export default defineConfig({
         globIgnores: ['**/react-query-devtools*', '**/node_modules/**', '**/uploads.html'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
         navigateFallbackDenylist: [/^\/api\//, /^\/uploads\.html$/],
-        // El SW nuevo toma control inmediatamente al detectarse deploy nuevo
-        // (sin esperar a que se cierren todas las tabs). Combinado con
-        // registerType:'autoUpdate' arriba y el listener onNeedRefresh del
-        // app garantiza que el usuario nunca quede con index.html stale
-        // apuntando a chunks JS que ya no existen (bug del 404 de assets).
-        skipWaiting: true,
+        // Sin skipWaiting: con registerType 'prompt' el SW nuevo espera a que el
+        // usuario pulse "Recargar" en el toast (main.jsx → updateSW(true) manda
+        // SKIP_WAITING). clientsClaim para que, ya activado, tome todas las tabs.
+        // index.html se sirve NetworkFirst (abajo), así que nunca queda un HTML
+        // stale apuntando a chunks que ya no existen (bug del 404 de assets).
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         runtimeCaching: [

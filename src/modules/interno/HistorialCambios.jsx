@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import FerrutekLoader from '../../components/FerrutekLoader';
+import { Cargando } from '../../components/kit';
 import { ChevronDown, ChevronRight, History, Search, RefreshCw } from 'lucide-react';
 
 // ═══════════════════ Constantes ═══════════════════
@@ -400,7 +400,7 @@ export default function HistorialCambios() {
       {/* ═══ Tabla ═══ */}
       <div style={{ background: theme.surface, border, borderRadius: 12, overflow: 'hidden' }}>
         {loading ? (
-          <FerrutekLoader label="Cargando historial…" sub="Leyendo auditoría de cambios" minHeight={260} />
+          <Cargando label="Cargando historial…" sub="Leyendo auditoría de cambios" minHeight={260} />
         ) : error ? (
           <div style={{ padding: 24, color: P.red, fontSize: 12 }}>No se pudo leer la auditoría: {error}</div>
         ) : rows.length === 0 ? (

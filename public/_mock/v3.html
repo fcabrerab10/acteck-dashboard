@@ -1,0 +1,334 @@
+<title>Acteck V3</title>
+<style>
+  :root{--bg:#F5F5F7;--surface:#FFFFFF;--inv:#000;--inv-text:#F5F5F7;--inv-muted:rgba(245,245,247,.66);--text:#1D1D1F;--muted:#6E6E73;--subtle:#86868B;--border:rgba(0,0,0,.06);--divider:rgba(0,0,0,.1);--accent:#007AFF;--green:#34C759;--red:#FF3B30;--orange:#FF9500;--yellow:#FFCC00;--purple:#AF52DE;--pink:#FF2D55;--ease:cubic-bezier(.32,.72,0,1);--ft:"SF Pro Text",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;--fd:"SF Pro Display",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;--sh-hover:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.08);--sh-float:0 2px 6px rgba(0,0,0,.08),0 16px 48px rgba(0,0,0,.16)}
+  *{box-sizing:border-box}body{background:var(--bg);color:var(--text);font-family:var(--ft);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1100px;margin:0 auto;padding:40px 28px 80px}
+  h1,h2,h3,.num{font-family:var(--fd);letter-spacing:-.02em}h1{font-size:clamp(34px,5vw,54px);font-weight:600;letter-spacing:-.04em;line-height:1.02;margin:6px 0 10px;text-wrap:balance}h2{font-size:26px;font-weight:600;letter-spacing:-.03em;margin:0 0 6px}h3{font-size:15px;font-weight:600;margin:0}p{margin:0}
+  .lede{font-size:17px;color:var(--muted);max-width:62ch}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:600;font-family:var(--fd)}.num{font-variant-numeric:tabular-nums}
+  section{margin-top:56px}.sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px;flex-wrap:wrap}.sec-head p{color:var(--muted);max-width:66ch}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px}.grid{display:grid;gap:12px}.g3{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}.g2{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+  .note{font-size:12px;color:var(--muted)}.spec{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11px;color:var(--muted);background:var(--bg);border-radius:8px;padding:8px 10px;margin-top:10px;white-space:pre-wrap}
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:600;font-family:var(--fd);white-space:nowrap}.pill i{width:5px;height:5px;border-radius:999px;background:currentColor;display:inline-block}
+  .p-green{background:rgba(52,199,89,.14);color:#1F7A3D}.p-blue{background:rgba(0,122,255,.12);color:#0A5DC2}.p-orange{background:rgba(255,149,0,.16);color:#9A5500}.p-red{background:rgba(255,59,48,.12);color:#B00020}.p-gray{background:rgba(0,0,0,.05);color:var(--muted)}.p-yellow{background:rgba(255,204,0,.22);color:#7A5B00}.p-purple{background:rgba(175,82,222,.14);color:#6D2AA0}.p-inv{background:var(--inv);color:#fff}
+  .tag{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:6px;background:var(--text);color:#fff;font-family:var(--fd)}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .btn{border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-weight:500;font-size:12.5px;padding:6px 14px;border-radius:999px;cursor:pointer;transition:transform 140ms var(--ease),background 160ms,box-shadow 160ms;display:inline-flex;align-items:center;gap:6px}.btn:hover{background:rgba(0,0,0,.03)}.btn:active{transform:scale(.96)}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .opt{border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:14px;position:relative}.opt .letter{position:absolute;top:-10px;left:14px;background:var(--text);color:#fff;font:700 11px/20px var(--fd);width:20px;height:20px;border-radius:999px;text-align:center}
+  .stage{border-radius:10px;border:1px solid var(--border);background:var(--bg);height:190px;position:relative;overflow:hidden;padding:10px}
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px}.kpi .ey{font-family:var(--fd);font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}.kpi .big{font-family:var(--fd);font-size:18px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1;margin-top:3px}.kpi .sub{font-size:10px;color:var(--muted);margin-top:3px}
+  .hero{background:var(--inv);color:#fff;border-radius:12px;padding:12px 14px}.hero .ey{font-size:9px;text-transform:uppercase;letter-spacing:.09em;color:var(--inv-muted);font-family:var(--fd);font-weight:600}.hero h4{font-family:var(--fd);font-size:16px;font-weight:600;margin:2px 0 0;letter-spacing:-.02em}
+  .sk{display:block;border-radius:6px;background:linear-gradient(90deg,rgba(0,0,0,.05) 25%,rgba(0,0,0,.10) 50%,rgba(0,0,0,.05) 75%);background-size:200% 100%;animation:sh 1.3s linear infinite}@keyframes sh{to{background-position:-200% 0}}
+  .spin{position:relative;width:26px;height:26px;animation:rot 900ms linear infinite}.spin i{position:absolute;top:0;left:50%;width:2px;height:7px;background:#6E6E73;border-radius:999px;transform-origin:1px 13px}@keyframes rot{to{transform:rotate(360deg)}}
+  .fade{animation:fadeUp 340ms var(--ease) both}@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .dotpulse{display:inline-flex;gap:3px}.dotpulse i{width:4px;height:4px;border-radius:999px;background:var(--subtle);animation:dp 1s infinite}.dotpulse i:nth-child(2){animation-delay:.15s}.dotpulse i:nth-child(3){animation-delay:.3s}@keyframes dp{0%,100%{opacity:.3}50%{opacity:1}}
+  .bar{height:2px;background:var(--accent);position:absolute;top:0;left:0;width:0;transition:width 700ms var(--ease)}
+  /* menús */
+  .app{border-radius:12px;border:1px solid var(--border);background:var(--bg);height:300px;overflow:hidden;display:flex;position:relative;font-size:11px}
+  .topnav{position:absolute;top:0;left:0;right:0;height:38px;background:rgba(29,29,31,.86);backdrop-filter:blur(20px) saturate(180%);color:#f5f5f7;display:flex;align-items:center;gap:18px;padding:0 16px;font-size:11.5px;font-weight:500;z-index:3}.topnav b{font-family:var(--fd);font-weight:600;margin-right:6px}.topnav span{opacity:.85;cursor:pointer}.topnav span.on{opacity:1;border-bottom:1.5px solid #fff;padding-bottom:2px}.topnav .r{margin-left:auto;display:flex;gap:10px;opacity:.85}
+  .mega{position:absolute;top:38px;left:0;right:0;background:rgba(29,29,31,.96);backdrop-filter:blur(20px);color:#f5f5f7;padding:16px 24px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;z-index:2;transform:translateY(-8px);opacity:0;transition:transform 260ms var(--ease),opacity 200ms;pointer-events:none}.mega.open{transform:none;opacity:1;pointer-events:auto}.mega h6{margin:0 0 6px;font:600 9.5px var(--fd);letter-spacing:.1em;text-transform:uppercase;opacity:.5}.mega div span{display:block;padding:3px 0;font-size:12px;opacity:.9}
+  .content{flex:1;padding:12px;display:flex;flex-direction:column;gap:8px}.content .mini-hero{background:var(--inv);color:#fff;border-radius:10px;padding:10px 12px;font-family:var(--fd);font-weight:600;font-size:13px}.content .mini-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.content .mini-kpis span{background:var(--surface);border:1px solid var(--border);border-radius:9px;height:44px}
+  .side{width:190px;background:rgba(246,246,248,.92);backdrop-filter:blur(20px);border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:2px;transition:width 260ms var(--ease)}.side.mini{width:56px}.side .h{font:600 9.5px var(--fd);letter-spacing:.09em;text-transform:uppercase;color:var(--subtle);padding:10px 8px 4px;white-space:nowrap;overflow:hidden}.side .it{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:7px;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;cursor:pointer}.side .it:hover{background:rgba(0,0,0,.05)}.side .it.on{background:var(--accent);color:#fff}.side .it i{width:16px;height:16px;border-radius:5px;background:rgba(0,0,0,.12);flex-shrink:0}.side .it.on i{background:rgba(255,255,255,.35)}.side.mini .h{opacity:0}.side.mini .it{justify-content:center;padding:6px}.side.mini .it span{display:none}.side .cli{width:16px;height:16px;border-radius:999px;flex-shrink:0}
+  .search{margin:4px 8px 6px;background:rgba(0,0,0,.06);border-radius:7px;padding:5px 8px;font-size:11px;color:var(--subtle);display:flex;justify-content:space-between}.side.mini .search{display:none}
+  .dock{width:52px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:6px}.dock i{width:34px;height:34px;border-radius:10px;background:rgba(0,0,0,.06);display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;transition:transform 140ms var(--ease)}.dock i:hover{transform:scale(1.08)}.dock i.on{background:var(--inv)}.dock i.on::after{content:"";position:absolute;left:-9px;width:3px;height:16px;border-radius:999px;background:var(--inv)}.dock i b{display:none;position:absolute;left:44px;background:var(--inv);color:#fff;font:500 11px var(--ft);padding:3px 8px;border-radius:6px;white-space:nowrap;z-index:5}.dock i:hover b{display:block}.dock .sep{width:24px;height:1px;background:var(--divider);margin:4px 0}.dock .cl{width:22px;height:22px;border-radius:999px}
+  .palette{position:absolute;left:50%;top:70px;transform:translateX(-50%);width:360px;background:rgba(255,255,255,.96);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:12px;box-shadow:var(--sh-float);z-index:6;padding:8px;display:none}.palette.open{display:block}.palette input{width:100%;border:0;outline:0;font:inherit;font-size:14px;padding:8px 10px;background:transparent}.palette div{padding:6px 10px;border-radius:7px;font-size:12px;display:flex;justify-content:space-between;color:var(--text)}.palette div.on{background:var(--accent);color:#fff}.palette kbd{font:10px var(--fd);opacity:.6}
+  .custom{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}.custom .c{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--surface)}.custom .c h6{margin:0 0 6px;font:600 11px var(--fd)}.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;margin:2px;background:var(--surface)}.chip.on{background:var(--inv);color:#fff;border-color:var(--inv)}
+  /* inicio */
+  .shot{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;font-size:11.5px;position:relative}
+  .shot .hero{padding:14px 16px;display:grid;grid-template-columns:1fr auto auto auto;gap:18px;align-items:center}.shot .hero h4{font-size:19px}.shot .hero .sub{color:var(--inv-muted);font-size:11.5px;max-width:460px;margin-top:2px}
+  .hstat{text-align:right}.hstat .k{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--inv-muted);font-family:var(--fd);font-weight:600}.hstat .v{font-family:var(--fd);font-size:20px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}.hstat .s{font-size:10px;color:var(--inv-muted)}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.two{display:grid;grid-template-columns:1.3fr 1fr;gap:10px}.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px}.panel h5{font-family:var(--fd);font-size:12px;font-weight:600;margin:0 0 6px;display:flex;justify-content:space-between;align-items:center}
+  .cli3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.cli3 .c{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--surface)}.cli3 .c b{font-family:var(--fd);font-size:12.5px;display:flex;justify-content:space-between;align-items:center}.cli3 .prog{height:3px;background:rgba(0,0,0,.06);border-radius:999px;margin:6px 0 4px;overflow:hidden}.cli3 .prog i{display:block;height:100%;border-radius:999px}
+  .al{display:grid;grid-template-columns:8px 1fr auto;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)}.al:last-child{border:0}.al i{width:7px;height:7px;border-radius:999px}.al .t{font-family:var(--fd);font-weight:600;font-size:11.5px}.al .d{font-size:10px;color:var(--muted)}
+  .ev{display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px}.ev:last-child{border:0}.ev .dt{font-family:var(--fd);font-weight:600;width:44px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .co{position:absolute;width:18px;height:18px;border-radius:999px;background:var(--accent);color:#fff;font:700 10px/18px var(--fd);text-align:center;box-shadow:0 0 0 3px rgba(0,122,255,.18);z-index:2}
+  .legend{display:grid;gap:6px;margin-top:10px}.legend div{display:grid;grid-template-columns:18px 1fr;gap:8px;font-size:12px;color:var(--muted)}.legend b{width:18px;height:18px;border-radius:999px;background:var(--accent);color:#fff;font:700 10px/18px var(--fd);text-align:center}.legend strong{color:var(--text)}
+  /* notificaciones */
+  .nc{width:360px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--sh-float);padding:10px;font-size:11.5px}.nc .tabs{display:inline-flex;padding:2px;background:rgba(0,0,0,.05);border-radius:8px;margin-bottom:8px}.nc .tabs span{padding:3px 10px;border-radius:6px;font-size:11px;color:var(--muted)}.nc .tabs span.on{background:#fff;color:var(--text);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}.nc .grp{font:600 9.5px var(--fd);letter-spacing:.09em;text-transform:uppercase;color:var(--subtle);margin:8px 0 4px}.nc .n{display:grid;grid-template-columns:8px 1fr auto;gap:8px;padding:6px 4px;border-radius:8px;align-items:start}.nc .n:hover{background:rgba(0,0,0,.03)}.nc .n i{width:7px;height:7px;border-radius:999px;margin-top:5px}.nc .n .t{font-family:var(--fd);font-weight:600}.nc .n .d{font-size:10px;color:var(--muted)}.nc .n .a{display:flex;gap:4px}.nc .n .a span{font-size:10px;padding:2px 6px;border-radius:999px;border:1px solid var(--border)}
+  .steps{display:grid;gap:8px}.step{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:12px}.step b{font-family:var(--fd)}.step span{font-size:12px;color:var(--muted);display:block}
+  .q{padding:12px 14px;border-left:3px solid var(--accent);background:var(--surface);border-radius:0 12px 12px 0}.q b{font-family:var(--fd)}
+
+  /* iPhone menu */
+  .ios{border-radius:12px;border:1px solid var(--border);background:var(--bg);height:340px;position:relative;overflow:hidden;font-size:11.5px}
+  .ios .lt{padding:14px 18px 6px;font:600 26px var(--fd);letter-spacing:-.03em}
+  .ios .grp{margin:8px 14px;background:var(--surface);border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+  .ios .gi{display:grid;grid-template-columns:28px 1fr auto 12px;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border)}.ios .gi:last-child{border:0}.ios .gi i{width:26px;height:26px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;color:#fff}.ios .gi b{font-weight:500;font-size:12.5px}.ios .gi small{color:var(--subtle)}.ios .gi .chev{color:var(--subtle)}
+  .ios .tab{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);background:rgba(255,255,255,.82);backdrop-filter:blur(24px) saturate(180%);border:1px solid rgba(0,0,0,.06);border-radius:999px;box-shadow:var(--sh-float);display:flex;gap:4px;padding:5px;z-index:4}
+  .ios .tab span{display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 12px;border-radius:999px;font:500 9px var(--fd);color:var(--muted);min-width:54px;cursor:pointer;transition:background 200ms var(--ease),color 200ms}.ios .tab span.on{background:var(--inv);color:#fff}.ios .tab span em{font-style:normal;font-size:15px;line-height:1}
+  .ios .sheet{position:absolute;left:0;right:0;bottom:0;height:78%;background:rgba(246,246,248,.96);backdrop-filter:blur(24px);border-radius:16px 16px 0 0;box-shadow:var(--sh-float);transform:translateY(105%);transition:transform 340ms var(--ease);z-index:3;padding:10px 14px}
+  .ios .sheet.open{transform:none}.ios .sheet .grab{width:36px;height:4px;border-radius:999px;background:rgba(0,0,0,.2);margin:0 auto 8px}.ios .sheet .sh{display:flex;justify-content:space-between;align-items:center;font:600 15px var(--fd);margin-bottom:8px}.ios .sheet .search{background:rgba(0,0,0,.06);border-radius:9px;padding:6px 10px;color:var(--subtle);margin-bottom:10px}
+  .ios .apps{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.ios .apps div{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:9.5px;color:var(--text);text-align:center}.ios .apps i{width:44px;height:44px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .ios .hd{display:flex;justify-content:space-between;align-items:center;padding:12px 16px 0;font-size:11px;color:var(--accent)}
+  /* notificaciones 3 */
+  .ncard{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px;font-size:11.5px;height:330px;overflow:hidden;position:relative}
+  .nios{display:flex;flex-direction:column;gap:6px}.nios .stack{background:rgba(0,0,0,.035);border-radius:12px;padding:8px 10px;position:relative}.nios .stack::after{content:"";position:absolute;left:8px;right:8px;bottom:-4px;height:6px;border-radius:0 0 10px 10px;background:rgba(0,0,0,.05)}.nios .stack .t{display:flex;justify-content:space-between;font:600 11px var(--fd)}.nios .stack .t small{font-weight:400;color:var(--subtle)}.nios .stack .b{font-size:11px;color:var(--text);margin-top:2px}.nios .stack .c{font-size:10px;color:var(--muted)}
+  .inbox{display:grid;grid-template-columns:100px 1fr;gap:8px;height:100%}.inbox .f{border-right:1px solid var(--border);padding-right:6px;display:flex;flex-direction:column;gap:2px}.inbox .f span{padding:4px 8px;border-radius:7px;font-size:11px;color:var(--muted);display:flex;justify-content:space-between}.inbox .f span.on{background:var(--accent);color:#fff}.inbox .l .m{display:grid;grid-template-columns:8px 1fr auto;gap:8px;padding:6px 4px;border-bottom:1px solid var(--border);align-items:start}.inbox .m i{width:7px;height:7px;border-radius:999px;margin-top:5px}.inbox .m .t{font:600 11.5px var(--fd)}.inbox .m .d{font-size:10px;color:var(--muted)}.inbox .m .ac{display:flex;gap:3px}.inbox .m .ac span{font-size:9.5px;padding:1px 6px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+  .feed{display:flex;flex-direction:column;gap:8px}.feed .day{font:600 9.5px var(--fd);letter-spacing:.09em;text-transform:uppercase;color:var(--subtle)}.feed .fc{border:1px solid var(--border);border-radius:12px;padding:8px 10px;display:grid;grid-template-columns:30px 1fr;gap:8px;align-items:start}.feed .fc i{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px}.feed .fc .t{font:600 11.5px var(--fd)}.feed .fc .d{font-size:10.5px;color:var(--muted)}.feed .fc .k{font:600 15px var(--fd);letter-spacing:-.02em;margin-top:2px}
+  /* perfil / ajustes */
+  .set{border-radius:12px;border:1px solid var(--border);background:var(--bg);display:grid;grid-template-columns:200px 1fr;height:360px;overflow:hidden;font-size:11.5px}
+  .set .nav{background:rgba(246,246,248,.92);border-right:1px solid var(--border);padding:12px 8px;display:flex;flex-direction:column;gap:2px}.set .nav .me{display:flex;gap:8px;align-items:center;padding:6px 8px 12px}.set .nav .me .av{width:36px;height:36px;border-radius:999px;background:linear-gradient(135deg,#5AC8FA,#007AFF);color:#fff;display:flex;align-items:center;justify-content:center;font:600 13px var(--fd)}.set .nav .me b{font:600 12px var(--fd);display:block}.set .nav .me small{color:var(--muted);font-size:10px}
+  .set .nav .it{display:flex;gap:8px;align-items:center;padding:5px 8px;border-radius:7px;font-size:12px;cursor:pointer}.set .nav .it i{width:20px;height:20px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:#fff}.set .nav .it.on{background:var(--accent);color:#fff}
+  .set .body{padding:14px 18px;overflow:hidden}.set .body h4{font:600 20px var(--fd);letter-spacing:-.025em;margin:0 0 10px}.set .g{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:10px}.set .g .r{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px}.set .g .r:last-child{border:0}.set .g .r small{color:var(--muted)}
+  .tog{width:30px;height:18px;border-radius:999px;background:var(--green);position:relative}.tog::after{content:"";position:absolute;top:1px;right:1px;width:16px;height:16px;border-radius:999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.15)}.tog.off{background:rgba(0,0,0,.15)}.tog.off::after{right:auto;left:1px}
+  .avs{display:flex;gap:8px;align-items:center}.avs i{width:34px;height:34px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font:600 12px var(--fd)}.avs i.sel{outline:2px solid var(--accent);outline-offset:2px}
+  @media (max-width:760px){.two,.custom,.cli3,.set,.inbox{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.shot .hero{grid-template-columns:1fr 1fr}}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+<div class="wrap">
+  <p class="eyebrow">Acteck Dashboard · V3 · Propuestas para elegir · 10 sep 2026</p>
+  <h1>V3. Cargas, menú, Inicio, notificaciones y tu cuenta.</h1>
+  <p class="lede">Segunda ronda. Cargas ya decidido (Silueta), menús A y B se quedan y C es ahora estilo iPhone; el Inicio cambia a punto de vista de dirección general; tres propuestas de notificaciones y una nueva sección de perfil y configuración. Las decisiones que faltan son tuyas. En cada una hay dos o tres propuestas construidas con las piezas del kit; pulsa los botones para ver cómo se mueven. Lo que no aparece aquí (quitar Ferruteck, sombras, versión, limpieza, Home único, frescura de datos) ya está en marcha.</p>
+
+  <!-- ─── 01 Cargas -->
+  <section>
+    <div class="sec-head"><div><p class="eyebrow">01 · Cargas iguales</p><h2>Decidido: A · Silueta.</h2><p>Hoy conviven cuatro loaders. La que elijas será el fallback de cada pestaña, de cada tabla y de cada botón que trae datos.</p></div></div>
+    <div class="grid g3">
+      <div class="opt" style="outline:2px solid var(--accent);outline-offset:2px"><span class="letter" style="background:var(--accent)">A</span>
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3>Silueta <span class="pill p-blue">elegida</span></h3><button class="btn" data-load="a">Reproducir</button></div>
+        <div class="stage" id="st-a"></div>
+        <p class="note" style="margin-top:8px">La pantalla aparece como silueta gris de su propia plantilla (hero, KPIs, tabla) con un brillo suave; cuando llegan los datos, cada bloque se rellena en su sitio. Sin saltos de layout. Es lo que hace Apple Music, App Store y Fitness.</p>
+        <div class="spec">skeleton por plantilla · brillo 1.3 s · reemplazo bloque a bloque con fade 200 ms · cero spinners de página</div>
+      </div>
+      <div class="opt"><span class="letter">B</span>
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3>Progresivo</h3><button class="btn" data-load="b">Reproducir</button></div>
+        <div class="stage" id="st-b"></div>
+        <p class="note" style="margin-top:8px">El hero entra primero con los datos que ya están en caché y una línea de progreso de 2 px arriba; los bloques pesados llegan después con tres puntos discretos en su esquina. Nunca hay pantalla vacía: siempre ves algo real en menos de 100 ms. Es el patrón de Safari y de las apps de Apple con datos en red.</p>
+        <div class="spec">caché primero (React Query) · barra 2 px accent · puntos en cada card pendiente · fade 340 ms al completar</div>
+      </div>
+      <div class="opt"><span class="letter">C</span>
+      <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3>iPhone · barra inferior flotante + biblioteca de pestañas</h3><span class="row" style="gap:6px"><button class="btn" data-ios-tab="inicio">Inicio</button><button class="btn" data-ios-tab="mas">Abrir "Más"</button></span></div>
+      <div class="grid" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:12px">
+        <div class="ios" id="ios">
+          <div class="hd"><span>‹ Clientes</span><span>Editar</span></div>
+          <div class="lt">Digitalife</div>
+          <div class="grp">
+            <div class="gi"><i style="background:var(--accent)">🏠</i><b>Resumen</b><small>51 % cuota</small><span class="chev">›</span></div>
+            <div class="gi"><i style="background:var(--green)">🛒</i><b>Sell In</b><small>$809K MTD</small><span class="chev">›</span></div>
+            <div class="gi"><i style="background:var(--pink)">🛍</i><b>Sell Out</b><small>ago $1.9M</small><span class="chev">›</span></div>
+            <div class="gi"><i style="background:var(--purple)">📣</i><b>Marketing</b><small>4 activas</small><span class="chev">›</span></div>
+            <div class="gi"><i style="background:var(--orange)">💳</i><b>Pagos</b><small>2 por pagar</small><span class="chev">›</span></div>
+            <div class="gi"><i style="background:#5AC8FA">🧾</i><b>Crédito y Cobranza</b><small>DSO 41 d</small><span class="chev">›</span></div>
+          </div>
+          <div class="sheet" id="ios-sheet"><div class="grab"></div><div class="sh">Todas las pestañas <span style="color:var(--accent);font-weight:500;font-size:12px">Listo</span></div><div class="search">🔍 Buscar pestaña, cliente o SKU</div>
+            <div class="apps">
+              <div><i style="background:var(--inv)">🏠</i>Inicio</div><div><i style="background:var(--accent)">📈</i>Visión General</div><div><i style="background:var(--green)">🛒</i>Sell In</div><div><i style="background:var(--pink)">🛍</i>Sell Out</div>
+              <div><i style="background:var(--orange)">📦</i>Inventario</div><div><i style="background:#5AC8FA">🧾</i>Cobranza</div><div><i style="background:var(--purple)">🎯</i>S&amp;OP</div><div><i style="background:#8E8E93">📋</i>Propuestas</div>
+              <div><i style="background:#3B82F6">D</i>Digitalife</div><div><i style="background:#EF4444">P</i>PCEL</div><div><i style="background:#10B981">D</i>Dicotech</div><div><i style="background:#8E8E93">🕘</i>Historial</div>
+            </div>
+          </div>
+          <div class="tab" id="ios-tab"><span class="on" data-t="inicio"><em>🏠</em>Inicio</span><span data-t="clientes"><em>👥</em>Clientes</span><span data-t="alertas"><em>🔔</em>Alertas</span><span data-t="buscar"><em>🔍</em>Buscar</span><span data-t="mas"><em>⋯</em>Más</span></div>
+        </div>
+        <div>
+          <p class="note">La navegación se siente como una app de iPhone, aunque estés en la Mac:</p>
+          <div class="legend" style="margin-top:8px">
+            <div><b>1</b><span><strong>Barra inferior flotante</strong> de cinco entradas (Inicio · Clientes · Alertas · Buscar · Más), translúcida, con la seleccionada en negro. Siempre visible, nunca ocupa el lateral.</span></div>
+            <div><b>2</b><span><strong>Listas agrupadas con título grande</strong> al estilo Ajustes: cada cliente es una lista con icono de color, dato del día a la derecha y chevron. Se entra y se vuelve con "‹".</span></div>
+            <div><b>3</b><span><strong>"Más" abre una hoja</strong> con todas las pestañas como iconos de app (biblioteca), buscador arriba y la posibilidad de arrastrar las cinco favoritas a la barra.</span></div>
+            <div><b>4</b><span><strong>Misma navegación en el celular</strong>: la app móvil desde cero usa exactamente esta barra y estas hojas, así que aprendes una sola forma de moverte.</span></div>
+          </div>
+          <div class="spec">barra 44 px · blur 24 · hoja 340 ms desde abajo con asa · iconos 44 px radio 11 · título grande 26/600 · escritorio: el contenido usa todo el ancho</div>
+        </div>
+      </div>
+      <p class="note" style="margin-top:8px"><span class="tag">Se quedan</span> A Barra apple.com y B Sidebar iPad tal como están. C pasa de Dock macOS a este modo iPhone. El usuario elige uno de los tres en Configuración.</p>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3>Personalización (común a los tres)</h3><span class="pill p-gray">Configuración → Menú</span></div>
+      <div class="custom">
+        <div class="c"><h6>Modo</h6><span class="chip">Barra apple.com</span><span class="chip on">Sidebar iPad</span><span class="chip">iPhone</span><p class="note" style="margin-top:6px">Cambia al instante, sin recargar. Se guarda en `perfiles.preferencias`.</p></div>
+        <div class="c"><h6>Favoritos fijados</h6><span class="chip on">★ Inicio</span><span class="chip on">★ Sell In · Digitalife</span><span class="chip on">★ Pagos · Dicotech</span><span class="chip">+ Fijar</span><p class="note" style="margin-top:6px">Cualquier pestaña, con o sin cliente. Máximo 8. Arrastrar para ordenar.</p></div>
+        <div class="c"><h6>Densidad y arranque</h6><span class="chip on">Cómoda</span><span class="chip">Compacta</span><br><span class="chip on">Abrir en Inicio</span><span class="chip">Abrir en la última pestaña</span><p class="note" style="margin-top:6px">Y ⌘K siempre disponible en los tres modos.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 03 Inicio -->
+  <section>
+    <div class="sec-head"><div><p class="eyebrow">03 · Pestaña Inicio · dirección general</p><h2>Cómo va la empresa hoy: ventas, margen, caja y riesgo.</h2><p>Segunda versión, con el punto de vista de dirección general: primero la empresa (Fact Neta oficial, contribución y utilidad al momento, cartera, inventario), después las notificaciones que importan, y al final los clientes y la agenda. Todo sale de las medidas del director ya validadas y del Estado de Resultados que ya se carga.</p></div></div>
+    <div class="shot">
+      <span class="co" style="left:-9px;top:-9px">1</span>
+      <div class="hero"><div><span class="ey">Inicio · miércoles 10 de septiembre · datos al 13:00</span><h4>Septiembre va al 51 % de cuota con margen del 33.7 %. Tres asuntos requieren decisión hoy.</h4><p class="sub">Fact Neta MTD $10.1M de $19.8M · run-rate del mes $30.3M (−3 % vs sep 2025) · utilidad comercial MTD $3.1M · cartera vencida subió a $3.2M.</p></div><div class="hstat"><div class="k">Fact Neta MTD</div><div class="v">$10.1M</div><div class="s">51 % · día 10 de 30</div></div><div class="hstat"><div class="k">Margen al momento</div><div class="v">33.7 %</div><div class="s">MC · MUC 23.0 %</div></div><div class="hstat"><div class="k">Utilidad comercial MTD</div><div class="v">$3.1M</div><div class="s">↓ 8 % vs sep 2025</div></div></div>
+      <span class="co" style="left:-9px;top:124px">2</span>
+      <div class="kpis">
+        <div class="kpi"><div class="ey">Fact Neta YTD</div><div class="big">$390M</div><div class="sub"><span class="pill p-red">↓ 16 %</span> vs 2025 · 74 % de cuota anual</div></div>
+        <div class="kpi"><div class="ey">Contribución YTD</div><div class="big">$137M</div><div class="sub">MC 35.1 % <span class="pill p-green">+7.4 pp</span> · lost profit $51.6M</div></div>
+        <div class="kpi"><div class="ey">Cartera</div><div class="big">$38M</div><div class="sub">vencida <span style="color:#B00020;font-weight:600">$3.2M</span> · DSO 41 d <span class="pill p-orange">↑ 4 d</span></div></div>
+        <div class="kpi"><div class="ey">Inventario + tránsito</div><div class="big">$96.6M</div><div class="sub">38 días · $12.6M en camino · <span class="pill p-red">12 SKUs en riesgo</span></div></div>
+      </div>
+      <div class="two" style="grid-template-columns:1.15fr 1fr">
+        <div class="panel" style="position:relative"><span class="co" style="left:-9px;top:-9px">3</span><h5>Ventas y margen · últimos 12 meses <span class="row" style="gap:6px"><span class="pill p-blue">Fact Neta</span><span class="pill p-green">Contribución</span><span class="pill p-orange">MC %</span></span></h5>
+          <div style="display:flex;align-items:flex-end;gap:5px;height:88px;padding:4px 0 2px">
+            <!-- barras -->
+            <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:2px"><span style="height:56px;background:rgba(0,122,255,.3);border-radius:3px 3px 0 0"></span></div><div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end"><span style="height:62px;background:rgba(0,122,255,.3);border-radius:3px 3px 0 0"></span></div><div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end"><span style="height:70px;background:rgba(0,122,255,.3);border-radius:3px 3px 0 0"></span></div><div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end"><span style="height:74px;background:rgba(0,122,255,.3);border-radius:3px 3px 0 0"></span></div><div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end"><span style="height:66px;background:rgba(0,122,255,.3);border-radius:3px 3px 0 0"></span></div><div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end"><span style="height:49px;background:rgba(0,122,255,.3);border-radius:3px 3px 0 0"></span></div><div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end"><span style="height:52px;background:rgba(0,122,255,.3);border-radius:3px 3px 0 0"></span></div><div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end"><span style="height:58px;background:rgba(0,122,255,.3);border-radius:3px 3px 0 0"></span></div><div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end"><span style="height:70px;background:rgba(0,122,255,.3);border-radius:3px 3px 0 0"></span></div><div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end"><span style="height:50px;background:rgba(0,122,255,.3);border-radius:3px 3px 0 0"></span></div><div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end"><span style="height:13px;background:var(--accent);border-radius:3px 3px 0 0"></span></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);font-family:var(--fd)"><span>Oct</span><span>Nov</span><span>Dic</span><span>Ene</span><span>Feb</span><span>Mar</span><span>Abr</span><span>May</span><span>Jun</span><span>Jul</span><span>Ago</span><span>Sep</span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px;font-size:10.5px;color:var(--muted)"><span>Devoluciones MTD <b class="num" style="color:var(--text)">−$67K</b></span><span>RMA's <b class="num" style="color:var(--text)">−$71K</b></span><span>Bonificaciones <b class="num" style="color:var(--text)">−$220K</b></span><span>Ticket promedio <b class="num" style="color:var(--text)">$490</b></span></div>
+        </div>
+        <div class="panel" style="position:relative"><span class="co" style="left:-9px;top:-9px">4</span><h5>Requiere decisión <span class="pill p-gray">3 críticas · 5 altas</span></h5>
+          <div class="al"><i style="background:var(--red)"></i><div><div class="t">Digitalife devolvió el 48 % de lo facturado en agosto</div><div class="d">$490K sobre $1.01M · 6× su promedio · impacto en MC −1.1 pp</div></div><span class="pill p-gray">Ver ›</span></div>
+          <div class="al"><i style="background:var(--red)"></i><div><div class="t">12 SKUs se agotan antes de su tránsito</div><div class="d">$1.8M de venta mensual en riesgo · 3 POs pueden adelantarse</div></div><span class="pill p-gray">Ver ›</span></div>
+          <div class="al"><i style="background:var(--orange)"></i><div><div class="t">Cartera vencida +$640K esta semana</div><div class="d">CT Internacional $410K a 61–90 días</div></div><span class="pill p-gray">Ver ›</span></div>
+          <div class="al"><i style="background:var(--orange)"></i><div><div class="t">Rebate de agosto de Dicotech por generar</div><div class="d">Alcance 152 % · 3 % = $24,285</div></div><span class="pill p-blue">Generar</span></div>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:6px">Ver las 8 en Notificaciones ›</div>
+        </div>
+      </div>
+      <span class="co" style="left:-9px;top:494px">5</span>
+      <div class="cli3">
+        <div class="c"><b>Digitalife <span class="pill p-orange">48 % cuota</span></b><div class="prog"><i style="width:48%;background:var(--orange)"></i></div><span class="note">MTD $809K · MC 34.8 % · sell-out ago $1.9M · devoluciones <span class="pill p-red">alta</span></span></div>
+        <div class="c"><b>PCEL <span class="pill p-yellow">62 % cuota</span></b><div class="prog"><i style="width:62%;background:var(--yellow)"></i></div><span class="note">MTD $1.5M · MC 31.2 % · sell-out ago $2.4M · 2 pagos por comprobar</span></div>
+        <div class="c"><b>Dicotech <span class="pill p-green">104 % cuota</span></b><div class="prog"><i style="width:100%;background:var(--green)"></i></div><span class="note">MTD $2.0M · MC 29.9 % · rebate ago 3 % <span class="pill p-blue">por generar</span></span></div>
+      </div>
+      <div class="two">
+        <div class="panel" style="position:relative"><span class="co" style="left:-9px;top:-9px">6</span><h5>Canales · MTD vs cuota</h5>
+          <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:4px 10px;font-size:11px;align-items:center">
+            <span>Mayoreo</span><span class="num">$5.6M</span><span class="pill p-green">58 %</span><span class="num" style="color:var(--muted)">MC 33 %</span>
+            <span>Distribuidor</span><span class="num">$2.1M</span><span class="pill p-yellow">47 %</span><span class="num" style="color:var(--muted)">MC 36 %</span>
+            <span>E-commerce</span><span class="num">$0.9M</span><span class="pill p-orange">39 %</span><span class="num" style="color:var(--muted)">MC 41 %</span>
+            <span>Retail</span><span class="num">$1.2M</span><span class="pill p-green">71 %</span><span class="num" style="color:var(--muted)">MC 28 %</span>
+            <span>Mostrador</span><span class="num">$0.3M</span><span class="pill p-gray">44 %</span><span class="num" style="color:var(--muted)">MC 38 %</span>
+          </div>
+        </div>
+        <div class="panel" style="position:relative"><span class="co" style="left:-9px;top:-9px">7</span><h5>Próximos 7 días y últimos cambios</h5>
+          <div class="ev"><span class="dt">Jue 11</span><span class="pill p-purple">Pago</span> Fondo MKT Q3 Dicotech · $80,000</div>
+          <div class="ev"><span class="dt">Vie 12</span><span class="pill p-blue">Arribo</span> PO 4471 · 3 SKUs críticos · Manzanillo</div>
+          <div class="ev"><span class="dt">Lun 15</span><span class="pill p-red">Pago</span> Rebate 3 % Ago · Dicotech</div>
+          <div class="ev"><span class="dt">13:02</span><span class="pill p-gray">Cambio</span> Karolina · OC 8812 entregada</div>
+          <div class="ev"><span class="dt">09:15</span><span class="pill p-gray">Carga</span> ERP · 176,412 renglones</div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <div><b>1</b><span><strong>Hero de dirección:</strong> Fact Neta MTD vs cuota total, margen de contribución al momento (con MUC) y utilidad comercial MTD, con la frase que resume el día y cuántos asuntos piden decisión.</span></div>
+      <div><b>2</b><span><strong>Cuatro cifras de empresa:</strong> venta anual vs 2025 y vs cuota, contribución y lost profit, cartera y DSO, inventario más tránsito con riesgo. Cada una lleva a Visión General, Cobranza o Inventario.</span></div>
+      <div><b>3</b><span><strong>Doce meses de ventas y margen</strong> con el mes en curso resaltado, y la línea de deducciones (devoluciones, RMA's, bonificaciones, ticket) tal como las mide tu jefe.</span></div>
+      <div><b>4</b><span><strong>Requiere decisión:</strong> sólo lo crítico y alto, con el impacto en dinero o en margen, y acción directa cuando existe. Es la central de notificaciones filtrada a "hoy".</span></div>
+      <div><b>5</b><span><strong>Clientes propios</strong> con cuota, margen y su alerta. Click abre su Resumen.</span></div>
+      <div><b>6</b><span><strong>Canales MTD</strong> vs su cuota (de `cuotas_canales`) y su margen: dónde está el hueco del mes.</span></div>
+      <div><b>7</b><span><strong>Agenda y cambios</strong> en un solo panel compacto: pagos, arribos, actividades, y los últimos movimientos del historial.</span></div>
+    </div>
+    <p class="note" style="margin-top:8px">Opcional en una segunda pasada: gastos y EBITDA del mes desde `estados_resultados` (hoy se carga mensual, con un mes de rezago), para cerrar el cuadro de dirección general.</p>
+  </section>
+
+  <!-- ─── 04 Notificaciones -->
+  <section>
+    <div class="sec-head"><div><p class="eyebrow">04 · Central de notificaciones</p><h2>Tres maneras de bajar el ruido.</h2><p>Las tres comparten la base: una sola cola (la tabla de alertas), agrupación por tipo, la severidad decide el canal, preferencias por usuario y acciones directas. Cambia cómo se presenta y cómo se consume.</p></div></div>
+    <div class="grid g3">
+      <div class="opt"><span class="letter">A</span>
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3>Centro iOS</h3><span class="note">pilas + resumen programado</span></div>
+        <div class="ncard nios">
+          <div class="row" style="justify-content:space-between;margin-bottom:4px"><span style="font:600 13px var(--fd)">Notificaciones</span><span class="note">Borrar</span></div>
+          <div class="stack"><div class="t">Inventario <small>hace 2 h · 12</small></div><div class="b">12 SKUs se agotan antes de su tránsito</div><div class="c">AC-943345 en 4 días · BR-940467 en 6 días · +10</div></div>
+          <div class="stack"><div class="t">Ventas <small>hoy</small></div><div class="b">Digitalife: devoluciones 48 % en agosto</div><div class="c">Impacto MC −1.1 pp</div></div>
+          <div class="stack"><div class="t">Pagos <small>ayer · 2</small></div><div class="b">Rebate de agosto de Dicotech por generar</div><div class="c">Y julio · alcance 152 % / 131 %</div></div>
+          <div class="stack" style="background:rgba(0,122,255,.08)"><div class="t">Resumen programado <small>13:00</small></div><div class="b">6 avisos de prioridad media agrupados</div><div class="c">Datos: sellout_general 28 d · 3 OCs sin actualizar · 2 alertas resueltas solas</div></div>
+        </div>
+        <p class="note" style="margin-top:8px">Como el Centro de Notificaciones del iPhone: las alertas se apilan por área (Inventario, Ventas, Pagos, Datos), se expanden al tocar, y todo lo que no es crítico llega junto en un "Resumen programado" a la hora que elijas. Cero correos sueltos: sólo las críticas llegan al instante.</p>
+        <div class="spec">pilas por tipo · expandir/colapsar · resumen programado 13:00 (y 18:00 opcional) · críticas inmediatas · badge = pilas nuevas, no avisos</div>
+      </div>
+      <div class="opt"><span class="letter">B</span>
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3>Bandeja tipo Mail</h3><span class="note">triage con filtros</span></div>
+        <div class="ncard"><div class="inbox">
+          <div class="f"><span class="on">Hoy <b>4</b></span><span>Semana <b>11</b></span><span>Críticas <b>3</b></span><span>Con acción <b>2</b></span><span>Pospuestas <b>1</b></span><span>Silenciadas</span><span style="margin-top:6px;font-size:9.5px;color:var(--subtle)">ÁREAS</span><span>Inventario</span><span>Ventas</span><span>Pagos</span><span>Datos</span></div>
+          <div class="l">
+            <div class="m"><i style="background:var(--red)"></i><div><div class="t">12 SKUs se agotan antes de su tránsito</div><div class="d">Inventario · 3 nuevos desde ayer</div></div><div class="ac"><span>Ver</span><span>3 d</span><span>✓</span></div></div>
+            <div class="m"><i style="background:var(--red)"></i><div><div class="t">Digitalife: devoluciones 48 %</div><div class="d">Ventas · hoy 09:15</div></div><div class="ac"><span>Ver</span><span>✓</span></div></div>
+            <div class="m"><i style="background:var(--orange)"></i><div><div class="t">Rebate agosto Dicotech</div><div class="d">Pagos · acción directa</div></div><div class="ac"><span style="color:var(--accent);border-color:var(--accent)">Generar</span></div></div>
+            <div class="m"><i style="background:var(--yellow)"></i><div><div class="t">sellout_general 28 días sin cargar</div><div class="d">Datos</div></div><div class="ac"><span>Subir</span><span>Silenciar</span></div></div>
+          </div>
+        </div></div>
+        <p class="note" style="margin-top:8px">Una bandeja de trabajo, como Mail o Recordatorios: filtros inteligentes a la izquierda (Hoy, Críticas, Con acción, Pospuestas, por área), y en cada fila las tres acciones de siempre: ver, posponer, resolver. Pensada para quien despacha las alertas cada mañana (tú y Karolina).</p>
+        <div class="spec">filtros inteligentes · posponer 1/3/7 d · resolver con motivo · atajos ⌘1-5 · vista de pantalla completa en la pestaña Alertas</div>
+      </div>
+      <div class="opt"><span class="letter">C</span>
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3>Feed diario</h3><span class="note">tarjetas con cifra, como Fitness</span></div>
+        <div class="ncard feed">
+          <div class="day">Hoy · miércoles 10</div>
+          <div class="fc"><i style="background:rgba(255,59,48,.12)">📦</i><div><div class="t">Venta en riesgo por desabasto</div><div class="k">$1.8M / mes</div><div class="d">12 SKUs sin cobertura hasta su arribo · ver lista</div></div></div>
+          <div class="fc"><i style="background:rgba(255,149,0,.16)">↩︎</i><div><div class="t">Devoluciones fuera de rango</div><div class="k">Digitalife 48 %</div><div class="d">6× su promedio · impacto MC −1.1 pp</div></div></div>
+          <div class="fc"><i style="background:rgba(0,122,255,.12)">💳</i><div><div class="t">Rebate por generar</div><div class="k">$24,285</div><div class="d">Dicotech · agosto · 3 % <span class="pill p-blue">Generar</span></div></div></div>
+          <div class="day">Ayer</div>
+          <div class="fc"><i style="background:rgba(0,0,0,.05)">✓</i><div><div class="t">2 alertas se resolvieron solas</div><div class="d">Stock repuesto en BR-944021 y AC-923088</div></div></div>
+        </div>
+        <p class="note" style="margin-top:8px">Como el resumen diario de Fitness o Salud: cada aviso es una tarjeta con la cifra que importa (dinero, %, días) y una línea de contexto, ordenadas por día. Se lee en 20 segundos y funciona igual en el celular. Menos operativa que B, más narrativa.</p>
+        <div class="spec">tarjetas por día · cifra protagonista · máximo 6 por día (el resto plegado) · el mismo feed es el correo de las 13:00</div>
+      </div>
+    </div>
+    <p class="note" style="margin-top:10px">Se pueden combinar: A o C como presentación en el Topbar e Inicio, y B como pantalla completa de "Alertas" para despachar. Dime cuál te gusta para cada uso.</p>
+  </section>
+
+  <!-- ─── 04b Perfil y configuración -->
+  <section>
+    <div class="sec-head"><div><p class="eyebrow">05 · Perfil y centro de configuración</p><h2>Tu cuenta y tus preferencias, como Ajustes de iOS.</h2><p>Hoy la configuración es una pantalla de administración. Propuesta: un centro con dos capas, "Mi cuenta" para todos y "Administración" sólo para ti, con foto de perfil, apariencia, menú, notificaciones y atajos.</p></div></div>
+    <div class="set">
+      <div class="nav">
+        <div class="me"><span class="av">FC</span><div><b>Fernando Cabrera</b><small>Dirección Comercial · Super admin</small></div></div>
+        <div class="it on"><i style="background:var(--accent)">👤</i>Mi cuenta</div>
+        <div class="it"><i style="background:#8E8E93">🎨</i>Apariencia</div>
+        <div class="it"><i style="background:var(--purple)">🧭</i>Menú y favoritos</div>
+        <div class="it"><i style="background:var(--red)">🔔</i>Notificaciones</div>
+        <div class="it"><i style="background:var(--green)">⌘</i>Atajos</div>
+        <div style="font:600 9.5px var(--fd);letter-spacing:.09em;text-transform:uppercase;color:var(--subtle);padding:12px 8px 4px">Administración</div>
+        <div class="it"><i style="background:var(--orange)">👥</i>Usuarios y permisos</div>
+        <div class="it"><i style="background:#5AC8FA">🗂</i>Datos y cargas</div>
+        <div class="it"><i style="background:var(--yellow)">📏</i>Cuotas y lineamientos</div>
+        <div class="it"><i style="background:#8E8E93">ⓘ</i>Acerca de · v3.0.0</div>
+      </div>
+      <div class="body">
+        <h4>Mi cuenta</h4>
+        <div class="g">
+          <div class="r"><span>Foto de perfil<br><small>Sube una imagen, recórtala en círculo, o elige un avatar con tus iniciales</small></span><span class="avs"><i style="background:linear-gradient(135deg,#5AC8FA,#007AFF)" class="sel">FC</i><i style="background:linear-gradient(135deg,#FF9500,#FF2D55)">FC</i><i style="background:linear-gradient(135deg,#34C759,#5AC8FA)">FC</i><i style="background:#F5F5F7;color:var(--muted);border:1px dashed var(--divider)">＋</i></span></div>
+          <div class="r"><span>Nombre para mostrar</span><small>Fernando Cabrera ›</small></div>
+          <div class="r"><span>Cargo y equipo</span><small>Dirección Comercial ›</small></div>
+          <div class="r"><span>Correo</span><small>fernando.cabrera@acteck.com</small></div>
+          <div class="r"><span>Inicio de sesión</span><small>Google · cerrar sesión en otros dispositivos ›</small></div>
+        </div>
+        <div class="g">
+          <div class="r"><span>Pestaña de inicio</span><small>Inicio ›</small></div>
+          <div class="r"><span>Cliente por defecto</span><small>Digitalife ›</small></div>
+          <div class="r"><span>Idioma de cifras</span><small>es-MX · $ · 24 h</small></div>
+        </div>
+      </div>
+    </div>
+    <div class="grid g3" style="margin-top:12px">
+      <div class="q"><b>Apariencia</b><p class="note">Tema Claro · Midnight · Marfil · Automático (según el sistema y la hora), densidad cómoda/compacta, tamaño de texto, reducir movimiento.</p></div>
+      <div class="q"><b>Menú y favoritos</b><p class="note">Modo (Barra · Sidebar iPad · iPhone), favoritos fijados con arrastre, orden de clientes, abrir en Inicio o en la última pestaña.</p></div>
+      <div class="q"><b>Notificaciones</b><p class="note">Por tipo y por cliente: campana, resumen programado, correo, push cuando exista la app. Hora del resumen. Silencios temporales (vacaciones).</p></div>
+      <div class="q"><b>Atajos</b><p class="note">⌘K buscar, ⌘1-9 favoritos, G luego S = Sell In… visibles en una hoja de ayuda con "?".</p></div>
+      <div class="q"><b>Administración</b><p class="note">Lo que ya existe (usuarios, permisos por pestaña, wizard de alta) con el mismo estilo de listas agrupadas; más Datos y cargas (uploads.html integrado con frescura y bitácora).</p></div>
+      <div class="q"><b>Acerca de</b><p class="note">Versión y commit, novedades de cada versión (changelog legible), estado de los servicios (Supabase, Vercel, cron) y "reportar un problema" que adjunta la telemetría.</p></div>
+    </div>
+    <div class="spec" style="margin-top:10px">foto: subida a Supabase Storage (bucket avatares, 512 px, recorte circular en el navegador) o avatar generado con iniciales y degradado iOS · perfiles.preferencias (jsonb) guarda apariencia, menú, notificaciones y atajos · el avatar aparece en Topbar, historial de cambios, minutas y pendientes</div>
+  </section>
+
+  <!-- ─── 05 -->
+  <section>
+    <div class="sec-head"><div><p class="eyebrow">06 · Lo que ya está en marcha</p><h2>Sin esperar tu respuesta.</h2></div></div>
+    <div class="grid g3">
+      <div class="q"><b>Ferruteck fuera</b><p class="note">Pastilla, overlay, tira de recomendaciones y loader. El código se archiva para retomarlo después.</p></div>
+      <div class="q"><b>Sombras macOS</b><p class="note">Tres niveles: reposo sin sombra, hover suave de dos capas, flotante para menús y modales.</p></div>
+      <div class="q"><b>v3.0.0 y aviso de versión</b><p class="note">Toast "Hay una versión nueva · Recargar" cuando Vercel despliega; versión visible en el menú de usuario.</p></div>
+      <div class="q"><b>Home único por cliente</b><p class="note">Un solo Resumen con configuración por cliente, en lugar de cuatro pantallas divergentes.</p></div>
+      <div class="q"><b>Frescura de datos</b><p class="note">Pill "Datos al 9 sep · 13:00" en cada pantalla, ligado a las alertas de datos sin actualizar.</p></div>
+      <div class="q"><b>Limpieza</b><p class="note">Código muerto, versiones duplicadas, tabla vieja del ERP y helpers de formato centralizados.</p></div>
+    </div>
+    <p class="note" style="margin-top:14px">Después vienen, con mockups: el resto de pantallas al kit (Estado de Resultados, Configuración, Análisis, Estrategia, Forecast, S&amp;OP, Propuestas) y la app móvil desde cero.</p>
+  </section>
+</div>
+<script>
+  const kpiHTML=(v,e)=>`<div class="kpi fade"><div class="ey">${e}</div><div class="big">${v}</div><div class="sub">vs 2025</div></div>`;
+  const REAL=`<div class="hero fade"><div class="ey">Sell In · Digitalife · Septiembre 2026</div><h4>Falta un empujón para cerrar la cuota.</h4></div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px">${kpiHTML('$809K','MTD')}${kpiHTML('$14.1M','YTD')}${kpiHTML('+35 %','YoY')}${kpiHTML('−68 %','MoM')}</div>`;
+  const SKEL=`<span class="sk" style="height:52px;border-radius:12px"></span><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px"><span class="sk" style="height:56px;border-radius:12px"></span><span class="sk" style="height:56px;border-radius:12px"></span><span class="sk" style="height:56px;border-radius:12px"></span><span class="sk" style="height:56px;border-radius:12px"></span></div><span class="sk" style="height:40px;border-radius:10px;margin-top:8px"></span>`;
+  const loads={
+    a(st){st.innerHTML=SKEL;setTimeout(()=>{st.innerHTML=REAL+`<span class="sk fade" style="height:40px;border-radius:10px;margin-top:8px;animation:none;background:var(--surface);border:1px solid var(--border)"></span>`},1400)},
+    b(st){st.innerHTML=`<div class="bar"></div><div class="hero fade"><div class="ey">Sell In · Digitalife · Septiembre 2026</div><h4>Falta un empujón para cerrar la cuota.</h4></div><div id="bk" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px">${[0,1,2,3].map(()=>`<div class="kpi"><div class="ey">MTD</div><div class="dotpulse" style="margin-top:8px"><i></i><i></i><i></i></div></div>`).join('')}</div>`;const bar=st.querySelector('.bar');requestAnimationFrame(()=>bar.style.width='60%');setTimeout(()=>{bar.style.width='100%';st.querySelector('#bk').innerHTML=kpiHTML('$809K','MTD')+kpiHTML('$14.1M','YTD')+kpiHTML('+35 %','YoY')+kpiHTML('−68 %','MoM');setTimeout(()=>bar.style.opacity=0,300)},1300)},
+    c(st){st.innerHTML=`<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px"><div class="spin">${Array.from({length:12},(_,i)=>`<i style="transform:translateX(-1px) rotate(${i*30}deg);opacity:${(i+1)/12}"></i>`).join('')}</div><span class="note">Trayendo facturación de Digitalife…</span></div>`;setTimeout(()=>{st.innerHTML=`<div class="fade">${REAL}</div>`},1400)}
+  };
+  document.querySelectorAll('[data-load]').forEach(b=>b.addEventListener('click',()=>loads[b.dataset.load](document.getElementById('st-'+b.dataset.load))));
+  ['a','b','c'].forEach(k=>loads[k](document.getElementById('st-'+k)));
+  const mega=document.getElementById('mega'),nav=document.getElementById('nav-com');let mt;nav.addEventListener('mouseenter',()=>{clearTimeout(mt);mega.classList.add('open')});mega.addEventListener('mouseenter',()=>clearTimeout(mt));[nav,mega].forEach(e=>e.addEventListener('mouseleave',()=>{mt=setTimeout(()=>mega.classList.remove('open'),220)}));
+  const side=document.getElementById('side');document.querySelector('[data-side]').addEventListener('click',e=>{side.classList.toggle('mini');e.target.textContent=side.classList.contains('mini')?'Expandir':'Colapsar'});
+
+  const iosSheet=document.getElementById('ios-sheet'),iosTab=document.getElementById('ios-tab');
+  const setTab=(t)=>{iosTab.querySelectorAll('span').forEach(x=>x.classList.toggle('on',x.dataset.t===t));iosSheet.classList.toggle('open',t==='mas')};
+  iosTab.querySelectorAll('span').forEach(x=>x.addEventListener('click',()=>setTab(x.dataset.t)));
+  document.querySelectorAll('[data-ios-tab]').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.iosTab)));
+</script>

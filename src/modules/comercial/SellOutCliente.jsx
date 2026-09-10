@@ -11,7 +11,7 @@ import {
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
 import { puedeVerPestanaCliente } from '../../lib/permisos';
-import { FerrutekLoader } from '../../components';
+import { Cargando } from '../../components/kit';
 import ExportMenu from '../../components/ExportMenu';
 import { fetchAll as fetchAllCentral } from '../../lib/queries';
 
@@ -644,7 +644,7 @@ export default function SellOutCliente({ clienteKey = 'dicotech' }) {
   };
 
   if (loading) {
-    return <FerrutekLoader label={`Cargando Sell Out de ${meta.nombre}…`} sub="Ferruteck está trayendo sellout, sucursales y clientes finales" minHeight={480} />;
+    return <Cargando label={`Cargando Sell Out de ${meta.nombre}…`} sub="Trayendo sellout, sucursales y clientes finales" minHeight={480} />;
   }
 
   return (

@@ -1,8 +1,9 @@
-// Botón pill · primario (accent) o secundario (hairline). Scale .96 al presionar.
+// Botón pill · primario (accent) o secundario (hairline). Scale .96 al presionar; el primario toma ELEV.hover al pasar el cursor.
 import React, { useState } from 'react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
+import { elevation } from '../../lib/elevation';
 
 export default function Boton({ children, primario = false, peligro = false, icon: Icon, size = 'sm', onClick, disabled, title, style, type = 'button' }) {
   const { theme } = useTheme();
@@ -18,7 +19,8 @@ export default function Boton({ children, primario = false, peligro = false, ico
         border: `1px solid ${primario ? accent : theme.border}`, background: primario ? accent : hover ? (theme.surfaceHover || 'rgba(0,0,0,0.03)') : theme.surface,
         color: primario ? '#FFF' : peligro ? accent : theme.text, fontFamily: TYPO.fontText, fontSize: size === 'md' ? 13 : 12, fontWeight: 500,
         cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1, whiteSpace: 'nowrap',
-        transform: down && !disabled ? 'scale(0.96)' : 'scale(1)', transition: `transform ${DUR.tap}ms ${EASE}, background ${DUR.state}ms ${EASE}`, ...style,
+        boxShadow: elevation(theme, primario && hover && !down && !disabled ? 'hover' : 'reposo'),
+        transform: down && !disabled ? 'scale(0.96)' : 'scale(1)', transition: `transform ${DUR.tap}ms ${EASE}, background ${DUR.state}ms ${EASE}, box-shadow ${DUR.state}ms ${EASE}`, ...style,
       }}>
       {Icon && <Icon size={size === 'md' ? 14 : 13} strokeWidth={2} />}
       {children}

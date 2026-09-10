@@ -4,6 +4,7 @@ import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
 import { EASE, DUR } from '../../lib/motion';
+import { elevation } from '../../lib/elevation';
 
 export default function Segmented({ options, value, onChange, size = 'sm', style }) {
   const { theme } = useTheme();
@@ -24,7 +25,7 @@ export default function Segmented({ options, value, onChange, size = 'sm', style
         <span aria-hidden style={{
           position: 'absolute', top: 2, bottom: 2, left: thumb.left, width: thumb.width, borderRadius: 7,
           background: dark ? 'rgba(99,99,102,0.9)' : '#FFFFFF',
-          boxShadow: dark ? 'none' : '0 3px 8px rgba(0,0,0,0.12), 0 3px 1px rgba(0,0,0,0.04)',
+          boxShadow: elevation(theme, 'hover'),
           transition: `left ${DUR.state}ms ${EASE}, width ${DUR.state}ms ${EASE}`,
         }} />
       )}

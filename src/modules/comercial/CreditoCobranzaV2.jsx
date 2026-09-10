@@ -1,4 +1,4 @@
-// CreditoCobranzaV2 · Ferruteck 2 · pestaña "Crédito y Cobranza" (Digitalife · PCEL · Dicotech)
+// CreditoCobranzaV2 · V3 · pestaña "Crédito y Cobranza" (Digitalife · PCEL · Dicotech)
 // Armado sólo con el kit (src/components/kit):
 // ─ Hero negro: eyebrow "Crédito y Cobranza · Cliente · semana N", frase por reglas, 3 HeroStat (saldo · vencido · DSO)
 // ─ 4 KpiCard con el aging (0-30 · 31-60 · 61-90 · +90) con barra proporcional y tono por tramo (click = filtra la tabla)
@@ -235,7 +235,7 @@ export default function CreditoCobranzaV2({ cliente, clienteKey }) {
   const vencidoStatus = pctVencido === 0 ? { label: 'Sin vencido', tone: 'good' } : pctVencido <= 5 ? { label: 'Bajo', tone: 'good' } : pctVencido <= 15 ? { label: 'Vigilar', tone: 'warn' } : { label: 'Crítico', tone: 'bad' };
   const colorDe = (st) => (st?.tone === 'bad' ? P.red : st?.tone === 'warn' ? P.orange : P.green);
 
-  // Alertas Ferruteck (máx. 3) → pills dentro del hero
+  // Alertas (máx. 3) → pills dentro del hero
   const recos = useMemo(() => {
     const out = [];
     if (facturaMasAtrasada && facturaMasAtrasada.dias > 0) {
