@@ -1,947 +1,205 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../../lib/supabase';
-import { formatMXN } from '../../lib/utils';
-import { PCEL_REAL } from '../../lib/constants';
-import { fetchInventarioCliente } from '../../lib/pcelAdapter';
+import React, { useMemo, useState } from 'react';
+import { Check, Clock, ArrowUpRight } from 'lucide-react';
 import { useTheme } from '../../lib/themeContext';
 import { TYPO } from '../../lib/themeTokens';
-import { TrendingUp, AlertTriangle, Target, Package } from 'lucide-react';
 import SinAcceso from '../../components/SinAcceso';
 import { usePerfil } from '../../lib/perfilContext';
-import { puedeVerPestanaGlobal } from '../../lib/permisos';
-import { fetchAllQ } from '../../lib/queries';
+import { puedeVerPestanaGlobal, puedeVerSensible } from '../../lib/permisos';
+import { useAlertas, resolverAlerta, posponerAlerta, ejecutarAccion, SEV_LABEL, NOMBRE_CLIENTE } from '../../lib/alertas';
+import { supabase } from '../../lib/supabase';
+import { Hero, KpiCard, Cargando, toast } from '../../components/kit';
+import { useResumenData, useMedidasSensibles } from './resumen/datos';
+import {
+  CLIENTES, CLIENTE_KEYS, opcionesPeriodo, periodoId, esPeriodoActual, labelPeriodo, hoy,
+  calcularResumen, calcularConsolidado, calcularShareEmpresa, calcularMargen,
+} from './resumen/calculo';
+import { fmtCompact, fmtInt, fmtPct, narrativaHero } from './resumen/textos';
+import Tendencia from './resumen/Tendencia';
+import TarjetaCliente from './resumen/TarjetaCliente';
 
 /**
- * Resumen Clientes v3 — Apple Bento editorial
+ * Resumen Clientes V3 — Bento editorial con el kit
  * ─────────────────────────────────────────────
- * - Hero card negra con facturación consolidada de los 3 clientes
- * - 4 insight cards Apple Fitness (Cuota · Cobranza · Sell-Out · Cobertura)
- * - Share vs empresa como KPI destacado en el hero
- * - Trend 12 meses estilo Apple Health
- * - Alertas cross-cliente en chips
- * - 3 cards clientes (Digitalife · PCEL · Dicotech) con narrativa
+ * - Hero (kit) con facturación consolidada del mes elegido · 4 KpiCard (Cuota · Cobranza · Sell-Out · Cobertura)
+ * - Selector de mes (últimos 12): todos los bloques respetan el periodo
+ * - Alertas de la central (tabla `alertas`) filtradas a los 3 clientes, con resolver/posponer
+ * - Tendencia 12 meses en Recharts · 3 TarjetaCliente con narrativa y doble cuota
+ * Datos: resumen/datos.js · cálculo: resumen/calculo.js · textos: resumen/textos.js
  */
 
-const CLIENTES = [
-  { key: 'digitalife', nombre: 'Digitalife', marca: 'Acteck · Balam Rush', letter: 'D' },
-  { key: 'pcel',       nombre: 'PCEL',       marca: 'Acteck',              letter: 'P' },
-  { key: 'dicotech',   nombre: 'Dicotech',   marca: 'Acteck · Balam Rush', letter: 'Di' },
-];
+const SET_MIOS = new Set(CLIENTE_KEYS);
+const SALIDA_MS = 160;
 
-// Paleta derivada del tema — Claro/Midnight usan iOS system colors;
-// Marfil usa la paleta editorial (cobalto/crimson/púrpura).
-function paletteFromTheme(theme) {
-  return {
-    accent:  theme.accent  || '#007AFF',
-    green:   theme.green   || '#34C759',
-    orange:  theme.orange  || '#FF9500',
-    red:     theme.red     || '#FF3B30',
-    purple:  theme.purple  || '#AF52DE',
-    teal:    theme.teal    || '#5AC8FA',
-    pink:    theme.pink    || '#FF2D55',
-  };
-}
-// Color de identidad por cliente por tema.
-function clienteColor(theme, key) {
-  const P = paletteFromTheme(theme);
-  const map = { digitalife: P.accent, pcel: P.red, dicotech: P.purple };
-  return map[key] || P.accent;
-}
-
-const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-
-const hoy = new Date();
-const anioActual = hoy.getFullYear();
-const mesActual  = hoy.getMonth() + 1;
-
-// ────────── Helpers de formato ──────────
-function fmtCompact(n) {
-  const v = Number(n) || 0;
-  const abs = Math.abs(v);
-  if (abs >= 1_000_000) return `$${(v / 1_000_000).toFixed(v >= 10_000_000 ? 1 : 2)}M`;
-  if (abs >= 1_000)     return `$${(v / 1_000).toFixed(0)}K`;
-  return `$${Math.round(v)}`;
-}
-function fmtPct(n) { return Number.isFinite(n) ? `${n.toFixed(0)}%` : '—'; }
-function fmtInt(n) { return new Intl.NumberFormat('es-MX').format(Number(n) || 0); }
-
-function invValorRow(r) {
-  const v = Number(r.valor) || 0;
-  if (v > 0) return v;
-  return (Number(r.stock) || 0) * (Number(r.costo_convenio) || 0);
-}
-
-// ────────── Hook: data loader ──────────
-function useResumenData() {
-  const [state, setState] = useState({
-    loading: true,
-    ventasAgg: [],           // TODOS los clientes (para share vs empresa)
-    cuotasMensuales: [],
-    inventarioCliente: [],
-    dsoReal: [],
-    creditoConfig: [],
-    selloutSku: [],
-    selloutPcelSemanal: [],
-    selloutPcelMensual: [],
-    sellInSku: [],
-    estadosCuenta: [],
-    estadosCuentaDetalle: [],
-  });
-
-  useEffect(() => {
-    // Delegado al motor paginado PARALELO + cache central (lib/queries.js).
-    async function fetchAll(qFactory, pageSize = 1000) {
-      return fetchAllQ(qFactory, { pageSize, label: "resumen" });
-    }
-    (async () => {
-      const [cmRes, invDigi, invPcel, invDico, dsoRes, ccRes, soRows, soPcelRows, soPcelMenRows, siRows, ecRows] = await Promise.all([
-        // NOTA: antes se leía v_ventas_mensuales_agg pero esa vista quedó desactualizada
-        // tras la migración sell_in_sku → facturacion_clientes (2026-05). Ahora se
-        // construye ventasAgg en el cliente uniendo facturacion_clientes (SI real)
-        // y sellout_sku (SO) más abajo.
-        supabase.from('cuotas_mensuales')
-          .select('cliente, mes, anio, cuota_min, cuota_ideal')
-          .eq('anio', anioActual),
-        fetchInventarioCliente('digitalife'),
-        fetchInventarioCliente('pcel'),
-        fetchInventarioCliente('dicotech').catch(() => []),
-        supabase.from('v_dso_real')
-          .select('cliente, fecha_corte, saldo_actual_total, saldo_vencido, dso_real, dso_erp, aging_mas90, facturas_abiertas'),
-        supabase.from('clientes_credito_config')
-          .select('cliente, plazo_dias_credito, linea_credito_usd'),
-        fetchAll(() => supabase.from('sellout_sku')
-          .select('cliente, anio, mes, sku, piezas, monto_pesos')
-          .gte('anio', anioActual - 1)),
-        fetchAll(() => supabase.from('sellout_pcel')
-          .select('sku, anio, semana, vta_semana, costo_promedio')
-          .eq('anio', anioActual)),
-        fetchAll(() => supabase.from('sellout_pcel_mensual')
-          .select('sku, anio, mes, piezas')
-          .eq('anio', anioActual)),
-        // Fuente canónica de sell-in real: facturacion_clientes.
-        // Agregamos anio y mes al select para poder construir ventasAgg abajo.
-        fetchAll(() => supabase.from('facturacion_clientes')
-          .select('cliente_key, sku, piezas, monto, anio, mes')
-          .gte('anio', anioActual - 1)),
-        fetchAll(() => supabase.from('estados_cuenta')
-          .select('id, cliente, fecha_corte, anio, semana')
-          .order('fecha_corte', { ascending: true })),
-      ]);
-
-      // Construir ventasAgg (cliente × anio × mes → sell_in + sell_out)
-      // desde las fuentes reales, sin depender de v_ventas_mensuales_agg.
-      const vaMap = new Map(); // key = `${cliente}|${anio}|${mes}`
-      const vaKey = (cli, a, m) => `${cli}|${a}|${m}`;
-      for (const r of (siRows || [])) {
-        const cli = r.cliente_key, a = Number(r.anio) || 0, m = Number(r.mes) || 0;
-        if (!cli || !a || !m) continue;
-        const k = vaKey(cli, a, m);
-        const cur = vaMap.get(k) || { cliente: cli, anio: a, mes: m, sell_in: 0, sell_out: 0 };
-        cur.sell_in += Number(r.monto) || 0;
-        vaMap.set(k, cur);
-      }
-      for (const r of (soRows || [])) {
-        const cli = r.cliente, a = Number(r.anio) || 0, m = Number(r.mes) || 0;
-        if (!cli || !a || !m) continue;
-        const k = vaKey(cli, a, m);
-        const cur = vaMap.get(k) || { cliente: cli, anio: a, mes: m, sell_in: 0, sell_out: 0 };
-        cur.sell_out += Number(r.monto_pesos) || 0;
-        vaMap.set(k, cur);
-      }
-      const ventasAggBuilt = Array.from(vaMap.values());
-
-      const invCombinado = [
-        ...(invDigi || []).map((r) => ({ ...r, cliente: 'digitalife' })),
-        ...(invPcel || []).map((r) => ({ ...r, cliente: 'pcel' })),
-        ...(invDico || []).map((r) => ({ ...r, cliente: 'dicotech' })),
-      ];
-
-      const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 12);
-      const ecRecientes = (ecRows || []).filter((r) => r.fecha_corte && new Date(r.fecha_corte) >= cutoff);
-      const ecIds = ecRecientes.map((r) => r.id);
-      let ecDetRows = [];
-      if (ecIds.length > 0) {
-        const CHUNK = 100;
-        for (let i = 0; i < ecIds.length; i += CHUNK) {
-          const slice = ecIds.slice(i, i + CHUNK);
-          const det = await fetchAll(() => supabase.from('estados_cuenta_detalle')
-            .select('estado_cuenta_id, referencia, fecha_emision, importe_factura, saldo_actual, dias_moratorios')
-            .in('estado_cuenta_id', slice));
-          ecDetRows.push(...det);
-        }
-      }
-
-      setState({
-        loading: false,
-        ventasAgg:         ventasAggBuilt,
-        cuotasMensuales:   cmRes.data  || [],
-        inventarioCliente: invCombinado,
-        dsoReal:           dsoRes.data || [],
-        creditoConfig:     ccRes.data  || [],
-        selloutSku:        soRows      || [],
-        selloutPcelSemanal:  soPcelRows    || [],
-        selloutPcelMensual:  soPcelMenRows || [],
-        // Mapeo compat: cliente_key→cliente, monto→monto_pesos para preservar consumidores.
-        sellInSku: (siRows || []).map((r) => ({ cliente: r.cliente_key, sku: r.sku, piezas: r.piezas, monto_pesos: r.monto })),
-        estadosCuenta:     ecRecientes || [],
-        estadosCuentaDetalle: ecDetRows || [],
-      });
-    })();
-  }, []);
-
-  return state;
-}
-
-// ────────── Cálculo por cliente (sin scores) ──────────
-function getMesEfectivo(va) {
-  const conDatos = va
-    .filter((r) => Number(r.anio) === anioActual && Number(r.sell_in || 0) > 0)
-    .map((r) => Number(r.mes) || 0);
-  if (conDatos.length === 0) return 0;
-  return Math.min(mesActual, Math.max(...conDatos));
-}
-
-function calcularResumen(clienteKey, data) {
-  const va = data.ventasAgg.filter((r) => r.cliente === clienteKey);
-  const cm = data.cuotasMensuales.filter((r) => r.cliente === clienteKey);
-  const mesEf = getMesEfectivo(va) || mesActual;
-  const inv = data.inventarioCliente.filter((r) => r.cliente === clienteKey);
-  const dsoRow = data.dsoReal.find((r) => r.cliente === clienteKey);
-  const ccRow  = data.creditoConfig.find((r) => r.cliente === clienteKey);
-  const so = data.selloutSku.filter((r) => r.cliente === clienteKey);
-  const si = (data.sellInSku || []).filter((r) => r.cliente === clienteKey);
-
-  // Costo promedio por SKU
-  const _agg = new Map();
-  si.forEach((r) => {
-    const sku = (r.sku || '').toString(); if (!sku) return;
-    const cur = _agg.get(sku) || { piezas: 0, monto: 0 };
-    cur.piezas += Number(r.piezas || 0);
-    cur.monto  += Number(r.monto_pesos || 0);
-    _agg.set(sku, cur);
-  });
-  const costoPromedioSku = {};
-  _agg.forEach((v, k) => { if (v.piezas > 0 && v.monto > 0) costoPromedioSku[k] = v.monto / v.piezas; });
-
-  // Sell-In YTD / mes
-  const vaAnio = va.filter((r) => r.anio === anioActual);
-  const siYTD = vaAnio.filter((r) => Number(r.mes) <= mesEf).reduce((a, r) => a + Number(r.sell_in || 0), 0);
-  const rowMesActual = vaAnio.find((r) => Number(r.mes) === mesEf);
-  const rowMesPrev   = vaAnio.find((r) => Number(r.mes) === mesEf - 1);
-  const siMes     = Number(rowMesActual?.sell_in || 0);
-  const siMesPrev = Number(rowMesPrev?.sell_in   || 0);
-  const siMoM = siMesPrev > 0 ? ((siMes - siMesPrev) / siMesPrev) * 100 : null;
-
-  // Sell-Out YTD / mes (Digitalife = precio venta · PCEL = a costo)
-  let soYTD = 0, soMes = 0, selloutACosto = false;
-  if (clienteKey === 'pcel') {
-    selloutACosto = true;
-    const costoFromInvPcel = {};
-    inv.forEach((r) => {
-      const k = (r.sku || '').toString(); const c = Number(r.costo_convenio || 0);
-      if (k && c > 0 && !costoFromInvPcel[k]) costoFromInvPcel[k] = c;
-    });
-    const costoPorSku = (sku) => costoFromInvPcel[sku] || costoPromedioSku[sku] || 0;
-    (data.selloutPcelMensual || []).forEach((r) => {
-      const sku = (r.sku || '').toString();
-      const piezas = Number(r.piezas || 0);
-      const costo = costoPorSku(sku);
-      if (piezas <= 0 || costo <= 0) return;
-      const monto = piezas * costo;
-      if (Number(r.mes) <= mesEf) soYTD += monto;
-      if (Number(r.mes) === mesEf) soMes += monto;
-    });
-    if (soYTD === 0) {
-      (data.selloutPcelSemanal || []).forEach((r) => {
-        const piezas = Number(r.vta_semana || 0);
-        const costo = Number(r.costo_promedio || 0);
-        if (piezas <= 0 || costo <= 0) return;
-        soYTD += piezas * costo;
-      });
-    }
-  } else {
-    so.forEach((r) => {
-      const monto = Number(r.monto_pesos || 0);
-      if (Number(r.mes) <= mesEf) soYTD += monto;
-      if (Number(r.mes) === mesEf) soMes += monto;
-    });
-  }
-
-  // Cuota YTD / mes / anual
-  let cuotaYTD = 0, cuotaMes = 0, cuotaAnual = 0;
-  cm.forEach((r) => {
-    const c = Number(r.cuota_min || 0);
-    cuotaAnual += c;
-    if (Number(r.mes) <= mesEf) cuotaYTD += c;
-    if (Number(r.mes) === mesEf) cuotaMes = c;
-  });
-  if (clienteKey === 'pcel' && cuotaAnual === 0 && PCEL_REAL?.cuota50M) {
-    for (let m = 1; m <= 12; m++) cuotaAnual += Number(PCEL_REAL.cuota50M[m] || 0);
-    for (let m = 1; m <= mesEf; m++) cuotaYTD += Number(PCEL_REAL.cuota50M[m] || 0);
-    cuotaMes = Number(PCEL_REAL.cuota50M[mesEf] || 0);
-  }
-  const cumplimientoYTD = cuotaYTD > 0 ? (siYTD / cuotaYTD) * 100 : null;
-  const cumplimientoMes = cuotaMes > 0 ? (siMes / cuotaMes) * 100 : null;
-
-  // Inventario snapshot
-  let inventarioValor = 0, inventarioPiezas = 0, inventarioSemana = null;
-  const invValidas = inv.filter((r) => r.anio != null && r.semana != null);
-  if (invValidas.length > 0) {
-    const semanaMax = invValidas.reduce((max, r) => {
-      const k = Number(r.anio) * 100 + Number(r.semana);
-      return k > max.k ? { k, anio: Number(r.anio), semana: Number(r.semana) } : max;
-    }, { k: -1, anio: 0, semana: 0 });
-    const snap = invValidas.filter((r) => Number(r.anio) === semanaMax.anio && Number(r.semana) === semanaMax.semana);
-    inventarioValor = snap.reduce((a, r) => {
-      const sku = (r.sku || '').toString();
-      const stock = Number(r.stock || 0);
-      const cp = costoPromedioSku[sku];
-      if (cp != null) return a + stock * cp;
-      return a + invValorRow(r);
-    }, 0);
-    inventarioPiezas = snap.reduce((a, r) => a + Number(r.stock || 0), 0);
-    inventarioSemana = `${semanaMax.anio}-${String(semanaMax.semana).padStart(2,'0')}`;
-  }
-
-  // Cobertura (aprox. últimos 3 meses de sell-out ÷ inventario)
-  let coberturaDias = null;
-  if (inventarioValor > 0 && soYTD > 0 && mesEf > 0) {
-    const soDiario = soYTD / (mesEf * 30);
-    coberturaDias = soDiario > 0 ? Math.round(inventarioValor / soDiario) : null;
-  }
-
-  // Crédito / DSO / vencidos
-  const plazo = Number(ccRow?.plazo_dias_credito || 90);
-  const saldoVencido = Number(dsoRow?.saldo_vencido || 0);
-  const saldoActual  = Number(dsoRow?.saldo_actual_total || 0);
-  const pctVencido = saldoActual > 0 ? (saldoVencido / saldoActual) * 100 : (saldoVencido > 0 ? 100 : 0);
-
-  const diasCobro = (() => {
-    const ec = (data.estadosCuenta || [])
-      .filter((r) => r.cliente === clienteKey && r.fecha_corte)
-      .sort((a, b) => new Date(a.fecha_corte) - new Date(b.fecha_corte));
-    if (ec.length === 0) return null;
-    const ultimoEC = ec[ec.length - 1];
-    const det = (data.estadosCuentaDetalle || []).filter((r) => r.estado_cuenta_id === ultimoEC.id);
-    let num = 0, den = 0;
-    det.forEach((r) => {
-      const importe = Number(r.importe_factura || 0);
-      const saldo   = Number(r.saldo_actual || 0);
-      if (importe <= 0 || saldo <= 0) return;
-      const mora = Math.max(0, Number(r.dias_moratorios || 0));
-      num += (plazo + mora) * importe;
-      den += importe;
-    });
-    return den > 0 ? Math.round(num / den) : null;
-  })();
-
-  const facturasAbiertas = Number(dsoRow?.facturas_abiertas || 0);
-
-  return {
-    mesEf,
-    siYTD, siMes, siMesPrev, siMoM, selloutACosto,
-    soYTD, soMes,
-    cuotaYTD, cuotaMes, cuotaAnual,
-    cumplimientoYTD, cumplimientoMes,
-    inventarioValor, inventarioPiezas, inventarioSemana, coberturaDias,
-    dsoPlazo: plazo, dsoReal: diasCobro,
-    saldoVencido, saldoActual, pctVencido, facturasAbiertas,
-  };
-}
-
-// ────────── Consolidados (3 clientes juntos) ──────────
-function calcularConsolidado(resumenes) {
-  return resumenes.reduce((acc, { resumen }) => ({
-    siYTD:  acc.siYTD  + resumen.siYTD,
-    siMes:  acc.siMes  + resumen.siMes,
-    soYTD:  acc.soYTD  + resumen.soYTD,
-    soMes:  acc.soMes  + resumen.soMes,
-    cuotaYTD:  acc.cuotaYTD  + resumen.cuotaYTD,
-    cuotaMes:  acc.cuotaMes  + resumen.cuotaMes,
-    cuotaAnual:acc.cuotaAnual+ resumen.cuotaAnual,
-    inventarioValor: acc.inventarioValor + resumen.inventarioValor,
-    saldoVencido: acc.saldoVencido + resumen.saldoVencido,
-    saldoActual:  acc.saldoActual  + resumen.saldoActual,
-    facturasAbiertas: acc.facturasAbiertas + resumen.facturasAbiertas,
-    coberturaSum: acc.coberturaSum + (resumen.coberturaDias || 0),
-    coberturaN:   acc.coberturaN   + (resumen.coberturaDias != null ? 1 : 0),
-  }), {
-    siYTD:0, siMes:0, soYTD:0, soMes:0, cuotaYTD:0, cuotaMes:0, cuotaAnual:0,
-    inventarioValor:0, saldoVencido:0, saldoActual:0, facturasAbiertas:0,
-    coberturaSum:0, coberturaN:0,
-  });
-}
-
-function calcularShareEmpresa(data, misClientes) {
-  const setMios = new Set(misClientes);
-  let siEmpresaMes = 0, siMios = 0, siEmpresaYTD = 0, siMiosYTD = 0;
-  data.ventasAgg.filter((r) => Number(r.anio) === anioActual).forEach((r) => {
-    const monto = Number(r.sell_in || 0);
-    if (Number(r.mes) === mesActual) {
-      siEmpresaMes += monto;
-      if (setMios.has(r.cliente)) siMios += monto;
-    }
-    if (Number(r.mes) <= mesActual) {
-      siEmpresaYTD += monto;
-      if (setMios.has(r.cliente)) siMiosYTD += monto;
-    }
-  });
-  return {
-    empresaMes: siEmpresaMes,
-    misMes: siMios,
-    shareMes: siEmpresaMes > 0 ? (siMios / siEmpresaMes) * 100 : null,
-    empresaYTD: siEmpresaYTD,
-    misYTD: siMiosYTD,
-    shareYTD: siEmpresaYTD > 0 ? (siMiosYTD / siEmpresaYTD) * 100 : null,
-  };
-}
-
-// ────────── Trend 12 meses ──────────
-function calcularTrend(data, clienteFiltro = 'todos') {
-  const cuotaPcelFallback = (() => {
-    const enBD = data.cuotasMensuales.some((r) => r.cliente === 'pcel');
-    return enBD || !PCEL_REAL?.cuota50M ? null : PCEL_REAL.cuota50M;
-  })();
-  const aplicaCliente = (cli) =>
-    clienteFiltro === 'todos'
-      ? (cli === 'digitalife' || cli === 'pcel' || cli === 'dicotech')
-      : cli === clienteFiltro;
-
-  const mesesConDatos = data.ventasAgg
-    .filter((r) => Number(r.anio) === anioActual && aplicaCliente(r.cliente) && Number(r.sell_in || 0) > 0)
-    .map((r) => Number(r.mes) || 0);
-  const mesEfTrend = mesesConDatos.length > 0
-    ? Math.min(mesActual, Math.max(...mesesConDatos))
-    : mesActual;
-
-  return Array.from({ length: 12 }, (_, idx) => {
-    const mes = idx + 1;
-    let cuota = 0, si = 0, siPrev = 0;
-    data.cuotasMensuales.forEach((r) => {
-      if (Number(r.mes) !== mes) return;
-      if (!aplicaCliente(r.cliente)) return;
-      cuota += Number(r.cuota_min || 0);
-    });
-    if (cuotaPcelFallback && cuotaPcelFallback[mes] != null) {
-      const incluyePcel = clienteFiltro === 'todos' || clienteFiltro === 'pcel';
-      const pcelEnBD = data.cuotasMensuales.some((r) => r.cliente === 'pcel');
-      if (incluyePcel && !pcelEnBD) cuota += Number(cuotaPcelFallback[mes] || 0);
-    }
-    data.ventasAgg.forEach((r) => {
-      if (Number(r.mes) !== mes || !aplicaCliente(r.cliente)) return;
-      if (Number(r.anio) === anioActual) si += Number(r.sell_in || 0);
-      else if (Number(r.anio) === anioActual - 1) siPrev += Number(r.sell_in || 0);
-    });
-    return {
-      mes, label: MESES_CORTO[idx], cuota, sell_in: si, sell_in_prev: siPrev,
-      esActual: mes === mesEfTrend,
-      esFuturo: mes > mesEfTrend,
-    };
-  });
-}
-
-// ────────── Alertas cross-cliente ──────────
-function calcularAlertas(resumenes) {
-  const alertas = [];
-  resumenes.forEach(({ cliente, resumen }) => {
-    if (resumen.pctVencido > 15) {
-      alertas.push({ tipo: 'vencido', clienteKey: cliente.key, cliente: cliente.nombre,
-        mensaje: `${formatMXN(resumen.saldoVencido)} vencidos (${resumen.pctVencido.toFixed(1)}% del saldo)`,
-        severidad: 'alta' });
-    }
-    if (resumen.dsoReal != null && resumen.dsoReal > (resumen.dsoPlazo + 30)) {
-      alertas.push({ tipo: 'dso', clienteKey: cliente.key, cliente: cliente.nombre,
-        mensaje: `Días de cobro ${resumen.dsoReal}d (plazo ${resumen.dsoPlazo}d)`, severidad: 'alta' });
-    }
-    if (resumen.cumplimientoYTD != null && resumen.cumplimientoYTD < 70) {
-      alertas.push({ tipo: 'cuota', clienteKey: cliente.key, cliente: cliente.nombre,
-        mensaje: `Cumplimiento YTD ${resumen.cumplimientoYTD.toFixed(0)}%`, severidad: 'alta' });
-    } else if (resumen.cumplimientoMes != null && resumen.cumplimientoMes < 80) {
-      alertas.push({ tipo: 'cuota', clienteKey: cliente.key, cliente: cliente.nombre,
-        mensaje: `Cumplimiento mes ${resumen.cumplimientoMes.toFixed(0)}%`, severidad: 'media' });
-    }
-    if (resumen.coberturaDias != null && resumen.coberturaDias < 30) {
-      alertas.push({ tipo: 'inventario', clienteKey: cliente.key, cliente: cliente.nombre,
-        mensaje: `Cobertura baja: ${resumen.coberturaDias}d (riesgo stockout)`, severidad: 'alta' });
-    } else if (resumen.coberturaDias != null && resumen.coberturaDias > 150) {
-      alertas.push({ tipo: 'inventario', clienteKey: cliente.key, cliente: cliente.nombre,
-        mensaje: `Sobreinventario: ${resumen.coberturaDias}d de cobertura`, severidad: 'media' });
-    }
-  });
-  return alertas;
-}
-
-// ────────── Estatus derivado (verde/amarillo/rojo) para la card ──────────
-function estatusCliente(resumen, theme) {
-  const P = paletteFromTheme(theme);
-  const c = resumen.cumplimientoMes ?? resumen.cumplimientoYTD;
-  const venc = resumen.pctVencido || 0;
-  const cob = resumen.coberturaDias;
-  if (venc > 15 || (c != null && c < 70) || (cob != null && cob < 15)) return { key: 'bad', label: 'Requiere atención', color: P.red };
-  if ((c != null && c < 90) || (cob != null && cob < 30) || (venc > 5)) return { key: 'warn', label: 'Vigilar', color: P.orange };
-  if (resumen.siYTD === 0) return { key: 'neutral', label: 'Sin datos aún', color: theme.textMuted };
-  return { key: 'good', label: 'Al día', color: P.green };
-}
-
-// ════════════════════════════════════════════════════════════════════
-// COMPONENTE PRINCIPAL
-// ════════════════════════════════════════════════════════════════════
 export default function ResumenClientesTab({ onDrillDown }) {
   const perfil = usePerfil();
-  if (!puedeVerPestanaGlobal(perfil, 'resumen_clientes')) {
-    return <SinAcceso motivo="No tienes acceso al Resumen de Clientes." />;
-  }
   const { theme } = useTheme();
+  const verSensible = puedeVerSensible(perfil);
   const data = useResumenData();
+  const medidas = useMedidasSensibles(verSensible && !data.loading);
+  const opciones = useMemo(() => opcionesPeriodo(12), []);
+  const [periodo, setPeriodo] = useState(opciones[0]);
 
   const resumenes = useMemo(() => {
     if (data.loading) return [];
-    return CLIENTES.map((c) => ({ cliente: c, resumen: calcularResumen(c.key, data) }));
-  }, [data]);
-
+    return CLIENTES.map((c) => ({ cliente: c, resumen: calcularResumen(c.key, data, periodo) }));
+  }, [data, periodo]);
   const consolidado = useMemo(() => calcularConsolidado(resumenes), [resumenes]);
-  const share = useMemo(() => calcularShareEmpresa(data, CLIENTES.map((c) => c.key)), [data]);
-  const cumplimientoConsol = consolidado.cuotaMes > 0 ? (consolidado.siMes / consolidado.cuotaMes) * 100 : null;
-  const cumplimientoConsolYTD = consolidado.cuotaYTD > 0 ? (consolidado.siYTD / consolidado.cuotaYTD) * 100 : null;
-  const coberturaProm = consolidado.coberturaN > 0 ? Math.round(consolidado.coberturaSum / consolidado.coberturaN) : null;
+  const share = useMemo(() => (data.loading ? {} : calcularShareEmpresa(data, periodo)), [data, periodo]);
+  const margenes = useMemo(() => Object.fromEntries(CLIENTES.map((c) => [c.key, calcularMargen(medidas, c.key, periodo)])), [medidas, periodo]);
 
-  const alertasAll = useMemo(() => calcularAlertas(resumenes), [resumenes]);
-  const [alertasAtendidas, setAlertasAtendidas] = useState(() => {
-    try {
-      const raw = localStorage.getItem('resumen_alertas_atendidas');
-      if (!raw) return new Set();
-      const p = JSON.parse(raw);
-      if (p?.fecha === hoy.toISOString().slice(0,10) && Array.isArray(p.ids)) return new Set(p.ids);
-    } catch {}
-    return new Set();
-  });
-  const marcarAtendida = (id) => {
-    const nuevo = new Set(alertasAtendidas); nuevo.add(id);
-    setAlertasAtendidas(nuevo);
-    try { localStorage.setItem('resumen_alertas_atendidas', JSON.stringify({ fecha: hoy.toISOString().slice(0,10), ids: Array.from(nuevo) })); } catch {}
+  // Navegación: Home del cliente vía onDrillDown; otras pestañas vía el evento global que atiende App.jsx.
+  const navegar = (clienteKey, pagina) => {
+    if (!pagina || pagina === 'home') { if (clienteKey) onDrillDown?.(clienteKey); return; }
+    window.dispatchEvent(new CustomEvent('acteck:navegar', { detail: { clienteKey: clienteKey || null, pagina } }));
   };
-  const alertaId = (a) => `${a.tipo}|${a.clienteKey || ''}|${a.mensaje}`;
-  const alertas = alertasAll.filter((a) => !alertasAtendidas.has(alertaId(a)));
 
-  const [trendCliente, setTrendCliente] = useState('todos');
-  const trend = useMemo(() => data.loading ? [] : calcularTrend(data, trendCliente), [data, trendCliente]);
-
-  if (data.loading) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center', color: theme.textMuted, fontFamily: TYPO.fontText }}>
-        Cargando resumen…
-      </div>
-    );
+  if (!puedeVerPestanaGlobal(perfil, 'resumen_clientes')) {
+    return <SinAcceso motivo="No tienes acceso al Resumen de Clientes." />;
   }
+  if (data.loading) return <Cargando pantalla="resumenClientes" />;
 
-  const isDark = theme.mode === 'dark';
-  const P = paletteFromTheme(theme);
-  const { accent: BLUE, green: GREEN, orange: ORANGE, red: RED, purple: PURPLE, teal: TEAL } = P;
-  const heroBg = theme.heroCardBg || '#1D1D1F';
-  const heroText = theme.heroCardText || '#F5F5F7';
-  const heroTextMuted = theme.textMutedOnDark || 'rgba(255,255,255,0.65)';
-  const heroTextSubtle = theme.textSubtleOnDark || 'rgba(255,255,255,0.5)';
+  const green = theme.green || '#34C759', orange = theme.orange || '#FF9500', red = theme.red || '#FF3B30';
+  const colCumpl = (c) => (c == null ? undefined : c >= 90 ? green : c >= 80 ? orange : red);
+  const actual = esPeriodoActual(periodo);
 
   return (
-    <div style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%' }} className="space-y-3">
+    <div data-stagger style={{ padding: '10px 6px', background: theme.bg, color: theme.text, fontFamily: TYPO.fontText, minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 10, fontVariantNumeric: 'tabular-nums' }}>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, padding: '0 4px', marginBottom: 4, flexWrap: 'wrap' }}>
+      {/* Header + selector de mes */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, padding: '0 4px', flexWrap: 'wrap' }}>
         <div>
-          <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontFamily: TYPO.fontText, fontWeight: 500 }}>
+          <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: theme.textMuted, marginBottom: 4, fontWeight: 500 }}>
             Dirección Comercial · Portafolio propio
           </p>
           <h2 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.025em', fontFamily: TYPO.fontDisplay, color: theme.text, margin: 0, lineHeight: 1.1 }}>
             Resumen de Clientes.
           </h2>
-          <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4, fontFamily: TYPO.fontText, fontVariantNumeric: 'tabular-nums' }}>
-            <strong style={{ color: theme.text, fontWeight: 500 }}>{CLIENTES.length} clientes activos</strong> · actualizado {hoy.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+          <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 4 }}>
+            <strong style={{ color: theme.text, fontWeight: 500 }}>{CLIENTES.length} clientes activos</strong> · {actual ? `al ${hoy.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}` : `cierre de ${labelPeriodo(periodo)}`}
           </p>
         </div>
+        <SelectorMes theme={theme} opciones={opciones} value={periodo} onChange={setPeriodo} />
       </div>
 
-      {/* ═══════════ Bento: hero + 4 insight cards ═══════════ */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gridTemplateRows: 'auto auto', gap: 8 }}>
-        {/* HERO — theme.heroCardBg (negro en Claro/Midnight, cobalto en Marfil) */}
-        <div style={{
-          gridColumn: 1, gridRow: '1 / span 2',
-          background: heroBg, color: heroText, borderRadius: 16, padding: 20,
-          border: isDark ? `1px solid rgba(255,255,255,0.06)` : 'none',
-          display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 20,
-          fontFamily: TYPO.fontText, position: 'relative', overflow: 'hidden',
-        }}>
-          {isDark && (
-            <div style={{
-              position: 'absolute', top: '-20%', right: '-10%', width: '60%', height: '80%',
-              background: `radial-gradient(circle, ${BLUE}22 0%, transparent 70%)`, pointerEvents: 'none',
-            }} />
-          )}
-          <div style={{ position: 'relative' }}>
-            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: heroTextSubtle, fontWeight: 500, margin: 0 }}>
-              Facturación consolidada · {MESES_CORTO[mesActual - 1]} {anioActual}
-            </p>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 42, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1, margin: '14px 0 6px', fontVariantNumeric: 'tabular-nums' }}>
-              {fmtCompact(consolidado.siMes)}
-            </div>
-            <p style={{ color: heroTextMuted, fontSize: 12, lineHeight: 1.5, margin: 0, maxWidth: 520 }}>
-              {cumplimientoConsol != null ? (
-                <>
-                  <strong style={{ color: heroText, fontWeight: 500 }}>{cumplimientoConsol.toFixed(0)}% de la cuota mensual.</strong>
-                  {' '}
-                  {(() => {
-                    const brecha = consolidado.cuotaMes - consolidado.siMes;
-                    const lider = [...resumenes].sort((a, b) => (b.resumen.cumplimientoMes || 0) - (a.resumen.cumplimientoMes || 0))[0];
-                    const rezaga = [...resumenes].sort((a, b) => (a.resumen.cumplimientoMes || 0) - (b.resumen.cumplimientoMes || 0))[0];
-                    if (brecha > 0) return `Brecha de ${fmtCompact(brecha)} vs meta. ${lider.cliente.nombre} lidera; ${rezaga.cliente.nombre} se rezaga.`;
-                    return `Meta superada por ${fmtCompact(-brecha)}. ${lider.cliente.nombre} lidera.`;
-                  })()}
-                </>
-              ) : (
-                <>Sin cuota registrada para este mes.</>
-              )}
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', position: 'relative' }}>
-            <div>
-              <div style={{ fontSize: 10, color: heroTextSubtle, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>YTD acumulado</div>
-              <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, color: heroText, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{fmtCompact(consolidado.siYTD)}</div>
-            </div>
-            {cumplimientoConsolYTD != null && (
-              <div>
-                <div style={{ fontSize: 10, color: heroTextSubtle, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>Cuota YTD</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, color: cumplimientoConsolYTD >= 90 ? GREEN : cumplimientoConsolYTD >= 80 ? ORANGE : RED, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{cumplimientoConsolYTD.toFixed(0)}%</div>
-              </div>
-            )}
-            {share.shareMes != null && (
-              <div>
-                <div style={{ fontSize: 10, color: heroTextSubtle, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>Share vs empresa</div>
-                <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 18, fontWeight: 600, color: theme.mode === 'dark' ? TEAL : theme.accentDark || TEAL, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{share.shareMes.toFixed(0)}%</div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* KPI Cuota */}
-        <KpiFitness theme={theme} Icon={Target} iconColor={GREEN} chip="Cuota"
-          value={cumplimientoConsol != null ? `${cumplimientoConsol.toFixed(0)}%` : '—'}
-          valueColor={cumplimientoConsol == null ? theme.text : cumplimientoConsol >= 90 ? GREEN : cumplimientoConsol >= 80 ? ORANGE : RED}
-          note={<><strong style={{ color: theme.text }}>{fmtCompact(consolidado.siMes)}</strong> / {fmtCompact(consolidado.cuotaMes)} meta.</>}
+      {/* Bento: hero + 4 KPI */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr)', gridTemplateRows: 'auto auto', gap: 8 }}>
+        <Hero
+          style={{ gridColumn: 1, gridRow: '1 / span 2', alignContent: 'center' }}
+          eyebrow={`Facturación consolidada · ${labelPeriodo(periodo)}`}
+          titulo={`${fmtCompact(consolidado.siMes)} facturados${consolidado.siYoY != null ? ` · ${consolidado.siYoY >= 0 ? '+' : ''}${consolidado.siYoY.toFixed(0)}% vs ${periodo.anio - 1}` : ''}`}
+          sub={narrativaHero(consolidado, resumenes, periodo)}
+          dot={consolidado.cumplIdeal != null && consolidado.cumplIdeal < 80}
+          stats={[
+            { k: 'YTD acumulado', v: fmtCompact(consolidado.siYTD), sub: `${periodo.anio} a ${labelPeriodo(periodo).split(' ')[0]}` },
+            ...(consolidado.cumplYTDIdeal != null ? [{ k: 'Cuota YTD', v: fmtPct(consolidado.cumplYTDIdeal), sub: consolidado.algunaDoble && consolidado.cumplYTDMin != null ? `${fmtPct(consolidado.cumplYTDMin)} de la mínima` : 'de la ideal', color: colCumpl(consolidado.cumplYTDIdeal) }] : []),
+            ...(share.shareMes != null ? [{ k: 'Share vs empresa', v: fmtPct(share.shareMes), sub: share.shareYTD != null ? `YTD ${fmtPct(share.shareYTD)}` : null }] : []),
+          ]}
         />
-
-        {/* KPI Cobranza */}
-        <KpiFitness theme={theme} Icon={AlertTriangle} iconColor={RED} chip="Cobranza"
-          value={fmtCompact(consolidado.saldoVencido)}
-          valueColor={consolidado.saldoVencido > 100000 ? RED : theme.text}
-          note={<><strong style={{ color: theme.text }}>{fmtInt(consolidado.facturasAbiertas)} facturas</strong> abiertas · {consolidado.saldoActual > 0 ? `${((consolidado.saldoVencido / consolidado.saldoActual) * 100).toFixed(1)}% vencido` : 'saldo al día'}.</>}
-        />
-
-        {/* KPI Sell-Out */}
-        <KpiFitness theme={theme} Icon={TrendingUp} iconColor={PURPLE} chip="Sell-Out mes"
-          value={fmtCompact(consolidado.soMes)}
-          note={consolidado.siMes > 0 ? <><strong style={{ color: theme.text }}>{((consolidado.soMes / consolidado.siMes) * 100).toFixed(0)}%</strong> del sell-in mensual.</> : <>Sin sell-out registrado aún.</>}
-        />
-
-        {/* KPI Cobertura */}
-        <KpiFitness theme={theme} Icon={Package} iconColor={TEAL} chip="Cobertura"
-          value={coberturaProm != null ? `${coberturaProm}d` : '—'}
-          note={<>Promedio de <strong style={{ color: theme.text }}>{resumenes.filter(r => r.resumen.coberturaDias != null).length} clientes</strong> · inventario {fmtCompact(consolidado.inventarioValor)}.</>}
-        />
+        <KpiCard eyebrow="Cuota del mes" badge={{ l: consolidado.algunaDoble ? 'ideal' : 'meta', tone: 'gray' }}
+          big={fmtPct(consolidado.cumplIdeal)} bigColor={colCumpl(consolidado.cumplIdeal)}
+          sub={<><strong style={{ color: theme.text }}>{fmtCompact(consolidado.siMes)}</strong> / {fmtCompact(consolidado.cuotaIdeal)}{consolidado.algunaDoble && consolidado.cumplMin != null && <> · {fmtPct(consolidado.cumplMin)} de la mínima</>}</>}
+          progress={consolidado.cumplIdeal ?? undefined} progressSecondary={consolidado.algunaDoble && consolidado.cumplMin != null ? Math.min(100, consolidado.cumplMin) : undefined} />
+        <KpiCard eyebrow="Cobranza" badge={consolidado.saldoVencido > 0 ? { l: `${fmtPct(consolidado.pctVencido, 1)} vencido`, tone: consolidado.pctVencido > 15 ? 'red' : 'orange' } : { l: 'al día', tone: 'green' }}
+          big={fmtCompact(consolidado.saldoVencido)} bigColor={consolidado.saldoVencido > 100000 ? red : theme.text}
+          sub={<><strong style={{ color: theme.text }}>{fmtInt(consolidado.facturasAbiertas)} facturas</strong> abiertas · saldo {fmtCompact(consolidado.saldoActual)}</>} />
+        <KpiCard eyebrow="Sell Out del mes" badge={consolidado.soYoY != null ? { l: `${consolidado.soYoY >= 0 ? '↑' : '↓'} ${Math.abs(consolidado.soYoY).toFixed(0)}% YoY`, tone: consolidado.soYoY >= 0 ? 'green' : 'red' } : null}
+          big={fmtCompact(consolidado.soMes)}
+          sub={consolidado.siMes > 0 && consolidado.soMes > 0 ? <><strong style={{ color: theme.text }}>{fmtPct((consolidado.soMes / consolidado.siMes) * 100)}</strong> del sell in mensual</> : 'Sin sell out registrado aún'} />
+        <KpiCard eyebrow="Cobertura" big={consolidado.coberturaProm != null ? `${consolidado.coberturaProm}d` : '—'}
+          bigColor={consolidado.coberturaProm == null ? theme.text : consolidado.coberturaProm < 30 ? red : theme.text}
+          sub={<>Promedio de <strong style={{ color: theme.text }}>{consolidado.coberturaN} clientes</strong> · inventario {fmtCompact(consolidado.inventarioValor)}</>} />
       </div>
 
-      {/* ═══════════ Alertas chips ═══════════ */}
-      {alertas.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-          {alertas.map((a) => {
-            const id = alertaId(a);
-            const isAlta = a.severidad === 'alta';
-            return (
-              <div key={id} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 4px 5px 12px',
-                borderRadius: 999, fontSize: 11, fontWeight: 500,
-                background: isAlta ? `${RED}${isDark ? '24' : '1A'}` : `${ORANGE}${isDark ? '2E' : '24'}`,
-                color: isAlta ? RED : ORANGE,
-                fontFamily: TYPO.fontText,
-              }}>
-                <span style={{ width: 6, height: 6, borderRadius: 999, background: isAlta ? RED : ORANGE }} />
-                <button onClick={() => a.clienteKey && onDrillDown?.(a.clienteKey)}
-                  style={{ border: 0, background: 'transparent', padding: 0, color: 'inherit', font: 'inherit', cursor: 'pointer' }}>
-                  <strong>{a.cliente}:</strong> {a.mensaje}
-                </button>
-                <button onClick={() => marcarAtendida(id)}
-                  title="Marcar como atendida (vuelve mañana)"
-                  style={{ marginLeft: 4, padding: '2px 8px', border: 0, borderLeft: `1px solid rgba(0,0,0,0.15)`, background: 'transparent', color: 'inherit', cursor: 'pointer', opacity: 0.5, fontSize: 10, borderRadius: '0 999px 999px 0' }}>
-                  ✕
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* Alertas de la central */}
+      <AlertasClientes theme={theme} onNavegar={navegar} email={perfil?.email} />
 
-      {/* ═══════════ Trend 12 meses ═══════════ */}
-      <TrendCard theme={theme} trend={trend} clienteFiltro={trendCliente} setClienteFiltro={setTrendCliente} isDark={isDark} />
+      {/* Tendencia */}
+      <Tendencia data={data} periodo={periodo} />
 
-      {/* ═══════════ 3 cards clientes ═══════════ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 4 }}>
+      {/* Tarjetas por cliente */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
         {resumenes.map(({ cliente, resumen }) => (
-          <ClienteCard key={cliente.key} theme={theme} cliente={cliente} resumen={resumen}
-            onDrillDown={() => onDrillDown?.(cliente.key)}
-            isDark={isDark} />
+          <TarjetaCliente key={cliente.key} cliente={cliente} resumen={resumen}
+            margen={margenes[cliente.key]} verSensible={verSensible}
+            onDrillDown={() => onDrillDown?.(cliente.key)} onNavegar={navegar} />
         ))}
       </div>
     </div>
   );
 }
 
-// ────────── KPI Apple Fitness ──────────
-function KpiFitness({ theme, Icon, iconColor, chip, value, valueColor, note }) {
-  const isDark = theme.mode === 'dark';
+// ────────── Selector de mes (últimos 12) ──────────
+function SelectorMes({ theme, opciones, value, onChange }) {
+  const dark = theme.mode === 'dark';
   return (
-    <div style={{
-      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14,
-      padding: '12px 14px', minHeight: 108,
-      display: 'flex', flexDirection: 'column', gap: 4, fontFamily: TYPO.fontText,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: 8, background: `${iconColor}22`, color: iconColor,
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 11, color: theme.textMuted, fontFamily: TYPO.fontDisplay, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+      Mes
+      <select value={periodoId(value)} onChange={(e) => onChange(opciones.find((o) => periodoId(o) === e.target.value) || opciones[0])}
+        style={{
+          appearance: 'none', WebkitAppearance: 'none', height: 30, padding: '0 28px 0 12px', borderRadius: 9, border: `1px solid ${theme.border}`,
+          background: `${dark ? 'rgba(120,120,128,0.24)' : 'rgba(120,120,128,0.12)'} url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.5'/></svg>") no-repeat right 10px center`,
+          color: theme.text, fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '-0.01em', textTransform: 'none', cursor: 'pointer',
         }}>
-          <Icon style={{ width: 14, height: 14 }} strokeWidth={1.8} />
-        </div>
-        {chip && (
-          <span style={{
-            fontSize: 9, padding: '2px 7px', borderRadius: 999,
-            background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-            color: theme.textMuted, fontWeight: 500,
-          }}>{chip}</span>
-        )}
-      </div>
-      <div style={{
-        fontFamily: TYPO.fontDisplay, fontSize: 22, fontWeight: 600, letterSpacing: '-0.03em',
-        color: valueColor || theme.text, fontVariantNumeric: 'tabular-nums', marginTop: 6, lineHeight: 1,
-      }}>{value}</div>
-      <div style={{ fontSize: 11, color: theme.textMuted, lineHeight: 1.35, marginTop: 'auto' }}>{note}</div>
-    </div>
+        {opciones.map((o, i) => <option key={periodoId(o)} value={periodoId(o)}>{labelPeriodo(o)}{i === 0 ? ' · actual' : ''}</option>)}
+      </select>
+    </label>
   );
 }
 
-// ────────── Trend chart Apple Health ──────────
-function TrendCard({ theme, trend, clienteFiltro, setClienteFiltro, isDark }) {
-  const [hoverIdx, setHoverIdx] = useState(null);
-  const activeIdx = hoverIdx != null ? hoverIdx : trend.findIndex((d) => d.esActual);
-  const activePoint = activeIdx >= 0 ? trend[activeIdx] : null;
+// ────────── Alertas de los 3 clientes (central `alertas`) ──────────
+function AlertasClientes({ theme, onNavegar, email }) {
+  const { data: todas = [], isLoading } = useAlertas({ clienteKey: null });
+  const [saliendo, setSaliendo] = useState(() => new Set());
+  const [ocultas, setOcultas] = useState(() => new Set());
+  const alertas = useMemo(() => todas.filter((a) => SET_MIOS.has(a.cliente_key) && !ocultas.has(a.id)), [todas, ocultas]);
+  if (isLoading || alertas.length === 0) return null;
 
-  const W = 800, H = 200, PAD_L = 20, PAD_R = 20, PAD_T = 20, PAD_B = 26;
-  const innerW = W - PAD_L - PAD_R;
-  const innerH = H - PAD_T - PAD_B;
-  const maxVal = Math.max(1, ...trend.flatMap((d) => [d.cuota, d.sell_in, d.sell_in_prev]));
-  const x = (i) => PAD_L + (i / 11) * innerW;
-  const y = (v) => PAD_T + innerH - (v / maxVal) * innerH;
-
-  // Line path for sell-in year actual (skip futuros)
-  const siPoints = trend.map((d, i) => (d.esFuturo || d.sell_in === 0) && !d.esActual ? null : [x(i), y(d.sell_in)]).filter(Boolean);
-  const siPath = siPoints.map(([xx, yy], i) => `${i === 0 ? 'M' : 'L'}${xx.toFixed(1)},${yy.toFixed(1)}`).join(' ');
-  const siFillPath = siPoints.length > 0
-    ? `${siPath} L${siPoints[siPoints.length - 1][0].toFixed(1)},${(PAD_T + innerH).toFixed(1)} L${siPoints[0][0].toFixed(1)},${(PAD_T + innerH).toFixed(1)} Z`
-    : '';
-
-  const cuotaPath = trend.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.cuota).toFixed(1)}`).join(' ');
-  const prevPath = trend.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.sell_in_prev).toFixed(1)}`).join(' ');
-
-  const P = paletteFromTheme(theme);
-  const BLUE = P.accent, GREEN = P.green, ORANGE = P.orange, RED = P.red, MUTED = theme.textMuted;
-
-  return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '12px 16px', fontFamily: TYPO.fontText, marginTop: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <h4 style={{ fontFamily: TYPO.fontDisplay, fontSize: 13, fontWeight: 600, letterSpacing: '-0.015em', margin: 0, color: theme.text }}>
-            Trend 12 meses · Sell-In vs Cuota
-          </h4>
-          {activePoint && (
-            <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
-              <strong style={{ color: theme.text, fontWeight: 500 }}>{activePoint.label}:</strong>{' '}
-              Sell-In {fmtCompact(activePoint.sell_in)} · Cuota {fmtCompact(activePoint.cuota)}
-              {activePoint.sell_in_prev > 0 && <> · {anioActual - 1}: {fmtCompact(activePoint.sell_in_prev)}</>}
-              {activePoint.cuota > 0 && activePoint.sell_in > 0 && <> · <span style={{ color: (activePoint.sell_in / activePoint.cuota) >= 0.9 ? GREEN : (activePoint.sell_in / activePoint.cuota) >= 0.8 ? ORANGE : RED }}>{((activePoint.sell_in / activePoint.cuota) * 100).toFixed(0)}%</span></>}
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'inline-flex', gap: 1, padding: 2, background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', borderRadius: 999 }}>
-          {[
-            { k: 'todos', l: 'Todos' },
-            { k: 'digitalife', l: 'Digitalife' },
-            { k: 'pcel', l: 'PCEL' },
-            { k: 'dicotech', l: 'Dicotech' },
-          ].map((op) => (
-            <button key={op.k} onClick={() => setClienteFiltro(op.k)}
-              style={{
-                padding: '5px 11px', borderRadius: 999,
-                background: clienteFiltro === op.k ? theme.surface : 'transparent',
-                color: clienteFiltro === op.k ? theme.text : theme.textMuted,
-                fontWeight: clienteFiltro === op.k ? 600 : 500, border: 0, fontFamily: 'inherit',
-                fontSize: 11, cursor: 'pointer',
-                boxShadow: clienteFiltro === op.k ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-              }}>{op.l}</button>
-          ))}
-        </div>
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 200, display: 'block' }}
-        onMouseLeave={() => setHoverIdx(null)}>
-        <defs>
-          <linearGradient id="siFillGrad" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor={BLUE} stopOpacity="0.20" />
-            <stop offset="1" stopColor={BLUE} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {/* Grid horizontal */}
-        {[0, 0.5, 1].map((r) => (
-          <line key={r} x1={PAD_L} x2={W - PAD_R} y1={PAD_T + innerH * (1 - r)} y2={PAD_T + innerH * (1 - r)}
-            stroke={theme.border} strokeDasharray="2 4" strokeWidth="1" />
-        ))}
-        {/* Fill sell-in */}
-        {siFillPath && <path d={siFillPath} fill="url(#siFillGrad)" />}
-        {/* Cuota (verde) */}
-        <path d={cuotaPath} fill="none" stroke={GREEN} strokeWidth="2" strokeDasharray="4 4" opacity="0.85" />
-        {/* Prev year (gris) */}
-        <path d={prevPath} fill="none" stroke={MUTED} strokeWidth="1.5" strokeDasharray="2 3" opacity="0.5" />
-        {/* Sell-in año actual (azul) */}
-        {siPath && <path d={siPath} fill="none" stroke={BLUE} strokeWidth="2.5" />}
-        {/* Puntos + hitboxes */}
-        {trend.map((d, i) => (
-          <g key={i}>
-            {!d.esFuturo && d.sell_in > 0 && (
-              <circle cx={x(i)} cy={y(d.sell_in)} r={i === activeIdx ? 4.5 : 3} fill={theme.surface} stroke={BLUE} strokeWidth="2" />
-            )}
-            {/* hitbox */}
-            <rect x={x(i) - innerW / 24} y={PAD_T} width={innerW / 12} height={innerH}
-              fill="transparent" style={{ cursor: 'crosshair' }}
-              onMouseEnter={() => setHoverIdx(i)} />
-            {/* Label mes */}
-            <text x={x(i)} y={H - 6} textAnchor="middle"
-              fontSize="10" fill={i === activeIdx ? theme.text : theme.textMuted}
-              fontWeight={i === activeIdx ? 600 : 500} fontFamily={TYPO.fontText}>
-              {d.label}
-            </text>
-          </g>
-        ))}
-        {/* Vertical hover line */}
-        {hoverIdx != null && (
-          <line x1={x(hoverIdx)} x2={x(hoverIdx)} y1={PAD_T} y2={PAD_T + innerH}
-            stroke={theme.border} strokeWidth="1" strokeDasharray="2 2" />
-        )}
-      </svg>
-      <div style={{ display: 'flex', gap: 16, fontSize: 10, color: theme.textMuted, padding: '2px 4px 0' }}>
-        <span><span style={{ display: 'inline-block', width: 10, height: 2, background: BLUE, verticalAlign: 'middle', marginRight: 5 }} />Sell-In {anioActual}</span>
-        <span><span style={{ display: 'inline-block', width: 10, height: 2, background: GREEN, verticalAlign: 'middle', marginRight: 5, borderBottom: `1px dashed ${GREEN}` }} />Cuota</span>
-        <span><span style={{ display: 'inline-block', width: 10, height: 2, background: MUTED, verticalAlign: 'middle', marginRight: 5, opacity: 0.5 }} />{anioActual - 1}</span>
-      </div>
-    </div>
+  const colorSev = (s) => ({ critica: theme.red || '#FF3B30', alta: theme.orange || '#FF9500', media: theme.yellow || '#FFCC00', info: theme.accent || '#007AFF' })[s] || theme.textMuted;
+  const emailActual = async () => { if (email) return email; try { const { data } = await supabase.auth.getUser(); return data?.user?.email || 'usuario'; } catch { return 'usuario'; } };
+  const salir = (id, accion, msg) => {
+    setSaliendo((s) => new Set(s).add(id));
+    setTimeout(async () => {
+      setOcultas((s) => new Set(s).add(id));
+      setSaliendo((s) => { const n = new Set(s); n.delete(id); return n; });
+      try { await accion(); toast.ok(msg); }
+      catch (e) { console.error('alertas:', e); toast.error('No se pudo actualizar la alerta'); setOcultas((s) => { const n = new Set(s); n.delete(id); return n; }); }
+    }, SALIDA_MS);
+  };
+  const resolver = (a) => salir(a.id, async () => resolverAlerta(a.id, await emailActual()), 'Alerta resuelta');
+  const posponer = (a) => salir(a.id, () => posponerAlerta(a.id, 3), 'Pospuesta 3 días');
+  const btn = (title, color, onClick, Icon) => (
+    <button type="button" onClick={onClick} title={title}
+      style={{ width: 22, height: 22, borderRadius: 999, border: 0, background: 'transparent', color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, opacity: 0.75 }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = theme.surfaceHover || 'rgba(0,0,0,0.04)'; e.currentTarget.style.opacity = 1; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.opacity = 0.75; }}>
+      <Icon size={12} strokeWidth={2.2} />
+    </button>
   );
-}
-
-// ────────── Cliente card ──────────
-function ClienteCard({ theme, cliente, resumen, onDrillDown, isDark }) {
-  const status = estatusCliente(resumen, theme);
-  const P = paletteFromTheme(theme);
-  const { accent: BLUE, green: GREEN, orange: ORANGE, red: RED } = P;
-  const cliCol = clienteColor(theme, cliente.key);
-  const cumpl = resumen.cumplimientoMes ?? resumen.cumplimientoYTD;
-  const cumplColor = cumpl == null ? theme.textMuted : cumpl >= 90 ? GREEN : cumpl >= 80 ? ORANGE : RED;
 
   return (
-    <div style={{
-      background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16,
-      borderLeft: `4px solid ${cliCol}`,
-      overflow: 'hidden', fontFamily: TYPO.fontText,
-      cursor: 'pointer', transition: 'transform 120ms, box-shadow 120ms',
-    }}
-    onClick={onDrillDown}
-    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)'; }}
-    onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
-    >
-      <div style={{
-        padding: '14px 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        borderBottom: `1px solid ${theme.border}`,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10, background: cliCol, color: '#FFFFFF',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: TYPO.fontDisplay, fontWeight: 600, fontSize: 14, letterSpacing: '-0.02em',
-          }}>{cliente.letter}</div>
-          <div>
-            <div style={{ fontFamily: TYPO.fontDisplay, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: theme.text }}>{cliente.nombre}.</div>
-            <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{cliente.marca}</div>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
+      {alertas.map((a) => {
+        const col = colorSev(a.severidad);
+        const sale = saliendo.has(a.id);
+        return (
+          <div key={a.id} title={`${SEV_LABEL[a.severidad] || ''}${a.detalle ? ` · ${a.detalle}` : ''}`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 4px 3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500,
+              background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text,
+              opacity: sale ? 0 : 1, transform: sale ? 'translateX(8px)' : 'none', transition: `opacity ${SALIDA_MS}ms ease, transform ${SALIDA_MS}ms ease`,
+            }}>
+            <span style={{ width: 7, height: 7, borderRadius: 999, background: col, flexShrink: 0 }} />
+            <button type="button" onClick={() => ejecutarAccion(a, onNavegar)}
+              style={{ border: 0, background: 'transparent', padding: 0, color: 'inherit', font: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <strong style={{ fontWeight: 600 }}>{NOMBRE_CLIENTE[a.cliente_key] || a.cliente_key}:</strong> {a.titulo}
+              <ArrowUpRight size={11} style={{ color: theme.textSubtle || theme.textMuted }} />
+            </button>
+            <span style={{ width: 1, height: 14, background: theme.border, margin: '0 2px' }} />
+            {btn('Posponer 3 días', theme.textMuted, () => posponer(a), Clock)}
+            {btn('Resolver', theme.green || '#34C759', () => resolver(a), Check)}
           </div>
-        </div>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          padding: '4px 10px', borderRadius: 999, fontSize: 10, fontWeight: 500,
-          background: `${status.color}1F`, color: status.color,
-        }}>
-          <span style={{ width: 5, height: 5, borderRadius: 999, background: status.color }} />
-          {status.label}
-        </span>
-      </div>
-
-      <div style={{ padding: '14px 16px' }}>
-        {/* Párrafo narrativo */}
-        <p style={{ fontSize: 11, color: theme.textMuted, margin: '0 0 12px', lineHeight: 1.5, fontFamily: TYPO.fontText }}>
-          {resumen.siYTD === 0 ? (
-            <>Cliente sin datos históricos en el ERP todavía. Se activa una vez que se cargue el primer sell-in.</>
-          ) : (
-            <>
-              Sell-in del mes en <strong style={{ color: theme.text }}>{fmtCompact(resumen.siMes)}</strong>
-              {cumpl != null && <> (<span style={{ color: cumplColor }}>{cumpl.toFixed(0)}% cuota</span>)</>}
-              {resumen.siMoM != null && (
-                <> · MoM {resumen.siMoM >= 0 ? <span style={{ color: GREEN }}>▲ {resumen.siMoM.toFixed(0)}%</span> : <span style={{ color: RED }}>▼ {Math.abs(resumen.siMoM).toFixed(0)}%</span>}</>
-              )}
-              . {resumen.saldoVencido > 0
-                ? <>Vencidos: <strong style={{ color: RED }}>{fmtCompact(resumen.saldoVencido)}</strong>{resumen.facturasAbiertas > 0 && <> en {fmtInt(resumen.facturasAbiertas)} facturas</>}.</>
-                : <>Cobranza al día.</>}
-            </>
-          )}
-        </p>
-
-        {/* KPIs mini */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 4 }}>
-          <MiniKpi theme={theme} label="Sell-In" value={fmtCompact(resumen.siMes)}
-            sub={resumen.siMoM != null ? (resumen.siMoM >= 0 ? `▲ ${resumen.siMoM.toFixed(0)}% MoM` : `▼ ${Math.abs(resumen.siMoM).toFixed(0)}% MoM`) : `YTD ${fmtCompact(resumen.siYTD)}`}
-            subColor={resumen.siMoM != null ? (resumen.siMoM >= 0 ? GREEN : RED) : theme.textMuted} />
-          <MiniKpi theme={theme} label="Sell-Out" value={fmtCompact(resumen.soMes)}
-            sub={resumen.selloutACosto ? 'a costo' : 'precio venta'} />
-          <MiniKpi theme={theme} label="Días de cobro"
-            value={resumen.dsoReal != null ? `${resumen.dsoReal}d` : '—'}
-            sub={`plazo ${resumen.dsoPlazo}d`}
-            valueColor={resumen.dsoReal == null ? theme.text : resumen.dsoReal <= resumen.dsoPlazo ? theme.text : resumen.dsoReal <= resumen.dsoPlazo + 30 ? ORANGE : RED} />
-          <MiniKpi theme={theme} label="Vencidos"
-            value={fmtCompact(resumen.saldoVencido)}
-            sub={resumen.facturasAbiertas > 0 ? `${fmtInt(resumen.facturasAbiertas)} facturas` : 'al día'}
-            valueColor={resumen.saldoVencido > 100000 ? RED : resumen.saldoVencido > 0 ? ORANGE : GREEN} />
-        </div>
-
-        {/* Cobertura + Inventario abajo */}
-        {resumen.inventarioValor > 0 && (
-          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${theme.border}`, display: 'flex', justifyContent: 'space-between', fontSize: 10, color: theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-            <span>Inventario · <strong style={{ color: theme.text }}>{fmtCompact(resumen.inventarioValor)}</strong> ({fmtInt(resumen.inventarioPiezas)} pz)</span>
-            {resumen.coberturaDias != null && (
-              <span>Cobertura · <strong style={{ color: resumen.coberturaDias < 30 ? RED : resumen.coberturaDias < 60 ? ORANGE : theme.text }}>{resumen.coberturaDias}d</strong></span>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MiniKpi({ theme, label, value, sub, subColor, valueColor }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', color: theme.textMuted, fontWeight: 600 }}>{label}</span>
-      <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', color: valueColor || theme.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{value}</span>
-      <span style={{ fontSize: 10, color: subColor || theme.textMuted, fontVariantNumeric: 'tabular-nums' }}>{sub}</span>
+        );
+      })}
     </div>
   );
 }

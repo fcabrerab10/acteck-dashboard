@@ -133,6 +133,16 @@ export function useSolicitudes(perfil) {
     await recargar();
   }, [recargar]);
 
+  // Editar campos de la solicitud (p. ej. notas = nombre del export en la hoja Mi Export)
+  const editarSolicitud = useCallback(async (solicitudId, cambios) => {
+    const { error } = await supabase
+      .from('solicitudes_compra')
+      .update(cambios)
+      .eq('id', solicitudId);
+    if (error) throw error;
+    await recargar();
+  }, [recargar]);
+
   // Cambiar estado (manual: colocada / cancelada)
   const cambiarEstado = useCallback(async (solicitudId, nuevoEstado) => {
     const { error } = await supabase
@@ -161,7 +171,7 @@ export function useSolicitudes(perfil) {
   return {
     solicitudes, lineas, loading, tablaExiste,
     borradores, cerradas, lineasDe,
-    crearBorrador, agregarLinea, editarLinea, eliminarLinea,
+    crearBorrador, agregarLinea, editarLinea, eliminarLinea, editarSolicitud,
     cerrarBorrador, cambiarEstado, eliminarSolicitud,
     recargar,
   };

@@ -3,6 +3,14 @@
 // Orden: la más reciente primero.
 export const NOVEDADES = [
   {
+    version: '3.8.0', fecha: '2026-09-10', titulo: 'S&OP y Resumen de Clientes',
+    items: [
+      'S&OP en el kit V3: buscador por palabras, filtros con conteo, costos sólo con permiso sensible, drill con demanda 12 meses y cobertura proyectada, carrito de export como hoja lateral con "Compartir export".',
+      'S&OP · Reuniones: repositorio de la reunión mensual pegando el correo del CRM, con cruce por línea contra sugerido, stock, tránsito y PO, y cumplimiento de la reunión.',
+      'Resumen de Clientes: selector de mes, doble cuota (mínima e ideal), alertas desde la central, MC % sensible, "Compartir avance" y menú "Ir a".',
+    ],
+  },
+  {
     version: '3.7.0', fecha: '2026-09-10', titulo: 'Inventario',
     items: [
       'Buscador por palabras sin acentos y filtros con conteo (estado, CEDIS, marca, familia, roadmap, con stock, con tránsito).',

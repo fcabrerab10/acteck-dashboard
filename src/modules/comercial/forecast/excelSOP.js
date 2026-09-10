@@ -1,9 +1,11 @@
 // Exportador a Excel S&OP Ferru — una solicitud individual.
 //
-//   exportarSolicitudExcel(solicitud, lineas)  → descarga el .xlsx (escritorio) y devuelve el nombre
-//   solicitudExcelBlob(solicitud, lineas)      → { blob, filename } para compartir desde el celular
-//                                                (navigator.share · src/lib/compartirArchivo.js)
-//   construirWorkbookSolicitud(XLSX, solicitud, lineas) → { wb, filename } (mismo libro en ambos casos)
+//   exportarSolicitudExcel(solicitud, lineas, opciones?)  → descarga el .xlsx (escritorio) y devuelve el nombre
+//   solicitudExcelBlob(solicitud, lineas, opciones?)      → { blob, filename } para compartir desde el celular
+//                                                           (navigator.share · src/lib/compartirArchivo.js)
+//   construirWorkbookSolicitud(XLSX, solicitud, lineas, opciones?) → { wb, filename } (mismo libro en ambos casos)
+//   opciones = { sinCostos: true } omite las columnas "Último Costo" y "Total" (usuario sin permiso "Información
+//   sensible", permisos.puedeVerSensible). Sin opciones el libro es idéntico al de siempre (móvil incluido).
 //
 // xlsx-js-style se carga bajo demanda con `await import(...)` (CLAUDE.md · Rendimiento).
 // Nombre del archivo: "S&OP Ferru <Mes> <Año>.xlsx" (mes/año = momento del export).
@@ -55,7 +57,8 @@ async function cargarXLSX() {
   return mod.default || mod;
 }
 
-export function construirWorkbookSolicitud(XLSX, solicitud, lineas) {
+export function construirWorkbookSolicitud(XLSX, solicitud, lineas, opciones = {}) {
+  const sinCostos = !!opciones.sinCostos;
   // Construir filas: una por línea, o N por línea si tiene envíos
   const filas = [];
   (lineas || [])
@@ -108,7 +111,8 @@ export function construirWorkbookSolicitud(XLSX, solicitud, lineas) {
 
   const COLUMNAS = [
     'SKU','Descripción','Envío','Proveedor','Fecha estimada de arribo',
-    'Cantidad','# de Contenedores','Último Costo','Total',
+    'Cantidad','# de Contenedores',
+    ...(sinCostos ? [] : ['Último Costo','Total']),
   ];
 
   // Construir matriz AOA (array of arrays) — más control sobre estilos
@@ -116,7 +120,9 @@ export function construirWorkbookSolicitud(XLSX, solicitud, lineas) {
     COLUMNAS, // header
     ...filas.map((f) => COLUMNAS.map((c) => f[c] ?? '')),
     [], // separador
-    ['', '', '', '', 'TOTAL', totalCantidad, '', '', totalUsd],
+    sinCostos
+      ? ['', '', '', '', 'TOTAL', totalCantidad, '']
+      : ['', '', '', '', 'TOTAL', totalCantidad, '', '', totalUsd],
   ];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
@@ -160,6 +166,7 @@ export function construirWorkbookSolicitud(XLSX, solicitud, lineas) {
 
       // Fila TOTAL al final — bold
       if (cell.v === 'TOTAL' || (R === range.e.r && C >= colIdx['Cantidad'])) {
+        // (las columnas de costo no existen con sinCostos: colIdx['Total'] es undefined y no entra)
         cell.s = { ...(cell.s || {}), font: { bold: true } };
         if (C === colIdx['Cantidad'] && typeof cell.v === 'number') {
           cell.z = FMT_NUM;
@@ -180,8 +187,10 @@ export function construirWorkbookSolicitud(XLSX, solicitud, lineas) {
     { wch: 26 },  // Fecha estimada de arribo
     { wch: 12 },  // Cantidad
     { wch: 22 },  // # de Contenedores
-    { wch: 14 },  // Último Costo
-    { wch: 16 },  // Total
+    ...(sinCostos ? [] : [
+      { wch: 14 },  // Último Costo
+      { wch: 16 },  // Total
+    ]),
   ];
 
   // Header un poco más alto para el wrap
@@ -196,17 +205,17 @@ export function construirWorkbookSolicitud(XLSX, solicitud, lineas) {
   return { wb, filename };
 }
 
-export async function exportarSolicitudExcel(solicitud, lineas) {
+export async function exportarSolicitudExcel(solicitud, lineas, opciones) {
   const XLSX = await cargarXLSX();
-  const { wb, filename } = construirWorkbookSolicitud(XLSX, solicitud, lineas);
+  const { wb, filename } = construirWorkbookSolicitud(XLSX, solicitud, lineas, opciones);
   XLSX.writeFile(wb, filename);
   return filename;
 }
 
 /** Mismo libro que exportarSolicitudExcel pero como Blob (para compartir por WhatsApp/correo desde el celular). */
-export async function solicitudExcelBlob(solicitud, lineas) {
+export async function solicitudExcelBlob(solicitud, lineas, opciones) {
   const XLSX = await cargarXLSX();
-  const { wb, filename } = construirWorkbookSolicitud(XLSX, solicitud, lineas);
+  const { wb, filename } = construirWorkbookSolicitud(XLSX, solicitud, lineas, opciones);
   const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   return { blob, filename };

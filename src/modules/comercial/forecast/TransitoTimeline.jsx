@@ -1,230 +1,150 @@
-// TransitoTimeline — tarjeta con calendario mensual de tránsito.
-//
-// Muestra qué inventario llega cada mes (próximos 6 meses) en piezas + USD,
-// con conteo de POs abiertas. Click en un mes lo expande mostrando el
-// inventario agrupado por Familia → Marca.
-
+// TransitoTimeline — calendario mensual de tránsito (próximos 6 meses): piezas (+ USD si `sensible`) y POs por mes;
+// click en un mes lo expande agrupado Familia → Marca. V3: sólo tokens de tema y kit (sin Tailwind).
+// Se monta dentro de un Panel plegable del S&OP; la lógica de agrupación es la original.
 import React, { useMemo, useState } from 'react';
-import { Ship, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
+import { useTheme } from '../../../lib/themeContext';
+import { TYPO } from '../../../lib/themeTokens';
+import { EASE, DUR } from '../../../lib/motion';
+import { Pill } from '../../../components/kit';
+import { fmtInt } from '../inventario/constantes';
 
 const MES_NOMBRE = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-
-const FMT_N = (n) => Math.round(n || 0).toLocaleString('es-MX');
 const FMT_USD = (n) => `$${Math.round(n || 0).toLocaleString('es-MX')}`;
+const MONO = '"SF Mono", ui-monospace, Menlo, monospace';
 
-export default function TransitoTimeline({ embarques, metaBySku }) {
-  const [mesExpandido, setMesExpandido] = useState(null);
-
-  const data = useMemo(() => {
-    // Agrupar embarques por mes de ETA — solo no-cancelados con ETA en el futuro
-    // o muy reciente (últimos 30 días) para reflejar lo que está por arribar.
-    const hoy = new Date();
-    const limiteAtras = new Date(hoy); limiteAtras.setDate(limiteAtras.getDate() - 14);
-    const limiteAdelante = new Date(hoy); limiteAdelante.setMonth(limiteAdelante.getMonth() + 6);
-
-    const meses = new Map(); // key = 'YYYY-MM'
-    let totalPiezas = 0;
-    let totalUsd = 0;
-    let totalPOs = new Set();
-
-    const ahora = new Date();
-    (embarques || []).forEach((e) => {
-      const est = String(e.estatus || '').toLowerCase();
-      // Estatus que significan "ya no está en tránsito"
-      if (est.includes('cancel') || est.includes('concluido') || est.includes('rechazada') || est.includes('perdida')) return;
-      // ETA real: priorizamos arribo_cedis (fecha estimada de arribo a
-      // CEDIS) > arribo_almacen > eta_puerto > eta. arribo_cedis NO es
-      // "ya llegó" — es la fecha programada de arribo final.
-      const etaStr = e.arribo_cedis || e.arribo_almacen || e.eta_puerto || e.eta;
-      if (!etaStr) return;
-      const eta = new Date(etaStr);
-      if (isNaN(eta)) return;
-      // Filtrar fechas absurdas (años fuera de 2020-2030 son bugs del importador)
-      const yr = eta.getFullYear();
-      if (yr < 2020 || yr > 2030) return;
-      if (eta < limiteAtras || eta > limiteAdelante) return;
-
-      const sku = (e.codigo || '').trim();
-      const meta = metaBySku ? metaBySku[sku] : null;
-      // unit_price viene de embarques_compras (precio que pagamos al proveedor)
-      const costoUsd = Number(e.unit_price || meta?.unit_price_usd_ultima || 0);
-      const piezas = Number(e.po_qty || 0);
-      const valorUsd = piezas * costoUsd;
-
-      const monthKey = `${eta.getFullYear()}-${String(eta.getMonth() + 1).padStart(2, '0')}`;
-      if (!meses.has(monthKey)) {
-        meses.set(monthKey, {
-          key: monthKey,
-          anio: eta.getFullYear(),
-          mes: eta.getMonth() + 1,
-          piezas: 0,
-          usd: 0,
-          pos: new Set(),
-          embarques: [],
-        });
-      }
-      const m = meses.get(monthKey);
-      m.piezas += piezas;
-      m.usd += valorUsd;
-      if (e.po) m.pos.add(e.po);
-      // Derivar marca desde metadata por SKU (la tabla embarques no la trae)
-      const marca = meta?.marca || '(sin marca)';
-      m.embarques.push({ ...e, valorUsd, marca });
-
-      totalPiezas += piezas;
-      totalUsd += valorUsd;
-      if (e.po) totalPOs.add(e.po);
-    });
-
-    // Ordenar por mes ascendente
-    const lista = Array.from(meses.values()).sort((a, b) => a.key.localeCompare(b.key));
-
-    // Próxima ETA (más cercana a hoy)
-    let proxEta = null;
-    (embarques || []).forEach((e) => {
-      const est = String(e.estatus || '').toLowerCase();
-      if (est.includes('cancel') || est.includes('concluido') || est.includes('rechazada') || est.includes('perdida')) return;
-      const etaStr = e.arribo_cedis || e.arribo_almacen || e.eta_puerto || e.eta;
-      if (!etaStr) return;
-      const eta = new Date(etaStr);
-      if (isNaN(eta)) return;
-      const yr = eta.getFullYear();
-      if (yr < 2020 || yr > 2030) return;
-      if (eta < limiteAtras) return;
-      if (!proxEta || eta < proxEta) proxEta = eta;
-    });
-
-    return {
-      meses: lista,
-      total: { piezas: totalPiezas, usd: totalUsd, pos: totalPOs.size },
-      proxEta,
-    };
-  }, [embarques, metaBySku]);
-
-  const formatEta = (d) => {
-    if (!d) return '—';
-    return `${d.getDate()} ${MES_NOMBRE[d.getMonth()]}`;
+export function agruparTransitoPorMes(embarques, metaBySku) {
+  // Agrupar embarques por mes de ETA — solo no-cancelados con ETA en el futuro
+  // o muy reciente (últimos 14 días) para reflejar lo que está por arribar.
+  const hoy = new Date();
+  const limiteAtras = new Date(hoy); limiteAtras.setDate(limiteAtras.getDate() - 14);
+  const limiteAdelante = new Date(hoy); limiteAdelante.setMonth(limiteAdelante.getMonth() + 6);
+  const fueraDeTransito = (e) => {
+    const est = String(e.estatus || '').toLowerCase();
+    return est.includes('cancel') || est.includes('concluido') || est.includes('rechazada') || est.includes('perdida');
+  };
+  const etaDe = (e) => {
+    // ETA real: arribo_cedis (fecha programada de arribo final) > arribo_almacen > eta_puerto > eta.
+    const etaStr = e.arribo_cedis || e.arribo_almacen || e.eta_puerto || e.eta;
+    if (!etaStr) return null;
+    const eta = new Date(etaStr);
+    if (isNaN(eta)) return null;
+    const yr = eta.getFullYear();
+    if (yr < 2020 || yr > 2030) return null; // fechas absurdas del importador
+    return eta;
   };
 
-  return (
-    <div className="bg-white rounded-xl border border-gray-200">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-        <Ship className="w-4 h-4 text-blue-600" />
-        <h3 className="font-semibold text-gray-800 text-sm">Tránsito · próximos 6 meses</h3>
-        <span className="ml-auto text-xs text-gray-500">
-          Total: <span className="font-bold text-gray-800">{FMT_N(data.total.piezas)} pzs</span>
-          <span className="text-gray-400"> · </span>
-          <span className="font-bold text-gray-800">{FMT_USD(data.total.usd)}</span>
-          <span className="text-gray-400"> · {data.total.pos} POs</span>
-          {data.proxEta && (
-            <>
-              <span className="text-gray-400"> · próx ETA </span>
-              <span className="font-semibold text-blue-700">{formatEta(data.proxEta)}</span>
-            </>
-          )}
-        </span>
-      </div>
+  const meses = new Map();
+  let totalPiezas = 0, totalUsd = 0;
+  const totalPOs = new Set();
+  let proxEta = null;
 
-      <div className="divide-y divide-gray-100">
-        {data.meses.length === 0 ? (
-          <div className="px-4 py-6 text-center text-xs text-gray-400 italic">
-            Sin tránsito programado en los próximos 6 meses
-          </div>
-        ) : (
-          data.meses.map((m) => (
-            <MesRow
-              key={m.key}
-              mes={m}
-              expandido={mesExpandido === m.key}
-              onToggle={() => setMesExpandido(mesExpandido === m.key ? null : m.key)}
-            />
-          ))
-        )}
-      </div>
-    </div>
-  );
+  (embarques || []).forEach((e) => {
+    if (fueraDeTransito(e)) return;
+    const eta = etaDe(e);
+    if (!eta || eta < limiteAtras) return;
+    if (!proxEta || eta < proxEta) proxEta = eta;
+    if (eta > limiteAdelante) return;
+
+    const sku = (e.codigo || '').trim();
+    const meta = metaBySku ? metaBySku[sku] : null;
+    const costoUsd = Number(e.unit_price || meta?.unit_price_usd_ultima || 0);
+    const piezas = Number(e.po_qty || 0);
+    const valorUsd = piezas * costoUsd;
+    const key = `${eta.getFullYear()}-${String(eta.getMonth() + 1).padStart(2, '0')}`;
+    if (!meses.has(key)) meses.set(key, { key, anio: eta.getFullYear(), mes: eta.getMonth() + 1, piezas: 0, usd: 0, pos: new Set(), embarques: [] });
+    const m = meses.get(key);
+    m.piezas += piezas; m.usd += valorUsd;
+    if (e.po) m.pos.add(e.po);
+    m.embarques.push({ ...e, valorUsd, marca: meta?.marca || '(sin marca)' });
+    totalPiezas += piezas; totalUsd += valorUsd;
+    if (e.po) totalPOs.add(e.po);
+  });
+
+  return { meses: Array.from(meses.values()).sort((a, b) => a.key.localeCompare(b.key)), total: { piezas: totalPiezas, usd: totalUsd, pos: totalPOs.size }, proxEta };
 }
 
-function MesRow({ mes, expandido, onToggle }) {
-  const titulo = `${MES_NOMBRE[mes.mes - 1].toUpperCase()} ${mes.anio}`;
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition text-left"
-      >
-        {expandido ? <ChevronUp className="w-4 h-4 text-gray-400"/> : <ChevronDown className="w-4 h-4 text-gray-400"/>}
-        <span className="font-semibold text-gray-700 text-sm w-24">{titulo}</span>
-        <span className="font-bold text-gray-800 tabular-nums text-sm w-24 text-right">
-          {FMT_N(mes.piezas)} pzs
-        </span>
-        <span className="font-semibold text-emerald-700 tabular-nums text-sm w-28 text-right">
-          {FMT_USD(mes.usd)}
-        </span>
-        <span className="text-xs text-gray-500 ml-auto">
-          {mes.pos.size} POs
-        </span>
-      </button>
-      {expandido && <DesgloseFamiliaMarca embarques={mes.embarques} />}
-    </div>
-  );
-}
-
-function DesgloseFamiliaMarca({ embarques }) {
-  // Agrupar por familia → marca
-  const grupos = useMemo(() => {
-    const tree = new Map(); // familia → Map(marca → {piezas, usd, skus:Set})
-    embarques.forEach((e) => {
-      const familia = e.familia || '(sin familia)';
-      const marca = e.marca || '(sin marca)';
-      if (!tree.has(familia)) tree.set(familia, new Map());
-      const fmap = tree.get(familia);
-      if (!fmap.has(marca)) fmap.set(marca, { piezas: 0, usd: 0, skus: new Set(), pos: new Set() });
-      const cell = fmap.get(marca);
-      cell.piezas += Number(e.po_qty || 0);
-      cell.usd += Number(e.valorUsd || 0);
-      if (e.codigo) cell.skus.add(e.codigo);
-      if (e.po) cell.pos.add(e.po);
-    });
-
-    const out = [];
-    for (const [familia, fmap] of tree.entries()) {
-      let famPiezas = 0, famUsd = 0;
-      const marcas = [];
-      for (const [marca, cell] of fmap.entries()) {
-        marcas.push({ marca, piezas: cell.piezas, usd: cell.usd, skus: cell.skus.size, pos: cell.pos.size });
-        famPiezas += cell.piezas;
-        famUsd += cell.usd;
-      }
-      marcas.sort((a, b) => b.piezas - a.piezas);
-      out.push({ familia, piezas: famPiezas, usd: famUsd, marcas });
+function desgloseFamiliaMarca(embarques) {
+  const tree = new Map();
+  embarques.forEach((e) => {
+    const familia = e.familia || '(sin familia)';
+    const marca = e.marca || '(sin marca)';
+    if (!tree.has(familia)) tree.set(familia, new Map());
+    const fmap = tree.get(familia);
+    if (!fmap.has(marca)) fmap.set(marca, { piezas: 0, usd: 0, skus: new Set(), pos: new Set() });
+    const cell = fmap.get(marca);
+    cell.piezas += Number(e.po_qty || 0); cell.usd += Number(e.valorUsd || 0);
+    if (e.codigo) cell.skus.add(e.codigo);
+    if (e.po) cell.pos.add(e.po);
+  });
+  const out = [];
+  for (const [familia, fmap] of tree.entries()) {
+    let famPiezas = 0, famUsd = 0;
+    const marcas = [];
+    for (const [marca, cell] of fmap.entries()) {
+      marcas.push({ marca, piezas: cell.piezas, usd: cell.usd, skus: cell.skus.size, pos: cell.pos.size });
+      famPiezas += cell.piezas; famUsd += cell.usd;
     }
-    out.sort((a, b) => b.piezas - a.piezas);
-    return out;
-  }, [embarques]);
+    marcas.sort((a, b) => b.piezas - a.piezas);
+    out.push({ familia, piezas: famPiezas, usd: famUsd, marcas });
+  }
+  return out.sort((a, b) => b.piezas - a.piezas);
+}
+
+export default function TransitoTimeline({ embarques, metaBySku, sensible = false }) {
+  const { theme } = useTheme();
+  const [mesExpandido, setMesExpandido] = useState(null);
+  const data = useMemo(() => agruparTransitoPorMes(embarques, metaBySku), [embarques, metaBySku]);
+  const hair = `1px solid ${theme.divider || theme.border}`;
+  const num = { fontFamily: TYPO.fontDisplay, fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: theme.text, fontSize: 12 };
 
   return (
-    <div className="px-4 pb-3 pt-1 space-y-2 bg-gray-50/40">
-      {grupos.map((g) => (
-        <div key={g.familia} className="text-xs">
-          <div className="flex items-center gap-2 py-1">
-            <span className="font-semibold text-gray-700 flex-1">{g.familia}</span>
-            <span className="tabular-nums text-gray-700 w-20 text-right">{FMT_N(g.piezas)} pzs</span>
-            <span className="tabular-nums text-emerald-700 w-24 text-right">{FMT_USD(g.usd)}</span>
-          </div>
-          <div className="ml-4 space-y-0.5">
-            {g.marcas.map((m) => (
-              <div key={m.marca} className="flex items-center gap-2 text-[11px] text-gray-600">
-                <span className="flex-1 truncate">{m.marca}</span>
-                <span className="tabular-nums w-16 text-right">{FMT_N(m.piezas)}</span>
-                <span className="tabular-nums w-20 text-right">{FMT_USD(m.usd)}</span>
-                <span className="text-gray-400 w-14 text-right">{m.skus} SKUs</span>
+    <div style={{ fontFamily: TYPO.fontText, color: theme.text }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11, color: theme.textMuted, padding: '0 2px 8px' }}>
+        <span>Total <strong style={{ color: theme.text }}>{fmtInt(data.total.piezas)} pz</strong></span>
+        {sensible && <span>· <strong style={{ color: theme.text }}>{FMT_USD(data.total.usd)}</strong></span>}
+        <span>· {data.total.pos} POs</span>
+        {data.proxEta && <Pill tone="blue" size="xs">próx. ETA {data.proxEta.getDate()} {MES_NOMBRE[data.proxEta.getMonth()]}</Pill>}
+      </div>
+      {data.meses.length === 0 && (
+        <div style={{ padding: '18px 0', textAlign: 'center', fontSize: 11.5, color: theme.textMuted }}>Sin tránsito programado en los próximos 6 meses</div>
+      )}
+      {data.meses.map((m) => {
+        const abierto = mesExpandido === m.key;
+        return (
+          <div key={m.key} style={{ borderTop: hair }}>
+            <button type="button" onClick={() => setMesExpandido(abierto ? null : m.key)}
+              style={{ width: '100%', display: 'grid', gridTemplateColumns: '16px 96px 1fr auto auto', gap: 10, alignItems: 'center', padding: '7px 6px', border: 0, background: 'transparent', cursor: 'pointer', color: theme.text, textAlign: 'left', fontFamily: TYPO.fontText }}>
+              <ChevronDown size={13} style={{ color: theme.textMuted, transform: abierto ? 'rotate(0)' : 'rotate(-90deg)', transition: `transform ${DUR.state}ms ${EASE}` }} />
+              <span style={{ fontFamily: TYPO.fontDisplay, fontSize: 12, fontWeight: 600, letterSpacing: '0.02em', textTransform: 'uppercase' }}>{MES_NOMBRE[m.mes - 1]} {m.anio}</span>
+              <span style={{ fontSize: 10.5, color: theme.textMuted }}>{m.pos.size} PO{m.pos.size === 1 ? '' : 's'}</span>
+              <span style={num}>{fmtInt(m.piezas)} pz</span>
+              {sensible ? <span style={{ ...num, color: theme.green, minWidth: 90, textAlign: 'right' }}>{FMT_USD(m.usd)}</span> : <span />}
+            </button>
+            {abierto && (
+              <div style={{ padding: '2px 8px 10px 32px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {desgloseFamiliaMarca(m.embarques).map((g) => (
+                  <div key={g.familia} style={{ fontSize: 11 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, padding: '3px 0', alignItems: 'baseline' }}>
+                      <span style={{ fontFamily: TYPO.fontDisplay, fontWeight: 600, color: theme.text }}>{g.familia}</span>
+                      <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: theme.text }}>{fmtInt(g.piezas)} pz</span>
+                      {sensible ? <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: theme.green, minWidth: 90, textAlign: 'right' }}>{FMT_USD(g.usd)}</span> : <span />}
+                    </div>
+                    {g.marcas.map((mk) => (
+                      <div key={mk.marca} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 10, padding: '1px 0 1px 12px', color: theme.textMuted, fontSize: 10.5, alignItems: 'baseline' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mk.marca}</span>
+                        <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{fmtInt(mk.piezas)}</span>
+                        {sensible ? <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums', minWidth: 90, textAlign: 'right' }}>{FMT_USD(mk.usd)}</span> : <span />}
+                        <span style={{ color: theme.textSubtle || theme.textMuted, minWidth: 52, textAlign: 'right' }}>{mk.skus} SKU{mk.skus === 1 ? '' : 's'}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
